@@ -19,7 +19,12 @@ class SystemSettingsManager
      */
     public function all(): array
     {
-        $cached = Cache::get(self::CACHE_KEY);
+        try {
+            $cached = Cache::get(self::CACHE_KEY);
+        } catch (Throwable) {
+            $cached = null;
+        }
+
         if (is_array($cached)) {
             return $cached;
         }
@@ -27,7 +32,11 @@ class SystemSettingsManager
         $settings = $this->loadFromDatabase();
 
         if ($this->settingsTableAvailable()) {
-            Cache::forever(self::CACHE_KEY, $settings);
+            try {
+                Cache::forever(self::CACHE_KEY, $settings);
+            } catch (Throwable) {
+                //
+            }
         }
 
         return $settings;
@@ -79,7 +88,11 @@ class SystemSettingsManager
             }
         });
 
-        Cache::forget(self::CACHE_KEY);
+        try {
+            Cache::forget(self::CACHE_KEY);
+        } catch (Throwable) {
+            //
+        }
     }
 
     /**
@@ -92,7 +105,11 @@ class SystemSettingsManager
         }
 
         SystemSetting::query()->whereIn('key', $keys)->delete();
-        Cache::forget(self::CACHE_KEY);
+        try {
+            Cache::forget(self::CACHE_KEY);
+        } catch (Throwable) {
+            //
+        }
     }
 
     /**
