@@ -1,0 +1,1685 @@
+<script setup lang='ts'>
+import { Head } from '@inertiajs/vue3';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
+import AdmissionLookupField from '@/components/admissions/AdmissionLookupField.vue';
+import AppIcon from '@/components/AppIcon.vue';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
+import { usePlatformAccess } from '@/composables/usePlatformAccess';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { formatEnumLabel } from '@/lib/labels';
+import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
+import { type BreadcrumbItem } from '@/types';
+
+type WorkspaceView = 'queue' | 'board' | 'documentation';
+type BoardTab = 'shift' | 'discharge';
+type DocumentationFlow = 'task' | 'round_note' | 'care_plan' | 'discharge_checklist';
+type ValidationErrorResponse = {
+    message?: string;
+    errors?: Record<string, string[]>;
+};
+type ApiError = Error & {
+    status?: number;
+    payload?: ValidationErrorResponse;
+};
+type ApiListMeta = {
+    currentPage?: number;
+    perPage?: number;
+    total?: number;
+    lastPage?: number;
+};
+type ApiListResponse<T> = {
+    data: T[];
+    meta?: ApiListMeta;
+};
+type CountBucket = { total: number; other: number; [key: string]: number };
+type CensusRow = {
+    id: string;
+    admissionNumber?: string | null;
+    patientId?: string | null;
+    patientNumber?: string | null;
+    patientName?: string | null;
+    ward?: string | null;
+    bed?: string | null;
+    admittedAt?: string | null;
+    admissionReason?: string | null;
+    status?: string | null;
+};
+type WardBedResource = {
+    id: string;
+    code?: string | null;
+    name?: string | null;
+    wardName?: string | null;
+    bedNumber?: string | null;
+    location?: string | null;
+    status?: string | null;
+};
+type WardTask = {
+    id: string;
+    taskNumber?: string | null;
+    admissionId?: string | null;
+    patientId?: string | null;
+    taskType?: string | null;
+    title?: string | null;
+    priority?: string | null;
+    status?: string | null;
+    statusReason?: string | null;
+    assignedToUserId?: number | null;
+    dueAt?: string | null;
+    startedAt?: string | null;
+    completedAt?: string | null;
+    escalatedAt?: string | null;
+    notes?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+};
+type CarePlan = {
+    id: string;
+    carePlanNumber?: string | null;
+    admissionId?: string | null;
+    patientId?: string | null;
+    title?: string | null;
+    planText?: string | null;
+    goals?: string[] | null;
+    interventions?: string[] | null;
+    targetDischargeAt?: string | null;
+    reviewDueAt?: string | null;
+    status?: string | null;
+    statusReason?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+};
+type DischargeChecklist = {
+    id: string;
+    admissionId?: string | null;
+    patientId?: string | null;
+    status?: string | null;
+    statusReason?: string | null;
+    clinicalSummaryCompleted: boolean;
+    medicationReconciliationCompleted: boolean;
+    followUpPlanCompleted: boolean;
+    patientEducationCompleted: boolean;
+    transportArranged: boolean;
+    billingCleared: boolean;
+    documentationCompleted: boolean;
+    isReadyForDischarge: boolean;
+    reviewedAt?: string | null;
+    notes?: string | null;
+    updatedAt?: string | null;
+};
+type BedSlot = { resource: WardBedResource; admission: CensusRow | null };
+
+const breadcrumbs: BreadcrumbItem[] = [{ title: 'Inpatient Ward', href: '/inpatient-ward' }];
+const taskTypeOptions = ['medication', 'vitals', 'lab_follow_up', 'imaging_follow_up', 'wound_care', 'physiotherapy', 'nursing_review', 'discharge_prep', 'other'] as const;
+const taskPriorityOptions = ['routine', 'urgent', 'critical'] as const;
+const taskStatusOptions = ['pending', 'in_progress', 'completed', 'escalated', 'cancelled'] as const;
+const carePlanStatusOptions = ['active', 'completed', 'cancelled'] as const;
+const dischargeChecklistStatusOptions = ['draft', 'ready', 'blocked', 'completed'] as const;
+
+const { permissionState, isFacilitySuperAdmin, scope, effectiveFacilityCode, effectiveTenantCode } = usePlatformAccess();
+const compactQueueRows = useLocalStorageBoolean('inpatient.ward.queue.compact', false);
+
+function hasAccess(name: string): boolean {
+    return permissionState(name) === 'allowed' || isFacilitySuperAdmin.value;
+}
+
+const canRead = computed(() => hasAccess('inpatient.ward.read'));
+const canCreateTask = computed(() => hasAccess('inpatient.ward.create-task'));
+const canUpdateTaskStatus = computed(() => hasAccess('inpatient.ward.update-task-status'));
+const canCreateRoundNote = computed(() => hasAccess('inpatient.ward.create-round-note'));
+const canCreateCarePlan = computed(() => hasAccess('inpatient.ward.create-care-plan'));
+const canUpdateCarePlan = computed(() => hasAccess('inpatient.ward.update-care-plan'));
+const canUpdateCarePlanStatus = computed(() => hasAccess('inpatient.ward.update-care-plan-status'));
+const canManageDischargeChecklist = computed(() => hasAccess('inpatient.ward.manage-discharge-checklist'));
+
+const workspaceView = ref<WorkspaceView>('queue');
+const boardTab = ref<BoardTab>('shift');
+const documentationFlow = ref<DocumentationFlow>('task');
+
+const pageLoading = ref(true);
+const queueLoading = ref(false);
+const boardLoading = ref(false);
+const documentationSubmitting = ref(false);
+const refreshingPage = ref(false);
+const pageError = ref<string | null>(null);
+const queueError = ref<string | null>(null);
+const boardError = ref<string | null>(null);
+const documentationError = ref<string | null>(null);
+const documentationSuccess = ref<string | null>(null);
+
+const filterSheetOpen = ref(false);
+const statusDialogOpen = ref(false);
+const statusDialogError = ref<string | null>(null);
+const statusDialogTarget = ref<WardTask | CarePlan | DischargeChecklist | null>(null);
+const statusDialogKind = ref<'task' | 'care_plan' | 'discharge_checklist'>('task');
+const statusDialogStatus = ref('');
+const statusDialogReason = ref('');
+const actionLoadingId = ref<string | null>(null);
+const taskDetailsOpen = ref(false);
+const taskDetailsTask = ref<WardTask | null>(null);
+
+const censusRows = ref<CensusRow[]>([]);
+const wardBeds = ref<WardBedResource[]>([]);
+const tasks = ref<WardTask[]>([]);
+const carePlans = ref<CarePlan[]>([]);
+const checklists = ref<DischargeChecklist[]>([]);
+const taskCounts = ref<CountBucket>({ pending: 0, in_progress: 0, completed: 0, escalated: 0, cancelled: 0, other: 0, total: 0 });
+const taskPagination = ref<ApiListMeta | null>(null);
+
+const taskFilters = reactive({ q: '', status: '', priority: '', admissionId: '', page: 1, perPage: 25 });
+const taskFilterDraft = reactive({ priority: '', admissionId: '' });
+
+const selectedAdmission = ref<CensusRow | null>(null);
+const selectedAdmissionId = ref('');
+const taskDetailsAdmission = computed(() => (taskDetailsTask.value ? admissionFor(taskDetailsTask.value) : null));
+const formErrors = ref<Record<string, string[]>>({});
+
+const taskForm = reactive({ taskType: 'vitals', title: '', priority: 'routine', assignedToUserId: '', dueAt: '', notes: '' });
+const roundNoteForm = reactive({ roundedAt: '', roundNote: '', carePlan: '', handoffNotes: '' });
+const carePlanForm = reactive({ title: '', planText: '', goalsText: '', interventionsText: '', reviewDueAt: '', targetDischargeAt: '' });
+const checklistForm = reactive({
+    status: 'draft',
+    statusReason: '',
+    clinicalSummaryCompleted: false,
+    medicationReconciliationCompleted: false,
+    followUpPlanCompleted: false,
+    patientEducationCompleted: false,
+    transportArranged: false,
+    billingCleared: false,
+    documentationCompleted: false,
+    notes: '',
+});
+
+function csrfToken(): string | null {
+    return document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? null;
+}
+
+async function apiRequest<T>(method: 'GET' | 'POST' | 'PATCH', path: string, options?: { query?: Record<string, string | number | null | undefined>; body?: Record<string, unknown> }): Promise<T> {
+    const url = new URL(`/api/v1${path}`, window.location.origin);
+    Object.entries(options?.query ?? {}).forEach(([key, value]) => {
+        if (value === null || value === undefined || value === '') return;
+        url.searchParams.set(key, String(value));
+    });
+    const headers: Record<string, string> = { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+    let body: string | undefined;
+    if (method !== 'GET') {
+        headers['Content-Type'] = 'application/json';
+        const token = csrfToken();
+        if (token) headers['X-CSRF-TOKEN'] = token;
+        body = JSON.stringify(options?.body ?? {});
+    }
+    const response = await fetch(url.toString(), { method, credentials: 'same-origin', headers, body });
+    const payload = (await response.json().catch(() => ({}))) as ValidationErrorResponse;
+    if (!response.ok) {
+        const error = new Error(payload.message ?? `${response.status} ${response.statusText}`) as ApiError;
+        error.status = response.status;
+        error.payload = payload;
+        throw error;
+    }
+    return payload as T;
+}
+
+function normalizeLocalDateTimeForApi(value: string): string {
+    if (!value) return value;
+    const localDate = new Date(value);
+    if (Number.isNaN(localDate.getTime())) {
+        const normalized = value.replace('T', ' ');
+        return normalized.length === 16 ? `${normalized}:00` : normalized;
+    }
+    const year = localDate.getUTCFullYear();
+    const month = String(localDate.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(localDate.getUTCDate()).padStart(2, '0');
+    const hours = String(localDate.getUTCHours()).padStart(2, '0');
+    const minutes = String(localDate.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(localDate.getUTCSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
+function formatDateTime(value: string | null | undefined): string {
+    if (!value) return 'Not recorded';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
+}
+
+function parseLines(value: string): string[] {
+    return value.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
+}
+
+function formatStatusVariant(status: string | null | undefined): 'default' | 'secondary' | 'outline' | 'destructive' {
+    const normalized = String(status ?? '').trim().toLowerCase();
+    if (['escalated', 'cancelled', 'blocked'].includes(normalized)) return 'destructive';
+    if (['completed', 'ready'].includes(normalized)) return 'default';
+    if (['active', 'in_progress', 'transferred'].includes(normalized)) return 'secondary';
+    return 'outline';
+}
+
+function taskStatusToneClass(status: string | null | undefined): string {
+    const normalized = String(status ?? '').trim().toLowerCase();
+    if (normalized === 'escalated') return 'border-red-200 bg-red-50 dark:border-red-900/60 dark:bg-red-950/20';
+    if (normalized === 'in_progress') return 'border-sky-200 bg-sky-50 dark:border-sky-900/60 dark:bg-sky-950/20';
+    if (normalized === 'completed') return 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/60 dark:bg-emerald-950/20';
+    if (normalized === 'cancelled') return 'border-border bg-muted/30 dark:bg-muted/10';
+    return 'border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/20';
+}
+
+function taskTimelineAnchor(task: WardTask): string | null {
+    return task.dueAt || task.escalatedAt || task.startedAt || task.completedAt || task.updatedAt || task.createdAt || null;
+}
+
+function admissionFor(record: { admissionId?: string | null; patientId?: string | null }): CensusRow | null {
+    const byAdmission = censusRows.value.find((row) => row.id === record.admissionId);
+    if (byAdmission) return byAdmission;
+    return censusRows.value.find((row) => row.patientId === record.patientId) ?? null;
+}
+
+function admissionLabel(record: { admissionId?: string | null; patientId?: string | null }): string {
+    const admission = admissionFor(record);
+    return admission?.admissionNumber?.trim() || (record.admissionId?.slice(0, 8).toUpperCase() ?? 'Admission');
+}
+
+function patientLabel(record: { admissionId?: string | null; patientId?: string | null }): string {
+    const admission = admissionFor(record);
+    return admission?.patientName?.trim() || admission?.patientNumber?.trim() || (record.patientId?.slice(0, 8).toUpperCase() ?? 'Patient');
+}
+
+function patientMeta(record: { admissionId?: string | null; patientId?: string | null }): string {
+    const admission = admissionFor(record);
+    const parts = [admission?.patientNumber?.trim() ?? null, admission?.ward?.trim() ?? null, admission?.bed?.trim() ? `Bed ${admission.bed.trim()}` : null].filter((value): value is string => Boolean(value));
+    return parts.length > 0 ? parts.join(' | ') : 'Context unavailable';
+}
+
+function placementLabel(admission: CensusRow | null): string {
+    if (!admission) return 'No ward or bed assigned';
+    const parts = [admission.ward?.trim() ?? null, admission.bed?.trim() ? `Bed ${admission.bed.trim()}` : null].filter((value): value is string => Boolean(value));
+    return parts.length > 0 ? parts.join(' / ') : 'No ward or bed assigned';
+}
+
+function checklistCompletionCount(checklist: DischargeChecklist): number {
+    return [
+        checklist.clinicalSummaryCompleted,
+        checklist.medicationReconciliationCompleted,
+        checklist.followUpPlanCompleted,
+        checklist.patientEducationCompleted,
+        checklist.transportArranged,
+        checklist.billingCleared,
+        checklist.documentationCompleted,
+    ].filter(Boolean).length;
+}
+
+function fieldError(key: string): string | null {
+    return formErrors.value[key]?.[0]
+        ?? Object.entries(formErrors.value).find(([errorKey]) => errorKey.startsWith(`${key}.`))?.[1]?.[0]
+        ?? null;
+}
+
+function setFieldError(key: string, message: string): void {
+    formErrors.value = { ...formErrors.value, [key]: [message] };
+}
+
+function clearFieldError(key: string): void {
+    if (!(key in formErrors.value)) return;
+    const nextErrors = { ...formErrors.value };
+    delete nextErrors[key];
+    formErrors.value = nextErrors;
+}
+
+function resetErrors(): void {
+    formErrors.value = {};
+    documentationError.value = null;
+    documentationSuccess.value = null;
+    statusDialogError.value = null;
+}
+
+function ensureSelectedAdmission(): boolean {
+    resetErrors();
+    if (selectedAdmissionId.value) return true;
+    setFieldError('admissionId', 'Select an inpatient admission first.');
+    return false;
+}
+
+function applyDocumentationApiError(error: unknown, fallbackMessage: string): void {
+    const apiError = error as ApiError;
+    const errors = apiError.payload?.errors ?? {};
+    const hasFieldErrors = Object.keys(errors).length > 0;
+    formErrors.value = errors;
+    documentationSuccess.value = null;
+    documentationError.value = hasFieldErrors ? null : (apiError.payload?.message ?? fallbackMessage);
+    if (!hasFieldErrors) {
+        notifyError(messageFromUnknown(error, fallbackMessage));
+    }
+}
+
+function syncFilterDraft(): void {
+    taskFilterDraft.priority = taskFilters.priority;
+    taskFilterDraft.admissionId = taskFilters.admissionId;
+}
+
+function resetTaskForm(): void {
+    taskForm.taskType = 'vitals';
+    taskForm.title = '';
+    taskForm.priority = 'routine';
+    taskForm.assignedToUserId = '';
+    taskForm.dueAt = '';
+    taskForm.notes = '';
+}
+
+function resetRoundNoteForm(): void {
+    roundNoteForm.roundedAt = '';
+    roundNoteForm.roundNote = '';
+    roundNoteForm.carePlan = '';
+    roundNoteForm.handoffNotes = '';
+}
+
+function resetCarePlanForm(): void {
+    carePlanForm.title = '';
+    carePlanForm.planText = '';
+    carePlanForm.goalsText = '';
+    carePlanForm.interventionsText = '';
+    carePlanForm.reviewDueAt = '';
+    carePlanForm.targetDischargeAt = '';
+}
+
+function resetChecklistForm(): void {
+    checklistForm.status = 'draft';
+    checklistForm.statusReason = '';
+    checklistForm.clinicalSummaryCompleted = false;
+    checklistForm.medicationReconciliationCompleted = false;
+    checklistForm.followUpPlanCompleted = false;
+    checklistForm.patientEducationCompleted = false;
+    checklistForm.transportArranged = false;
+    checklistForm.billingCleared = false;
+    checklistForm.documentationCompleted = false;
+    checklistForm.notes = '';
+}
+
+const editableCarePlan = computed(() =>
+    carePlans.value.find((plan) => plan.admissionId === selectedAdmissionId.value && String(plan.status ?? '').trim().toLowerCase() === 'active')
+    ?? carePlans.value.find((plan) => plan.admissionId === selectedAdmissionId.value)
+    ?? null,
+);
+
+const editableChecklist = computed(() =>
+    checklists.value.find((checklist) => checklist.admissionId === selectedAdmissionId.value) ?? null,
+);
+
+const checklistReadyForSubmit = computed(() => [
+    checklistForm.clinicalSummaryCompleted,
+    checklistForm.medicationReconciliationCompleted,
+    checklistForm.followUpPlanCompleted,
+    checklistForm.patientEducationCompleted,
+    checklistForm.transportArranged,
+    checklistForm.billingCleared,
+    checklistForm.documentationCompleted,
+].every(Boolean));
+
+async function loadCensus(): Promise<void> {
+    const response = await apiRequest<ApiListResponse<CensusRow>>('GET', '/inpatient-ward/census', { query: { perPage: 250 } });
+    censusRows.value = response.data;
+}
+
+async function loadWardBeds(): Promise<void> {
+    const response = await apiRequest<ApiListResponse<WardBedResource>>('GET', '/inpatient-ward/ward-beds', { query: { perPage: 500 } });
+    wardBeds.value = response.data;
+}
+
+async function loadTasks(): Promise<void> {
+    queueLoading.value = true;
+    queueError.value = null;
+    try {
+        const response = await apiRequest<ApiListResponse<WardTask>>('GET', '/inpatient-ward/tasks', {
+            query: {
+                q: taskFilters.q.trim() || undefined,
+                status: taskFilters.status || undefined,
+                priority: taskFilters.priority || undefined,
+                admissionId: taskFilters.admissionId || undefined,
+                page: taskFilters.page,
+                perPage: taskFilters.perPage,
+            },
+        });
+        tasks.value = response.data;
+        taskPagination.value = response.meta ?? null;
+    } catch (error) {
+        queueError.value = messageFromUnknown(error, 'Unable to load ward task queue.');
+    } finally {
+        queueLoading.value = false;
+    }
+}
+
+async function loadTaskCounts(): Promise<void> {
+    const response = await apiRequest<{ data: CountBucket }>('GET', '/inpatient-ward/task-status-counts', {
+        query: {
+            q: taskFilters.q.trim() || undefined,
+            priority: taskFilters.priority || undefined,
+            admissionId: taskFilters.admissionId || undefined,
+        },
+    });
+    taskCounts.value = { pending: 0, in_progress: 0, completed: 0, escalated: 0, cancelled: 0, other: 0, total: 0, ...response.data };
+}
+
+async function loadCarePlans(): Promise<void> {
+    const response = await apiRequest<ApiListResponse<CarePlan>>('GET', '/inpatient-ward/care-plans', { query: { perPage: 100 } });
+    carePlans.value = response.data;
+}
+
+async function loadChecklists(): Promise<void> {
+    const response = await apiRequest<ApiListResponse<DischargeChecklist>>('GET', '/inpatient-ward/discharge-checklists', { query: { perPage: 100 } });
+    checklists.value = response.data;
+}
+
+async function reloadQueue(): Promise<void> {
+    await Promise.all([loadTasks(), loadTaskCounts()]);
+}
+
+function replaceTask(updated: WardTask): void {
+    tasks.value = tasks.value.map((task) => (task.id === updated.id ? updated : task));
+    if (taskDetailsTask.value?.id === updated.id) {
+        taskDetailsTask.value = updated;
+    }
+}
+
+function openTaskDetails(task: WardTask): void {
+    taskDetailsTask.value = task;
+    taskDetailsOpen.value = true;
+}
+
+function closeTaskDetails(): void {
+    taskDetailsOpen.value = false;
+    taskDetailsTask.value = null;
+}
+
+function openTaskStatusFromDetails(): void {
+    if (!taskDetailsTask.value) return;
+    const task = taskDetailsTask.value;
+    closeTaskDetails();
+    openStatusDialogFor('task', task);
+}
+
+function replaceCarePlan(updated: CarePlan): void {
+    const existing = carePlans.value.find((plan) => plan.id === updated.id);
+    carePlans.value = existing ? carePlans.value.map((plan) => (plan.id === updated.id ? updated : plan)) : [updated, ...carePlans.value];
+}
+
+function replaceChecklist(updated: DischargeChecklist): void {
+    const existing = checklists.value.find((checklist) => checklist.id === updated.id);
+    checklists.value = existing ? checklists.value.map((checklist) => (checklist.id === updated.id ? updated : checklist)) : [updated, ...checklists.value];
+}
+
+function openSelectedAdmission(admission: CensusRow | null, options?: { preserveFeedback?: boolean }): void {
+    selectedAdmission.value = admission;
+    selectedAdmissionId.value = admission?.id ?? '';
+    clearFieldError('admissionId');
+    if (selectedAdmissionId.value) {
+        documentationError.value = null;
+        if (!options?.preserveFeedback) {
+            documentationSuccess.value = null;
+        }
+    }
+
+    if (editableCarePlan.value) {
+        carePlanForm.title = editableCarePlan.value.title ?? '';
+        carePlanForm.planText = editableCarePlan.value.planText ?? '';
+        carePlanForm.goalsText = (editableCarePlan.value.goals ?? []).join('\n');
+        carePlanForm.interventionsText = (editableCarePlan.value.interventions ?? []).join('\n');
+        carePlanForm.reviewDueAt = editableCarePlan.value.reviewDueAt ? new Date(editableCarePlan.value.reviewDueAt).toISOString().slice(0, 16) : '';
+        carePlanForm.targetDischargeAt = editableCarePlan.value.targetDischargeAt ? new Date(editableCarePlan.value.targetDischargeAt).toISOString().slice(0, 16) : '';
+    } else {
+        resetCarePlanForm();
+    }
+
+    if (editableChecklist.value) {
+        checklistForm.status = editableChecklist.value.status ?? 'draft';
+        checklistForm.statusReason = editableChecklist.value.statusReason ?? '';
+        checklistForm.clinicalSummaryCompleted = editableChecklist.value.clinicalSummaryCompleted;
+        checklistForm.medicationReconciliationCompleted = editableChecklist.value.medicationReconciliationCompleted;
+        checklistForm.followUpPlanCompleted = editableChecklist.value.followUpPlanCompleted;
+        checklistForm.patientEducationCompleted = editableChecklist.value.patientEducationCompleted;
+        checklistForm.transportArranged = editableChecklist.value.transportArranged;
+        checklistForm.billingCleared = editableChecklist.value.billingCleared;
+        checklistForm.documentationCompleted = editableChecklist.value.documentationCompleted;
+        checklistForm.notes = editableChecklist.value.notes ?? '';
+    } else {
+        resetChecklistForm();
+    }
+}
+
+function applyFilters(): void {
+    taskFilters.priority = taskFilterDraft.priority;
+    taskFilters.admissionId = taskFilterDraft.admissionId;
+    taskFilters.page = 1;
+    filterSheetOpen.value = false;
+    void reloadQueue();
+}
+
+function resetFilters(): void {
+    taskFilters.priority = '';
+    taskFilters.admissionId = '';
+    taskFilters.perPage = 25;
+    taskFilters.page = 1;
+    syncFilterDraft();
+    filterSheetOpen.value = false;
+    void reloadQueue();
+}
+
+async function submitTask(): Promise<void> {
+    if (!ensureSelectedAdmission()) {
+        return;
+    }
+    documentationSubmitting.value = true;
+    try {
+        const response = await apiRequest<{ data: WardTask }>('POST', '/inpatient-ward/tasks', {
+            body: {
+                admissionId: selectedAdmissionId.value,
+                taskType: taskForm.taskType,
+                title: taskForm.title.trim() || null,
+                priority: taskForm.priority,
+                assignedToUserId: taskForm.assignedToUserId.trim() ? Number.parseInt(taskForm.assignedToUserId.trim(), 10) : null,
+                dueAt: taskForm.dueAt ? normalizeLocalDateTimeForApi(taskForm.dueAt) : null,
+                notes: taskForm.notes.trim() || null,
+            },
+        });
+        tasks.value = [response.data, ...tasks.value];
+        resetTaskForm();
+        documentationSuccess.value = 'Ward task created.';
+        notifySuccess('Ward task created.');
+        await loadTaskCounts();
+        await loadTasks();
+    } catch (error) {
+        applyDocumentationApiError(error, 'Unable to create ward task.');
+    } finally {
+        documentationSubmitting.value = false;
+    }
+}
+
+async function submitRoundNote(): Promise<void> {
+    if (!ensureSelectedAdmission()) {
+        return;
+    }
+    documentationSubmitting.value = true;
+    try {
+        await apiRequest('POST', '/inpatient-ward/round-notes', {
+            body: {
+                admissionId: selectedAdmissionId.value,
+                roundedAt: roundNoteForm.roundedAt ? normalizeLocalDateTimeForApi(roundNoteForm.roundedAt) : null,
+                roundNote: roundNoteForm.roundNote.trim(),
+                carePlan: roundNoteForm.carePlan.trim() || null,
+                handoffNotes: roundNoteForm.handoffNotes.trim() || null,
+            },
+        });
+        resetRoundNoteForm();
+        documentationSuccess.value = 'Round note recorded.';
+        notifySuccess('Round note recorded.');
+    } catch (error) {
+        applyDocumentationApiError(error, 'Unable to save round note.');
+    } finally {
+        documentationSubmitting.value = false;
+    }
+}
+
+async function submitCarePlan(): Promise<void> {
+    if (!ensureSelectedAdmission()) {
+        return;
+    }
+    documentationSubmitting.value = true;
+    const body = {
+        admissionId: selectedAdmissionId.value,
+        title: carePlanForm.title.trim(),
+        planText: carePlanForm.planText.trim() || null,
+        goals: parseLines(carePlanForm.goalsText),
+        interventions: parseLines(carePlanForm.interventionsText),
+        reviewDueAt: carePlanForm.reviewDueAt ? normalizeLocalDateTimeForApi(carePlanForm.reviewDueAt) : null,
+        targetDischargeAt: carePlanForm.targetDischargeAt ? normalizeLocalDateTimeForApi(carePlanForm.targetDischargeAt) : null,
+    };
+    try {
+        const response = editableCarePlan.value && canUpdateCarePlan.value
+            ? await apiRequest<{ data: CarePlan }>('PATCH', `/inpatient-ward/care-plans/${editableCarePlan.value.id}`, { body })
+            : await apiRequest<{ data: CarePlan }>('POST', '/inpatient-ward/care-plans', { body });
+        replaceCarePlan(response.data);
+        documentationSuccess.value = editableCarePlan.value && canUpdateCarePlan.value ? 'Care plan updated.' : 'Care plan created.';
+        notifySuccess(editableCarePlan.value && canUpdateCarePlan.value ? 'Care plan updated.' : 'Care plan created.');
+    } catch (error) {
+        applyDocumentationApiError(error, 'Unable to save care plan.');
+    } finally {
+        documentationSubmitting.value = false;
+    }
+}
+
+async function submitChecklist(): Promise<void> {
+    if (!ensureSelectedAdmission()) {
+        return;
+    }
+    if (['ready', 'completed'].includes(checklistForm.status) && !checklistReadyForSubmit.value) {
+        setFieldError('status', 'Complete all seven items before moving the checklist to ready or completed.');
+        return;
+    }
+    if (checklistForm.status === 'blocked' && !checklistForm.statusReason.trim()) {
+        setFieldError('statusReason', 'Blocker note is required when the checklist is blocked.');
+        return;
+    }
+    documentationSubmitting.value = true;
+    const body = {
+        admissionId: selectedAdmissionId.value,
+        status: checklistForm.status,
+        statusReason: checklistForm.statusReason.trim() || null,
+        clinicalSummaryCompleted: checklistForm.clinicalSummaryCompleted,
+        medicationReconciliationCompleted: checklistForm.medicationReconciliationCompleted,
+        followUpPlanCompleted: checklistForm.followUpPlanCompleted,
+        patientEducationCompleted: checklistForm.patientEducationCompleted,
+        transportArranged: checklistForm.transportArranged,
+        billingCleared: checklistForm.billingCleared,
+        documentationCompleted: checklistForm.documentationCompleted,
+        notes: checklistForm.notes.trim() || null,
+    };
+    try {
+        const response = editableChecklist.value
+            ? await apiRequest<{ data: DischargeChecklist }>('PATCH', `/inpatient-ward/discharge-checklists/${editableChecklist.value.id}`, { body })
+            : await apiRequest<{ data: DischargeChecklist }>('POST', '/inpatient-ward/discharge-checklists', { body });
+        replaceChecklist(response.data);
+        documentationSuccess.value = editableChecklist.value ? 'Discharge checklist updated.' : 'Discharge checklist created.';
+        notifySuccess(editableChecklist.value ? 'Discharge checklist updated.' : 'Discharge checklist created.');
+    } catch (error) {
+        applyDocumentationApiError(error, 'Unable to save discharge checklist.');
+    } finally {
+        documentationSubmitting.value = false;
+    }
+}
+
+function openStatusDialogFor(kind: 'task' | 'care_plan' | 'discharge_checklist', record: WardTask | CarePlan | DischargeChecklist): void {
+    statusDialogKind.value = kind;
+    statusDialogTarget.value = record;
+    statusDialogStatus.value = String(record.status ?? '').trim().toLowerCase();
+    statusDialogReason.value = String(record.statusReason ?? '').trim();
+    statusDialogError.value = null;
+    statusDialogOpen.value = true;
+}
+
+function closeStatusDialog(): void {
+    statusDialogOpen.value = false;
+    statusDialogTarget.value = null;
+    statusDialogStatus.value = '';
+    statusDialogReason.value = '';
+    statusDialogError.value = null;
+}
+
+const statusDialogOptions = computed(() => {
+    if (statusDialogKind.value === 'task') return [...taskStatusOptions];
+    if (statusDialogKind.value === 'care_plan') return [...carePlanStatusOptions];
+    return [...dischargeChecklistStatusOptions];
+});
+
+const statusDialogReasonLabel = computed(() => {
+    if (statusDialogKind.value === 'task') {
+        if (statusDialogStatus.value === 'escalated') return 'Escalation note';
+        if (statusDialogStatus.value === 'cancelled') return 'Cancellation note';
+        return 'Status note';
+    }
+    if (statusDialogKind.value === 'care_plan') {
+        return statusDialogStatus.value === 'cancelled' ? 'Cancellation note' : 'Status note';
+    }
+    return statusDialogStatus.value === 'blocked' ? 'Blocker note' : 'Status note';
+});
+
+const statusDialogBlockedReason = computed(() => {
+    if (statusDialogKind.value !== 'discharge_checklist') return '';
+    if (!['ready', 'completed'].includes(statusDialogStatus.value)) return '';
+    return checklistReadyForSubmit.value ? '' : 'Complete all seven items before moving the checklist to ready or completed.';
+});
+
+async function submitStatusDialog(): Promise<void> {
+    if (!statusDialogTarget.value) return;
+    const reason = statusDialogReason.value.trim();
+    if (statusDialogKind.value === 'task' && ['escalated', 'cancelled'].includes(statusDialogStatus.value) && !reason) {
+        statusDialogError.value = `${statusDialogReasonLabel.value} is required.`;
+        return;
+    }
+    if (statusDialogKind.value === 'care_plan' && statusDialogStatus.value === 'cancelled' && !reason) {
+        statusDialogError.value = 'Cancellation note is required.';
+        return;
+    }
+    if (statusDialogKind.value === 'discharge_checklist' && statusDialogStatus.value === 'blocked' && !reason) {
+        statusDialogError.value = 'Blocker note is required.';
+        return;
+    }
+    if (statusDialogBlockedReason.value) {
+        statusDialogError.value = statusDialogBlockedReason.value;
+        return;
+    }
+    actionLoadingId.value = statusDialogTarget.value.id;
+    statusDialogError.value = null;
+    try {
+        if (statusDialogKind.value === 'task') {
+            const response = await apiRequest<{ data: WardTask }>('PATCH', `/inpatient-ward/tasks/${statusDialogTarget.value.id}/status`, { body: { status: statusDialogStatus.value, reason: reason || null } });
+            replaceTask(response.data);
+            await loadTaskCounts();
+        } else if (statusDialogKind.value === 'care_plan') {
+            const response = await apiRequest<{ data: CarePlan }>('PATCH', `/inpatient-ward/care-plans/${statusDialogTarget.value.id}/status`, { body: { status: statusDialogStatus.value, reason: reason || null } });
+            replaceCarePlan(response.data);
+        } else {
+            const response = await apiRequest<{ data: DischargeChecklist }>('PATCH', `/inpatient-ward/discharge-checklists/${statusDialogTarget.value.id}/status`, { body: { status: statusDialogStatus.value, reason: reason || null } });
+            replaceChecklist(response.data);
+            openSelectedAdmission(selectedAdmission.value);
+        }
+        notifySuccess('Ward workflow status updated.');
+        closeStatusDialog();
+    } catch (error) {
+        const apiError = error as ApiError;
+        statusDialogError.value = apiError.payload?.message ?? 'Unable to update status.';
+    } finally {
+        actionLoadingId.value = null;
+    }
+}
+
+const queueStatusChips = computed(() => [
+    { key: 'all', label: 'All tasks', count: taskCounts.value.total ?? 0 },
+    { key: 'pending', label: 'Pending', count: taskCounts.value.pending ?? 0 },
+    { key: 'in_progress', label: 'In progress', count: taskCounts.value.in_progress ?? 0 },
+    { key: 'escalated', label: 'Escalated', count: taskCounts.value.escalated ?? 0 },
+    { key: 'completed', label: 'Completed', count: taskCounts.value.completed ?? 0 },
+]);
+
+const taskAdvancedFilterCount = computed(() =>
+    Number(Boolean(taskFilters.priority)) + Number(Boolean(taskFilters.admissionId)),
+);
+
+const taskQueueStateLabel = computed(() => {
+    if (taskFilters.q.trim()) return 'Search active';
+    if (taskAdvancedFilterCount.value > 0) return 'Filters active';
+    return 'All ward tasks';
+});
+
+const taskQueueFilterChips = computed(() => {
+    const chips: string[] = [];
+    if (taskFilters.q.trim()) chips.push(`Search: ${taskFilters.q.trim()}`);
+    if (taskFilters.status) chips.push(`Status: ${formatEnumLabel(taskFilters.status)}`);
+    if (taskFilters.priority) chips.push(`Priority: ${formatEnumLabel(taskFilters.priority)}`);
+    if (taskFilters.admissionId) chips.push(`Admission: ${taskFilters.admissionId}`);
+    if (taskFilters.perPage !== 25) chips.push(`${taskFilters.perPage} rows`);
+    if (compactQueueRows.value) chips.push('Compact view');
+    return chips;
+});
+
+const scopeWarning = computed(() => {
+    if (scope.value?.resolvedFrom === 'none') {
+        return 'No tenant or facility scope is resolved. Ward requests may be limited until a valid scope is selected.';
+    }
+
+    if (!scope.value && !effectiveTenantCode.value && !effectiveFacilityCode.value) {
+        return 'Current tenant and facility scope could not be loaded.';
+    }
+
+    return '';
+});
+
+const scopeStatusLabel = computed(() =>
+    scopeWarning.value ? 'Scope Unresolved' : 'Scope Ready',
+);
+const shiftColumns = computed(() => [
+    { key: 'escalated', title: 'Escalated', helper: 'Items needing immediate ward leadership attention.', emptyLabel: 'No escalated bedside tasks are currently open.', tasks: tasks.value.filter((task) => String(task.status ?? '').trim().toLowerCase() === 'escalated').slice(0, 6) },
+    { key: 'in_progress', title: 'In progress', helper: 'Active nursing work already under way.', emptyLabel: 'No in-progress bedside tasks are active right now.', tasks: tasks.value.filter((task) => String(task.status ?? '').trim().toLowerCase() === 'in_progress').slice(0, 6) },
+    { key: 'pending', title: 'Pending', helper: 'Tasks waiting to start in the current queue scope.', emptyLabel: 'No pending ward tasks are waiting in scope.', tasks: tasks.value.filter((task) => String(task.status ?? '').trim().toLowerCase() === 'pending').slice(0, 6) },
+]);
+
+const bedsideTimeline = computed(() =>
+    tasks.value
+        .filter((task) => ['pending', 'in_progress', 'escalated'].includes(String(task.status ?? '').trim().toLowerCase()))
+        .sort((a, b) => new Date(taskTimelineAnchor(a) ?? 0).getTime() - new Date(taskTimelineAnchor(b) ?? 0).getTime())
+        .slice(0, 8),
+);
+
+const wardBedGroups = computed(() => {
+    const occupantByPlacement = new Map<string, CensusRow>();
+    censusRows.value.forEach((row) => {
+        occupantByPlacement.set(`${String(row.ward ?? '').trim().toLowerCase()}::${String(row.bed ?? '').trim().toLowerCase()}`, row);
+    });
+    const wards = new Map<string, BedSlot[]>();
+    wardBeds.value
+        .slice()
+        .sort((a, b) => `${a.wardName ?? ''}${a.bedNumber ?? a.name ?? ''}`.localeCompare(`${b.wardName ?? ''}${b.bedNumber ?? b.name ?? ''}`, undefined, { numeric: true, sensitivity: 'base' }))
+        .forEach((resource) => {
+            const wardName = resource.wardName?.trim() || 'Unassigned ward';
+            const key = `${String(resource.wardName ?? '').trim().toLowerCase()}::${String(resource.bedNumber ?? resource.name ?? resource.code ?? '').trim().toLowerCase()}`;
+            if (!wards.has(wardName)) wards.set(wardName, []);
+            wards.get(wardName)?.push({ resource, admission: occupantByPlacement.get(key) ?? null });
+        });
+    return Array.from(wards.entries()).map(([wardName, slots]) => ({ wardName, slots }));
+});
+
+const boardSummaryCards = computed(() => [
+    { id: 'inpatients', title: 'Active inpatients', value: censusRows.value.length },
+    { id: 'escalated', title: 'Escalated tasks', value: taskCounts.value.escalated ?? 0 },
+    { id: 'ready', title: 'Ready for discharge', value: checklists.value.filter((checklist) => checklist.isReadyForDischarge).length },
+    { id: 'blocked', title: 'Blocked checklists', value: checklists.value.filter((checklist) => String(checklist.status ?? '').trim().toLowerCase() === 'blocked').length },
+]);
+
+watch(() => taskFilters.page, () => { void loadTasks(); });
+watch(() => [selectedAdmissionId.value, editableCarePlan.value?.id, editableChecklist.value?.id], () => {
+    if (!selectedAdmissionId.value) return;
+    openSelectedAdmission(selectedAdmission.value, { preserveFeedback: true });
+});
+
+onMounted(async () => {
+    if (!canRead.value) {
+        pageLoading.value = false;
+        return;
+    }
+    try {
+        boardLoading.value = true;
+        await Promise.all([loadCensus(), loadWardBeds(), loadTasks(), loadTaskCounts(), loadCarePlans(), loadChecklists()]);
+        syncFilterDraft();
+    } catch (error) {
+        pageError.value = messageFromUnknown(error, 'Unable to load Inpatient Ward.');
+    } finally {
+        boardLoading.value = false;
+        pageLoading.value = false;
+    }
+});
+async function refreshWardPage(): Promise<void> {
+    if (!canRead.value || refreshingPage.value) return;
+
+    refreshingPage.value = true;
+    pageError.value = null;
+    queueError.value = null;
+    boardError.value = null;
+
+    try {
+        boardLoading.value = true;
+        await Promise.all([loadCensus(), loadWardBeds(), loadTasks(), loadTaskCounts(), loadCarePlans(), loadChecklists()]);
+        syncFilterDraft();
+    } catch (error) {
+        pageError.value = messageFromUnknown(error, 'Unable to refresh Inpatient Ward.');
+    } finally {
+        boardLoading.value = false;
+        refreshingPage.value = false;
+    }
+}
+</script>
+<template>
+    <Head title='Inpatient Ward' />
+
+    <AppLayout :breadcrumbs='breadcrumbs'>
+        <div class='flex flex-col gap-6 px-4 py-4 md:px-6 md:py-6'>
+            <section class='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
+                <div class='min-w-0'>
+                    <h1 class='flex items-center gap-2 text-2xl font-semibold tracking-tight'>
+                        <AppIcon name='bed-double' class='size-7 text-primary' />
+                        Inpatient Ward Operations
+                    </h1>
+                    <p class='mt-1 text-sm text-muted-foreground'>Coordinate ward tasks, bed occupancy, care plans, discharge readiness, and bedside documentation from one operational surface.</p>
+                </div>
+
+                <div class='flex flex-wrap items-center gap-2'>
+                    <Popover>
+                        <PopoverTrigger as-child>
+                            <Button variant='outline' size='sm' class='h-8 px-2.5'>
+                                <Badge :variant='scopeWarning ? "destructive" : "secondary"'>
+                                    {{ scopeStatusLabel }}
+                                </Badge>
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align='end' class='w-72 space-y-1 text-xs'>
+                            <p v-if='scope?.tenant'>
+                                Tenant: {{ scope.tenant.name || 'Tenant' }} ({{ scope.tenant.code || effectiveTenantCode || 'n/a' }})
+                            </p>
+                            <p v-else-if='effectiveTenantCode'>
+                                Tenant code: {{ effectiveTenantCode }}
+                            </p>
+                            <p v-if='scope?.facility'>
+                                Facility: {{ scope.facility.name || 'Facility' }} ({{ scope.facility.code || effectiveFacilityCode || 'n/a' }})
+                            </p>
+                            <p v-else-if='effectiveFacilityCode'>
+                                Facility code: {{ effectiveFacilityCode }}
+                            </p>
+                            <p class='text-muted-foreground'>
+                                Resolved from: {{ scope?.resolvedFrom || 'shared context unavailable' }}
+                            </p>
+                            <p v-if='isFacilitySuperAdmin' class='text-muted-foreground'>
+                                Access: Facility super admin
+                            </p>
+                            <p v-if='scopeWarning' class='text-destructive'>
+                                {{ scopeWarning }}
+                            </p>
+                        </PopoverContent>
+                    </Popover>
+                    <Button variant='outline' size='sm' class='h-8 gap-1.5' :disabled='refreshingPage || pageLoading' @click='refreshWardPage'>
+                        <AppIcon name='refresh-cw' class='size-3.5' />
+                        {{ refreshingPage ? 'Refreshing...' : 'Refresh' }}
+                    </Button>
+                    <Button :variant='workspaceView === "queue" ? "default" : "outline"' size='sm' class='h-8 gap-1.5' @click='workspaceView = "queue"'>
+                        <AppIcon name='clipboard-list' class='size-4' />
+                        Ward Queue
+                    </Button>
+                    <Button :variant='workspaceView === "board" ? "default" : "outline"' size='sm' class='h-8 gap-1.5' @click='workspaceView = "board"'>
+                        <AppIcon name='layout-dashboard' class='size-4' />
+                        Ward Board
+                    </Button>
+                    <Button :variant='workspaceView === "documentation" ? "default" : "outline"' size='sm' class='h-8 gap-1.5' @click='workspaceView = "documentation"'>
+                        <AppIcon name='file-pen-line' class='size-4' />
+                        Ward Documentation
+                    </Button>
+                </div>
+            </section>
+
+            <Alert v-if='scopeWarning' variant='destructive'>
+                <AppIcon name='triangle-alert' class='size-4' />
+                <AlertTitle>Scope warning</AlertTitle>
+                <AlertDescription>{{ scopeWarning }}</AlertDescription>
+            </Alert>
+
+            <Alert v-if='pageError' variant='destructive'>
+                <AppIcon name='triangle-alert' class='size-4' />
+                <AlertTitle>Ward page load issue</AlertTitle>
+                <AlertDescription>{{ pageError }}</AlertDescription>
+            </Alert>
+
+            <template v-if='canRead'>
+                <section v-if='workspaceView === "queue"' class='space-y-4'>
+                    <div class='rounded-lg border bg-muted/30 px-3 py-2 dark:bg-muted/10'>
+                        <div class='flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between'>
+                            <div class='flex flex-wrap gap-2'>
+                                <Button
+                                    v-for='chip in queueStatusChips'
+                                    :key='chip.key'
+                                    size='sm'
+                                    :variant='taskFilters.status === (chip.key === "all" ? "" : chip.key) ? "default" : "outline"'
+                                    class='h-8 gap-1.5'
+                                    @click='taskFilters.status = chip.key === "all" ? "" : chip.key; taskFilters.page = 1; void reloadQueue()'
+                                >
+                                    <span>{{ chip.label }}</span>
+                                    <Badge variant='secondary' class='rounded-full px-1.5 py-0 text-[10px]'>{{ chip.count }}</Badge>
+                                </Button>
+                            </div>
+                            <div class='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
+                                <Badge variant='secondary'>{{ taskQueueStateLabel }}</Badge>
+                                <Badge v-if='taskAdvancedFilterCount' variant='outline'>{{ taskAdvancedFilterCount }} filters</Badge>
+                            </div>
+                        </div>
+                    </div>
+
+                    <Card class='rounded-lg border-sidebar-border/70'>
+                        <CardHeader class='gap-4 border-b pb-4'>
+                            <div class='flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between'>
+                                <div class='min-w-0'>
+                                    <CardTitle class='flex items-center gap-2'>
+                                        <AppIcon name='clipboard-list' class='size-5 text-muted-foreground' />
+                                        Ward Task Queue
+                                    </CardTitle>
+                                    <CardDescription>Search active ward work, review priority, and update bedside task status without leaving the queue.</CardDescription>
+                                </div>
+                                <div class='flex w-full flex-col gap-2'>
+                                    <div class='flex w-full flex-col gap-2 xl:flex-row xl:items-center'>
+                                        <div class='relative min-w-0 flex-1'>
+                                            <AppIcon
+                                                name='search'
+                                                class='pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground'
+                                            />
+                                            <Input
+                                                v-model='taskFilters.q'
+                                                class='h-9 pl-9'
+                                                placeholder='Search task number, patient, admission, ward, or notes'
+                                                @keydown.enter.prevent='taskFilters.page = 1; void reloadQueue()'
+                                            />
+                                        </div>
+                                        <div class='flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:flex-nowrap'>
+                                            <Button variant='outline' size='sm' class='h-9 gap-1.5' @click='syncFilterDraft(); filterSheetOpen = true'>
+                                                <AppIcon name='sliders-horizontal' class='size-3.5' />
+                                                All filters
+                                                <Badge v-if='taskAdvancedFilterCount' variant='secondary' class='ml-1 text-[10px]'>
+                                                    {{ taskAdvancedFilterCount }}
+                                                </Badge>
+                                            </Button>
+                                            <Popover>
+                                                <PopoverTrigger as-child>
+                                                    <Button variant='outline' size='sm' class='h-9 gap-1.5'>
+                                                        <AppIcon name='eye' class='size-3.5' />
+                                                        View
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent align='end' class='w-72 space-y-4'>
+                                                    <div class='grid gap-2'>
+                                                        <Label for='ward-task-per-page'>Results per page</Label>
+                                                        <Select :model-value='String(taskFilters.perPage)' @update:model-value='(value) => { taskFilters.perPage = Number(value); taskFilters.page = 1; void reloadQueue(); }'>
+                                                            <SelectTrigger id='ward-task-per-page' class='w-full min-w-0 justify-between bg-background dark:bg-background'>
+                                                                <SelectValue placeholder='Results per page' />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value='10'>10</SelectItem>
+                                                                <SelectItem value='25'>25</SelectItem>
+                                                                <SelectItem value='50'>50</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div class='grid gap-2'>
+                                                        <Label>Row density</Label>
+                                                        <div class='grid grid-cols-2 gap-2'>
+                                                            <Button
+                                                                variant='outline'
+                                                                size='sm'
+                                                                :class='compactQueueRows ? "" : "border-primary bg-primary/5 text-foreground dark:border-primary/40 dark:bg-primary/15"'
+                                                                @click='compactQueueRows = false'
+                                                            >
+                                                                Comfortable
+                                                            </Button>
+                                                            <Button
+                                                                variant='outline'
+                                                                size='sm'
+                                                                :class='compactQueueRows ? "border-primary bg-primary/5 text-foreground dark:border-primary/40 dark:bg-primary/15" : ""'
+                                                                @click='compactQueueRows = true'
+                                                            >
+                                                                Compact
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                </PopoverContent>
+                                            </Popover>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
+                                <Badge variant='secondary'>{{ taskQueueStateLabel }}</Badge>
+                                <Badge v-for='chip in taskQueueFilterChips' :key='chip' variant='outline'>{{ chip }}</Badge>
+                            </div>
+                        </CardHeader>
+                        <CardContent class='p-0'>
+                            <template v-if='queueError'>
+                                <div class='p-4'>
+                                    <Alert variant='destructive'>
+                                        <AppIcon name='triangle-alert' class='size-4' />
+                                        <AlertDescription>{{ queueError }}</AlertDescription>
+                                    </Alert>
+                                </div>
+                            </template>
+                            <template v-else-if='pageLoading || (queueLoading && tasks.length === 0)'>
+                                <div class='space-y-2 p-4'>
+                                    <Skeleton class='h-20 w-full rounded-lg' />
+                                    <Skeleton class='h-20 w-full rounded-lg' />
+                                    <Skeleton class='h-20 w-full rounded-lg' />
+                                </div>
+                            </template>
+                            <template v-else-if='tasks.length > 0'>
+                                <div class='divide-y'>
+                                    <div v-for='task in tasks' :key='task.id' :class='["grid gap-3 px-4", compactQueueRows ? "py-3" : "py-4"]'>
+                                        <div class='flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between'>
+                                            <div class='min-w-0 space-y-1.5'>
+                                                <div class='flex flex-wrap items-center gap-2'>
+                                                    <p class='font-medium text-foreground'>{{ task.taskNumber || 'Ward task' }}</p>
+                                                    <Badge :variant='formatStatusVariant(task.status)'>{{ formatEnumLabel(task.status) }}</Badge>
+                                                    <Badge variant='outline'>{{ formatEnumLabel(task.priority) }}</Badge>
+                                                    <Badge variant='outline'>{{ formatEnumLabel(task.taskType) }}</Badge>
+                                                </div>
+                                                <p class='text-sm text-foreground'>{{ task.title || 'Untitled bedside task' }}</p>
+                                                <p class='text-xs text-muted-foreground'>{{ patientLabel(task) }} | {{ patientMeta(task) }}</p>
+                                            </div>
+                                            <div class='flex flex-wrap items-center gap-2'>
+                                                <Badge variant='outline'>Due {{ formatDateTime(task.dueAt) }}</Badge>
+                                                <Button size='sm' variant='outline' class='gap-1.5' @click='openTaskDetails(task)'>
+                                                    <AppIcon name='eye' class='size-3.5' />
+                                                    Open task
+                                                </Button>
+                                                <Button v-if='canUpdateTaskStatus' size='sm' class='gap-1.5' :disabled='actionLoadingId === task.id' @click='openStatusDialogFor("task", task)'>
+                                                    <AppIcon name='refresh-cw' class='size-3.5' />
+                                                    Update status
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <div class='flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground'>
+                                            <span>Admission {{ admissionLabel(task) }}</span>
+                                            <span>Started {{ formatDateTime(task.startedAt) }}</span>
+                                            <span>Completed {{ formatDateTime(task.completedAt) }}</span>
+                                            <span v-if='task.assignedToUserId'>Assigned user {{ task.assignedToUserId }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                            <div v-else class='p-6 text-center text-sm text-muted-foreground'>No ward tasks match the current queue scope.</div>
+                        </CardContent>
+                        <div class='flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between'>
+                            <p>Showing {{ tasks.length }} of {{ taskPagination?.total ?? tasks.length }} ward tasks</p>
+                            <div class='flex items-center gap-2'>
+                                <Button variant='outline' size='sm' :disabled='(taskPagination?.currentPage ?? 1) <= 1 || queueLoading' @click='taskFilters.page = Math.max((taskPagination?.currentPage ?? 1) - 1, 1)'>Previous</Button>
+                                <span>Page {{ taskPagination?.currentPage ?? 1 }} of {{ taskPagination?.lastPage ?? 1 }}</span>
+                                <Button variant='outline' size='sm' :disabled='(taskPagination?.currentPage ?? 1) >= (taskPagination?.lastPage ?? 1) || queueLoading' @click='taskFilters.page = Math.min((taskPagination?.currentPage ?? 1) + 1, taskPagination?.lastPage ?? 1)'>Next</Button>
+                            </div>
+                        </div>
+                    </Card>
+                </section>
+
+                <section v-else-if='workspaceView === "board"' class='space-y-4'>
+                    <Card class='rounded-lg border-sidebar-border/70'>
+                        <CardHeader class='pb-3'>
+                            <div class='flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between'>
+                                <div class='min-w-0'>
+                                    <CardTitle class='flex items-center gap-2'>
+                                        <AppIcon name='layout-dashboard' class='size-5 text-muted-foreground' />
+                                        Ward Board
+                                    </CardTitle>
+                                    <CardDescription>{{ boardTab === 'shift' ? 'Monitor active ward workload, escalations, and the bedside task timeline.' : 'Review care-plan progress, discharge readiness, and current inpatient placement below.' }}</CardDescription>
+                                </div>
+                                <div class='flex flex-wrap items-center gap-2'>
+                                    <Badge v-for='card in boardSummaryCards' :key='card.id' variant='outline' class='px-2.5 py-1'>
+                                        <span class='mr-1 font-medium text-foreground'>{{ card.value }}</span>
+                                        {{ card.title }}
+                                    </Badge>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent class='space-y-4'>
+                            <Tabs v-model='boardTab' class='w-full'>
+                                <div class='space-y-2'>
+                                    <TabsList class='grid h-auto w-full grid-cols-2 gap-1 rounded-lg bg-muted/70 dark:bg-muted/20 sm:w-auto'>
+                                        <TabsTrigger value='shift' class='inline-flex min-h-10 items-center justify-center gap-1.5 px-2 text-xs sm:text-sm data-[state=active]:border-border/60 data-[state=active]:bg-background data-[state=active]:text-foreground dark:data-[state=active]:border-border/50 dark:data-[state=active]:bg-background/80 dark:data-[state=active]:text-foreground'>
+                                            <AppIcon name='activity' class='size-3.5' />
+                                            Shift pressure
+                                        </TabsTrigger>
+                                        <TabsTrigger value='discharge' class='inline-flex min-h-10 items-center justify-center gap-1.5 px-2 text-xs sm:text-sm data-[state=active]:border-border/60 data-[state=active]:bg-background data-[state=active]:text-foreground dark:data-[state=active]:border-border/50 dark:data-[state=active]:bg-background/80 dark:data-[state=active]:text-foreground'>
+                                            <AppIcon name='check-check' class='size-3.5' />
+                                            Discharge planning
+                                        </TabsTrigger>
+                                    </TabsList>
+                                    <p class='text-xs text-muted-foreground'>
+                                        {{ boardTab === 'shift' ? 'Monitor active task pressure, escalations, and bedside work here.' : 'Review care plans, discharge blockers, and readiness here.' }}
+                                    </p>
+                                </div>
+                                <TabsContent value='shift' class='mt-3 space-y-3'>
+                                    <div class='grid gap-3 xl:grid-cols-3'>
+                                        <Card v-for='column in shiftColumns' :key='column.key' class='rounded-lg border-border/70'>
+                                            <CardHeader class='pb-2'>
+                                                <CardTitle class='text-sm'>{{ column.title }}</CardTitle>
+                                                <CardDescription class='text-xs'>{{ column.helper }}</CardDescription>
+                                            </CardHeader>
+                                            <CardContent class='space-y-2'>
+                                                <template v-if='column.tasks.length > 0'>
+                                                    <div v-for='task in column.tasks' :key='`${column.key}-${task.id}`' :class='["rounded-lg border p-3 text-sm transition hover:border-primary/40 cursor-pointer", taskStatusToneClass(task.status)]' role='button' tabindex='0' @click='openTaskDetails(task)' @keydown.enter.prevent='openTaskDetails(task)' @keydown.space.prevent='openTaskDetails(task)'>
+                                                        <div class='flex items-start justify-between gap-2'>
+                                                            <div class='min-w-0'>
+                                                                <p class='truncate font-medium'>{{ task.taskNumber }}</p>
+                                                                <p class='text-xs text-muted-foreground'>{{ formatEnumLabel(task.taskType) }} | {{ task.title || 'Untitled task' }}</p>
+                                                            </div>
+                                                            <Badge variant='outline'>{{ formatEnumLabel(task.priority) }}</Badge>
+                                                        </div>
+                                                        <p class='mt-2 text-xs text-muted-foreground'>{{ admissionLabel(task) }} | {{ formatDateTime(taskTimelineAnchor(task)) }}</p>
+                                                    </div>
+                                                </template>
+                                                <p v-else class='rounded-lg border border-dashed p-4 text-sm text-muted-foreground'>{{ column.emptyLabel }}</p>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+                                    <Card class='rounded-lg border-border/70'>
+                                        <CardHeader class='pb-2'>
+                                            <CardTitle class='text-sm'>Bedside Task Timeline</CardTitle>
+                                            <CardDescription class='text-xs'>Next due and most recent active ward tasks across the current queue scope.</CardDescription>
+                                        </CardHeader>
+                                        <CardContent class='space-y-3'>
+                                            <template v-if='bedsideTimeline.length > 0'>
+                                                <div v-for='(task, index) in bedsideTimeline' :key='`timeline-${task.id}`' class='relative pl-6'>
+                                                    <span class='absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full bg-primary/80' />
+                                                    <span v-if='index < bedsideTimeline.length - 1' class='absolute left-[4px] top-4 h-[calc(100%+0.25rem)] w-px bg-border' />
+                                                    <div class='rounded-lg border border-border/70 bg-background/70 p-3 transition hover:border-primary/40 cursor-pointer' role='button' tabindex='0' @click='openTaskDetails(task)' @keydown.enter.prevent='openTaskDetails(task)' @keydown.space.prevent='openTaskDetails(task)'>
+                                                        <div class='flex items-start justify-between gap-2'>
+                                                            <div class='min-w-0'>
+                                                                <p class='truncate text-sm font-medium'>{{ task.taskNumber }}</p>
+                                                                <p class='text-xs text-muted-foreground'>{{ formatEnumLabel(task.taskType) }} | {{ task.title || 'Untitled task' }}</p>
+                                                            </div>
+                                                            <Badge :variant='formatStatusVariant(task.status)'>{{ formatEnumLabel(task.status) }}</Badge>
+                                                        </div>
+                                                        <p class='mt-2 text-xs text-muted-foreground'>{{ admissionLabel(task) }} | {{ formatDateTime(taskTimelineAnchor(task)) }}</p>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            <p v-else class='rounded-lg border border-dashed p-4 text-sm text-muted-foreground'>No bedside timeline anchors are available in the current task scope.</p>
+                                        </CardContent>
+                                    </Card>
+                                </TabsContent>
+                                <TabsContent value='discharge' class='mt-3 space-y-3'>
+                                    <div class='grid gap-3 xl:grid-cols-2'>
+                                        <Card class='rounded-lg border-border/70'>
+                                            <CardHeader class='pb-2'>
+                                                <CardTitle class='text-sm'>Inpatient Care Plans</CardTitle>
+                                                <CardDescription class='text-xs'>Active and recently updated ward plans that drive next clinical steps.</CardDescription>
+                                            </CardHeader>
+                                            <CardContent class='space-y-2'>
+                                                <template v-if='carePlans.length > 0'>
+                                                    <div v-for='plan in carePlans.slice(0, 8)' :key='plan.id' class='rounded-lg border p-3'>
+                                                        <div class='flex items-start justify-between gap-2'>
+                                                            <div class='min-w-0'>
+                                                                <p class='truncate text-sm font-medium'>{{ plan.title || plan.carePlanNumber || 'Care plan' }}</p>
+                                                                <p class='text-xs text-muted-foreground'>{{ patientLabel(plan) }} | {{ admissionLabel(plan) }}</p>
+                                                            </div>
+                                                            <Badge :variant='formatStatusVariant(plan.status)'>{{ formatEnumLabel(plan.status) }}</Badge>
+                                                        </div>
+                                                        <p class='mt-2 text-xs text-muted-foreground'>Review due {{ formatDateTime(plan.reviewDueAt) }} | Target discharge {{ formatDateTime(plan.targetDischargeAt) }}</p>
+                                                        <div class='mt-3 flex justify-end'>
+                                                            <Button v-if='canUpdateCarePlanStatus' size='sm' variant='outline' class='gap-1.5' @click='openStatusDialogFor("care_plan", plan)'>
+                                                                <AppIcon name='refresh-cw' class='size-3.5' />
+                                                                Update status
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                                <p v-else class='rounded-lg border border-dashed p-4 text-sm text-muted-foreground'>No care plans are currently in scope for discharge planning.</p>
+                                            </CardContent>
+                                        </Card>
+                                        <Card class='rounded-lg border-border/70'>
+                                            <CardHeader class='pb-2'>
+                                                <CardTitle class='text-sm'>Discharge Checklists</CardTitle>
+                                                <CardDescription class='text-xs'>Track readiness, blockers, and completion on active inpatient discharges.</CardDescription>
+                                            </CardHeader>
+                                            <CardContent class='space-y-2'>
+                                                <template v-if='checklists.length > 0'>
+                                                    <div v-for='checklist in checklists.slice(0, 8)' :key='checklist.id' class='rounded-lg border p-3'>
+                                                        <div class='flex items-start justify-between gap-2'>
+                                                            <div class='min-w-0'>
+                                                                <p class='truncate text-sm font-medium'>{{ patientLabel(checklist) }}</p>
+                                                                <p class='text-xs text-muted-foreground'>{{ admissionLabel(checklist) }} | {{ checklistCompletionCount(checklist) }}/7 items complete</p>
+                                                            </div>
+                                                            <Badge :variant='formatStatusVariant(checklist.status)'>{{ formatEnumLabel(checklist.status) }}</Badge>
+                                                        </div>
+                                                        <p class='mt-2 text-xs text-muted-foreground'>Ready for discharge {{ checklist.isReadyForDischarge ? 'Yes' : 'No' }} | Reviewed {{ formatDateTime(checklist.reviewedAt) }}</p>
+                                                        <div class='mt-3 flex justify-end'>
+                                                            <Button v-if='canManageDischargeChecklist' size='sm' variant='outline' class='gap-1.5' @click='openStatusDialogFor("discharge_checklist", checklist)'>
+                                                                <AppIcon name='refresh-cw' class='size-3.5' />
+                                                                Update status
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                                <p v-else class='rounded-lg border border-dashed p-4 text-sm text-muted-foreground'>No discharge checklists are currently in scope.</p>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+                                </TabsContent>
+                            </Tabs>
+                        </CardContent>
+                    </Card>
+
+                    <Card class='rounded-lg border-sidebar-border/70'>
+                        <CardHeader class='pb-2'>
+                            <div class='flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between'>
+                                <div class='min-w-0'>
+                                    <CardTitle class='flex items-center gap-2'>
+                                        <AppIcon name='bed-double' class='size-5 text-muted-foreground' />
+                                        Current Inpatient Census
+                                    </CardTitle>
+                                    <CardDescription>Placement and occupancy view for active inpatient beds and receiving-unit coverage.</CardDescription>
+                                </div>
+                                <div class='flex items-center gap-2 text-xs text-muted-foreground'>
+                                    <Badge variant='outline'>Active inpatients {{ censusRows.length }}</Badge>
+                                    <Badge variant='outline'>Configured beds {{ wardBeds.length }}</Badge>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent class='space-y-4'>
+                            <template v-if='boardError'>
+                                <Alert variant='destructive'>
+                                    <AppIcon name='triangle-alert' class='size-4' />
+                                    <AlertDescription>{{ boardError }}</AlertDescription>
+                                </Alert>
+                            </template>
+                            <template v-else-if='pageLoading || (boardLoading && wardBedGroups.length === 0)'>
+                                <div class='grid gap-3 md:grid-cols-2 xl:grid-cols-3'>
+                                    <Skeleton class='h-36 w-full rounded-lg' />
+                                    <Skeleton class='h-36 w-full rounded-lg' />
+                                    <Skeleton class='h-36 w-full rounded-lg' />
+                                    <Skeleton class='h-36 w-full rounded-lg' />
+                                    <Skeleton class='h-36 w-full rounded-lg' />
+                                    <Skeleton class='h-36 w-full rounded-lg' />
+                                </div>
+                            </template>
+                            <template v-else-if='wardBedGroups.length > 0'>
+                                <div class='space-y-4'>
+                                    <div v-for='ward in wardBedGroups' :key='ward.wardName' class='space-y-3'>
+                                        <div>
+                                            <h3 class='text-sm font-semibold'>{{ ward.wardName }}</h3>
+                                            <p class='text-xs text-muted-foreground'>{{ ward.slots.filter((slot) => slot.admission).length }} occupied | {{ ward.slots.length }} configured beds</p>
+                                        </div>
+                                        <div class='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
+                                            <div v-for='slot in ward.slots' :key='slot.resource.id' :class='["rounded-lg border p-3", slot.admission ? "border-primary/20 bg-primary/5 dark:border-primary/30 dark:bg-primary/10" : String(slot.resource.status ?? "").trim().toLowerCase() === "maintenance" ? "border-red-200 bg-red-50 dark:border-red-900/60 dark:bg-red-950/20" : "border-emerald-200 bg-emerald-50 dark:border-emerald-900/60 dark:bg-emerald-950/20"]'>
+                                                <div class='flex items-start justify-between gap-3'>
+                                                    <div class='min-w-0'>
+                                                        <div class='flex items-center gap-2'>
+                                                            <AppIcon name='bed-double' class='size-4 text-muted-foreground' />
+                                                            <p class='font-medium'>{{ slot.resource.bedNumber || slot.resource.name || slot.resource.code || 'Bed' }}</p>
+                                                        </div>
+                                                        <div class='mt-2 flex flex-wrap gap-1.5'>
+                                                            <Badge variant='outline'>{{ slot.resource.wardName || 'Ward' }}</Badge>
+                                                            <Badge v-if='slot.resource.location' variant='outline'>{{ slot.resource.location }}</Badge>
+                                                        </div>
+                                                    </div>
+                                                    <Badge :variant='slot.admission ? "default" : formatStatusVariant(slot.resource.status)'>{{ slot.admission ? String(slot.admission.status ?? '').trim().toLowerCase() === 'transferred' ? 'Transferred in' : 'Occupied' : String(slot.resource.status ?? '').trim().toLowerCase() === 'maintenance' ? 'Maintenance' : 'Available' }}</Badge>
+                                                </div>
+                                                <div v-if='slot.admission' class='mt-3 space-y-1'>
+                                                    <p class='truncate text-sm font-medium'>{{ slot.admission.patientName || 'Patient not loaded' }}</p>
+                                                    <p class='text-xs text-muted-foreground'>{{ slot.admission.patientNumber || slot.admission.admissionNumber || 'No patient number' }}</p>
+                                                    <div class='mt-2 flex items-center justify-between gap-2'>
+                                                        <p class='text-xs text-muted-foreground'>{{ formatDateTime(slot.admission.admittedAt) }}</p>
+                                                        <Popover>
+                                                            <PopoverTrigger as-child>
+                                                                <Button size='sm' variant='outline' class='h-7 px-2 text-xs'>More</Button>
+                                                            </PopoverTrigger>
+                                                            <PopoverContent class='w-72 space-y-3'>
+                                                                <div>
+                                                                    <p class='font-medium'>{{ slot.admission.patientName || 'Patient not loaded' }}</p>
+                                                                    <p class='text-xs text-muted-foreground'>{{ slot.admission.patientNumber || 'No patient number' }}</p>
+                                                                </div>
+                                                                <div class='space-y-1 text-xs text-muted-foreground'>
+                                                                    <p><span class='font-medium text-foreground'>Admission</span> {{ slot.admission.admissionNumber || slot.admission.id.slice(0, 8).toUpperCase() }}</p>
+                                                                    <p><span class='font-medium text-foreground'>Status</span> {{ formatEnumLabel(slot.admission.status) }}</p>
+                                                                    <p><span class='font-medium text-foreground'>Placement</span> {{ placementLabel(slot.admission) }}</p>
+                                                                    <p><span class='font-medium text-foreground'>Admitted</span> {{ formatDateTime(slot.admission.admittedAt) }}</p>
+                                                                    <p v-if='slot.admission.admissionReason'><span class='font-medium text-foreground'>Reason</span> {{ slot.admission.admissionReason }}</p>
+                                                                </div>
+                                                            </PopoverContent>
+                                                        </Popover>
+                                                    </div>
+                                                </div>
+                                                <div v-else class='mt-3 text-xs text-muted-foreground'>{{ String(slot.resource.status ?? '').trim().toLowerCase() === 'maintenance' ? 'Not assignable' : 'Ready for new admission' }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                            <div v-else class='rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground'>No ward-bed registry is available yet for the current facility scope.</div>
+                        </CardContent>
+                    </Card>
+                </section>
+
+                <section v-else class='space-y-4'>
+                    <Card class='rounded-lg border-sidebar-border/70'>
+                        <CardHeader class='space-y-4'>
+                            <div class='flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between'>
+                                <div class='min-w-0'>
+                                    <CardTitle class='flex items-center gap-2'>
+                                        <AppIcon name='file-pen-line' class='size-5 text-muted-foreground' />
+                                        Ward Documentation
+                                    </CardTitle>
+                                    <CardDescription>Select one active inpatient admission, then capture ward tasks, round notes, care plans, or discharge checklist updates from a compact admission-first flow.</CardDescription>
+                                </div>
+                            </div>
+                            <div class='grid gap-2 md:grid-cols-2 xl:grid-cols-4'>
+                                <button type='button' :class='["rounded-lg border px-4 py-3 text-left transition", documentationFlow === "task" ? "border-primary bg-primary/5 dark:border-primary/40 dark:bg-primary/15" : "bg-background/70 dark:bg-background/40 hover:border-primary/40 hover:bg-muted/20 dark:hover:bg-muted/10"]' @click='documentationFlow = "task"'>
+                                    <div class='flex items-center gap-2'><AppIcon name='clipboard-list' class='size-4 text-muted-foreground' /><span class='font-medium'>Ward task</span></div>
+                                    <p class='mt-1 text-xs text-muted-foreground'>Create a bedside nursing task linked to the current admission.</p>
+                                </button>
+                                <button type='button' :class='["rounded-lg border px-4 py-3 text-left transition", documentationFlow === "round_note" ? "border-primary bg-primary/5 dark:border-primary/40 dark:bg-primary/15" : "bg-background/70 dark:bg-background/40 hover:border-primary/40 hover:bg-muted/20 dark:hover:bg-muted/10"]' @click='documentationFlow = "round_note"'>
+                                    <div class='flex items-center gap-2'><AppIcon name='stethoscope' class='size-4 text-muted-foreground' /><span class='font-medium'>Round note</span></div>
+                                    <p class='mt-1 text-xs text-muted-foreground'>Capture the clinical round, updated care plan, and handoff notes.</p>
+                                </button>
+                                <button type='button' :class='["rounded-lg border px-4 py-3 text-left transition", documentationFlow === "care_plan" ? "border-primary bg-primary/5 dark:border-primary/40 dark:bg-primary/15" : "bg-background/70 dark:bg-background/40 hover:border-primary/40 hover:bg-muted/20 dark:hover:bg-muted/10"]' @click='documentationFlow = "care_plan"'>
+                                    <div class='flex items-center gap-2'><AppIcon name='file-text' class='size-4 text-muted-foreground' /><span class='font-medium'>Care plan</span></div>
+                                    <p class='mt-1 text-xs text-muted-foreground'>Create or update the active inpatient care plan for this admission.</p>
+                                </button>
+                                <button type='button' :class='["rounded-lg border px-4 py-3 text-left transition", documentationFlow === "discharge_checklist" ? "border-primary bg-primary/5 dark:border-primary/40 dark:bg-primary/15" : "bg-background/70 dark:bg-background/40 hover:border-primary/40 hover:bg-muted/20 dark:hover:bg-muted/10"]' @click='documentationFlow = "discharge_checklist"'>
+                                    <div class='flex items-center gap-2'><AppIcon name='check-check' class='size-4 text-muted-foreground' /><span class='font-medium'>Discharge checklist</span></div>
+                                    <p class='mt-1 text-xs text-muted-foreground'>Track readiness, blockers, and bedside discharge completion items.</p>
+                                </button>
+                            </div>
+                        </CardHeader>
+                        <CardContent class='space-y-5'>
+                            <template v-if='pageLoading'>
+                                <div class='space-y-4'>
+                                    <Skeleton class='h-20 w-full rounded-lg' />
+                                    <Skeleton class='h-64 w-full rounded-lg' />
+                                </div>
+                            </template>
+                            <template v-else>
+                                <div class='rounded-lg border border-border/70 bg-muted/20 p-4 dark:bg-muted/10'>
+                                <AdmissionLookupField v-model='selectedAdmissionId' input-id='ward-documentation-admission' label='Admission' helper-text='Search current inpatient admissions from the active census.' :error-message='fieldError("admissionId")' @selected='openSelectedAdmission' />
+                                <div v-if='selectedAdmission' class='mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
+                                    <Badge variant='outline'>{{ selectedAdmission.admissionNumber || 'Admission' }}</Badge>
+                                    <Badge variant='outline'>{{ selectedAdmission.patientName || 'Patient not loaded' }}</Badge>
+                                    <Badge variant='outline'>{{ placementLabel(selectedAdmission) }}</Badge>
+                                    <Badge variant='outline'>{{ formatEnumLabel(selectedAdmission.status) }}</Badge>
+                                </div>
+                            </div>
+
+                            <Alert v-if='documentationSuccess' class='border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100'>
+                                <AppIcon name='check' class='size-4' />
+                                <AlertDescription>{{ documentationSuccess }}</AlertDescription>
+                            </Alert>
+                            <Alert v-if='documentationError' variant='destructive'>
+                                <AppIcon name='triangle-alert' class='size-4' />
+                                <AlertDescription>{{ documentationError }}</AlertDescription>
+                            </Alert>
+                            <Card class='rounded-lg border'>
+                                <CardHeader class='pb-3'>
+                                    <CardTitle class='text-base'>{{ documentationFlow === 'task' ? 'Create ward task' : documentationFlow === 'round_note' ? 'Record round note' : documentationFlow === 'care_plan' ? editableCarePlan ? 'Update care plan' : 'Create care plan' : editableChecklist ? 'Update discharge checklist' : 'Create discharge checklist' }}</CardTitle>
+                                    <CardDescription>{{ documentationFlow === 'task' ? 'Assign bedside work, due timing, and a clear nursing note.' : documentationFlow === 'round_note' ? 'Capture the current clinical review and handoff guidance.' : documentationFlow === 'care_plan' ? 'Document the plan, goals, interventions, and next review date.' : 'Track discharge readiness, blockers, and bedside completion items.' }}</CardDescription>
+                                </CardHeader>
+                                <CardContent class='space-y-4'>
+                                    <template v-if='documentationFlow === "task"'>
+                                        <div class='grid gap-4 md:grid-cols-2'>
+                                            <div class='grid gap-2'>
+                                                <Label for='ward-task-type'>Task type</Label>
+                                                <Select v-model='taskForm.taskType'>
+                                                    <SelectTrigger id='ward-task-type' class='w-full min-w-0 justify-between bg-background dark:bg-background'>
+                                                        <SelectValue placeholder='Select task type' />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem v-for='option in taskTypeOptions' :key='option' :value='option'>
+                                                            {{ formatEnumLabel(option) }}
+                                                        </SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                                <p v-if='fieldError("taskType")' class='text-xs text-destructive'>{{ fieldError('taskType') }}</p>
+                                            </div>
+                                            <div class='grid gap-2'>
+                                                <Label for='ward-task-priority'>Priority</Label>
+                                                <Select v-model='taskForm.priority'>
+                                                    <SelectTrigger id='ward-task-priority' class='w-full min-w-0 justify-between bg-background dark:bg-background'>
+                                                        <SelectValue placeholder='Select priority' />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem v-for='option in taskPriorityOptions' :key='option' :value='option'>
+                                                            {{ formatEnumLabel(option) }}
+                                                        </SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                                <p v-if='fieldError("priority")' class='text-xs text-destructive'>{{ fieldError('priority') }}</p>
+                                            </div>
+                                        </div>
+                                        <div class='grid gap-2'>
+                                            <Label for='ward-task-title'>Task title</Label>
+                                            <Input id='ward-task-title' v-model='taskForm.title' placeholder='Evening vitals review' />
+                                            <p v-if='fieldError("title")' class='text-xs text-destructive'>{{ fieldError('title') }}</p>
+                                        </div>
+                                        <div class='grid gap-4 md:grid-cols-2'>
+                                            <div class='grid gap-2'>
+                                                <Label for='ward-task-assigned-user'>Assigned user</Label>
+                                                <Input id='ward-task-assigned-user' v-model='taskForm.assignedToUserId' inputmode='numeric' placeholder='Optional user ID' />
+                                                <p v-if='fieldError("assignedToUserId")' class='text-xs text-destructive'>{{ fieldError('assignedToUserId') }}</p>
+                                            </div>
+                                            <div class='grid gap-2'>
+                                                <Label for='ward-task-due-at'>Due at</Label>
+                                                <Input id='ward-task-due-at' v-model='taskForm.dueAt' type='datetime-local' />
+                                                <p v-if='fieldError("dueAt")' class='text-xs text-destructive'>{{ fieldError('dueAt') }}</p>
+                                            </div>
+                                        </div>
+                                        <div class='grid gap-2'>
+                                            <Label for='ward-task-notes'>Notes</Label>
+                                            <Textarea id='ward-task-notes' v-model='taskForm.notes' rows='4' placeholder='Repeat BP, pulse, temperature and update bedside chart.' />
+                                            <p v-if='fieldError("notes")' class='text-xs text-destructive'>{{ fieldError('notes') }}</p>
+                                        </div>
+                                        <div class='flex justify-end'><Button :disabled='documentationSubmitting || !canCreateTask' class='gap-1.5' @click='submitTask'><AppIcon name='plus' class='size-4' />{{ documentationSubmitting ? 'Saving...' : 'Create ward task' }}</Button></div>
+                                    </template>
+                                    <template v-else-if='documentationFlow === "round_note"'>
+                                        <div class='grid gap-4 md:grid-cols-2'>
+                                            <div class='grid gap-2'><Label for='round-note-rounded-at'>Rounded at</Label><Input id='round-note-rounded-at' v-model='roundNoteForm.roundedAt' type='datetime-local' /><p v-if='fieldError("roundedAt")' class='text-xs text-destructive'>{{ fieldError('roundedAt') }}</p></div>
+                                            <div class='grid gap-2'><Label for='round-note-care-plan'>Updated care plan summary</Label><Input id='round-note-care-plan' v-model='roundNoteForm.carePlan' placeholder='Continue monitoring, reassess tomorrow.' /><p v-if='fieldError("carePlan")' class='text-xs text-destructive'>{{ fieldError('carePlan') }}</p></div>
+                                        </div>
+                                        <div class='grid gap-2'>
+                                            <Label for='round-note-note'>Round note</Label>
+                                            <Textarea id='round-note-note' v-model='roundNoteForm.roundNote' rows='5' placeholder='Patient reviewed on ward round. Stable, tolerating oral intake.' />
+                                            <p v-if='fieldError("roundNote")' class='text-xs text-destructive'>{{ fieldError('roundNote') }}</p>
+                                        </div>
+                                        <div class='grid gap-2'><Label for='round-note-handoff'>Handoff notes</Label><Textarea id='round-note-handoff' v-model='roundNoteForm.handoffNotes' rows='4' placeholder='Night shift to watch pain score and temperature trend.' /><p v-if='fieldError("handoffNotes")' class='text-xs text-destructive'>{{ fieldError('handoffNotes') }}</p></div>
+                                        <div class='flex justify-end'><Button :disabled='documentationSubmitting || !canCreateRoundNote' class='gap-1.5' @click='submitRoundNote'><AppIcon name='plus' class='size-4' />{{ documentationSubmitting ? 'Saving...' : 'Record round note' }}</Button></div>
+                                    </template>
+                                    <template v-else-if='documentationFlow === "care_plan"'>
+                                        <div class='grid gap-2'><Label for='care-plan-title'>Care plan title</Label><Input id='care-plan-title' v-model='carePlanForm.title' placeholder='Inpatient monitoring plan' /><p v-if='fieldError("title")' class='text-xs text-destructive'>{{ fieldError('title') }}</p></div>
+                                        <div class='grid gap-2'><Label for='care-plan-text'>Plan text</Label><Textarea id='care-plan-text' v-model='carePlanForm.planText' rows='5' placeholder='Monitor recovery progress and prepare for safe discharge.' /><p v-if='fieldError("planText")' class='text-xs text-destructive'>{{ fieldError('planText') }}</p></div>
+                                        <div class='grid gap-4 md:grid-cols-2'>
+                                            <div class='grid gap-2'><Label for='care-plan-goals'>Goals</Label><Textarea id='care-plan-goals' v-model='carePlanForm.goalsText' rows='5' placeholder='Stable vitals&#10;Pain controlled' /><p v-if='fieldError("goals")' class='text-xs text-destructive'>{{ fieldError('goals') }}</p></div>
+                                            <div class='grid gap-2'><Label for='care-plan-interventions'>Interventions</Label><Textarea id='care-plan-interventions' v-model='carePlanForm.interventionsText' rows='5' placeholder='Ward observations every shift&#10;Medication review' /><p v-if='fieldError("interventions")' class='text-xs text-destructive'>{{ fieldError('interventions') }}</p></div>
+                                        </div>
+                                        <div class='grid gap-4 md:grid-cols-2'>
+                                            <div class='grid gap-2'><Label for='care-plan-review-due'>Review due</Label><Input id='care-plan-review-due' v-model='carePlanForm.reviewDueAt' type='datetime-local' /><p v-if='fieldError("reviewDueAt")' class='text-xs text-destructive'>{{ fieldError('reviewDueAt') }}</p></div>
+                                            <div class='grid gap-2'><Label for='care-plan-target-discharge'>Target discharge</Label><Input id='care-plan-target-discharge' v-model='carePlanForm.targetDischargeAt' type='datetime-local' /><p v-if='fieldError("targetDischargeAt")' class='text-xs text-destructive'>{{ fieldError('targetDischargeAt') }}</p></div>
+                                        </div>
+                                        <div class='flex justify-end'><Button :disabled='documentationSubmitting || !(editableCarePlan ? canUpdateCarePlan : canCreateCarePlan)' class='gap-1.5' @click='submitCarePlan'><AppIcon name='plus' class='size-4' />{{ documentationSubmitting ? 'Saving...' : editableCarePlan ? 'Update care plan' : 'Create care plan' }}</Button></div>
+                                    </template>
+                                    <template v-else>
+                                        <div class='grid gap-4 md:grid-cols-2 xl:grid-cols-3'>
+                                            <label class='flex items-center gap-3 rounded-lg border border-border/70 bg-background/70 p-3 text-sm dark:bg-background/40'><Checkbox :checked='checklistForm.clinicalSummaryCompleted' @update:checked='checklistForm.clinicalSummaryCompleted = Boolean($event)' /><span>Clinical summary complete</span></label>
+                                            <label class='flex items-center gap-3 rounded-lg border border-border/70 bg-background/70 p-3 text-sm dark:bg-background/40'><Checkbox :checked='checklistForm.medicationReconciliationCompleted' @update:checked='checklistForm.medicationReconciliationCompleted = Boolean($event)' /><span>Medication reconciliation complete</span></label>
+                                            <label class='flex items-center gap-3 rounded-lg border border-border/70 bg-background/70 p-3 text-sm dark:bg-background/40'><Checkbox :checked='checklistForm.followUpPlanCompleted' @update:checked='checklistForm.followUpPlanCompleted = Boolean($event)' /><span>Follow-up plan complete</span></label>
+                                            <label class='flex items-center gap-3 rounded-lg border border-border/70 bg-background/70 p-3 text-sm dark:bg-background/40'><Checkbox :checked='checklistForm.patientEducationCompleted' @update:checked='checklistForm.patientEducationCompleted = Boolean($event)' /><span>Patient education complete</span></label>
+                                            <label class='flex items-center gap-3 rounded-lg border border-border/70 bg-background/70 p-3 text-sm dark:bg-background/40'><Checkbox :checked='checklistForm.transportArranged' @update:checked='checklistForm.transportArranged = Boolean($event)' /><span>Transport arranged</span></label>
+                                            <label class='flex items-center gap-3 rounded-lg border border-border/70 bg-background/70 p-3 text-sm dark:bg-background/40'><Checkbox :checked='checklistForm.billingCleared' @update:checked='checklistForm.billingCleared = Boolean($event)' /><span>Billing cleared</span></label>
+                                            <label class='flex items-center gap-3 rounded-lg border border-border/70 bg-background/70 p-3 text-sm dark:bg-background/40 md:col-span-2 xl:col-span-3'><Checkbox :checked='checklistForm.documentationCompleted' @update:checked='checklistForm.documentationCompleted = Boolean($event)' /><span>Documentation complete</span></label>
+                                        </div>
+                                        <div class='grid gap-4 md:grid-cols-2'>
+                                            <div class='grid gap-2'><Label for='checklist-status'>Checklist status</Label><Select v-model='checklistForm.status'><SelectTrigger id='checklist-status' class='w-full min-w-0 justify-between bg-background dark:bg-background'><SelectValue placeholder='Select checklist status' /></SelectTrigger><SelectContent><SelectItem v-for='option in dischargeChecklistStatusOptions' :key='option' :value='option'>{{ formatEnumLabel(option) }}</SelectItem></SelectContent></Select><p v-if='fieldError("status")' class='text-xs text-destructive'>{{ fieldError('status') }}</p></div>
+                                            <div class='grid gap-2'><Label for='checklist-status-reason'>Blocker note</Label><Input id='checklist-status-reason' v-model='checklistForm.statusReason' :placeholder='checklistForm.status === "blocked" ? "Required blocker note" : "Optional status note"' /><p v-if='fieldError("statusReason")' class='text-xs text-destructive'>{{ fieldError('statusReason') }}</p></div>
+                                        </div>
+                                        <div class='rounded-lg border border-border/70 bg-muted/20 p-3 text-sm text-muted-foreground dark:bg-muted/10'>{{ checklistReadyForSubmit ? 'All required discharge items are complete.' : 'Complete all seven items before moving the checklist to ready or completed.' }}</div>
+                                        <div class='grid gap-2'><Label for='checklist-notes'>Notes</Label><Textarea id='checklist-notes' v-model='checklistForm.notes' rows='4' placeholder='Waiting for discharge medicines and final documentation.' /><p v-if='fieldError("notes")' class='text-xs text-destructive'>{{ fieldError('notes') }}</p></div>
+                                        <div class='flex justify-end'><Button :disabled='documentationSubmitting || !canManageDischargeChecklist' class='gap-1.5' @click='submitChecklist'><AppIcon name='plus' class='size-4' />{{ documentationSubmitting ? 'Saving...' : editableChecklist ? 'Update checklist' : 'Create checklist' }}</Button></div>
+                                    </template>
+                                </CardContent>
+                            </Card>
+                            </template>
+                        </CardContent>
+                    </Card>
+                </section>
+            </template>
+
+            <Alert v-else variant='destructive'>
+                <AppIcon name='shield-x' class='size-4' />
+                <AlertTitle>Ward access restricted</AlertTitle>
+                <AlertDescription>This user cannot open inpatient ward operations for the current facility scope.</AlertDescription>
+            </Alert>
+        </div>
+
+        <Sheet :open='taskDetailsOpen' @update:open='(open) => (open ? (taskDetailsOpen = true) : closeTaskDetails())'>
+            <SheetContent side='right' class='w-full sm:max-w-2xl'>
+                <SheetHeader>
+                    <SheetTitle class='flex items-center gap-2'><AppIcon name='clipboard-list' class='size-5 text-muted-foreground' />Ward Task Details</SheetTitle>
+                    <SheetDescription>Review bedside task context, workflow timing, and the current bedside note.</SheetDescription>
+                </SheetHeader>
+                <div v-if='taskDetailsTask' class='mt-6 space-y-4'>
+                    <div class='rounded-lg border border-border/70 bg-muted/20 p-4 dark:bg-muted/10'>
+                        <div class='flex flex-wrap items-start justify-between gap-3'>
+                            <div class='min-w-0 space-y-1'>
+                                <div class='flex flex-wrap items-center gap-2'>
+                                    <p class='text-sm font-semibold text-foreground'>{{ taskDetailsTask.taskNumber || 'Ward task' }}</p>
+                                    <Badge :variant='formatStatusVariant(taskDetailsTask.status)'>{{ formatEnumLabel(taskDetailsTask.status) }}</Badge>
+                                    <Badge variant='outline'>{{ formatEnumLabel(taskDetailsTask.priority) }}</Badge>
+                                    <Badge variant='outline'>{{ formatEnumLabel(taskDetailsTask.taskType) }}</Badge>
+                                </div>
+                                <p class='text-sm text-foreground'>{{ taskDetailsTask.title || 'Untitled bedside task' }}</p>
+                                <p class='text-xs text-muted-foreground'>{{ patientLabel(taskDetailsTask) }} | {{ patientMeta(taskDetailsTask) }}</p>
+                            </div>
+                            <Badge variant='outline'>Due {{ formatDateTime(taskDetailsTask.dueAt) }}</Badge>
+                        </div>
+                    </div>
+                    <div class='grid gap-4 md:grid-cols-2'>
+                        <div class='rounded-lg border border-border/70 p-4'>
+                            <p class='text-xs font-medium uppercase tracking-wide text-muted-foreground'>Task context</p>
+                            <dl class='mt-3 space-y-3 text-sm'>
+                                <div class='flex justify-between gap-4'><dt class='text-muted-foreground'>Patient</dt><dd class='text-right font-medium text-foreground'>{{ patientLabel(taskDetailsTask) }}</dd></div>
+                                <div class='flex justify-between gap-4'><dt class='text-muted-foreground'>Admission</dt><dd class='text-right font-medium text-foreground'>{{ admissionLabel(taskDetailsTask) }}</dd></div>
+                                <div class='flex justify-between gap-4'><dt class='text-muted-foreground'>Placement</dt><dd class='text-right font-medium text-foreground'>{{ placementLabel(taskDetailsAdmission) }}</dd></div>
+                                <div class='flex justify-between gap-4'><dt class='text-muted-foreground'>Assigned user</dt><dd class='text-right font-medium text-foreground'>{{ taskDetailsTask.assignedToUserId || 'Not assigned' }}</dd></div>
+                            </dl>
+                        </div>
+                        <div class='rounded-lg border border-border/70 p-4'>
+                            <p class='text-xs font-medium uppercase tracking-wide text-muted-foreground'>Workflow timing</p>
+                            <dl class='mt-3 space-y-3 text-sm'>
+                                <div class='flex justify-between gap-4'><dt class='text-muted-foreground'>Due at</dt><dd class='text-right font-medium text-foreground'>{{ formatDateTime(taskDetailsTask.dueAt) }}</dd></div>
+                                <div class='flex justify-between gap-4'><dt class='text-muted-foreground'>Started</dt><dd class='text-right font-medium text-foreground'>{{ formatDateTime(taskDetailsTask.startedAt) }}</dd></div>
+                                <div class='flex justify-between gap-4'><dt class='text-muted-foreground'>Completed</dt><dd class='text-right font-medium text-foreground'>{{ formatDateTime(taskDetailsTask.completedAt) }}</dd></div>
+                                <div class='flex justify-between gap-4'><dt class='text-muted-foreground'>Escalated</dt><dd class='text-right font-medium text-foreground'>{{ formatDateTime(taskDetailsTask.escalatedAt) }}</dd></div>
+                            </dl>
+                        </div>
+                    </div>
+                    <div class='grid gap-4 md:grid-cols-2'>
+                        <div class='rounded-lg border border-border/70 p-4'>
+                            <p class='text-xs font-medium uppercase tracking-wide text-muted-foreground'>Bedside notes</p>
+                            <p class='mt-3 text-sm leading-6 text-foreground'>{{ taskDetailsTask.notes || 'No bedside notes were recorded for this ward task.' }}</p>
+                        </div>
+                        <div class='rounded-lg border border-border/70 p-4'>
+                            <p class='text-xs font-medium uppercase tracking-wide text-muted-foreground'>Workflow note</p>
+                            <p class='mt-3 text-sm leading-6 text-foreground'>{{ taskDetailsTask.statusReason || 'No workflow note was recorded for the current task status.' }}</p>
+                        </div>
+                    </div>
+                    <div class='flex items-center justify-end gap-2 border-t pt-4'>
+                        <Button variant='outline' @click='closeTaskDetails'>Close</Button>
+                        <Button v-if='canUpdateTaskStatus' class='gap-1.5' :disabled='actionLoadingId === taskDetailsTask.id' @click='openTaskStatusFromDetails'><AppIcon name='refresh-cw' class='size-4' />Update status</Button>
+                    </div>
+                </div>
+            </SheetContent>
+        </Sheet>
+
+        <Sheet :open='filterSheetOpen' @update:open='(open) => (filterSheetOpen = open)'>
+            <SheetContent side='right' class='w-full sm:max-w-lg'>
+                <SheetHeader>
+                    <SheetTitle>All filters</SheetTitle>
+                    <SheetDescription>Refine the ward task queue by priority and admission context.</SheetDescription>
+                </SheetHeader>
+                <div class='mt-6 space-y-4'>
+                    <div class='grid gap-2'><Label for='filter-priority'>Priority</Label><Select :model-value='taskFilterDraft.priority || "all"' @update:model-value='(value) => { taskFilterDraft.priority = value === "all" ? "" : value; }'><SelectTrigger id='filter-priority' class='w-full min-w-0 justify-between bg-background dark:bg-background'><SelectValue placeholder='All priorities' /></SelectTrigger><SelectContent><SelectItem value='all'>All priorities</SelectItem><SelectItem v-for='option in taskPriorityOptions' :key='option' :value='option'>{{ formatEnumLabel(option) }}</SelectItem></SelectContent></Select></div>
+                    <div class='grid gap-2'><Label for='filter-admission'>Admission</Label><Input id='filter-admission' v-model='taskFilterDraft.admissionId' placeholder='Admission number or ID' /></div>
+                </div>
+                <div class='mt-6 flex items-center justify-end gap-2 border-t pt-4'><Button variant='outline' @click='resetFilters'>Reset</Button><Button @click='applyFilters'>Apply filters</Button></div>
+            </SheetContent>
+        </Sheet>
+
+        <Dialog :open='statusDialogOpen' @update:open='(open) => (open ? (statusDialogOpen = true) : closeStatusDialog())'>
+            <DialogContent class='rounded-lg sm:max-w-2xl'>
+                <DialogHeader>
+                    <DialogTitle class='flex items-center gap-2'><AppIcon name='refresh-cw' class='size-5 text-muted-foreground' />Update status</DialogTitle>
+                    <DialogDescription>Update the current workflow state for this inpatient ward record.</DialogDescription>
+                </DialogHeader>
+                <div class='space-y-4'>
+                    <div class='grid gap-2'><Label for='status-dialog-status'>New status</Label><Select v-model='statusDialogStatus'><SelectTrigger id='status-dialog-status' class='w-full min-w-0 justify-between bg-background dark:bg-background'><SelectValue placeholder='Select new status' /></SelectTrigger><SelectContent><SelectItem v-for='option in statusDialogOptions' :key='option' :value='option'>{{ formatEnumLabel(option) }}</SelectItem></SelectContent></Select></div>
+                    <div class='grid gap-2'><Label for='status-dialog-reason'>{{ statusDialogReasonLabel }}</Label><Textarea id='status-dialog-reason' v-model='statusDialogReason' rows='4' :placeholder='statusDialogReasonLabel' /></div>
+                    <p v-if='statusDialogError && statusDialogError !== statusDialogBlockedReason' class='text-xs text-destructive'>{{ statusDialogError }}</p>
+                    <Alert v-if='statusDialogBlockedReason' variant='destructive'><AppIcon name='triangle-alert' class='size-4' /><AlertDescription>{{ statusDialogBlockedReason }}</AlertDescription></Alert>
+                </div>
+                <DialogFooter class='gap-2'><Button variant='outline' @click='closeStatusDialog'>Close</Button><Button :disabled='Boolean(actionLoadingId) || Boolean(statusDialogBlockedReason)' @click='submitStatusDialog'>{{ actionLoadingId ? 'Saving...' : 'Save status' }}</Button></DialogFooter>
+            </DialogContent>
+        </Dialog>
+    </AppLayout>
+</template>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

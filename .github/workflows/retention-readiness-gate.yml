@@ -1,0 +1,134 @@
+name: retention-readiness-gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: Target environment label passed to readiness check (for example production, staging)
+        required: true
+        default: production
+        type: string
+  workflow_call:
+    inputs:
+      target_environment:
+        required: false
+        type: string
+        default: production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: retention-readiness-gate-${{ github.workflow }}-${{ inputs.target_environment || github.event.inputs.target_environment || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target_environment || github.event.inputs.target_environment || 'production' }}
+    env:
+      APP_ENV: ${{ inputs.target_environment || github.event.inputs.target_environment || 'production' }}
+      APP_KEY: ${{ secrets.APP_KEY }}
+      PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_SCHEDULE_ENABLED: ${{ vars.PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_SCHEDULE_ENABLED }}
+      PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_SCHEDULE_ALLOWED_ENVS: ${{ vars.PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_SCHEDULE_ALLOWED_ENVS }}
+      PLATFORM_CROSS_TENANT_AUDIT_LOG_HOLDS_ENFORCE_TWO_PERSON_CONTROL: ${{ vars.PLATFORM_CROSS_TENANT_AUDIT_LOG_HOLDS_ENFORCE_TWO_PERSON_CONTROL }}
+      PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_REQUIRE_TWO_PERSON_CONTROL_FOR_SCHEDULED_PURGE: ${{ vars.PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_REQUIRE_TWO_PERSON_CONTROL_FOR_SCHEDULED_PURGE }}
+      PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_SCHEDULE_TWO_PERSON_CONTROL_WAIVER_ENABLED: ${{ vars.PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_SCHEDULE_TWO_PERSON_CONTROL_WAIVER_ENABLED }}
+      PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_SCHEDULE_TWO_PERSON_CONTROL_WAIVER_REFERENCE: ${{ vars.PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_SCHEDULE_TWO_PERSON_CONTROL_WAIVER_REFERENCE }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+          coverage: none
+
+      - name: Install Dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Copy Environment File
+        run: cp .env.example .env
+
+      - name: Validate Required Environment Secrets
+        run: |
+          test -n "$APP_KEY" || {
+            echo "Missing required GitHub Environment secret: APP_KEY" >&2
+            exit 1
+          }
+
+      - name: Validate Critical Retention Readiness Policy Vars
+        run: |
+          required_vars=(
+            PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_SCHEDULE_ENABLED
+            PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_SCHEDULE_ALLOWED_ENVS
+            PLATFORM_CROSS_TENANT_AUDIT_LOG_HOLDS_ENFORCE_TWO_PERSON_CONTROL
+            PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_REQUIRE_TWO_PERSON_CONTROL_FOR_SCHEDULED_PURGE
+            PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_SCHEDULE_TWO_PERSON_CONTROL_WAIVER_ENABLED
+          )
+
+          for var_name in "${required_vars[@]}"; do
+            value="${!var_name:-}"
+            if [ -z "$value" ]; then
+              echo "Missing required GitHub Environment variable: $var_name" >&2
+              exit 1
+            fi
+          done
+
+          bool_vars=(
+            PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_SCHEDULE_ENABLED
+            PLATFORM_CROSS_TENANT_AUDIT_LOG_HOLDS_ENFORCE_TWO_PERSON_CONTROL
+            PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_REQUIRE_TWO_PERSON_CONTROL_FOR_SCHEDULED_PURGE
+            PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_SCHEDULE_TWO_PERSON_CONTROL_WAIVER_ENABLED
+          )
+
+          for var_name in "${bool_vars[@]}"; do
+            value="$(printf '%s' "${!var_name}" | tr '[:upper:]' '[:lower:]')"
+            case "$value" in
+              true|false|1|0|yes|no|on|off) ;;
+              *)
+                echo "Invalid boolean-style GitHub Environment variable: $var_name=${!var_name}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          waiver_enabled="$(printf '%s' "$PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_SCHEDULE_TWO_PERSON_CONTROL_WAIVER_ENABLED" | tr '[:upper:]' '[:lower:]')"
+          if [ "$waiver_enabled" = "true" ] || [ "$waiver_enabled" = "1" ] || [ "$waiver_enabled" = "yes" ] || [ "$waiver_enabled" = "on" ]; then
+            test -n "$PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_SCHEDULE_TWO_PERSON_CONTROL_WAIVER_REFERENCE" || {
+              echo "Waiver enabled but missing GitHub Environment variable: PLATFORM_CROSS_TENANT_AUDIT_LOG_RETENTION_SCHEDULE_TWO_PERSON_CONTROL_WAIVER_REFERENCE" >&2
+              exit 1
+            }
+          fi
+
+      - name: Generate Retention Readiness Artifact (Strict Gate)
+        id: retention_readiness_gate
+        run: |
+          php scripts/export-retention-readiness-artifact.php \
+            --environment="${{ inputs.target_environment || github.event.inputs.target_environment || 'production' }}" \
+            --output="storage/app/deployment-artifacts/retention-readiness-gate-${{ inputs.target_environment || github.event.inputs.target_environment || 'production' }}.json" \
+            --require-status=ready
+
+      - name: Upload Retention Readiness Gate Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retention-readiness-gate-${{ inputs.target_environment || github.event.inputs.target_environment || 'production' }}
+          path: storage/app/deployment-artifacts/retention-readiness-gate-${{ inputs.target_environment || github.event.inputs.target_environment || 'production' }}.json
+          if-no-files-found: error
+
+      - name: Write Job Summary
+        if: always()
+        run: |
+          {
+            echo "## Retention Readiness Gate"
+            echo
+            echo "- Target environment: \`${{ inputs.target_environment || github.event.inputs.target_environment || 'production' }}\`"
+            echo "- Artifact path: \`storage/app/deployment-artifacts/retention-readiness-gate-${{ inputs.target_environment || github.event.inputs.target_environment || 'production' }}.json\`"
+            echo "- Gate policy: \`--require-status=ready\`"
+            echo "- Config source: GitHub Environment vars/secrets (no CI override defaults)"
+            echo "- Critical policy vars: validated before gate execution"
+          } >> "$GITHUB_STEP_SUMMARY"

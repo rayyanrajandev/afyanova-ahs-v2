@@ -1,0 +1,90 @@
+<script setup lang="ts">
+import {
+    computed,
+    defineAsyncComponent,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    useAttrs,
+    useTemplateRef,
+} from 'vue';
+
+interface PageProps {
+    [key: string]: unknown;
+}
+
+const restoredWardPageUrl = import.meta.env.DEV
+    ? '/@fs/C:/Portfolio/afyanova-ahs-v2/public/build/assets/RebuiltPage-C95gc6YP.js'
+    : '/build/assets/RebuiltPage-C95gc6YP.js';
+
+const RestoredInpatientWardPage = defineAsyncComponent({
+    loader: () => new Function('url', 'return import(url)')(restoredWardPageUrl) as Promise<unknown>,
+    delay: 0,
+    timeout: 4000,
+});
+
+defineOptions({
+    inheritAttrs: false,
+});
+
+const props = defineProps<PageProps>();
+const attrs = useAttrs();
+const pageRoot = useTemplateRef<HTMLElement>('pageRoot');
+const forwardedBindings = computed(() => ({
+    ...props,
+    ...attrs,
+}));
+
+let wardObserver: MutationObserver | null = null;
+
+function normalizeText(value: string | null | undefined): string {
+    return (value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function hideDuplicateCurrentInpatientCard(): void {
+    const root = pageRoot.value;
+    if (!root) return;
+
+    const labels = Array.from(root.querySelectorAll<HTMLElement>('h1,h2,h3,p,span,div')).filter(
+        (element) => normalizeText(element.textContent) === 'Current inpatient',
+    );
+
+    const duplicateLabel = labels.find((element) => {
+        const card = element.closest<HTMLElement>('[data-slot="card"]');
+        return Boolean(card);
+    });
+
+    const duplicateCard = duplicateLabel?.closest<HTMLElement>('[data-slot="card"]');
+    if (duplicateCard) {
+        duplicateCard.style.display = 'none';
+    }
+}
+
+onMounted(() => {
+    nextTick(() => {
+        hideDuplicateCurrentInpatientCard();
+
+        if (!pageRoot.value) return;
+
+        wardObserver = new MutationObserver(() => {
+            hideDuplicateCurrentInpatientCard();
+        });
+
+        wardObserver.observe(pageRoot.value, {
+            childList: true,
+            subtree: true,
+        });
+    });
+});
+
+onBeforeUnmount(() => {
+    wardObserver?.disconnect();
+    wardObserver = null;
+});
+</script>
+
+<template>
+    <div ref="pageRoot">
+        <RestoredInpatientWardPage v-bind="forwardedBindings" />
+    </div>
+</template>
