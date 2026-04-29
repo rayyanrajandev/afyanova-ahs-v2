@@ -23,6 +23,13 @@ class EloquentTenantRepository implements TenantRepositoryInterface
         return $tenant?->toArray();
     }
 
+    public function create(array $attributes): array
+    {
+        $tenant = TenantModel::query()->create($attributes);
+
+        return $tenant->toArray();
+    }
+
     public function updateById(string $id, array $attributes): ?array
     {
         $tenant = TenantModel::query()->find($id);

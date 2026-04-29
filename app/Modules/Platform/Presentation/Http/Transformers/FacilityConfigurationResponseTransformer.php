@@ -16,6 +16,7 @@ class FacilityConfigurationResponseTransformer
             'code' => $facility['code'] ?? null,
             'name' => $facility['name'] ?? null,
             'facilityType' => $facility['facility_type'] ?? null,
+            'facilityTier' => $facility['facility_tier'] ?? null,
             'timezone' => $facility['timezone'] ?? null,
             'status' => $facility['status'] ?? null,
             'statusReason' => $facility['status_reason'] ?? null,

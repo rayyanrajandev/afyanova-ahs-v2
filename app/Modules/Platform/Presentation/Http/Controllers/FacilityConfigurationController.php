@@ -6,12 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Modules\Platform\Application\Exceptions\DuplicateFacilityCodeException;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
 use App\Modules\Platform\Domain\Repositories\TenantRepositoryInterface;
+use App\Modules\Platform\Application\UseCases\CreateFacilityConfigurationUseCase;
 use App\Modules\Platform\Application\UseCases\GetFacilityConfigurationUseCase;
 use App\Modules\Platform\Application\UseCases\ListFacilityConfigurationAuditLogsUseCase;
 use App\Modules\Platform\Application\UseCases\ListFacilityConfigurationsUseCase;
 use App\Modules\Platform\Application\UseCases\SyncFacilityConfigurationOwnersUseCase;
 use App\Modules\Platform\Application\UseCases\UpdateFacilityConfigurationStatusUseCase;
 use App\Modules\Platform\Application\UseCases\UpdateFacilityConfigurationUseCase;
+use App\Modules\Platform\Presentation\Http\Requests\StoreFacilityConfigurationRequest;
 use App\Modules\Platform\Presentation\Http\Requests\SyncFacilityConfigurationOwnersRequest;
 use App\Modules\Platform\Presentation\Http\Requests\UpdateFacilityConfigurationRequest;
 use App\Modules\Platform\Presentation\Http\Requests\UpdateFacilityConfigurationStatusRequest;
@@ -36,6 +38,27 @@ class FacilityConfigurationController extends Controller
             'data' => array_map([FacilityConfigurationResponseTransformer::class, 'transform'], $result['data']),
             'meta' => $result['meta'],
         ]);
+    }
+
+    public function store(
+        StoreFacilityConfigurationRequest $request,
+        CreateFacilityConfigurationUseCase $useCase,
+        TenantRepositoryInterface $tenantRepository
+    ): JsonResponse {
+        try {
+            $facility = $useCase->execute(
+                payload: $this->toStorePayload($request->validated()),
+                actorId: $request->user()?->id,
+            );
+        } catch (DuplicateFacilityCodeException $exception) {
+            return $this->validationError('facilityCode', $exception->getMessage());
+        } catch (DomainException $exception) {
+            return $this->validationError('facility', $exception->getMessage());
+        }
+
+        return response()->json([
+            'data' => $this->transformFacility($facility, $tenantRepository),
+        ], 201);
     }
 
     public function show(
@@ -195,6 +218,26 @@ class FacilityConfigurationController extends Controller
         }
 
         return $payload;
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array<string, mixed>
+     */
+    private function toStorePayload(array $validated): array
+    {
+        return [
+            'tenant_code' => $validated['tenantCode'] ?? null,
+            'tenant_name' => $validated['tenantName'] ?? null,
+            'tenant_country_code' => $validated['tenantCountryCode'] ?? null,
+            'tenant_allowed_country_codes' => $validated['tenantAllowedCountryCodes'] ?? null,
+            'facility_code' => $validated['facilityCode'] ?? null,
+            'facility_name' => $validated['facilityName'] ?? null,
+            'facility_type' => $validated['facilityType'] ?? null,
+            'facility_tier' => $validated['facilityTier'] ?? null,
+            'timezone' => $validated['timezone'] ?? null,
+            'facility_admin_user_id' => $validated['facilityAdminUserId'] ?? null,
+        ];
     }
 
     private function transformFacility(array $facility, TenantRepositoryInterface $tenantRepository): array

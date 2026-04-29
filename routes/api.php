@@ -404,6 +404,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('platform/admin/facilities', [FacilityConfigurationController::class, 'index'])
         ->middleware('can:platform.facilities.read')
         ->name('platform.admin.facilities.index');
+    Route::post('platform/admin/facilities', [FacilityConfigurationController::class, 'store'])
+        ->middleware('can:platform.facilities.update')
+        ->name('platform.admin.facilities.store');
     Route::get('platform/admin/facilities/{id}', [FacilityConfigurationController::class, 'show'])
         ->middleware('can:platform.facilities.read')
         ->name('platform.admin.facilities.show');

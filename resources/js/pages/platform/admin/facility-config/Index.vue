@@ -7,6 +7,14 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -24,6 +32,7 @@ import { type BreadcrumbItem } from '@/types';
 
 type Facility = {
   id: string | null; code: string | null; name: string | null; facilityType: string | null; timezone: string | null;
+  facilityTier?: string | null;
   tenantCode: string | null; tenantName: string | null; tenantCountryCode: string | null; tenantAllowedCountryCodes: string[];
   status: 'active' | 'inactive' | null; statusReason: string | null;
   operationsOwnerUserId: number | null; clinicalOwnerUserId: number | null; administrativeOwnerUserId: number | null;
@@ -46,6 +55,7 @@ const { permissionNames, permissionState } = usePlatformAccess();
 const { countryProfileFullCatalog, loadCountryProfile } = usePlatformCountryProfile();
 const permissionsResolved = computed(() => permissionNames.value !== null);
 const canRead = computed(() => permissionState('platform.facilities.read') === 'allowed');
+const canCreate = computed(() => permissionState('platform.facilities.create') === 'allowed' || permissionState('platform.facilities.update') === 'allowed');
 const canUpdate = computed(() => permissionState('platform.facilities.update') === 'allowed');
 const canUpdateStatus = computed(() => permissionState('platform.facilities.update-status') === 'allowed');
 const canManageOwners = computed(() => permissionState('platform.facilities.manage-owners') === 'allowed');
@@ -57,6 +67,22 @@ const listError = ref<string | null>(null);
 const facilities = ref<Facility[]>([]);
 const page = ref<Pagination | null>(null);
 const filters = reactive({ q: '', status: '', facilityType: '', ownerUserId: '', sortBy: 'name', sortDir: 'asc' as 'asc' | 'desc', perPage: 20, page: 1 });
+
+const createOpen = ref(false);
+const createSaving = ref(false);
+const createErrors = ref<Record<string, string[]>>({});
+const createForm = reactive({
+  tenantCode: 'DSK',
+  tenantName: 'DSK Dispensary',
+  tenantCountryCode: 'TZ',
+  tenantAllowedCountryCodes: ['TZ'] as string[],
+  facilityCode: 'DSK-DISP',
+  facilityName: 'DSK Dispensary',
+  facilityType: 'dispensary',
+  facilityTier: 'primary_care',
+  timezone: 'Africa/Dar_es_Salaam',
+  facilityAdminUserId: '',
+});
 
 const detailsOpen = ref(false);
 const detailsLoading = ref(false);
@@ -127,7 +153,7 @@ function hydrate(f: Facility): void {
 
 function syncInQueue(f: Facility): void { const i = facilities.value.findIndex((x) => x.id === f.id); if (i >= 0) facilities.value[i] = f; }
 
-async function api<T>(method: 'GET' | 'PATCH', path: string, options?: { query?: Record<string, string | number | null>; body?: Record<string, unknown> }): Promise<T> {
+async function api<T>(method: 'GET' | 'POST' | 'PATCH', path: string, options?: { query?: Record<string, string | number | null>; body?: Record<string, unknown> }): Promise<T> {
   const url = new URL(`/api/v1${path}`, window.location.origin);
   Object.entries(options?.query ?? {}).forEach(([k, v]) => { if (v !== null && v !== '') url.searchParams.set(k, String(v)); });
   const headers: Record<string, string> = { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
@@ -175,6 +201,77 @@ function openDetails(f: Facility): void {
   void loadDetails(id);
 }
 function closeDetails(): void { detailsOpen.value = false; selected.value = null; }
+
+function resetCreateForm(): void {
+  Object.assign(createForm, {
+    tenantCode: 'DSK',
+    tenantName: 'DSK Dispensary',
+    tenantCountryCode: 'TZ',
+    tenantAllowedCountryCodes: ['TZ'],
+    facilityCode: 'DSK-DISP',
+    facilityName: 'DSK Dispensary',
+    facilityType: 'dispensary',
+    facilityTier: 'primary_care',
+    timezone: 'Africa/Dar_es_Salaam',
+    facilityAdminUserId: '',
+  });
+  createErrors.value = {};
+}
+
+function openCreate(): void {
+  if (!canCreate.value) return;
+  resetCreateForm();
+  createOpen.value = true;
+}
+
+function closeCreate(): void {
+  if (createSaving.value) return;
+  createOpen.value = false;
+  createErrors.value = {};
+}
+
+function positiveUserId(value: string): number | null | 'invalid' {
+  const normalized = value.trim();
+  if (!normalized) return null;
+  const parsed = Number.parseInt(normalized, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 'invalid';
+}
+
+async function createFacility(): Promise<void> {
+  if (!canCreate.value || createSaving.value) return;
+  createSaving.value = true; createErrors.value = {};
+  const adminUserId = positiveUserId(createForm.facilityAdminUserId);
+  if (adminUserId === 'invalid') {
+    createErrors.value = { facilityAdminUserId: ['Must be a positive user ID.'] };
+    createSaving.value = false;
+    return;
+  }
+  try {
+    const r = await api<{ data: Facility }>('POST', '/platform/admin/facilities', {
+      body: {
+        tenantCode: createForm.tenantCode.trim(),
+        tenantName: createForm.tenantName.trim(),
+        tenantCountryCode: createForm.tenantCountryCode.trim().toUpperCase(),
+        tenantAllowedCountryCodes: normalizeCountryCodes(createForm.tenantAllowedCountryCodes),
+        facilityCode: createForm.facilityCode.trim(),
+        facilityName: createForm.facilityName.trim(),
+        facilityType: createForm.facilityType.trim() || null,
+        facilityTier: createForm.facilityTier.trim() || null,
+        timezone: createForm.timezone.trim() || null,
+        facilityAdminUserId: adminUserId,
+      },
+    });
+    facilities.value = [r.data, ...facilities.value.filter((entry) => entry.id !== r.data.id)];
+    notifySuccess('Organization and facility created.');
+    createOpen.value = false;
+    void loadList();
+    openDetails(r.data);
+  } catch (e) {
+    const er = e as Error & { status?: number; payload?: VError };
+    if (er.status === 422 && er.payload?.errors) createErrors.value = er.payload.errors;
+    else notifyError(messageFromUnknown(e, 'Unable to create facility.'));
+  } finally { createSaving.value = false; }
+}
 
 async function saveConfig(): Promise<void> {
   const id = String(selected.value?.id ?? '').trim(); if (!id || !canUpdate.value || configSaving.value) return;
@@ -269,11 +366,17 @@ onMounted(() => { void Promise.all([loadList(), loadCountryProfile()]); });
   <Head title="Facility Configuration" />
   <AppLayout :breadcrumbs="breadcrumbs">
     <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
-      <div class="flex flex-col gap-1">
-        <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-          <AppIcon name="building-2" class="size-7 text-primary" /> Facility Configuration and Ownership
-        </h1>
-        <p class="text-sm text-muted-foreground">Queue, details, configuration, status, owners, and audit workflows.</p>
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div class="flex flex-col gap-1">
+          <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+            <AppIcon name="building-2" class="size-7 text-primary" /> Facility Configuration and Ownership
+          </h1>
+          <p class="text-sm text-muted-foreground">Organizations, hospitals, facility administrators, status, and audit workflows.</p>
+        </div>
+        <Button v-if="canCreate" class="gap-2" @click="openCreate">
+          <AppIcon name="plus" class="size-4" />
+          New Facility
+        </Button>
       </div>
 
       <Alert v-if="!permissionsResolved">
@@ -429,6 +532,103 @@ onMounted(() => { void Promise.all([loadList(), loadCountryProfile()]); });
           <SheetFooter class="border-t px-4 py-3"><Button variant="outline" @click="closeDetails">Close</Button></SheetFooter>
         </SheetContent>
       </Sheet>
+
+      <Dialog :open="createOpen" @update:open="(open) => (open ? (createOpen = true) : closeCreate())">
+        <DialogContent class="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle class="flex items-center gap-2">
+              <AppIcon name="building-2" class="size-5 text-primary" />
+              New Organization And Facility
+            </DialogTitle>
+            <DialogDescription>Create the hospital foundation and optionally assign its first facility super admin.</DialogDescription>
+          </DialogHeader>
+
+          <div class="grid gap-4">
+            <div class="grid gap-3 rounded-lg border p-3 md:grid-cols-2">
+              <div class="grid gap-1.5">
+                <Label>Organization code</Label>
+                <Input v-model="createForm.tenantCode" :disabled="createSaving" />
+                <p v-if="firstError(createErrors, 'tenantCode')" class="text-xs text-destructive">{{ firstError(createErrors, 'tenantCode') }}</p>
+              </div>
+              <div class="grid gap-1.5">
+                <Label>Organization name</Label>
+                <Input v-model="createForm.tenantName" :disabled="createSaving" />
+                <p v-if="firstError(createErrors, 'tenantName')" class="text-xs text-destructive">{{ firstError(createErrors, 'tenantName') }}</p>
+              </div>
+              <div class="grid gap-1.5">
+                <Label>Country</Label>
+                <Input v-model="createForm.tenantCountryCode" maxlength="2" :disabled="createSaving" />
+                <p v-if="firstError(createErrors, 'tenantCountryCode')" class="text-xs text-destructive">{{ firstError(createErrors, 'tenantCountryCode') }}</p>
+              </div>
+              <div class="grid gap-1.5">
+                <Label>Allowed country profiles</Label>
+                <Select
+                  :model-value="createForm.tenantAllowedCountryCodes[0] ?? ''"
+                  @update:model-value="createForm.tenantAllowedCountryCodes = $event ? [String($event)] : []"
+                >
+                  <SelectTrigger :disabled="createSaving"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TZ">TZ - Tanzania</SelectItem>
+                    <SelectItem value="KE">KE - Kenya</SelectItem>
+                    <SelectItem value="UG">UG - Uganda</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div class="grid gap-3 rounded-lg border p-3 md:grid-cols-2">
+              <div class="grid gap-1.5">
+                <Label>Facility code</Label>
+                <Input v-model="createForm.facilityCode" :disabled="createSaving" />
+                <p v-if="firstError(createErrors, 'facilityCode')" class="text-xs text-destructive">{{ firstError(createErrors, 'facilityCode') }}</p>
+              </div>
+              <div class="grid gap-1.5">
+                <Label>Facility name</Label>
+                <Input v-model="createForm.facilityName" :disabled="createSaving" />
+                <p v-if="firstError(createErrors, 'facilityName')" class="text-xs text-destructive">{{ firstError(createErrors, 'facilityName') }}</p>
+              </div>
+              <div class="grid gap-1.5">
+                <Label>Facility type</Label>
+                <Select v-model="createForm.facilityType">
+                  <SelectTrigger :disabled="createSaving"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hospital">Hospital</SelectItem>
+                    <SelectItem value="dispensary">Dispensary</SelectItem>
+                    <SelectItem value="clinic">Clinic</SelectItem>
+                    <SelectItem value="diagnostic_center">Diagnostic center</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div class="grid gap-1.5">
+                <Label>Facility tier</Label>
+                <Select v-model="createForm.facilityTier">
+                  <SelectTrigger :disabled="createSaving"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="primary_care">Primary care</SelectItem>
+                    <SelectItem value="secondary_care">Secondary care</SelectItem>
+                    <SelectItem value="tertiary_care">Tertiary care</SelectItem>
+                    <SelectItem value="specialist">Specialist</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div class="grid gap-1.5">
+                <Label>Timezone</Label>
+                <Input v-model="createForm.timezone" :disabled="createSaving" />
+              </div>
+              <div class="grid gap-1.5">
+                <Label>Facility super admin user ID</Label>
+                <Input v-model="createForm.facilityAdminUserId" inputmode="numeric" :disabled="createSaving" />
+                <p v-if="firstError(createErrors, 'facilityAdminUserId')" class="text-xs text-destructive">{{ firstError(createErrors, 'facilityAdminUserId') }}</p>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" :disabled="createSaving" @click="closeCreate">Cancel</Button>
+            <Button :disabled="createSaving" @click="createFacility">{{ createSaving ? 'Creating...' : 'Create Facility' }}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   </AppLayout>
 </template>

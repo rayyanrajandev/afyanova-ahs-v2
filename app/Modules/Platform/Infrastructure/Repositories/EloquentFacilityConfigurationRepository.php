@@ -77,6 +77,13 @@ class EloquentFacilityConfigurationRepository implements FacilityConfigurationRe
         return $this->toSearchResult($paginator);
     }
 
+    public function create(array $attributes): array
+    {
+        $facility = FacilityModel::query()->create($attributes);
+
+        return $facility->toArray();
+    }
+
     public function update(string $id, array $attributes): ?array
     {
         $query = FacilityModel::query();

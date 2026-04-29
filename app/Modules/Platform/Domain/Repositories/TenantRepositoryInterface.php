@@ -8,5 +8,7 @@ interface TenantRepositoryInterface
 
     public function findById(string $id): ?array;
 
+    public function create(array $attributes): array;
+
     public function updateById(string $id, array $attributes): ?array;
 }

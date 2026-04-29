@@ -17,6 +17,8 @@ interface FacilityConfigurationRepositoryInterface
         string $sortDirection
     ): array;
 
+    public function create(array $attributes): array;
+
     public function update(string $id, array $attributes): ?array;
 
     public function existsCodeInTenant(
