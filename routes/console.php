@@ -963,6 +963,200 @@ Artisan::command('app:sync-default-role-permissions {--code=*} {--list}', functi
     return 0;
 })->purpose('Sync the default permission bundles for common hospital and platform roles');
 
+Artisan::command('app:bootstrap-staging-minimum
+    {--admin-email=admin@afyanova.test}
+    {--admin-name=Hospital Administrator}
+    {--admin-password=}
+    {--registration-email=}
+    {--registration-name=Registration Clerk}
+    {--registration-password=}
+    {--tenant-code=TZH}
+    {--tenant-name=Tanzania Health Network}
+    {--facility-code=DAR-MAIN}
+    {--facility-name=Dar Main Hospital}', function (): int {
+    $adminEmail = trim((string) $this->option('admin-email'));
+    $adminName = trim((string) $this->option('admin-name'));
+    $adminPassword = trim((string) $this->option('admin-password'));
+    $registrationEmail = trim((string) $this->option('registration-email'));
+    $registrationName = trim((string) $this->option('registration-name'));
+    $registrationPassword = trim((string) $this->option('registration-password'));
+    $tenantCode = strtoupper(trim((string) $this->option('tenant-code')));
+    $tenantName = trim((string) $this->option('tenant-name'));
+    $facilityCode = strtoupper(trim((string) $this->option('facility-code')));
+    $facilityName = trim((string) $this->option('facility-name'));
+
+    if (! filter_var($adminEmail, FILTER_VALIDATE_EMAIL)) {
+        $this->error('Provide a valid --admin-email value.');
+
+        return self::FAILURE;
+    }
+
+    if ($registrationEmail !== '' && ! filter_var($registrationEmail, FILTER_VALIDATE_EMAIL)) {
+        $this->error('Provide a valid --registration-email value.');
+
+        return self::FAILURE;
+    }
+
+    if ($adminName === '' || $tenantCode === '' || $tenantName === '' || $facilityCode === '' || $facilityName === '') {
+        $this->error('Admin name, tenant code/name, and facility code/name are required.');
+
+        return self::FAILURE;
+    }
+
+    $generatedAdminPassword = false;
+    if ($adminPassword === '') {
+        $adminPassword = Str::password(20);
+        $generatedAdminPassword = true;
+    }
+
+    $generatedRegistrationPassword = false;
+    if ($registrationEmail !== '' && $registrationPassword === '') {
+        $registrationPassword = Str::password(20);
+        $generatedRegistrationPassword = true;
+    }
+
+    try {
+        Artisan::call('app:sync-default-role-permissions');
+
+        DB::transaction(function () use (
+            $adminEmail,
+            $adminName,
+            $adminPassword,
+            $registrationEmail,
+            $registrationName,
+            $registrationPassword,
+            $tenantCode,
+            $tenantName,
+            $facilityCode,
+            $facilityName
+        ): void {
+            $tenant = TenantModel::query()->firstOrCreate(
+                ['code' => $tenantCode],
+                [
+                    'name' => $tenantName,
+                    'country_code' => 'TZ',
+                    'status' => 'active',
+                ],
+            );
+
+            $tenant->fill([
+                'name' => $tenantName,
+                'country_code' => 'TZ',
+                'status' => 'active',
+            ])->save();
+
+            $facility = FacilityModel::query()->firstOrCreate(
+                ['tenant_id' => $tenant->id, 'code' => $facilityCode],
+                [
+                    'name' => $facilityName,
+                    'facility_type' => 'hospital',
+                    'timezone' => 'Africa/Dar_es_Salaam',
+                    'status' => 'active',
+                ],
+            );
+
+            $facility->fill([
+                'name' => $facilityName,
+                'facility_type' => 'hospital',
+                'timezone' => 'Africa/Dar_es_Salaam',
+                'status' => 'active',
+            ])->save();
+
+            BaselineDepartmentCatalog::seedForScope(
+                tenantId: (string) $tenant->id,
+                facilityId: (string) $facility->id,
+            );
+
+            $admin = User::query()->firstOrNew(['email' => $adminEmail]);
+            $admin->fill([
+                'name' => $adminName,
+                'password' => $adminPassword,
+                'status' => 'active',
+            ]);
+            $admin->email_verified_at = now();
+            $admin->save();
+
+            DB::table('facility_user')->updateOrInsert(
+                [
+                    'facility_id' => $facility->id,
+                    'user_id' => $admin->id,
+                ],
+                [
+                    'role' => 'super_admin',
+                    'is_primary' => true,
+                    'is_active' => true,
+                    'updated_at' => now(),
+                    'created_at' => now(),
+                ],
+            );
+
+            foreach (Permission::query()->pluck('name')->all() as $permissionName) {
+                $admin->givePermissionTo((string) $permissionName);
+            }
+
+            if ($registrationEmail !== '') {
+                $registrationUser = User::query()->firstOrNew(['email' => $registrationEmail]);
+                $registrationUser->fill([
+                    'name' => $registrationName !== '' ? $registrationName : 'Registration Clerk',
+                    'password' => $registrationPassword,
+                    'status' => 'active',
+                ]);
+                $registrationUser->email_verified_at = now();
+                $registrationUser->save();
+
+                DB::table('facility_user')->updateOrInsert(
+                    [
+                        'facility_id' => $facility->id,
+                        'user_id' => $registrationUser->id,
+                    ],
+                    [
+                        'role' => 'front_desk',
+                        'is_primary' => true,
+                        'is_active' => true,
+                        'updated_at' => now(),
+                        'created_at' => now(),
+                    ],
+                );
+
+                $registrationRole = RoleModel::query()
+                    ->where('code', 'HOSPITAL.REGISTRATION.CLERK')
+                    ->first();
+
+                if ($registrationRole instanceof RoleModel) {
+                    $registrationUser->roles()->syncWithoutDetaching([$registrationRole->id]);
+                }
+            }
+        });
+    } catch (QueryException $exception) {
+        $this->error('Unable to bootstrap staging data. Ensure migrations are complete and database credentials are correct.');
+        $this->line('Database error: '.$exception->getCode());
+
+        return self::FAILURE;
+    }
+
+    $this->info('Minimum staging data is ready.');
+    $this->line('Admin email: '.$adminEmail);
+    $this->line('Tenant: '.$tenantCode);
+    $this->line('Facility: '.$facilityCode);
+    $this->line('Created/updated: tenant, facility, departments, permissions, roles, admin user, facility assignment.');
+
+    if ($generatedAdminPassword) {
+        $this->warn('Generated admin password: '.$adminPassword);
+        $this->line('Store it now. It will not be shown again.');
+    }
+
+    if ($registrationEmail !== '') {
+        $this->line('Registration user email: '.$registrationEmail);
+
+        if ($generatedRegistrationPassword) {
+            $this->warn('Generated registration password: '.$registrationPassword);
+            $this->line('Store it now. It will not be shown again.');
+        }
+    }
+
+    return self::SUCCESS;
+})->purpose('Create clean minimum staging data for first hospital testing without demo patient records');
+
 Artisan::command('app:seed-demo-opd-data {--user-email=admin@local.test} {--tenant-code=TZH} {--facility-code=DAR-MAIN}', function (): int {
     $userEmail = trim((string) $this->option('user-email'));
     $tenantCode = strtoupper(trim((string) $this->option('tenant-code')));
