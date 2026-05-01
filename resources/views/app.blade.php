@@ -22,6 +22,24 @@
             })();
         </script>
 
+        {{-- Inline script to apply UI scale before first paint to prevent FOUC --}}
+        <script>
+            (function() {
+                var UI_SCALE_FONT_SIZE_MAP = {
+                    'ultra-compact': '12px',
+                    'extra-compact': '12.8px',
+                    'compact': '14px',
+                    'comfortable': '16px',
+                    'spacious': '18px'
+                };
+                var validScales = Object.keys(UI_SCALE_FONT_SIZE_MAP);
+                var stored = localStorage.getItem('ui.scale-preset');
+                var scale = (stored && validScales.indexOf(stored) !== -1) ? stored : 'comfortable';
+                document.documentElement.dataset.uiScale = scale;
+                document.documentElement.style.fontSize = UI_SCALE_FONT_SIZE_MAP[scale];
+            })();
+        </script>
+
         {{-- Inline surface so the browser paints the real theme before Vue mounts --}}
         <style>
             html,

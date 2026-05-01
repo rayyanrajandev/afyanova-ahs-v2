@@ -2235,7 +2235,7 @@ async function refreshWardPage(): Promise<void> {
                 <div class='flex flex-wrap items-center gap-2'>
                     <Popover>
                         <PopoverTrigger as-child>
-                            <Button variant='outline' size='sm' class='h-8 px-2.5'>
+                            <Button variant='outline' size='sm' class='h-9 px-2.5'>
                                 <Badge :variant='scopeWarning ? "destructive" : "secondary"'>
                                     {{ scopeStatusLabel }}
                                 </Badge>
@@ -2265,19 +2265,19 @@ async function refreshWardPage(): Promise<void> {
                             </p>
                         </PopoverContent>
                     </Popover>
-                    <Button variant='outline' size='sm' class='h-8 gap-1.5' :disabled='refreshingPage || pageLoading' @click='refreshWardPage'>
+                    <Button variant='outline' size='sm' class='h-9 gap-1.5' :disabled='refreshingPage || pageLoading' @click='refreshWardPage'>
                         <AppIcon name='refresh-cw' class='size-3.5' />
                         {{ refreshingPage ? 'Refreshing...' : 'Refresh' }}
                     </Button>
-                    <Button :variant='workspaceView === "queue" ? "default" : "outline"' size='sm' class='h-8 gap-1.5' @click='workspaceView = "queue"'>
+                    <Button :variant='workspaceView === "queue" ? "default" : "outline"' size='sm' class='h-9 gap-1.5' :aria-pressed='workspaceView === "queue"' @click='workspaceView = "queue"'>
                         <AppIcon name='clipboard-list' class='size-4' />
                         Ward Queue
                     </Button>
-                    <Button :variant='workspaceView === "board" ? "default" : "outline"' size='sm' class='h-8 gap-1.5' @click='workspaceView = "board"'>
+                    <Button :variant='workspaceView === "board" ? "default" : "outline"' size='sm' class='h-9 gap-1.5' :aria-pressed='workspaceView === "board"' @click='workspaceView = "board"'>
                         <AppIcon name='layout-dashboard' class='size-4' />
                         Ward Board
                     </Button>
-                    <Button :variant='workspaceView === "documentation" ? "default" : "outline"' size='sm' class='h-8 gap-1.5' @click='workspaceView = "documentation"'>
+                    <Button :variant='workspaceView === "documentation" ? "default" : "outline"' size='sm' class='h-9 gap-1.5' :aria-pressed='workspaceView === "documentation"' @click='workspaceView = "documentation"'>
                         <AppIcon name='file-pen-line' class='size-4' />
                         Ward Documentation
                     </Button>
@@ -2317,11 +2317,11 @@ async function refreshWardPage(): Promise<void> {
                                     :key='chip.key'
                                     size='sm'
                                     :variant='taskFilters.status === (chip.key === "all" ? "" : chip.key) ? "default" : "outline"'
-                                    class='h-8 gap-1.5'
+                                    class='h-9 gap-1.5'
                                     @click='taskFilters.status = chip.key === "all" ? "" : chip.key; taskFilters.page = 1; void reloadQueue()'
                                 >
                                     <span>{{ chip.label }}</span>
-                                    <Badge variant='secondary' class='rounded-full px-1.5 py-0 text-[10px]'>{{ chip.count }}</Badge>
+                                    <Badge variant='secondary' class='rounded-full px-1.5 py-0 text-xs'>{{ chip.count }}</Badge>
                                 </Button>
                             </div>
                             <div class='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
@@ -2360,7 +2360,7 @@ async function refreshWardPage(): Promise<void> {
                                             <Button variant='outline' size='sm' class='h-9 gap-1.5' @click='syncFilterDraft(); filterSheetOpen = true'>
                                                 <AppIcon name='sliders-horizontal' class='size-3.5' />
                                                 All filters
-                                                <Badge v-if='taskAdvancedFilterCount' variant='secondary' class='ml-1 text-[10px]'>
+                                                <Badge v-if='taskAdvancedFilterCount' variant='secondary' class='ml-1 text-xs'>
                                                     {{ taskAdvancedFilterCount }}
                                                 </Badge>
                                             </Button>

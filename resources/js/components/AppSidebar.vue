@@ -402,7 +402,7 @@ const showLimitedAccessHint = computed(
 </script>
 
 <template>
-    <Sidebar collapsible="icon" variant="inset">
+    <Sidebar collapsible="icon" variant="inset" aria-label="Main navigation">
         <SidebarHeader>
             <SidebarMenu>
                 <SidebarMenuItem>

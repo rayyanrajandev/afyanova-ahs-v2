@@ -3903,7 +3903,7 @@ onMounted(initialPageLoad);
                                     <Badge
                                         v-if="patientFilterChips.length > 0"
                                         variant="secondary"
-                                        class="ml-1 h-5 px-1.5 text-[10px]"
+                                        class="ml-1 h-5 px-1.5 text-xs"
                                     >
                                         {{ patientFilterChips.length }}
                                     </Badge>
@@ -3997,7 +3997,7 @@ onMounted(initialPageLoad);
                             <!-- Status -->
                             <div class="flex items-center gap-2">
                                 <span class="text-xs text-muted-foreground md:hidden">Status:</span>
-                                <Badge :variant="statusVariant(patient.status)" class="text-[10px] leading-none">
+                                <Badge :variant="statusVariant(patient.status)" class="text-xs leading-none">
                                     {{ patient.status || 'unknown' }}
                                 </Badge>
                             </div>
@@ -4055,7 +4055,7 @@ onMounted(initialPageLoad);
                                             <AppIcon name="clipboard-list" class="size-3.5" />
                                             Start Visit Handoff
                                         </DropdownMenuItem>
-                                        <DropdownMenuLabel class="px-2 pt-1 text-[11px] font-normal text-muted-foreground">
+                                        <DropdownMenuLabel class="px-2 pt-1 text-xs font-normal text-muted-foreground">
                                             Checks for an active visit before routing
                                         </DropdownMenuLabel>
                                         <DropdownMenuSeparator />
@@ -4254,7 +4254,7 @@ onMounted(initialPageLoad);
                                                         {{ match.status || 'unknown' }}
                                                     </Badge>
                                                 </div>
-                                                <p class="mt-1 text-[11px] text-amber-800">
+                                                <p class="mt-1 text-xs text-amber-800">
                                                     Registered {{ formatDate(match.createdAt) || 'date not recorded' }}
                                                 </p>
                                             </div>
@@ -4270,7 +4270,7 @@ onMounted(initialPageLoad);
                                         </div>
 
                                         <div class="mt-3 overflow-hidden rounded-md border border-amber-200 bg-white">
-                                            <div class="grid grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)_4rem] border-b border-amber-200 bg-amber-100/70 px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-amber-900">
+                                            <div class="grid grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)_4rem] border-b border-amber-200 bg-amber-100/70 px-2 py-1.5 text-xs font-medium uppercase tracking-wide text-amber-900">
                                                 <span>Field</span>
                                                 <span>New entry</span>
                                                 <span>Existing</span>
@@ -4287,7 +4287,7 @@ onMounted(initialPageLoad);
                                                 <span class="text-right">
                                                     <Badge
                                                         :variant="row.matched ? 'secondary' : 'outline'"
-                                                        class="text-[10px]"
+                                                        class="text-xs"
                                                     >
                                                         {{ row.matched ? 'Same' : 'Check' }}
                                                     </Badge>
@@ -4297,7 +4297,7 @@ onMounted(initialPageLoad);
                                     </div>
                                 </div>
                                 <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <p class="text-[11px] text-amber-800">
+                                    <p class="text-xs text-amber-800">
                                         Continue only when the new entry is confirmed as a separate patient.
                                     </p>
                                     <div class="flex flex-wrap gap-2">
@@ -4720,15 +4720,15 @@ onMounted(initialPageLoad);
                     <div v-if="postRegistrationPatient" class="space-y-4">
                         <div class="grid gap-2 rounded-lg border bg-muted/20 p-3 sm:grid-cols-3">
                             <div>
-                                <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Patient</p>
+                                <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Patient</p>
                                 <p class="mt-1 truncate text-sm font-semibold">{{ patientName(postRegistrationPatient) }}</p>
                             </div>
                             <div>
-                                <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Contact</p>
+                                <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Contact</p>
                                 <p class="mt-1 truncate text-sm font-semibold">{{ postRegistrationPatient.phone || 'Not recorded' }}</p>
                             </div>
                             <div>
-                                <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Location</p>
+                                <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Location</p>
                                 <p class="mt-1 truncate text-sm font-semibold">{{ patientLocationLabel(postRegistrationPatient) }}</p>
                             </div>
                         </div>
@@ -4800,15 +4800,15 @@ onMounted(initialPageLoad);
                             <section class="rounded-lg border bg-muted/20 p-3">
                                 <div class="grid gap-3 sm:grid-cols-3">
                                     <div>
-                                        <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Patient</p>
+                                        <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Patient</p>
                                         <p class="mt-1 truncate text-sm font-semibold text-foreground">{{ patientName(visitHandoffPatient) }}</p>
                                     </div>
                                     <div>
-                                        <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Contact</p>
+                                        <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Contact</p>
                                         <p class="mt-1 truncate text-sm font-semibold text-foreground">{{ visitHandoffPatient.phone || 'Not recorded' }}</p>
                                     </div>
                                     <div>
-                                        <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Location</p>
+                                        <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Location</p>
                                         <p class="mt-1 truncate text-sm font-semibold text-foreground">{{ patientLocationLabel(visitHandoffPatient) }}</p>
                                     </div>
                                 </div>
@@ -4918,7 +4918,7 @@ onMounted(initialPageLoad);
                                         <span class="min-w-0 flex-1">
                                             <span class="flex items-center justify-between gap-2">
                                                 <span class="text-sm font-semibold text-foreground">Outpatient visit</span>
-                                                <Badge variant="secondary" class="text-[10px]">{{ visitHandoffModeBadge('outpatient') }}</Badge>
+                                                <Badge variant="secondary" class="text-xs">{{ visitHandoffModeBadge('outpatient') }}</Badge>
                                             </span>
                                             <span class="mt-1 block text-xs leading-5 text-muted-foreground">
                                                 Standard OPD flow: appointment, arrival check-in, nurse triage, provider, orders, billing.
@@ -4933,7 +4933,7 @@ onMounted(initialPageLoad);
                                         <span class="min-w-0 flex-1">
                                             <span class="flex items-center justify-between gap-2">
                                                 <span class="text-sm font-semibold text-foreground">Emergency triage</span>
-                                                <Badge variant="outline" class="text-[10px]">{{ visitHandoffModeBadge('emergency') }}</Badge>
+                                                <Badge variant="outline" class="text-xs">{{ visitHandoffModeBadge('emergency') }}</Badge>
                                             </span>
                                             <span class="mt-1 block text-xs leading-5 text-muted-foreground">
                                                 Use when the patient needs immediate assessment, stabilization, transfer, or admission routing.
@@ -4948,7 +4948,7 @@ onMounted(initialPageLoad);
                                         <span class="min-w-0 flex-1">
                                             <span class="flex items-center justify-between gap-2">
                                                 <span class="text-sm font-semibold text-foreground">Billing first</span>
-                                                <Badge variant="outline" class="text-[10px]">{{ visitHandoffModeBadge('billing') }}</Badge>
+                                                <Badge variant="outline" class="text-xs">{{ visitHandoffModeBadge('billing') }}</Badge>
                                             </span>
                                             <span class="mt-1 block text-xs leading-5 text-muted-foreground">
                                                 For registration fees, deposits, cashier instructions, or patient-share collection.
@@ -4963,7 +4963,7 @@ onMounted(initialPageLoad);
                                         <span class="min-w-0 flex-1">
                                             <span class="flex items-center justify-between gap-2">
                                                 <span class="text-sm font-semibold text-foreground">Chart only</span>
-                                                <Badge variant="outline" class="text-[10px]">{{ visitHandoffModeBadge('chart') }}</Badge>
+                                                <Badge variant="outline" class="text-xs">{{ visitHandoffModeBadge('chart') }}</Badge>
                                             </span>
                                             <span class="mt-1 block text-xs leading-5 text-muted-foreground">
                                                 Review patient context without creating a new visit or financial workflow.
@@ -5061,7 +5061,7 @@ onMounted(initialPageLoad);
                                                     {{ patientInitials(detailsSheetPatient) }}
                                                 </div>
                                                 <div class="min-w-0">
-                                                    <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Patient</p>
+                                                    <p class="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Patient</p>
                                                     <p class="mt-0.5 truncate text-sm font-semibold leading-4">{{ patientName(detailsSheetPatient) }}</p>
                                                     <p class="truncate text-xs leading-4 text-muted-foreground">
                                                         {{ detailsSheetPatient.patientNumber || `ID: ${detailsSheetPatient.id.slice(0, 8)}` }}
@@ -5071,7 +5071,7 @@ onMounted(initialPageLoad);
                                         </div>
                                         <div class="min-w-0 rounded-lg border bg-background/70 px-3 py-2">
                                             <div class="flex items-center justify-between gap-2">
-                                                <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Contact</p>
+                                                <p class="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Contact</p>
                                                 <Badge variant="outline" class="capitalize">{{ detailsSheetPatient.gender || 'Unknown' }}</Badge>
                                             </div>
                                             <p class="mt-0.5 truncate text-sm font-semibold leading-4">{{ detailsSheetPatient.phone || 'Phone not recorded' }}</p>
@@ -5079,7 +5079,7 @@ onMounted(initialPageLoad);
                                         </div>
                                         <div class="min-w-0 rounded-lg border bg-background/70 px-3 py-2">
                                             <div class="flex items-center justify-between gap-2">
-                                                <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Care activity</p>
+                                                <p class="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Care activity</p>
                                                 <Badge variant="secondary">{{ detailsTimelineEvents.length }} events</Badge>
                                             </div>
                                             <p class="mt-0.5 truncate text-sm font-semibold leading-4">
@@ -5107,7 +5107,7 @@ onMounted(initialPageLoad);
                                                 <Badge
                                                     v-if="detailsAuditMeta"
                                                     variant="secondary"
-                                                    class="h-4 min-w-4 px-1 text-[10px]"
+                                                    class="h-4 min-w-4 px-1 text-xs"
                                                 >
                                                     {{ detailsAuditMeta.total }}
                                                 </Badge>
@@ -5271,7 +5271,7 @@ onMounted(initialPageLoad);
                                             </Alert>
 
                                             <div class="rounded-lg border bg-muted/20 p-3">
-                                                <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                                                <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                                                     Recommended next step
                                                 </p>
                                                 <p class="mt-1 text-sm font-medium text-foreground">
@@ -5368,7 +5368,7 @@ onMounted(initialPageLoad);
                                                 >
                                                     <div class="flex items-center justify-between gap-3">
                                                         <div>
-                                                            <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                                                            <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                                                                 {{ section.label }}
                                                             </p>
                                                             <p class="mt-1 text-lg font-semibold text-foreground">
@@ -5494,19 +5494,19 @@ onMounted(initialPageLoad);
 
                                                     <div class="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
                                                         <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
-                                                            <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Entries</p>
+                                                            <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Entries</p>
                                                             <p class="mt-1 text-sm font-semibold text-foreground">{{ detailsAuditSummary.total }}</p>
                                                         </div>
                                                         <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
-                                                            <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Changed events</p>
+                                                            <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Changed events</p>
                                                             <p class="mt-1 text-sm font-semibold text-foreground">{{ detailsAuditSummary.changedEntries }}</p>
                                                         </div>
                                                         <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
-                                                            <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">User actions</p>
+                                                            <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">User actions</p>
                                                             <p class="mt-1 text-sm font-semibold text-foreground">{{ detailsAuditSummary.userEntries }}</p>
                                                         </div>
                                                         <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
-                                                            <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">System events</p>
+                                                            <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">System events</p>
                                                             <p class="mt-1 text-sm font-semibold text-foreground">{{ detailsAuditSummary.systemEntries }}</p>
                                                         </div>
                                                     </div>
@@ -5516,7 +5516,7 @@ onMounted(initialPageLoad);
                                                             v-for="filter in detailsAuditActiveFilters"
                                                             :key="filter.key"
                                                             variant="secondary"
-                                                            class="px-2 py-1 text-[11px]"
+                                                            class="px-2 py-1 text-xs"
                                                         >
                                                             {{ filter.label }}
                                                         </Badge>
@@ -5645,7 +5645,7 @@ onMounted(initialPageLoad);
                                                                     v-for="field in auditLogChangeKeys(log)"
                                                                     :key="`${log.id}-field-${field}`"
                                                                     variant="outline"
-                                                                    class="text-[10px]"
+                                                                    class="text-xs"
                                                                 >
                                                                     {{ field }}
                                                                 </Badge>
@@ -6005,7 +6005,7 @@ onMounted(initialPageLoad);
                                     <CardContent class="p-4 sm:p-5">
                                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                             <div>
-                                                <p class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                                                <p class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                                                     <AppIcon name="file-text" class="size-3.5" />
                                                     Additional details (optional)
                                                 </p>

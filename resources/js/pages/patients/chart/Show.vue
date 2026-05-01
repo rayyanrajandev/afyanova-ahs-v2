@@ -3343,20 +3343,20 @@ onMounted(() => {
                             </Alert>
                         </div>
 
-                        <div class="border-b bg-muted/10 px-6 py-4">
+                        <div class="border-b bg-muted/10 px-6 py-4" aria-live="polite" aria-atomic="false">
                             <div class="grid gap-3 lg:grid-cols-3">
                                 <div class="rounded-lg border bg-background px-4 py-3">
-                                    <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Current visit</p>
+                                    <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Current visit</p>
                                     <p class="mt-1.5 text-sm font-medium text-foreground">{{ primaryVisit ? `${primaryVisit.department || 'Department pending'} | ${formatEnumLabel(primaryVisit.status || 'scheduled')}` : 'No active visit in chart context' }}</p>
                                     <p class="mt-1 text-xs text-muted-foreground">{{ primaryVisit ? `Scheduled ${formatDateTime(primaryVisit.scheduledAt)}` : 'Use the visits tab or appointments workspace when a visit is booked.' }}</p>
                                 </div>
                                 <div class="rounded-lg border bg-background px-4 py-3">
-                                    <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Latest note</p>
+                                    <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Latest note</p>
                                     <p class="mt-1.5 text-sm font-medium text-foreground">{{ latestRecord ? formatDateTime(latestRecord.encounterAt) : 'No consultation recorded yet' }}</p>
                                     <p class="mt-1 text-xs text-muted-foreground">{{ latestRecord ? recordProblem(latestRecord) : 'Start the first chart note from this patient workspace.' }}</p>
                                 </div>
                                 <div class="rounded-lg border bg-background px-4 py-3">
-                                    <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Chart scope</p>
+                                    <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Chart scope</p>
                                     <p class="mt-1.5 text-sm font-medium text-foreground">{{ chartCounts.records }} records | {{ chartCounts.visits }} visits | {{ chartCounts.timelineEvents }} events</p>
                                     <p class="mt-1 text-xs text-muted-foreground">{{ chartCounts.activeVisits }} active visit{{ chartCounts.activeVisits === 1 ? '' : 's' }} currently visible in this chart context.</p>
                                 </div>
@@ -3371,9 +3371,9 @@ onMounted(() => {
                                             <span class="truncate font-semibold text-foreground">{{ patientName(patient) }}</span>
                                             <span class="shrink-0 text-muted-foreground">·</span>
                                             <span class="shrink-0 text-xs text-muted-foreground">{{ patient.patientNumber || '' }}</span>
-                                            <Badge v-if="primaryVisit" :variant="appointmentStatusVariant(primaryVisit.status)" class="h-4 shrink-0 px-1 text-[10px]">{{ formatEnumLabel(primaryVisit.status || 'scheduled') }}</Badge>
+                                            <Badge v-if="primaryVisit" :variant="appointmentStatusVariant(primaryVisit.status)" class="h-4 shrink-0 px-1 text-xs">{{ formatEnumLabel(primaryVisit.status || 'scheduled') }}</Badge>
                                         </div>
-                                        <Button v-if="canReadAppointments" size="sm" class="h-7 shrink-0 gap-1.5 px-2.5 text-xs" as-child>
+                                        <Button v-if="canReadAppointments" size="sm" class="h-9 shrink-0 gap-1.5 px-2.5 text-xs" as-child>
                                             <Link :href="visitPrimaryActionHref"><AppIcon :name="visitPrimaryActionIcon" class="size-3" />{{ visitPrimaryActionLabel }}</Link>
                                         </Button>
                                     </div>
@@ -3383,12 +3383,14 @@ onMounted(() => {
                                             :key="tab.value"
                                             :value="tab.value"
                                             class="gap-1"
+                                            :aria-label="tab.count ? `${tab.label} (${tab.count > 99 ? '99+' : tab.count})` : tab.label"
                                         >
                                             {{ tab.label }}
                                             <span
                                                 v-if="tab.count"
+                                                aria-hidden="true"
                                                 :class="[
-                                                    'inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium tabular-nums',
+                                                    'inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-xs font-medium tabular-nums',
                                                     tab.hasAlert ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
                                                 ]"
                                             >{{ tab.count > 99 ? '99+' : tab.count }}</span>
@@ -3517,6 +3519,18 @@ onMounted(() => {
                                         </div>
 
                                         <div class="min-w-0 space-y-4">
+                                            <Card v-if="primaryVisit?.triageVitalsSummary" class="rounded-lg border-l-4 border-l-info">
+                                                <CardHeader class="px-4 pb-2 pt-4">
+                                                    <CardTitle class="flex items-center gap-2 text-base">
+                                                        <AppIcon name="activity" class="size-4 text-info" aria-hidden="true" />
+                                                        Triage vitals
+                                                    </CardTitle>
+                                                </CardHeader>
+                                                <CardContent class="px-4 pb-4">
+                                                    <p class="text-sm text-foreground">{{ primaryVisit.triageVitalsSummary }}</p>
+                                                    <p class="mt-1.5 text-xs text-muted-foreground">Recorded at triage for this visit. Open the visit or consultation note for full vitals.</p>
+                                                </CardContent>
+                                            </Card>
                                             <Card class="rounded-lg">
                                                 <CardHeader class="px-4 pb-2 pt-4">
                                                     <CardTitle class="text-base">Patient details</CardTitle>
@@ -3579,19 +3593,19 @@ onMounted(() => {
                                     <div v-else class="space-y-6">
                                         <div class="grid gap-4 xl:grid-cols-3">
                                             <div class="rounded-lg border bg-muted/10 px-4 py-4">
-                                                <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Current handoff</p>
+                                                <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Current handoff</p>
                                                 <p class="mt-2 text-sm font-semibold text-foreground">{{ handoffSummary.title }}</p>
                                                 <p class="mt-2 text-sm text-foreground">{{ handoffSummary.summary }}</p>
                                                 <p class="mt-2 text-xs text-muted-foreground">{{ handoffSummary.meta }}</p>
                                             </div>
                                             <div class="rounded-lg border bg-muted/10 px-4 py-4">
-                                                <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Latest clinical signal</p>
+                                                <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Latest clinical signal</p>
                                                 <p class="mt-2 text-sm font-semibold text-foreground">{{ latestClinicalSignal ? latestClinicalSignal.title : 'No recent clinical signal' }}</p>
                                                 <p class="mt-2 text-sm text-foreground">{{ latestClinicalSignal ? latestClinicalSignal.summary : 'Consultation notes, lab results, and imaging reports will surface here.' }}</p>
                                                 <p class="mt-2 text-xs text-muted-foreground">{{ latestClinicalSignal ? `${timelineCategoryLabel(latestClinicalSignal.category)} | ${formatDateTime(latestClinicalSignal.occurredAt)}` : 'Timeline follows the most recent patient activity.' }}</p>
                                             </div>
                                             <div class="rounded-lg border bg-muted/10 px-4 py-4">
-                                                <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Next documented step</p>
+                                                <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Next documented step</p>
                                                 <p class="mt-2 text-sm text-foreground">{{ nextDocumentedStep }}</p>
                                                 <p class="mt-2 text-xs text-muted-foreground">Use this together with the current handoff card to keep the patient moving through care.</p>
                                             </div>
@@ -3617,29 +3631,29 @@ onMounted(() => {
                                             <CardContent class="space-y-4">
                                                 <div class="grid gap-3 md:grid-cols-4">
                                                     <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                                        <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Linked events</p>
+                                                        <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Linked events</p>
                                                         <p class="mt-2 text-lg font-semibold text-foreground">{{ focusedEncounterCounts.total }}</p>
                                                         <p class="mt-1 text-xs text-muted-foreground">All timeline items tied to this visit.</p>
                                                     </div>
                                                     <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                                        <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Consultation notes</p>
+                                                        <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Consultation notes</p>
                                                         <p class="mt-2 text-lg font-semibold text-foreground">{{ focusedEncounterCounts.notes }}</p>
                                                         <p class="mt-1 text-xs text-muted-foreground">Documentation linked to this encounter.</p>
                                                     </div>
                                                     <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                                        <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Orders &amp; results</p>
+                                                        <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Orders &amp; results</p>
                                                         <p class="mt-2 text-lg font-semibold text-foreground">{{ focusedEncounterCounts.orders }}</p>
                                                         <p class="mt-1 text-xs text-muted-foreground">Lab, imaging, and pharmacy activity for this visit.</p>
                                                     </div>
                                                     <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                                        <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Billing items</p>
+                                                        <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Billing items</p>
                                                         <p class="mt-2 text-lg font-semibold text-foreground">{{ focusedEncounterCounts.billing }}</p>
                                                         <p class="mt-1 text-xs text-muted-foreground">Invoices and financial follow-up linked to the visit.</p>
                                                     </div>
                                                 </div>
 
                                                 <div class="rounded-lg border bg-muted/10 px-4 py-3">
-                                                    <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Latest encounter signal</p>
+                                                    <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Latest encounter signal</p>
                                                     <p class="mt-2 text-sm font-semibold text-foreground">{{ focusedEncounterLatestEvent ? focusedEncounterLatestEvent.title : 'No linked encounter signal' }}</p>
                                                     <p class="mt-1 text-sm text-foreground">{{ focusedEncounterLatestEvent ? focusedEncounterLatestEvent.summary : 'This visit is in chart focus, but no consultation note, order, result, or billing item has been linked to it yet.' }}</p>
                                                     <p class="mt-2 text-xs text-muted-foreground">{{ focusedEncounterLatestEvent ? timelineCategoryLabel(focusedEncounterLatestEvent.category) + ' | ' + formatDateTime(focusedEncounterLatestEvent.occurredAt) : 'The focused encounter stream will fill as care is recorded.' }}</p>
@@ -3668,7 +3682,7 @@ onMounted(() => {
                                                                 <span v-if="event.subtitle" class="ml-1.5 text-xs text-muted-foreground">{{ event.subtitle }}</span>
                                                             </div>
                                                             <div class="flex shrink-0 items-center gap-1.5">
-                                                                <Badge v-if="event.status" :variant="workflowStatusVariant(event.status)" class="text-[10px]">{{ formatEnumLabel(event.status) }}</Badge>
+                                                                <Badge v-if="event.status" :variant="workflowStatusVariant(event.status)" class="text-xs">{{ formatEnumLabel(event.status) }}</Badge>
                                                                 <span class="text-xs text-muted-foreground">{{ formatDateTime(event.occurredAt) }}</span>
                                                             </div>
                                                         </div>
@@ -3813,7 +3827,7 @@ onMounted(() => {
                                                     <div class="space-y-1">
                                                         <div class="flex items-center gap-2">
                                                             <p class="text-sm font-semibold text-foreground">1. Record allergy</p>
-                                                            <span class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-medium tabular-nums text-muted-foreground">{{ patientAllergies.length }}</span>
+                                                            <span class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-xs font-medium tabular-nums text-muted-foreground">{{ patientAllergies.length }}</span>
                                                         </div>
                                                         <p class="text-xs text-muted-foreground">Add medicine or substance reactions before more therapy is ordered or dispensed.</p>
                                                     </div>
@@ -3833,7 +3847,7 @@ onMounted(() => {
                                                     <div class="space-y-1">
                                                         <div class="flex items-center gap-2">
                                                             <p class="text-sm font-semibold text-foreground">2. Add current medication</p>
-                                                            <span class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-medium tabular-nums text-muted-foreground">{{ patientMedicationProfile.length }}</span>
+                                                            <span class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-xs font-medium tabular-nums text-muted-foreground">{{ patientMedicationProfile.length }}</span>
                                                         </div>
                                                         <p class="text-xs text-muted-foreground">Use this for home meds, chronic therapy, discharge medication, or external prescriptions.</p>
                                                     </div>
@@ -3852,7 +3866,7 @@ onMounted(() => {
                                                     <div class="space-y-1">
                                                         <div class="flex items-center gap-2">
                                                             <p class="text-sm font-semibold text-foreground">3. Review reconciliation</p>
-                                                            <span v-if="(patientMedicationReconciliation?.counts.unreconciledDispensedOrders ?? 0) > 0" class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] font-medium tabular-nums text-primary">{{ patientMedicationReconciliation!.counts.unreconciledDispensedOrders }}</span>
+                                                            <span v-if="(patientMedicationReconciliation?.counts.unreconciledDispensedOrders ?? 0) > 0" class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-xs font-medium tabular-nums text-primary">{{ patientMedicationReconciliation!.counts.unreconciledDispensedOrders }}</span>
                                                         </div>
                                                         <p class="text-xs text-muted-foreground">Compare dispensed therapy with the active profile and close follow-up that still needs review.</p>
                                                     </div>
@@ -3871,19 +3885,19 @@ onMounted(() => {
 
                                     <div class="grid gap-4 xl:grid-cols-4">
                                         <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                            <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Active allergies</p>
+                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Active allergies</p>
                                             <p class="mt-1.5 text-lg font-semibold text-foreground">{{ patientMedicationReconciliation?.counts.activeAllergies ?? patientAllergies.length }}</p>
                                         </div>
                                         <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                            <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Current medications</p>
+                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Current medications</p>
                                             <p class="mt-1.5 text-lg font-semibold text-foreground">{{ patientMedicationReconciliation?.counts.activeMedicationProfile ?? patientMedicationProfile.length }}</p>
                                         </div>
                                         <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                            <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Dispensed orders</p>
+                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Dispensed orders</p>
                                             <p class="mt-1.5 text-lg font-semibold text-foreground">{{ patientMedicationReconciliation?.counts.activeDispensedOrders ?? 0 }}</p>
                                         </div>
                                         <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                            <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Reconciliation attention</p>
+                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Reconciliation attention</p>
                                             <p class="mt-1.5 text-lg font-semibold text-foreground">{{ patientMedicationReconciliation?.counts.unreconciledDispensedOrders ?? 0 }}</p>
                                         </div>
                                     </div>
@@ -4051,15 +4065,15 @@ onMounted(() => {
 
                                                 <div class="grid gap-4 xl:grid-cols-3">
                                                     <div class="rounded-lg border bg-muted/10 px-4 py-3">
-                                                        <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Unreconciled dispensed orders</p>
+                                                        <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Unreconciled dispensed orders</p>
                                                         <p class="mt-1.5 text-lg font-semibold text-foreground">{{ patientMedicationReconciliation.unreconciledDispensedOrders.length }}</p>
                                                     </div>
                                                     <div class="rounded-lg border bg-muted/10 px-4 py-3">
-                                                        <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Continue candidates</p>
+                                                        <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Continue candidates</p>
                                                         <p class="mt-1.5 text-lg font-semibold text-foreground">{{ patientMedicationReconciliation.continueCandidates.length }}</p>
                                                     </div>
                                                     <div class="rounded-lg border bg-muted/10 px-4 py-3">
-                                                        <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">List review needed</p>
+                                                        <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">List review needed</p>
                                                         <p class="mt-1.5 text-lg font-semibold text-foreground">{{ patientMedicationReconciliation.profileWithoutDispensedOrders.length + patientMedicationReconciliation.newOrdersToProfile.length }}</p>
                                                     </div>
                                                 </div>
@@ -4088,7 +4102,7 @@ onMounted(() => {
                                                                         v-if="canUpdatePatients"
                                                                         size="sm"
                                                                         variant="outline"
-                                                                        class="h-7 gap-1.5 px-2.5 text-[11px]"
+                                                                        class="h-9 gap-1.5 px-2.5 text-xs"
                                                                         @click="openMedicationProfileDialogFromOrder(order, 'add')"
                                                                     >
                                                                         <AppIcon name="pill" class="size-3.5" />
@@ -4127,7 +4141,7 @@ onMounted(() => {
                                                                         v-if="canUpdatePatients"
                                                                         size="sm"
                                                                         variant="outline"
-                                                                        class="h-7 gap-1.5 px-2.5 text-[11px]"
+                                                                        class="h-9 gap-1.5 px-2.5 text-xs"
                                                                         @click="openMedicationProfileDialogFromOrder(order, 'continue')"
                                                                     >
                                                                         <AppIcon name="refresh-cw" class="size-3.5" />
@@ -4161,7 +4175,7 @@ onMounted(() => {
                                                                         v-if="canUpdatePatients"
                                                                         size="sm"
                                                                         variant="outline"
-                                                                        class="h-7 gap-1.5 px-2.5 text-[11px]"
+                                                                        class="h-9 gap-1.5 px-2.5 text-xs"
                                                                         :disabled="isMedicationWorkspaceActionLoading(`profile-review:${profile.id}`)"
                                                                         @click="quickReconcileMedicationProfile(profile)"
                                                                     >
@@ -4200,7 +4214,7 @@ onMounted(() => {
                                                                         v-if="canUpdatePatients"
                                                                         size="sm"
                                                                         variant="outline"
-                                                                        class="h-7 gap-1.5 px-2.5 text-[11px]"
+                                                                        class="h-9 gap-1.5 px-2.5 text-xs"
                                                                         @click="openMedicationProfileDialogFromOrder(order, 'add')"
                                                                     >
                                                                         <AppIcon name="plus" class="size-3.5" />
@@ -4246,7 +4260,7 @@ onMounted(() => {
                                     <div class="rounded-lg border bg-muted/10 px-4 py-3">
                                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                             <div class="space-y-1">
-                                                <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Care launch context</p>
+                                                <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Care launch context</p>
                                                 <p class="text-sm text-foreground">{{ careWorkspaceContext.meta }}</p>
                                             </div>
                                             <div v-if="canReadAppointments" class="flex flex-wrap gap-2">
@@ -4263,7 +4277,7 @@ onMounted(() => {
                                     <div class="rounded-lg border bg-background px-4 py-3">
                                         <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                                             <div class="space-y-1">
-                                                <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">View scope</p>
+                                                <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">View scope</p>
                                                 <p class="text-sm text-foreground">{{ ordersWorkspaceScopeSummary }}</p>
                                                 <p class="text-xs text-muted-foreground">{{ ordersWorkspaceScopeHint }}</p>
                                             </div>
@@ -4390,11 +4404,11 @@ onMounted(() => {
                                                 <CardContent class="space-y-4">
                                                     <div class="grid gap-3 sm:grid-cols-2">
                                                         <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
-                                                            <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Active</p>
+                                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Active</p>
                                                             <p class="mt-1.5 text-lg font-semibold text-foreground">{{ careCounts.labActive }}</p>
                                                         </div>
                                                         <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
-                                                            <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Completed</p>
+                                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Completed</p>
                                                             <p class="mt-1.5 text-lg font-semibold text-foreground">{{ careCounts.labCompleted }}</p>
                                                         </div>
                                                     </div>
@@ -4427,7 +4441,16 @@ onMounted(() => {
                                                             </p>
                                                         </template>
                                                         <template v-else>
-                                                            <div class="space-y-3">
+                                                            <div class="space-y-3" aria-live="polite" aria-atomic="false">
+                                                                <Alert
+                                                                    v-if="displayedLaboratoryOrders.some(o => laboratoryClinicalSignal(o).label === 'Critical result')"
+                                                                    variant="destructive"
+                                                                    role="alert"
+                                                                >
+                                                                    <AppIcon name="triangle-alert" class="size-4" aria-hidden="true" />
+                                                                    <AlertTitle>Critical laboratory result</AlertTitle>
+                                                                    <AlertDescription>One or more laboratory results in this view are flagged as critical and require immediate clinical review.</AlertDescription>
+                                                                </Alert>
                                                                 <div>
                                                                     <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
                                                                         {{ displayedLaboratoryOrdersScopeLabel }}
@@ -4461,7 +4484,7 @@ onMounted(() => {
                                                                             <Badge :variant="laboratoryClinicalSignal(order).variant">
                                                                                 {{ laboratoryClinicalSignal(order).label }}
                                                                             </Badge>
-                                                                            <span class="text-[11px] text-muted-foreground">
+                                                                            <span class="text-xs text-muted-foreground">
                                                                                 {{
                                                                                     order.resultedAt
                                                                                         ? `Resulted ${formatDateTime(order.resultedAt)}`
@@ -4480,7 +4503,7 @@ onMounted(() => {
                                                                         </p>
                                                                         <p
                                                                             v-if="lifecycleLinkageText(order, 'laboratory order')"
-                                                                            class="mt-1 text-[11px] text-muted-foreground"
+                                                                            class="mt-1 text-xs text-muted-foreground"
                                                                         >
                                                                             {{ lifecycleLinkageText(order, 'laboratory order') }}
                                                                         </p>
@@ -4497,7 +4520,7 @@ onMounted(() => {
                                                                                 size="sm"
                                                                                 :variant="currentCareNextActionVariant(currentCareNextAction('laboratory', order))"
                                                                                 as-child
-                                                                                class="h-7 gap-1.5 px-2.5 text-[11px]"
+                                                                                class="h-9 gap-1.5 px-2.5 text-xs"
                                                                             >
                                                                                 <Link :href="currentCareNextActionHref('laboratory', order)">
                                                                                     <AppIcon :name="currentCareNextActionIcon('laboratory')" class="size-3.5" />
@@ -4509,7 +4532,7 @@ onMounted(() => {
                                                                                 size="sm"
                                                                                 variant="outline"
                                                                                 as-child
-                                                                                class="h-7 gap-1.5 px-2.5 text-[11px]"
+                                                                                class="h-9 gap-1.5 px-2.5 text-xs"
                                                                             >
                                                                                 <Link
                                                                                     :href="clinicalModuleHref('/laboratory-orders', {
@@ -4525,7 +4548,7 @@ onMounted(() => {
                                                                                 size="sm"
                                                                                 variant="outline"
                                                                                 as-child
-                                                                                class="h-7 gap-1.5 px-2.5 text-[11px]"
+                                                                                class="h-9 gap-1.5 px-2.5 text-xs"
                                                                             >
                                                                                 <Link
                                                                                     :href="clinicalModuleHref('/laboratory-orders', {
@@ -4538,7 +4561,7 @@ onMounted(() => {
                                                                             </Button>
                                                                             <DropdownMenu v-if="hasLaboratoryEncounterMoreActions(order)">
                                                                                 <DropdownMenuTrigger as-child>
-                                                                                    <Button size="sm" variant="outline" class="h-7 gap-1.5 px-2.5 text-[11px]">
+                                                                                    <Button size="sm" variant="outline" class="h-9 gap-1.5 px-2.5 text-xs">
                                                                                         More
                                                                                     </Button>
                                                                                 </DropdownMenuTrigger>
@@ -4568,7 +4591,7 @@ onMounted(() => {
                                                                         </div>
                                                                         <p
                                                                             v-if="currentCareWorkflowHint(order)"
-                                                                            class="mt-2 text-[11px] leading-4 text-muted-foreground"
+                                                                            class="mt-2 text-xs leading-4 text-muted-foreground"
                                                                         >
                                                                             {{ currentCareWorkflowHint(order) }}
                                                                         </p>
@@ -4599,11 +4622,11 @@ onMounted(() => {
                                                 <CardContent class="space-y-4">
                                                     <div class="grid gap-3 sm:grid-cols-2">
                                                         <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
-                                                            <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Active</p>
+                                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Active</p>
                                                             <p class="mt-1.5 text-lg font-semibold text-foreground">{{ careCounts.imagingActive }}</p>
                                                         </div>
                                                         <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
-                                                            <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Reported</p>
+                                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Reported</p>
                                                             <p class="mt-1.5 text-lg font-semibold text-foreground">{{ careCounts.imagingCompleted }}</p>
                                                         </div>
                                                     </div>
@@ -4670,7 +4693,7 @@ onMounted(() => {
                                                                             <Badge :variant="radiologyClinicalSignal(order).variant">
                                                                                 {{ radiologyClinicalSignal(order).label }}
                                                                             </Badge>
-                                                                            <span class="text-[11px] text-muted-foreground">
+                                                                            <span class="text-xs text-muted-foreground">
                                                                                 {{
                                                                                     order.completedAt
                                                                                         ? `Reported ${formatDateTime(order.completedAt)}`
@@ -4689,7 +4712,7 @@ onMounted(() => {
                                                                         </p>
                                                                         <p
                                                                             v-if="lifecycleLinkageText(order, 'imaging order')"
-                                                                            class="mt-1 text-[11px] text-muted-foreground"
+                                                                            class="mt-1 text-xs text-muted-foreground"
                                                                         >
                                                                             {{ lifecycleLinkageText(order, 'imaging order') }}
                                                                         </p>
@@ -4706,7 +4729,7 @@ onMounted(() => {
                                                                                 size="sm"
                                                                                 :variant="currentCareNextActionVariant(currentCareNextAction('radiology', order))"
                                                                                 as-child
-                                                                                class="h-7 gap-1.5 px-2.5 text-[11px]"
+                                                                                class="h-9 gap-1.5 px-2.5 text-xs"
                                                                             >
                                                                                 <Link :href="currentCareNextActionHref('radiology', order)">
                                                                                     <AppIcon :name="currentCareNextActionIcon('radiology')" class="size-3.5" />
@@ -4718,7 +4741,7 @@ onMounted(() => {
                                                                                 size="sm"
                                                                                 variant="outline"
                                                                                 as-child
-                                                                                class="h-7 gap-1.5 px-2.5 text-[11px]"
+                                                                                class="h-9 gap-1.5 px-2.5 text-xs"
                                                                             >
                                                                                 <Link
                                                                                     :href="clinicalModuleHref('/radiology-orders', {
@@ -4734,7 +4757,7 @@ onMounted(() => {
                                                                                 size="sm"
                                                                                 variant="outline"
                                                                                 as-child
-                                                                                class="h-7 gap-1.5 px-2.5 text-[11px]"
+                                                                                class="h-9 gap-1.5 px-2.5 text-xs"
                                                                             >
                                                                                 <Link
                                                                                     :href="clinicalModuleHref('/radiology-orders', {
@@ -4747,7 +4770,7 @@ onMounted(() => {
                                                                             </Button>
                                                                             <DropdownMenu v-if="hasRadiologyEncounterMoreActions(order)">
                                                                                 <DropdownMenuTrigger as-child>
-                                                                                    <Button size="sm" variant="outline" class="h-7 gap-1.5 px-2.5 text-[11px]">
+                                                                                    <Button size="sm" variant="outline" class="h-9 gap-1.5 px-2.5 text-xs">
                                                                                         More
                                                                                     </Button>
                                                                                 </DropdownMenuTrigger>
@@ -4777,7 +4800,7 @@ onMounted(() => {
                                                                         </div>
                                                                         <p
                                                                             v-if="currentCareWorkflowHint(order)"
-                                                                            class="mt-2 text-[11px] leading-4 text-muted-foreground"
+                                                                            class="mt-2 text-xs leading-4 text-muted-foreground"
                                                                         >
                                                                             {{ currentCareWorkflowHint(order) }}
                                                                         </p>
@@ -4806,11 +4829,11 @@ onMounted(() => {
                                                 <CardContent class="space-y-4">
                                                     <div class="grid gap-3 sm:grid-cols-2">
                                                         <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
-                                                            <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Active</p>
+                                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Active</p>
                                                             <p class="mt-1.5 text-lg font-semibold text-foreground">{{ careCounts.procedureActive }}</p>
                                                         </div>
                                                         <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
-                                                            <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Completed</p>
+                                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Completed</p>
                                                             <p class="mt-1.5 text-lg font-semibold text-foreground">{{ careCounts.procedureCompleted }}</p>
                                                         </div>
                                                     </div>
@@ -4886,7 +4909,7 @@ onMounted(() => {
                                                                         </p>
                                                                         <p
                                                                             v-if="lifecycleLinkageText(procedure, 'procedure booking')"
-                                                                            class="mt-1 text-[11px] text-muted-foreground"
+                                                                            class="mt-1 text-xs text-muted-foreground"
                                                                         >
                                                                             {{ lifecycleLinkageText(procedure, 'procedure booking') }}
                                                                         </p>
@@ -4903,7 +4926,7 @@ onMounted(() => {
                                                                                 size="sm"
                                                                                 :variant="currentCareNextActionVariant(currentCareNextAction('theatre', procedure))"
                                                                                 as-child
-                                                                                class="h-7 gap-1.5 px-2.5 text-[11px]"
+                                                                                class="h-9 gap-1.5 px-2.5 text-xs"
                                                                             >
                                                                                 <Link :href="currentCareNextActionHref('theatre', procedure)">
                                                                                     <AppIcon :name="currentCareNextActionIcon('theatre')" class="size-3.5" />
@@ -4915,7 +4938,7 @@ onMounted(() => {
                                                                                 size="sm"
                                                                                 variant="outline"
                                                                                 as-child
-                                                                                class="h-7 gap-1.5 px-2.5 text-[11px]"
+                                                                                class="h-9 gap-1.5 px-2.5 text-xs"
                                                                             >
                                                                                 <Link
                                                                                     :href="clinicalModuleHref('/theatre-procedures', {
@@ -4931,7 +4954,7 @@ onMounted(() => {
                                                                                 size="sm"
                                                                                 variant="outline"
                                                                                 as-child
-                                                                                class="h-7 gap-1.5 px-2.5 text-[11px]"
+                                                                                class="h-9 gap-1.5 px-2.5 text-xs"
                                                                             >
                                                                                 <Link
                                                                                     :href="clinicalModuleHref('/theatre-procedures', {
@@ -4944,7 +4967,7 @@ onMounted(() => {
                                                                             </Button>
                                                                             <DropdownMenu v-if="hasTheatreEncounterMoreActions(procedure)">
                                                                                 <DropdownMenuTrigger as-child>
-                                                                                    <Button size="sm" variant="outline" class="h-7 gap-1.5 px-2.5 text-[11px]">
+                                                                                    <Button size="sm" variant="outline" class="h-9 gap-1.5 px-2.5 text-xs">
                                                                                         More
                                                                                     </Button>
                                                                                 </DropdownMenuTrigger>
@@ -4974,7 +4997,7 @@ onMounted(() => {
                                                                         </div>
                                                                         <p
                                                                             v-if="currentCareWorkflowHint(procedure)"
-                                                                            class="mt-2 text-[11px] leading-4 text-muted-foreground"
+                                                                            class="mt-2 text-xs leading-4 text-muted-foreground"
                                                                         >
                                                                             {{ currentCareWorkflowHint(procedure) }}
                                                                         </p>
@@ -5003,11 +5026,11 @@ onMounted(() => {
                                                 <CardContent class="space-y-4">
                                                     <div class="grid gap-3 sm:grid-cols-2">
                                                         <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
-                                                            <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Active</p>
+                                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Active</p>
                                                             <p class="mt-1.5 text-lg font-semibold text-foreground">{{ careCounts.pharmacyActive }}</p>
                                                         </div>
                                                         <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
-                                                            <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Dispensed</p>
+                                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Dispensed</p>
                                                             <p class="mt-1.5 text-lg font-semibold text-foreground">{{ careCounts.pharmacyDispensed }}</p>
                                                         </div>
                                                     </div>
@@ -5114,7 +5137,7 @@ onMounted(() => {
                                                                         </div>
                                                                         <p
                                                                             v-if="lifecycleLinkageText(order, 'medication order')"
-                                                                            class="mt-1 text-[11px] text-muted-foreground"
+                                                                            class="mt-1 text-xs text-muted-foreground"
                                                                         >
                                                                             {{ lifecycleLinkageText(order, 'medication order') }}
                                                                         </p>
@@ -5131,7 +5154,7 @@ onMounted(() => {
                                                                                 size="sm"
                                                                                 :variant="currentCareNextActionVariant(currentCareNextAction('pharmacy', order))"
                                                                                 as-child
-                                                                                class="h-7 gap-1.5 px-2.5 text-[11px]"
+                                                                                class="h-9 gap-1.5 px-2.5 text-xs"
                                                                             >
                                                                                 <Link :href="currentCareNextActionHref('pharmacy', order)">
                                                                                     <AppIcon :name="currentCareNextActionIcon('pharmacy')" class="size-3.5" />
@@ -5143,7 +5166,7 @@ onMounted(() => {
                                                                                 size="sm"
                                                                                 variant="outline"
                                                                                 as-child
-                                                                                class="h-7 gap-1.5 px-2.5 text-[11px]"
+                                                                                class="h-9 gap-1.5 px-2.5 text-xs"
                                                                             >
                                                                                 <Link
                                                                                     :href="clinicalModuleHref('/pharmacy-orders', {
@@ -5159,7 +5182,7 @@ onMounted(() => {
                                                                                 size="sm"
                                                                                 variant="outline"
                                                                                 as-child
-                                                                                class="h-7 gap-1.5 px-2.5 text-[11px]"
+                                                                                class="h-9 gap-1.5 px-2.5 text-xs"
                                                                             >
                                                                                 <Link
                                                                                     :href="clinicalModuleHref('/pharmacy-orders', {
@@ -5172,7 +5195,7 @@ onMounted(() => {
                                                                             </Button>
                                                                             <DropdownMenu v-if="hasPharmacyEncounterMoreActions(order)">
                                                                                 <DropdownMenuTrigger as-child>
-                                                                                    <Button size="sm" variant="outline" class="h-7 gap-1.5 px-2.5 text-[11px]">
+                                                                                    <Button size="sm" variant="outline" class="h-9 gap-1.5 px-2.5 text-xs">
                                                                                         More
                                                                                     </Button>
                                                                                 </DropdownMenuTrigger>
@@ -5212,7 +5235,7 @@ onMounted(() => {
                                                                         </div>
                                                                         <p
                                                                             v-if="currentCareWorkflowHint(order)"
-                                                                            class="mt-2 text-[11px] leading-4 text-muted-foreground"
+                                                                            class="mt-2 text-xs leading-4 text-muted-foreground"
                                                                         >
                                                                             {{ currentCareWorkflowHint(order) }}
                                                                         </p>
@@ -5296,7 +5319,7 @@ onMounted(() => {
                                     <div class="rounded-lg border bg-muted/10 px-4 py-3">
                                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                             <div class="space-y-1">
-                                                <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Billing context</p>
+                                                <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Billing context</p>
                                                 <p class="text-sm text-foreground">Invoices launched from this chart stay linked to the patient and the visit currently in chart focus when one is available.</p>
                                             </div>
                                             <div v-if="canReadAppointments" class="flex flex-wrap gap-2">
@@ -5332,11 +5355,11 @@ onMounted(() => {
                                                     </div>
                                                     <div class="grid gap-3 sm:grid-cols-2">
                                                         <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
-                                                            <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Open</p>
+                                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Open</p>
                                                             <p class="mt-1.5 text-lg font-semibold text-foreground">{{ careCounts.billingOpen }}</p>
                                                         </div>
                                                         <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
-                                                            <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Paid</p>
+                                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Paid</p>
                                                             <p class="mt-1.5 text-lg font-semibold text-foreground">{{ careCounts.billingSettled }}</p>
                                                         </div>
                                                     </div>
@@ -5451,11 +5474,11 @@ onMounted(() => {
 
                                             <div class="mt-3 grid gap-3 lg:grid-cols-2">
                                                 <div class="rounded-lg border bg-muted/20 px-3 py-3">
-                                                    <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Problem focus</p>
+                                                    <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Problem focus</p>
                                                     <p class="mt-1.5 text-sm text-foreground">{{ recordProblem(record) }}</p>
                                                 </div>
                                                 <div class="rounded-lg border bg-muted/20 px-3 py-3">
-                                                    <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Next step</p>
+                                                    <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Next step</p>
                                                     <p class="mt-1.5 text-sm text-foreground">{{ recordNextStep(record) }}</p>
                                                 </div>
                                             </div>
