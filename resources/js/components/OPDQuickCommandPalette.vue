@@ -40,7 +40,7 @@ type WorkflowActionCommand = {
 };
 
 const open = ref(false);
-const { permissionNames, isFacilitySuperAdmin } = usePlatformAccess();
+const { permissionNames, hasUniversalAdminAccess } = usePlatformAccess();
 
 const routes: CommandRoute[] = [
     {
@@ -843,19 +843,19 @@ const workflowActions = computed<WorkflowActionCommand[]>(() => {
 });
 
 const visibleRoutes = computed(() =>
-    filterItemsByRouteAccess(routes, permissionNames.value, isFacilitySuperAdmin.value),
+    filterItemsByRouteAccess(routes, permissionNames.value, hasUniversalAdminAccess.value),
 );
 
 const visibleCreateWorkflowRoutes = computed(() =>
-    filterItemsByRouteAccess(createWorkflowRoutes, permissionNames.value, isFacilitySuperAdmin.value),
+    filterItemsByRouteAccess(createWorkflowRoutes, permissionNames.value, hasUniversalAdminAccess.value),
 );
 
 const visibleQueuePresets = computed(() =>
-    filterItemsByRouteAccess(queuePresets.value, permissionNames.value, isFacilitySuperAdmin.value),
+    filterItemsByRouteAccess(queuePresets.value, permissionNames.value, hasUniversalAdminAccess.value),
 );
 
 const visibleWorkflowActions = computed(() =>
-    filterItemsByRouteAccess(workflowActions.value, permissionNames.value, isFacilitySuperAdmin.value),
+    filterItemsByRouteAccess(workflowActions.value, permissionNames.value, hasUniversalAdminAccess.value),
 );
 
 const isMac = computed(() => {

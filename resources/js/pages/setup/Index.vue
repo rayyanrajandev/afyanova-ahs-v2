@@ -18,7 +18,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const refreshing = ref(false);
-const { permissionNames, isFacilitySuperAdmin } = usePlatformAccess();
+const { permissionNames, hasUniversalAdminAccess } = usePlatformAccess();
 
 const {
     loading,
@@ -34,7 +34,7 @@ const {
 
 const visibleSteps = computed(() =>
     steps.value.filter((step) =>
-        hasRouteAccess(step.href, permissionNames.value, isFacilitySuperAdmin.value),
+        hasRouteAccess(step.href, permissionNames.value, hasUniversalAdminAccess.value),
     ),
 );
 const visibleStepKeys = computed(() => visibleSteps.value.map((step) => step.key));
@@ -85,7 +85,7 @@ const semanticLayers = computed<Array<{
         tone: inventoryReady.value ? 'secondary' : 'outline',
         href: '/inventory-procurement',
     },
-].filter((layer) => hasRouteAccess(layer.href, permissionNames.value, isFacilitySuperAdmin.value)));
+].filter((layer) => hasRouteAccess(layer.href, permissionNames.value, hasUniversalAdminAccess.value)));
 
 const operationalChecklist = computed(() => [
     {
@@ -109,7 +109,7 @@ const operationalChecklist = computed(() => [
         icon: 'package',
         href: '/inventory-procurement?section=procurement',
     },
-].filter((item) => hasRouteAccess(item.href, permissionNames.value, isFacilitySuperAdmin.value)));
+].filter((item) => hasRouteAccess(item.href, permissionNames.value, hasUniversalAdminAccess.value)));
 
 const setupPrinciples = [
     {

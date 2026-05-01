@@ -82,10 +82,10 @@ const queuePages = [
     { title: 'Facility Rollouts', href: '/platform/admin/facility-rollouts', note: 'Multi-facility rollout queue and command-center controls' },
 ];
 
-const { permissionNames, isFacilitySuperAdmin } = usePlatformAccess();
+const { permissionNames, hasUniversalAdminAccess } = usePlatformAccess();
 
 const visibleQueuePages = computed(() =>
-    filterItemsByRouteAccess(queuePages, permissionNames.value, isFacilitySuperAdmin.value),
+    filterItemsByRouteAccess(queuePages, permissionNames.value, hasUniversalAdminAccess.value),
 );
 </script>
 

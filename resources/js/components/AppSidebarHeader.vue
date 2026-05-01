@@ -20,6 +20,11 @@ import {
     setScopeCookies,
     usePlatformAccess,
 } from '@/composables/usePlatformAccess';
+import {
+    isOperationalFacilityScopePath,
+    isPlatformAdminPath,
+    normalizePlatformPath,
+} from '@/lib/platformScopeRoutes';
 import type { BreadcrumbItem } from '@/types';
 
 withDefaults(
@@ -38,52 +43,14 @@ const {
 
 const page = usePage();
 
-const operationalPathPrefixes = [
-    '/patients',
-    '/appointments',
-    '/admissions',
-    '/medical-records',
-    '/laboratory-orders',
-    '/pharmacy-orders',
-    '/radiology-orders',
-    '/emergency-triage',
-    '/inpatient-ward',
-    '/theatre-procedures',
-    '/billing',
-    '/billing-cash',
-    '/billing-payment-plans',
-    '/billing-refunds',
-    '/billing-discounts',
-    '/billing-financial-reports',
-    '/billing-corporate',
-    '/billing-payer-contracts',
-    '/billing-service-catalog',
-    '/pos',
-    '/claims-insurance',
-    '/inventory-procurement',
-    '/staff',
-    '/staff-credentialing',
-    '/staff-privileges',
-    '/setup-center',
-];
-
-function normalizePath(url: string | undefined): string {
-    const candidate = String(url ?? '').split('#', 1)[0]?.split('?', 1)[0] ?? '';
-
-    return candidate.startsWith('/') ? candidate : `/${candidate}`;
-}
-
-const currentPath = computed(() => normalizePath(page.url));
+const currentPath = computed(() => normalizePlatformPath(page.url));
 
 const isPlatformAdminPage = computed(() =>
-    currentPath.value === '/platform/admin'
-    || currentPath.value.startsWith('/platform/admin/'),
+    isPlatformAdminPath(currentPath.value),
 );
 
 const isOperationalPage = computed(() =>
-    operationalPathPrefixes.some((prefix) =>
-        currentPath.value === prefix || currentPath.value.startsWith(`${prefix}/`),
-    ),
+    isOperationalFacilityScopePath(currentPath.value),
 );
 
 const accessibleFacilities = computed(() => {
@@ -228,6 +195,7 @@ function selectScope(key: string) {
             <DropdownMenu>
                 <DropdownMenuTrigger as-child>
                     <Button
+                        id="app-facility-scope-trigger"
                         variant="outline"
                         size="sm"
                         class="h-9 max-w-[340px] gap-2 px-2.5 font-normal text-muted-foreground"
@@ -297,4 +265,3 @@ function selectScope(key: string) {
         </div>
     </header>
 </template>
-

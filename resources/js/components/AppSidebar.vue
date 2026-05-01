@@ -317,7 +317,7 @@ const navCatalog: NavCatalogItem[] = [
     },
 ];
 
-const { permissionNames, isFacilitySuperAdmin } = usePlatformAccess();
+const { permissionNames, hasUniversalAdminAccess } = usePlatformAccess();
 
 const sectionLabels: Record<NavSectionKey, string> = {
     care_delivery: 'Care Delivery',
@@ -338,7 +338,7 @@ const shouldRestrictByPermissions = computed(
 );
 
 const visibleNavItems = computed<NavCatalogItem[]>(() => {
-    if (isFacilitySuperAdmin.value) {
+    if (hasUniversalAdminAccess.value) {
         return navCatalog;
     }
 
@@ -350,7 +350,7 @@ const visibleNavItems = computed<NavCatalogItem[]>(() => {
 });
 
 const showSetupCenter = computed(() => {
-    return hasRouteAccess('/setup-center', permissionNames.value, isFacilitySuperAdmin.value);
+    return hasRouteAccess('/setup-center', permissionNames.value, hasUniversalAdminAccess.value);
 });
 
 const homeItems = computed<NavItem[]>(() => [
