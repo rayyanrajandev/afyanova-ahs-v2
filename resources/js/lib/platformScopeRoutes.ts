@@ -25,7 +25,6 @@ export const operationalFacilityScopePathPrefixes = [
     '/staff',
     '/staff-credentialing',
     '/staff-privileges',
-    '/setup-center',
 ];
 
 export function normalizePlatformPath(url: string | undefined): string {

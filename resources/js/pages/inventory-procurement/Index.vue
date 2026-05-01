@@ -11,7 +11,6 @@ import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vu
 import InventoryEmptyState from '@/components/inventory/InventoryEmptyState.vue';
 import InventoryItemLookupField from '@/components/inventory/InventoryItemLookupField.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
-import MasterDataSetupGuide from '@/components/setup/MasterDataSetupGuide.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -30,7 +29,6 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
-import { useMasterDataSetupReadiness } from '@/composables/useMasterDataSetupReadiness';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersistence';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -179,13 +177,6 @@ function normalizeInventoryWorkspaceTab(value: string): InventoryWorkspaceTab {
 const activeTab = ref<InventoryWorkspaceTab>('inventory');
 const loading = ref(false);
 const queueError = ref<string | null>(null);
-const {
-    steps: setupSteps,
-    recommendedNextStep,
-    loadSetupReadiness,
-    warehouseReady,
-    supplierReady,
-} = useMasterDataSetupReadiness();
 
 const canRead = ref(false);
 const canManageItems = ref(false);
@@ -409,6 +400,8 @@ const suppliers = ref<LookupOption[]>([]);
 const warehouses = ref<LookupOption[]>([]);
 const departments = ref<LookupOption[]>([]);
 const requisitionContext = ref<DepartmentRequisitionContext | null>(null);
+const supplierReady = computed(() => suppliers.value.length > 0);
+const warehouseReady = computed(() => warehouses.value.length > 0);
 
 type RequisitionInventorySelection = {
     id: string;
@@ -4235,7 +4228,7 @@ async function reloadAll() {
     loading.value = true;
     queueError.value = null;
     try {
-        const tasks = [loadReferenceData(), loadItems(), loadProcurementRequests(), loadStockLedger(), loadDepartmentStock(), loadDeptRequisitions(), loadWarehouseTransfers(), loadSuppliersAndWarehouses(), loadClaimLinks(), loadMsdOrders(), loadSetupReadiness()];
+        const tasks = [loadReferenceData(), loadItems(), loadProcurementRequests(), loadStockLedger(), loadDepartmentStock(), loadDeptRequisitions(), loadWarehouseTransfers(), loadSuppliersAndWarehouses(), loadClaimLinks(), loadMsdOrders()];
         if (activeTab.value === 'shortage-queue') {
             tasks.push(loadShortageQueue());
         }
@@ -5258,12 +5251,6 @@ onMounted(async () => {
                     </Popover>
                 </div>
             </div>
-
-            <MasterDataSetupGuide
-                current-step="inventory"
-                :steps="setupSteps"
-                :recommended-next-step="recommendedNextStep"
-            />
 
             <Card v-if="canRead" class="rounded-lg border-sidebar-border/70">
                 <CardHeader class="pb-2">

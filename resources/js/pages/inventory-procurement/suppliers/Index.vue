@@ -2,7 +2,6 @@
 import { Head } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import MasterDataSetupGuide from '@/components/setup/MasterDataSetupGuide.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,7 +16,6 @@ import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import { useMasterDataSetupReadiness } from '@/composables/useMasterDataSetupReadiness';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { usePlatformCountryProfile } from '@/composables/usePlatformCountryProfile';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -64,7 +62,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const { permissionState } = usePlatformAccess();
 const { countryProfileCatalog, loadCountryProfile } = usePlatformCountryProfile();
-const { steps: setupSteps, recommendedNextStep, loadSetupReadiness } = useMasterDataSetupReadiness();
 const canRead = computed(() => permissionState('inventory.procurement.read') === 'allowed');
 const canManage = computed(() => permissionState('inventory.procurement.manage-suppliers') === 'allowed');
 const canAudit = computed(() => permissionState('inventory.procurement.view-audit-logs') === 'allowed');
@@ -285,7 +282,7 @@ async function createItem() {
         Object.assign(createForm, { supplierCode: '', supplierName: '', tinNumber: '', contactPerson: '', phone: '', email: '', addressLine: '', countryCode: '', notes: '' });
         createOpen.value = false;
         filters.page = 1;
-        await Promise.all([refreshPage(), loadSetupReadiness()]);
+        await refreshPage();
     } catch (error) {
         notifyError(messageFromUnknown(error, 'Unable to create supplier.'));
     } finally { createLoading.value = false; }
@@ -380,7 +377,7 @@ function prevPage() { if ((pagination.value?.currentPage ?? 1) > 1) { filters.pa
 function nextPage() { if (pagination.value && pagination.value.currentPage < pagination.value.lastPage) { filters.page += 1; void loadItems(); } }
 
 onMounted(() => {
-    void Promise.all([refreshPage(), loadSetupReadiness()]);
+    void refreshPage();
 });
 </script>
 
@@ -409,12 +406,6 @@ onMounted(() => {
                     </Button>
                 </div>
             </div>
-
-            <MasterDataSetupGuide
-                current-step="suppliers"
-                :steps="setupSteps"
-                :recommended-next-step="recommendedNextStep"
-            />
 
             <!-- Queue bar -->
             <div v-if="canRead" class="flex min-h-9 flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-4 py-2">

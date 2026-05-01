@@ -3,7 +3,6 @@ import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import ComboboxField from '@/components/forms/ComboboxField.vue';
-import MasterDataSetupGuide from '@/components/setup/MasterDataSetupGuide.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,7 +15,6 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { useMasterDataSetupReadiness } from '@/composables/useMasterDataSetupReadiness';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatEnumLabel } from '@/lib/labels';
@@ -130,7 +128,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Clinical Care Catalogs', href: '/platform/admin/clinical-catalogs' },
 ];
 
-const { steps: setupSteps, recommendedNextStep, loadSetupReadiness } = useMasterDataSetupReadiness();
 const domains = {
     'lab-tests': {
         label: 'Lab Tests',
@@ -1195,7 +1192,7 @@ async function createItem(): Promise<void> {
         resetCreateForm();
         clinicalWorkspaceView.value = 'queue';
         notifySuccess(`${catalog.value.label} item created.`);
-        await Promise.all([loadItems(), loadSetupReadiness()]);
+        await loadItems();
     } catch (error) {
         const apiError = error as ApiError;
         if (apiError.status === 422 && apiError.payload?.errors) createErrors.value = apiError.payload.errors;
@@ -1405,7 +1402,7 @@ watch(catalogKey, () => {
 });
 
 onMounted(() => {
-    void Promise.all([loadItems(), loadDepartments(), loadSetupReadiness()]);
+    void Promise.all([loadItems(), loadDepartments()]);
 });
 </script>
 
@@ -1458,12 +1455,6 @@ onMounted(() => {
                     </Button>
                 </div>
             </div>
-
-            <MasterDataSetupGuide
-                current-step="clinical"
-                :steps="setupSteps"
-                :recommended-next-step="recommendedNextStep"
-            />
 
             <Card class="rounded-lg border-sidebar-border/70">
                 <CardHeader class="gap-2 pb-2">

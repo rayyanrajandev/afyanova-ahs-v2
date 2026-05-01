@@ -13,7 +13,7 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
-import { filterItemsByRouteAccess, hasRouteAccess } from '@/lib/routeAccess';
+import { filterItemsByRouteAccess } from '@/lib/routeAccess';
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import AppLogo from './AppLogo.vue';
@@ -349,10 +349,6 @@ const visibleNavItems = computed<NavCatalogItem[]>(() => {
     return filterItemsByRouteAccess(navCatalog, permissionNames.value);
 });
 
-const showSetupCenter = computed(() => {
-    return hasRouteAccess('/setup-center', permissionNames.value, hasUniversalAdminAccess.value);
-});
-
 const homeItems = computed<NavItem[]>(() => [
     {
         title: 'Dashboard',
@@ -379,14 +375,6 @@ const navSections = computed<NavSection[]>(() =>
                     isActive,
                 }));
 
-            if (key === 'configuration' && showSetupCenter.value) {
-                items.unshift({
-                    title: 'Setup Center',
-                    href: '/setup-center',
-                    iconName: 'layout-list',
-                });
-            }
-
             return {
                 key,
                 label: sectionLabels[key],
@@ -397,7 +385,7 @@ const navSections = computed<NavSection[]>(() =>
 );
 
 const showLimitedAccessHint = computed(
-    () => shouldRestrictByPermissions.value && visibleNavItems.value.length === 0 && !showSetupCenter.value,
+    () => shouldRestrictByPermissions.value && visibleNavItems.value.length === 0,
 );
 </script>
 

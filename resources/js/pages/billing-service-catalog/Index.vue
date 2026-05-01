@@ -7,7 +7,6 @@ import ComboboxField from '@/components/forms/ComboboxField.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vue';
 import TimePopoverField from '@/components/forms/TimePopoverField.vue';
-import MasterDataSetupGuide from '@/components/setup/MasterDataSetupGuide.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,7 +18,6 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { useMasterDataSetupReadiness } from '@/composables/useMasterDataSetupReadiness';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { usePlatformCountryProfile } from '@/composables/usePlatformCountryProfile';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -182,7 +180,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Billable Service Catalog', href: '/billing-service-catalog' },
 ];
 
-const { steps: setupSteps, recommendedNextStep, loadSetupReadiness } = useMasterDataSetupReadiness();
 const { permissionNames, permissionState, scope: sharedScope, multiTenantIsolationEnabled } = usePlatformAccess();
 const { activeCurrencyCode, loadCountryProfile } = usePlatformCountryProfile();
 
@@ -1849,7 +1846,7 @@ async function createItem(): Promise<void> {
 
         catalogWorkspaceView.value = 'queue';
         notifySuccess('Service catalog item created.');
-        await Promise.all([loadItems(), loadSetupReadiness()]);
+        await loadItems();
     } catch (error) {
         const apiError = error as Error & { status?: number; payload?: ValidationErrorResponse };
         if (apiError.status === 422 && apiError.payload?.errors) {
@@ -2279,7 +2276,7 @@ async function exportAuditLogs(): Promise<void> {
 onMounted(async () => {
     await loadCountryProfile();
     applyCurrencyDefaults();
-    await Promise.all([loadItems(), loadDepartments(), loadClinicalCatalogLookupItems(), loadSetupReadiness()]);
+    await Promise.all([loadItems(), loadDepartments(), loadClinicalCatalogLookupItems()]);
 });
 
 watch(
@@ -2405,12 +2402,6 @@ watch(
                     </Button>
                 </div>
             </div>
-
-            <MasterDataSetupGuide
-                current-step="pricing"
-                :steps="setupSteps"
-                :recommended-next-step="recommendedNextStep"
-            />
 
             <Alert v-if="!permissionsResolved">
                 <AlertTitle class="flex items-center gap-2">

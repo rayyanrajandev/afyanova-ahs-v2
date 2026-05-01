@@ -26,10 +26,6 @@ Route::get('dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
-Route::get('setup-center', function () {
-    return Inertia::render('setup/Index');
-})->middleware(['auth', 'verified', 'can:setup-center.access'])->name('setup-center.page');
-
 Route::get('patients', function () {
     return Inertia::render('patients/Index');
 })->middleware(['auth', 'verified', 'can:patients.read', 'facility.entitlement:patients.search'])->name('patients.page');

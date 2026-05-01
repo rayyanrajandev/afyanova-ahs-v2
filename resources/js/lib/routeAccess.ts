@@ -5,25 +5,6 @@ type RouteAccessRule = {
 
 const routeAccessRules: RouteAccessRule[] = [
     {
-        pathPrefix: '/setup-center',
-        requiredPermissions: [
-            'inventory.procurement.read',
-            'inventory.procurement.manage-warehouses',
-            'inventory.procurement.manage-suppliers',
-            'platform.clinical-catalog.read',
-            'billing.service-catalog.read',
-            'departments.read',
-            'specialties.read',
-            'staff.specialties.read',
-            'staff.read',
-            'patients.read',
-            'appointments.read',
-            'platform.resources.read',
-            'platform.facilities.read',
-            'platform.subscription-plans.read',
-        ],
-    },
-    {
         pathPrefix: '/inventory-procurement/suppliers',
         requiredPermissions: ['inventory.procurement.read'],
     },

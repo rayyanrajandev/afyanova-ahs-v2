@@ -69,25 +69,6 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('appointments.manage-provider-session', function ($user): bool {
             return $this->allowsAppointmentProviderSession($user);
         });
-
-        Gate::define('setup-center.access', function ($user): bool {
-            return $this->allowsAnyPermission($user, [
-                'inventory.procurement.read',
-                'inventory.procurement.manage-warehouses',
-                'inventory.procurement.manage-suppliers',
-                'platform.clinical-catalog.read',
-                'billing.service-catalog.read',
-                'departments.read',
-                'specialties.read',
-                'staff.specialties.read',
-                'staff.read',
-                'patients.read',
-                'appointments.read',
-                'platform.resources.read',
-                'platform.facilities.read',
-                'platform.subscription-plans.read',
-            ]);
-        });
     }
 
     private function allowsAppointmentProviderSession(mixed $user): bool
@@ -107,35 +88,6 @@ class AppServiceProvider extends ServiceProvider
         $authorization = app(ConsultationProviderAuthorization::class);
 
         return $authorization->allows($user);
-    }
-
-    /**
-     * @param  array<int, string>  $permissions
-     */
-    private function allowsAnyPermission(mixed $user, array $permissions): bool
-    {
-        if ($user === null) {
-            return false;
-        }
-
-        if (
-            method_exists($user, 'isFacilitySuperAdminAccess')
-            && (bool) $user->isFacilitySuperAdminAccess()
-        ) {
-            return true;
-        }
-
-        if (! method_exists($user, 'hasPermissionTo')) {
-            return false;
-        }
-
-        foreach ($permissions as $permission) {
-            if ((bool) $user->hasPermissionTo($permission)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private function applyRuntimeBrandingConfig(): void
