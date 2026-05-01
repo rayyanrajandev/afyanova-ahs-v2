@@ -9,6 +9,7 @@ use App\Modules\Platform\Infrastructure\Models\RoleModel;
 use App\Modules\Platform\Infrastructure\Models\TenantModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Inertia\Testing\AssertableInertia as Assert;
 
 uses(RefreshDatabase::class);
 
@@ -61,6 +62,7 @@ function facilityAdminSmokeContext(): array
         'patients.read',
         'patients.create',
         'patients.update',
+        'laboratory.orders.read',
         'inventory.procurement.read',
         'departments.read',
         'staff.clinical-directory.read',
@@ -164,6 +166,37 @@ it('allows facility admins into operational setup only through real setup permis
     $this->actingAs($userWithoutSetupPermission)
         ->get('/setup-center')
         ->assertForbidden();
+});
+
+it('blocks unsubscribed operational workspaces even when the role has module permission', function (): void {
+    $context = facilityAdminSmokeContext();
+
+    $this->actingAs($context['user'])
+        ->get('/laboratory-orders')
+        ->assertForbidden()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('errors/FacilitySubscriptionRequired')
+            ->where('access.code', 'FACILITY_ENTITLEMENT_REQUIRED')
+            ->where('access.missingEntitlements.0', 'laboratory.orders'));
+
+    $clinicalPlan = PlatformSubscriptionPlanModel::query()
+        ->where('code', 'clinical_operations')
+        ->firstOrFail();
+
+    FacilitySubscriptionModel::query()
+        ->where('facility_id', $context['facility']->id)
+        ->update([
+            'plan_id' => $clinicalPlan->id,
+            'price_amount' => $clinicalPlan->price_amount,
+            'currency_code' => $clinicalPlan->currency_code,
+            'updated_at' => now(),
+        ]);
+
+    $this->actingAs($context['user'])
+        ->get('/laboratory-orders')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('laboratory-orders/Index'));
 });
 
 it('allows assigned facility admins to register patients only inside their facility scope and active subscription', function (): void {

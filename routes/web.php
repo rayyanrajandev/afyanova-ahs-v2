@@ -42,115 +42,115 @@ Route::get('patients/{id}/chart', function (string $id) {
 
 Route::get('appointments', function () {
     return Inertia::render('appointments/Index');
-})->middleware(['auth', 'verified', 'can:appointments.read'])->name('appointments.page');
+})->middleware(['auth', 'verified', 'can:appointments.read', 'facility.entitlement:appointments.scheduling'])->name('appointments.page');
 
 Route::get('admissions', function () {
     return Inertia::render('admissions/Index');
-})->middleware(['auth', 'verified', 'can:admissions.read'])->name('admissions.page');
+})->middleware(['auth', 'verified', 'can:admissions.read', 'facility.entitlement:admissions.management'])->name('admissions.page');
 
 Route::get('medical-records', function () {
     return Inertia::render('medical-records/Index');
-})->middleware(['auth', 'verified', 'can:medical.records.read'])->name('medical-records.page');
+})->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])->name('medical-records.page');
 
 Route::get('medical-records/{id}/print', [MedicalRecordDocumentController::class, 'show'])
-    ->middleware(['auth', 'verified', 'can:medical.records.read'])
+    ->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])
     ->name('medical-records.print.page');
 
 Route::get('medical-records/{id}/pdf', [MedicalRecordDocumentController::class, 'downloadPdf'])
-    ->middleware(['auth', 'verified', 'can:medical.records.read'])
+    ->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])
     ->name('medical-records.pdf.download');
 
 Route::get('laboratory-orders', function () {
     return Inertia::render('laboratory-orders/Index');
-})->middleware(['auth', 'verified', 'can:laboratory.orders.read'])->name('laboratory-orders.page');
+})->middleware(['auth', 'verified', 'can:laboratory.orders.read', 'facility.entitlement:laboratory.orders'])->name('laboratory-orders.page');
 
 Route::get('pharmacy-orders', function () {
     return Inertia::render('pharmacy-orders/Index');
-})->middleware(['auth', 'verified', 'can:pharmacy.orders.read'])->name('pharmacy-orders.page');
+})->middleware(['auth', 'verified', 'can:pharmacy.orders.read', 'facility.entitlement:pharmacy.orders'])->name('pharmacy-orders.page');
 
 Route::get('billing-invoices', function () {
     return Inertia::render('billing-invoices/Index');
-})->middleware(['auth', 'verified', 'can:billing.invoices.read'])->name('billing-invoices.page');
+})->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.invoices'])->name('billing-invoices.page');
 
 Route::get('billing-cash', function () {
     return Inertia::render('billing-cash/Index');
-})->middleware(['auth', 'verified', 'can:billing.cash-accounts.read'])->name('billing-cash.page');
+})->middleware(['auth', 'verified', 'can:billing.cash-accounts.read', 'facility.entitlement:billing.cash_accounts'])->name('billing-cash.page');
 
 Route::get('billing-payment-plans', function () {
     return Inertia::render('billing-payment-plans/Index');
-})->middleware(['auth', 'verified', 'can:billing.invoices.read'])->name('billing-payment-plans.page');
+})->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.payment_plans'])->name('billing-payment-plans.page');
 
 Route::get('pos', function () {
     return Inertia::render('pos/Index');
-})->middleware(['auth', 'verified', 'can:pos.registers.read'])->name('pos.page');
+})->middleware(['auth', 'verified', 'can:pos.registers.read', 'facility.entitlement:pos.registers_sessions'])->name('pos.page');
 
 Route::get('pos/sales/{id}/print', [PosSaleDocumentController::class, 'show'])
-    ->middleware(['auth', 'verified', 'can:pos.sales.read'])
+    ->middleware(['auth', 'verified', 'can:pos.sales.read', 'facility.entitlement:pos.sales'])
     ->name('pos.sales.print.page');
 
 Route::get('pos/sales/{id}/pdf', [PosSaleDocumentController::class, 'downloadPdf'])
-    ->middleware(['auth', 'verified', 'can:pos.sales.read'])
+    ->middleware(['auth', 'verified', 'can:pos.sales.read', 'facility.entitlement:pos.sales'])
     ->name('pos.sales.pdf.download');
 
 Route::get('pos/sessions/{id}/report', [PosRegisterSessionDocumentController::class, 'show'])
-    ->middleware(['auth', 'verified', 'can:pos.sessions.read'])
+    ->middleware(['auth', 'verified', 'can:pos.sessions.read', 'facility.entitlement:pos.registers_sessions'])
     ->name('pos.sessions.report.page');
 
 Route::get('pos/sessions/{id}/report.pdf', [PosRegisterSessionDocumentController::class, 'downloadPdf'])
-    ->middleware(['auth', 'verified', 'can:pos.sessions.read'])
+    ->middleware(['auth', 'verified', 'can:pos.sessions.read', 'facility.entitlement:pos.registers_sessions'])
     ->name('pos.sessions.report.pdf.download');
 
 Route::get('billing-refunds', function () {
     return Inertia::render('billing-refunds/Index');
-})->middleware(['auth', 'verified', 'can:billing.refunds.read'])->name('billing-refunds.page');
+})->middleware(['auth', 'verified', 'can:billing.refunds.read', 'facility.entitlement:billing.discounts_refunds'])->name('billing-refunds.page');
 
 Route::get('billing-discounts', function () {
     return Inertia::render('billing-discounts/Index');
-})->middleware(['auth', 'verified', 'can:billing.discounts.read'])->name('billing-discounts.page');
+})->middleware(['auth', 'verified', 'can:billing.discounts.read', 'facility.entitlement:billing.discounts_refunds'])->name('billing-discounts.page');
 
 Route::get('billing-financial-reports', function () {
     return Inertia::render('billing-financial-reports/Index');
-})->middleware(['auth', 'verified', 'can:billing.financial-controls.read'])->name('billing-financial-reports.page');
+})->middleware(['auth', 'verified', 'can:billing.financial-controls.read', 'facility.entitlement:billing.financial_controls'])->name('billing-financial-reports.page');
 
 Route::get('billing-corporate', function () {
     return Inertia::render('billing-corporate/Index');
-})->middleware(['auth', 'verified', 'can:billing.payer-contracts.read'])->name('billing-corporate.page');
+})->middleware(['auth', 'verified', 'can:billing.payer-contracts.read', 'facility.entitlement:billing.payer_contracts'])->name('billing-corporate.page');
 
 Route::get('billing-invoices/{id}/print', [BillingInvoiceDocumentController::class, 'show'])
-    ->middleware(['auth', 'verified', 'can:billing.invoices.read'])
+    ->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.invoices'])
     ->name('billing-invoices.print.page');
 
 Route::get('billing-invoices/{id}/pdf', [BillingInvoiceDocumentController::class, 'downloadPdf'])
-    ->middleware(['auth', 'verified', 'can:billing.invoices.read'])
+    ->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.invoices'])
     ->name('billing-invoices.pdf.download');
 
 Route::get('claims-insurance/{id}/print', [ClaimsInsuranceDocumentController::class, 'show'])
-    ->middleware(['auth', 'verified', 'can:claims.insurance.read'])
+    ->middleware(['auth', 'verified', 'can:claims.insurance.read', 'facility.entitlement:claims.insurance'])
     ->name('claims-insurance.print.page');
 
 Route::get('claims-insurance/{id}/pdf', [ClaimsInsuranceDocumentController::class, 'downloadPdf'])
-    ->middleware(['auth', 'verified', 'can:claims.insurance.read'])
+    ->middleware(['auth', 'verified', 'can:claims.insurance.read', 'facility.entitlement:claims.insurance'])
     ->name('claims-insurance.pdf.download');
 
 Route::get('billing-payer-contracts', function () {
     return Inertia::render('billing-payer-contracts/Index');
-})->middleware(['auth', 'verified', 'can:billing.payer-contracts.read'])->name('billing-payer-contracts.page');
+})->middleware(['auth', 'verified', 'can:billing.payer-contracts.read', 'facility.entitlement:billing.payer_contracts'])->name('billing-payer-contracts.page');
 
 Route::get('billing-service-catalog', function () {
     return Inertia::render('billing-service-catalog/Index');
-})->middleware(['auth', 'verified', 'can:billing.service-catalog.read'])->name('billing-service-catalog.page');
+})->middleware(['auth', 'verified', 'can:billing.service-catalog.read', 'facility.entitlement:billing.service_catalog'])->name('billing-service-catalog.page');
 
 Route::get('staff', function () {
     return Inertia::render('staff/Index');
-})->middleware(['auth', 'verified', 'can:staff.read'])->name('staff.page');
+})->middleware(['auth', 'verified', 'can:staff.read', 'facility.entitlement:staff.profiles'])->name('staff.page');
 
 Route::get('staff-credentialing', function () {
     return Inertia::render('staff-credentialing/Index');
-})->middleware(['auth', 'verified', 'can:staff.credentialing.read'])->name('staff-credentialing.page');
+})->middleware(['auth', 'verified', 'can:staff.credentialing.read', 'facility.entitlement:staff.credentialing'])->name('staff-credentialing.page');
 
 Route::get('staff-privileges', function () {
     return Inertia::render('staff-privileges/Index');
-})->middleware(['auth', 'verified', 'can:staff.privileges.read'])->name('staff-privileges.page');
+})->middleware(['auth', 'verified', 'can:staff.privileges.read', 'facility.entitlement:staff.privileges'])->name('staff-privileges.page');
 
 Route::get('platform/admin/users', function () {
     return Inertia::render('platform/admin/users/Index');
@@ -212,58 +212,58 @@ Route::get('platform/admin/clinical-catalogs', function () {
 
 Route::get('radiology-orders', function () {
     return Inertia::render('radiology-orders/Index');
-})->middleware(['auth', 'verified', 'can:radiology.orders.read'])->name('radiology-orders.page');
+})->middleware(['auth', 'verified', 'can:radiology.orders.read', 'facility.entitlement:radiology.orders'])->name('radiology-orders.page');
 
 Route::get('emergency-triage', function () {
     return Inertia::render('emergency-triage/Index');
-})->middleware(['auth', 'verified', 'can:emergency.triage.read'])->name('emergency-triage.page');
+})->middleware(['auth', 'verified', 'can:emergency.triage.read', 'facility.entitlement:emergency.triage'])->name('emergency-triage.page');
 
 Route::get('inpatient-ward', function () {
     return Inertia::render('inpatient-ward/Index');
-})->middleware(['auth', 'verified', 'can:inpatient.ward.read'])->name('inpatient-ward.page');
+})->middleware(['auth', 'verified', 'can:inpatient.ward.read', 'facility.entitlement:inpatient.ward'])->name('inpatient-ward.page');
 
 Route::get('inpatient-ward/discharge-checklists/{id}/print', [InpatientWardDischargeChecklistDocumentController::class, 'show'])
-    ->middleware(['auth', 'verified', 'can:inpatient.ward.read'])
+    ->middleware(['auth', 'verified', 'can:inpatient.ward.read', 'facility.entitlement:inpatient.care_plans'])
     ->name('inpatient-ward-discharge-checklists.print.page');
 
 Route::get('inpatient-ward/discharge-checklists/{id}/pdf', [InpatientWardDischargeChecklistDocumentController::class, 'downloadPdf'])
-    ->middleware(['auth', 'verified', 'can:inpatient.ward.read'])
+    ->middleware(['auth', 'verified', 'can:inpatient.ward.read', 'facility.entitlement:inpatient.care_plans'])
     ->name('inpatient-ward-discharge-checklists.pdf.download');
 
 Route::get('theatre-procedures', function () {
     return Inertia::render('theatre-procedures/Index');
-})->middleware(['auth', 'verified', 'can:theatre.procedures.read'])->name('theatre-procedures.page');
+})->middleware(['auth', 'verified', 'can:theatre.procedures.read', 'facility.entitlement:theatre.procedures'])->name('theatre-procedures.page');
 
 Route::get('claims-insurance', function () {
     return Inertia::render('claims-insurance/Index');
-})->middleware(['auth', 'verified', 'can:claims.insurance.read'])->name('claims-insurance.page');
+})->middleware(['auth', 'verified', 'can:claims.insurance.read', 'facility.entitlement:claims.insurance'])->name('claims-insurance.page');
 
 Route::get('inventory-procurement', function () {
     return Inertia::render('inventory-procurement/Index');
-})->middleware(['auth', 'verified', 'can:inventory.procurement.read'])->name('inventory-procurement.page');
+})->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])->name('inventory-procurement.page');
 
 Route::get('inventory-procurement/suppliers', function () {
     return Inertia::render('inventory-procurement/suppliers/Index');
-})->middleware(['auth', 'verified', 'can:inventory.procurement.read'])->name('inventory-procurement-suppliers.page');
+})->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.suppliers'])->name('inventory-procurement-suppliers.page');
 
 Route::get('inventory-procurement/warehouses', function () {
     return Inertia::render('inventory-procurement/warehouses/Index');
-})->middleware(['auth', 'verified', 'can:inventory.procurement.read'])->name('inventory-procurement-warehouses.page');
+})->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.warehouses'])->name('inventory-procurement-warehouses.page');
 
 Route::get('inventory-procurement/warehouse-transfers/{id}/pick-slip', [InventoryWarehouseTransferDocumentController::class, 'showPickSlip'])
-    ->middleware(['auth', 'verified', 'can:inventory.procurement.read'])
+    ->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.transfers'])
     ->name('inventory-procurement-warehouse-transfers.pick-slip.page');
 
 Route::get('inventory-procurement/warehouse-transfers/{id}/pick-slip.pdf', [InventoryWarehouseTransferDocumentController::class, 'downloadPickSlipPdf'])
-    ->middleware(['auth', 'verified', 'can:inventory.procurement.read'])
+    ->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.transfers'])
     ->name('inventory-procurement-warehouse-transfers.pick-slip.pdf.download');
 
 Route::get('inventory-procurement/warehouse-transfers/{id}/dispatch-note', [InventoryWarehouseTransferDocumentController::class, 'showDispatchNote'])
-    ->middleware(['auth', 'verified', 'can:inventory.procurement.read'])
+    ->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.transfers'])
     ->name('inventory-procurement-warehouse-transfers.dispatch-note.page');
 
 Route::get('inventory-procurement/warehouse-transfers/{id}/dispatch-note.pdf', [InventoryWarehouseTransferDocumentController::class, 'downloadDispatchNotePdf'])
-    ->middleware(['auth', 'verified', 'can:inventory.procurement.read'])
+    ->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.transfers'])
     ->name('inventory-procurement-warehouse-transfers.dispatch-note.pdf.download');
 
 Route::get('help/shortcuts', function () {
