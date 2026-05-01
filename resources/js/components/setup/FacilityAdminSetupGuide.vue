@@ -304,10 +304,10 @@ const nextPendingTaskOutcome = computed(() => nextPendingTask.value?.outcome ?? 
 
 <template>
     <!-- Collapsed state -->
-    <Card class="rounded-xl border-sidebar-border/70 shadow-md overflow-hidden">
+    <Card class="rounded-lg border-sidebar-border/70">
         <CardContent v-if="launchGuideHidden" class="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
             <div class="flex min-w-0 items-center gap-3">
-                <div class="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-background text-muted-foreground">
+                <div class="flex size-8 shrink-0 items-center justify-center rounded-lg border bg-background text-muted-foreground">
                     <AppIcon name="clipboard-list" class="size-4" />
                 </div>
                 <div class="min-w-0">
@@ -319,274 +319,126 @@ const nextPendingTaskOutcome = computed(() => nextPendingTask.value?.outcome ?? 
             </div>
             <Button type="button" size="sm" variant="outline" class="h-8 shrink-0 gap-1.5" @click="launchGuideHidden = false">
                 <AppIcon name="eye" class="size-3.5" />
-                Show checklist
+                Show
             </Button>
         </CardContent>
 
         <CardContent v-else class="p-0">
             <!-- ── Header ─────────────────────────────────────────────────── -->
-            <div class="border-b bg-gradient-to-r from-background to-muted/40 px-6 py-5">
-                <div class="flex flex-wrap items-start justify-between gap-4">
-                    <div class="flex items-center gap-3">
-                        <div class="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <AppIcon name="clipboard-list" class="size-4" />
-                        </div>
-                        <div>
-                            <h2 class="text-base font-semibold leading-none">Launch checklist</h2>
-                            <p class="mt-0.5 text-xs text-muted-foreground">First login → first patient, in order</p>
-                        </div>
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
+                <div class="flex items-center gap-2.5">
+                    <div class="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <AppIcon name="clipboard-list" class="size-3.5" />
                     </div>
-                    <div class="flex items-center gap-3">
-                        <!-- 4-phase segment bar -->
-                        <div class="hidden items-center gap-1 sm:flex">
-                            <div
-                                v-for="(phase, i) in phases"
-                                :key="i"
-                                class="h-1.5 w-10 overflow-hidden rounded-full transition-all duration-500"
-                                :class="phaseAllDone(phase) ? 'bg-emerald-500' : i === currentPhaseIndex ? 'bg-primary' : 'bg-muted'"
-                            />
-                        </div>
-                        <Badge :variant="nextPendingTask ? 'outline' : 'secondary'" class="tabular-nums">
-                            {{ readyTaskCount }}/{{ measurableTasks.length }}
-                        </Badge>
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            class="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground hover:text-foreground"
-                            @click="launchGuideHidden = true"
-                        >
-                            <AppIcon name="eye-off" class="size-3.5" />
-                            Hide
-                        </Button>
-                    </div>
+                    <h2 class="text-sm font-semibold">Launch checklist</h2>
                 </div>
-            </div>
-
-            <!-- ── Critical path stepper ──────────────────────────────────── -->
-            <div class="border-b bg-muted/30 px-6 py-4">
-                <p class="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    Minimum path to first patient
-                </p>
-                <div class="flex items-center">
-                    <!-- Node 1: Departments -->
-                    <Link href="/platform/admin/departments" class="group flex flex-col items-center gap-1.5">
-                        <div
-                            class="flex size-8 items-center justify-center rounded-full border-2 transition-colors"
-                            :class="departmentsReady ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-primary bg-primary/10 text-primary'"
-                        >
-                            <AppIcon v-if="departmentsReady" name="check" class="size-3.5" />
-                            <span v-else class="text-xs font-bold">1</span>
-                        </div>
-                        <span class="text-[11px] font-medium text-muted-foreground transition-colors group-hover:text-foreground">Department</span>
-                    </Link>
-                    <!-- Connector -->
-                    <div class="mb-5 h-0.5 flex-1 transition-colors" :class="departmentsReady ? 'bg-emerald-500' : 'bg-muted'" />
-                    <!-- Node 2: Service points -->
-                    <Link href="/platform/admin/service-points" class="group flex flex-col items-center gap-1.5">
-                        <div
-                            class="flex size-8 items-center justify-center rounded-full border-2 transition-colors"
-                            :class="servicePointsReady ? 'border-emerald-500 bg-emerald-500 text-white' : departmentsReady ? 'border-primary bg-primary/10 text-primary' : 'border-muted-foreground/30 bg-background text-muted-foreground'"
-                        >
-                            <AppIcon v-if="servicePointsReady" name="check" class="size-3.5" />
-                            <span v-else class="text-xs font-bold">2</span>
-                        </div>
-                        <span class="text-[11px] font-medium text-muted-foreground transition-colors group-hover:text-foreground">Service point</span>
-                    </Link>
-                    <!-- Connector -->
-                    <div class="mb-5 h-0.5 flex-1 transition-colors" :class="servicePointsReady ? 'bg-emerald-500' : 'bg-muted'" />
-                    <!-- Node 3: First patient -->
-                    <Link href="/patients" class="group flex flex-col items-center gap-1.5">
-                        <div
-                            class="flex size-8 items-center justify-center rounded-full border-2 transition-colors"
-                            :class="patientsReady ? 'border-emerald-500 bg-emerald-500 text-white' : servicePointsReady ? 'border-primary bg-primary/10 text-primary' : 'border-muted-foreground/30 bg-background text-muted-foreground'"
-                        >
-                            <AppIcon v-if="patientsReady" name="check" class="size-3.5" />
-                            <span v-else class="text-xs font-bold">3</span>
-                        </div>
-                        <span class="text-[11px] font-medium text-muted-foreground transition-colors group-hover:text-foreground">Register patient</span>
-                    </Link>
-                </div>
-            </div>
-
-            <!-- ── Main: phase list + focus panel ─────────────────────────── -->
-            <div class="grid xl:grid-cols-[1fr_20rem]">
-
-                <!-- Phase list -->
-                <div class="divide-y">
-                    <div
-                        v-for="(phase, phaseIndex) in phases"
-                        :key="phase.title"
-                        class="relative px-6 py-5 transition-colors"
-                        :class="phaseIndex === currentPhaseIndex && !loading ? 'bg-muted/20' : ''"
+                <div class="flex items-center gap-2">
+                    <Badge :variant="nextPendingTask ? 'outline' : 'secondary'" class="tabular-nums text-xs">
+                        {{ readyTaskCount }}/{{ measurableTasks.length }} done
+                    </Badge>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        class="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                        @click="launchGuideHidden = true"
                     >
-                        <!-- Left accent bar -->
-                        <div
-                            class="absolute inset-y-0 left-0 w-0.5 rounded-r-full transition-all duration-300"
-                            :class="phaseAllDone(phase) ? 'bg-emerald-500' : phaseIndex === currentPhaseIndex ? 'bg-primary' : 'bg-transparent'"
-                        />
-
-                        <!-- Phase header row -->
-                        <div class="mb-3 flex items-center gap-3">
-                            <div
-                                class="flex size-7 shrink-0 items-center justify-center rounded-lg transition-colors"
-                                :class="phaseAllDone(phase) ? 'bg-emerald-500/15 text-emerald-600' : phaseIndex === currentPhaseIndex ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'"
-                            >
-                                <AppIcon :name="phase.icon" class="size-3.5" />
-                            </div>
-                            <div class="min-w-0 flex-1">
-                                <div class="flex items-baseline gap-2">
-                                    <span class="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                                        Phase {{ phaseIndex + 1 }}
-                                    </span>
-                                    <Badge variant="outline" class="h-4 px-1.5 text-[9px]">{{ phase.badge }}</Badge>
-                                </div>
-                                <h3 class="text-sm font-semibold leading-tight">{{ phase.title }}</h3>
-                            </div>
-                            <span
-                                class="shrink-0 text-xs font-medium tabular-nums"
-                                :class="phaseAllDone(phase) ? 'text-emerald-600' : 'text-muted-foreground'"
-                            >
-                                {{ phaseReadyCount(phase) }}/{{ phaseMeasurableTasks(phase).length }}
-                            </span>
-                        </div>
-
-                        <!-- Task rows -->
-                        <div class="ml-10 space-y-0.5">
-                            <component
-                                :is="taskLinkEnabled(task) ? Link : 'div'"
-                                v-for="task in phase.tasks"
-                                :key="task.title"
-                                :href="taskLinkEnabled(task) ? task.href : undefined"
-                                class="group relative flex min-w-0 items-start gap-3 rounded-lg px-3 py-2.5 transition-all"
-                                :class="[
-                                    taskLinkEnabled(task)
-                                        ? 'cursor-pointer hover:bg-background hover:shadow-sm'
-                                        : 'cursor-default opacity-40',
-                                    isNextTask(task) ? 'bg-primary/5 ring-1 ring-primary/15' : '',
-                                ]"
-                            >
-                                <!-- Status circle -->
-                                <div
-                                    class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full transition-all"
-                                    :class="
-                                        taskReady(task)
-                                            ? 'bg-emerald-500 text-white'
-                                            : isNextTask(task)
-                                              ? 'bg-primary text-primary-foreground'
-                                              : taskPlanControlledAndInactive(task)
-                                                ? 'border border-dashed border-muted-foreground/30 text-muted-foreground/40'
-                                                : 'border border-muted-foreground/25 bg-background text-muted-foreground/50'
-                                    "
-                                >
-                                    <AppIcon v-if="taskReady(task)" name="check" class="size-3" />
-                                    <AppIcon v-else-if="isNextTask(task)" :name="task.icon" class="size-3" />
-                                    <AppIcon v-else-if="taskPlanControlledAndInactive(task)" name="lock" class="size-3" />
-                                    <AppIcon v-else :name="task.icon" class="size-3 opacity-50" />
-                                </div>
-
-                                <!-- Text content -->
-                                <div class="min-w-0 flex-1">
-                                    <p
-                                        class="text-sm font-medium leading-none"
-                                        :class="isNextTask(task) ? 'text-foreground' : 'text-foreground/90'"
-                                    >{{ task.title }}</p>
-                                    <p class="mt-1 text-xs leading-4 text-muted-foreground">{{ task.description }}</p>
-                                    <p
-                                        v-if="taskReady(task)"
-                                        class="mt-1 flex items-center gap-1 text-[11px] font-medium text-emerald-600"
-                                    >
-                                        <AppIcon name="check-circle-2" class="size-3" />
-                                        {{ task.outcome }}
-                                    </p>
-                                </div>
-
-                                <!-- Record count + arrow -->
-                                <div class="flex shrink-0 items-center gap-2 pt-0.5">
-                                    <span
-                                        v-if="taskTotal(task) !== null"
-                                        class="rounded bg-muted px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground"
-                                    >{{ taskTotal(task) }}</span>
-                                    <AppIcon
-                                        v-if="taskLinkEnabled(task)"
-                                        name="arrow-right"
-                                        class="size-3.5 text-muted-foreground/30 transition-colors group-hover:text-primary"
-                                    />
-                                </div>
-                            </component>
-                        </div>
-                    </div>
+                        <AppIcon name="eye-off" class="size-3.5" />
+                        Hide
+                    </Button>
                 </div>
+            </div>
 
-                <!-- ── Right: "You are here" focus panel ──────────────── -->
-                <div class="border-t bg-gradient-to-b from-muted/30 to-muted/10 p-5 xl:border-l xl:border-t-0">
-                    <div class="sticky top-4 space-y-4">
+            <!-- ── Phase list ─────────────────────────────────────────────── -->
+            <div class="divide-y">
+                <div
+                    v-for="(phase, phaseIndex) in phases"
+                    :key="phase.title"
+                    class="relative px-5 py-4"
+                >
+                    <!-- Left accent bar -->
+                    <div
+                        class="absolute inset-y-0 left-0 w-0.5 rounded-r-full transition-colors"
+                        :class="phaseAllDone(phase) ? 'bg-emerald-500' : phaseIndex === currentPhaseIndex ? 'bg-primary' : 'bg-transparent'"
+                    />
 
-                        <!-- Next step card -->
-                        <div class="rounded-xl border bg-background p-4 shadow-sm">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <Badge variant="outline" class="text-[10px]">
-                                    {{ currentPhaseName || 'Complete' }}
-                                </Badge>
-                                <Badge :variant="nextPendingTask ? 'outline' : 'secondary'" class="text-[10px]">
-                                    {{ nextPendingTask ? 'Next up' : 'All done' }}
-                                </Badge>
-                            </div>
-                            <p class="mt-3 text-base font-semibold leading-snug">
-                                {{ nextPendingTask?.title ?? 'Setup complete' }}
-                            </p>
-                            <p class="mt-1.5 text-xs leading-5 text-muted-foreground">
-                                {{ nextPendingTaskDescription || 'All measurable setup steps are done. You can now test patient registration, orders, billing, and live operations.' }}
-                            </p>
-                            <div v-if="nextPendingTaskOutcome" class="mt-3 flex items-center gap-1.5 rounded-lg bg-muted/50 px-3 py-2">
-                                <AppIcon name="target" class="size-3.5 shrink-0 text-muted-foreground" />
-                                <p class="text-[11px] font-medium text-muted-foreground">{{ nextPendingTaskOutcome }}</p>
-                            </div>
-                            <Button
-                                v-if="nextPendingTask && taskAccessible(nextPendingTask)"
-                                as-child
-                                class="mt-4 w-full gap-1.5"
-                            >
-                                <Link :href="nextPendingTask.href">
-                                    <AppIcon :name="nextPendingTask.icon" class="size-3.5" />
-                                    Open {{ nextPendingTask.title }}
-                                </Link>
-                            </Button>
-                            <Badge v-else variant="secondary" class="mt-4 w-fit">Ready for live workflows</Badge>
+                    <!-- Phase header -->
+                    <div class="mb-2.5 flex items-center gap-2.5">
+                        <div
+                            class="flex size-6 shrink-0 items-center justify-center rounded-md transition-colors"
+                            :class="phaseAllDone(phase) ? 'bg-emerald-500/15 text-emerald-600' : phaseIndex === currentPhaseIndex ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'"
+                        >
+                            <AppIcon :name="phase.icon" class="size-3.5" />
                         </div>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                                {{ phase.badge }}
+                            </span>
+                            <h3 class="text-sm font-semibold leading-tight">{{ phase.title }}</h3>
+                        </div>
+                        <span
+                            class="shrink-0 text-xs tabular-nums"
+                            :class="phaseAllDone(phase) ? 'text-emerald-600 font-medium' : 'text-muted-foreground'"
+                        >
+                            {{ phaseReadyCount(phase) }}/{{ phaseMeasurableTasks(phase).length }}
+                        </span>
+                    </div>
 
-                        <!-- Overall progress card -->
-                        <div class="rounded-xl border bg-background p-4 shadow-sm">
-                            <div class="mb-2 flex items-center justify-between">
-                                <p class="text-xs font-medium text-muted-foreground">Overall progress</p>
-                                <p class="text-sm font-semibold tabular-nums">{{ progressPercent }}%</p>
+                    <!-- Task rows -->
+                    <div class="ml-9 space-y-px">
+                        <component
+                            :is="taskLinkEnabled(task) ? Link : 'div'"
+                            v-for="task in phase.tasks"
+                            :key="task.title"
+                            :href="taskLinkEnabled(task) ? task.href : undefined"
+                            class="group flex min-w-0 items-start gap-3 rounded-lg px-3 py-2.5 transition-colors"
+                            :class="[
+                                taskLinkEnabled(task) ? 'hover:bg-muted/60' : 'cursor-default opacity-40',
+                                isNextTask(task) ? 'bg-primary/5 ring-1 ring-inset ring-primary/15' : '',
+                            ]"
+                        >
+                            <!-- Status indicator -->
+                            <div
+                                class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full transition-colors"
+                                :class="
+                                    taskReady(task)
+                                        ? 'bg-emerald-500 text-white'
+                                        : isNextTask(task)
+                                          ? 'bg-primary text-primary-foreground'
+                                          : taskPlanControlledAndInactive(task)
+                                            ? 'border border-dashed border-muted-foreground/30 text-muted-foreground/30'
+                                            : 'border border-muted-foreground/20 text-muted-foreground/40'
+                                "
+                            >
+                                <AppIcon v-if="taskReady(task)" name="check" class="size-3" />
+                                <AppIcon v-else-if="isNextTask(task)" :name="task.icon" class="size-3" />
+                                <AppIcon v-else-if="taskPlanControlledAndInactive(task)" name="lock" class="size-3" />
+                                <AppIcon v-else :name="task.icon" class="size-3" />
                             </div>
-                            <div class="h-2 overflow-hidden rounded-full bg-muted">
-                                <div
-                                    class="h-full rounded-full transition-all duration-700"
-                                    :class="progressPercent === 100 ? 'bg-emerald-500' : 'bg-primary'"
-                                    :style="{ width: `${progressPercent}%` }"
+
+                            <!-- Text -->
+                            <div class="min-w-0 flex-1">
+                                <p class="text-sm font-medium leading-none">{{ task.title }}</p>
+                                <p class="mt-1 text-xs leading-4 text-muted-foreground">{{ task.description }}</p>
+                                <p v-if="taskReady(task)" class="mt-1 flex items-center gap-1 text-[11px] font-medium text-emerald-600">
+                                    <AppIcon name="check" class="size-3" />
+                                    {{ task.outcome }}
+                                </p>
+                            </div>
+
+                            <!-- Count + chevron -->
+                            <div class="flex shrink-0 items-center gap-1.5 pt-0.5">
+                                <span
+                                    v-if="taskTotal(task) !== null"
+                                    class="rounded bg-muted px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground"
+                                >{{ taskTotal(task) }}</span>
+                                <AppIcon
+                                    v-if="taskLinkEnabled(task)"
+                                    name="chevron-right"
+                                    class="size-3.5 text-muted-foreground/30 transition-colors group-hover:text-muted-foreground"
                                 />
                             </div>
-                            <p class="mt-2 text-[11px] text-muted-foreground">
-                                {{ readyTaskCount }} of {{ measurableTasks.length }} measurable steps complete
-                            </p>
-                            <!-- Phase mini-bars -->
-                            <div class="mt-3 flex items-end gap-2">
-                                <div
-                                    v-for="(phase, i) in phases"
-                                    :key="i"
-                                    class="flex-1 space-y-1"
-                                >
-                                    <div
-                                        class="h-1 rounded-full transition-all duration-500"
-                                        :class="phaseAllDone(phase) ? 'bg-emerald-500' : i === currentPhaseIndex ? 'bg-primary' : 'bg-muted'"
-                                    />
-                                    <p class="truncate text-[9px] text-muted-foreground">{{ phase.badge }}</p>
-                                </div>
-                            </div>
-                        </div>
-
+                        </component>
                     </div>
                 </div>
             </div>
