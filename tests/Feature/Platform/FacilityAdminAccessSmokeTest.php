@@ -199,6 +199,34 @@ it('blocks unsubscribed operational workspaces even when the role has module per
             ->component('laboratory-orders/Index'));
 });
 
+it('blocks unsubscribed operational apis even when the role has module permission', function (): void {
+    $context = facilityAdminSmokeContext();
+
+    $this->actingAs($context['user'])
+        ->getJson('/api/v1/laboratory-orders/status-counts')
+        ->assertForbidden()
+        ->assertJsonPath('code', 'FACILITY_ENTITLEMENT_REQUIRED')
+        ->assertJsonPath('missingEntitlements.0', 'laboratory.orders');
+
+    $clinicalPlan = PlatformSubscriptionPlanModel::query()
+        ->where('code', 'clinical_operations')
+        ->firstOrFail();
+
+    FacilitySubscriptionModel::query()
+        ->where('facility_id', $context['facility']->id)
+        ->update([
+            'plan_id' => $clinicalPlan->id,
+            'price_amount' => $clinicalPlan->price_amount,
+            'currency_code' => $clinicalPlan->currency_code,
+            'updated_at' => now(),
+        ]);
+
+    $this->actingAs($context['user'])
+        ->getJson('/api/v1/laboratory-orders/status-counts')
+        ->assertOk()
+        ->assertJsonStructure(['data']);
+});
+
 it('allows assigned facility admins to register patients only inside their facility scope and active subscription', function (): void {
     $context = facilityAdminSmokeContext();
 

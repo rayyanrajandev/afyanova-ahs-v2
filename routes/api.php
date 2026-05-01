@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnforceTenantIsolationWhenEnabled;
+use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
 use App\Http\Middleware\ResolvePlatformScopeContext;
 use App\Modules\Admission\Presentation\Http\Controllers\AdmissionController;
 use App\Modules\Authentication\Presentation\Http\Controllers\AuthenticatedUserController;
@@ -47,7 +48,7 @@ use App\Modules\Staff\Presentation\Http\Controllers\StaffPrivilegeGrantControlle
 use App\Modules\TheatreProcedure\Presentation\Http\Controllers\TheatreProcedureController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTenantIsolationWhenEnabled::class])->prefix('v1')->group(function (): void {
+Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTenantIsolationWhenEnabled::class, EnsureMappedFacilitySubscriptionEntitlement::class])->prefix('v1')->group(function (): void {
     Route::get('auth/csrf-token', function (\Illuminate\Http\Request $request) {
         $request->session()->regenerateToken();
 

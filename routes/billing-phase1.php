@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnforceTenantIsolationWhenEnabled;
+use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
 use App\Http\Middleware\ResolvePlatformScopeContext;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingDiscountController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingRefundController;
@@ -8,7 +9,7 @@ use App\Modules\Billing\Presentation\Http\Controllers\BillingRoutingController;
 use App\Modules\Billing\Presentation\Http\Controllers\CashBillingController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTenantIsolationWhenEnabled::class])
+Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTenantIsolationWhenEnabled::class, EnsureMappedFacilitySubscriptionEntitlement::class])
     ->prefix('api/v1')
     ->group(function () {
     // Cash Billing Routes
