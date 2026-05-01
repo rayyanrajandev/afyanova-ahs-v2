@@ -18,6 +18,11 @@ class EnsureMappedFacilitySubscriptionEntitlement
         'appointments.referrals.' => ['appointments.referrals'],
         'appointments.' => ['appointments.scheduling'],
 
+        // Aggregate / reference admission signals for front-office plans (e.g. Clinic Starter) that have
+        // scheduling but not the full admissions.management SKU; admissions.read remains enforced per route.
+        'admissions.status-counts' => ['appointments.scheduling'],
+        'admissions.discharge-destination-options' => ['appointments.scheduling'],
+
         'admissions.' => ['admissions.management'],
 
         'medical-records.signer-attestations.' => ['medical_records.governance'],
