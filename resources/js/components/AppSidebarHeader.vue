@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { router, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import Breadcrumbs from '@/components/Breadcrumbs.vue';
 import OPDQuickCommandPalette from '@/components/OPDQuickCommandPalette.vue';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -31,7 +33,58 @@ withDefaults(
 
 const {
     scope,
+    hasUniversalAdminAccess,
 } = usePlatformAccess();
+
+const page = usePage();
+
+const operationalPathPrefixes = [
+    '/patients',
+    '/appointments',
+    '/admissions',
+    '/medical-records',
+    '/laboratory-orders',
+    '/pharmacy-orders',
+    '/radiology-orders',
+    '/emergency-triage',
+    '/inpatient-ward',
+    '/theatre-procedures',
+    '/billing',
+    '/billing-cash',
+    '/billing-payment-plans',
+    '/billing-refunds',
+    '/billing-discounts',
+    '/billing-financial-reports',
+    '/billing-corporate',
+    '/billing-payer-contracts',
+    '/billing-service-catalog',
+    '/pos',
+    '/claims-insurance',
+    '/inventory-procurement',
+    '/staff',
+    '/staff-credentialing',
+    '/staff-privileges',
+    '/setup-center',
+];
+
+function normalizePath(url: string | undefined): string {
+    const candidate = String(url ?? '').split('#', 1)[0]?.split('?', 1)[0] ?? '';
+
+    return candidate.startsWith('/') ? candidate : `/${candidate}`;
+}
+
+const currentPath = computed(() => normalizePath(page.url));
+
+const isPlatformAdminPage = computed(() =>
+    currentPath.value === '/platform/admin'
+    || currentPath.value.startsWith('/platform/admin/'),
+);
+
+const isOperationalPage = computed(() =>
+    operationalPathPrefixes.some((prefix) =>
+        currentPath.value === prefix || currentPath.value.startsWith(`${prefix}/`),
+    ),
+);
 
 const accessibleFacilities = computed(() => {
     const facilities = scope.value?.userAccess?.facilities ?? [];
@@ -86,28 +139,69 @@ const selectedScopeKey = computed(() => {
     return `${tenantCode}|${facilityCode}`;
 });
 
+const hasSelectedFacility = computed(() => Boolean(scope.value?.facility?.code));
+
+const scopeMode = computed(() => {
+    if (hasSelectedFacility.value) {
+        return {
+            label: 'Working facility',
+            description: 'Facility-scoped data',
+            variant: 'secondary' as const,
+        };
+    }
+
+    if (hasUniversalAdminAccess.value && isPlatformAdminPage.value) {
+        return {
+            label: 'Global admin',
+            description: 'Platform-wide administration',
+            variant: 'outline' as const,
+        };
+    }
+
+    if (isOperationalPage.value) {
+        return {
+            label: 'Facility required',
+            description: 'Choose a facility',
+            variant: 'destructive' as const,
+        };
+    }
+
+    return {
+        label: hasUniversalAdminAccess.value ? 'All facilities' : 'No facility',
+        description: hasUniversalAdminAccess.value ? 'Platform-wide access' : 'No active facility scope',
+        variant: 'outline' as const,
+    };
+});
+
 const facilityTriggerLabel = computed(() => {
-    if (!scope.value) return 'Scope unavailable';
-    if (scope.value.resolvedFrom === 'none') return 'Scope unresolved';
-    const facility = scope.value.facility;
+    const facility = scope.value?.facility;
     if (facility?.name && facility?.code) return `${facility.name} (${facility.code})`;
-    const tenant = scope.value.tenant;
+    const tenant = scope.value?.tenant;
     if (tenant?.name && tenant?.code) return `${tenant.name} (${tenant.code})`;
-    return 'Scope ready';
+    if (hasUniversalAdminAccess.value && isPlatformAdminPage.value) return 'Global admin mode';
+    if (hasUniversalAdminAccess.value) return 'All facilities';
+
+    return 'Select facility';
 });
 
 const facilityTriggerMeta = computed(() => {
     const count = accessibleFacilities.value.length;
-    if (count === 0) return 'No facilities';
+    if (hasSelectedFacility.value) {
+        return scope.value?.tenant?.name || scope.value?.tenant?.code || 'Facility scope';
+    }
+    if (hasUniversalAdminAccess.value && isPlatformAdminPage.value) return 'All facilities visible';
+    if (count === 0) return 'No facilities available';
     if (count === 1) return '1 facility';
 
-    return `${count} facilities`;
+    return `${count} facilities available`;
 });
 
 function selectScope(key: string) {
+    if (key === selectedScopeKey.value) return;
+
     if (key === 'auto') {
         clearScopeCookies();
-        window.location.reload();
+        router.reload({ preserveScroll: false, preserveState: false });
         return;
     }
     const [tenantCodeRaw, facilityCodeRaw] = key.split('|');
@@ -115,7 +209,7 @@ function selectScope(key: string) {
     const facilityCode = facilityCodeRaw?.trim().toUpperCase() ?? '';
     if (tenantCode && facilityCode) {
         setScopeCookies(tenantCode, facilityCode);
-        window.location.reload();
+        router.reload({ preserveScroll: false, preserveState: false });
     }
 }
 </script>
@@ -136,17 +230,25 @@ function selectScope(key: string) {
                     <Button
                         variant="outline"
                         size="sm"
-                        class="h-9 max-w-[260px] gap-2 px-2.5 font-normal text-muted-foreground"
+                        class="h-9 max-w-[340px] gap-2 px-2.5 font-normal text-muted-foreground"
                     >
                         <AppIcon name="building-2" class="size-3.5 shrink-0" />
+                        <Badge :variant="scopeMode.variant" class="hidden shrink-0 px-1.5 py-0 text-[10px] font-medium sm:inline-flex">
+                            {{ scopeMode.label }}
+                        </Badge>
                         <span class="hidden max-w-[170px] truncate text-left sm:inline">{{ facilityTriggerLabel }}</span>
                         <span class="sm:hidden">Facility</span>
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" class="w-[320px]">
                     <DropdownMenuLabel class="space-y-0.5">
-                        <span class="block text-sm font-medium">Active facility</span>
-                        <span class="block text-xs font-normal text-muted-foreground">{{ facilityTriggerMeta }}</span>
+                        <span class="flex items-center justify-between gap-2">
+                            <span class="text-sm font-medium">Facility scope</span>
+                            <Badge :variant="scopeMode.variant" class="px-1.5 py-0 text-[10px] font-medium">
+                                {{ scopeMode.label }}
+                            </Badge>
+                        </span>
+                        <span class="block text-xs font-normal text-muted-foreground">{{ scopeMode.description }} | {{ facilityTriggerMeta }}</span>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -155,10 +257,12 @@ function selectScope(key: string) {
                         @select="selectScope('auto')"
                     >
                         <div class="flex min-w-0 items-center gap-2">
-                            <AppIcon name="refresh-cw" class="size-3.5 shrink-0 text-muted-foreground" />
+                            <AppIcon :name="hasUniversalAdminAccess ? 'shield-check' : 'refresh-cw'" class="size-3.5 shrink-0 text-muted-foreground" />
                             <div class="min-w-0">
-                                <p class="text-sm font-medium">Auto-resolve</p>
-                                <p class="text-xs text-muted-foreground">Use your primary assigned facility.</p>
+                                <p class="text-sm font-medium">{{ hasUniversalAdminAccess ? 'Global admin / all facilities' : 'Auto-resolve' }}</p>
+                                <p class="text-xs text-muted-foreground">
+                                    {{ hasUniversalAdminAccess ? 'Use platform-wide scope where pages support it.' : 'Use your primary assigned facility.' }}
+                                </p>
                             </div>
                         </div>
                     </DropdownMenuItem>
@@ -182,7 +286,7 @@ function selectScope(key: string) {
                             <div class="min-w-0">
                                 <p class="truncate text-sm font-medium">{{ facility.facilityName }}</p>
                                 <p class="truncate text-xs text-muted-foreground">
-                                    {{ facility.tenantCode }} / {{ facility.facilityCode }} · {{ facility.tenantName }}
+                                    {{ facility.tenantCode }} / {{ facility.facilityCode }} - {{ facility.tenantName }}
                                 </p>
                             </div>
                         </div>
