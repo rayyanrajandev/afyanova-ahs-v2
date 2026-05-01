@@ -31,6 +31,10 @@ Route::get('dashboard/registration-clerk', function () {
     return Inertia::render('dashboard/RegistrationClerk');
 })->middleware(['auth', 'verified', 'can:patients.create'])->name('dashboard.registration-clerk');
 
+Route::get('dashboard/nurse', function () {
+    return Inertia::render('dashboard/Nurse');
+})->middleware(['auth', 'verified', 'can:inpatient.ward.read'])->name('dashboard.nurse');
+
 Route::get('patients', function () {
     return Inertia::render('patients/Index');
 })->middleware(['auth', 'verified', 'can:patients.read', 'facility.entitlement:patients.search'])->name('patients.page');
