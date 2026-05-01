@@ -39,13 +39,22 @@ return [
 
         'smtp' => [
             'transport' => 'smtp',
-            'scheme' => env('MAIL_SCHEME', env('MAIL_ENCRYPTION')),
+            'scheme' => match (strtolower((string) env('MAIL_SCHEME', env('MAIL_ENCRYPTION', '')))) {
+                'tls', 'starttls' => 'smtp',
+                'ssl' => 'smtps',
+                '' => null,
+                default => env('MAIL_SCHEME', env('MAIL_ENCRYPTION')),
+            },
             'url' => env('MAIL_URL'),
             'host' => env('MAIL_HOST', '127.0.0.1'),
             'port' => env('MAIL_PORT', 2525),
             'username' => env('MAIL_USERNAME'),
             'password' => env('MAIL_PASSWORD'),
             'timeout' => null,
+            'require_tls' => filter_var(env(
+                'MAIL_REQUIRE_TLS',
+                in_array(strtolower((string) env('MAIL_SCHEME', env('MAIL_ENCRYPTION', ''))), ['tls', 'starttls'], true)
+            ), FILTER_VALIDATE_BOOLEAN),
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
 
