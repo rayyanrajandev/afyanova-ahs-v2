@@ -22,6 +22,8 @@ class EnsureMappedFacilitySubscriptionEntitlement
         // scheduling but not the full admissions.management SKU; admissions.read remains enforced per route.
         'admissions.status-counts' => ['appointments.scheduling'],
         'admissions.discharge-destination-options' => ['appointments.scheduling'],
+        // Nursing/front-office dashboard snippet of admitted rows (still `can:admissions.read`).
+        'admissions.index' => ['appointments.scheduling'],
 
         'admissions.' => ['admissions.management'],
 
@@ -42,6 +44,13 @@ class EnsureMappedFacilitySubscriptionEntitlement
         'inpatient-ward.round-notes.' => ['inpatient.tasks'],
         'inpatient-ward.care-plans.' => ['inpatient.care_plans'],
         'inpatient-ward.discharge-checklists.' => ['inpatient.care_plans'],
+        /*
+         * Ward KPI aggregates (`can:inpatient.ward.read` on each route). Down-map to scheduling tier — same rationale
+         * as admissions.status-counts — so Nursing dashboard tiles work without inpatient.ward / tasks / care_plans SKUs.
+         */
+        'inpatient-ward.task-status-counts' => ['appointments.scheduling'],
+        'inpatient-ward.care-plan-status-counts' => ['appointments.scheduling'],
+        'inpatient-ward.discharge-checklist-status-counts' => ['appointments.scheduling'],
         'inpatient-ward.' => ['inpatient.ward'],
 
         'billing-invoices.financial-controls.' => ['billing.financial_controls'],
