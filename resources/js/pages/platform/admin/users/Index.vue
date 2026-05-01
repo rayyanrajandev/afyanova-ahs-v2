@@ -376,6 +376,37 @@ const bulkUnassignedFacilities = computed(() => {
         return id !== '' && !selected.has(id);
     });
 });
+const allSelectValue = '__all';
+const searchStatusSelectValue = computed({
+    get: () => searchForm.status || allSelectValue,
+    set: (value: string) => {
+        searchForm.status = value === allSelectValue ? '' : value;
+    },
+});
+const searchVerificationSelectValue = computed({
+    get: () => searchForm.verification || allSelectValue,
+    set: (value: string) => {
+        searchForm.verification = value === allSelectValue ? '' : value;
+    },
+});
+const searchRoleSelectValue = computed({
+    get: () => searchForm.roleId || allSelectValue,
+    set: (value: string) => {
+        searchForm.roleId = value === allSelectValue ? '' : value;
+    },
+});
+const searchFacilitySelectValue = computed({
+    get: () => searchForm.facilityId || allSelectValue,
+    set: (value: string) => {
+        searchForm.facilityId = value === allSelectValue ? '' : value;
+    },
+});
+const detailsAuditActorTypeSelectValue = computed({
+    get: () => detailsAuditFilters.actorType || allSelectValue,
+    set: (value: string) => {
+        detailsAuditFilters.actorType = value === allSelectValue ? '' : value;
+    },
+});
 
 function normalizeRoleIds(roleIds: Array<number | string>): string[] {
     return Array.from(new Set(
@@ -1896,12 +1927,12 @@ onMounted(async () => {
                                                     </p>
                                                     <div class="grid gap-2">
                                                         <Label for="user-status-popover">Status</Label>
-                                                        <Select v-model="searchForm.status">
+                                                        <Select v-model="searchStatusSelectValue">
                                                             <SelectTrigger class="w-full">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                            <SelectItem value="">All statuses</SelectItem>
+                                                            <SelectItem :value="allSelectValue">All statuses</SelectItem>
                                                             <SelectItem value="active">Active</SelectItem>
                                                             <SelectItem value="inactive">Inactive</SelectItem>
                                                             </SelectContent>
@@ -1909,12 +1940,12 @@ onMounted(async () => {
                                                     </div>
                                                     <div class="grid gap-2">
                                                         <Label for="user-verification-popover">Verification</Label>
-                                                        <Select v-model="searchForm.verification">
+                                                        <Select v-model="searchVerificationSelectValue">
                                                             <SelectTrigger class="w-full">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                            <SelectItem value="">All users</SelectItem>
+                                                            <SelectItem :value="allSelectValue">All users</SelectItem>
                                                             <SelectItem value="verified">Verified only</SelectItem>
                                                             <SelectItem value="unverified">Unverified only</SelectItem>
                                                             </SelectContent>
@@ -1922,12 +1953,12 @@ onMounted(async () => {
                                                     </div>
                                                     <div class="grid gap-2">
                                                         <Label for="user-role-popover">Role</Label>
-                                                        <Select v-model="searchForm.roleId">
+                                                        <Select v-model="searchRoleSelectValue">
                                                             <SelectTrigger class="w-full">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                            <SelectItem value="">All roles</SelectItem>
+                                                            <SelectItem :value="allSelectValue">All roles</SelectItem>
                                                             <SelectItem
                                                                 v-for="role in roles"
                                                                 :key="`filter-role-${String(role.id)}`"
@@ -1940,12 +1971,12 @@ onMounted(async () => {
                                                     </div>
                                                     <div class="grid gap-2">
                                                         <Label for="user-facility-popover">Facility</Label>
-                                                        <Select v-model="searchForm.facilityId">
+                                                        <Select v-model="searchFacilitySelectValue">
                                                             <SelectTrigger class="w-full">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                            <SelectItem value="">All facilities</SelectItem>
+                                                            <SelectItem :value="allSelectValue">All facilities</SelectItem>
                                                             <SelectItem v-for="facility in availableFacilities" :key="String(facility.id)" :value="String(facility.id)">{{ facility.code || 'FAC' }} - {{ facility.name || 'Facility' }}</SelectItem>
                                                             </SelectContent>
                                                         </Select>
@@ -2438,10 +2469,9 @@ onMounted(async () => {
                                     <Label for="bulk-facility-add">Add facility</Label>
                                     <Select v-model="newBulkFacilityDraftId">
                                         <SelectTrigger>
-                                            <SelectValue />
+                                            <SelectValue placeholder="Select facility" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                        <SelectItem value="">Select facility</SelectItem>
                                         <SelectItem
                                             v-for="facility in bulkUnassignedFacilities"
                                             :key="`bulk-facility-${String(facility.id)}`"
@@ -2578,17 +2608,55 @@ onMounted(async () => {
 
 
             <Sheet :open="detailsOpen" @update:open="(open) => (open ? (detailsOpen = true) : closeDetails())">
-                <SheetContent side="right" variant="workspace" size="3xl">
-                    <!-- Fixed header -->
-                    <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
-                        <SheetTitle class="flex items-center gap-2 text-lg">
-                            <AppIcon name="user" class="size-5 text-primary" />
-                            User Details
-                        </SheetTitle>
-                        <SheetDescription class="text-sm">Review roles, facility assignments, and audit events.</SheetDescription>
+                <SheetContent side="right" variant="workspace" size="5xl" class="flex h-full min-h-0 flex-col">
+                    <SheetHeader class="shrink-0 border-b bg-background px-4 py-3 pr-12 text-left">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div class="min-w-0 space-y-1">
+                                <SheetTitle class="flex min-w-0 items-center gap-2 text-lg">
+                                    <AppIcon name="user" class="size-5 shrink-0 text-primary" />
+                                    <span class="truncate">{{ detailsUser?.name || 'User Details' }}</span>
+                                </SheetTitle>
+                                <SheetDescription class="truncate text-sm">
+                                    <template v-if="detailsUser">
+                                        {{ detailsUser.email || 'No email recorded' }} | User #{{ detailsUser.id ?? 'N/A' }}
+                                    </template>
+                                    <template v-else>
+                                        Review identity, credentials, facility scope, and audit activity.
+                                    </template>
+                                </SheetDescription>
+                            </div>
+                            <div v-if="detailsUser" class="flex flex-wrap items-center gap-2 pr-1 sm:justify-end">
+                                <Badge :variant="verificationVariant(detailsUser)" class="rounded-md">
+                                    {{ verificationLabel(detailsUser) }}
+                                </Badge>
+                                <Badge :variant="statusVariant(detailsUser.status)" class="rounded-md capitalize">
+                                    {{ detailsUser.status || 'unknown' }}
+                                </Badge>
+                            </div>
+                        </div>
                     </SheetHeader>
 
-                    <!-- Loading skeleton -->
+                    <div
+                        v-if="detailsActionMessage"
+                        class="shrink-0 border-b border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100"
+                    >
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex min-w-0 items-start gap-2">
+                                <AppIcon name="check-circle" class="mt-0.5 size-4 shrink-0" />
+                                <div class="min-w-0">
+                                    <p class="text-sm font-semibold">Action completed</p>
+                                    <p class="text-xs leading-relaxed">{{ detailsActionMessage }}</p>
+                                </div>
+                            </div>
+                            <Button v-if="detailsCredentialPreviewUrl" as-child size="sm" variant="outline" class="shrink-0 gap-1.5 border-emerald-300 bg-white/80 text-emerald-950 hover:bg-white dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
+                                <a :href="detailsCredentialPreviewUrl" target="_blank" rel="noopener noreferrer">
+                                    <AppIcon name="arrow-up-right" class="size-3.5" />
+                                    {{ credentialLinkPreviewLabel(detailsUser) }}
+                                </a>
+                            </Button>
+                        </div>
+                    </div>
+
                     <div v-if="detailsLoading" class="space-y-3 p-4">
                         <Skeleton class="h-20 w-full" />
                         <Skeleton class="h-10 w-full" />
@@ -2596,54 +2664,40 @@ onMounted(async () => {
                         <Skeleton class="h-32 w-full" />
                     </div>
 
-                    <!-- Scrollable body -->
-                    <ScrollArea v-else-if="detailsUser" class="min-h-0 flex-1">
-                        <div class="space-y-4 p-4">
-                            <!-- Sticky identity card -->
-                            <div class="sticky top-0 z-10 rounded-lg border bg-background/95 p-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
-                                <div class="flex items-start gap-4">
-                                    <div class="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary">
-                                        {{ userInitials(detailsUser) }}
+                    <ScrollArea v-else-if="detailsUser" class="min-h-0 flex-1" viewport-class="pb-6">
+                        <div class="grid gap-4 px-4 py-4">
+                            <div class="rounded-lg border bg-muted/10 p-3">
+                                <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,0.9fr)] lg:items-center">
+                                    <div class="flex min-w-0 items-start gap-4">
+                                        <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary">
+                                            {{ userInitials(detailsUser) }}
+                                        </div>
+                                        <div class="min-w-0 space-y-1">
+                                            <p class="truncate text-base font-semibold leading-tight">{{ detailsUser.name || 'Unnamed user' }}</p>
+                                            <p class="truncate text-sm text-muted-foreground">{{ detailsUser.email || 'No email recorded' }}</p>
+                                            <p class="text-xs text-muted-foreground">
+                                                User ID:
+                                                <span class="font-mono font-medium text-foreground">{{ detailsUser.id ?? 'N/A' }}</span>
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex flex-wrap items-start justify-between gap-2">
-                                            <div>
-                                                <p class="text-base font-semibold leading-tight">{{ detailsUser.name || 'Unnamed user' }}</p>
-                                                <p class="mt-0.5 text-sm text-muted-foreground">{{ detailsUser.email || 'No email' }}</p>
-                                                <p class="mt-1 text-xs text-muted-foreground">
-                                                    User ID:
-                                                    <span class="font-mono font-medium text-foreground">{{ detailsUser.id ?? 'N/A' }}</span>
-                                                </p>
-                                            </div>
-                                            <div class="flex flex-wrap items-center justify-end gap-2">
-                                                <Badge :variant="verificationVariant(detailsUser)" class="shrink-0">
-                                                    {{ verificationLabel(detailsUser) }}
-                                                </Badge>
-                                                <Badge :variant="statusVariant(detailsUser.status)" class="shrink-0">
-                                                    {{ detailsUser.status || 'unknown' }}
-                                                </Badge>
-                                            </div>
+                                    <div class="grid gap-2 sm:grid-cols-3">
+                                        <div class="rounded-md border bg-background px-3 py-2">
+                                            <p class="text-[11px] uppercase tracking-wide text-muted-foreground">Roles</p>
+                                            <p class="mt-1 truncate text-sm font-semibold">{{ detailsUser.roles.length }}</p>
+                                        </div>
+                                        <div class="rounded-md border bg-background px-3 py-2">
+                                            <p class="text-[11px] uppercase tracking-wide text-muted-foreground">Facilities</p>
+                                            <p class="mt-1 truncate text-sm font-semibold">{{ detailsUser.facilityAssignments.length }}</p>
+                                        </div>
+                                        <div class="rounded-md border bg-background px-3 py-2">
+                                            <p class="text-[11px] uppercase tracking-wide text-muted-foreground">Updated</p>
+                                            <p class="mt-1 truncate text-sm font-semibold">{{ formatDateTime(detailsUser.updatedAt) }}</p>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <Alert v-if="detailsActionMessage">
-                                <AlertTitle>Saved</AlertTitle>
-                                <AlertDescription>
-                                    <div>{{ detailsActionMessage }}</div>
-                                    <div v-if="detailsCredentialPreviewUrl" class="mt-3">
-                                        <Button as-child size="sm" variant="outline" class="gap-1.5">
-                                            <a :href="detailsCredentialPreviewUrl" target="_blank" rel="noopener noreferrer">
-                                                <AppIcon name="arrow-up-right" class="size-3.5" />
-                                                Open local credential link
-                                            </a>
-                                        </Button>
-                                    </div>
-                                </AlertDescription>
-                            </Alert>
-
-                            <!-- Tabs -->
                             <Tabs v-model="detailsSheetTab" class="w-full">
                                 <TabsList class="grid w-full grid-cols-3">
                                     <TabsTrigger value="overview" class="inline-flex items-center gap-1.5 text-xs sm:text-sm">
@@ -2665,20 +2719,25 @@ onMounted(async () => {
 
                                 <!-- OVERVIEW TAB -->
                                 <TabsContent value="overview" class="mt-3 space-y-3">
-                                    <div class="space-y-3">
-                                        <Card class="rounded-lg !gap-4 !py-4">
+                                    <div class="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
+                                        <Card class="rounded-lg !gap-4 !py-4 xl:row-span-2">
                                             <CardHeader class="px-4 pb-1 pt-0">
                                                 <div class="flex flex-wrap items-center justify-between gap-2">
-                                                    <CardTitle class="flex items-center gap-2 text-sm font-medium">
-                                                        <AppIcon name="user" class="size-4 text-muted-foreground" />
-                                                        Account
-                                                    </CardTitle>
+                                                    <div>
+                                                        <CardTitle class="flex items-center gap-2 text-sm font-medium">
+                                                            <AppIcon name="user" class="size-4 text-muted-foreground" />
+                                                            Account Profile
+                                                        </CardTitle>
+                                                        <CardDescription class="mt-0.5 text-xs">
+                                                            Core identity used across platform, facility scope, and audit records.
+                                                        </CardDescription>
+                                                    </div>
                                                     <div class="flex flex-wrap items-center gap-2">
                                                         <Button
                                                             v-if="canCreateLinkedStaffProfile"
                                                             size="sm"
                                                             variant="outline"
-                                                            class="h-7 gap-1.5 text-xs"
+                                                            class="h-8 gap-1.5 text-xs"
                                                             @click="openCreateStaffProfile(detailsUser)"
                                                         >
                                                             <AppIcon name="users" class="size-3.5" />
@@ -2688,64 +2747,88 @@ onMounted(async () => {
                                                             v-if="canUpdate"
                                                             size="sm"
                                                             variant="outline"
-                                                            class="h-7 gap-1.5 text-xs"
+                                                            class="h-8 gap-1.5 text-xs"
                                                             @click="openEditDialog(detailsUser)"
                                                         >
-                                                            <AppIcon name="user" class="size-3.5" />
+                                                            <AppIcon name="pencil" class="size-3.5" />
                                                             Edit Profile
                                                         </Button>
                                                     </div>
                                                 </div>
                                             </CardHeader>
-                                            <CardContent class="space-y-2 px-4 pt-0 text-sm">
+                                            <CardContent class="space-y-4 px-4 pt-0 text-sm">
                                                 <Alert v-if="!canUpdate" variant="destructive">
                                                     <AlertTitle>Profile edit restricted</AlertTitle>
                                                     <AlertDescription>Request <code>platform.users.update</code> permission.</AlertDescription>
                                                 </Alert>
-                                                <div class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">User ID</span>
-                                                    <span class="font-mono text-right font-medium">{{ detailsUser.id ?? '--' }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">Name</span>
-                                                    <span class="text-right font-medium">{{ detailsUser.name || '--' }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">Email</span>
-                                                    <span class="truncate text-right font-medium">{{ detailsUser.email || '--' }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">Verification</span>
-                                                    <Badge :variant="verificationVariant(detailsUser)" class="h-5 text-xs">{{ verificationLabel(detailsUser) }}</Badge>
-                                                </div>
-                                                <div class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">Status</span>
-                                                    <Badge :variant="statusVariant(detailsUser.status)" class="h-5 text-xs">{{ detailsUser.status || 'unknown' }}</Badge>
+                                                <div class="grid gap-3 sm:grid-cols-2">
+                                                    <div class="rounded-md border bg-muted/10 px-3 py-2">
+                                                        <p class="text-xs text-muted-foreground">Full name</p>
+                                                        <p class="mt-1 truncate font-medium">{{ detailsUser.name || '--' }}</p>
+                                                    </div>
+                                                    <div class="rounded-md border bg-muted/10 px-3 py-2">
+                                                        <p class="text-xs text-muted-foreground">Email address</p>
+                                                        <p class="mt-1 truncate font-medium">{{ detailsUser.email || '--' }}</p>
+                                                    </div>
+                                                    <div class="rounded-md border bg-muted/10 px-3 py-2">
+                                                        <p class="text-xs text-muted-foreground">Verification</p>
+                                                        <Badge :variant="verificationVariant(detailsUser)" class="mt-1 h-5 rounded-md text-xs">
+                                                            {{ verificationLabel(detailsUser) }}
+                                                        </Badge>
+                                                    </div>
+                                                    <div class="rounded-md border bg-muted/10 px-3 py-2">
+                                                        <p class="text-xs text-muted-foreground">Current status</p>
+                                                        <Badge :variant="statusVariant(detailsUser.status)" class="mt-1 h-5 rounded-md text-xs capitalize">
+                                                            {{ detailsUser.status || 'unknown' }}
+                                                        </Badge>
+                                                    </div>
                                                 </div>
                                                 <div v-if="detailsUserRequiresApprovalCase" class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
                                                     This is a privileged platform account. Profile, role, facility, and status changes require approval-case traceability.
                                                 </div>
-                                                <div v-if="detailsUser.statusReason" class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">Status note</span>
-                                                    <span class="text-right font-medium">{{ detailsUser.statusReason }}</span>
+                                                <div v-if="detailsUser.statusReason" class="rounded-lg border bg-muted/20 p-3">
+                                                    <p class="text-xs text-muted-foreground">Status note</p>
+                                                    <p class="mt-1 text-sm font-medium">{{ detailsUser.statusReason }}</p>
+                                                </div>
+                                                <div class="grid gap-3 border-t pt-3 sm:grid-cols-2">
+                                                    <div>
+                                                        <p class="text-xs text-muted-foreground">Role summary</p>
+                                                        <p class="mt-1 truncate font-medium">{{ userRoleSummary(detailsUser) }}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p class="text-xs text-muted-foreground">Facility summary</p>
+                                                        <p class="mt-1 truncate font-medium">{{ userFacilitySummary(detailsUser) }}</p>
+                                                    </div>
                                                 </div>
                                             </CardContent>
                                         </Card>
                                         <Card class="rounded-lg !gap-4 !py-4">
                                             <CardHeader class="px-4 pb-1 pt-0">
-                                                <CardTitle class="flex items-center gap-2 text-sm font-medium">
-                                                    <AppIcon name="mail" class="size-4 text-muted-foreground" />
-                                                    Account Security
-                                                </CardTitle>
+                                                <div class="flex items-start justify-between gap-3">
+                                                    <div>
+                                                        <CardTitle class="flex items-center gap-2 text-sm font-medium">
+                                                            <AppIcon name="mail" class="size-4 text-muted-foreground" />
+                                                            Credential Delivery
+                                                        </CardTitle>
+                                                        <CardDescription class="mt-0.5 text-xs">
+                                                            Verification and password recovery for this account.
+                                                        </CardDescription>
+                                                    </div>
+                                                    <Badge :variant="verificationVariant(detailsUser)" class="shrink-0 rounded-md">
+                                                        {{ verificationLabel(detailsUser) }}
+                                                    </Badge>
+                                                </div>
                                             </CardHeader>
                                             <CardContent class="space-y-3 px-4 pt-0 text-sm">
-                                                <div class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">Mailbox proof</span>
-                                                    <Badge :variant="verificationVariant(detailsUser)" class="h-5 text-xs">{{ verificationLabel(detailsUser) }}</Badge>
-                                                </div>
-                                                <div class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">Verified at</span>
-                                                    <span class="text-right font-medium">{{ detailsUser.emailVerifiedAt ? formatDateTime(detailsUser.emailVerifiedAt) : 'Pending completion' }}</span>
+                                                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                                                    <div class="rounded-md border bg-muted/10 px-3 py-2">
+                                                        <p class="text-xs text-muted-foreground">Verified at</p>
+                                                        <p class="mt-1 font-medium">{{ detailsUser.emailVerifiedAt ? formatDateTime(detailsUser.emailVerifiedAt) : 'Pending completion' }}</p>
+                                                    </div>
+                                                    <div class="rounded-md border bg-muted/10 px-3 py-2">
+                                                        <p class="text-xs text-muted-foreground">Delivery mode</p>
+                                                        <p class="mt-1 font-medium">{{ platformMailDeliversExternally ? 'SMTP email' : 'Log preview only' }}</p>
+                                                    </div>
                                                 </div>
                                                 <div class="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">
                                                     {{ credentialLinkActionDescription(detailsUser) }}
@@ -2773,39 +2856,38 @@ onMounted(async () => {
                                                     <AlertTitle>Credential dispatch restricted</AlertTitle>
                                                     <AlertDescription>Request <code>platform.users.reset-password</code> permission.</AlertDescription>
                                                 </Alert>
-                                                <div class="flex justify-end">
-                                                    <Button
-                                                        v-if="canResetPassword"
-                                                        size="sm"
-                                                        class="gap-1.5"
-                                                        :disabled="actionLoadingId === detailsUser.id || !detailsUser.email"
-                                                        @click="sendCredentialLink(detailsUser)"
-                                                    >
-                                                        <AppIcon name="mail" class="size-3.5" />
-                                                        {{ actionLoadingId === detailsUser.id ? 'Sending...' : credentialLinkActionLabel(detailsUser) }}
-                                                    </Button>
-                                                </div>
+                                                <Button
+                                                    v-if="canResetPassword"
+                                                    size="sm"
+                                                    class="w-full gap-1.5"
+                                                    :disabled="actionLoadingId === detailsUser.id || !detailsUser.email"
+                                                    @click="sendCredentialLink(detailsUser)"
+                                                >
+                                                    <AppIcon name="mail" class="size-3.5" />
+                                                    {{ actionLoadingId === detailsUser.id ? 'Sending...' : credentialLinkActionLabel(detailsUser) }}
+                                                </Button>
                                             </CardContent>
                                         </Card>
                                         <Card class="rounded-lg !gap-4 !py-4">
                                             <CardHeader class="px-4 pb-1 pt-0">
                                                 <CardTitle class="flex items-center gap-2 text-sm font-medium">
                                                     <AppIcon name="activity" class="size-4 text-muted-foreground" />
-                                                    Timeline
+                                                    Account Timeline
                                                 </CardTitle>
+                                                <CardDescription class="text-xs">Lifecycle markers for operational traceability.</CardDescription>
                                             </CardHeader>
-                                            <CardContent class="space-y-2 px-4 pt-0 text-sm">
-                                                <div class="flex justify-between gap-4">
+                                            <CardContent class="grid gap-2 px-4 pt-0 text-sm">
+                                                <div class="flex items-center justify-between gap-4 rounded-md border bg-muted/10 px-3 py-2">
                                                     <span class="text-muted-foreground">Created</span>
                                                     <span class="text-right font-medium">{{ formatDateTime(detailsUser.createdAt) }}</span>
                                                 </div>
-                                                <div class="flex justify-between gap-4">
+                                                <div class="flex items-center justify-between gap-4 rounded-md border bg-muted/10 px-3 py-2">
                                                     <span class="text-muted-foreground">Updated</span>
                                                     <span class="text-right font-medium">{{ formatDateTime(detailsUser.updatedAt) }}</span>
                                                 </div>
-                                                <div class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">Roles</span>
-                                                    <span class="text-right font-medium">{{ detailsUser.roles.length }}</span>
+                                                <div class="flex items-center justify-between gap-4 rounded-md border bg-muted/10 px-3 py-2">
+                                                    <span class="text-muted-foreground">User ID</span>
+                                                    <span class="font-mono text-right font-medium">{{ detailsUser.id ?? '--' }}</span>
                                                 </div>
                                             </CardContent>
                                         </Card>
@@ -2922,10 +3004,9 @@ onMounted(async () => {
                                                             <Label for="details-facility-add">Add facility</Label>
                                                             <Select v-model="newFacilityDraftId">
                                                                 <SelectTrigger>
-                                                                    <SelectValue />
+                                                                    <SelectValue placeholder="Select facility to add" />
                                                                 </SelectTrigger>
                                                                 <SelectContent>
-                                                                <SelectItem value="">Select facility to add</SelectItem>
                                                                 <SelectItem
                                                                     v-for="facility in unassignedFacilities"
                                                                     :key="`available-${String(facility.id)}`"
@@ -3081,12 +3162,12 @@ onMounted(async () => {
                                                             </div>
                                                             <div class="space-y-1.5">
                                                                 <Label for="user-audit-actor-type" class="text-xs">Actor type</Label>
-                                                                <Select v-model="detailsAuditFilters.actorType">
+                                                                <Select v-model="detailsAuditActorTypeSelectValue">
                                                                     <SelectTrigger class="mt-0">
                                                                         <SelectValue />
                                                                     </SelectTrigger>
                                                                     <SelectContent>
-                                                                    <SelectItem value="">All actors</SelectItem>
+                                                                    <SelectItem :value="allSelectValue">All actors</SelectItem>
                                                                     <SelectItem value="user">User only</SelectItem>
                                                                     <SelectItem value="system">System only</SelectItem>
                                                                     </SelectContent>
@@ -3194,11 +3275,16 @@ onMounted(async () => {
                         </div>
                     </ScrollArea>
 
-                    <SheetFooter class="shrink-0 flex-row border-t bg-muted/20 px-4 py-3 sm:justify-end">
-                        <Button variant="outline" class="gap-1.5" @click="closeDetails">
-                            <AppIcon name="circle-x" class="size-3.5" />
-                            Close
-                        </Button>
+                    <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
+                        <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <p class="text-xs text-muted-foreground">
+                                {{ detailsUser ? `${verificationLabel(detailsUser)} | ${userFacilitySummary(detailsUser)}` : 'User details workspace' }}
+                            </p>
+                            <Button variant="outline" class="gap-1.5 self-end sm:self-auto" @click="closeDetails">
+                                <AppIcon name="circle-x" class="size-3.5" />
+                                Close
+                            </Button>
+                        </div>
                     </SheetFooter>
                 </SheetContent>
             </Sheet>
@@ -3226,12 +3312,12 @@ onMounted(async () => {
                                 </div>
                                 <div class="grid gap-2">
                                     <Label for="user-search-status-mobile">Status</Label>
-                                    <Select v-model="searchForm.status">
+                                    <Select v-model="searchStatusSelectValue">
                                         <SelectTrigger>
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                        <SelectItem value="">All statuses</SelectItem>
+                                        <SelectItem :value="allSelectValue">All statuses</SelectItem>
                                         <SelectItem value="active">Active</SelectItem>
                                         <SelectItem value="inactive">Inactive</SelectItem>
                                         </SelectContent>
@@ -3239,12 +3325,12 @@ onMounted(async () => {
                                 </div>
                                 <div class="grid gap-2">
                                     <Label for="user-search-verification-mobile">Verification</Label>
-                                    <Select v-model="searchForm.verification">
+                                    <Select v-model="searchVerificationSelectValue">
                                         <SelectTrigger>
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                        <SelectItem value="">All users</SelectItem>
+                                        <SelectItem :value="allSelectValue">All users</SelectItem>
                                         <SelectItem value="verified">Verified only</SelectItem>
                                         <SelectItem value="unverified">Unverified only</SelectItem>
                                         </SelectContent>
@@ -3252,12 +3338,12 @@ onMounted(async () => {
                                 </div>
                                 <div class="grid gap-2">
                                     <Label for="user-search-role-mobile">Role</Label>
-                                    <Select v-model="searchForm.roleId">
+                                    <Select v-model="searchRoleSelectValue">
                                         <SelectTrigger>
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                        <SelectItem value="">All roles</SelectItem>
+                                        <SelectItem :value="allSelectValue">All roles</SelectItem>
                                         <SelectItem
                                             v-for="role in roles"
                                             :key="`mobile-role-${String(role.id)}`"
@@ -3299,12 +3385,12 @@ onMounted(async () => {
                             <div class="grid gap-3">
                                 <div class="grid gap-2">
                                     <Label for="user-search-facility-mobile">Facility</Label>
-                                    <Select v-model="searchForm.facilityId">
+                                    <Select v-model="searchFacilitySelectValue">
                                         <SelectTrigger>
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                        <SelectItem value="">All facilities</SelectItem>
+                                        <SelectItem :value="allSelectValue">All facilities</SelectItem>
                                         <SelectItem
                                             v-for="facility in availableFacilities"
                                             :key="`mobile-${String(facility.id)}`"

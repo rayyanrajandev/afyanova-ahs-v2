@@ -18,6 +18,7 @@ import {
     LayoutGridIcon,
     ListViewIcon,
     Login01Icon,
+    Mail01Icon,
     MapPinIcon,
     MoreVerticalIcon,
     PackageIcon,
@@ -58,6 +59,7 @@ import {
     LayoutGrid,
     LayoutList,
     LogIn,
+    Mail,
     MapPin,
     Package,
     PanelRightOpen,
@@ -107,6 +109,7 @@ export type AppIconName =
     | 'layout-list'
     | 'list-restart'
     | 'log-in'
+    | 'mail'
     | 'map-pin'
     | 'package'
     | 'panel-right-open'
@@ -153,6 +156,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     'layout-list': LayoutList,
     'list-restart': ClipboardList,
     'log-in': LogIn,
+    mail: Mail,
     'map-pin': MapPin,
     package: Package,
     'panel-right-open': PanelRightOpen,
@@ -200,6 +204,7 @@ const HUGE_ICON_MAP = {
     'layout-list': ListViewIcon,
     'list-restart': CheckListIcon,
     'log-in': Login01Icon,
+    mail: Mail01Icon,
     'map-pin': MapPinIcon,
     package: PackageIcon,
     'panel-right-open': EyeIcon,
