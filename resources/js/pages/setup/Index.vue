@@ -38,10 +38,6 @@ const {
     clinicalReady,
     pricingReady,
     inventoryReady,
-    openingStockReady,
-    patientRegistrationReady,
-    departmentRequisitionReady,
-    procurementRequestReady,
 } = useMasterDataSetupReadiness({ includeWardBeds: wardBedSetupRequired });
 
 const visibleSteps = computed(() =>
@@ -112,64 +108,6 @@ const semanticLayers = computed<Array<{
     },
 ].filter((layer) => hasRouteAccess(layer.href, permissionNames.value, hasUniversalAdminAccess.value)));
 
-const operationalChecklist = computed(() => [
-    {
-        title: 'Register first patient',
-        description: 'Create the first real or test patient only after the facility structure and minimum service setup are in place.',
-        ready: patientRegistrationReady.value,
-        icon: 'users',
-        href: '/patients',
-    },
-    {
-        title: 'Set opening stock',
-        description: 'Load day-0 counted balances into the right warehouse. This is setup stock, not a purchase, expense, or requisition.',
-        ready: openingStockReady.value,
-        icon: 'activity',
-        href: '/inventory-procurement?section=inventory',
-    },
-    {
-        title: 'Create department requisition',
-        description: 'Start live store demand from a department request so stock issues are auditable and not hidden as manual adjustments.',
-        ready: departmentRequisitionReady.value,
-        icon: 'clipboard-list',
-        href: '/inventory-procurement?section=requisitions',
-    },
-    {
-        title: 'Create procurement request',
-        description: 'Raise supplier procurement only after demand or low-stock need exists, then test approval, order, receipt, cost, and audit trail.',
-        ready: procurementRequestReady.value,
-        icon: 'package',
-        href: '/inventory-procurement?section=procurement',
-    },
-].filter((item) => hasRouteAccess(item.href, permissionNames.value, hasUniversalAdminAccess.value)));
-
-const setupPrinciples = [
-    {
-        title: 'Confirm scope first',
-        description: 'Facility admins must verify organization, facility, subscription, and active scope before creating operational data.',
-        icon: 'shield-check',
-    },
-    {
-        title: 'Map the facility',
-        description: 'Departments, service points, and staff form the local operating map. Wards and beds become required only when the facility plan includes ward operations.',
-        icon: 'building-2',
-    },
-    {
-        title: 'Define care before prices',
-        description: 'Clinical definitions drive selections; finance links to them instead of retyping service names.',
-        icon: 'book-open',
-    },
-    {
-        title: 'Separate stock from services',
-        description: 'Inventory owns physical items only. Medicines may bridge to formulary; lab tests never become reagents.',
-        icon: 'package',
-    },
-    {
-        title: 'Prove live operations',
-        description: 'Patient registration, opening stock, requisitions, and procurement prove day-1 controls.',
-        icon: 'shield-check',
-    },
-];
 
 async function refreshSetup(): Promise<void> {
     if (refreshing.value) return;
@@ -206,29 +144,13 @@ onMounted(async () => {
                         </div>
                         <div class="space-y-2">
                             <h1 class="max-w-4xl text-2xl font-semibold tracking-tight md:text-3xl">
-                                Guide the facility admin from first login to first patient registration.
+                                Set up your facility
                             </h1>
                             <p class="max-w-3xl text-sm leading-6 text-muted-foreground">
-                                This center turns setup into a controlled launch path: verify facility scope and plan, build departments and service points, add ward beds only when the plan includes ward operations, prepare staff, catalogs, pricing, and stock, then test patient registration and live operations.
+                                Complete each step in order. Departments and service points unlock patient registration. Everything else builds on that foundation.
                             </p>
                         </div>
-                        <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                            <div
-                                v-for="principle in setupPrinciples"
-                                :key="principle.title"
-                                class="min-w-0 rounded-lg border bg-background/70 p-3 backdrop-blur"
-                            >
-                                <div class="flex items-center gap-2">
-                                    <div class="rounded-lg bg-primary/10 p-1.5 text-primary">
-                                        <AppIcon :name="principle.icon" class="size-3.5" />
-                                    </div>
-                                    <p class="truncate text-sm font-semibold">{{ principle.title }}</p>
-                                </div>
-                                <p class="mt-2 line-clamp-2 text-xs leading-4 text-muted-foreground">
-                                    {{ principle.description }}
-                                </p>
-                            </div>
-                        </div>
+
                     </div>
 
                     <div class="rounded-lg border bg-background/85 p-4 shadow-sm backdrop-blur">
@@ -277,89 +199,6 @@ onMounted(async () => {
                 :recommended-next-step="visibleRecommendedNextStep"
                 :loading="loading || refreshing"
             />
-
-            <div class="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-                <Card class="rounded-lg border-sidebar-border/70">
-                    <CardHeader class="pb-3">
-                        <CardTitle>Governance Split</CardTitle>
-                        <CardDescription>Modern hospital systems keep clinical definitions, charging, and stock ownership separate.</CardDescription>
-                    </CardHeader>
-                    <CardContent class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                        <div v-for="layer in semanticLayers" :key="layer.title" class="min-w-0 rounded-lg border bg-muted/20 p-3">
-                            <div class="flex items-start justify-between gap-2">
-                                <div class="min-w-0">
-                                    <p class="truncate text-sm font-semibold">{{ layer.title }}</p>
-                                    <p class="mt-0.5 text-xs font-medium text-muted-foreground">{{ layer.principle }}</p>
-                                </div>
-                                <div class="rounded-lg bg-background p-1.5 text-muted-foreground">
-                                    <AppIcon :name="layer.icon" class="size-3.5" />
-                                </div>
-                            </div>
-                            <p class="mt-2 line-clamp-3 text-xs leading-4 text-muted-foreground">{{ layer.description }}</p>
-                            <Badge :variant="layer.tone" class="mt-3">{{ layer.state }}</Badge>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card class="rounded-lg border-sidebar-border/70">
-                    <CardHeader class="pb-3">
-                        <CardTitle>Operational Smoke Test</CardTitle>
-                        <CardDescription>After master data, prove live stock control with the correct hospital sequence.</CardDescription>
-                    </CardHeader>
-                    <CardContent class="space-y-3">
-                        <Link
-                            v-for="item in operationalChecklist"
-                            :key="item.title"
-                            :href="item.href"
-                            class="flex min-w-0 items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors hover:bg-muted/30"
-                        >
-                            <div class="mt-0.5 rounded-lg bg-muted p-1.5 text-muted-foreground">
-                                <AppIcon :name="item.icon" class="size-3.5" />
-                            </div>
-                            <div class="min-w-0 flex-1">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <p class="text-sm font-semibold">{{ item.title }}</p>
-                                    <Badge :variant="item.ready ? 'secondary' : 'outline'">
-                                        {{ item.ready ? 'Ready' : 'Pending' }}
-                                    </Badge>
-                                </div>
-                                <p class="mt-1 line-clamp-2 text-xs leading-4 text-muted-foreground">{{ item.description }}</p>
-                            </div>
-                        </Link>
-                    </CardContent>
-                </Card>
-            </div>
-
-            <Card class="rounded-lg border-sidebar-border/70">
-                <CardHeader class="pb-3">
-                    <CardTitle>First-Run Operating Rule</CardTitle>
-                    <CardDescription>Use this as the clean-database sequence when testing a new Tanzanian facility.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                        <Link
-                            v-for="(step, index) in visibleSteps"
-                            :key="step.key"
-                            :href="step.href"
-                            class="group flex min-w-0 items-center gap-3 rounded-lg border bg-background/70 px-3 py-2.5 transition-colors hover:bg-muted/30"
-                        >
-                            <div
-                                class="flex size-8 shrink-0 items-center justify-center rounded-lg border text-xs font-semibold"
-                                :class="step.ready ? 'border-primary/20 bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'"
-                            >
-                                {{ index + 1 }}
-                            </div>
-                            <div class="min-w-0 flex-1">
-                                <p class="truncate text-sm font-semibold">{{ step.label }}</p>
-                                <p class="truncate text-xs text-muted-foreground">
-                                    {{ step.ready ? 'Created and available' : 'Create before downstream testing' }}
-                                </p>
-                            </div>
-                            <AppIcon name="arrow-right" class="size-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
-                        </Link>
-                    </div>
-                </CardContent>
-            </Card>
         </div>
     </AppLayout>
 </template>

@@ -324,6 +324,27 @@ const nextPendingTask = computed(() =>
                         </Button>
                     </div>
 
+                    <div class="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+                        <p class="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Minimum path to first patient</p>
+                        <div class="mt-2 flex flex-wrap items-center gap-2">
+                            <Link href="/platform/admin/departments" class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted/50">
+                                <AppIcon name="building-2" class="size-3 text-muted-foreground" />
+                                1. Create a department
+                            </Link>
+                            <AppIcon name="arrow-right" class="size-3 text-muted-foreground" />
+                            <Link href="/platform/admin/service-points" class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted/50">
+                                <AppIcon name="map-pin" class="size-3 text-muted-foreground" />
+                                2. Create a service point
+                            </Link>
+                            <AppIcon name="arrow-right" class="size-3 text-muted-foreground" />
+                            <Link href="/patients" class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted/50">
+                                <AppIcon name="users" class="size-3 text-muted-foreground" />
+                                3. Register first patient
+                            </Link>
+                        </div>
+                        <p class="mt-2 text-xs text-muted-foreground">Everything else (staff, catalogs, billing, inventory) can be set up after the first patient is registered.</p>
+                    </div>
+
                     <div class="grid gap-3 lg:grid-cols-2">
                         <section
                             v-for="(phase, phaseIndex) in phases"
