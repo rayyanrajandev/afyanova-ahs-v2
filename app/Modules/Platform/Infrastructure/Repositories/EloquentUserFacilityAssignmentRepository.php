@@ -9,6 +9,10 @@ class EloquentUserFacilityAssignmentRepository implements UserFacilityAssignment
 {
     public function listActiveFacilityScopesByUserId(int $userId): array
     {
+        if ($this->hasActiveSuperAdminAssignment($userId)) {
+            return $this->listAllActiveFacilityScopesForSuperAdmin($userId);
+        }
+
         return DB::table('facility_user')
             ->join('facilities', 'facilities.id', '=', 'facility_user.facility_id')
             ->join('tenants', 'tenants.id', '=', 'facilities.tenant_id')
@@ -35,5 +39,71 @@ class EloquentUserFacilityAssignmentRepository implements UserFacilityAssignment
             ])
             ->map(static fn ($row): array => (array) $row)
             ->all();
+    }
+
+    private function hasActiveSuperAdminAssignment(int $userId): bool
+    {
+        return DB::table('facility_user')
+            ->where('user_id', $userId)
+            ->where('is_active', true)
+            ->where('role', 'super_admin')
+            ->exists();
+    }
+
+    private function listAllActiveFacilityScopesForSuperAdmin(int $userId): array
+    {
+        $primaryFacilityId = DB::table('facility_user')
+            ->where('user_id', $userId)
+            ->where('is_active', true)
+            ->where('role', 'super_admin')
+            ->orderByDesc('is_primary')
+            ->value('facility_id');
+
+        $facilities = DB::table('facilities')
+            ->join('tenants', 'tenants.id', '=', 'facilities.tenant_id')
+            ->where('facilities.status', 'active')
+            ->where('tenants.status', 'active')
+            ->orderBy('tenants.code')
+            ->orderBy('facilities.code')
+            ->get([
+                'tenants.id as tenant_id',
+                'tenants.code as tenant_code',
+                'tenants.name as tenant_name',
+                'tenants.country_code as tenant_country_code',
+                'facilities.id as facility_id',
+                'facilities.code as facility_code',
+                'facilities.name as facility_name',
+                'facilities.facility_type',
+                'facilities.timezone as facility_timezone',
+            ])
+            ->map(static fn ($row): array => [
+                'user_id' => $userId,
+                'is_primary' => (string) $row->facility_id === (string) $primaryFacilityId,
+                'assignment_role' => 'super_admin',
+                'tenant_id' => $row->tenant_id,
+                'tenant_code' => $row->tenant_code,
+                'tenant_name' => $row->tenant_name,
+                'tenant_country_code' => $row->tenant_country_code,
+                'facility_id' => $row->facility_id,
+                'facility_code' => $row->facility_code,
+                'facility_name' => $row->facility_name,
+                'facility_type' => $row->facility_type,
+                'facility_timezone' => $row->facility_timezone,
+            ])
+            ->all();
+
+        usort($facilities, static function (array $left, array $right): int {
+            $primarySort = ((int) ($right['is_primary'] ?? false)) <=> ((int) ($left['is_primary'] ?? false));
+            if ($primarySort !== 0) {
+                return $primarySort;
+            }
+
+            return strcmp(
+                (string) ($left['tenant_code'] ?? '').(string) ($left['facility_code'] ?? ''),
+                (string) ($right['tenant_code'] ?? '').(string) ($right['facility_code'] ?? ''),
+            );
+        });
+
+        return $facilities;
     }
 }

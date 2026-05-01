@@ -130,3 +130,102 @@ function inventoryBatchRecord(string $itemId, array $overrides = []): array
 
     return $batch;
 }
+
+/**
+ * Phase 5 readiness checks validate file presence by path. Tests create these
+ * fixtures explicitly so local developer document folders are not test inputs.
+ *
+ * @return array<int, string>
+ */
+function phase5TestingEnsureConfiguredReadinessFiles(): array
+{
+    $createdPaths = [];
+
+    foreach (phase5TestingConfiguredReadinessFilePaths() as $relativePath) {
+        $absolutePath = base_path($relativePath);
+
+        if (is_file($absolutePath)) {
+            continue;
+        }
+
+        $directory = dirname($absolutePath);
+        if (! is_dir($directory)) {
+            mkdir($directory, 0777, true);
+        }
+
+        file_put_contents($absolutePath, "# Phase 5 readiness test fixture\n");
+        $createdPaths[] = $absolutePath;
+    }
+
+    return $createdPaths;
+}
+
+/**
+ * @param  array<int, string>  $createdPaths
+ */
+function phase5TestingRemoveConfiguredReadinessFiles(array $createdPaths): void
+{
+    foreach (array_reverse($createdPaths) as $absolutePath) {
+        if (is_file($absolutePath)) {
+            @unlink($absolutePath);
+        }
+
+        phase5TestingRemoveEmptyReadinessDirectories(dirname($absolutePath));
+    }
+}
+
+/**
+ * @return array<int, string>
+ */
+function phase5TestingConfiguredReadinessFilePaths(): array
+{
+    $paths = [];
+
+    foreach ((array) config('phase5_readiness.gates', []) as $gate) {
+        if (is_array($gate) && is_string($gate['signedArtifact'] ?? null)) {
+            $paths[] = $gate['signedArtifact'];
+        }
+    }
+
+    foreach ((array) config('phase5_documentation_readiness.modules', []) as $module) {
+        if (! is_array($module)) {
+            continue;
+        }
+
+        foreach ((array) ($module['requiredFiles'] ?? []) as $path) {
+            if (is_string($path)) {
+                $paths[] = $path;
+            }
+        }
+
+        if (is_string($module['citationPackPath'] ?? null)) {
+            $paths[] = $module['citationPackPath'];
+        }
+    }
+
+    return array_values(array_unique(array_filter(
+        array_map(static fn (string $path): string => trim($path), $paths),
+        static fn (string $path): bool => $path !== ''
+    )));
+}
+
+function phase5TestingRemoveEmptyReadinessDirectories(string $directory): void
+{
+    $documentsRoot = rtrim(str_replace('\\', '/', base_path('documents')), '/');
+    $current = rtrim(str_replace('\\', '/', $directory), '/');
+
+    while (
+        $current !== ''
+        && $current !== $documentsRoot
+        && str_starts_with($current, $documentsRoot.'/')
+        && is_dir($current)
+    ) {
+        $entries = array_values(array_diff(scandir($current) ?: [], ['.', '..']));
+        if ($entries !== []) {
+            return;
+        }
+
+        @rmdir($current);
+        $current = rtrim(str_replace('\\', '/', dirname($current)), '/');
+    }
+}

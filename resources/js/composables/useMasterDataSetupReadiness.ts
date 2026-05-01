@@ -79,7 +79,7 @@ const stepDefinitions: ReadonlyArray<{
     },
     {
         key: 'pricing',
-        label: 'Service Price List',
+        label: 'Billable Service Catalog',
         href: '/billing-service-catalog',
         description: 'Create billable tariffs after the care definition exists so finance does not recreate codes and names.',
     },
@@ -160,8 +160,11 @@ export function useMasterDataSetupReadiness() {
         procurement_requests: { total: null, active: null, error: null },
     });
 
-    async function loadSetupReadiness(): Promise<void> {
+    async function loadSetupReadiness(stepKeys: MasterDataSetupStepKey[] | null = null): Promise<void> {
         loading.value = true;
+        const enabledStepKeys = new Set(stepKeys ?? stepDefinitions.map((definition) => definition.key));
+        const shouldLoad = (key: MasterDataSetupStepKey): boolean => enabledStepKeys.has(key);
+        const skipped = { total: null, active: null, error: null };
 
         const [
             warehouseResult,
@@ -173,42 +176,46 @@ export function useMasterDataSetupReadiness() {
             departmentRequisitionResult,
             procurementRequestResult,
         ] = await Promise.allSettled([
-            getJson<CountResponse>('/inventory-procurement/warehouses/status-counts'),
-            getJson<CountResponse>('/inventory-procurement/suppliers/status-counts'),
-            Promise.all([
+            shouldLoad('warehouses') ? getJson<CountResponse>('/inventory-procurement/warehouses/status-counts') : Promise.resolve(null),
+            shouldLoad('suppliers') ? getJson<CountResponse>('/inventory-procurement/suppliers/status-counts') : Promise.resolve(null),
+            shouldLoad('clinical') ? Promise.all([
                 getJson<CountResponse>('/platform/admin/clinical-catalogs/lab-tests/status-counts'),
                 getJson<CountResponse>('/platform/admin/clinical-catalogs/radiology-procedures/status-counts'),
                 getJson<CountResponse>('/platform/admin/clinical-catalogs/theatre-procedures/status-counts'),
                 getJson<CountResponse>('/platform/admin/clinical-catalogs/formulary-items/status-counts'),
-            ]),
-            getJson<CountResponse>('/billing-service-catalog/items/status-counts'),
-            getJson<StockAlertCountResponse>('/inventory-procurement/stock-alert-counts'),
-            getJson<StockMovementSummaryResponse>('/inventory-procurement/stock-movements/summary', { movementType: 'receive' }),
-            getJson<PagedCountResponse>('/inventory-procurement/department-requisitions', { perPage: 1 }),
-            getJson<PagedCountResponse>('/inventory-procurement/procurement-requests', { perPage: 1 }),
+            ]) : Promise.resolve(null),
+            shouldLoad('pricing') ? getJson<CountResponse>('/billing-service-catalog/items/status-counts') : Promise.resolve(null),
+            shouldLoad('inventory') ? getJson<StockAlertCountResponse>('/inventory-procurement/stock-alert-counts') : Promise.resolve(null),
+            shouldLoad('opening_stock') ? getJson<StockMovementSummaryResponse>('/inventory-procurement/stock-movements/summary', { movementType: 'receive' }) : Promise.resolve(null),
+            shouldLoad('department_requisitions') ? getJson<PagedCountResponse>('/inventory-procurement/department-requisitions', { perPage: 1 }) : Promise.resolve(null),
+            shouldLoad('procurement_requests') ? getJson<PagedCountResponse>('/inventory-procurement/procurement-requests', { perPage: 1 }) : Promise.resolve(null),
         ]);
 
-        if (warehouseResult.status === 'fulfilled') {
+        if (warehouseResult.status === 'fulfilled' && warehouseResult.value !== null) {
             summaries.value.warehouses = {
                 total: normalizeCount(warehouseResult.value.data?.total),
                 active: normalizeCount(warehouseResult.value.data?.active),
                 error: null,
             };
+        } else if (warehouseResult.status === 'fulfilled') {
+            summaries.value.warehouses = skipped;
         } else {
             summaries.value.warehouses = { total: null, active: null, error: warehouseResult.reason instanceof Error ? warehouseResult.reason.message : 'Unavailable' };
         }
 
-        if (supplierResult.status === 'fulfilled') {
+        if (supplierResult.status === 'fulfilled' && supplierResult.value !== null) {
             summaries.value.suppliers = {
                 total: normalizeCount(supplierResult.value.data?.total),
                 active: normalizeCount(supplierResult.value.data?.active),
                 error: null,
             };
+        } else if (supplierResult.status === 'fulfilled') {
+            summaries.value.suppliers = skipped;
         } else {
             summaries.value.suppliers = { total: null, active: null, error: supplierResult.reason instanceof Error ? supplierResult.reason.message : 'Unavailable' };
         }
 
-        if (clinicalResults.status === 'fulfilled') {
+        if (clinicalResults.status === 'fulfilled' && clinicalResults.value !== null) {
             const total = clinicalResults.value.reduce((carry, response) => carry + (normalizeCount(response.data?.total) ?? 0), 0);
             const active = clinicalResults.value.reduce((carry, response) => carry + (normalizeCount(response.data?.active) ?? 0), 0);
 
@@ -217,57 +224,69 @@ export function useMasterDataSetupReadiness() {
                 active,
                 error: null,
             };
+        } else if (clinicalResults.status === 'fulfilled') {
+            summaries.value.clinical = skipped;
         } else {
             summaries.value.clinical = { total: null, active: null, error: clinicalResults.reason instanceof Error ? clinicalResults.reason.message : 'Unavailable' };
         }
 
-        if (pricingResult.status === 'fulfilled') {
+        if (pricingResult.status === 'fulfilled' && pricingResult.value !== null) {
             summaries.value.pricing = {
                 total: normalizeCount(pricingResult.value.data?.total),
                 active: normalizeCount(pricingResult.value.data?.active),
                 error: null,
             };
+        } else if (pricingResult.status === 'fulfilled') {
+            summaries.value.pricing = skipped;
         } else {
             summaries.value.pricing = { total: null, active: null, error: pricingResult.reason instanceof Error ? pricingResult.reason.message : 'Unavailable' };
         }
 
-        if (inventoryResult.status === 'fulfilled') {
+        if (inventoryResult.status === 'fulfilled' && inventoryResult.value !== null) {
             summaries.value.inventory = {
                 total: normalizeCount(inventoryResult.value.data?.total),
                 active: normalizeCount(inventoryResult.value.data?.total),
                 error: null,
             };
+        } else if (inventoryResult.status === 'fulfilled') {
+            summaries.value.inventory = skipped;
         } else {
             summaries.value.inventory = { total: null, active: null, error: inventoryResult.reason instanceof Error ? inventoryResult.reason.message : 'Unavailable' };
         }
 
-        if (openingStockResult.status === 'fulfilled') {
+        if (openingStockResult.status === 'fulfilled' && openingStockResult.value !== null) {
             const total = normalizeCount(openingStockResult.value.data?.receive ?? openingStockResult.value.data?.total);
             summaries.value.opening_stock = {
                 total,
                 active: total,
                 error: null,
             };
+        } else if (openingStockResult.status === 'fulfilled') {
+            summaries.value.opening_stock = skipped;
         } else {
             summaries.value.opening_stock = { total: null, active: null, error: openingStockResult.reason instanceof Error ? openingStockResult.reason.message : 'Unavailable' };
         }
 
-        if (departmentRequisitionResult.status === 'fulfilled') {
+        if (departmentRequisitionResult.status === 'fulfilled' && departmentRequisitionResult.value !== null) {
             summaries.value.department_requisitions = {
                 total: normalizeCount(departmentRequisitionResult.value.meta?.total),
                 active: normalizeCount(departmentRequisitionResult.value.meta?.total),
                 error: null,
             };
+        } else if (departmentRequisitionResult.status === 'fulfilled') {
+            summaries.value.department_requisitions = skipped;
         } else {
             summaries.value.department_requisitions = { total: null, active: null, error: departmentRequisitionResult.reason instanceof Error ? departmentRequisitionResult.reason.message : 'Unavailable' };
         }
 
-        if (procurementRequestResult.status === 'fulfilled') {
+        if (procurementRequestResult.status === 'fulfilled' && procurementRequestResult.value !== null) {
             summaries.value.procurement_requests = {
                 total: normalizeCount(procurementRequestResult.value.meta?.total),
                 active: normalizeCount(procurementRequestResult.value.meta?.total),
                 error: null,
             };
+        } else if (procurementRequestResult.status === 'fulfilled') {
+            summaries.value.procurement_requests = skipped;
         } else {
             summaries.value.procurement_requests = { total: null, active: null, error: procurementRequestResult.reason instanceof Error ? procurementRequestResult.reason.message : 'Unavailable' };
         }

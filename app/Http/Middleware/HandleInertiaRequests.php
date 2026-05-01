@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
+use App\Modules\Platform\Application\Support\CredentialLinkDeliveryPolicy;
 use App\Support\Auth\EffectivePermissionNameResolver;
 use App\Support\Branding\SystemBrandingManager;
 use Illuminate\Http\Request;
@@ -124,18 +125,17 @@ class HandleInertiaRequests extends Middleware
         $defaultMailer = (string) config('mail.default', 'log');
         /** @var SystemBrandingManager $brandingManager */
         $brandingManager = app(SystemBrandingManager::class);
-        $logsOnly = in_array($defaultMailer, ['log', 'array'], true);
+        /** @var CredentialLinkDeliveryPolicy $credentialLinkDeliveryPolicy */
+        $credentialLinkDeliveryPolicy = app(CredentialLinkDeliveryPolicy::class);
 
         return [
             'defaultMailer' => $defaultMailer,
             'fromName' => $brandingManager->mailFromName(),
             'fromAddress' => $brandingManager->mailFromAddress(),
             'replyToAddress' => $brandingManager->mailReplyToAddress(),
-            'deliversExternally' => ! $logsOnly,
-            'supportsCredentialLinkPreview' => $logsOnly && app()->environment(['local', 'testing']),
-            'warning' => $logsOnly
-                ? 'Invite and password-reset emails are currently written to the application log instead of being delivered to a mailbox.'
-                : null,
+            'deliversExternally' => $credentialLinkDeliveryPolicy->deliversExternally(),
+            'supportsCredentialLinkPreview' => $credentialLinkDeliveryPolicy->shouldReturnLocalPreview(),
+            'warning' => $credentialLinkDeliveryPolicy->warning(),
         ];
     }
 

@@ -163,12 +163,14 @@ it('writes pharmacy verify and reconciliation parity metadata in audit logs', fu
         'pharmacy.orders.reconcile',
     ]);
     $patient = pharmacyHardeningMakePatient();
+    $catalogItem = pharmacyHardeningEnsureActiveApprovedMedicineCatalogItem();
     InventoryItemModel::query()->create([
         'tenant_id' => null,
         'facility_id' => null,
+        'clinical_catalog_item_id' => $catalogItem->id,
         'item_code' => 'ATC:N02BE01',
         'item_name' => 'Paracetamol 500mg',
-        'category' => 'analgesics',
+        'category' => 'pharmaceutical',
         'unit' => 'tablet',
         'current_stock' => 100,
         'reorder_level' => 10,

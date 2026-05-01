@@ -3,6 +3,14 @@
 use Illuminate\Support\Str;
 use Symfony\Component\Process\Process;
 
+beforeEach(function (): void {
+    $this->phase5ReadinessFixturePaths = phase5TestingEnsureConfiguredReadinessFiles();
+});
+
+afterEach(function (): void {
+    phase5TestingRemoveConfiguredReadinessFiles($this->phase5ReadinessFixturePaths ?? []);
+});
+
 it('writes phase 5 documentation-readiness artifact and exits zero when required status is satisfied', function (): void {
     $artifactPath = storage_path('app/deployment-artifacts/'.Str::uuid().'-phase5-documentation-readiness.json');
     @unlink($artifactPath);

@@ -2,12 +2,17 @@
 
 namespace App\Modules\Platform\Application\UseCases;
 
+use App\Models\User;
 use App\Modules\Platform\Application\Exceptions\DuplicateFacilityCodeException;
+use App\Modules\Platform\Application\Support\FacilityAdminEligibilityPolicy;
+use App\Modules\Platform\Application\Support\FacilityAdminProvisioningService;
 use App\Modules\Platform\Domain\Repositories\FacilityConfigurationAuditLogRepositoryInterface;
 use App\Modules\Platform\Domain\Repositories\FacilityConfigurationRepositoryInterface;
 use App\Modules\Platform\Domain\Repositories\TenantRepositoryInterface;
+use DomainException;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use Throwable;
 
 class CreateFacilityConfigurationUseCase
 {
@@ -15,11 +20,22 @@ class CreateFacilityConfigurationUseCase
         private readonly FacilityConfigurationRepositoryInterface $facilityConfigurationRepository,
         private readonly FacilityConfigurationAuditLogRepositoryInterface $auditLogRepository,
         private readonly TenantRepositoryInterface $tenantRepository,
+        private readonly FacilityAdminEligibilityPolicy $facilityAdminEligibilityPolicy,
+        private readonly FacilityAdminProvisioningService $facilityAdminProvisioningService,
     ) {}
 
+    /**
+     * @return array{
+     *     facility: array<string, mixed>,
+     *     facility_admin_user_id: int|null,
+     *     created_facility_admin_user_id: int|null,
+     *     facility_admin_invite: array<string, mixed>|null,
+     *     facility_admin_invite_error: string|null
+     * }
+     */
     public function execute(array $payload, ?int $actorId = null): array
     {
-        return DB::transaction(function () use ($payload, $actorId): array {
+        $result = DB::transaction(function () use ($payload, $actorId): array {
             $tenantCode = $this->normalizeCode((string) ($payload['tenant_code'] ?? ''));
             $facilityCode = $this->normalizeCode((string) ($payload['facility_code'] ?? ''));
             $tenant = $this->tenantRepository->findByCode($tenantCode);
@@ -48,6 +64,47 @@ class CreateFacilityConfigurationUseCase
                 throw new InvalidArgumentException('Tenant could not be resolved for facility creation.');
             }
 
+            $facilityAdminUserId = isset($payload['facility_admin_user_id'])
+                ? (int) $payload['facility_admin_user_id']
+                : null;
+            $facilityAdminPayload = isset($payload['facility_admin']) && is_array($payload['facility_admin'])
+                ? $payload['facility_admin']
+                : null;
+            $facilityAdminUser = null;
+            $createdFacilityAdminUserId = null;
+
+            if ($facilityAdminUserId !== null && $facilityAdminPayload !== null) {
+                throw new DomainException('Choose an existing facility admin or create a new one, not both.');
+            }
+
+            if ($facilityAdminUserId === null && $facilityAdminPayload === null) {
+                throw new DomainException('Select or create a facility admin before creating the facility.');
+            }
+
+            if ($facilityAdminUserId !== null && $facilityAdminUserId > 0) {
+                $facilityAdminUser = $this->facilityAdminEligibilityPolicy->findEligibleUser($facilityAdminUserId);
+                if ($facilityAdminUser === null) {
+                    throw new DomainException('Selected facility admin must be an active user with the Facility Administrator role.');
+                }
+
+                $existingTenantId = is_string($facilityAdminUser->tenant_id) && trim($facilityAdminUser->tenant_id) !== ''
+                    ? trim($facilityAdminUser->tenant_id)
+                    : null;
+                if ($existingTenantId !== null && $existingTenantId !== $tenantId) {
+                    throw new DomainException('Selected facility admin already belongs to another organization.');
+                }
+            }
+
+            if ($facilityAdminPayload !== null) {
+                $facilityAdminUser = $this->facilityAdminProvisioningService->createFacilityAdmin(
+                    payload: $facilityAdminPayload,
+                    tenantId: $tenantId,
+                    actorId: $actorId,
+                );
+                $facilityAdminUserId = (int) $facilityAdminUser->id;
+                $createdFacilityAdminUserId = $facilityAdminUserId;
+            }
+
             if ($this->facilityConfigurationRepository->existsCodeInTenant($tenantId, $facilityCode)) {
                 throw new DuplicateFacilityCodeException('Facility code already exists in this organization.');
             }
@@ -60,22 +117,24 @@ class CreateFacilityConfigurationUseCase
                 'facility_tier' => $this->nullableTrimmedValue($payload['facility_tier'] ?? null),
                 'timezone' => $this->nullableTrimmedValue($payload['timezone'] ?? null),
                 'status' => 'active',
-                'administrative_owner_user_id' => $payload['facility_admin_user_id'] ?? null,
+                'administrative_owner_user_id' => $facilityAdminUserId,
             ]);
 
             $facilityId = (string) ($facility['id'] ?? '');
-            $facilityAdminUserId = isset($payload['facility_admin_user_id'])
-                ? (int) $payload['facility_admin_user_id']
-                : null;
 
-            if ($facilityAdminUserId !== null && $facilityAdminUserId > 0) {
+            if ($facilityAdminUser !== null && $facilityAdminUserId !== null) {
+                if (! is_string($facilityAdminUser->tenant_id) || trim($facilityAdminUser->tenant_id) === '') {
+                    $facilityAdminUser->tenant_id = $tenantId;
+                    $facilityAdminUser->save();
+                }
+
                 DB::table('facility_user')->updateOrInsert(
                     [
                         'facility_id' => $facilityId,
                         'user_id' => $facilityAdminUserId,
                     ],
                     [
-                        'role' => 'super_admin',
+                        'role' => 'facility_admin',
                         'is_primary' => true,
                         'is_active' => true,
                         'created_at' => now(),
@@ -104,8 +163,43 @@ class CreateFacilityConfigurationUseCase
                 ],
             );
 
-            return $this->facilityConfigurationRepository->findById($facilityId) ?? $facility;
+            return [
+                'facility' => $this->facilityConfigurationRepository->findById($facilityId) ?? $facility,
+                'facility_admin_user_id' => $facilityAdminUserId,
+                'created_facility_admin_user_id' => $createdFacilityAdminUserId,
+                'created_facility_admin_email' => $facilityAdminUser?->email,
+                'facility_id' => $facilityId,
+                'tenant_id' => $tenantId,
+            ];
         });
+
+        $invite = null;
+        $inviteError = null;
+        $createdFacilityAdminUserId = $result['created_facility_admin_user_id'] ?? null;
+
+        if (is_int($createdFacilityAdminUserId) && $createdFacilityAdminUserId > 0) {
+            try {
+                $user = User::query()->find($createdFacilityAdminUserId);
+                if ($user !== null) {
+                    $invite = $this->facilityAdminProvisioningService->dispatchInviteLink(
+                        user: $user,
+                        tenantId: (string) ($result['tenant_id'] ?? ''),
+                        facilityId: (string) ($result['facility_id'] ?? ''),
+                        actorId: $actorId,
+                    );
+                }
+            } catch (Throwable $exception) {
+                $inviteError = $exception->getMessage();
+            }
+        }
+
+        return [
+            'facility' => $result['facility'],
+            'facility_admin_user_id' => $result['facility_admin_user_id'] ?? null,
+            'created_facility_admin_user_id' => $createdFacilityAdminUserId,
+            'facility_admin_invite' => $invite,
+            'facility_admin_invite_error' => $inviteError,
+        ];
     }
 
     private function normalizeCode(string $value): string

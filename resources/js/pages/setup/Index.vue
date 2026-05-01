@@ -7,7 +7,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useMasterDataSetupReadiness } from '@/composables/useMasterDataSetupReadiness';
+import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { hasRouteAccess } from '@/lib/routeAccess';
 import type { BreadcrumbItem } from '@/types';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -16,12 +18,11 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const refreshing = ref(false);
+const { permissionNames, isFacilitySuperAdmin } = usePlatformAccess();
 
 const {
     loading,
     steps,
-    readyStepCount,
-    recommendedNextStep,
     loadSetupReadiness,
     clinicalReady,
     pricingReady,
@@ -31,14 +32,22 @@ const {
     procurementRequestReady,
 } = useMasterDataSetupReadiness();
 
-const setupComplete = computed(() => readyStepCount.value === steps.value.length);
-const currentStep = computed(() => recommendedNextStep.value?.key ?? 'inventory');
+const visibleSteps = computed(() =>
+    steps.value.filter((step) =>
+        hasRouteAccess(step.href, permissionNames.value, isFacilitySuperAdmin.value),
+    ),
+);
+const visibleStepKeys = computed(() => visibleSteps.value.map((step) => step.key));
+const visibleReadyStepCount = computed(() => visibleSteps.value.filter((step) => step.ready).length);
+const visibleRecommendedNextStep = computed(() => visibleSteps.value.find((step) => !step.ready) ?? null);
+const setupComplete = computed(() => visibleSteps.value.length > 0 && visibleReadyStepCount.value === visibleSteps.value.length);
+const currentStep = computed(() => visibleRecommendedNextStep.value?.key ?? visibleSteps.value[0]?.key ?? 'inventory');
 const readinessPercent = computed(() => {
-    if (steps.value.length === 0) return 0;
+    if (visibleSteps.value.length === 0) return 0;
 
-    return Math.round((readyStepCount.value / steps.value.length) * 100);
+    return Math.round((visibleReadyStepCount.value / visibleSteps.value.length) * 100);
 });
-const nextStepLabel = computed(() => recommendedNextStep.value?.label ?? 'Operational workflows');
+const nextStepLabel = computed(() => visibleRecommendedNextStep.value?.label ?? 'Operational workflows');
 
 const semanticLayers = computed<Array<{
     title: string;
@@ -47,6 +56,7 @@ const semanticLayers = computed<Array<{
     icon: string;
     state: string;
     tone: 'outline' | 'secondary';
+    href: string;
 }>>(() => [
     {
         title: 'Clinical Care Catalog',
@@ -55,14 +65,16 @@ const semanticLayers = computed<Array<{
         icon: 'book-open',
         state: clinicalReady.value ? 'Ready' : 'Pending',
         tone: clinicalReady.value ? 'secondary' : 'outline',
+        href: '/platform/admin/clinical-catalogs',
     },
     {
-        title: 'Service Price List',
+        title: 'Billable Service Catalog',
         description: 'This is the charging layer. Finance should price linked catalog items instead of retyping names and codes.',
         principle: 'Charge linked services',
         icon: 'receipt',
         state: pricingReady.value ? 'Ready' : 'Pending',
         tone: pricingReady.value ? 'secondary' : 'outline',
+        href: '/billing-service-catalog',
     },
     {
         title: 'Inventory Items',
@@ -71,8 +83,9 @@ const semanticLayers = computed<Array<{
         icon: 'package',
         state: inventoryReady.value ? 'Ready' : 'Pending',
         tone: inventoryReady.value ? 'secondary' : 'outline',
+        href: '/inventory-procurement',
     },
-]);
+].filter((layer) => hasRouteAccess(layer.href, permissionNames.value, isFacilitySuperAdmin.value)));
 
 const operationalChecklist = computed(() => [
     {
@@ -96,7 +109,7 @@ const operationalChecklist = computed(() => [
         icon: 'package',
         href: '/inventory-procurement?section=procurement',
     },
-]);
+].filter((item) => hasRouteAccess(item.href, permissionNames.value, isFacilitySuperAdmin.value)));
 
 const setupPrinciples = [
     {
@@ -127,14 +140,14 @@ async function refreshSetup(): Promise<void> {
     refreshing.value = true;
 
     try {
-        await loadSetupReadiness();
+        await loadSetupReadiness(visibleStepKeys.value);
     } finally {
         refreshing.value = false;
     }
 }
 
 onMounted(async () => {
-    await loadSetupReadiness();
+    await loadSetupReadiness(visibleStepKeys.value);
 });
 </script>
 
@@ -192,7 +205,7 @@ onMounted(async () => {
                             </div>
                         </div>
                         <p class="mt-3 text-sm text-muted-foreground">
-                            <template v-if="recommendedNextStep">
+                            <template v-if="visibleRecommendedNextStep">
                                 Open the next step from here, complete the minimum record, then return to refresh readiness.
                             </template>
                             <template v-else>
@@ -200,10 +213,10 @@ onMounted(async () => {
                             </template>
                         </p>
                         <div class="mt-4 flex flex-col gap-2">
-                            <Button v-if="recommendedNextStep" as-child class="w-full gap-1.5">
-                                <Link :href="recommendedNextStep.href">
+                            <Button v-if="visibleRecommendedNextStep" as-child class="w-full gap-1.5">
+                                <Link :href="visibleRecommendedNextStep.href">
                                     <AppIcon name="arrow-right" class="size-3.5" />
-                                    Open {{ recommendedNextStep.label }}
+                                    Open {{ visibleRecommendedNextStep.label }}
                                 </Link>
                             </Button>
                             <Button variant="outline" class="w-full gap-1.5" :disabled="loading || refreshing" @click="refreshSetup">
@@ -217,8 +230,8 @@ onMounted(async () => {
 
             <MasterDataSetupGuide
                 :current-step="currentStep"
-                :steps="steps"
-                :recommended-next-step="recommendedNextStep"
+                :steps="visibleSteps"
+                :recommended-next-step="visibleRecommendedNextStep"
                 :loading="loading || refreshing"
             />
 
@@ -282,7 +295,7 @@ onMounted(async () => {
                 <CardContent>
                     <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                         <Link
-                            v-for="(step, index) in steps"
+                            v-for="(step, index) in visibleSteps"
                             :key="step.key"
                             :href="step.href"
                             class="group flex min-w-0 items-center gap-3 rounded-lg border bg-background/70 px-3 py-2.5 transition-colors hover:bg-muted/30"

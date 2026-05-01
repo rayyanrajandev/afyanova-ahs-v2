@@ -104,7 +104,7 @@ function openPosPharmacySession(User $user, array $scope, string $registerId): a
         ->json('data');
 }
 
-function createApprovedMedicineCatalogItem(array $overrides = []): ClinicalCatalogItemModel
+function createPosApprovedMedicineCatalogItem(array $overrides = []): ClinicalCatalogItemModel
 {
     return ClinicalCatalogItemModel::query()->create(array_merge([
         'tenant_id' => null,
@@ -173,7 +173,7 @@ it('lists pharmacy otc approved medicines with stock context and otc eligibility
     ]);
     $scope = seedPosPharmacyScope($user->id);
 
-    createApprovedMedicineCatalogItem([
+    createPosApprovedMedicineCatalogItem([
         'metadata' => [
             'dosageForm' => 'tablet',
             'strength' => '500 mg',
@@ -185,7 +185,7 @@ it('lists pharmacy otc approved medicines with stock context and otc eligibility
         'reorder_level' => 80,
     ]);
 
-    createApprovedMedicineCatalogItem([
+    createPosApprovedMedicineCatalogItem([
         'code' => 'ATC:J01DD04',
         'name' => 'Ceftriaxone 1g',
         'unit' => 'vial',
@@ -204,7 +204,7 @@ it('lists pharmacy otc approved medicines with stock context and otc eligibility
         'current_stock' => 12,
         'reorder_level' => 4,
     ]);
-    createApprovedMedicineCatalogItem([
+    createPosApprovedMedicineCatalogItem([
         'code' => 'ATC:A11CC01',
         'name' => 'Vitamin D3',
         'category' => 'supplements',
@@ -220,7 +220,7 @@ it('lists pharmacy otc approved medicines with stock context and otc eligibility
         'current_stock' => 0,
         'reorder_level' => 10,
     ]);
-    createApprovedMedicineCatalogItem([
+    createPosApprovedMedicineCatalogItem([
         'code' => 'ATC:B03BB01',
         'name' => 'Folic Acid',
         'category' => 'supplements',
@@ -256,7 +256,7 @@ it('hides pharmacy otc medicines when only expired or quarantined batches remain
     ]);
     $scope = seedPosPharmacyScope($user->id);
 
-    $catalogItem = createApprovedMedicineCatalogItem([
+    $catalogItem = createPosApprovedMedicineCatalogItem([
         'tenant_id' => $scope['tenantId'],
         'facility_id' => $scope['facilityId'],
         'code' => 'ATC:J01CA04',
@@ -315,7 +315,7 @@ it('creates a pharmacy otc sale and issues inventory stock in the same checkout 
     $register = createPosPharmacyRegister($user, $scope);
     openPosPharmacySession($user, $scope, (string) $register['id']);
 
-    $catalogItem = createApprovedMedicineCatalogItem([
+    $catalogItem = createPosApprovedMedicineCatalogItem([
         'metadata' => [
             'dosageForm' => 'tablet',
             'strength' => '500 mg',
@@ -383,7 +383,7 @@ it('rejects restricted approved medicines from pharmacy otc checkout', function 
     $register = createPosPharmacyRegister($user, $scope);
     openPosPharmacySession($user, $scope, (string) $register['id']);
 
-    $catalogItem = createApprovedMedicineCatalogItem([
+    $catalogItem = createPosApprovedMedicineCatalogItem([
         'code' => 'ATC:J01DD04',
         'name' => 'Ceftriaxone 1g',
         'unit' => 'vial',
@@ -442,7 +442,7 @@ it('rejects pharmacy otc quantity beyond available stock and leaves inventory un
     $register = createPosPharmacyRegister($user, $scope);
     openPosPharmacySession($user, $scope, (string) $register['id']);
 
-    $catalogItem = createApprovedMedicineCatalogItem([
+    $catalogItem = createPosApprovedMedicineCatalogItem([
         'metadata' => [
             'dosageForm' => 'tablet',
             'strength' => '500 mg',

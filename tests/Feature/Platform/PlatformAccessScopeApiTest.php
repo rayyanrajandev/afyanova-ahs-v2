@@ -82,6 +82,49 @@ it('resolves explicit tenant and facility headers when user has access', functio
         ->assertJsonPath('data.facility.code', 'MSA-02');
 });
 
+it('lets facility super admin switch across all active facilities', function (): void {
+    $user = User::factory()->create();
+
+    seedPlatformScope(
+        userId: $user->id,
+        tenantCode: 'TZH',
+        tenantName: 'Tanzania Health Network',
+        countryCode: 'TZ',
+        facilityCode: 'DAR-MAIN',
+        facilityName: 'Dar Main Hospital',
+    );
+
+    $secondFacility = seedTenantAndFacility(
+        tenantCode: 'TZH',
+        tenantName: 'Tanzania Health Network',
+        countryCode: 'TZ',
+        facilityCode: 'DSK-DISP',
+        facilityName: 'DSK Dispensary',
+    );
+
+    DB::table('facility_user')
+        ->where('user_id', $user->id)
+        ->update(['role' => 'super_admin']);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/platform/access-scope')
+        ->assertOk()
+        ->assertJsonPath('data.userAccess.accessibleFacilityCount', 2)
+        ->assertJsonPath('data.userAccess.facilities.0.code', 'DAR-MAIN')
+        ->assertJsonPath('data.userAccess.facilities.1.code', 'DSK-DISP');
+
+    $this->actingAs($user)
+        ->withHeaders([
+            'X-Tenant-Code' => 'TZH',
+            'X-Facility-Code' => 'DSK-DISP',
+        ])
+        ->getJson('/api/v1/platform/access-scope')
+        ->assertOk()
+        ->assertJsonPath('data.resolvedFrom', 'headers')
+        ->assertJsonPath('data.facility.id', $secondFacility[1])
+        ->assertJsonPath('data.facility.code', 'DSK-DISP');
+});
+
 it('treats blank scope headers as absent and falls back to single-assignment resolution', function (): void {
     $user = User::factory()->create();
 

@@ -54,7 +54,7 @@ class MultiFacilityRolloutController extends Controller
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return $this->tenantScopeRequiredError($exception->getMessage());
         } catch (DomainException $exception) {
-            return $this->validationError('rolloutCode', $exception->getMessage());
+            return $this->validationError($this->rolloutDomainErrorField($exception->getMessage()), $exception->getMessage());
         }
 
         return response()->json([
@@ -86,7 +86,7 @@ class MultiFacilityRolloutController extends Controller
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return $this->tenantScopeRequiredError($exception->getMessage());
         } catch (DomainException $exception) {
-            return $this->validationError('payload', $exception->getMessage());
+            return $this->validationError($this->rolloutDomainErrorField($exception->getMessage()), $exception->getMessage());
         }
 
         abort_if($plan === null, 404, 'Rollout plan not found.');
@@ -268,6 +268,33 @@ class MultiFacilityRolloutController extends Controller
                 $field => [$message],
             ],
         ], 422);
+    }
+
+    private function rolloutDomainErrorField(string $message): string
+    {
+        $normalized = strtolower($message);
+
+        if (str_contains($normalized, 'facility')) {
+            return 'facilityId';
+        }
+
+        if (str_contains($normalized, 'targetgoliveat')) {
+            return 'targetGoLiveAt';
+        }
+
+        if (str_contains($normalized, 'owneruserid')) {
+            return 'ownerUserId';
+        }
+
+        if (str_contains($normalized, 'status')) {
+            return 'status';
+        }
+
+        if (str_contains($normalized, 'metadata')) {
+            return 'metadata';
+        }
+
+        return 'rolloutCode';
     }
 
     private function tenantScopeRequiredError(string $message): JsonResponse

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import AppIcon from '@/components/AppIcon.vue';
 import Breadcrumbs from '@/components/Breadcrumbs.vue';
 import OPDQuickCommandPalette from '@/components/OPDQuickCommandPalette.vue';
 import { Button } from '@/components/ui/button';
@@ -34,7 +35,27 @@ const {
 
 const accessibleFacilities = computed(() => {
     const facilities = scope.value?.userAccess?.facilities ?? [];
-    return facilities
+    const scopedFacility = scope.value?.facility;
+    const scopedTenant = scope.value?.tenant;
+    const merged = [...facilities];
+
+    if (scopedFacility?.code && scopedTenant?.code) {
+        const alreadyListed = merged.some((entry) =>
+            String(entry.tenantCode ?? '').trim().toUpperCase() === String(scopedTenant.code ?? '').trim().toUpperCase()
+            && String(entry.code ?? '').trim().toUpperCase() === String(scopedFacility.code ?? '').trim().toUpperCase(),
+        );
+
+        if (!alreadyListed) {
+            merged.unshift({
+                ...scopedFacility,
+                tenantId: scopedTenant.id,
+                tenantCode: scopedTenant.code,
+                tenantName: scopedTenant.name,
+            });
+        }
+    }
+
+    return merged
         .map((entry) => {
             const tenantCode = String(entry.tenantCode ?? '').trim().toUpperCase();
             const facilityCode = String(entry.code ?? '').trim().toUpperCase();
@@ -44,9 +65,16 @@ const accessibleFacilities = computed(() => {
                 tenantCode,
                 facilityCode,
                 facilityName: String(entry.name ?? '').trim() || 'Facility',
+                tenantName: String(entry.tenantName ?? '').trim() || tenantCode,
+                isPrimary: Boolean(entry.isPrimary),
             };
         })
-        .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+        .sort((left, right) => {
+            if (left.isPrimary !== right.isPrimary) return left.isPrimary ? -1 : 1;
+
+            return `${left.tenantCode}${left.facilityCode}`.localeCompare(`${right.tenantCode}${right.facilityCode}`);
+        });
 });
 
 const selectedScopeKey = computed(() => {
@@ -66,6 +94,14 @@ const facilityTriggerLabel = computed(() => {
     const tenant = scope.value.tenant;
     if (tenant?.name && tenant?.code) return `${tenant.name} (${tenant.code})`;
     return 'Scope ready';
+});
+
+const facilityTriggerMeta = computed(() => {
+    const count = accessibleFacilities.value.length;
+    if (count === 0) return 'No facilities';
+    if (count === 1) return '1 facility';
+
+    return `${count} facilities`;
 });
 
 function selectScope(key: string) {
@@ -100,21 +136,39 @@ function selectScope(key: string) {
                     <Button
                         variant="outline"
                         size="sm"
-                        class="h-9 min-w-[200px] gap-2 font-normal text-muted-foreground"
+                        class="h-9 max-w-[260px] gap-2 px-2.5 font-normal text-muted-foreground"
                     >
-                        <span class="hidden truncate max-w-[140px] sm:inline">{{ facilityTriggerLabel }}</span>
+                        <AppIcon name="building-2" class="size-3.5 shrink-0" />
+                        <span class="hidden max-w-[170px] truncate text-left sm:inline">{{ facilityTriggerLabel }}</span>
                         <span class="sm:hidden">Facility</span>
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" class="min-w-[200px]">
-                    <DropdownMenuLabel class="text-sm font-medium">Active facility</DropdownMenuLabel>
+                <DropdownMenuContent align="end" class="w-[320px]">
+                    <DropdownMenuLabel class="space-y-0.5">
+                        <span class="block text-sm font-medium">Active facility</span>
+                        <span class="block text-xs font-normal text-muted-foreground">{{ facilityTriggerMeta }}</span>
+                    </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                         class="cursor-pointer text-sm"
                         :class="{ 'bg-accent': selectedScopeKey === 'auto' }"
                         @select="selectScope('auto')"
                     >
-                        Auto-resolve
+                        <div class="flex min-w-0 items-center gap-2">
+                            <AppIcon name="refresh-cw" class="size-3.5 shrink-0 text-muted-foreground" />
+                            <div class="min-w-0">
+                                <p class="text-sm font-medium">Auto-resolve</p>
+                                <p class="text-xs text-muted-foreground">Use your primary assigned facility.</p>
+                            </div>
+                        </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                        v-if="accessibleFacilities.length === 0"
+                        disabled
+                        class="text-sm text-muted-foreground"
+                    >
+                        No active facility assignments.
                     </DropdownMenuItem>
                     <DropdownMenuItem
                         v-for="facility in accessibleFacilities"
@@ -123,7 +177,15 @@ function selectScope(key: string) {
                         :class="{ 'bg-accent': selectedScopeKey === facility.key }"
                         @select="selectScope(facility.key)"
                     >
-                        {{ facility.tenantCode }} / {{ facility.facilityCode }} - {{ facility.facilityName }}
+                        <div class="flex min-w-0 items-center gap-2">
+                            <AppIcon name="map-pin" class="size-3.5 shrink-0 text-muted-foreground" />
+                            <div class="min-w-0">
+                                <p class="truncate text-sm font-medium">{{ facility.facilityName }}</p>
+                                <p class="truncate text-xs text-muted-foreground">
+                                    {{ facility.tenantCode }} / {{ facility.facilityCode }} · {{ facility.tenantName }}
+                                </p>
+                            </div>
+                        </div>
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>

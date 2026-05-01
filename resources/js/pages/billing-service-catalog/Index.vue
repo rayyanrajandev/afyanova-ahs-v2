@@ -179,7 +179,7 @@ const clinicalCatalogSources = [
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Billing', href: '/billing-service-catalog' },
-    { title: 'Service Prices', href: '/billing-service-catalog' },
+    { title: 'Billable Service Catalog', href: '/billing-service-catalog' },
 ];
 
 const { steps: setupSteps, recommendedNextStep, loadSetupReadiness } = useMasterDataSetupReadiness();
@@ -2343,7 +2343,7 @@ watch(
 );
 </script>
 <template>
-    <Head title="Service Price List" />
+    <Head title="Billable Service Catalog" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
@@ -2351,10 +2351,10 @@ watch(
                 <div class="space-y-1">
                     <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
                         <AppIcon name="receipt" class="size-7 text-primary" />
-                        Service Price List
+                        Billable Service Catalog
                     </h1>
                     <p class="text-sm text-muted-foreground">
-                        Manage service prices, future price changes, and contract impact from one place.
+                        Manage billable services, tariffs, future price changes, and payer-contract impact from one place.
                     </p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">

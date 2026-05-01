@@ -28,17 +28,17 @@ Route::get('dashboard', function () {
 
 Route::get('setup-center', function () {
     return Inertia::render('setup/Index');
-})->middleware(['auth', 'verified'])->name('setup-center.page');
+})->middleware(['auth', 'verified', 'can:setup-center.access'])->name('setup-center.page');
 
 Route::get('patients', function () {
     return Inertia::render('patients/Index');
-})->middleware(['auth', 'verified', 'can:patients.read'])->name('patients.page');
+})->middleware(['auth', 'verified', 'can:patients.read', 'facility.entitlement:patients.search'])->name('patients.page');
 
 Route::get('patients/{id}/chart', function (string $id) {
     return Inertia::render('patients/chart/Show', [
         'patientId' => $id,
     ]);
-})->middleware(['auth', 'verified', 'can:patients.read'])->name('patients.chart.page');
+})->middleware(['auth', 'verified', 'can:patients.read', 'facility.entitlement:patients.search'])->name('patients.chart.page');
 
 Route::get('appointments', function () {
     return Inertia::render('appointments/Index');
@@ -195,6 +195,10 @@ Route::get('platform/admin/facility-rollouts', function () {
 Route::get('platform/admin/facility-config', function () {
     return Inertia::render('platform/admin/facility-config/Index');
 })->middleware(['auth', 'verified', 'can:platform.facilities.read'])->name('platform-admin-facility-config.page');
+
+Route::get('platform/admin/service-plans', function () {
+    return Inertia::render('platform/admin/service-plans/Index');
+})->middleware(['auth', 'verified', 'can:platform.subscription-plans.read'])->name('platform-admin-service-plans.page');
 
 Route::get('platform/admin/branding', function (SystemBrandingManager $brandingManager) {
     return Inertia::render('platform/admin/branding/Index', [

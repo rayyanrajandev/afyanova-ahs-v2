@@ -488,6 +488,8 @@ const isWardBedRegistryPermissionResolved = computed(
     () => wardBedRegistryPermissionState.value !== 'unknown',
 );
 const canViewAdmissionAudit = ref(false);
+const canCreateAdmissions = ref(false);
+const canUpdateAdmissionStatus = ref(false);
 const canReadPatients = ref(false);
 const canReadMedicalRecords = ref(false);
 const canCreateMedicalRecords = ref(false);
@@ -3094,6 +3096,8 @@ async function loadAdmissionPermissions() {
             ? 'allowed'
             : 'denied';
         canViewAdmissionAudit.value = hasSuperAdminAccess || names.has('admissions.view-audit-logs');
+        canCreateAdmissions.value = hasSuperAdminAccess || names.has('admissions.create');
+        canUpdateAdmissionStatus.value = hasSuperAdminAccess || names.has('admissions.update-status');
         canReadPatients.value = hasSuperAdminAccess || names.has('patients.read');
         canReadMedicalRecords.value = hasSuperAdminAccess || names.has('medical.records.read');
         canCreateMedicalRecords.value = canReadMedicalRecords.value && (hasSuperAdminAccess || names.has('medical.records.create'));
@@ -3104,11 +3108,16 @@ async function loadAdmissionPermissions() {
         canReadBillingPayerContracts.value = hasSuperAdminAccess || names.has('billing.payer-contracts.read');
         canReadAppointments.value = hasSuperAdminAccess || names.has('appointments.read');
         canReadClinicianDirectory.value = hasSuperAdminAccess || names.has('staff.clinical-directory.read');
+        if (!canCreateAdmissions.value && admissionWorkspaceView.value === 'new') {
+            setAdmissionWorkspaceView(admissionBrowseView.value);
+        }
     } catch {
         const hasSuperAdminAccess = isFacilitySuperAdmin.value;
         admissionReadPermissionState.value = hasSuperAdminAccess ? 'allowed' : 'denied';
         wardBedRegistryPermissionState.value = hasSuperAdminAccess ? 'allowed' : 'denied';
         canViewAdmissionAudit.value = hasSuperAdminAccess;
+        canCreateAdmissions.value = hasSuperAdminAccess;
+        canUpdateAdmissionStatus.value = hasSuperAdminAccess;
         canReadPatients.value = hasSuperAdminAccess;
         canReadMedicalRecords.value = hasSuperAdminAccess;
         canCreateMedicalRecords.value = hasSuperAdminAccess;
@@ -3119,6 +3128,9 @@ async function loadAdmissionPermissions() {
         canReadBillingPayerContracts.value = hasSuperAdminAccess;
         canReadAppointments.value = hasSuperAdminAccess;
         canReadClinicianDirectory.value = hasSuperAdminAccess;
+        if (!canCreateAdmissions.value && admissionWorkspaceView.value === 'new') {
+            setAdmissionWorkspaceView(admissionBrowseView.value);
+        }
     }
 }
 
@@ -3387,6 +3399,11 @@ async function initialPageLoad() {
 
 async function createAdmission() {
     if (createLoading.value) return;
+    if (!canCreateAdmissions.value) {
+        notifyError('Request admissions.create permission to admit a patient.');
+        return;
+    }
+
     createErrors.value = {};
     createMessage.value = null;
 
@@ -3438,6 +3455,11 @@ async function createAdmission() {
 }
 
 function openAdmissionStatusDialog(admission: Admission, status: 'discharged' | 'transferred' | 'cancelled') {
+    if (!canUpdateAdmissionStatus.value) {
+        notifyError('Request admissions.update-status permission to change admission status.');
+        return;
+    }
+
     statusDialogAdmission.value = admission;
     statusDialogAction.value = status;
     statusDialogReason.value = admission.statusReason ?? '';
@@ -3531,6 +3553,11 @@ function admissionNotesSectionTitle(status: string | null | undefined) {
 
 async function submitAdmissionStatusDialog() {
     if (!statusDialogAdmission.value || !statusDialogAction.value || actionLoadingId.value) return;
+    if (!canUpdateAdmissionStatus.value) {
+        statusDialogError.value = 'Request admissions.update-status permission to change admission status.';
+        return;
+    }
+
     const reason = statusDialogReason.value.trim();
     if (!reason) {
         statusDialogError.value = `${statusDialogReasonLabel.value} is required.`;
@@ -4592,7 +4619,7 @@ const createAdmissionLocationBlockedReason = computed(() => {
 });
 
 const createAdmissionActionDisabled = computed(
-    () => createLoading.value || !createForm.patientId.trim() || Boolean(createAdmissionLocationBlockedReason.value),
+    () => !canCreateAdmissions.value || createLoading.value || !createForm.patientId.trim() || Boolean(createAdmissionLocationBlockedReason.value),
 );
 
 function createAdmissionLocationErrors(): Record<string, string[]> {
@@ -4760,6 +4787,11 @@ const occupancyBoardSummary = computed(() => ({
 }));
 
 function setAdmissionWorkspaceView(view: AdmissionWorkspaceView) {
+    if (view === 'new' && !canCreateAdmissions.value) {
+        notifyError('Request admissions.create permission to admit a patient.');
+        return;
+    }
+
     admissionWorkspaceView.value = view;
     if (view !== 'new') {
         admissionBrowseView.value = view;
@@ -5164,6 +5196,7 @@ onMounted(initialPageLoad);
                         {{ admissionWorkspaceView === 'board' ? 'Admission Queue' : 'Bed Board' }}
                     </Button>
                     <Button
+                        v-if="canCreateAdmissions"
                         :variant="admissionWorkspaceView === 'new' ? 'outline' : 'default'"
                         size="sm"
                         class="h-8 gap-1.5"
@@ -5700,8 +5733,8 @@ onMounted(initialPageLoad);
                                             <div class="flex flex-wrap items-center gap-2">
                                                 <Badge :variant="statusVariant(admission.status)">{{ admissionStatusLabel(admission.status) }}</Badge>
                                                 <Button size="sm" variant="outline" class="gap-1.5" @click="openAdmissionDetailsSheet(admission)"><AppIcon name="eye" class="size-3.5" />Open admission</Button>
-                                                <Button v-if="hasActivePlacementStatus(admission.status)" size="sm" variant="outline" class="gap-1.5" :disabled="actionLoadingId === admission.id" @click="openAdmissionStatusDialog(admission, 'transferred')"><AppIcon name="layout-list" class="size-3.5" />{{ actionLoadingId === admission.id ? 'Updating...' : 'Transfer ward/bed' }}</Button>
-                                                <Button v-if="hasActivePlacementStatus(admission.status)" size="sm" class="gap-1.5" :disabled="actionLoadingId === admission.id" @click="openAdmissionStatusDialog(admission, 'discharged')"><AppIcon name="user-x" class="size-3.5" />{{ actionLoadingId === admission.id ? 'Updating...' : 'Discharge patient' }}</Button>
+                                                <Button v-if="hasActivePlacementStatus(admission.status) && canUpdateAdmissionStatus" size="sm" variant="outline" class="gap-1.5" :disabled="actionLoadingId === admission.id" @click="openAdmissionStatusDialog(admission, 'transferred')"><AppIcon name="layout-list" class="size-3.5" />{{ actionLoadingId === admission.id ? 'Updating...' : 'Transfer ward/bed' }}</Button>
+                                                <Button v-if="hasActivePlacementStatus(admission.status) && canUpdateAdmissionStatus" size="sm" class="gap-1.5" :disabled="actionLoadingId === admission.id" @click="openAdmissionStatusDialog(admission, 'discharged')"><AppIcon name="user-x" class="size-3.5" />{{ actionLoadingId === admission.id ? 'Updating...' : 'Discharge patient' }}</Button>
                                             </div>
                                         </div>
                                     </div>
@@ -5761,7 +5794,7 @@ onMounted(initialPageLoad);
                     </CardContent>
                 </Card>
 
-                <Card v-if="admissionWorkspaceView === 'new'" class="rounded-lg border-sidebar-border/70">
+                <Card v-if="admissionWorkspaceView === 'new' && canCreateAdmissions" class="rounded-lg border-sidebar-border/70">
                     <CardHeader class="gap-3 pb-3">
                         <CardTitle class="flex items-center gap-2">
                             <AppIcon name="plus" class="size-5 text-muted-foreground" />
@@ -6656,7 +6689,7 @@ onMounted(initialPageLoad);
                                                     </div>
                                                     <div class="flex flex-wrap gap-2">
                                                         <Button
-                                                            v-if="detailsShiftHandoffSummary.primaryActionType === 'status' && detailsShiftHandoffSummary.primaryActionStatus"
+                                                            v-if="detailsShiftHandoffSummary.primaryActionType === 'status' && detailsShiftHandoffSummary.primaryActionStatus && canUpdateAdmissionStatus"
                                                             size="sm"
                                                             class="gap-1.5"
                                                             :disabled="actionLoadingId === detailsSheetAdmission.id"
@@ -7037,7 +7070,7 @@ onMounted(initialPageLoad);
                                                         </Link>
                                                     </Button>
                                                 </template>
-                                                <template v-else-if="hasActivePlacementStatus(detailsSheetAdmission.status)">
+                                                <template v-else-if="hasActivePlacementStatus(detailsSheetAdmission.status) && canUpdateAdmissionStatus">
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
@@ -7391,7 +7424,7 @@ onMounted(initialPageLoad);
                                         </Card>
 
                                         <Card
-                                            v-if="hasActivePlacementStatus(detailsSheetAdmission.status)"
+                                            v-if="hasActivePlacementStatus(detailsSheetAdmission.status) && canUpdateAdmissionStatus"
                                             class="rounded-lg !gap-4 !py-4"
                                         >
                                             <CardHeader class="px-4 pb-1 pt-0">

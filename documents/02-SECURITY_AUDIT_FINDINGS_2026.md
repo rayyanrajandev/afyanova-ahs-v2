@@ -360,7 +360,7 @@ AUDIT_EXPORT_JOB_RETENTION_SCHEDULE_CRON="41 2 * * *"
 **Issue:** Database password visible in `.env` (critical)
 
 ```diff
-- DB_PASSWORD=Bulle@1591@
+- DB_PASSWORD=<redacted>
 + DB_PASSWORD=${DB_PASSWORD}
 ```
 

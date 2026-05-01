@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\User;
+use App\Modules\Platform\Infrastructure\Models\FacilitySubscriptionModel;
+use App\Modules\Platform\Infrastructure\Models\PlatformSubscriptionPlanModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -21,6 +23,10 @@ it('shares auth permissions and platform bootstrap scope in inertia payload', fu
         countryCode: 'TZ',
         facilityCode: 'DAR-MAIN',
         facilityName: 'Dar Main Hospital',
+    );
+    seedInertiaActivePatientRegistrationSubscription(
+        tenantCode: 'TZH',
+        facilityCode: 'DAR-MAIN',
     );
 
     $this->actingAs($user)
@@ -66,6 +72,37 @@ function seedInertiaScopeAssignment(
     ]);
 
     return [$tenantId, $facilityId];
+}
+
+function seedInertiaActivePatientRegistrationSubscription(string $tenantCode, string $facilityCode): void
+{
+    $tenant = DB::table('tenants')
+        ->where('code', $tenantCode)
+        ->first();
+    $facility = DB::table('facilities')
+        ->where('code', $facilityCode)
+        ->first();
+
+    if ($tenant === null || $facility === null) {
+        return;
+    }
+
+    $plan = PlatformSubscriptionPlanModel::query()
+        ->where('code', 'patient_registration')
+        ->firstOrFail();
+
+    FacilitySubscriptionModel::query()->create([
+        'tenant_id' => (string) $tenant->id,
+        'facility_id' => (string) $facility->id,
+        'plan_id' => $plan->id,
+        'status' => 'active',
+        'billing_cycle' => 'monthly',
+        'price_amount' => $plan->price_amount,
+        'currency_code' => $plan->currency_code,
+        'current_period_starts_at' => now()->startOfDay(),
+        'current_period_ends_at' => now()->addMonth(),
+        'metadata' => [],
+    ]);
 }
 
 /**

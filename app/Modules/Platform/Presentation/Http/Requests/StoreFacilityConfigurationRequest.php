@@ -3,6 +3,7 @@
 namespace App\Modules\Platform\Presentation\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 class StoreFacilityConfigurationRequest extends FormRequest
 {
@@ -28,6 +29,28 @@ class StoreFacilityConfigurationRequest extends FormRequest
             'facilityTier' => ['nullable', 'string', 'max:50'],
             'timezone' => ['nullable', 'string', 'max:100'],
             'facilityAdminUserId' => ['nullable', 'integer', 'min:1', 'exists:users,id'],
+            'facilityAdmin' => ['nullable', 'array'],
+            'facilityAdmin.name' => ['required_with:facilityAdmin', 'string', 'max:150'],
+            'facilityAdmin.email' => ['required_with:facilityAdmin', 'email', 'max:255'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            $hasExistingAdmin = filled($this->input('facilityAdminUserId'));
+            $newAdmin = $this->input('facilityAdmin');
+            $hasNewAdmin = is_array($newAdmin)
+                && trim((string) ($newAdmin['name'] ?? '')) !== ''
+                && trim((string) ($newAdmin['email'] ?? '')) !== '';
+
+            if (! $hasExistingAdmin && ! $hasNewAdmin) {
+                $validator->errors()->add('facilityAdmin', 'Select or create a facility admin before creating the facility.');
+            }
+
+            if ($hasExistingAdmin && $hasNewAdmin) {
+                $validator->errors()->add('facilityAdmin', 'Choose one facility admin setup path.');
+            }
+        });
     }
 }

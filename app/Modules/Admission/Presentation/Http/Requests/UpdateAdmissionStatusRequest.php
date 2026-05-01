@@ -10,7 +10,7 @@ class UpdateAdmissionStatusRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user() !== null;
+        return $this->user()?->can('admissions.update-status') ?? false;
     }
 
     /**
@@ -28,4 +28,3 @@ class UpdateAdmissionStatusRequest extends FormRequest
         ];
     }
 }
-

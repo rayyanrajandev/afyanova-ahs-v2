@@ -1421,7 +1421,7 @@ onMounted(() => {
                         Clinical Care Catalogs
                     </h1>
                     <p class="text-sm text-muted-foreground">
-                        Manage the clinical definitions that care teams select, then keep them linked to the shared service price list without duplicating records.
+                        Manage the clinical definitions that care teams select, then keep them linked to the shared billable service catalog without duplicating records.
                     </p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
@@ -1453,7 +1453,7 @@ onMounted(() => {
                     <Button size="sm" variant="outline" as-child class="gap-1.5">
                         <Link href="/billing-service-catalog">
                             <AppIcon name="receipt" class="size-3.5" />
-                            Service Price List
+                            Billable Service Catalog
                         </Link>
                     </Button>
                 </div>
@@ -1590,7 +1590,7 @@ onMounted(() => {
                                 </p>
                             </div>
                             <p class="text-xs text-muted-foreground">
-                                Use the same shared code from Service Price List when you want automatic charge capture later.
+                                Use the same shared code from the Billable Service Catalog when you want automatic charge capture later.
                             </p>
                         </div>
                     </div>
@@ -1610,7 +1610,7 @@ onMounted(() => {
                         />
                         <div class="grid gap-1.5"><Label>{{ catalog.categoryLabel }}</Label><Input v-model="createForm.category" :placeholder="catalog.categoryPlaceholder" /></div>
                         <div class="grid gap-1.5"><Label>{{ catalog.unitLabel }}</Label><Input v-model="createForm.unit" :placeholder="catalog.unitPlaceholder" /></div>
-                        <div class="grid gap-1.5 md:col-span-3"><Label>Linked Billing Service Code</Label><Input v-model="createForm.billingServiceCode" placeholder="Use the shared code from Service Price List" /><p class="text-xs text-muted-foreground">This links the clinical item to an existing billing service family. It does not create a second billing record.</p><p v-if="firstError(createErrors, 'billingServiceCode')" class="text-xs text-destructive">{{ firstError(createErrors, 'billingServiceCode') }}</p></div>
+                        <div class="grid gap-1.5 md:col-span-3"><Label>Linked Billing Service Code</Label><Input v-model="createForm.billingServiceCode" placeholder="Use the shared code from the Billable Service Catalog" /><p class="text-xs text-muted-foreground">This links the clinical item to an existing billing service family. It does not create a second billing record.</p><p v-if="firstError(createErrors, 'billingServiceCode')" class="text-xs text-destructive">{{ firstError(createErrors, 'billingServiceCode') }}</p></div>
                         <div class="grid gap-1.5 md:col-span-3"><Label>Description</Label><Textarea v-model="createForm.description" class="min-h-20" placeholder="Operational guidance for care teams" /></div>
                     </div>
 
@@ -1756,7 +1756,7 @@ onMounted(() => {
                     <div v-else-if="loading || listLoading" class="space-y-2 p-4"><Skeleton class="h-12 w-full" /><Skeleton class="h-12 w-full" /><Skeleton class="h-12 w-full" /></div>
                     <div v-else-if="items.length === 0" class="m-4 rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
                         <template v-if="clinicalActiveFilterChips.length === 0 && counts.total === 0">
-                            No clinical definitions exist yet. Start with the first lab test, radiology procedure, theatre procedure, or formulary medicine before building the Service Price List.
+                            No clinical definitions exist yet. Start with the first lab test, radiology procedure, theatre procedure, or formulary medicine before building the Billable Service Catalog.
                         </template>
                         <template v-else>
                             No items matched the current filters.
@@ -1872,7 +1872,7 @@ onMounted(() => {
                                                 <p class="text-sm text-muted-foreground">{{ billingLinkDetail(selected) }}</p>
                                                 <div class="flex flex-wrap gap-2 pt-1">
                                                     <Button size="sm" variant="outline" as-child>
-                                                        <Link href="/billing-service-catalog">Open Service Price List</Link>
+                                                        <Link href="/billing-service-catalog">Open Billable Service Catalog</Link>
                                                     </Button>
                                                 </div>
                                             </CardContent>
@@ -2052,7 +2052,7 @@ onMounted(() => {
                                                     />
                                                     <div class="grid gap-1.5"><Label>{{ catalog.categoryLabel }}</Label><Input v-model="editForm.category" :disabled="!canManage" /></div>
                                                     <div class="grid gap-1.5"><Label>{{ catalog.unitLabel }}</Label><Input v-model="editForm.unit" :disabled="!canManage" /></div>
-                                                    <div class="grid gap-1.5 md:col-span-3"><Label>Linked Billing Service Code</Label><Input v-model="editForm.billingServiceCode" :disabled="!canManage" placeholder="Use the shared code from Service Price List" /><p class="text-xs text-muted-foreground">Keep this aligned with the service price list. If the billing price exists, this catalog item will resolve automatically. If not, the linkage will stay in pending price state.</p><p v-if="firstError(editErrors, 'billingServiceCode')" class="text-xs text-destructive">{{ firstError(editErrors, 'billingServiceCode') }}</p></div>
+                                                    <div class="grid gap-1.5 md:col-span-3"><Label>Linked Billing Service Code</Label><Input v-model="editForm.billingServiceCode" :disabled="!canManage" placeholder="Use the shared code from the Billable Service Catalog" /><p class="text-xs text-muted-foreground">Keep this aligned with the billable service catalog. If the billing price exists, this catalog item will resolve automatically. If not, the linkage will stay in pending price state.</p><p v-if="firstError(editErrors, 'billingServiceCode')" class="text-xs text-destructive">{{ firstError(editErrors, 'billingServiceCode') }}</p></div>
                                                     <div class="grid gap-1.5 md:col-span-3"><Label>Description</Label><Textarea v-model="editForm.description" class="min-h-20" :disabled="!canManage" /></div>
                                                 </div>
 

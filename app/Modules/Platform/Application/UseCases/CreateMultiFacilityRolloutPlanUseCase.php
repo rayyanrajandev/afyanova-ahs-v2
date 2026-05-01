@@ -5,11 +5,26 @@ namespace App\Modules\Platform\Application\UseCases;
 use App\Modules\Platform\Domain\Repositories\MultiFacilityRolloutAuditLogRepositoryInterface;
 use App\Modules\Platform\Domain\Repositories\MultiFacilityRolloutRepositoryInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
+use App\Modules\Platform\Domain\ValueObjects\MultiFacilityRolloutCheckpointStatus;
 use App\Modules\Platform\Domain\ValueObjects\MultiFacilityRolloutPlanStatus;
 use DomainException;
 
 class CreateMultiFacilityRolloutPlanUseCase
 {
+    /**
+     * @var array<int, array{code: string, name: string}>
+     */
+    private const DEFAULT_CHECKPOINTS = [
+        ['code' => 'FACILITY_PROFILE_CONFIRMED', 'name' => 'Facility profile confirmed'],
+        ['code' => 'SUBSCRIPTION_ACCESS_CONFIRMED', 'name' => 'Subscription access confirmed'],
+        ['code' => 'ADMIN_OWNER_ASSIGNED', 'name' => 'Facility admin owner assigned'],
+        ['code' => 'USER_ACCESS_REVIEWED', 'name' => 'Users and permissions reviewed'],
+        ['code' => 'PATIENT_REGISTRATION_READY', 'name' => 'Patient registration workflow ready'],
+        ['code' => 'TRAINING_COMPLETED', 'name' => 'Operational training completed'],
+        ['code' => 'GO_LIVE_SUPPORT_READY', 'name' => 'Go-live support coverage ready'],
+        ['code' => 'ACCEPTANCE_EVIDENCE_READY', 'name' => 'Acceptance evidence ready'],
+    ];
+
     public function __construct(
         private readonly MultiFacilityRolloutRepositoryInterface $rolloutRepository,
         private readonly MultiFacilityRolloutAuditLogRepositoryInterface $auditLogRepository,
@@ -50,6 +65,12 @@ class CreateMultiFacilityRolloutPlanUseCase
             throw new DomainException('targetGoLiveAt is required when status is ready or active.');
         }
 
+        $ownerUserId = isset($payload['owner_user_id']) ? (int) $payload['owner_user_id'] : null;
+        if (in_array($status, [MultiFacilityRolloutPlanStatus::READY->value, MultiFacilityRolloutPlanStatus::ACTIVE->value], true)
+            && $ownerUserId === null) {
+            throw new DomainException('ownerUserId is required when status is ready or active.');
+        }
+
         $tenantId = (string) ($facility['tenant_id'] ?? '');
         if ($tenantId === '') {
             throw new DomainException('Resolved facility does not include tenant scope.');
@@ -66,11 +87,21 @@ class CreateMultiFacilityRolloutPlanUseCase
             'status' => $status,
             'target_go_live_at' => $targetGoLiveAt,
             'actual_go_live_at' => $this->nullableTrimmedValue($payload['actual_go_live_at'] ?? null),
-            'owner_user_id' => isset($payload['owner_user_id']) ? (int) $payload['owner_user_id'] : null,
+            'owner_user_id' => $ownerUserId,
             'rollback_required' => false,
             'rollback_reason' => null,
             'metadata' => is_array($payload['metadata'] ?? null) ? $payload['metadata'] : [],
         ]);
+
+        foreach (self::DEFAULT_CHECKPOINTS as $checkpoint) {
+            $this->rolloutRepository->upsertCheckpoint((string) $created['id'], $checkpoint['code'], [
+                'checkpoint_name' => $checkpoint['name'],
+                'status' => MultiFacilityRolloutCheckpointStatus::NOT_STARTED->value,
+                'decision_notes' => null,
+                'completed_by_user_id' => null,
+                'completed_at' => null,
+            ]);
+        }
 
         $this->auditLogRepository->write(
             rolloutPlanId: (string) $created['id'],

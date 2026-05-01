@@ -2,7 +2,9 @@
 
 namespace App\Modules\Platform\Infrastructure\Models;
 
+use App\Models\User;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Model;
 
 class FacilityModel extends Model
@@ -42,5 +44,29 @@ class FacilityModel extends Model
             'clinical_owner_user_id' => 'integer',
             'administrative_owner_user_id' => 'integer',
         ];
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function operationsOwner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'operations_owner_user_id');
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function clinicalOwner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'clinical_owner_user_id');
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function administrativeOwner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'administrative_owner_user_id');
     }
 }

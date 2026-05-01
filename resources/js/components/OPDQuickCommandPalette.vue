@@ -40,7 +40,7 @@ type WorkflowActionCommand = {
 };
 
 const open = ref(false);
-const { permissionNames } = usePlatformAccess();
+const { permissionNames, isFacilitySuperAdmin } = usePlatformAccess();
 
 const routes: CommandRoute[] = [
     {
@@ -152,7 +152,7 @@ const routes: CommandRoute[] = [
         shortcut: 'G K',
     },
     {
-        label: 'Billing Service Price List',
+        label: 'Billable Service Catalog',
         href: '/billing-service-catalog',
         icon: 'receipt',
         shortcut: 'G 7',
@@ -228,6 +228,12 @@ const routes: CommandRoute[] = [
         href: '/platform/admin/facility-config',
         icon: 'building-2',
         shortcut: 'G 6',
+    },
+    {
+        label: 'Facility Subscription Plans',
+        href: '/platform/admin/service-plans',
+        icon: 'receipt',
+        shortcut: 'G $',
     },
     {
         label: 'Clinical Care Catalogs',
@@ -341,7 +347,7 @@ const createWorkflowRoutes: CommandRoute[] = [
         shortcut: 'C K',
     },
     {
-        label: 'Manage Service Prices',
+        label: 'Manage Billable Services',
         href: '/billing-service-catalog',
         icon: 'receipt',
         shortcut: 'C 7',
@@ -794,7 +800,7 @@ const workflowActions = computed<WorkflowActionCommand[]>(() => {
             icon: 'stethoscope',
         },
         {
-            label: 'Open Service Price List Workspace',
+            label: 'Open Billable Service Catalog',
             href: '/billing-service-catalog',
             icon: 'receipt',
         },
@@ -837,19 +843,19 @@ const workflowActions = computed<WorkflowActionCommand[]>(() => {
 });
 
 const visibleRoutes = computed(() =>
-    filterItemsByRouteAccess(routes, permissionNames.value),
+    filterItemsByRouteAccess(routes, permissionNames.value, isFacilitySuperAdmin.value),
 );
 
 const visibleCreateWorkflowRoutes = computed(() =>
-    filterItemsByRouteAccess(createWorkflowRoutes, permissionNames.value),
+    filterItemsByRouteAccess(createWorkflowRoutes, permissionNames.value, isFacilitySuperAdmin.value),
 );
 
 const visibleQueuePresets = computed(() =>
-    filterItemsByRouteAccess(queuePresets.value, permissionNames.value),
+    filterItemsByRouteAccess(queuePresets.value, permissionNames.value, isFacilitySuperAdmin.value),
 );
 
 const visibleWorkflowActions = computed(() =>
-    filterItemsByRouteAccess(workflowActions.value, permissionNames.value),
+    filterItemsByRouteAccess(workflowActions.value, permissionNames.value, isFacilitySuperAdmin.value),
 );
 
 const isMac = computed(() => {

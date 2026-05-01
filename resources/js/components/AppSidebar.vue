@@ -13,7 +13,7 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
-import { filterItemsByRouteAccess } from '@/lib/routeAccess';
+import { filterItemsByRouteAccess, hasRouteAccess } from '@/lib/routeAccess';
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import AppLogo from './AppLogo.vue';
@@ -124,7 +124,7 @@ const navCatalog: NavCatalogItem[] = [
         permissionPrefixes: ['pos.'],
     },
     {
-        title: 'Service Price List',
+        title: 'Billable Service Catalog',
         href: '/billing-service-catalog',
         iconName: 'receipt',
         section: 'revenue',
@@ -267,10 +267,18 @@ const navCatalog: NavCatalogItem[] = [
         iconName: 'building-2',
         section: 'configuration',
         permissionPrefixes: [
+            'platform.facilities.',
             'platform.multi-facility.',
             'platform.resources.',
             'platform.users.manage-facilities',
         ],
+    },
+    {
+        title: 'Facility Subscription Plans',
+        href: '/platform/admin/service-plans',
+        iconName: 'receipt',
+        section: 'configuration',
+        permissionPrefixes: ['platform.subscription-plans.'],
     },
     {
         title: 'Facility Rollouts',
@@ -330,6 +338,10 @@ const shouldRestrictByPermissions = computed(
 );
 
 const visibleNavItems = computed<NavCatalogItem[]>(() => {
+    if (isFacilitySuperAdmin.value) {
+        return navCatalog;
+    }
+
     if (!shouldRestrictByPermissions.value) {
         return navCatalog;
     }
@@ -338,14 +350,7 @@ const visibleNavItems = computed<NavCatalogItem[]>(() => {
 });
 
 const showSetupCenter = computed(() => {
-    if (isFacilitySuperAdmin.value) return true;
-    if (permissionNames.value === null) return true;
-
-    return permissionNames.value.some((permission) =>
-        permission.startsWith('inventory.procurement.')
-        || permission.startsWith('billing.service-catalog.')
-        || permission.startsWith('platform.clinical-catalog.'),
-    );
+    return hasRouteAccess('/setup-center', permissionNames.value, isFacilitySuperAdmin.value);
 });
 
 const homeItems = computed<NavItem[]>(() => [

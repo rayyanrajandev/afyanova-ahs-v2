@@ -4,8 +4,10 @@ namespace App\Modules\Platform\Presentation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Platform\Application\Exceptions\DuplicateFacilityCodeException;
+use App\Modules\Platform\Application\Exceptions\DuplicatePlatformUserEmailException;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
-use App\Modules\Platform\Domain\Repositories\TenantRepositoryInterface;
+use App\Modules\Platform\Application\Services\FacilitySubscriptionManagementService;
+use App\Modules\Platform\Application\Support\FacilityAdminEligibilityPolicy;
 use App\Modules\Platform\Application\UseCases\CreateFacilityConfigurationUseCase;
 use App\Modules\Platform\Application\UseCases\GetFacilityConfigurationUseCase;
 use App\Modules\Platform\Application\UseCases\ListFacilityConfigurationAuditLogsUseCase;
@@ -17,8 +19,10 @@ use App\Modules\Platform\Presentation\Http\Requests\StoreFacilityConfigurationRe
 use App\Modules\Platform\Presentation\Http\Requests\SyncFacilityConfigurationOwnersRequest;
 use App\Modules\Platform\Presentation\Http\Requests\UpdateFacilityConfigurationRequest;
 use App\Modules\Platform\Presentation\Http\Requests\UpdateFacilityConfigurationStatusRequest;
+use App\Modules\Platform\Presentation\Http\Requests\UpdateFacilitySubscriptionRequest;
 use App\Modules\Platform\Presentation\Http\Transformers\FacilityConfigurationAuditLogResponseTransformer;
 use App\Modules\Platform\Presentation\Http\Transformers\FacilityConfigurationResponseTransformer;
+use App\Modules\Platform\Domain\Repositories\TenantRepositoryInterface;
 use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -40,24 +44,71 @@ class FacilityConfigurationController extends Controller
         ]);
     }
 
+    public function adminCandidates(
+        Request $request,
+        FacilityAdminEligibilityPolicy $eligibilityPolicy,
+        TenantRepositoryInterface $tenantRepository
+    ): JsonResponse
+    {
+        $query = trim((string) $request->query('q', ''));
+        $limit = max(1, min((int) $request->query('limit', 8), 20));
+        $tenantCode = trim((string) $request->query('tenantCode', ''));
+        $tenant = $tenantCode !== '' ? $tenantRepository->findByCode(strtoupper($tenantCode)) : null;
+        $tenantId = is_array($tenant) && isset($tenant['id']) ? (string) $tenant['id'] : null;
+        $users = $eligibilityPolicy->searchCandidates(
+            query: $query,
+            limit: $limit,
+            tenantId: $tenantId,
+            unassignedOnly: $tenantCode !== '' && $tenantId === null,
+        );
+
+        return response()->json([
+            'data' => array_map(static fn ($user): array => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'status' => $user->status,
+                'roles' => $user->roles->map(static fn ($role): array => [
+                    'id' => $role->id,
+                    'code' => $role->code,
+                    'name' => $role->name,
+                ])->values()->all(),
+            ], $users),
+            'meta' => [
+                'eligibleRoleCodes' => $eligibilityPolicy->eligibleRoleCodes(),
+                'minSearchCharacters' => 2,
+                'tenantCode' => $tenantCode !== '' ? strtoupper($tenantCode) : null,
+            ],
+        ]);
+    }
+
     public function store(
         StoreFacilityConfigurationRequest $request,
         CreateFacilityConfigurationUseCase $useCase,
         TenantRepositoryInterface $tenantRepository
     ): JsonResponse {
         try {
-            $facility = $useCase->execute(
+            $result = $useCase->execute(
                 payload: $this->toStorePayload($request->validated()),
                 actorId: $request->user()?->id,
             );
+            $facility = $result['facility'];
         } catch (DuplicateFacilityCodeException $exception) {
             return $this->validationError('facilityCode', $exception->getMessage());
+        } catch (DuplicatePlatformUserEmailException $exception) {
+            return $this->validationError('facilityAdmin.email', $exception->getMessage());
         } catch (DomainException $exception) {
-            return $this->validationError('facility', $exception->getMessage());
+            return $this->validationError('facilityAdmin', $exception->getMessage());
         }
 
         return response()->json([
             'data' => $this->transformFacility($facility, $tenantRepository),
+            'meta' => [
+                'facilityAdminUserId' => $result['facility_admin_user_id'] ?? null,
+                'createdFacilityAdminUserId' => $result['created_facility_admin_user_id'] ?? null,
+                'facilityAdminInvite' => $this->transformInviteResult($result['facility_admin_invite'] ?? null),
+                'facilityAdminInviteError' => $result['facility_admin_invite_error'] ?? null,
+            ],
         ], 201);
     }
 
@@ -149,6 +200,49 @@ class FacilityConfigurationController extends Controller
         ]);
     }
 
+    public function subscriptionPlans(FacilitySubscriptionManagementService $service): JsonResponse
+    {
+        return response()->json([
+            'data' => $service->activePlans(),
+        ]);
+    }
+
+    public function subscription(
+        string $id,
+        FacilitySubscriptionManagementService $service
+    ): JsonResponse {
+        $subscription = $service->subscriptionForFacility($id);
+        abort_if($subscription === null, 404, 'Facility not found.');
+
+        return response()->json([
+            'data' => $subscription,
+        ]);
+    }
+
+    public function updateSubscription(
+        string $id,
+        UpdateFacilitySubscriptionRequest $request,
+        FacilitySubscriptionManagementService $service
+    ): JsonResponse {
+        try {
+            $subscription = $service->updateSubscriptionForFacility(
+                facilityId: $id,
+                payload: $this->toSubscriptionPayload($request->validated()),
+                actorId: $request->user()?->id,
+            );
+        } catch (TenantScopeRequiredForIsolationException $exception) {
+            return $this->tenantScopeRequiredError($exception->getMessage());
+        } catch (DomainException $exception) {
+            return $this->validationError('planId', $exception->getMessage());
+        }
+
+        abort_if($subscription === null, 404, 'Facility not found.');
+
+        return response()->json([
+            'data' => $subscription,
+        ]);
+    }
+
     public function auditLogs(
         string $id,
         Request $request,
@@ -237,6 +331,7 @@ class FacilityConfigurationController extends Controller
             'facility_tier' => $validated['facilityTier'] ?? null,
             'timezone' => $validated['timezone'] ?? null,
             'facility_admin_user_id' => $validated['facilityAdminUserId'] ?? null,
+            'facility_admin' => $validated['facilityAdmin'] ?? null,
         ];
     }
 
@@ -251,6 +346,42 @@ class FacilityConfigurationController extends Controller
         $facility['tenant_allowed_country_codes'] = $tenant['allowed_country_codes'] ?? null;
 
         return FacilityConfigurationResponseTransformer::transform($facility);
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $invite
+     * @return array<string, mixed>|null
+     */
+    private function transformInviteResult(?array $invite): ?array
+    {
+        if ($invite === null) {
+            return null;
+        }
+
+        return [
+            'userId' => $invite['user_id'] ?? null,
+            'message' => $invite['message'] ?? null,
+            'previewUrl' => $invite['preview_url'] ?? null,
+            'deliveryMode' => $invite['delivery_mode'] ?? null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array<string, mixed>
+     */
+    private function toSubscriptionPayload(array $validated): array
+    {
+        return [
+            'plan_id' => $validated['planId'],
+            'status' => $validated['status'],
+            'trial_ends_at' => $validated['trialEndsAt'] ?? null,
+            'current_period_starts_at' => $validated['currentPeriodStartsAt'] ?? null,
+            'current_period_ends_at' => $validated['currentPeriodEndsAt'] ?? null,
+            'next_invoice_at' => $validated['nextInvoiceAt'] ?? null,
+            'grace_period_ends_at' => $validated['gracePeriodEndsAt'] ?? null,
+            'status_reason' => $validated['statusReason'] ?? null,
+        ];
     }
 
     /**

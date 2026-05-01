@@ -4,6 +4,7 @@ namespace App\Modules\Platform\Application\UseCases;
 
 use App\Models\User;
 use App\Modules\Platform\Application\Exceptions\PasswordResetDispatchFailedException;
+use App\Modules\Platform\Application\Support\CredentialLinkDeliveryPolicy;
 use App\Modules\Platform\Domain\Repositories\PlatformUserAdminRepositoryInterface;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
@@ -15,6 +16,7 @@ class SendPlatformUserInviteLinkUseCase
         private readonly PlatformUserAdminRepositoryInterface $platformUserAdminRepository,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
+        private readonly CredentialLinkDeliveryPolicy $credentialLinkDeliveryPolicy,
     ) {}
 
     /**
@@ -39,7 +41,7 @@ class SendPlatformUserInviteLinkUseCase
         }
 
         $previewUrl = null;
-        if ($this->shouldReturnLocalPreview()) {
+        if ($this->credentialLinkDeliveryPolicy->shouldReturnLocalPreview()) {
             $userModel = User::query()->find($userId);
             if (! $userModel) {
                 return null;
@@ -76,11 +78,5 @@ class SendPlatformUserInviteLinkUseCase
             'preview_url' => $previewUrl,
             'delivery_mode' => $previewUrl !== null ? 'local-preview' : 'email',
         ];
-    }
-
-    private function shouldReturnLocalPreview(): bool
-    {
-        return app()->environment(['local', 'testing'])
-            && in_array((string) config('mail.default', 'log'), ['log', 'array'], true);
     }
 }

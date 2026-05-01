@@ -3,6 +3,7 @@
 use App\Models\User;
 use App\Modules\Platform\Infrastructure\Models\FacilityModel;
 use App\Modules\Platform\Infrastructure\Models\MultiFacilityRolloutAuditLogModel;
+use App\Modules\Platform\Infrastructure\Models\MultiFacilityRolloutCheckpointModel;
 use App\Modules\Platform\Infrastructure\Models\MultiFacilityRolloutPlanModel;
 use App\Modules\Platform\Infrastructure\Models\TenantModel;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
@@ -105,16 +106,20 @@ it('creates a rollout plan and writes audit log when authorized', function (): v
             'rolloutCode' => 'rol-create-001',
             'status' => 'ready',
             'targetGoLiveAt' => now()->addDay()->toIso8601String(),
+            'ownerUserId' => $actor->id,
             'metadata' => ['wave' => 'pilot-a'],
         ])
         ->assertCreated()
         ->assertJsonPath('data.rolloutCode', 'ROL-CREATE-001')
         ->assertJsonPath('data.status', 'ready')
-        ->assertJsonPath('data.facilityId', $facilityContext['facility']->id);
+        ->assertJsonPath('data.facilityId', $facilityContext['facility']->id)
+        ->assertJsonCount(8, 'data.checkpoints')
+        ->assertJsonPath('data.checkpoints.0.status', 'not_started');
 
     $rolloutId = $response->json('data.id');
 
     expect(MultiFacilityRolloutPlanModel::query()->where('id', $rolloutId)->exists())->toBeTrue();
+    expect(MultiFacilityRolloutCheckpointModel::query()->where('rollout_plan_id', $rolloutId)->count())->toBe(8);
     expect(
         MultiFacilityRolloutAuditLogModel::query()
             ->where('rollout_plan_id', $rolloutId)
@@ -130,19 +135,27 @@ it('lists and shows rollout plans when read permission is granted', function ():
         'rollout_code' => 'ROL-READ-001',
         'status' => 'active',
     ]);
+    MultiFacilityRolloutCheckpointModel::query()->create([
+        'rollout_plan_id' => $plan->id,
+        'checkpoint_code' => 'PATIENT_REGISTRATION_READY',
+        'checkpoint_name' => 'Patient registration workflow ready',
+        'status' => 'passed',
+        'decision_notes' => 'Reception workflow validated.',
+    ]);
 
     $this->actingAs($actor)
         ->getJson('/api/v1/platform/admin/facility-rollouts?q=ROL-READ-001')
         ->assertOk()
         ->assertJsonPath('meta.total', 1)
         ->assertJsonPath('data.0.id', $plan->id)
-        ->assertJsonPath('data.0.rolloutCode', 'ROL-READ-001');
+        ->assertJsonPath('data.0.rolloutCode', 'ROL-READ-001')
+        ->assertJsonPath('data.0.checkpoints.0.checkpointCode', 'PATIENT_REGISTRATION_READY');
 
     $this->actingAs($actor)
         ->getJson('/api/v1/platform/admin/facility-rollouts/'.$plan->id)
         ->assertOk()
         ->assertJsonPath('data.id', $plan->id)
-        ->assertJsonPath('data.checkpoints', [])
+        ->assertJsonPath('data.checkpoints.0.checkpointCode', 'PATIENT_REGISTRATION_READY')
         ->assertJsonPath('data.incidents', []);
 });
 

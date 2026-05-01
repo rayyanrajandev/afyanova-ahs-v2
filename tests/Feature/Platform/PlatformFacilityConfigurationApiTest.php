@@ -3,7 +3,11 @@
 use App\Models\User;
 use App\Modules\Platform\Infrastructure\Models\FacilityConfigurationAuditLogModel;
 use App\Modules\Platform\Infrastructure\Models\FacilityModel;
+use App\Modules\Platform\Infrastructure\Models\FacilitySubscriptionModel;
+use App\Modules\Platform\Infrastructure\Models\PlatformSubscriptionPlanModel;
+use App\Modules\Platform\Infrastructure\Models\RoleModel;
 use App\Modules\Platform\Infrastructure\Models\TenantModel;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -270,6 +274,101 @@ it('syncs facility owners and writes audit logs when authorized', function (): v
             ->where('action', 'platform.facilities.owners.synced')
             ->exists()
     )->toBeTrue();
+});
+
+it('creates a facility with a new facility admin and generates an invite link', function (): void {
+    app()->detectEnvironment(static fn (): string => 'local');
+    config()->set('mail.default', 'smtp');
+
+    $actor = makeFacilityConfigurationActor(['platform.facilities.create']);
+
+    $facilityAdminRole = RoleModel::query()->create([
+        'tenant_id' => null,
+        'facility_id' => null,
+        'code' => 'HOSPITAL.FACILITY.ADMIN',
+        'name' => 'Facility Administrator',
+        'status' => 'active',
+        'is_system' => true,
+    ]);
+
+    $response = $this->actingAs($actor)
+        ->postJson('/api/v1/platform/admin/facilities', [
+            'tenantCode' => 'dsk',
+            'tenantName' => 'DSK Dispensary Group',
+            'tenantCountryCode' => 'TZ',
+            'tenantAllowedCountryCodes' => ['TZ'],
+            'facilityCode' => 'dsk-disp',
+            'facilityName' => 'DSK Dispensary',
+            'facilityType' => 'dispensary',
+            'facilityTier' => 'primary_care',
+            'timezone' => 'Africa/Dar_es_Salaam',
+            'facilityAdmin' => [
+                'name' => 'DSK Facility Admin',
+                'email' => 'facility.admin@dsk.test',
+            ],
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.code', 'DSK-DISP')
+        ->assertJsonPath('data.name', 'DSK Dispensary')
+        ->assertJsonPath('meta.facilityAdminInvite.deliveryMode', 'local-preview');
+
+    expect((string) data_get($response->json(), 'meta.facilityAdminInvite.previewUrl'))
+        ->toContain('/reset-password/');
+
+    $admin = User::query()
+        ->where('email', 'facility.admin@dsk.test')
+        ->first();
+
+    expect($admin)->not->toBeNull();
+    expect($admin?->email_verified_at)->toBeNull();
+    expect($admin?->roles()->where('roles.id', $facilityAdminRole->id)->exists())->toBeTrue();
+
+    $facility = FacilityModel::query()
+        ->where('code', 'DSK-DISP')
+        ->first();
+
+    expect($facility)->not->toBeNull();
+    expect($facility?->administrative_owner_user_id)->toBe($admin?->id);
+
+    expect(DB::table('facility_user')
+        ->where('facility_id', $facility?->id)
+        ->where('user_id', $admin?->id)
+        ->where('role', 'facility_admin')
+        ->where('is_primary', true)
+        ->where('is_active', true)
+        ->exists())->toBeTrue();
+
+    expect(DB::table('password_reset_tokens')
+        ->where('email', 'facility.admin@dsk.test')
+        ->exists())->toBeTrue();
+});
+
+it('reports expired active facility subscriptions as restricted access', function (): void {
+    $actor = makeFacilityConfigurationActor(['platform.facilities.read']);
+    $context = makeFacilityConfigurationContext('TEN-SUB', 'FAC-SUB');
+    $plan = PlatformSubscriptionPlanModel::query()
+        ->where('code', 'patient_registration')
+        ->firstOrFail();
+
+    FacilitySubscriptionModel::query()->create([
+        'tenant_id' => $context['tenant']->id,
+        'facility_id' => $context['facility']->id,
+        'plan_id' => $plan->id,
+        'status' => 'active',
+        'billing_cycle' => 'monthly',
+        'price_amount' => $plan->price_amount,
+        'currency_code' => $plan->currency_code,
+        'current_period_starts_at' => now()->subMonth(),
+        'current_period_ends_at' => now()->subDay(),
+        'metadata' => [],
+    ]);
+
+    $this->actingAs($actor)
+        ->getJson('/api/v1/platform/admin/facilities/'.$context['facility']->id.'/subscription')
+        ->assertOk()
+        ->assertJsonPath('data.status', 'active')
+        ->assertJsonPath('data.accessEnabled', false)
+        ->assertJsonPath('data.accessState', 'expired');
 });
 
 it('lists and exports facility configuration audit logs when authorized', function (): void {

@@ -2,6 +2,14 @@
 
 use Illuminate\Support\Facades\Artisan;
 
+beforeEach(function (): void {
+    $this->phase5ReadinessFixturePaths = phase5TestingEnsureConfiguredReadinessFiles();
+});
+
+afterEach(function (): void {
+    phase5TestingRemoveConfiguredReadinessFiles($this->phase5ReadinessFixturePaths ?? []);
+});
+
 it('reports ready when all configured phase 5 signed artifacts are present', function (): void {
     $exitCode = Artisan::call('platform:phase5:gate-readiness-check', [
         '--json' => true,

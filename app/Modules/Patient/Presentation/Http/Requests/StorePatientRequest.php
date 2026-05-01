@@ -2,7 +2,6 @@
 
 namespace App\Modules\Patient\Presentation\Http\Requests;
 
-use App\Modules\Patient\Domain\ValueObjects\PatientStatus;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -10,7 +9,7 @@ class StorePatientRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user() !== null;
+        return $this->user()?->can('patients.create') ?? false;
     }
 
     /**
@@ -33,7 +32,9 @@ class StorePatientRequest extends FormRequest
             'addressLine' => ['required', 'string', 'max:255'],
             'nextOfKinName' => ['nullable', 'string', 'max:150'],
             'nextOfKinPhone' => ['nullable', 'string', 'max:30'],
-            'status' => ['sometimes', Rule::in(PatientStatus::values())],
+            'status' => ['prohibited'],
+            'statusReason' => ['prohibited'],
+            'reason' => ['prohibited'],
         ];
     }
 

@@ -1,6 +1,6 @@
-# Credentials & Super Admin Bootstrap
+# Local Access Bootstrap
 
-Use this when you need login access for local UI testing.
+Use this when you need login access for local UI testing. Do not store real passwords, database URLs, API keys, or generated reset links in this file.
 
 ## Rajani Admin Account
 
@@ -22,11 +22,13 @@ Important:
 1. Existing password cannot be retrieved (passwords are hashed).
 2. Running this command rotates/reset the password for that user.
 
-## Set Your Own Password (Optional)
+## Set Your Own Temporary Password (Optional)
 
 ```bash
-php artisan app:bootstrap-super-admin --email=rajani.diwani@afyanova-ahs.com --password="YourStrongPass123!" --show-password
+php artisan app:bootstrap-super-admin --email=rajani.diwani@afyanova-ahs.com --password="<temporary-local-password>" --show-password
 ```
+
+Use a one-time local password and rotate it before any shared testing session.
 
 ## If Command Fails
 

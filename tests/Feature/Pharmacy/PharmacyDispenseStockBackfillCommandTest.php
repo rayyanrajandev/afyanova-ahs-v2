@@ -3,6 +3,7 @@
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryStockMovementModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
+use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
@@ -157,18 +158,41 @@ function makeBackfillPatient(array $overrides = []): PatientModel
 
 function makeBackfillInventoryItem(array $overrides = []): InventoryItemModel
 {
-    return InventoryItemModel::query()->create(array_merge([
+    $attributes = array_merge([
         'tenant_id' => null,
         'facility_id' => null,
         'item_code' => 'MED-TEST-001',
         'item_name' => 'Test Medicine',
-        'category' => 'analgesics',
+        'category' => 'pharmaceutical',
         'unit' => 'tablet',
         'current_stock' => 20,
         'reorder_level' => 5,
         'max_stock_level' => 100,
         'status' => 'active',
-    ], $overrides));
+    ], $overrides);
+
+    $catalogCategory = (string) ($overrides['category'] ?? 'medicine');
+    $attributes['category'] = 'pharmaceutical';
+    $attributes['clinical_catalog_item_id'] = $attributes['clinical_catalog_item_id'] ?? ClinicalCatalogItemModel::query()->firstOrCreate(
+        [
+            'tenant_id' => $attributes['tenant_id'],
+            'facility_id' => $attributes['facility_id'],
+            'catalog_type' => 'formulary_item',
+            'code' => $attributes['item_code'],
+        ],
+        [
+            'name' => $attributes['item_name'],
+            'department_id' => null,
+            'category' => $catalogCategory,
+            'unit' => $attributes['unit'],
+            'description' => 'Auto-linked pharmacy stock backfill test fixture.',
+            'metadata' => null,
+            'status' => 'active',
+            'status_reason' => null,
+        ],
+    )->id;
+
+    return InventoryItemModel::query()->create($attributes);
 }
 
 function makeHistoricalDispensedPharmacyOrder(string $patientId, array $overrides = []): PharmacyOrderModel

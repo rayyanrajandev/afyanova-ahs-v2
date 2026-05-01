@@ -287,7 +287,7 @@ class EloquentMultiFacilityRolloutRepository implements MultiFacilityRolloutRepo
     {
         return [
             'data' => array_map(
-                static fn (MultiFacilityRolloutPlanModel $plan): array => $plan->toArray(),
+                fn (MultiFacilityRolloutPlanModel $plan): array => $this->withPlanDetails($plan->toArray()),
                 $paginator->items(),
             ),
             'meta' => [

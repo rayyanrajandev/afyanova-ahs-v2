@@ -33,6 +33,7 @@ use App\Modules\Platform\Presentation\Http\Controllers\FacilityConfigurationCont
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformClinicalCatalogController;
 use App\Modules\Platform\Presentation\Http\Controllers\FacilityResourceRegistryController;
 use App\Modules\Platform\Presentation\Http\Controllers\MultiFacilityRolloutController;
+use App\Modules\Platform\Presentation\Http\Controllers\PlatformSubscriptionPlanController;
 use App\Modules\Patient\Presentation\Http\Controllers\PatientController;
 use App\Modules\Patient\Presentation\Http\Controllers\PatientMedicationSafetyController;
 use App\Modules\Pos\Presentation\Http\Controllers\PosController;
@@ -404,6 +405,12 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('platform/admin/facilities', [FacilityConfigurationController::class, 'index'])
         ->middleware('can:platform.facilities.read')
         ->name('platform.admin.facilities.index');
+    Route::get('platform/admin/facility-subscription-plans', [FacilityConfigurationController::class, 'subscriptionPlans'])
+        ->middleware('can:platform.facilities.read')
+        ->name('platform.admin.facilities.subscription-plans');
+    Route::get('platform/admin/facility-admin-candidates', [FacilityConfigurationController::class, 'adminCandidates'])
+        ->middleware(['can:platform.facilities.create', 'can:platform.users.read'])
+        ->name('platform.admin.facilities.admin-candidates');
     Route::post('platform/admin/facilities', [FacilityConfigurationController::class, 'store'])
         ->middleware('can:platform.facilities.create')
         ->name('platform.admin.facilities.store');
@@ -419,12 +426,33 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::patch('platform/admin/facilities/{id}/owners', [FacilityConfigurationController::class, 'syncOwners'])
         ->middleware('can:platform.facilities.manage-owners')
         ->name('platform.admin.facilities.sync-owners');
+    Route::get('platform/admin/facilities/{id}/subscription', [FacilityConfigurationController::class, 'subscription'])
+        ->middleware('can:platform.facilities.read')
+        ->name('platform.admin.facilities.subscription');
+    Route::patch('platform/admin/facilities/{id}/subscription', [FacilityConfigurationController::class, 'updateSubscription'])
+        ->middleware('can:platform.facilities.manage-subscriptions')
+        ->name('platform.admin.facilities.update-subscription');
     Route::get('platform/admin/facilities/{id}/audit-logs/export', [FacilityConfigurationController::class, 'exportAuditLogsCsv'])
         ->middleware('can:platform.facilities.view-audit-logs')
         ->name('platform.admin.facilities.audit-logs.export');
     Route::get('platform/admin/facilities/{id}/audit-logs', [FacilityConfigurationController::class, 'auditLogs'])
         ->middleware('can:platform.facilities.view-audit-logs')
         ->name('platform.admin.facilities.audit-logs');
+    Route::get('platform/admin/service-plans', [PlatformSubscriptionPlanController::class, 'index'])
+        ->middleware('can:platform.subscription-plans.read')
+        ->name('platform.admin.service-plans.index');
+    Route::get('platform/admin/service-plans/{id}/audit-logs', [PlatformSubscriptionPlanController::class, 'auditLogs'])
+        ->middleware('can:platform.subscription-plans.view-audit-logs')
+        ->name('platform.admin.service-plans.audit-logs');
+    Route::get('platform/admin/service-plans/{id}', [PlatformSubscriptionPlanController::class, 'show'])
+        ->middleware('can:platform.subscription-plans.read')
+        ->name('platform.admin.service-plans.show');
+    Route::patch('platform/admin/service-plans/{id}', [PlatformSubscriptionPlanController::class, 'update'])
+        ->middleware('can:platform.subscription-plans.manage')
+        ->name('platform.admin.service-plans.update');
+    Route::patch('platform/admin/service-plans/{id}/entitlements/{entitlementId}', [PlatformSubscriptionPlanController::class, 'updateEntitlement'])
+        ->middleware('can:platform.subscription-plans.manage')
+        ->name('platform.admin.service-plans.entitlements.update');
     Route::get('platform/admin/facility-rollouts', [MultiFacilityRolloutController::class, 'index'])
         ->middleware('can:platform.multi-facility.read')
         ->name('platform.admin.facility-rollouts.index');
@@ -460,50 +488,52 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->name('platform.admin.facility-rollouts.update');
 
     Route::get('patients', [PatientController::class, 'index'])
-        ->middleware('can:patients.read')
+        ->middleware(['can:patients.read', 'facility.entitlement:patients.search'])
         ->name('patients.index');
     Route::get('patients/status-counts', [PatientController::class, 'statusCounts'])
-        ->middleware('can:patients.read')
+        ->middleware(['can:patients.read', 'facility.entitlement:patients.search'])
         ->name('patients.status-counts');
-    Route::post('patients', [PatientController::class, 'store'])->name('patients.store');
+    Route::post('patients', [PatientController::class, 'store'])
+        ->middleware(['can:patients.create', 'facility.entitlement:patients.registration'])
+        ->name('patients.store');
     Route::get('patients/{id}', [PatientController::class, 'show'])
-        ->middleware('can:patients.read')
+        ->middleware(['can:patients.read', 'facility.entitlement:patients.search'])
         ->name('patients.show');
     Route::patch('patients/{id}', [PatientController::class, 'update'])
-        ->middleware('can:patients.update')
+        ->middleware(['can:patients.update', 'facility.entitlement:patients.demographics'])
         ->name('patients.update');
     Route::patch('patients/{id}/status', [PatientController::class, 'updateStatus'])
-        ->middleware('can:patients.update-status')
+        ->middleware(['can:patients.update-status', 'facility.entitlement:patients.demographics'])
         ->name('patients.update-status');
     Route::get('patients/{id}/audit-logs/export', [PatientController::class, 'exportAuditLogsCsv'])
-        ->middleware('can:patients.view-audit-logs')
+        ->middleware(['can:patients.view-audit-logs', 'facility.entitlement:patients.search'])
         ->name('patients.audit-logs.export');
     Route::get('patients/{id}/audit-logs', [PatientController::class, 'auditLogs'])
-        ->middleware('can:patients.view-audit-logs')
+        ->middleware(['can:patients.view-audit-logs', 'facility.entitlement:patients.search'])
         ->name('patients.audit-logs');
     Route::get('patients/{id}/allergies', [PatientMedicationSafetyController::class, 'allergies'])
-        ->middleware('can:patients.read')
+        ->middleware(['can:patients.read', 'facility.entitlement:patients.search'])
         ->name('patients.allergies.index');
     Route::post('patients/{id}/allergies', [PatientMedicationSafetyController::class, 'storeAllergy'])
-        ->middleware('can:patients.update')
+        ->middleware(['can:patients.update', 'facility.entitlement:patients.demographics'])
         ->name('patients.allergies.store');
     Route::patch('patients/{id}/allergies/{allergyId}', [PatientMedicationSafetyController::class, 'updateAllergy'])
-        ->middleware('can:patients.update')
+        ->middleware(['can:patients.update', 'facility.entitlement:patients.demographics'])
         ->name('patients.allergies.update');
     Route::get('patients/{id}/medication-profile', [PatientMedicationSafetyController::class, 'medicationProfile'])
-        ->middleware('can:patients.read')
+        ->middleware(['can:patients.read', 'facility.entitlement:patients.search'])
         ->name('patients.medication-profile.index');
     Route::post('patients/{id}/medication-profile', [PatientMedicationSafetyController::class, 'storeMedicationProfile'])
-        ->middleware('can:patients.update')
+        ->middleware(['can:patients.update', 'facility.entitlement:patients.demographics'])
         ->name('patients.medication-profile.store');
     Route::patch('patients/{id}/medication-profile/{medicationId}', [PatientMedicationSafetyController::class, 'updateMedicationProfile'])
-        ->middleware('can:patients.update')
+        ->middleware(['can:patients.update', 'facility.entitlement:patients.demographics'])
         ->name('patients.medication-profile.update');
     Route::get('patients/{id}/medication-safety-summary', [PatientMedicationSafetyController::class, 'medicationSafetySummary'])
-        ->middleware('can:patients.read')
+        ->middleware(['can:patients.read', 'facility.entitlement:patients.search'])
         ->name('patients.medication-safety-summary');
     Route::get('patients/{id}/medication-reconciliation', [PatientMedicationSafetyController::class, 'medicationReconciliation'])
-        ->middleware('can:patients.read')
+        ->middleware(['can:patients.read', 'facility.entitlement:patients.search'])
         ->name('patients.medication-reconciliation');
 
     Route::get('appointments', [AppointmentController::class, 'index'])
@@ -579,12 +609,18 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('admissions/discharge-destination-options', [AdmissionController::class, 'dischargeDestinationOptions'])
         ->middleware('can:admissions.read')
         ->name('admissions.discharge-destination-options');
-    Route::post('admissions', [AdmissionController::class, 'store'])->name('admissions.store');
+    Route::post('admissions', [AdmissionController::class, 'store'])
+        ->middleware('can:admissions.create')
+        ->name('admissions.store');
     Route::get('admissions/{id}', [AdmissionController::class, 'show'])
         ->middleware('can:admissions.read')
         ->name('admissions.show');
-    Route::patch('admissions/{id}', [AdmissionController::class, 'update'])->name('admissions.update');
-    Route::patch('admissions/{id}/status', [AdmissionController::class, 'updateStatus'])->name('admissions.update-status');
+    Route::patch('admissions/{id}', [AdmissionController::class, 'update'])
+        ->middleware('can:admissions.update')
+        ->name('admissions.update');
+    Route::patch('admissions/{id}/status', [AdmissionController::class, 'updateStatus'])
+        ->middleware('can:admissions.update-status')
+        ->name('admissions.update-status');
     Route::get('admissions/{id}/audit-logs/export', [AdmissionController::class, 'exportAuditLogsCsv'])
         ->middleware('can:admissions.view-audit-logs')
         ->name('admissions.audit-logs.export');

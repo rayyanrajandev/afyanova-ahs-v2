@@ -1145,7 +1145,9 @@ async function createUser() {
                 const inviteResponse = await apiRequest<PlatformUserCredentialLinkResponse>('POST', `/platform/admin/users/${createdUserId}/invite-link`);
                 successMessage = platformMailDeliversExternally.value
                     ? `User ${response.data.email ?? createForm.email} created and invite link sent.`
-                    : `User ${response.data.email ?? createForm.email} created and invite link generated, but email delivery is currently set to log only.`;
+                    : inviteResponse.data.previewUrl
+                        ? `User ${response.data.email ?? createForm.email} created and invite link generated for local preview.`
+                        : `User ${response.data.email ?? createForm.email} created and invite link generated, but email delivery is not external.`;
                 previewUrl = inviteResponse.data.previewUrl ?? null;
             } catch {
                 successMessage = `User ${response.data.email ?? createForm.email} created. Invite dispatch failed; retry from queue actions.`;

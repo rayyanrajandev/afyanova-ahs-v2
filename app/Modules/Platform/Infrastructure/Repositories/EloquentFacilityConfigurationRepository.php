@@ -18,7 +18,7 @@ class EloquentFacilityConfigurationRepository implements FacilityConfigurationRe
 
     public function findById(string $id): ?array
     {
-        $query = FacilityModel::query();
+        $query = FacilityModel::query()->with($this->ownerRelations());
         $this->applyPlatformScopeIfEnabled($query);
 
         $facility = $query->find($id);
@@ -40,7 +40,7 @@ class EloquentFacilityConfigurationRepository implements FacilityConfigurationRe
             ? $sortBy
             : 'name';
 
-        $queryBuilder = FacilityModel::query();
+        $queryBuilder = FacilityModel::query()->with($this->ownerRelations());
         $this->applyPlatformScopeIfEnabled($queryBuilder);
 
         $queryBuilder
@@ -80,6 +80,7 @@ class EloquentFacilityConfigurationRepository implements FacilityConfigurationRe
     public function create(array $attributes): array
     {
         $facility = FacilityModel::query()->create($attributes);
+        $facility->load($this->ownerRelations());
 
         return $facility->toArray();
     }
@@ -96,6 +97,7 @@ class EloquentFacilityConfigurationRepository implements FacilityConfigurationRe
 
         $facility->fill($attributes);
         $facility->save();
+        $facility->load($this->ownerRelations());
 
         return $facility->toArray();
     }
@@ -145,5 +147,13 @@ class EloquentFacilityConfigurationRepository implements FacilityConfigurationRe
                 'lastPage' => $paginator->lastPage(),
             ],
         ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function ownerRelations(): array
+    {
+        return ['operationsOwner', 'clinicalOwner', 'administrativeOwner'];
     }
 }

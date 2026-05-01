@@ -2,6 +2,7 @@
 
 use App\Models\User;
 use App\Http\Middleware\EnforceTenantIsolationWhenEnabled;
+use App\Http\Middleware\EnsureFacilitySubscriptionEntitlement;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\Patient\Infrastructure\Models\PatientAuditLogModel;
@@ -16,6 +17,10 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    $this->withoutMiddleware(EnsureFacilitySubscriptionEntitlement::class);
+});
 
 function patientPayload(array $overrides = []): array
 {
@@ -42,6 +47,11 @@ function grantPatientReadPermission(User $user): void
     $user->givePermissionTo('patients.read');
 }
 
+function grantPatientCreatePermission(User $user): void
+{
+    $user->givePermissionTo('patients.create');
+}
+
 function grantPatientUpdatePermission(User $user): void
 {
     $user->givePermissionTo('patients.update');
@@ -56,6 +66,7 @@ function makePatientReadUser(): User
 {
     $user = User::factory()->create();
     grantPatientReadPermission($user);
+    grantPatientCreatePermission($user);
 
     return $user;
 }
@@ -91,6 +102,15 @@ it('can register a patient', function (): void {
         ->assertJsonPath('warnings', []);
 
     expect($response->json('data.patientNumber'))->toStartWith('PT');
+});
+
+it('forbids patient registration without create permission', function (): void {
+    $user = User::factory()->create();
+    grantPatientReadPermission($user);
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/patients', patientPayload())
+        ->assertForbidden();
 });
 
 it('returns duplicate warning when active patient has same name dob and phone', function (): void {
@@ -145,6 +165,8 @@ it('fetches patient by id', function (): void {
 
 it('forbids patient show without read permission', function (): void {
     $writer = User::factory()->create();
+    grantPatientCreatePermission($writer);
+
     $created = $this->actingAs($writer)->postJson('/api/v1/patients', patientPayload())->json('data');
     $userWithoutRead = User::factory()->create();
 

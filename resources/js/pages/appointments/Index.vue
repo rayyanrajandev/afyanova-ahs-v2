@@ -426,6 +426,7 @@ const createIntentActive = ref(initialCreateIntent);
 
 const createMessage = ref<string | null>(null);
 const createErrors = ref<Record<string, string[]>>({});
+const createConflictAppointment = ref<Appointment | null>(null);
 const createSubmitting = ref(false);
 const createPrefillApplied = ref(false);
 const createPatientLocked = ref(false);
@@ -627,7 +628,21 @@ const canUseMyClinicalQueue = computed(() => {
 });
 const canUseTriageQueue = computed(() => canRecordOpdTriage.value && !canUseMyClinicalQueue.value);
 
-const hasCreateAlerts = computed(() => Boolean(createMessage.value) || Object.keys(createErrors.value).length > 0);
+const hasCreateAlerts = computed(() =>
+    Boolean(createMessage.value)
+    || Object.keys(createErrors.value).length > 0
+    || Boolean(createConflictAppointment.value),
+);
+const createConflictAppointmentHref = computed(() => {
+    const appointment = createConflictAppointment.value;
+    if (!appointment?.id) return null;
+
+    const url = new URL('/appointments', window.location.origin);
+    if (appointment.patientId) url.searchParams.set('patientId', appointment.patientId);
+    if (appointment.status) url.searchParams.set('status', appointment.status);
+    url.searchParams.set('focusAppointmentId', appointment.id);
+    return `${url.pathname}${url.search}`;
+});
 const hasCreateDraft = computed(() => Boolean(
     createForm.patientId.trim()
     || createForm.sourceAdmissionId.trim()
@@ -1223,6 +1238,44 @@ async function apiRequest<T>(
     }
 
     return payload as T;
+}
+
+function appointmentFromConflictContext(value: unknown): Appointment | null {
+    if (!value || typeof value !== 'object') return null;
+
+    const candidate = value as Partial<Appointment>;
+    if (typeof candidate.id !== 'string' || candidate.id.trim() === '') {
+        return null;
+    }
+
+    return {
+        id: candidate.id,
+        appointmentNumber: candidate.appointmentNumber ?? null,
+        patientId: candidate.patientId ?? null,
+        sourceAdmissionId: candidate.sourceAdmissionId ?? null,
+        clinicianUserId: candidate.clinicianUserId ?? null,
+        department: candidate.department ?? null,
+        scheduledAt: candidate.scheduledAt ?? null,
+        durationMinutes: candidate.durationMinutes ?? null,
+        reason: candidate.reason ?? null,
+        notes: candidate.notes ?? null,
+        financialClass: candidate.financialClass ?? null,
+        billingPayerContractId: candidate.billingPayerContractId ?? null,
+        coverageReference: candidate.coverageReference ?? null,
+        coverageNotes: candidate.coverageNotes ?? null,
+        triageVitalsSummary: candidate.triageVitalsSummary ?? null,
+        triageNotes: candidate.triageNotes ?? null,
+        triagedAt: candidate.triagedAt ?? null,
+        triagedByUserId: candidate.triagedByUserId ?? null,
+        consultationStartedAt: candidate.consultationStartedAt ?? null,
+        consultationOwnerUserId: candidate.consultationOwnerUserId ?? null,
+        consultationOwnerAssignedAt: candidate.consultationOwnerAssignedAt ?? null,
+        consultationTakeoverCount: candidate.consultationTakeoverCount ?? null,
+        status: candidate.status ?? null,
+        statusReason: candidate.statusReason ?? null,
+        createdAt: candidate.createdAt ?? null,
+        updatedAt: candidate.updatedAt ?? null,
+    };
 }
 
 function billingPayerContractById(id: string | null | undefined): BillingPayerContract | null {
@@ -2375,6 +2428,7 @@ function triageFieldError(key: string): string | null {
 function resetCreateAlerts(): void {
     createMessage.value = null;
     createErrors.value = {};
+    createConflictAppointment.value = null;
 }
 
 function clearCreateDraft(): void {
@@ -2519,6 +2573,9 @@ async function submitCreate(): Promise<void> {
     } catch (error) {
         const apiError = error as ApiError;
         createErrors.value = apiError.payload?.errors ?? {};
+        createConflictAppointment.value = appointmentFromConflictContext(
+            apiError.payload?.context?.activeAppointmentConflict,
+        );
         createMessage.value = apiError.payload?.message ?? messageFromUnknown(error, 'Unable to schedule appointment.');
         notifyError(createMessage.value);
     } finally {
@@ -3919,6 +3976,16 @@ function dismissCreateAlerts(): void {
     resetCreateAlerts();
 }
 
+async function openCreateConflictAppointment(): Promise<void> {
+    const appointment = createConflictAppointment.value;
+    if (!appointment) return;
+
+    createSheetOpen.value = false;
+    createResumeAvailable.value = false;
+    createIntentActive.value = false;
+    await openDetails(appointment);
+}
+
 function syncAdvancedFiltersDraftFromSearch(): void {
     advancedFiltersDraft.patientId = searchForm.patientId;
     advancedFiltersDraft.from = searchForm.from;
@@ -4935,6 +5002,41 @@ function submitSearch(): void {
                                     <AlertDescription>{{ createMessage }}</AlertDescription>
                                 </Alert>
 
+                                <Alert v-if="createConflictAppointment" class="border-amber-300 bg-amber-50">
+                                    <AlertTitle class="text-amber-900">Use the existing active visit</AlertTitle>
+                                    <AlertDescription class="space-y-3 text-amber-900">
+                                        <p>
+                                            This patient already has
+                                            {{ createConflictAppointment.appointmentNumber || 'an active appointment' }}
+                                            <template v-if="createConflictAppointment.scheduledAt">
+                                                scheduled {{ formatDateTime(createConflictAppointment.scheduledAt) }}
+                                            </template>
+                                            <template v-if="createConflictAppointment.department">
+                                                in {{ createConflictAppointment.department }}
+                                            </template>
+                                            . Continue that visit instead of creating a duplicate encounter.
+                                        </p>
+                                        <div class="flex flex-wrap gap-2">
+                                            <Button size="sm" class="gap-1.5" @click="void openCreateConflictAppointment()">
+                                                <AppIcon name="calendar-clock" class="size-3.5" />
+                                                Open existing visit
+                                            </Button>
+                                            <Button
+                                                v-if="createConflictAppointmentHref"
+                                                size="sm"
+                                                variant="outline"
+                                                as-child
+                                                class="gap-1.5 border-amber-300 bg-white/70 text-amber-950 hover:bg-white"
+                                            >
+                                                <Link :href="createConflictAppointmentHref">
+                                                    <AppIcon name="arrow-up-right" class="size-3.5" />
+                                                    Open in queue
+                                                </Link>
+                                            </Button>
+                                        </div>
+                                    </AlertDescription>
+                                </Alert>
+
                                 <section
                                     v-if="createForm.sourceAdmissionId.trim()"
                                     class="space-y-3 rounded-lg border bg-muted/20 p-4"
@@ -5246,7 +5348,7 @@ function submitSearch(): void {
                             </Button>
                             <Button variant="outline" @click="handleCreateSheetOpenChange(false)">Close</Button>
                             <Button :disabled="createSubmitting" @click="submitCreate">
-                                <AppIcon v-if="!createSubmitting" name="calendar-check-2" class="mr-1.5 size-3.5" />
+                                <AppIcon v-if="!createSubmitting" name="calendar-clock" class="mr-1.5 size-3.5" />
                                 {{ createSubmitting ? 'Scheduling...' : 'Schedule appointment' }}
                             </Button>
                         </SheetFooter>

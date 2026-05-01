@@ -5,6 +5,22 @@ type RouteAccessRule = {
 
 const routeAccessRules: RouteAccessRule[] = [
     {
+        pathPrefix: '/setup-center',
+        requiredPermissions: [
+            'inventory.procurement.read',
+            'inventory.procurement.manage-warehouses',
+            'inventory.procurement.manage-suppliers',
+            'platform.clinical-catalog.read',
+            'billing.service-catalog.read',
+            'departments.read',
+            'specialties.read',
+            'staff.specialties.read',
+            'platform.resources.read',
+            'platform.facilities.read',
+            'platform.subscription-plans.read',
+        ],
+    },
+    {
         pathPrefix: '/inventory-procurement/suppliers',
         requiredPermissions: ['inventory.procurement.read'],
     },
@@ -23,6 +39,10 @@ const routeAccessRules: RouteAccessRule[] = [
     {
         pathPrefix: '/platform/admin/facility-config',
         requiredPermissions: ['platform.facilities.read'],
+    },
+    {
+        pathPrefix: '/platform/admin/service-plans',
+        requiredPermissions: ['platform.subscription-plans.read'],
     },
     {
         pathPrefix: '/platform/admin/clinical-catalogs',
@@ -177,7 +197,12 @@ export function permissionsForHref(href: string): string[] {
 export function hasRouteAccess(
     href: string,
     permissionNames: string[] | null | undefined,
+    hasUnrestrictedAccess = false,
 ): boolean {
+    if (hasUnrestrictedAccess) {
+        return true;
+    }
+
     if (permissionNames === null || permissionNames === undefined) {
         return true;
     }
@@ -193,6 +218,7 @@ export function hasRouteAccess(
 export function filterItemsByRouteAccess<T extends { href: string }>(
     items: T[],
     permissionNames: string[] | null | undefined,
+    hasUnrestrictedAccess = false,
 ): T[] {
-    return items.filter((item) => hasRouteAccess(item.href, permissionNames));
+    return items.filter((item) => hasRouteAccess(item.href, permissionNames, hasUnrestrictedAccess));
 }

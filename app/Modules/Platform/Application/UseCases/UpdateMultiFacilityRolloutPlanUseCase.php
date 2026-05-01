@@ -74,10 +74,18 @@ class UpdateMultiFacilityRolloutPlanUseCase
 
         $nextStatus = (string) ($updatePayload['status'] ?? ($existing['status'] ?? 'draft'));
         $nextTargetGoLiveAt = $updatePayload['target_go_live_at'] ?? ($existing['target_go_live_at'] ?? null);
+        $nextOwnerUserId = array_key_exists('owner_user_id', $updatePayload)
+            ? $updatePayload['owner_user_id']
+            : ($existing['owner_user_id'] ?? null);
 
         if (in_array($nextStatus, [MultiFacilityRolloutPlanStatus::READY->value, MultiFacilityRolloutPlanStatus::ACTIVE->value], true)
             && $nextTargetGoLiveAt === null) {
             throw new DomainException('targetGoLiveAt is required when status is ready or active.');
+        }
+
+        if (in_array($nextStatus, [MultiFacilityRolloutPlanStatus::READY->value, MultiFacilityRolloutPlanStatus::ACTIVE->value], true)
+            && $nextOwnerUserId === null) {
+            throw new DomainException('ownerUserId is required when status is ready or active.');
         }
 
         $updated = $this->rolloutRepository->updatePlan($id, $updatePayload);
@@ -102,6 +110,12 @@ class UpdateMultiFacilityRolloutPlanUseCase
                     true
                 );
                 $metadata['target_go_live_provided'] = $nextTargetGoLiveAt !== null;
+                $metadata['owner_required'] = in_array(
+                    $nextStatus,
+                    [MultiFacilityRolloutPlanStatus::READY->value, MultiFacilityRolloutPlanStatus::ACTIVE->value],
+                    true
+                );
+                $metadata['owner_provided'] = $nextOwnerUserId !== null;
             }
 
             $this->auditLogRepository->write(

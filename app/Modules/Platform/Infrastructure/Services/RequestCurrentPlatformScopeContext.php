@@ -7,11 +7,16 @@ use Illuminate\Http\Request;
 
 class RequestCurrentPlatformScopeContext implements CurrentPlatformScopeContextInterface
 {
-    public function __construct(private readonly Request $request) {}
+    public function __construct(private readonly ?Request $fallbackRequest = null) {}
 
     public function toArray(): array
     {
-        $scope = $this->request->attributes->get('platform.scope');
+        $request = $this->currentRequest();
+        if ($request === null) {
+            return $this->defaultScope();
+        }
+
+        $scope = $request->attributes->get('platform.scope');
 
         if (! is_array($scope)) {
             return $this->defaultScope();
@@ -107,5 +112,17 @@ class RequestCurrentPlatformScopeContext implements CurrentPlatformScopeContextI
                 'facilities' => [],
             ],
         ];
+    }
+
+    private function currentRequest(): ?Request
+    {
+        if (app()->bound('request')) {
+            $request = app('request');
+            if ($request instanceof Request) {
+                return $request;
+            }
+        }
+
+        return $this->fallbackRequest;
     }
 }

@@ -23,8 +23,29 @@ class FacilityConfigurationResponseTransformer
             'operationsOwnerUserId' => $facility['operations_owner_user_id'] ?? null,
             'clinicalOwnerUserId' => $facility['clinical_owner_user_id'] ?? null,
             'administrativeOwnerUserId' => $facility['administrative_owner_user_id'] ?? null,
+            'operationsOwner' => self::userSummary($facility['operations_owner'] ?? null),
+            'clinicalOwner' => self::userSummary($facility['clinical_owner'] ?? null),
+            'administrativeOwner' => self::userSummary($facility['administrative_owner'] ?? null),
             'createdAt' => $facility['created_at'] ?? null,
             'updatedAt' => $facility['updated_at'] ?? null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $user
+     * @return array<string, mixed>|null
+     */
+    private static function userSummary(?array $user): ?array
+    {
+        if ($user === null) {
+            return null;
+        }
+
+        return [
+            'id' => $user['id'] ?? null,
+            'name' => $user['name'] ?? null,
+            'email' => $user['email'] ?? null,
+            'status' => $user['status'] ?? null,
         ];
     }
 }

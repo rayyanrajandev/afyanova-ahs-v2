@@ -897,6 +897,24 @@ it('returns a local preview url when invite link is generated under local log-st
         ->assertJsonPath('data.previewUrl', fn ($value) => is_string($value) && str_contains($value, '/reset-password/'));
 });
 
+it('returns a local preview url for invite links in local environment even when smtp is configured', function (): void {
+    app()->detectEnvironment(static fn (): string => 'local');
+    config()->set('mail.default', 'smtp');
+
+    $actor = makePlatformUserAdminActor(['platform.users.reset-password']);
+    $target = User::factory()->create([
+        'email' => 'invite-local-smtp-user@example.com',
+        'email_verified_at' => null,
+    ]);
+
+    $this->actingAs($actor)
+        ->postJson('/api/v1/platform/admin/users/'.$target->id.'/invite-link')
+        ->assertOk()
+        ->assertJsonPath('data.userId', $target->id)
+        ->assertJsonPath('data.deliveryMode', 'local-preview')
+        ->assertJsonPath('data.previewUrl', fn ($value) => is_string($value) && str_contains($value, '/reset-password/'));
+});
+
 it('returns a local preview url when password reset link is generated under local log-style mail delivery', function (): void {
     config()->set('mail.default', 'log');
 

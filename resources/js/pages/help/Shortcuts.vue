@@ -64,6 +64,7 @@ const queuePages = [
     { title: 'Pharmacy', href: '/pharmacy-orders', note: 'Dispense queue + status updates' },
     { title: 'Radiology', href: '/radiology-orders', note: 'Imaging order workspace foundation' },
     { title: 'Billing', href: '/billing-invoices', note: 'Invoice queue + settlement actions' },
+    { title: 'Billable Service Catalog', href: '/billing-service-catalog', note: 'Billable services, tariffs, payer impact, and pricing history' },
     { title: 'Point of Sale', href: '/pos', note: 'Cashier workspace for receipts, quick lanes, and shift closeout' },
     { title: 'Claims & Insurance', href: '/claims-insurance', note: 'Claims adjudication workflow foundation' },
     { title: 'Inventory & Procurement', href: '/inventory-procurement', note: 'Stock and procurement workflow foundation' },
@@ -76,13 +77,15 @@ const queuePages = [
     { title: 'Departments', href: '/platform/admin/departments', note: 'Department master-data administration workspace' },
     { title: 'Service Points', href: '/platform/admin/service-points', note: 'Service point resource administration workspace' },
     { title: 'Ward/Beds', href: '/platform/admin/ward-beds', note: 'Ward and bed resource administration workspace' },
+    { title: 'Facility Configuration', href: '/platform/admin/facility-config', note: 'Tenant, facility, owner, and subscription assignment workspace' },
+    { title: 'Facility Subscription Plans', href: '/platform/admin/service-plans', note: 'Facility subscription packages, fees, entitlements, and audit history' },
     { title: 'Facility Rollouts', href: '/platform/admin/facility-rollouts', note: 'Multi-facility rollout queue and command-center controls' },
 ];
 
-const { permissionNames } = usePlatformAccess();
+const { permissionNames, isFacilitySuperAdmin } = usePlatformAccess();
 
 const visibleQueuePages = computed(() =>
-    filterItemsByRouteAccess(queuePages, permissionNames.value),
+    filterItemsByRouteAccess(queuePages, permissionNames.value, isFacilitySuperAdmin.value),
 );
 </script>
 

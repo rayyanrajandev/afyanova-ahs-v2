@@ -75,6 +75,21 @@ function grantAdmissionReadPermission(User $user): void
     $user->givePermissionTo('admissions.read');
 }
 
+function grantAdmissionCreatePermission(User $user): void
+{
+    $user->givePermissionTo('admissions.create');
+}
+
+function grantAdmissionUpdatePermission(User $user): void
+{
+    $user->givePermissionTo('admissions.update');
+}
+
+function grantAdmissionStatusUpdatePermission(User $user): void
+{
+    $user->givePermissionTo('admissions.update-status');
+}
+
 function seedAdmissionWardBedRegistry(
     string $wardName,
     string $bedNumber,
@@ -103,6 +118,9 @@ function makeAdmissionReadUser(): User
 {
     $user = User::factory()->create();
     grantAdmissionReadPermission($user);
+    grantAdmissionCreatePermission($user);
+    grantAdmissionUpdatePermission($user);
+    grantAdmissionStatusUpdatePermission($user);
 
     return $user;
 }
@@ -127,6 +145,16 @@ it('can create admission for active patient', function (): void {
         ->assertJsonPath('data.patientId', $patient->id)
         ->assertJsonPath('data.appointmentId', $appointment->id)
         ->assertJsonPath('data.status', 'admitted');
+});
+
+it('forbids admission creation without create permission', function (): void {
+    $user = User::factory()->create();
+    grantAdmissionReadPermission($user);
+    $patient = makeAdmissionPatient();
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/admissions', admissionPayload($patient->id))
+        ->assertForbidden();
 });
 
 it('rejects admission for inactive patient', function (): void {
@@ -173,6 +201,7 @@ it('fetches admission by id', function (): void {
 
 it('forbids admission show without read permission', function (): void {
     $writer = User::factory()->create();
+    grantAdmissionCreatePermission($writer);
     $patient = makeAdmissionPatient();
 
     $created = $this->actingAs($writer)
@@ -203,6 +232,25 @@ it('updates admission fields', function (): void {
         ->assertOk()
         ->assertJsonPath('data.ward', 'Ward C')
         ->assertJsonPath('data.bed', 'C-11');
+});
+
+it('forbids admission update without update permission', function (): void {
+    $creator = makeAdmissionReadUser();
+    $patient = makeAdmissionPatient();
+
+    $created = $this->actingAs($creator)
+        ->postJson('/api/v1/admissions', admissionPayload($patient->id))
+        ->json('data');
+
+    $user = User::factory()->create();
+    grantAdmissionReadPermission($user);
+    grantAdmissionCreatePermission($user);
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/admissions/'.$created['id'], [
+            'notes' => 'Unauthorized update attempt',
+        ])
+        ->assertForbidden();
 });
 
 it('rejects admission creation when ward and bed do not match an active registry placement', function (): void {
@@ -387,6 +435,28 @@ it('updates admission status and sets discharged timestamp', function (): void {
     expect($record?->discharged_at)->not->toBeNull();
     expect($record?->discharge_destination)->toBe('Home');
     expect($record?->follow_up_plan)->toBe('Return to medical clinic after 7 days for review.');
+});
+
+it('forbids admission status update without status permission', function (): void {
+    $creator = makeAdmissionReadUser();
+    $patient = makeAdmissionPatient();
+
+    $created = $this->actingAs($creator)
+        ->postJson('/api/v1/admissions', admissionPayload($patient->id))
+        ->json('data');
+
+    $user = User::factory()->create();
+    grantAdmissionReadPermission($user);
+    grantAdmissionCreatePermission($user);
+    grantAdmissionUpdatePermission($user);
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/admissions/'.$created['id'].'/status', [
+            'status' => 'discharged',
+            'reason' => 'Unauthorized discharge attempt',
+            'dischargeDestination' => 'Home',
+        ])
+        ->assertForbidden();
 });
 
 it('requires discharge destination when discharging patient', function (): void {
@@ -962,5 +1032,3 @@ function seedAdmissionPlatformScopeFacility(
 
     return [$tenantId, $facilityId];
 }
-
-

@@ -23,14 +23,6 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import {
-    Drawer,
-    DrawerContent,
-    DrawerDescription,
-    DrawerFooter,
-    DrawerHeader,
-    DrawerTitle,
-} from '@/components/ui/drawer';
-import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -230,6 +222,10 @@ type PatientWorkflowRecommendation = {
     primaryIcon: string;
 };
 
+type PatientVisitHandoffMode = 'outpatient' | 'emergency' | 'billing' | 'chart';
+
+type PatientVisitHandoffSource = 'post-registration' | 'list' | 'details';
+
 type PatientAuditLog = {
     id: string;
     patientId: string | null;
@@ -271,6 +267,11 @@ type AuthPermissionsResponse = {
 type SearchForm = {
     q: string;
     status: string;
+    gender: string;
+    region: string;
+    district: string;
+    sortBy: string;
+    sortDir: string;
     perPage: number;
     page: number;
 };
@@ -547,8 +548,11 @@ const isPatientReadPermissionResolved = computed(() => patientReadPermissionStat
 const canViewPatientAudit = ref(hasPermission('patients.view-audit-logs'));
 const canReadAppointments = ref(hasPermission('appointments.read'));
 const canCreateAppointments = ref(hasPermission('appointments.create'));
+const canUpdateAppointmentsStatus = ref(hasPermission('appointments.update-status'));
 const canReadAdmissions = ref(hasPermission('admissions.read'));
 const canReadMedicalRecords = ref(hasPermission('medical.records.read'));
+const canCreateBillingInvoices = ref(hasPermission('billing.invoices.create'));
+const canCreatePatients = ref(hasPermission('patients.create'));
 const canUpdatePatients = ref(hasPermission('patients.update'));
 const canUpdatePatientStatus = ref(hasPermission('patients.update-status'));
 const canRecordOpdTriage = ref(
@@ -559,12 +563,20 @@ const canCreatePharmacyOrders = ref(hasPermission('pharmacy.orders.create'));
 const canCreateTheatreProcedures = ref(hasPermission('theatre.procedures.create'));
 const canManageProviderSession = computed(() => canReadAppointments.value && canReadMedicalRecords.value);
 const tenantIsolationEnabled = ref(multiTenantIsolationEnabled.value);
+const SELECT_ALL_VALUE = '__all__';
+const SELECT_NONE_VALUE = '__none__';
+const patientVisitActiveStatuses = new Set([
+    'scheduled',
+    'waiting_triage',
+    'waiting_provider',
+    'in_consultation',
+]);
 const auditActorTypeOptions = [
-    { value: '', label: 'All actors' },
+    { value: SELECT_ALL_VALUE, label: 'All actors' },
     { value: 'user', label: 'User only' },
     { value: 'system', label: 'System only' },
 ];
-const mobileFiltersDrawerOpen = ref(false);
+const patientFiltersSheetOpen = ref(false);
 const registerDialogOpen = ref(false);
 const registerOptionalDetailsOpen = ref(false);
 const registrationErrorSummaryRef = ref<HTMLElement | null>(null);
@@ -573,6 +585,18 @@ const preSubmitDuplicateCheckLoading = ref(false);
 const preSubmitDuplicateCheckError = ref<string | null>(null);
 const preSubmitDuplicateMatches = ref<Patient[]>([]);
 const preSubmitDuplicateConfirmed = ref(false);
+const postRegistrationDialogOpen = ref(false);
+const postRegistrationPatient = ref<Patient | null>(null);
+const visitHandoffSheetOpen = ref(false);
+const visitHandoffPatient = ref<Patient | null>(null);
+const visitHandoffSource = ref<PatientVisitHandoffSource>('list');
+const visitHandoffMode = ref<PatientVisitHandoffMode>('outpatient');
+const visitHandoffAppointments = ref<PatientTimelineAppointment[]>([]);
+const visitHandoffLoading = ref(false);
+const visitHandoffSubmitting = ref(false);
+const visitHandoffError = ref<string | null>(null);
+const visitHandoffActionError = ref<string | null>(null);
+let visitHandoffRequestToken = 0;
 const detailsSheetOpen = ref(false);
 const detailsSheetPatient = ref<Patient | null>(null);
 const detailsSheetTab = ref('overview');
@@ -878,6 +902,155 @@ const detailsWorkflowRecommendation = computed<PatientWorkflowRecommendation | n
             };
     }
 });
+const visitHandoffActiveAppointment = computed<PatientTimelineAppointment | null>(() => {
+    const patientId = visitHandoffPatient.value?.id ?? null;
+    if (!patientId) return null;
+
+    return [...visitHandoffAppointments.value]
+        .filter((appointment) =>
+            appointment.patientId === patientId &&
+            patientVisitActiveStatuses.has(String(appointment.status ?? '').trim()),
+        )
+        .sort((left, right) => {
+            const priorityDifference =
+                patientAppointmentWorkflowPriority(right.status)
+                - patientAppointmentWorkflowPriority(left.status);
+
+            if (priorityDifference !== 0) {
+                return priorityDifference;
+            }
+
+            return patientTimelineTimestamp(right.scheduledAt) - patientTimelineTimestamp(left.scheduledAt);
+        })[0] ?? null;
+});
+const visitHandoffExistingVisitHref = computed(() => {
+    const patient = visitHandoffPatient.value;
+    const appointment = visitHandoffActiveAppointment.value;
+    if (!patient || !appointment || !canReadAppointments.value) return null;
+
+    return patientAppointmentWorkflowHref(patient, appointment);
+});
+const visitHandoffCanCheckIn = computed(() =>
+    visitHandoffMode.value === 'outpatient'
+    && visitHandoffPatient.value?.status === 'active'
+    && visitHandoffActiveAppointment.value?.status === 'scheduled'
+    && canUpdateAppointmentsStatus.value,
+);
+const visitHandoffPrimaryHref = computed(() => {
+    const patient = visitHandoffPatient.value;
+    if (!patient) return null;
+
+    if (visitHandoffMode.value === 'outpatient') {
+        return visitHandoffExistingVisitHref.value
+            ?? (canCreateAppointments.value ? patientContextHref('/appointments', patient, { openSchedule: true }) : null);
+    }
+
+    if (visitHandoffMode.value === 'emergency') {
+        return patientContextHref('/emergency-triage', patient, { includeTabNew: true });
+    }
+
+    if (visitHandoffMode.value === 'billing') {
+        const appointment = visitHandoffActiveAppointment.value;
+        return patientTimelineHref('/billing-invoices', patient.id, {
+            appointmentId: appointment?.id ?? null,
+        });
+    }
+
+    return patientChartContextHref(patient, {
+        appointmentId: visitHandoffActiveAppointment.value?.id ?? null,
+        from: 'patients',
+    });
+});
+const visitHandoffPrimaryLabel = computed(() => {
+    const appointment = visitHandoffActiveAppointment.value;
+
+    if (visitHandoffMode.value === 'outpatient') {
+        if (!appointment) return 'Schedule outpatient visit';
+        switch (appointment.status) {
+            case 'scheduled':
+                return canUpdateAppointmentsStatus.value ? 'Check in patient' : 'Open check-in';
+            case 'waiting_triage':
+                return canRecordOpdTriage.value ? 'Open triage workflow' : 'Open current visit';
+            case 'waiting_provider':
+                return canManageProviderSession.value ? 'Open provider workflow' : 'Open current visit';
+            case 'in_consultation':
+                return 'Open consultation';
+            default:
+                return 'Open current visit';
+        }
+    }
+
+    if (visitHandoffMode.value === 'emergency') return 'Start emergency triage';
+    if (visitHandoffMode.value === 'billing') return 'Create invoice';
+    return 'Open patient chart';
+});
+const visitHandoffPrimaryIcon = computed(() => {
+    if (visitHandoffMode.value === 'emergency') return 'activity';
+    if (visitHandoffMode.value === 'billing') return 'receipt';
+    if (visitHandoffMode.value === 'chart') return 'book-open';
+    return visitHandoffActiveAppointment.value ? 'calendar-clock' : 'calendar-plus-2';
+});
+const visitHandoffPrimaryDisabledReason = computed(() => {
+    const patient = visitHandoffPatient.value;
+    if (!patient) return 'Select a patient first.';
+
+    if (patient.status && patient.status !== 'active') {
+        return 'Patient must be active before a new visit handoff can start.';
+    }
+
+    if (visitHandoffMode.value === 'outpatient') {
+        if (visitHandoffActiveAppointment.value && !canReadAppointments.value) {
+            return 'Request appointments.read permission to open the current visit.';
+        }
+        if (!visitHandoffActiveAppointment.value && !canCreateAppointments.value) {
+            return 'Request appointments.create permission to schedule a visit.';
+        }
+    }
+
+    if (visitHandoffMode.value === 'emergency' && !canRecordOpdTriage.value) {
+        return 'Request emergency triage permission to start urgent intake.';
+    }
+
+    if (visitHandoffMode.value === 'billing' && !canCreateBillingInvoices.value) {
+        return 'Request billing.invoices.create permission to create an invoice.';
+    }
+
+    if (visitHandoffMode.value === 'chart' && !canReadPatients.value) {
+        return 'Request patients.read permission to open the patient chart.';
+    }
+
+    return null;
+});
+const visitHandoffPrimaryDescription = computed(() => {
+    const appointment = visitHandoffActiveAppointment.value;
+
+    if (visitHandoffMode.value === 'outpatient') {
+        if (!appointment) {
+            return 'Create the visit shell first so check-in, triage, consultation, orders, and billing share one encounter context.';
+        }
+
+        if (appointment.status === 'scheduled' && canUpdateAppointmentsStatus.value) {
+            return 'Record arrival now and move this visit into the nurse triage queue without leaving the patient handoff.';
+        }
+
+        return `Use ${appointment.appointmentNumber || 'the existing active visit'} instead of creating another same-day workflow.`;
+    }
+
+    if (visitHandoffMode.value === 'emergency') {
+        return 'Use urgent intake when the patient needs immediate nursing assessment or emergency routing.';
+    }
+
+    if (visitHandoffMode.value === 'billing') {
+        return 'Use billing-first only for registration fees, deposits, or cashier workflows that happen before clinical care.';
+    }
+
+    return 'Open chart-only when staff need context without starting a new visit.';
+});
+const visitHandoffSourceLabel = computed(() => {
+    if (visitHandoffSource.value === 'post-registration') return 'Post registration';
+    if (visitHandoffSource.value === 'details') return 'Patient details';
+    return 'Patient list';
+});
 const detailsAuditTotalEntries = computed(
     () => detailsAuditMeta.value?.total ?? detailsAuditLogs.value.length,
 );
@@ -1008,9 +1181,23 @@ function queryStatusParam(): string {
     return 'active';
 }
 
+function queryAllowedParam(name: string, allowed: string[], fallback = ''): string {
+    const value = queryParam(name);
+    return allowed.find((option) => option.toLowerCase() === value.toLowerCase()) ?? fallback;
+}
+
 const searchForm = reactive<SearchForm>({
     q: queryParam('q'),
     status: queryStatusParam(),
+    gender: queryAllowedParam('gender', ['male', 'female', 'other', 'unknown']),
+    region: queryParam('region'),
+    district: queryParam('district'),
+    sortBy: queryAllowedParam(
+        'sortBy',
+        ['createdAt', 'updatedAt', 'patientNumber', 'firstName', 'lastName'],
+        'createdAt',
+    ),
+    sortDir: queryAllowedParam('sortDir', ['asc', 'desc'], 'desc'),
     perPage: queryNumberParam('perPage', 10, { allowed: [10, 25, 50] }),
     page: queryNumberParam('page', 1, { min: 1 }),
 });
@@ -1059,6 +1246,10 @@ const registrationCountryCode = computed(
 );
 const editCountryCode = computed(
     () => editForm.countryCode || defaultPatientCountryCode.value,
+);
+const patientFilterCountryCode = computed(() => defaultPatientCountryCode.value);
+const patientFilterCountryUi = computed(() =>
+    patientCountryOption(patientFilterCountryCode.value),
 );
 
 function patientLocationValueOption(
@@ -1170,6 +1361,34 @@ const editDistrictHelperText = computed(() =>
         ? ''
         : `Choose ${editCountryUi.value.regionLabel.toLowerCase()} before ${editCountryUi.value.districtLabel.toLowerCase()}.`,
 );
+const patientFilterRegionOptions = computed(() =>
+    mergeSearchableOptions(
+        regionPresetOptions(patientLocationPresetsForCountry(patientFilterCountryCode.value)),
+        historicalRegionOptionsForCountry(patientFilterCountryCode.value),
+    ),
+);
+const patientFilterDistrictOptions = computed(() =>
+    mergeSearchableOptions(
+        districtPresetOptionsForRegion(
+            patientLocationPresetsForCountry(patientFilterCountryCode.value),
+            searchForm.region,
+        ),
+        historicalDistrictOptionsForCountryAndRegion(
+            patientFilterCountryCode.value,
+            searchForm.region,
+        ),
+    ),
+);
+const patientFilterDistrictPlaceholder = computed(() =>
+    searchForm.region.trim()
+        ? patientFilterCountryUi.value.districtPlaceholder
+        : `Select ${patientFilterCountryUi.value.regionLabel.toLowerCase()} first`,
+);
+const patientFilterDistrictHelperText = computed(() =>
+    searchForm.region.trim()
+        ? ''
+        : `Choose ${patientFilterCountryUi.value.regionLabel.toLowerCase()} before ${patientFilterCountryUi.value.districtLabel.toLowerCase()}.`,
+);
 const registrationErrorSummary = computed(() => {
     const seen = new Set<string>();
 
@@ -1202,6 +1421,75 @@ const registrationDerivedDateOfBirth = computed(() =>
         asTrimmedString(registrationForm.ageMonths),
     ),
 );
+
+const registrationPatientNamePreview = computed(() => {
+    const name = [
+        registrationForm.firstName,
+        registrationForm.middleName,
+        registrationForm.lastName,
+    ]
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .join(' ');
+
+    return name || 'New patient';
+});
+
+const registrationAgeSummary = computed(() => {
+    if (registrationBirthInputMode.value === 'estimated') {
+        if (registrationDerivedDateOfBirth.value) {
+            return `Estimated DOB ${formatDate(registrationDerivedDateOfBirth.value)}`;
+        }
+
+        return 'Age pending';
+    }
+
+    if (registrationForm.dateOfBirth) {
+        return `${formatDate(registrationForm.dateOfBirth)} | ${formatAge(registrationForm.dateOfBirth) || 'Age pending'}`;
+    }
+
+    return 'DOB pending';
+});
+
+const registrationDuplicateDateOfBirth = computed(() =>
+    asTrimmedString(registrationForm.dateOfBirth) ||
+    registrationDerivedDateOfBirth.value ||
+    '',
+);
+
+const registrationDuplicateLocation = computed(() =>
+    [
+        registrationForm.district,
+        registrationForm.region,
+        countryDisplayLabel(registrationForm.countryCode) ||
+            registrationForm.countryCode,
+    ]
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .join(', '),
+);
+
+const registrationRequiredReadiness = computed(() => {
+    const hasAgeOrDob = Boolean(
+        registrationForm.dateOfBirth.trim() ||
+            registrationForm.ageYears.trim() ||
+            registrationForm.ageMonths.trim(),
+    );
+
+    const items = [
+        { key: 'name', complete: Boolean(registrationForm.firstName.trim() && registrationForm.lastName.trim()) },
+        { key: 'gender', complete: Boolean(registrationForm.gender) },
+        { key: 'birth', complete: hasAgeOrDob },
+        { key: 'phone', complete: Boolean(registrationForm.phone.trim()) },
+        { key: 'location', complete: Boolean(registrationForm.region.trim() && registrationForm.district.trim()) },
+        { key: 'address', complete: Boolean(registrationForm.addressLine.trim()) },
+    ];
+
+    return {
+        complete: items.filter((item) => item.complete).length,
+        total: items.length,
+    };
+});
 
 const editDerivedDateOfBirth = computed(() =>
     deriveDateOfBirthFromAgeParts(
@@ -1426,6 +1714,177 @@ function patientAppointmentWorkflowHref(
     }
 
     return patientTimelineHref('/appointments', patient.id, extra, { includePatientId: false });
+}
+
+function visitHandoffDefaultMode(): PatientVisitHandoffMode {
+    if (
+        (visitHandoffActiveAppointment.value && canReadAppointments.value)
+        || canCreateAppointments.value
+    ) {
+        return 'outpatient';
+    }
+
+    if (canRecordOpdTriage.value) {
+        return 'emergency';
+    }
+
+    if (canCreateBillingInvoices.value) {
+        return 'billing';
+    }
+
+    return 'chart';
+}
+
+function closePatientVisitHandoff() {
+    visitHandoffRequestToken += 1;
+    visitHandoffSheetOpen.value = false;
+    visitHandoffLoading.value = false;
+    visitHandoffSubmitting.value = false;
+    visitHandoffError.value = null;
+    visitHandoffActionError.value = null;
+    visitHandoffAppointments.value = [];
+    visitHandoffPatient.value = null;
+    visitHandoffMode.value = 'outpatient';
+}
+
+async function loadVisitHandoffContext(patient: Patient) {
+    const requestToken = ++visitHandoffRequestToken;
+    visitHandoffLoading.value = canReadAppointments.value;
+    visitHandoffError.value = null;
+    visitHandoffActionError.value = null;
+    visitHandoffAppointments.value = [];
+
+    if (!canReadAppointments.value) {
+        visitHandoffMode.value = visitHandoffDefaultMode();
+        visitHandoffLoading.value = false;
+        return;
+    }
+
+    try {
+        const response = await apiRequest<PatientTimelineListResponse<PatientTimelineAppointment>>('GET', '/appointments', {
+            query: {
+                patientId: patient.id,
+                page: 1,
+                perPage: 8,
+                sortBy: 'scheduledAt',
+                sortDir: 'desc',
+            },
+        });
+
+        if (requestToken !== visitHandoffRequestToken) return;
+        visitHandoffAppointments.value = response.data ?? [];
+        visitHandoffMode.value = visitHandoffDefaultMode();
+    } catch (error) {
+        if (requestToken !== visitHandoffRequestToken) return;
+        visitHandoffError.value = messageFromUnknown(error, 'Unable to check current visit context.');
+        visitHandoffMode.value = visitHandoffDefaultMode();
+    } finally {
+        if (requestToken === visitHandoffRequestToken) {
+            visitHandoffLoading.value = false;
+        }
+    }
+}
+
+function openPatientVisitHandoff(
+    patient: Patient,
+    source: PatientVisitHandoffSource = 'list',
+) {
+    visitHandoffPatient.value = patient;
+    visitHandoffSource.value = source;
+    visitHandoffMode.value = 'outpatient';
+    visitHandoffAppointments.value = [];
+    visitHandoffError.value = null;
+    visitHandoffSheetOpen.value = true;
+    if (source === 'post-registration') {
+        postRegistrationDialogOpen.value = false;
+    }
+    if (source === 'details') {
+        closePatientDetailsSheet();
+    }
+    void loadVisitHandoffContext(patient);
+}
+
+function replaceVisitHandoffAppointment(updated: PatientTimelineAppointment) {
+    const existingIndex = visitHandoffAppointments.value.findIndex((appointment) => appointment.id === updated.id);
+
+    if (existingIndex === -1) {
+        visitHandoffAppointments.value = [updated, ...visitHandoffAppointments.value];
+    } else {
+        visitHandoffAppointments.value = visitHandoffAppointments.value.map((appointment, index) =>
+            index === existingIndex ? { ...appointment, ...updated } : appointment,
+        );
+    }
+
+    detailsTimelineAppointments.value = detailsTimelineAppointments.value.map((appointment) =>
+        appointment.id === updated.id ? { ...appointment, ...updated } : appointment,
+    );
+}
+
+async function checkInVisitFromHandoff() {
+    const appointment = visitHandoffActiveAppointment.value;
+    if (!appointment || appointment.status !== 'scheduled' || !canUpdateAppointmentsStatus.value) {
+        return;
+    }
+
+    visitHandoffSubmitting.value = true;
+    visitHandoffActionError.value = null;
+
+    try {
+        const response = await apiRequest<{ data: PatientTimelineAppointment }>('PATCH', `/appointments/${appointment.id}/status`, {
+            body: {
+                status: 'waiting_triage',
+                reason: null,
+            },
+        });
+
+        replaceVisitHandoffAppointment(response.data);
+        visitHandoffMode.value = 'outpatient';
+        notifySuccess('Patient checked in. Visit is now waiting for nurse triage.');
+    } catch (error) {
+        const apiError = error as Error & { payload?: ValidationErrorResponse };
+        visitHandoffActionError.value =
+            apiError.payload?.message ?? messageFromUnknown(error, 'Unable to check in patient.');
+        notifyError(visitHandoffActionError.value);
+    } finally {
+        visitHandoffSubmitting.value = false;
+    }
+}
+
+function visitHandoffModeAvailable(mode: PatientVisitHandoffMode): boolean {
+    if (mode === 'outpatient') {
+        return canCreateAppointments.value || canReadAppointments.value;
+    }
+
+    if (mode === 'emergency') {
+        return canRecordOpdTriage.value;
+    }
+
+    if (mode === 'billing') {
+        return canCreateBillingInvoices.value;
+    }
+
+    return canReadPatients.value;
+}
+
+function visitHandoffModeButtonClass(mode: PatientVisitHandoffMode): string {
+    return [
+        'flex min-h-[92px] w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors',
+        visitHandoffMode.value === mode
+            ? 'border-primary/50 bg-primary/5'
+            : 'bg-background hover:border-primary/30 hover:bg-muted/20',
+        visitHandoffModeAvailable(mode) ? '' : 'opacity-60',
+    ].filter(Boolean).join(' ');
+}
+
+function visitHandoffModeBadge(mode: PatientVisitHandoffMode): string {
+    if (mode === 'outpatient' && visitHandoffActiveAppointment.value) {
+        return 'Use existing';
+    }
+
+    if (mode === 'outpatient') return 'Standard';
+    if (mode === 'emergency') return 'Urgent';
+    if (mode === 'billing') return 'Cashier';
+    return 'Chart';
 }
 
 function clearTimelineState() {
@@ -1726,16 +2185,76 @@ const scopeStatusLabel = computed(() => {
     if (!scope.value) return 'Scope Unavailable';
     return scope.value.resolvedFrom === 'none' ? 'Scope Unresolved' : 'Scope Ready';
 });
+
+const patientGenderFilterOptions = [
+    { value: SELECT_ALL_VALUE, label: 'All genders' },
+    { value: 'female', label: 'Female' },
+    { value: 'male', label: 'Male' },
+    { value: 'other', label: 'Other' },
+    { value: 'unknown', label: 'Unknown' },
+];
+
+const patientSortByOptions = [
+    { value: 'createdAt', label: 'Registered date' },
+    { value: 'updatedAt', label: 'Last updated' },
+    { value: 'patientNumber', label: 'Patient number' },
+    { value: 'firstName', label: 'First name' },
+    { value: 'lastName', label: 'Last name' },
+];
+
+const patientSortDirOptions = [
+    { value: 'desc', label: 'Descending' },
+    { value: 'asc', label: 'Ascending' },
+];
+
+function nonEmptySelectValue(value: string | null | undefined): string {
+    return value && value.trim() !== '' ? value : SELECT_ALL_VALUE;
+}
+
+function filterValueFromSelect(value: string | number | null | undefined): string {
+    const normalized = String(value ?? '');
+    return normalized === SELECT_ALL_VALUE ? '' : normalized;
+}
+
+function optionLabel(options: Array<{ value: string; label: string }>, value: string): string {
+    return options.find((option) => option.value === value)?.label ?? formatEnumLabel(value);
+}
+
+const detailsAuditActorTypeFilterValue = computed({
+    get: () => nonEmptySelectValue(detailsAuditFilters.actorType),
+    set: (value: string | number | null | undefined) => {
+        detailsAuditFilters.actorType = filterValueFromSelect(value);
+    },
+});
+
+const editGenderSelectValue = computed({
+    get: () => editForm.gender || SELECT_NONE_VALUE,
+    set: (value: string | number | null | undefined) => {
+        const normalized = String(value ?? '');
+        editForm.gender = normalized === SELECT_NONE_VALUE ? '' : normalized;
+    },
+});
+
 const hasActivePatientFilters = computed(() => {
     return Boolean(
         searchForm.q.trim() ||
             searchForm.status !== 'active' ||
+            searchForm.gender ||
+            searchForm.region.trim() ||
+            searchForm.district.trim() ||
+            searchForm.sortBy !== 'createdAt' ||
+            searchForm.sortDir !== 'desc' ||
             searchForm.perPage !== 10,
     );
 });
 
 function matchesPatientPreset(options: { status?: string }): boolean {
     if (searchForm.q.trim()) return false;
+    if (searchForm.gender) return false;
+    if (searchForm.region.trim()) return false;
+    if (searchForm.district.trim()) return false;
+    if (searchForm.sortBy !== 'createdAt') return false;
+    if (searchForm.sortDir !== 'desc') return false;
     if (searchForm.perPage !== 10) return false;
     if (searchForm.page !== 1) return false;
     return (options.status ?? '') === searchForm.status;
@@ -1808,24 +2327,53 @@ const summaryPatientStatusCounts = computed<PatientStatusCounts>(() => {
     };
 });
 
-const patientFilterStateLabel = computed(() => {
-    if (!hasActivePatientFilters.value) return null;
-
-    const parts: string[] = [];
+const patientFilterChips = computed(() => {
+    const chips: Array<{ key: string; label: string }> = [];
 
     if (searchForm.q.trim()) {
-        parts.push('Search');
+        chips.push({ key: 'q', label: `Search: ${searchForm.q.trim()}` });
     }
 
     if (searchForm.status !== 'active') {
-        parts.push(searchForm.status ? formatEnumLabel(searchForm.status) : 'All');
+        chips.push({
+            key: 'status',
+            label: `Status: ${searchForm.status ? formatEnumLabel(searchForm.status) : 'All'}`,
+        });
+    }
+
+    if (searchForm.gender) {
+        chips.push({
+            key: 'gender',
+            label: `Gender: ${optionLabel(patientGenderFilterOptions, searchForm.gender)}`,
+        });
+    }
+
+    if (searchForm.region.trim()) {
+        chips.push({ key: 'region', label: `Region: ${searchForm.region.trim()}` });
+    }
+
+    if (searchForm.district.trim()) {
+        chips.push({ key: 'district', label: `District: ${searchForm.district.trim()}` });
+    }
+
+    if (searchForm.sortBy !== 'createdAt' || searchForm.sortDir !== 'desc') {
+        chips.push({
+            key: 'sort',
+            label: `Sort: ${optionLabel(patientSortByOptions, searchForm.sortBy)}, ${optionLabel(patientSortDirOptions, searchForm.sortDir)}`,
+        });
     }
 
     if (searchForm.perPage !== 10) {
-        parts.push(`${searchForm.perPage} rows`);
+        chips.push({ key: 'perPage', label: `${searchForm.perPage} rows` });
     }
 
-    return parts.length > 0 ? parts.join(' | ') : 'Filtered';
+    return chips;
+});
+
+const patientFilterStateLabel = computed(() => {
+    const count = patientFilterChips.value.length;
+    if (count === 0) return null;
+    return count === 1 ? '1 filter' : `${count} filters`;
 });
 
 async function loadScope() {
@@ -1870,8 +2418,11 @@ async function loadPatientPermissions() {
         canViewPatientAudit.value = names.has('patients.view-audit-logs');
         canReadAppointments.value = names.has('appointments.read');
         canCreateAppointments.value = names.has('appointments.create');
+        canUpdateAppointmentsStatus.value = names.has('appointments.update-status');
         canReadAdmissions.value = names.has('admissions.read');
         canReadMedicalRecords.value = names.has('medical.records.read');
+        canCreateBillingInvoices.value = names.has('billing.invoices.create');
+        canCreatePatients.value = names.has('patients.create');
         canUpdatePatients.value = names.has('patients.update');
         canUpdatePatientStatus.value = names.has('patients.update-status');
         canRecordOpdTriage.value =
@@ -1884,8 +2435,11 @@ async function loadPatientPermissions() {
         canViewPatientAudit.value = false;
         canReadAppointments.value = false;
         canCreateAppointments.value = false;
+        canUpdateAppointmentsStatus.value = false;
         canReadAdmissions.value = false;
         canReadMedicalRecords.value = false;
+        canCreateBillingInvoices.value = false;
+        canCreatePatients.value = false;
         canUpdatePatients.value = false;
         canUpdatePatientStatus.value = false;
         canRecordOpdTriage.value = false;
@@ -1912,6 +2466,11 @@ async function loadPatients() {
             query: {
                 q: searchForm.q.trim() || null,
                 status: searchForm.status || null,
+                gender: searchForm.gender || null,
+                region: searchForm.region.trim() || null,
+                district: searchForm.district.trim() || null,
+                sortBy: searchForm.sortBy,
+                sortDir: searchForm.sortDir,
                 page: searchForm.page,
                 perPage: searchForm.perPage,
             },
@@ -2182,10 +2741,24 @@ function resetRegistrationForm() {
 }
 
 function openRegistrationDialog() {
+    if (!canCreatePatients.value) {
+        notifyError('Request patients.create permission to register a patient.');
+        return;
+    }
+
     resetCreateMessages();
     clearPreSubmitDuplicateState();
     resetRegistrationForm();
     registerDialogOpen.value = true;
+}
+
+function closePostRegistrationDialog() {
+    postRegistrationDialogOpen.value = false;
+}
+
+function registerAnotherPatient() {
+    closePostRegistrationDialog();
+    openRegistrationDialog();
 }
 
 function clearPreSubmitDuplicateState() {
@@ -2219,6 +2792,87 @@ function normalizeNameForDuplicate(value: string | null | undefined): string {
 
 function normalizePhoneForDuplicate(value: string | null | undefined): string {
     return (value ?? '').replace(/\s+/g, '').trim().toLowerCase();
+}
+
+function duplicateDisplayValue(value: string | null | undefined, fallback = 'Not recorded'): string {
+    const normalized = (value ?? '').trim();
+    return normalized || fallback;
+}
+
+function duplicateComparableValue(value: string | null | undefined): string {
+    return (value ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, ' ');
+}
+
+function duplicatePhoneMatches(left: string | null | undefined, right: string | null | undefined): boolean {
+    const leftPhone = normalizePhoneForDuplicate(left);
+    const rightPhone = normalizePhoneForDuplicate(right);
+    return Boolean(leftPhone && rightPhone && leftPhone === rightPhone);
+}
+
+function duplicateValueMatches(left: string | null | undefined, right: string | null | undefined): boolean {
+    const leftValue = duplicateComparableValue(left);
+    const rightValue = duplicateComparableValue(right);
+    return Boolean(leftValue && rightValue && leftValue === rightValue);
+}
+
+function duplicateDateMatches(left: string | null | undefined, right: string | null | undefined): boolean {
+    const leftDate = (left ?? '').slice(0, 10);
+    const rightDate = (right ?? '').slice(0, 10);
+    return Boolean(leftDate && rightDate && leftDate === rightDate);
+}
+
+function duplicateComparisonRows(candidate: Patient) {
+    const incomingName = registrationPatientNamePreview.value;
+    const incomingDob = registrationDuplicateDateOfBirth.value;
+    const incomingLocation = registrationDuplicateLocation.value;
+
+    return [
+        {
+            key: 'name',
+            label: 'Name',
+            incoming: duplicateDisplayValue(incomingName, 'Name pending'),
+            existing: duplicateDisplayValue(patientName(candidate)),
+            matched: duplicateValueMatches(incomingName, patientName(candidate)),
+        },
+        {
+            key: 'phone',
+            label: 'Phone',
+            incoming: duplicateDisplayValue(registrationForm.phone),
+            existing: duplicateDisplayValue(candidate.phone),
+            matched: duplicatePhoneMatches(registrationForm.phone, candidate.phone),
+        },
+        {
+            key: 'dob',
+            label: 'DOB',
+            incoming: incomingDob ? formatDate(incomingDob) : 'Not recorded',
+            existing: candidate.dateOfBirth ? formatDate(candidate.dateOfBirth) : 'Not recorded',
+            matched: duplicateDateMatches(incomingDob, candidate.dateOfBirth),
+        },
+        {
+            key: 'gender',
+            label: 'Gender',
+            incoming: duplicateDisplayValue(formatEnumLabel(registrationForm.gender)),
+            existing: duplicateDisplayValue(formatEnumLabel(candidate.gender ?? '')),
+            matched: duplicateValueMatches(registrationForm.gender, candidate.gender),
+        },
+        {
+            key: 'id',
+            label: 'National ID',
+            incoming: duplicateDisplayValue(registrationForm.nationalId),
+            existing: duplicateDisplayValue(candidate.nationalId),
+            matched: duplicateValueMatches(registrationForm.nationalId, candidate.nationalId),
+        },
+        {
+            key: 'location',
+            label: 'Location',
+            incoming: duplicateDisplayValue(incomingLocation),
+            existing: patientLocationLabel(candidate),
+            matched: duplicateValueMatches(incomingLocation, patientLocationLabel(candidate)),
+        },
+    ];
 }
 
 function asTrimmedString(value: unknown): string {
@@ -2546,6 +3200,10 @@ async function confirmCreateDespiteDuplicate() {
 
 async function createPatient() {
     if (createLoading.value) return;
+    if (!canCreatePatients.value) {
+        notifyError('Request patients.create permission to register a patient.');
+        return;
+    }
 
     resetCreateMessages();
     preSubmitDuplicateCheckError.value = null;
@@ -2588,6 +3246,8 @@ async function createPatient() {
             : tW2('create.success');
         if (createMessage.value) notifySuccess(createMessage.value);
         createdWarnings.value = response.warnings ?? [];
+        postRegistrationPatient.value = response.data;
+        postRegistrationDialogOpen.value = true;
 
         resetRegistrationForm();
         clearPreSubmitDuplicateState();
@@ -2614,6 +3274,36 @@ function submitSearch() {
     clearSearchDebounce();
     searchForm.page = 1;
     void Promise.all([loadPatients(), loadPatientStatusCounts()]);
+}
+
+function updatePatientStatusFilter(value: string | number | null | undefined) {
+    searchForm.status = filterValueFromSelect(value);
+    submitSearch();
+}
+
+function updatePatientGenderFilter(value: string | number | null | undefined) {
+    searchForm.gender = filterValueFromSelect(value);
+    submitSearch();
+}
+
+function updatePatientSortByFilter(value: string | number | null | undefined) {
+    const nextValue = String(value ?? 'createdAt');
+    searchForm.sortBy = patientSortByOptions.some((option) => option.value === nextValue)
+        ? nextValue
+        : 'createdAt';
+    submitSearch();
+}
+
+function updatePatientSortDirFilter(value: string | number | null | undefined) {
+    const nextValue = String(value ?? 'desc');
+    searchForm.sortDir = nextValue === 'asc' ? 'asc' : 'desc';
+    submitSearch();
+}
+
+function updatePatientPerPageFilter(value: string | number | null | undefined) {
+    const nextValue = Number(value);
+    searchForm.perPage = [10, 25, 50].includes(nextValue) ? nextValue : 10;
+    submitSearch();
 }
 
 function patientLocationLabel(patient: Patient): string {
@@ -2804,23 +3494,22 @@ async function changePatientStatus() {
     }
 }
 
-function submitSearchFromMobileDrawer() {
-    submitSearch();
-    mobileFiltersDrawerOpen.value = false;
-}
-
 function resetPatientFilters() {
     clearSearchDebounce();
     searchForm.q = '';
     searchForm.status = 'active';
+    searchForm.gender = '';
+    searchForm.region = '';
+    searchForm.district = '';
+    searchForm.sortBy = 'createdAt';
+    searchForm.sortDir = 'desc';
     searchForm.perPage = 10;
     searchForm.page = 1;
     void Promise.all([loadPatients(), loadPatientStatusCounts()]);
 }
 
-function resetPatientFiltersFromMobileDrawer() {
+function resetPatientFiltersFromSheet() {
     resetPatientFilters();
-    mobileFiltersDrawerOpen.value = false;
 }
 
 function prevPage() {
@@ -2849,12 +3538,14 @@ function clearSearchDebounce() {
 }
 
 watch(
-    () => searchForm.q,
+    () => [searchForm.q, searchForm.region, searchForm.district],
     (value, previousValue) => {
-        const currentQuery = value.trim();
-        const previousQuery = (previousValue ?? '').trim();
+        const currentValues = value.map((item) => item.trim());
+        const previousValues = (previousValue ?? []).map((item) => item.trim());
 
-        if (currentQuery === previousQuery) return;
+        if (currentValues.every((currentValue, index) => currentValue === previousValues[index])) {
+            return;
+        }
 
         clearSearchDebounce();
         searchDebounceTimer = window.setTimeout(() => {
@@ -2862,6 +3553,16 @@ watch(
             void Promise.all([loadPatients(), loadPatientStatusCounts()]);
             searchDebounceTimer = null;
         }, 350);
+    },
+);
+
+watch(
+    () => normalizeLocationToken(searchForm.region),
+    (value, previousValue) => {
+        if (value === previousValue) return;
+        if (!searchForm.district.trim()) return;
+
+        searchForm.district = '';
     },
 );
 
@@ -3064,7 +3765,7 @@ onMounted(initialPageLoad);
                         {{ listLoading ? 'Refreshing...' : 'Refresh' }}
                     </Button>
 
-                    <Button size="sm" class="h-8 gap-1.5" @click="openRegistrationDialog()">
+                    <Button v-if="canCreatePatients" size="sm" class="h-8 gap-1.5" @click="openRegistrationDialog()">
                         <AppIcon name="plus" class="size-3.5" />
                         Register Patient
                     </Button>
@@ -3191,62 +3892,29 @@ onMounted(initialPageLoad);
                                     />
                                 </div>
 
-                                <Popover>
-                                    <PopoverTrigger as-child>
-                                        <Button variant="outline" size="sm" class="hidden gap-1.5 md:inline-flex">
-                                            <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                            Filters
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent class="w-56" align="end">
-                                        <div class="grid gap-3">
-                                            <p class="flex items-center gap-2 text-sm font-medium">
-                                                <AppIcon name="sliders-horizontal" class="size-4 text-muted-foreground" />
-                                                Filters & view
-                                            </p>
-                                            <p class="text-xs text-muted-foreground">
-                                                Adjust result size for the patient list.
-                                            </p>
-                                            <div class="grid w-full gap-2">
-                                                <Label for="patient-search-per-page">Rows per page</Label>
-                                                <div class="w-full [&_[data-slot=native-select-wrapper]]:w-full">
-                                                    <Select v-model="searchForm.perPage">
-                                                        <SelectTrigger class="w-full">
-                                                            <SelectValue />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                        <SelectItem value="10">10</SelectItem>
-                                                        <SelectItem value="25">25</SelectItem>
-                                                        <SelectItem value="50">50</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                            </div>
-                                            <Separator />
-                                            <div class="flex items-center justify-between gap-2">
-                                                <Button variant="outline" size="sm" class="gap-1.5" @click="resetPatientFilters">
-                                                    <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                                    Reset
-                                                </Button>
-                                                <Button size="sm" class="gap-1.5" @click="submitSearch">
-                                                    <AppIcon name="eye" class="size-3.5" />
-                                                    Apply filters
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </PopoverContent>
-                                </Popover>
-
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    class="gap-1.5 md:hidden"
-                                    @click="mobileFiltersDrawerOpen = true"
+                                    class="h-9 gap-1.5 rounded-lg"
+                                    @click="patientFiltersSheetOpen = true"
                                 >
                                     <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                    Filters & view
+                                    Filters
+                                    <Badge
+                                        v-if="patientFilterChips.length > 0"
+                                        variant="secondary"
+                                        class="ml-1 h-5 px-1.5 text-[10px]"
+                                    >
+                                        {{ patientFilterChips.length }}
+                                    </Badge>
                                 </Button>
                             </div>
+                        </div>
+
+                        <div v-if="patientFilterChips.length > 0" class="flex flex-wrap gap-1.5">
+                            <Badge v-for="chip in patientFilterChips" :key="chip.key" variant="outline">
+                                {{ chip.label }}
+                            </Badge>
                         </div>
 
                     </div>
@@ -3383,14 +4051,12 @@ onMounted(initialPageLoad);
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
                                         <DropdownMenuLabel class="text-xs text-muted-foreground">Recommended next step</DropdownMenuLabel>
-                                        <DropdownMenuItem as-child>
-                                            <Link :href="patientContextHref('/appointments', patient, { openSchedule: true })" class="flex items-center gap-2">
-                                                <AppIcon name="calendar-clock" class="size-3.5" />
-                                                Schedule Appointment
-                                            </Link>
+                                        <DropdownMenuItem class="flex items-center gap-2" @click="openPatientVisitHandoff(patient, 'list')">
+                                            <AppIcon name="clipboard-list" class="size-3.5" />
+                                            Start Visit Handoff
                                         </DropdownMenuItem>
                                         <DropdownMenuLabel class="px-2 pt-1 text-[11px] font-normal text-muted-foreground">
-                                            Standard flow after registration
+                                            Checks for an active visit before routing
                                         </DropdownMenuLabel>
                                         <DropdownMenuSeparator />
                                         <DropdownMenuLabel class="text-xs text-muted-foreground">Urgent or direct entry</DropdownMenuLabel>
@@ -3543,7 +4209,24 @@ onMounted(initialPageLoad);
                 </SheetHeader>
 
                 <ScrollArea class="min-h-0 flex-1">
-                    <div class="mx-auto w-full max-w-4xl space-y-5 p-4 pb-24">
+                    <div class="grid gap-4 px-6 py-4 pb-8">
+                        <div class="flex flex-col gap-3 rounded-lg border bg-muted/20 px-3 py-3 text-xs sm:flex-row sm:items-center sm:justify-between">
+                            <div class="min-w-0">
+                                <p class="truncate text-sm font-medium">{{ registrationPatientNamePreview }}</p>
+                                <p class="mt-0.5 text-muted-foreground">
+                                    {{ scope?.facility?.name || 'Facility context' }}
+                                    <template v-if="scope?.facility?.code"> | {{ scope.facility.code }}</template>
+                                </p>
+                            </div>
+                            <div class="flex flex-wrap gap-1.5">
+                                <Badge variant="outline">{{ formatEnumLabel(registrationForm.gender || 'gender pending') }}</Badge>
+                                <Badge variant="outline">{{ registrationAgeSummary }}</Badge>
+                                <Badge variant="outline">{{ countryDisplayLabel(registrationForm.countryCode) || registrationForm.countryCode || 'Country pending' }}</Badge>
+                                <Badge :variant="registrationRequiredReadiness.complete === registrationRequiredReadiness.total ? 'secondary' : 'outline'">
+                                    {{ registrationRequiredReadiness.complete }}/{{ registrationRequiredReadiness.total }} required
+                                </Badge>
+                            </div>
+                        </div>
                         <Alert
                             v-if="preSubmitDuplicateMatches.length > 0"
                             class="border-amber-300 bg-amber-50"
@@ -3552,30 +4235,72 @@ onMounted(initialPageLoad);
                                 <AppIcon name="alert-triangle" class="size-4" />
                                 {{ tW2('duplicate.title') }}
                             </AlertTitle>
-                            <AlertDescription class="space-y-2 text-xs text-amber-900">
+                            <AlertDescription class="space-y-3 text-xs text-amber-900">
                                 <p>{{ tW2('duplicate.description') }}</p>
-                                <div class="space-y-1">
+                                <div class="grid gap-3">
                                     <div
                                         v-for="match in preSubmitDuplicateMatches"
                                         :key="`duplicate-${match.id}`"
-                                        class="flex items-center justify-between gap-2 rounded border border-amber-300 bg-white/70 px-2 py-1.5"
+                                        class="rounded-lg border border-amber-300 bg-white/80 p-3 shadow-sm"
                                     >
-                                        <span class="font-medium">
-                                            {{ patientName(match) }}
-                                            <span class="ml-1 text-muted-foreground">
-                                                ({{ match.patientNumber || match.id.slice(0, 8) }})
-                                            </span>
-                                        </span>
-                                        <Link
-                                            :href="`/patients?q=${encodeURIComponent(match.patientNumber || match.id)}`"
-                                            target="_blank"
-                                            class="text-primary underline underline-offset-2"
-                                        >
-                                            {{ tW2('duplicate.viewExistingPatient') }}
-                                        </Link>
+                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                            <div class="min-w-0">
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <p class="font-semibold text-amber-950">{{ patientName(match) }}</p>
+                                                    <Badge variant="outline" class="border-amber-300 bg-amber-100 text-amber-900">
+                                                        {{ match.patientNumber || match.id.slice(0, 8) }}
+                                                    </Badge>
+                                                    <Badge :variant="statusVariant(match.status)" class="capitalize">
+                                                        {{ match.status || 'unknown' }}
+                                                    </Badge>
+                                                </div>
+                                                <p class="mt-1 text-[11px] text-amber-800">
+                                                    Registered {{ formatDate(match.createdAt) || 'date not recorded' }}
+                                                </p>
+                                            </div>
+                                            <Button size="sm" variant="outline" as-child class="h-8 shrink-0 gap-1.5 border-amber-300 bg-white">
+                                                <Link
+                                                    :href="`/patients?q=${encodeURIComponent(match.patientNumber || match.id)}`"
+                                                    target="_blank"
+                                                >
+                                                    <AppIcon name="eye" class="size-3.5" />
+                                                    {{ tW2('duplicate.viewExistingPatient') }}
+                                                </Link>
+                                            </Button>
+                                        </div>
+
+                                        <div class="mt-3 overflow-hidden rounded-md border border-amber-200 bg-white">
+                                            <div class="grid grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)_4rem] border-b border-amber-200 bg-amber-100/70 px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-amber-900">
+                                                <span>Field</span>
+                                                <span>New entry</span>
+                                                <span>Existing</span>
+                                                <span class="text-right">Match</span>
+                                            </div>
+                                            <div
+                                                v-for="row in duplicateComparisonRows(match)"
+                                                :key="`duplicate-${match.id}-${row.key}`"
+                                                class="grid grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)_4rem] gap-2 border-b border-amber-100 px-2 py-1.5 last:border-b-0"
+                                            >
+                                                <span class="font-medium text-amber-950">{{ row.label }}</span>
+                                                <span class="min-w-0 truncate">{{ row.incoming }}</span>
+                                                <span class="min-w-0 truncate">{{ row.existing }}</span>
+                                                <span class="text-right">
+                                                    <Badge
+                                                        :variant="row.matched ? 'secondary' : 'outline'"
+                                                        class="text-[10px]"
+                                                    >
+                                                        {{ row.matched ? 'Same' : 'Check' }}
+                                                    </Badge>
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="flex flex-wrap gap-2">
+                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <p class="text-[11px] text-amber-800">
+                                        Continue only when the new entry is confirmed as a separate patient.
+                                    </p>
+                                    <div class="flex flex-wrap gap-2">
                                     <Button
                                         size="sm"
                                         variant="outline"
@@ -3591,6 +4316,7 @@ onMounted(initialPageLoad);
                                     >
                                         {{ tW2('duplicate.confirmNewPatient') }}
                                     </Button>
+                                    </div>
                                 </div>
                             </AlertDescription>
                         </Alert>
@@ -3622,8 +4348,8 @@ onMounted(initialPageLoad);
                         </div>
 
                         <!-- ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ PRIMARY INTAKE STRIP ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ -->
-                        <Card class="rounded-lg border-border/70 shadow-sm">
-                            <CardContent class="space-y-5 p-4 sm:p-5">
+                        <fieldset class="grid gap-4 rounded-lg border p-3">
+                            <legend class="px-2 text-sm font-medium text-muted-foreground">Patient identity</legend>
 
                                 <!-- Row 1: First name | Last name -->
                                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -3705,6 +4431,11 @@ onMounted(initialPageLoad);
                                         <p v-if="fieldError('countryCode')" class="text-xs text-destructive">{{ fieldError('countryCode') }}</p>
                                     </div>
                                 </div>
+
+                        </fieldset>
+
+                        <fieldset class="grid gap-4 rounded-lg border p-3">
+                            <legend class="px-2 text-sm font-medium text-muted-foreground">Age and date of birth</legend>
 
                                 <!-- Row 3: Age / DOB ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â mode toggle inline with label -->
                                 <div class="grid gap-2">
@@ -3792,6 +4523,11 @@ onMounted(initialPageLoad);
                                     </div>
                                 </div>
 
+                        </fieldset>
+
+                        <fieldset class="grid gap-4 rounded-lg border p-3">
+                            <legend class="px-2 text-sm font-medium text-muted-foreground">Contact and address</legend>
+
                                 <!-- Row 4: Phone (full width ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â primary contact) -->
                                 <div class="grid gap-1.5">
                                     <Label for="patient-form-phone" class="text-xs font-medium">
@@ -3852,16 +4588,15 @@ onMounted(initialPageLoad);
                                     <p v-if="fieldError('addressLine')" class="text-xs text-destructive">{{ fieldError('addressLine') }}</p>
                                 </div>
 
-                            </CardContent>
-                        </Card>
+                        </fieldset>
 
                         <!-- ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ ADDITIONAL DETAILS (OPTIONAL) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ -->
                         <Collapsible v-model:open="registerOptionalDetailsOpen">
-                            <Card class="rounded-lg border-dashed shadow-sm">
-                                <CardContent class="p-4 sm:p-5">
+                            <fieldset class="rounded-lg border border-dashed p-3">
+                                <legend class="px-2 text-sm font-medium text-muted-foreground">Additional details</legend>
                                     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
-                                            <p class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                                            <p class="flex items-center gap-1.5 text-sm font-medium">
                                                 <AppIcon name="info" class="size-3.5" />
                                                 {{ tW2('registration.additionalDetailsOptional') }}
                                             </p>
@@ -3875,9 +4610,8 @@ onMounted(initialPageLoad);
                                             </Button>
                                         </CollapsibleTrigger>
                                     </div>
-                                </CardContent>
-                                <CollapsibleContent>
-                                    <CardContent class="grid grid-cols-1 gap-4 border-t px-4 pb-4 pt-4 sm:grid-cols-2 sm:px-5 sm:pb-5">
+                                <CollapsibleContent class="mt-3 border-t pt-3">
+                                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                         <div class="grid gap-1.5">
                                             <Label for="patient-form-nationalId" class="text-xs font-medium">National ID</Label>
                                             <Input
@@ -3918,45 +4652,373 @@ onMounted(initialPageLoad);
                                                 placeholder="Use international format when possible"
                                             />
                                         </div>
-                                    </CardContent>
+                                    </div>
                                 </CollapsibleContent>
-                            </Card>
+                            </fieldset>
                         </Collapsible>
                     </div>
                 </ScrollArea>
 
-                <SheetFooter class="shrink-0 flex-col-reverse gap-2 border-t bg-muted/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-end">
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        :disabled="createLoading"
-                        class="w-full sm:w-auto"
-                        @click="registerDialogOpen = false"
-                    >
-                        Cancel
-                    </Button>
-                    <Button
-                        size="sm"
-                        :disabled="createLoading || preSubmitDuplicateCheckLoading"
-                        class="h-8 w-full gap-1.5 px-3 sm:w-auto"
-                        @click="createPatient"
-                    >
-                        <AppIcon name="plus" class="size-3.5" />
-                        {{
-                            createLoading
-                                ? tW2('action.creating')
-                                : preSubmitDuplicateCheckLoading
-                                  ? tW2('action.checkingDuplicates')
-                                  : tW2('action.registerPatient')
-                        }}
-                    </Button>
+                <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
+                    <div class="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p class="text-xs text-muted-foreground">
+                            {{ registrationPatientNamePreview }} | {{ registrationRequiredReadiness.complete }}/{{ registrationRequiredReadiness.total }} required fields ready
+                        </p>
+                        <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                :disabled="createLoading"
+                                class="w-full sm:w-auto"
+                                @click="registerDialogOpen = false"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                size="sm"
+                                :disabled="createLoading || preSubmitDuplicateCheckLoading"
+                                class="h-8 w-full gap-1.5 px-3 sm:w-auto"
+                                @click="createPatient"
+                            >
+                                <AppIcon name="plus" class="size-3.5" />
+                                {{
+                                    createLoading
+                                        ? tW2('action.creating')
+                                        : preSubmitDuplicateCheckLoading
+                                          ? tW2('action.checkingDuplicates')
+                                          : tW2('action.registerPatient')
+                                }}
+                            </Button>
+                        </div>
+                    </div>
                 </SheetFooter>
             </SheetContent>
         </Sheet>
 
+            <!-- ================================================================== -->
+            <!-- POST REGISTRATION ACTIONS                                          -->
+            <!-- ================================================================== -->
+            <Dialog
+                :open="postRegistrationDialogOpen"
+                @update:open="(open) => (open ? (postRegistrationDialogOpen = true) : closePostRegistrationDialog())"
+            >
+                <DialogContent size="lg">
+                    <DialogHeader>
+                        <DialogTitle class="flex items-center gap-2">
+                            <AppIcon name="check-circle" class="size-5 text-primary" />
+                            Patient registered
+                        </DialogTitle>
+                        <DialogDescription v-if="postRegistrationPatient">
+                            {{ patientName(postRegistrationPatient) }}
+                            <template v-if="postRegistrationPatient.patientNumber">
+                                | {{ postRegistrationPatient.patientNumber }}
+                            </template>
+                            is ready for the next front-desk workflow.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div v-if="postRegistrationPatient" class="space-y-4">
+                        <div class="grid gap-2 rounded-lg border bg-muted/20 p-3 sm:grid-cols-3">
+                            <div>
+                                <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Patient</p>
+                                <p class="mt-1 truncate text-sm font-semibold">{{ patientName(postRegistrationPatient) }}</p>
+                            </div>
+                            <div>
+                                <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Contact</p>
+                                <p class="mt-1 truncate text-sm font-semibold">{{ postRegistrationPatient.phone || 'Not recorded' }}</p>
+                            </div>
+                            <div>
+                                <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Location</p>
+                                <p class="mt-1 truncate text-sm font-semibold">{{ patientLocationLabel(postRegistrationPatient) }}</p>
+                            </div>
+                        </div>
+
+                        <Alert v-if="createdWarnings.length > 0" class="border-amber-300 bg-amber-50">
+                            <AlertTitle class="text-amber-900">Registration warning</AlertTitle>
+                            <AlertDescription class="space-y-1 text-xs text-amber-900">
+                                <p
+                                    v-for="warning in createdWarnings"
+                                    :key="`created-warning-${warning.code}-${warning.message ?? ''}`"
+                                >
+                                    {{ warning.message || warning.code }}
+                                </p>
+                            </AlertDescription>
+                        </Alert>
+
+                        <div class="rounded-lg border bg-background p-3">
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div class="space-y-1">
+                                    <p class="text-sm font-semibold text-foreground">Start visit handoff</p>
+                                    <p class="text-xs text-muted-foreground">
+                                        Route the patient into appointment, emergency triage, billing, or chart review with one controlled flow.
+                                    </p>
+                                </div>
+                                <Button class="gap-1.5 sm:shrink-0" @click="openPatientVisitHandoff(postRegistrationPatient, 'post-registration')">
+                                    <AppIcon name="clipboard-list" class="size-3.5" />
+                                    Start Handoff
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <DialogFooter class="gap-2 sm:gap-0">
+                        <Button variant="outline" @click="closePostRegistrationDialog">
+                            Close
+                        </Button>
+                        <Button variant="secondary" class="gap-1.5" @click="registerAnotherPatient">
+                            <AppIcon name="plus" class="size-3.5" />
+                            Register Another
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
 
             <!-- ================================================================== -->
-            <!-- PATIENT DETAILS SHEET (WITH TABS)                                  -->
+            <!-- PATIENT VISIT HANDOFF                                              -->
+            <!-- ================================================================== -->
+            <Sheet
+                :open="visitHandoffSheetOpen"
+                @update:open="(open) => (open ? (visitHandoffSheetOpen = true) : closePatientVisitHandoff())"
+            >
+                <SheetContent side="right" variant="form" size="3xl" class="flex h-full min-h-0 flex-col">
+                    <SheetHeader v-if="visitHandoffPatient" class="shrink-0 border-b px-6 py-4 text-left pr-12">
+                        <SheetTitle class="flex items-center gap-2">
+                            <AppIcon name="clipboard-list" class="size-5 text-primary" />
+                            Patient Visit Handoff
+                        </SheetTitle>
+                        <SheetDescription>
+                            {{ visitHandoffSourceLabel }} workflow for {{ patientName(visitHandoffPatient) }}
+                            <template v-if="visitHandoffPatient.patientNumber">
+                                | {{ visitHandoffPatient.patientNumber }}
+                            </template>
+                        </SheetDescription>
+                    </SheetHeader>
+
+                    <div v-if="visitHandoffPatient" class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                        <div class="space-y-5">
+                            <section class="rounded-lg border bg-muted/20 p-3">
+                                <div class="grid gap-3 sm:grid-cols-3">
+                                    <div>
+                                        <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Patient</p>
+                                        <p class="mt-1 truncate text-sm font-semibold text-foreground">{{ patientName(visitHandoffPatient) }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Contact</p>
+                                        <p class="mt-1 truncate text-sm font-semibold text-foreground">{{ visitHandoffPatient.phone || 'Not recorded' }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Location</p>
+                                        <p class="mt-1 truncate text-sm font-semibold text-foreground">{{ patientLocationLabel(visitHandoffPatient) }}</p>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <Alert v-if="visitHandoffPatient.status && visitHandoffPatient.status !== 'active'" variant="destructive">
+                                <AlertTitle>Patient is not active</AlertTitle>
+                                <AlertDescription>
+                                    Reactivate or review this patient before starting a new appointment, triage, or billing workflow.
+                                </AlertDescription>
+                            </Alert>
+
+                            <Alert v-if="visitHandoffError" variant="destructive">
+                                <AlertTitle>Visit check unavailable</AlertTitle>
+                                <AlertDescription>{{ visitHandoffError }}</AlertDescription>
+                            </Alert>
+
+                            <Alert v-if="visitHandoffActionError" variant="destructive">
+                                <AlertTitle>Handoff action failed</AlertTitle>
+                                <AlertDescription>{{ visitHandoffActionError }}</AlertDescription>
+                            </Alert>
+
+                            <section class="space-y-3">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div>
+                                        <p class="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Current visit check</p>
+                                        <p class="mt-1 text-sm text-muted-foreground">
+                                            Confirm the patient does not already have an active outpatient visit before creating another one.
+                                        </p>
+                                    </div>
+                                    <Badge variant="outline">{{ visitHandoffLoading ? 'Checking' : 'Ready' }}</Badge>
+                                </div>
+
+                                <div v-if="visitHandoffLoading" class="space-y-2">
+                                    <Skeleton class="h-16 w-full" />
+                                    <Skeleton class="h-16 w-full" />
+                                </div>
+
+                                <Alert v-else-if="visitHandoffActiveAppointment" class="border-amber-300 bg-amber-50">
+                                    <AlertTitle class="text-amber-900">Active visit already exists</AlertTitle>
+                                    <AlertDescription class="space-y-3 text-amber-900">
+                                        <div class="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-start">
+                                            <div>
+                                                <p>
+                                                    Use
+                                                    {{ visitHandoffActiveAppointment.appointmentNumber || 'the current visit' }}
+                                                    instead of opening a duplicate workflow.
+                                                </p>
+                                                <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                                                    <Badge variant="outline" class="border-amber-300 bg-white/70 text-amber-950">
+                                                        {{ formatEnumLabel(visitHandoffActiveAppointment.status || 'active visit') }}
+                                                    </Badge>
+                                                    <span v-if="visitHandoffActiveAppointment.scheduledAt">
+                                                        {{ formatDateTime(visitHandoffActiveAppointment.scheduledAt) }}
+                                                    </span>
+                                                    <span v-if="visitHandoffActiveAppointment.department">
+                                                        {{ visitHandoffActiveAppointment.department }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="flex flex-wrap gap-2 sm:justify-end">
+                                                <Button
+                                                    v-if="visitHandoffCanCheckIn"
+                                                    size="sm"
+                                                    class="gap-1.5"
+                                                    :disabled="visitHandoffSubmitting"
+                                                    @click="checkInVisitFromHandoff"
+                                                >
+                                                    <AppIcon name="calendar-clock" class="size-3.5" />
+                                                    {{ visitHandoffSubmitting ? 'Checking in...' : 'Check in now' }}
+                                                </Button>
+                                                <Button
+                                                    v-if="visitHandoffExistingVisitHref"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    as-child
+                                                    class="gap-1.5 border-amber-300 bg-white/70 text-amber-950 hover:bg-white"
+                                                >
+                                                    <Link :href="visitHandoffExistingVisitHref">
+                                                        <AppIcon name="arrow-up-right" class="size-3.5" />
+                                                        Open visit
+                                                    </Link>
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </AlertDescription>
+                                </Alert>
+
+                                <div v-else class="rounded-lg border border-dashed bg-background px-3 py-3 text-sm text-muted-foreground">
+                                    No active outpatient visit was found from the patient context available to this user.
+                                </div>
+                            </section>
+
+                            <section class="space-y-3 border-t pt-5">
+                                <div>
+                                    <p class="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Handoff route</p>
+                                    <p class="mt-1 text-sm text-muted-foreground">
+                                        Choose the operational lane that matches why the patient is at the facility now.
+                                    </p>
+                                </div>
+
+                                <div class="grid gap-3 md:grid-cols-2">
+                                    <button type="button" :class="visitHandoffModeButtonClass('outpatient')" @click="visitHandoffMode = 'outpatient'">
+                                        <span class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                                            <AppIcon name="calendar-clock" class="size-4" />
+                                        </span>
+                                        <span class="min-w-0 flex-1">
+                                            <span class="flex items-center justify-between gap-2">
+                                                <span class="text-sm font-semibold text-foreground">Outpatient visit</span>
+                                                <Badge variant="secondary" class="text-[10px]">{{ visitHandoffModeBadge('outpatient') }}</Badge>
+                                            </span>
+                                            <span class="mt-1 block text-xs leading-5 text-muted-foreground">
+                                                Standard OPD flow: appointment, arrival check-in, nurse triage, provider, orders, billing.
+                                            </span>
+                                        </span>
+                                    </button>
+
+                                    <button type="button" :class="visitHandoffModeButtonClass('emergency')" @click="visitHandoffMode = 'emergency'">
+                                        <span class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-destructive/10 text-destructive">
+                                            <AppIcon name="activity" class="size-4" />
+                                        </span>
+                                        <span class="min-w-0 flex-1">
+                                            <span class="flex items-center justify-between gap-2">
+                                                <span class="text-sm font-semibold text-foreground">Emergency triage</span>
+                                                <Badge variant="outline" class="text-[10px]">{{ visitHandoffModeBadge('emergency') }}</Badge>
+                                            </span>
+                                            <span class="mt-1 block text-xs leading-5 text-muted-foreground">
+                                                Use when the patient needs immediate assessment, stabilization, transfer, or admission routing.
+                                            </span>
+                                        </span>
+                                    </button>
+
+                                    <button type="button" :class="visitHandoffModeButtonClass('billing')" @click="visitHandoffMode = 'billing'">
+                                        <span class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-700">
+                                            <AppIcon name="receipt" class="size-4" />
+                                        </span>
+                                        <span class="min-w-0 flex-1">
+                                            <span class="flex items-center justify-between gap-2">
+                                                <span class="text-sm font-semibold text-foreground">Billing first</span>
+                                                <Badge variant="outline" class="text-[10px]">{{ visitHandoffModeBadge('billing') }}</Badge>
+                                            </span>
+                                            <span class="mt-1 block text-xs leading-5 text-muted-foreground">
+                                                For registration fees, deposits, cashier instructions, or patient-share collection.
+                                            </span>
+                                        </span>
+                                    </button>
+
+                                    <button type="button" :class="visitHandoffModeButtonClass('chart')" @click="visitHandoffMode = 'chart'">
+                                        <span class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                                            <AppIcon name="book-open" class="size-4" />
+                                        </span>
+                                        <span class="min-w-0 flex-1">
+                                            <span class="flex items-center justify-between gap-2">
+                                                <span class="text-sm font-semibold text-foreground">Chart only</span>
+                                                <Badge variant="outline" class="text-[10px]">{{ visitHandoffModeBadge('chart') }}</Badge>
+                                            </span>
+                                            <span class="mt-1 block text-xs leading-5 text-muted-foreground">
+                                                Review patient context without creating a new visit or financial workflow.
+                                            </span>
+                                        </span>
+                                    </button>
+                                </div>
+                            </section>
+
+                            <section class="rounded-lg border bg-muted/20 p-4">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div class="space-y-1">
+                                        <p class="text-sm font-semibold text-foreground">{{ visitHandoffPrimaryLabel }}</p>
+                                        <p class="max-w-xl text-xs leading-5 text-muted-foreground">{{ visitHandoffPrimaryDescription }}</p>
+                                        <p v-if="visitHandoffPrimaryDisabledReason" class="text-xs font-medium text-destructive">
+                                            {{ visitHandoffPrimaryDisabledReason }}
+                                        </p>
+                                    </div>
+                                    <Button
+                                        v-if="visitHandoffCanCheckIn && !visitHandoffPrimaryDisabledReason"
+                                        class="gap-1.5 sm:shrink-0"
+                                        :disabled="visitHandoffSubmitting"
+                                        @click="checkInVisitFromHandoff"
+                                    >
+                                        <AppIcon :name="visitHandoffPrimaryIcon" class="size-3.5" />
+                                        {{ visitHandoffSubmitting ? 'Checking in...' : visitHandoffPrimaryLabel }}
+                                    </Button>
+                                    <Button
+                                        v-else-if="visitHandoffPrimaryHref && !visitHandoffPrimaryDisabledReason"
+                                        as-child
+                                        class="gap-1.5 sm:shrink-0"
+                                    >
+                                        <Link :href="visitHandoffPrimaryHref">
+                                            <AppIcon :name="visitHandoffPrimaryIcon" class="size-3.5" />
+                                            {{ visitHandoffPrimaryLabel }}
+                                        </Link>
+                                    </Button>
+                                    <Button v-else disabled class="gap-1.5 sm:shrink-0">
+                                        <AppIcon :name="visitHandoffPrimaryIcon" class="size-3.5" />
+                                        {{ visitHandoffPrimaryLabel }}
+                                    </Button>
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+
+                    <SheetFooter class="shrink-0 border-t px-6 py-4">
+                        <Button variant="outline" @click="closePatientVisitHandoff">Close</Button>
+                    </SheetFooter>
+                </SheetContent>
+            </Sheet>
+
+
+            <!-- ================================================================== -->
+            <!-- PATIENT DETAILS SHEET                                             -->
             <!-- ================================================================== -->
             <Sheet
                 :open="detailsSheetOpen"
@@ -3965,76 +5027,114 @@ onMounted(initialPageLoad);
                 <SheetContent
                     side="right"
                     variant="workspace"
-                    size="3xl"
+                    size="4xl"
+                    class="flex h-full min-h-0 flex-col"
                 >
-                    <!-- Header: fixed, with padding for close button -->
-                                    <SheetHeader class="shrink-0 border-b px-6 py-4 text-left pr-12">
-                        <SheetTitle class="flex items-center gap-2 text-lg">
-                            <AppIcon name="user" class="size-5 text-primary" />
-                            Patient Details
+                    <SheetHeader v-if="detailsSheetPatient" class="shrink-0 border-b bg-background px-4 py-3 text-left pr-12">
+                        <SheetTitle class="flex min-w-0 flex-wrap items-center gap-2">
+                            <AppIcon name="user" class="size-5 text-muted-foreground" />
+                            <span class="min-w-0 truncate">{{ patientName(detailsSheetPatient) }}</span>
+                            <Badge v-if="detailsSheetPatient.patientNumber" variant="outline" class="shrink-0 font-normal">
+                                {{ detailsSheetPatient.patientNumber }}
+                            </Badge>
+                            <Badge :variant="statusVariant(detailsSheetPatient.status)" class="shrink-0 capitalize">
+                                {{ detailsSheetPatient.status || 'unknown' }}
+                            </Badge>
                         </SheetTitle>
-                        <SheetDescription class="text-sm">
-                            Review patient context and continue workflows.
+                        <SheetDescription>
+                            {{ detailsSheetPatient.gender ? detailsSheetPatient.gender : 'Gender not recorded' }}
+                            |
+                            {{ detailsSheetPatient.dateOfBirth ? `Age ${formatAge(detailsSheetPatient.dateOfBirth)}` : 'Age not recorded' }}
+                            |
+                            {{ patientLocationLabel(detailsSheetPatient) }}
                         </SheetDescription>
                     </SheetHeader>
 
-                    <!-- Scrollable body -->
-                    <ScrollArea v-if="detailsSheetPatient" class="min-h-0 flex-1">
-                        <div class="space-y-4 p-4">
-                            <!-- Patient header card (sticky when scrolling) -->
-                            <div class="sticky top-0 z-10 mt-4 rounded-lg border bg-background/95 p-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
-                                <div class="flex items-start gap-3">
-                                    <div class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-base font-bold text-primary ring-2 ring-primary/20">
-                                        {{ patientInitials(detailsSheetPatient) }}
-                                    </div>
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex flex-wrap items-start justify-between gap-2">
-                                            <div class="min-w-0">
-                                                <p class="truncate text-base font-semibold leading-tight">
-                                                    {{ patientName(detailsSheetPatient) }}
-                                                </p>
-                                                <div class="mt-0.5 flex flex-wrap items-center gap-2">
-                                                    <span class="text-xs text-muted-foreground">
+                    <div v-if="detailsSheetPatient" class="min-h-0 flex flex-1 flex-col overflow-hidden">
+                        <Tabs v-model="detailsSheetTab" class="flex h-full min-h-0 flex-col">
+                            <div class="shrink-0 border-b bg-muted/5 px-4 py-2.5">
+                                <div class="space-y-4">
+                                    <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                                        <div class="min-w-0 rounded-lg border bg-background/70 px-3 py-2">
+                                            <div class="flex items-start gap-3">
+                                                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary ring-1 ring-primary/20">
+                                                    {{ patientInitials(detailsSheetPatient) }}
+                                                </div>
+                                                <div class="min-w-0">
+                                                    <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Patient</p>
+                                                    <p class="mt-0.5 truncate text-sm font-semibold leading-4">{{ patientName(detailsSheetPatient) }}</p>
+                                                    <p class="truncate text-xs leading-4 text-muted-foreground">
                                                         {{ detailsSheetPatient.patientNumber || `ID: ${detailsSheetPatient.id.slice(0, 8)}` }}
-                                                    </span>
-                                                    <template v-if="detailsSheetPatient.dateOfBirth">
-                                                        <span class="text-xs text-muted-foreground">|</span>
-                                                        <span class="text-xs font-medium text-muted-foreground">
-                                                            Age {{ formatAge(detailsSheetPatient.dateOfBirth) }}
-                                                        </span>
-                                                    </template>
-                                                    <template v-if="detailsSheetPatient.gender">
-                                                        <span class="text-xs text-muted-foreground">|</span>
-                                                        <span class="text-xs capitalize text-muted-foreground">{{ detailsSheetPatient.gender }}</span>
-                                                    </template>
+                                                    </p>
                                                 </div>
                                             </div>
-                                            <Badge :variant="statusVariant(detailsSheetPatient.status)" class="shrink-0 capitalize">
-                                                {{ detailsSheetPatient.status || 'unknown' }}
-                                            </Badge>
                                         </div>
-                                        <!-- Action row -->
-                                        <div class="mt-2.5 flex flex-wrap gap-2">
+                                        <div class="min-w-0 rounded-lg border bg-background/70 px-3 py-2">
+                                            <div class="flex items-center justify-between gap-2">
+                                                <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Contact</p>
+                                                <Badge variant="outline" class="capitalize">{{ detailsSheetPatient.gender || 'Unknown' }}</Badge>
+                                            </div>
+                                            <p class="mt-0.5 truncate text-sm font-semibold leading-4">{{ detailsSheetPatient.phone || 'Phone not recorded' }}</p>
+                                            <p class="truncate text-xs leading-4 text-muted-foreground">{{ patientLocationLabel(detailsSheetPatient) }}</p>
+                                        </div>
+                                        <div class="min-w-0 rounded-lg border bg-background/70 px-3 py-2">
+                                            <div class="flex items-center justify-between gap-2">
+                                                <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Care activity</p>
+                                                <Badge variant="secondary">{{ detailsTimelineEvents.length }} events</Badge>
+                                            </div>
+                                            <p class="mt-0.5 truncate text-sm font-semibold leading-4">
+                                                {{ detailsWorkflowRecommendation?.title ?? 'Review patient workflow' }}
+                                            </p>
+                                            <p class="truncate text-xs leading-4 text-muted-foreground">
+                                                {{ detailsSheetPatient.dateOfBirth ? `Age ${formatAge(detailsSheetPatient.dateOfBirth)}` : 'Age not recorded' }}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                        <TabsList class="flex h-auto w-full flex-wrap justify-start gap-2 rounded-lg bg-transparent p-0 lg:w-auto">
+                                            <TabsTrigger value="overview" class="gap-1.5 rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">
+                                                <AppIcon name="layout-grid" class="size-3.5" />
+                                                Overview
+                                            </TabsTrigger>
+                                            <TabsTrigger value="activity" class="gap-1.5 rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">
+                                                <AppIcon name="activity" class="size-3.5" />
+                                                Activity
+                                            </TabsTrigger>
+                                            <TabsTrigger v-if="canViewPatientAudit" value="audit" class="gap-1.5 rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">
+                                                <AppIcon name="file-text" class="size-3.5" />
+                                                Audit
+                                                <Badge
+                                                    v-if="detailsAuditMeta"
+                                                    variant="secondary"
+                                                    class="h-4 min-w-4 px-1 text-[10px]"
+                                                >
+                                                    {{ detailsAuditMeta.total }}
+                                                </Badge>
+                                            </TabsTrigger>
+                                        </TabsList>
+
+                                        <div class="flex flex-wrap gap-2">
                                             <Button
                                                 v-if="canUpdatePatients"
                                                 size="sm"
                                                 variant="outline"
-                                                class="h-7 gap-1.5 text-xs"
+                                                class="h-8 gap-1.5 text-xs"
                                                 @click="openEditSheet(detailsSheetPatient)"
                                             >
-                                                <AppIcon name="pencil" class="size-3" />
+                                                <AppIcon name="pencil" class="size-3.5" />
                                                 Edit Demographics
                                             </Button>
                                             <Button
                                                 v-if="canUpdatePatientStatus"
                                                 size="sm"
                                                 :variant="detailsSheetPatient.status === 'active' ? 'ghost' : 'secondary'"
-                                                class="h-7 gap-1.5 text-xs"
+                                                class="h-8 gap-1.5 text-xs"
                                                 @click="openStatusDialog(detailsSheetPatient)"
                                             >
                                                 <AppIcon
                                                     :name="detailsSheetPatient.status === 'active' ? 'user-x' : 'user-check'"
-                                                    class="size-3"
+                                                    class="size-3.5"
                                                 />
                                                 {{ detailsSheetPatient.status === 'active' ? 'Deactivate' : 'Activate' }}
                                             </Button>
@@ -4043,36 +5143,10 @@ onMounted(initialPageLoad);
                                 </div>
                             </div>
 
-                            <!-- Tabs: shadcn-style list -->
-                            <Tabs v-model="detailsSheetTab" class="w-full">
-                                <TabsList :class="canViewPatientAudit ? 'grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4' : 'grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-3'">
-                                    <TabsTrigger value="overview" class="inline-flex min-h-10 items-center justify-center gap-1.5 px-2 text-xs sm:text-sm">
-                                        <AppIcon name="layout-grid" class="size-3.5" />
-                                        Overview
-                                    </TabsTrigger>
-                                    <TabsTrigger value="timeline" class="inline-flex min-h-10 items-center justify-center gap-1.5 px-2 text-xs sm:text-sm">
-                                        <AppIcon name="activity" class="size-3.5" />
-                                        {{ tW2('tabs.timeline') }}
-                                    </TabsTrigger>
-                                    <TabsTrigger value="workflows" class="inline-flex min-h-10 items-center justify-center gap-1.5 px-2 text-xs sm:text-sm">
-                                        <AppIcon name="clipboard-list" class="size-3.5" />
-                                        Workflows
-                                    </TabsTrigger>
-                                    <TabsTrigger v-if="canViewPatientAudit" value="audit" class="inline-flex min-h-10 items-center justify-center gap-1.5 px-2 text-xs sm:text-sm">
-                                        <AppIcon name="file-text" class="size-3.5" />
-                                        Audit
-                                        <Badge
-                                            v-if="detailsAuditMeta"
-                                            variant="secondary"
-                                            class="h-4 min-w-4 px-1 text-[10px]"
-                                        >
-                                            {{ detailsAuditMeta.total }}
-                                        </Badge>
-                                    </TabsTrigger>
-                                </TabsList>
+                            <ScrollArea class="min-h-0 flex-1" viewport-class="pb-6">
 
                                     <!-- OVERVIEW TAB -->
-                                    <TabsContent value="overview" class="mt-3 space-y-3">
+                                    <TabsContent value="overview" class="m-0 space-y-3 px-6 py-4">
                                         <!-- Status reason banner (shown when inactive/deactivated) -->
                                         <div
                                             v-if="detailsSheetPatient.status && detailsSheetPatient.status !== 'active' && detailsSheetPatient.statusReason"
@@ -4168,8 +5242,105 @@ onMounted(initialPageLoad);
                                         </Card>
                                     </TabsContent>
 
-                                    <!-- TIMELINE TAB -->
-                                    <TabsContent value="timeline" class="mt-3 space-y-3">
+                                    <!-- ACTIVITY TAB -->
+                                    <TabsContent value="activity" class="m-0 space-y-4 px-6 py-4">
+                                        <section class="grid gap-3 rounded-lg border p-3">
+                                            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                                <div class="space-y-1">
+                                                    <p class="flex items-center gap-2 text-sm font-medium">
+                                                        <AppIcon name="clipboard-list" class="size-4 text-muted-foreground" />
+                                                        Continue care workflow
+                                                    </p>
+                                                    <p class="max-w-2xl text-xs text-muted-foreground">
+                                                        Recommended action is calculated from the patient record and current clinical activity.
+                                                    </p>
+                                                </div>
+                                                <div class="flex shrink-0">
+                                                    <Button size="sm" class="gap-1.5" @click="openPatientVisitHandoff(detailsSheetPatient, 'details')">
+                                                        <AppIcon name="clipboard-list" class="size-3.5" />
+                                                        Continue handoff
+                                                    </Button>
+                                                </div>
+                                            </div>
+
+                                            <Alert v-if="detailsSheetPatient.status && detailsSheetPatient.status !== 'active'" variant="destructive">
+                                                <AlertTitle>Patient is not active</AlertTitle>
+                                                <AlertDescription>
+                                                    Reactivate or review status before starting a new appointment, triage, or consultation.
+                                                </AlertDescription>
+                                            </Alert>
+
+                                            <div class="rounded-lg border bg-muted/20 p-3">
+                                                <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                                                    Recommended next step
+                                                </p>
+                                                <p class="mt-1 text-sm font-medium text-foreground">
+                                                    {{ detailsWorkflowRecommendation?.title ?? 'Review patient workflow' }}
+                                                </p>
+                                                <p class="mt-1 text-xs text-muted-foreground">
+                                                    {{
+                                                        detailsWorkflowRecommendation?.description
+                                                            ?? 'Review the current visit state before continuing care.'
+                                                    }}
+                                                </p>
+                                            </div>
+
+                                            <div class="grid gap-3 lg:grid-cols-2">
+                                                <div class="rounded-lg border p-3">
+                                                    <p class="text-sm font-medium text-foreground">Front desk and urgent care</p>
+                                                    <p class="mt-1 text-xs text-muted-foreground">
+                                                        Use triage for unstable walk-ins. Use the chart for context before opening a new visit workflow.
+                                                    </p>
+                                                    <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                                                        <Button size="sm" variant="secondary" as-child class="justify-start gap-1.5">
+                                                            <Link :href="patientContextHref('/emergency-triage', detailsSheetPatient, { includeTabNew: true })">
+                                                                <AppIcon name="activity" class="size-3.5" />
+                                                                Start Triage
+                                                            </Link>
+                                                        </Button>
+                                                        <Button size="sm" variant="secondary" as-child class="justify-start gap-1.5">
+                                                            <Link :href="patientChartContextHref(detailsSheetPatient, { from: 'patients' })">
+                                                                <AppIcon name="book-open" class="size-3.5" />
+                                                                Open Chart
+                                                            </Link>
+                                                        </Button>
+                                                    </div>
+                                                </div>
+
+                                                <div class="rounded-lg border p-3">
+                                                    <p class="text-sm font-medium text-foreground">Orders and billing</p>
+                                                    <p class="mt-1 text-xs text-muted-foreground">
+                                                        Open investigations, medicines, procedures, or billing after clinical assessment.
+                                                    </p>
+                                                    <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                                                        <Button v-if="canCreateLaboratoryOrders" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
+                                                            <Link :href="patientContextHref('/laboratory-orders', detailsSheetPatient, { includeTabNew: true })">
+                                                                <AppIcon name="flask-conical" class="size-3.5" />
+                                                                Lab Order
+                                                            </Link>
+                                                        </Button>
+                                                        <Button v-if="canCreatePharmacyOrders" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
+                                                            <Link :href="patientContextHref('/pharmacy-orders', detailsSheetPatient, { includeTabNew: true })">
+                                                                <AppIcon name="pill" class="size-3.5" />
+                                                                Pharmacy Order
+                                                            </Link>
+                                                        </Button>
+                                                        <Button v-if="canCreateTheatreProcedures" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
+                                                            <Link :href="patientContextHref('/theatre-procedures', detailsSheetPatient, { includeTabNew: true })">
+                                                                <AppIcon name="scissors" class="size-3.5" />
+                                                                Procedure
+                                                            </Link>
+                                                        </Button>
+                                                        <Button size="sm" variant="secondary" as-child class="justify-start gap-1.5">
+                                                            <Link :href="patientContextHref('/billing-invoices', detailsSheetPatient)">
+                                                                <AppIcon name="receipt" class="size-3.5" />
+                                                                Invoice
+                                                            </Link>
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </section>
                                         <Alert v-if="detailsTimelineError" variant="destructive">
                                             <AlertTitle>{{ tW2('timeline.loadIssue') }}</AlertTitle>
                                             <AlertDescription>{{ detailsTimelineError }}</AlertDescription>
@@ -4260,107 +5431,8 @@ onMounted(initialPageLoad);
                                         </template>
                                     </TabsContent>
 
-                                    <!-- WORKFLOWS TAB -->
-                                    <TabsContent value="workflows" class="mt-3 space-y-3">
-                                        <Card class="rounded-lg !gap-4 !py-4">
-                                            <CardHeader class="px-4 pb-1 pt-0">
-                                                <CardTitle class="flex items-center gap-2 text-sm font-medium">
-                                                    <AppIcon name="clipboard-list" class="size-4 text-muted-foreground" />
-                                                    Continue care workflow
-                                                </CardTitle>
-                                                <CardDescription class="text-xs">
-                                                    Follow the standard outpatient flow unless this is an urgent walk-in or a direct clinician encounter.
-                                                </CardDescription>
-                                            </CardHeader>
-                                            <CardContent class="space-y-4 px-4 pt-0">
-                                                <Alert v-if="detailsSheetPatient.status && detailsSheetPatient.status !== 'active'" variant="destructive">
-                                                    <AlertTitle>Patient is not active</AlertTitle>
-                                                    <AlertDescription>
-                                                        Reactivate or review status before starting a new appointment, triage, or consultation.
-                                                    </AlertDescription>
-                                                </Alert>
-
-                                                <div class="rounded-lg border bg-muted/20 p-3">
-                                                    <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                                                        Recommended next step
-                                                    </p>
-                                                    <p class="mt-1 text-sm font-medium text-foreground">
-                                                        {{ detailsWorkflowRecommendation?.title ?? 'Review patient workflow' }}
-                                                    </p>
-                                                    <p class="mt-1 text-xs text-muted-foreground">
-                                                        {{
-                                                            detailsWorkflowRecommendation?.description
-                                                                ?? 'Review the current visit state before continuing care.'
-                                                        }}
-                                                    </p>
-                                                    <div
-                                                        v-if="detailsWorkflowRecommendation?.primaryHref && detailsWorkflowRecommendation?.primaryLabel"
-                                                        class="mt-3 flex flex-wrap gap-2"
-                                                    >
-                                                        <Button size="sm" as-child class="gap-1.5">
-                                                            <Link :href="detailsWorkflowRecommendation.primaryHref">
-                                                                <AppIcon :name="detailsWorkflowRecommendation.primaryIcon" class="size-3.5" />
-                                                                {{ detailsWorkflowRecommendation.primaryLabel }}
-                                                            </Link>
-                                                        </Button>
-                                                    </div>
-                                                </div>
-
-                                                <div class="grid gap-3 lg:grid-cols-2">
-                                                    <div class="rounded-lg border p-3">
-                                                        <p class="text-sm font-medium text-foreground">Urgent or direct entry</p>
-                                                        <p class="mt-1 text-xs text-muted-foreground">
-                                                            Use triage for unstable walk-ins. Use the patient chart for history review, then start outpatient consultation from Appointments so the visit handoff stays intact.
-                                                        </p>
-                                                        <div class="mt-3 grid gap-2">
-                                                            <Button size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                                <Link :href="patientContextHref('/emergency-triage', detailsSheetPatient, { includeTabNew: true })">
-                                                                    <AppIcon name="activity" class="size-3.5" />
-                                                                    Start Emergency Triage
-                                                                </Link>
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-
-                                                    <div class="rounded-lg border p-3">
-                                                        <p class="text-sm font-medium text-foreground">Usually after consultation</p>
-                                                        <p class="mt-1 text-xs text-muted-foreground">
-                                                            Open investigations, medicines, or billing after clinical assessment.
-                                                        </p>
-                                                        <div class="mt-3 grid gap-2">
-                                                            <Button v-if="canCreateLaboratoryOrders" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                                <Link :href="patientContextHref('/laboratory-orders', detailsSheetPatient, { includeTabNew: true })">
-                                                                    <AppIcon name="flask-conical" class="size-3.5" />
-                                                                    New Lab Order
-                                                                </Link>
-                                                            </Button>
-                                                            <Button v-if="canCreatePharmacyOrders" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                                <Link :href="patientContextHref('/pharmacy-orders', detailsSheetPatient, { includeTabNew: true })">
-                                                                    <AppIcon name="pill" class="size-3.5" />
-                                                                    New Pharmacy Order
-                                                                </Link>
-                                                            </Button>
-                                                            <Button v-if="canCreateTheatreProcedures" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                                <Link :href="patientContextHref('/theatre-procedures', detailsSheetPatient, { includeTabNew: true })">
-                                                                    <AppIcon name="scissors" class="size-3.5" />
-                                                                    Schedule Procedure
-                                                                </Link>
-                                                            </Button>
-                                                            <Button size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                                <Link :href="patientContextHref('/billing-invoices', detailsSheetPatient)">
-                                                                    <AppIcon name="receipt" class="size-3.5" />
-                                                                    Create Invoice
-                                                                </Link>
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    </TabsContent>
-
                                     <!-- AUDIT TAB -->
-                                    <TabsContent v-if="canViewPatientAudit" value="audit" class="mt-3 space-y-3">
+                                    <TabsContent v-if="canViewPatientAudit" value="audit" class="m-0 space-y-3 px-6 py-4">
                                         <Alert v-if="!canViewPatientAudit" variant="destructive">
                                             <AlertTitle class="flex items-center gap-2">
                                                 <AppIcon name="shield-check" class="size-4" />
@@ -4372,14 +5444,14 @@ onMounted(initialPageLoad);
                                         </Alert>
 
                                         <template v-else>
-                                            <Card class="rounded-lg !gap-4 !py-4">
-                                                <CardHeader class="px-4 pb-2 pt-0">
+                                            <fieldset class="grid gap-3 rounded-lg border p-3">
+                                                <legend class="px-2 text-sm font-medium text-muted-foreground">Audit trail</legend>
                                                     <div class="flex flex-wrap items-center justify-between gap-2">
                                                         <div>
-                                                            <CardTitle class="text-sm font-medium">Audit activity</CardTitle>
-                                                            <CardDescription class="mt-0.5 text-xs">
+                                                            <p class="text-sm font-medium">Audit activity</p>
+                                                            <p class="mt-0.5 text-xs text-muted-foreground">
                                                                 {{ detailsAuditSummary.total }} entries | Search by action, user, or date range
-                                                            </CardDescription>
+                                                            </p>
                                                         </div>
                                                         <div class="flex flex-wrap items-center gap-2">
                                                             <Button
@@ -4392,12 +5464,12 @@ onMounted(initialPageLoad);
                                                             </Button>
                                                             <Button variant="secondary" size="sm" class="gap-1.5" @click="detailsAuditFiltersOpen = !detailsAuditFiltersOpen">
                                                                 <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                                                {{ detailsAuditFiltersOpen ? 'Hide audit filters' : 'Audit filters' }}
+                                                                {{ detailsAuditFiltersOpen ? 'Hide filters' : 'More filters' }}
                                                             </Button>
                                                         </div>
                                                     </div>
-                                                </CardHeader>
-                                                <CardContent class="space-y-3 px-4 pt-0">
+
+                                                <div class="space-y-3">
                                                     <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
                                                         <div class="space-y-1.5">
                                                             <Label for="patient-audit-q" class="text-xs">Search logs</Label>
@@ -4410,8 +5482,8 @@ onMounted(initialPageLoad);
                                                         </div>
                                                         <div class="flex flex-col-reverse gap-2 sm:flex-row lg:items-end">
                                                             <Button size="sm" class="gap-1.5" :disabled="detailsAuditLoading" @click="applyDetailsAuditFilters">
-                                                                <AppIcon name="eye" class="size-3.5" />
-                                                                {{ detailsAuditLoading ? 'Applying...' : 'Apply' }}
+                                                                <AppIcon name="search" class="size-3.5" />
+                                                                {{ detailsAuditLoading ? 'Searching...' : 'Search' }}
                                                             </Button>
                                                             <Button size="sm" variant="outline" class="gap-1.5" :disabled="detailsAuditLoading" @click="resetDetailsAuditFilters">
                                                                 <AppIcon name="sliders-horizontal" class="size-3.5" />
@@ -4449,19 +5521,19 @@ onMounted(initialPageLoad);
                                                             {{ filter.label }}
                                                         </Badge>
                                                     </div>
-                                                </CardContent>
-                                            </Card>
+                                                </div>
+                                            </fieldset>
 
                                             <Collapsible v-model:open="detailsAuditFiltersOpen">
                                                 <CollapsibleContent>
-                                                    <Card class="rounded-lg !gap-4 !py-4">
-                                                        <CardHeader class="px-4 pb-2 pt-0">
-                                                            <CardTitle class="text-sm font-medium">Audit filters</CardTitle>
-                                                            <CardDescription class="text-xs">
+                                                    <fieldset class="grid gap-3 rounded-lg border p-3">
+                                                        <legend class="px-2 text-sm font-medium text-muted-foreground">Advanced filters</legend>
+                                                            <div>
+                                                            <p class="text-sm font-medium">Narrow audit activity</p>
+                                                            <p class="text-xs text-muted-foreground">
                                                                 Narrow by action, user, actor type, date range, or page size.
-                                                            </CardDescription>
-                                                        </CardHeader>
-                                                        <CardContent class="px-4 pt-0">
+                                                            </p>
+                                                            </div>
                                                             <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                                                 <div class="space-y-1.5">
                                                                     <Label for="patient-audit-action" class="text-xs">Exact action key</Label>
@@ -4473,12 +5545,12 @@ onMounted(initialPageLoad);
                                                                 </div>
                                                                 <div class="space-y-1.5">
                                                                     <Label for="patient-audit-actor-type" class="text-xs">Actor type</Label>
-                                                                    <Select v-model="detailsAuditFilters.actorType">
+                                                                    <Select v-model="detailsAuditActorTypeFilterValue">
                                                                         <SelectTrigger class="mt-0">
                                                                             <SelectValue />
                                                                         </SelectTrigger>
                                                                         <SelectContent>
-                                                                        <SelectItem v-for="option in auditActorTypeOptions" :key="`audit-at-${option.value || 'all'}`" :value="option.value">{{ option.label }}</SelectItem>
+                                                                        <SelectItem v-for="option in auditActorTypeOptions" :key="`audit-at-${option.value}`" :value="option.value">{{ option.label }}</SelectItem>
                                                                         </SelectContent>
                                                                     </Select>
                                                                 </div>
@@ -4523,8 +5595,7 @@ onMounted(initialPageLoad);
                                                                     </Select>
                                                                 </div>
                                                             </div>
-                                                        </CardContent>
-                                                    </Card>
+                                                    </fieldset>
                                                 </CollapsibleContent>
                                             </Collapsible>
 
@@ -4612,10 +5683,10 @@ onMounted(initialPageLoad);
                                             </div>
                                         </template>
                                     </TabsContent>
-                                </Tabs>
-                            </div>
-                        </ScrollArea>
-                        <SheetFooter class="shrink-0 flex-col-reverse gap-2 border-t bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                            </ScrollArea>
+                        </Tabs>
+                    </div>
+                    <SheetFooter class="shrink-0 flex-col-reverse gap-2 border-t bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                             <Button variant="outline" class="gap-1.5 sm:shrink-0" @click="closePatientDetailsSheet">
                                 <AppIcon name="circle-x" class="size-3.5" />
                                 Close
@@ -4626,7 +5697,7 @@ onMounted(initialPageLoad);
                                     Open Patient Chart
                                 </Link>
                             </Button>
-                        </SheetFooter>
+                    </SheetFooter>
                 </SheetContent>
             </Sheet>
 
@@ -4655,6 +5726,28 @@ onMounted(initialPageLoad);
                     <ScrollArea class="min-h-0 flex-1">
                         <div class="mx-auto w-full max-w-4xl space-y-5 p-4 pb-24">
                             <div
+                                v-if="editTargetPatient"
+                                class="flex flex-col gap-3 rounded-lg border bg-muted/20 px-3 py-3 text-xs sm:flex-row sm:items-center sm:justify-between"
+                            >
+                                <div class="min-w-0">
+                                    <p class="truncate text-sm font-medium">{{ patientName(editTargetPatient) }}</p>
+                                    <p class="mt-0.5 text-muted-foreground">
+                                        {{ editTargetPatient.patientNumber || editTargetPatient.id.slice(0, 8) }}
+                                        <template v-if="scope?.facility?.name"> | {{ scope.facility.name }}</template>
+                                    </p>
+                                </div>
+                                <div class="flex flex-wrap gap-1.5">
+                                    <Badge :variant="statusVariant(editTargetPatient.status)" class="capitalize">
+                                        {{ editTargetPatient.status || 'unknown' }}
+                                    </Badge>
+                                    <Badge variant="outline">
+                                        {{ editTargetPatient.dateOfBirth ? formatAge(editTargetPatient.dateOfBirth) : 'Age not recorded' }}
+                                    </Badge>
+                                    <Badge variant="outline">{{ patientLocationLabel(editTargetPatient) }}</Badge>
+                                </div>
+                            </div>
+
+                            <div
                                 v-if="editErrorSummary.length > 0"
                                 ref="editErrorSummaryRef"
                                 tabindex="-1"
@@ -4675,8 +5768,8 @@ onMounted(initialPageLoad);
                                 </Alert>
                             </div>
 
-                            <Card class="rounded-lg border-border/70 shadow-sm">
-                                <CardContent class="space-y-5 p-4 sm:p-5">
+                            <fieldset class="grid gap-4 rounded-lg border p-3">
+                                <legend class="px-2 text-sm font-medium text-muted-foreground">Patient identity</legend>
                                     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                         <div class="grid gap-1.5">
                                             <Label for="patient-edit-firstName" class="text-xs font-medium">
@@ -4723,12 +5816,12 @@ onMounted(initialPageLoad);
                                             <Label for="patient-edit-gender" class="text-xs font-medium">
                                                 Gender
                                             </Label>
-                                            <Select v-model="editForm.gender">
+                                            <Select v-model="editGenderSelectValue">
                                                 <SelectTrigger class="h-10 w-full">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                <SelectItem value="">Select gender</SelectItem>
+                                                <SelectItem :value="SELECT_NONE_VALUE">Select gender</SelectItem>
                                                 <SelectItem value="female">Female</SelectItem>
                                                 <SelectItem value="male">Male</SelectItem>
                                                 <SelectItem value="other">Other</SelectItem>
@@ -4759,6 +5852,10 @@ onMounted(initialPageLoad);
                                         </div>
                                     </div>
 
+                            </fieldset>
+
+                            <fieldset class="grid gap-4 rounded-lg border p-3">
+                                <legend class="px-2 text-sm font-medium text-muted-foreground">Age and date of birth</legend>
                                     <div class="grid gap-2">
                                         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                             <Label class="text-xs font-medium">
@@ -4841,6 +5938,10 @@ onMounted(initialPageLoad);
                                         </div>
                                     </div>
 
+                            </fieldset>
+
+                            <fieldset class="grid gap-4 rounded-lg border p-3">
+                                <legend class="px-2 text-sm font-medium text-muted-foreground">Contact and address</legend>
                                     <div class="grid gap-1.5">
                                         <Label for="patient-edit-phone" class="text-xs font-medium">
                                             Phone
@@ -4897,8 +5998,7 @@ onMounted(initialPageLoad);
                                         />
                                         <p v-if="editFieldError('addressLine')" class="text-xs text-destructive">{{ editFieldError('addressLine') }}</p>
                                     </div>
-                                </CardContent>
-                            </Card>
+                            </fieldset>
 
                             <Collapsible v-model:open="editOptionalDetailsOpen">
                                 <Card class="rounded-lg border-dashed shadow-sm">
@@ -5053,87 +6153,209 @@ onMounted(initialPageLoad);
             </Dialog>
 
             <!-- ================================================================== -->
-            <!-- MOBILE FILTERS DRAWER                                              -->
+            <!-- PATIENT FILTERS SHEET                                              -->
             <!-- ================================================================== -->
-            <Drawer
+            <Sheet
                 v-if="canReadPatients"
-                :open="mobileFiltersDrawerOpen"
-                @update:open="mobileFiltersDrawerOpen = $event"
+                :open="patientFiltersSheetOpen"
+                @update:open="patientFiltersSheetOpen = $event"
             >
-                <DrawerContent class="max-h-[90vh]">
-                    <DrawerHeader>
-                        <DrawerTitle class="flex items-center gap-2">
-                            <AppIcon name="sliders-horizontal" class="size-5 text-primary" />
+                <SheetContent side="right" variant="form" size="md" class="flex h-full min-h-0 flex-col">
+                    <SheetHeader>
+                        <SheetTitle class="flex items-center gap-2">
+                            <AppIcon name="sliders-horizontal" class="size-4 text-muted-foreground" />
                             Patient Filters
-                        </DrawerTitle>
-                        <DrawerDescription>
-                            Filter the patient look-up list on mobile.
-                        </DrawerDescription>
-                    </DrawerHeader>
+                        </SheetTitle>
+                        <SheetDescription>
+                            Registry controls for status, identity, location, sorting, and result size.
+                        </SheetDescription>
+                    </SheetHeader>
 
-                    <div class="space-y-4 overflow-y-auto px-4 pb-2">
+                    <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
                         <div class="rounded-lg border p-3">
                             <div class="mb-3">
-                                <p class="text-sm font-medium">Search Patients</p>
-                                <p class="text-xs text-muted-foreground">Search by name, patient number, or contact details.</p>
+                                <p class="text-sm font-medium">Find patient records</p>
+                                <p class="text-xs text-muted-foreground">
+                                    Search across identity, contact, and facility registration data.
+                                </p>
                             </div>
-                            <div class="grid gap-3">
-                            <div class="grid gap-2">
-                                <Label for="patient-search-q-mobile">Search</Label>
-                                <Input
-                                    id="patient-search-q-mobile"
-                                    v-model="searchForm.q"
-                                    placeholder="Name, patient number, phone, email, national ID"
-                                    @keyup.enter="submitSearchFromMobileDrawer"
-                                />
-                            </div>
-                            <div class="grid gap-2">
-                                <Label for="patient-search-status-mobile">Status</Label>
-                                <Select v-model="searchForm.status">
-                                    <SelectTrigger class="w-full">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                    <SelectItem value="">All</SelectItem>
-                                    <SelectItem value="active">Active</SelectItem>
-                                    <SelectItem value="inactive">Inactive</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div class="grid gap-2">
-                                <Label for="patient-search-per-page-mobile">Rows per page</Label>
-                                <Select v-model="searchForm.perPage">
-                                    <SelectTrigger class="w-full">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                    <SelectItem value="10">10</SelectItem>
-                                    <SelectItem value="25">25</SelectItem>
-                                    <SelectItem value="50">50</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <div class="grid gap-2 sm:col-span-2">
+                                    <Label for="patient-search-q-sheet">Search</Label>
+                                    <div class="relative">
+                                        <AppIcon
+                                            name="search"
+                                            class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+                                        />
+                                        <Input
+                                            id="patient-search-q-sheet"
+                                            v-model="searchForm.q"
+                                            placeholder="Name, patient number, phone, email, or ID"
+                                            class="pl-9"
+                                            :disabled="listLoading"
+                                            @keyup.enter="submitSearch"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div class="grid gap-2">
+                                    <Label for="patient-search-status-sheet">Status</Label>
+                                    <Select
+                                        :model-value="nonEmptySelectValue(searchForm.status)"
+                                        @update:model-value="updatePatientStatusFilter"
+                                    >
+                                        <SelectTrigger id="patient-search-status-sheet" class="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem :value="SELECT_ALL_VALUE">All statuses</SelectItem>
+                                            <SelectItem value="active">Active</SelectItem>
+                                            <SelectItem value="inactive">Inactive</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div class="grid gap-2">
+                                    <Label for="patient-search-gender-sheet">Gender</Label>
+                                    <Select
+                                        :model-value="nonEmptySelectValue(searchForm.gender)"
+                                        @update:model-value="updatePatientGenderFilter"
+                                    >
+                                        <SelectTrigger id="patient-search-gender-sheet" class="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem
+                                                v-for="option in patientGenderFilterOptions"
+                                                :key="`patient-gender-filter-${option.value}`"
+                                                :value="option.value"
+                                            >
+                                                {{ option.label }}
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </div>
                         </div>
+
+                        <div class="rounded-lg border p-3">
+                            <div class="mb-3">
+                                <p class="text-sm font-medium">Location</p>
+                                <p class="text-xs text-muted-foreground">
+                                    Narrow registry results by the patient address recorded at registration.
+                                </p>
+                            </div>
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <SearchableSelectField
+                                    input-id="patient-search-region-sheet"
+                                    v-model="searchForm.region"
+                                    :label="patientFilterCountryUi.regionLabel"
+                                    :options="patientFilterRegionOptions"
+                                    :placeholder="patientFilterCountryUi.regionPlaceholder"
+                                    :search-placeholder="`Search ${patientFilterCountryUi.regionLabel.toLowerCase()}`"
+                                    :empty-text="`No ${patientFilterCountryUi.regionLabel.toLowerCase()} suggestion found.`"
+                                    :disabled="listLoading"
+                                />
+                                <SearchableSelectField
+                                    input-id="patient-search-district-sheet"
+                                    v-model="searchForm.district"
+                                    :label="patientFilterCountryUi.districtLabel"
+                                    :options="patientFilterDistrictOptions"
+                                    :placeholder="patientFilterDistrictPlaceholder"
+                                    :search-placeholder="`Search ${patientFilterCountryUi.districtLabel.toLowerCase()}`"
+                                    :helper-text="patientFilterDistrictHelperText"
+                                    :empty-text="`No ${patientFilterCountryUi.districtLabel.toLowerCase()} suggestion found.`"
+                                    :disabled="listLoading || !searchForm.region.trim()"
+                                />
+                            </div>
+                        </div>
+
+                        <div class="rounded-lg border p-3">
+                            <div class="mb-3">
+                                <p class="text-sm font-medium">List view</p>
+                                <p class="text-xs text-muted-foreground">
+                                    Control result ordering and row density for registry work.
+                                </p>
+                            </div>
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <div class="grid gap-2">
+                                    <Label for="patient-search-sort-by-sheet">Sort by</Label>
+                                    <Select
+                                        :model-value="searchForm.sortBy"
+                                        @update:model-value="updatePatientSortByFilter"
+                                    >
+                                        <SelectTrigger id="patient-search-sort-by-sheet" class="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem
+                                                v-for="option in patientSortByOptions"
+                                                :key="`patient-sort-${option.value}`"
+                                                :value="option.value"
+                                            >
+                                                {{ option.label }}
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div class="grid gap-2">
+                                    <Label for="patient-search-sort-dir-sheet">Sort direction</Label>
+                                    <Select
+                                        :model-value="searchForm.sortDir"
+                                        @update:model-value="updatePatientSortDirFilter"
+                                    >
+                                        <SelectTrigger id="patient-search-sort-dir-sheet" class="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem
+                                                v-for="option in patientSortDirOptions"
+                                                :key="`patient-sort-dir-${option.value}`"
+                                                :value="option.value"
+                                            >
+                                                {{ option.label }}
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div class="grid gap-2 sm:col-span-2">
+                                    <Label for="patient-search-per-page-sheet">Rows per page</Label>
+                                    <Select
+                                        :model-value="String(searchForm.perPage)"
+                                        @update:model-value="updatePatientPerPageFilter"
+                                    >
+                                        <SelectTrigger id="patient-search-per-page-sheet" class="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="10">10</SelectItem>
+                                            <SelectItem value="25">25</SelectItem>
+                                            <SelectItem value="50">50</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <DrawerFooter class="gap-2">
-                        <Button :disabled="listLoading" class="gap-1.5" @click="submitSearchFromMobileDrawer">
-                            <AppIcon name="eye" class="size-3.5" />
-                            Search
-                        </Button>
+                    <SheetFooter class="gap-2 border-t px-4 py-3">
                         <Button
                             variant="outline"
                             class="gap-1.5"
                             :disabled="listLoading && !hasActivePatientFilters"
-                            @click="resetPatientFiltersFromMobileDrawer"
+                            @click="resetPatientFiltersFromSheet"
                         >
                             <AppIcon name="sliders-horizontal" class="size-3.5" />
                             Reset Filters
                         </Button>
-                    </DrawerFooter>
-                </DrawerContent>
-            </Drawer>
+                        <Button :disabled="listLoading" class="gap-1.5" @click="patientFiltersSheetOpen = false">
+                            Done
+                        </Button>
+                    </SheetFooter>
+                </SheetContent>
+            </Sheet>
     </AppLayout>
 </template>
 
