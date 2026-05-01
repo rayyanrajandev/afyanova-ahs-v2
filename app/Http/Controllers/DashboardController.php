@@ -19,7 +19,8 @@ class DashboardController extends Controller
         
         // If role detected, redirect to role dashboard
         if ($primaryRole) {
-            return redirect()->route("dashboard.{$primaryRole}");
+            $routeName = 'dashboard.' . str_replace('_', '-', $primaryRole);
+            return redirect()->route($routeName);
         }
         
         // Fallback to generic dashboard for users without specific role
