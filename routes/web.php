@@ -3,7 +3,6 @@
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
-use App\Http\Controllers\DashboardController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingInvoiceDocumentController;
 use App\Modules\ClaimsInsurance\Presentation\Http\Controllers\ClaimsInsuranceDocumentController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryWarehouseTransferDocumentController;
@@ -23,18 +22,9 @@ Route::get('/', function () {
     ]);
 })->name('home');
 
-Route::get('dashboard', [DashboardController::class, 'index'])
-    ->middleware(['auth', 'verified'])
-    ->name('dashboard');
-
-// Role-based dashboards
-Route::get('dashboard/registration-clerk', function () {
-    return Inertia::render('dashboard/RegistrationClerk');
-})->middleware(['auth', 'verified', 'can:patients.create'])->name('dashboard.registration-clerk');
-
-Route::get('dashboard/nurse', function () {
-    return Inertia::render('dashboard/Nurse');
-})->middleware(['auth', 'verified', 'can:inpatient.ward.read'])->name('dashboard.nurse');
+Route::get('dashboard', function () {
+    return Inertia::render('Dashboard');
+})->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::get('patients', function () {
     return Inertia::render('patients/Index');
