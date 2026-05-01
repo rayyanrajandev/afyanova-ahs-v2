@@ -26,6 +26,11 @@ Route::get('dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
+// Role-based dashboards
+Route::get('dashboard/registration-clerk', function () {
+    return Inertia::render('dashboard/RegistrationClerk');
+})->middleware(['auth', 'verified', 'can:patients.create'])->name('dashboard.registration-clerk');
+
 Route::get('patients', function () {
     return Inertia::render('patients/Index');
 })->middleware(['auth', 'verified', 'can:patients.read', 'facility.entitlement:patients.search'])->name('patients.page');
