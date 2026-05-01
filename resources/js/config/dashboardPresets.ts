@@ -135,7 +135,11 @@ export function eligibleDashboardPresets(input: InferDashboardPresetInput): Dash
     if (presetMatchesRole(roleCodesUpper, DASHBOARD_NURSING_ROLE_CODES)) {
         allow.add('nursing');
     }
-    if (hasPermission('admissions.read') || hasPermission('inpatient.ward.read')) {
+    /*
+     * Omit admissions.read alone: clerks/registrars need it for workflows but must not inherit the Nursing
+     * dashboard (preset priority would also put nursing ahead of front_desk). Ward context is required.
+     */
+    if (hasPermission('inpatient.ward.read')) {
         allow.add('nursing');
     }
     if (presetMatchesRole(roleCodesUpper, DASHBOARD_DIRECT_SERVICE_ROLE_CODES)) {
