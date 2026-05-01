@@ -272,167 +272,210 @@ const nextPendingTask = computed(() =>
 </script>
 
 <template>
-    <Card v-if="launchGuideHidden" class="rounded-lg border-sidebar-border/70 bg-muted/20 shadow-sm">
-        <CardContent class="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+    <!-- Hidden state — compact dismissible banner -->
+    <Card class="rounded-lg border-sidebar-border/70 shadow-sm" :class="launchGuideHidden ? 'bg-muted/20' : 'overflow-hidden'">
+        <CardContent v-if="launchGuideHidden" class="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
             <div class="flex min-w-0 items-center gap-3">
                 <div class="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-background text-muted-foreground">
-                    <AppIcon name="shield-check" class="size-4" />
+                    <AppIcon name="clipboard-list" class="size-4" />
                 </div>
                 <div class="min-w-0">
-                    <p class="text-sm font-semibold">Facility admin launch guide hidden</p>
+                    <p class="text-sm font-semibold">Launch checklist hidden</p>
                     <p class="truncate text-xs text-muted-foreground">
-                        {{ nextPendingTask ? `Next: ${nextPendingTask.title}` : 'Facility setup path is complete' }}
+                        {{ nextPendingTask ? `Next: ${nextPendingTask.title}` : 'All measurable steps complete' }}
                     </p>
                 </div>
             </div>
             <Button type="button" size="sm" variant="outline" class="h-8 shrink-0 gap-1.5" @click="launchGuideHidden = false">
                 <AppIcon name="eye" class="size-3.5" />
-                Show guide
+                Show
             </Button>
         </CardContent>
-    </Card>
 
-    <Card v-else class="overflow-hidden rounded-lg border-sidebar-border/70 shadow-sm">
-        <CardContent class="p-0">
-            <div class="grid gap-0 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.32fr)]">
-                <div class="space-y-4 p-4 md:p-5">
-                    <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                        <div class="space-y-2">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <Badge variant="secondary">Facility Admin First Login</Badge>
-                                <Badge variant="outline">{{ readyTaskCount }}/{{ measurableTasks.length }} measurable steps ready</Badge>
-                                <Badge :variant="nextPendingTask ? 'outline' : 'secondary'">
-                                    {{ nextPendingTask ? 'Setup in progress' : 'Ready for workflow testing' }}
-                                </Badge>
-                            </div>
-                            <div class="space-y-1">
-                                <h2 class="text-lg font-semibold tracking-tight">Start here before DSK goes live with patient registration.</h2>
-                                <p class="max-w-3xl text-sm leading-6 text-muted-foreground">
-                                    This is the facility admin path from first login to first patient test: verify scope, build the facility map, prepare services and stock, then prove patient registration and handoffs.
-                                </p>
-                            </div>
-                        </div>
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            class="h-8 w-fit shrink-0 gap-1.5 rounded-lg px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                            @click="launchGuideHidden = true"
-                        >
-                            <AppIcon name="eye-off" class="size-3.5" />
-                            Hide guide
-                        </Button>
+        <!-- Full checklist -->
+        <CardContent v-else class="p-0">
+
+            <!-- ── Header row ───────────────────────────────────── -->
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
+                <div class="flex min-w-0 items-center gap-3">
+                    <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <AppIcon name="clipboard-list" class="size-4" />
                     </div>
-
-                    <div class="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
-                        <p class="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Minimum path to first patient</p>
-                        <div class="mt-2 flex flex-wrap items-center gap-2">
-                            <Link href="/platform/admin/departments" class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted/50">
-                                <AppIcon name="building-2" class="size-3 text-muted-foreground" />
-                                1. Create a department
-                            </Link>
-                            <AppIcon name="arrow-right" class="size-3 text-muted-foreground" />
-                            <Link href="/platform/admin/service-points" class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted/50">
-                                <AppIcon name="map-pin" class="size-3 text-muted-foreground" />
-                                2. Create a service point
-                            </Link>
-                            <AppIcon name="arrow-right" class="size-3 text-muted-foreground" />
-                            <Link href="/patients" class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted/50">
-                                <AppIcon name="users" class="size-3 text-muted-foreground" />
-                                3. Register first patient
-                            </Link>
-                        </div>
-                        <p class="mt-2 text-xs text-muted-foreground">Everything else (staff, catalogs, billing, inventory) can be set up after the first patient is registered.</p>
+                    <div class="min-w-0">
+                        <h2 class="text-base font-semibold leading-none">Launch checklist</h2>
+                        <p class="mt-1 text-xs text-muted-foreground">First login → first patient, in order</p>
                     </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <!-- Inline progress bar (hidden on very small screens) -->
+                    <div class="hidden w-36 sm:block">
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-muted-foreground">Progress</span>
+                            <span class="font-semibold">{{ progressPercent }}%</span>
+                        </div>
+                        <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                            <div
+                                class="h-full rounded-full bg-primary transition-all duration-500"
+                                :style="{ width: `${progressPercent}%` }"
+                            />
+                        </div>
+                    </div>
+                    <Badge :variant="nextPendingTask ? 'outline' : 'secondary'">
+                        {{ readyTaskCount }}/{{ measurableTasks.length }} done
+                    </Badge>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        class="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+                        @click="launchGuideHidden = true"
+                    >
+                        <AppIcon name="eye-off" class="size-3.5" />
+                        Hide
+                    </Button>
+                </div>
+            </div>
 
-                    <div class="grid gap-3 lg:grid-cols-2">
-                        <section
-                            v-for="(phase, phaseIndex) in phases"
-                            :key="phase.title"
-                            class="rounded-lg border bg-muted/10 p-3"
-                        >
-                            <div class="flex items-start justify-between gap-3">
-                                <div class="min-w-0">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <Badge variant="outline">{{ phaseIndex + 1 }}</Badge>
-                                        <Badge variant="secondary">{{ phase.badge }}</Badge>
-                                    </div>
-                                    <h3 class="mt-2 text-sm font-semibold">{{ phase.title }}</h3>
-                                    <p class="mt-1 text-xs leading-5 text-muted-foreground">{{ phase.description }}</p>
-                                </div>
-                            </div>
+            <!-- ── Critical path banner ─────────────────────────── -->
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b bg-primary/5 px-5 py-3">
+                <p class="shrink-0 text-xs font-semibold text-primary">Minimum to register first patient:</p>
+                <div class="flex flex-wrap items-center gap-2">
+                    <Link
+                        href="/platform/admin/departments"
+                        class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted/50"
+                    >
+                        <AppIcon name="building-2" class="size-3 text-muted-foreground" />
+                        1. Department
+                    </Link>
+                    <AppIcon name="chevron-right" class="size-3 text-muted-foreground/60" />
+                    <Link
+                        href="/platform/admin/service-points"
+                        class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted/50"
+                    >
+                        <AppIcon name="map-pin" class="size-3 text-muted-foreground" />
+                        2. Service point
+                    </Link>
+                    <AppIcon name="chevron-right" class="size-3 text-muted-foreground/60" />
+                    <Link
+                        href="/patients"
+                        class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted/50"
+                    >
+                        <AppIcon name="users" class="size-3 text-muted-foreground" />
+                        3. Register patient
+                    </Link>
+                </div>
+            </div>
 
-                            <div class="mt-3 grid gap-2">
-                                <component
-                                    :is="taskLinkEnabled(task) ? Link : 'div'"
-                                    v-for="task in phase.tasks"
-                                    :key="task.title"
-                                    :href="taskLinkEnabled(task) ? task.href : undefined"
-                                    class="group grid min-w-0 gap-2 rounded-lg border bg-background px-3 py-2.5 transition-colors"
-                                    :class="taskLinkEnabled(task) ? 'hover:bg-muted/30' : 'opacity-75'"
+            <!-- ── Main layout: phase list + action panel ───────── -->
+            <div class="grid xl:grid-cols-[1fr_17rem]">
+
+                <!-- Phase timeline -->
+                <div class="divide-y">
+                    <div v-for="(phase, phaseIndex) in phases" :key="phase.title" class="px-5 py-4">
+
+                        <!-- Phase header -->
+                        <div class="mb-2 flex items-center gap-2.5">
+                            <span
+                                class="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-bold tabular-nums text-muted-foreground"
+                            >{{ phaseIndex + 1 }}</span>
+                            <h3 class="text-sm font-semibold">{{ phase.title }}</h3>
+                            <Badge variant="secondary" class="ml-auto h-5 px-2 text-[10px]">{{ phase.badge }}</Badge>
+                        </div>
+
+                        <!-- Task rows — flat, no nested cards -->
+                        <div class="ml-7 space-y-0.5">
+                            <component
+                                :is="taskLinkEnabled(task) ? Link : 'div'"
+                                v-for="task in phase.tasks"
+                                :key="task.title"
+                                :href="taskLinkEnabled(task) ? task.href : undefined"
+                                class="group flex min-w-0 items-center gap-3 rounded-lg px-3 py-2 transition-colors"
+                                :class="taskLinkEnabled(task) ? 'hover:bg-muted/40 cursor-pointer' : 'cursor-default opacity-50'"
+                            >
+                                <!-- Status icon -->
+                                <div
+                                    class="flex size-7 shrink-0 items-center justify-center rounded-md border"
+                                    :class="taskReady(task) ? 'border-primary/25 bg-primary/10 text-primary' : 'bg-muted/40 text-muted-foreground'"
                                 >
-                                    <div class="flex items-start gap-3">
-                                        <div
-                                            class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border"
-                                            :class="taskReady(task) ? 'border-primary/20 bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'"
-                                        >
-                                            <AppIcon :name="task.icon" class="size-3.5" />
-                                        </div>
-                                        <div class="min-w-0 flex-1">
-                                            <div class="flex flex-wrap items-center justify-between gap-2">
-                                                <p class="text-sm font-semibold">{{ task.title }}</p>
-                                                <Badge :variant="taskVariant(task)" class="h-5 px-2 text-[10px]">
-                                                    {{ taskStateLabel(task) }}
-                                                </Badge>
-                                            </div>
-                                            <p class="mt-1 text-xs leading-5 text-muted-foreground">{{ task.description }}</p>
-                                            <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                                                <span>{{ task.outcome }}</span>
-                                                <span v-if="taskTotal(task) !== null">| {{ taskTotal(task) }} records</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </component>
-                            </div>
-                        </section>
+                                    <AppIcon :name="task.icon" class="size-3.5" />
+                                </div>
+
+                                <!-- Label + outcome -->
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate text-sm font-medium leading-none">{{ task.title }}</p>
+                                    <p class="mt-0.5 truncate text-[11px] text-muted-foreground">{{ task.outcome }}</p>
+                                </div>
+
+                                <!-- Meta + badge + chevron -->
+                                <div class="flex shrink-0 items-center gap-2">
+                                    <span
+                                        v-if="taskTotal(task) !== null"
+                                        class="text-[11px] tabular-nums text-muted-foreground"
+                                    >{{ taskTotal(task) }}</span>
+                                    <Badge :variant="taskVariant(task)" class="h-5 px-2 text-[10px]">
+                                        {{ taskStateLabel(task) }}
+                                    </Badge>
+                                    <AppIcon
+                                        v-if="taskLinkEnabled(task)"
+                                        name="chevron-right"
+                                        class="size-3.5 text-muted-foreground/40 transition-colors group-hover:text-primary"
+                                    />
+                                </div>
+                            </component>
+                        </div>
                     </div>
                 </div>
 
-                <aside class="border-t bg-muted/20 p-4 xl:border-l xl:border-t-0 md:p-5">
-                    <div class="flex h-full flex-col justify-between gap-4 rounded-lg border bg-background/80 p-4">
-                        <div class="space-y-3">
-                            <div class="flex items-center gap-2">
-                                <div class="rounded-lg bg-primary/10 p-2 text-primary">
-                                    <AppIcon :name="nextPendingTask?.icon ?? 'shield-check'" class="size-4" />
-                                </div>
-                                <div>
-                                    <p class="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Next facility-admin action</p>
-                                    <p class="text-sm font-semibold">{{ nextPendingTask?.title ?? 'Facility setup ready' }}</p>
-                                </div>
+                <!-- ── Right: sticky "You are here" panel ──────── -->
+                <div class="border-t bg-muted/20 p-4 xl:border-l xl:border-t-0">
+                    <div class="sticky top-4 flex flex-col gap-4 rounded-lg border bg-background p-4">
+
+                        <!-- Next action -->
+                        <div class="flex items-start gap-3">
+                            <div class="rounded-lg bg-primary/10 p-2 text-primary">
+                                <AppIcon :name="nextPendingTask?.icon ?? 'shield-check'" class="size-4" />
                             </div>
-                            <p class="text-sm leading-6 text-muted-foreground">
-                                <template v-if="nextPendingTask">
-                                    Complete this next so the facility grows in a controlled order instead of creating patient, billing, and stock records on weak foundations.
-                                </template>
-                                <template v-else>
-                                    The first-login measurable setup path is complete. Keep using the audit trails and dashboard while testing live workflows.
-                                </template>
-                            </p>
-                            <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
-                                <div class="flex items-center justify-between gap-3">
-                                    <span class="text-xs font-medium text-muted-foreground">Measured progress</span>
-                                    <span class="text-sm font-semibold">{{ progressPercent }}%</span>
-                                </div>
-                                <div class="mt-2 h-2 overflow-hidden rounded-full bg-muted">
-                                    <div
-                                        class="h-full rounded-full bg-primary transition-all duration-500"
-                                        :style="{ width: `${progressPercent}%` }"
-                                    />
-                                </div>
+                            <div class="min-w-0">
+                                <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Next action</p>
+                                <p class="mt-0.5 text-sm font-semibold leading-snug">
+                                    {{ nextPendingTask?.title ?? 'Setup complete' }}
+                                </p>
                             </div>
                         </div>
 
-                        <Button v-if="nextPendingTask && taskAccessible(nextPendingTask)" as-child size="sm" class="w-full gap-1.5">
+                        <p class="text-xs leading-5 text-muted-foreground">
+                            <template v-if="nextPendingTask">
+                                Complete this step before moving on. It prevents broken downstream workflows.
+                            </template>
+                            <template v-else>
+                                All measurable setup steps are done. You can now test patient registration, orders, billing, and live operations.
+                            </template>
+                        </p>
+
+                        <!-- Progress -->
+                        <div>
+                            <div class="mb-1.5 flex items-center justify-between text-xs">
+                                <span class="text-muted-foreground">Overall progress</span>
+                                <span class="font-semibold">{{ progressPercent }}%</span>
+                            </div>
+                            <div class="h-2 overflow-hidden rounded-full bg-muted">
+                                <div
+                                    class="h-full rounded-full bg-primary transition-all duration-500"
+                                    :style="{ width: `${progressPercent}%` }"
+                                />
+                            </div>
+                            <p class="mt-1.5 text-[11px] text-muted-foreground">
+                                {{ readyTaskCount }} of {{ measurableTasks.length }} steps complete
+                            </p>
+                        </div>
+
+                        <!-- CTA -->
+                        <Button
+                            v-if="nextPendingTask && taskAccessible(nextPendingTask)"
+                            as-child
+                            size="sm"
+                            class="w-full gap-1.5"
+                        >
                             <Link :href="nextPendingTask.href">
                                 <AppIcon :name="nextPendingTask.icon" class="size-3.5" />
                                 Open next step
@@ -440,7 +483,7 @@ const nextPendingTask = computed(() =>
                         </Button>
                         <Badge v-else variant="secondary" class="w-fit">Ready for testing</Badge>
                     </div>
-                </aside>
+                </div>
             </div>
         </CardContent>
     </Card>
