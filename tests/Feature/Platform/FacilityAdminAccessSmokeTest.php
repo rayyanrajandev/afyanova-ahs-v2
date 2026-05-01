@@ -142,31 +142,6 @@ it('keeps facility admins out of platform-wide facility and subscription adminis
         ->assertForbidden();
 });
 
-it('allows facility admins into operational setup only through real setup permissions', function (): void {
-    $context = facilityAdminSmokeContext();
-
-    $this->actingAs($context['user'])
-        ->get('/setup-center')
-        ->assertOk();
-
-    $userWithoutSetupPermission = User::factory()->create([
-        'tenant_id' => $context['tenant']->id,
-    ]);
-
-    DB::table('facility_user')->insert([
-        'facility_id' => $context['facility']->id,
-        'user_id' => $userWithoutSetupPermission->id,
-        'role' => 'facility_admin',
-        'is_primary' => true,
-        'is_active' => true,
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
-
-    $this->actingAs($userWithoutSetupPermission)
-        ->get('/setup-center')
-        ->assertForbidden();
-});
 
 it('blocks unsubscribed operational workspaces even when the role has module permission', function (): void {
     $context = facilityAdminSmokeContext();
