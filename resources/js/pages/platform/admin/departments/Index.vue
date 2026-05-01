@@ -9,18 +9,20 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
+import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Separator } from '@/components/ui/separator';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
+import type { SearchableSelectOption } from '@/lib/patientLocations';
 import { type BreadcrumbItem } from '@/types';
 
 type Pagination = { currentPage: number; perPage: number; total: number; lastPage: number };
@@ -58,6 +60,7 @@ type ListResponse<T> = { data: T[]; meta: Pagination };
 type ItemResponse<T> = { data: T };
 type StatusResponse = { data: StatusCounts };
 type AuditResponse = { data: AuditLog[]; meta: Pagination };
+type ValidationErrors = Record<string, string[]>;
 type DepartmentStaffProfile = {
     id: string;
     userId: number | null;
@@ -74,6 +77,66 @@ type DepartmentStaffProfile = {
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Platform Admin', href: '/platform/admin/departments' },
     { title: 'Departments', href: '/platform/admin/departments' },
+];
+
+const EMPTY_SELECT_VALUE = '__all__';
+const serviceTypeOptions: SearchableSelectOption[] = [
+    {
+        value: 'Clinical Service',
+        label: 'Clinical Service',
+        description: 'OPD, specialty clinic, emergency, theatre, maternity, or direct patient care unit.',
+        group: 'Patient care',
+        keywords: ['opd', 'clinic', 'emergency', 'theatre', 'maternity'],
+    },
+    {
+        value: 'Diagnostic Service',
+        label: 'Diagnostic Service',
+        description: 'Laboratory, imaging, point-of-care diagnostics, or sample collection.',
+        group: 'Patient care',
+        keywords: ['lab', 'radiology', 'imaging', 'diagnostics'],
+    },
+    {
+        value: 'Pharmacy & Dispensing',
+        label: 'Pharmacy & Dispensing',
+        description: 'Dispensing, medicine counselling, stock-facing pharmacy service, or OTC counter.',
+        group: 'Patient care',
+        keywords: ['pharmacy', 'dispensing', 'medicine'],
+    },
+    {
+        value: 'Nursing & Ward Operations',
+        label: 'Nursing & Ward Operations',
+        description: 'Ward, bed, nursing station, inpatient observation, or procedure room operations.',
+        group: 'Care operations',
+        keywords: ['ward', 'nursing', 'bed', 'inpatient'],
+    },
+    {
+        value: 'Revenue Cycle',
+        label: 'Revenue Cycle',
+        description: 'Billing, cashier, claims, payer relations, or patient financial counselling.',
+        group: 'Administration',
+        keywords: ['billing', 'cashier', 'claims', 'insurance'],
+    },
+    {
+        value: 'Medical Records',
+        label: 'Medical Records',
+        description: 'Registration, file room, records archive, coding, or documentation desk.',
+        group: 'Administration',
+        keywords: ['registration', 'records', 'archive'],
+    },
+    {
+        value: 'Supply & Support',
+        label: 'Supply & Support',
+        description: 'Stores, procurement, maintenance, laundry, sterilization, ICT, or logistics.',
+        group: 'Operations',
+        keywords: ['stores', 'procurement', 'maintenance', 'ict'],
+    },
+    {
+        value: 'Governance & Administration',
+        label: 'Governance & Administration',
+        description: 'Management, quality, HR, finance, compliance, or facility administration.',
+        group: 'Administration',
+        keywords: ['admin', 'quality', 'hr', 'finance', 'compliance'],
+    },
 ];
 
 const { permissionState } = usePlatformAccess();
@@ -94,6 +157,11 @@ const items = ref<Department[]>([]);
 const pagination = ref<Pagination | null>(null);
 const counts = ref<StatusCounts>({ active: 0, inactive: 0, other: 0, total: 0 });
 const filters = reactive({ q: '', status: '', serviceType: '', managerUserId: '', page: 1, perPage: 20 });
+const departmentFiltersOpen = ref(false);
+const compactRows = ref(false);
+const managerOptionsLoading = ref(false);
+const managerOptionsError = ref<string | null>(null);
+const managerProfiles = ref<DepartmentStaffProfile[]>([]);
 const departmentFilterCount = computed(() => {
     let count = 0;
     if (filters.q.trim()) count += 1;
@@ -118,9 +186,77 @@ const departmentListSummaryText = computed(() => {
 });
 
 const departmentScopeText = computed(() => `${counts.value.total} departments in scope`);
+const departmentFilterChips = computed(() => {
+    const chips: Array<{ key: string; label: string; clear: () => void }> = [];
+
+    if (filters.q.trim()) {
+        chips.push({
+            key: 'q',
+            label: `"${filters.q.trim()}"`,
+            clear: () => {
+                filters.q = '';
+                filters.page = 1;
+                void refreshPage();
+            },
+        });
+    }
+
+    if (filters.status) {
+        chips.push({
+            key: 'status',
+            label: filters.status === 'active' ? 'Active' : 'Inactive',
+            clear: () => {
+                filters.status = '';
+                filters.page = 1;
+                void refreshPage();
+            },
+        });
+    }
+
+    if (filters.serviceType.trim()) {
+        chips.push({
+            key: 'serviceType',
+            label: filters.serviceType.trim(),
+            clear: () => {
+                filters.serviceType = '';
+                filters.page = 1;
+                void refreshPage();
+            },
+        });
+    }
+
+    if (filters.managerUserId.trim()) {
+        const manager = departmentManagerOptions.value.find((option) => option.value === filters.managerUserId.trim());
+        chips.push({
+            key: 'managerUserId',
+            label: manager ? `Manager: ${manager.label}` : `Manager #${filters.managerUserId.trim()}`,
+            clear: () => {
+                filters.managerUserId = '';
+                filters.page = 1;
+                void refreshPage();
+            },
+        });
+    }
+
+    if (filters.perPage !== 20) {
+        chips.push({
+            key: 'perPage',
+            label: `${filters.perPage} per page`,
+            clear: () => {
+                filters.perPage = 20;
+                filters.page = 1;
+                void refreshPage();
+            },
+        });
+    }
+
+    return chips;
+});
 
 const createOpen = ref(false);
 const createLoading = ref(false);
+const createRequestError = ref<string | null>(null);
+const createFormErrors = ref<ValidationErrors>({});
 const createForm = reactive({
     code: '',
     name: '',
@@ -133,6 +269,8 @@ const createForm = reactive({
 const editOpen = ref(false);
 const editLoading = ref(false);
 const editTarget = ref<Department | null>(null);
+const editRequestError = ref<string | null>(null);
+const editFormErrors = ref<ValidationErrors>({});
 const editForm = reactive({
     code: '',
     name: '',
@@ -161,6 +299,53 @@ const detailsStaffError = ref<string | null>(null);
 const detailsStaff = ref<DepartmentStaffProfile[]>([]);
 const detailsStaffMeta = ref<Pagination | null>(null);
 
+const departmentManagerOptions = computed<SearchableSelectOption[]>(() => {
+    const options = new Map<string, SearchableSelectOption>();
+
+    const addOption = (value: number | string | null | undefined, option: Omit<SearchableSelectOption, 'value'>) => {
+        const normalizedValue = String(value ?? '').trim();
+        if (!normalizedValue || options.has(normalizedValue)) return;
+        options.set(normalizedValue, { value: normalizedValue, ...option });
+    };
+
+    managerProfiles.value.forEach((profile) => {
+        addOption(profile.userId, {
+            label: staffProfileDisplayName(profile),
+            description: [profile.employeeNumber, profile.jobTitle, profile.userEmail].filter(Boolean).join(' | '),
+            group: profile.department || 'No department',
+            keywords: [profile.employeeNumber, profile.userEmail, profile.jobTitle, profile.department].filter(Boolean) as string[],
+        });
+    });
+
+    items.value.forEach((department) => {
+        if (!department.managerUserId) return;
+        addOption(department.managerUserId, {
+            label: departmentManagerDisplayName(department.manager, department.managerUserId),
+            description: department.manager?.email ?? undefined,
+            group: department.manager?.staffStatus ? `Staff ${department.manager.staffStatus}` : 'Assigned manager',
+        });
+    });
+
+    [detailsDepartment.value, editTarget.value].forEach((department) => {
+        if (!department?.managerUserId) return;
+        addOption(department.managerUserId, {
+            label: departmentManagerDisplayName(department.manager, department.managerUserId),
+            description: department.manager?.email ?? undefined,
+            group: department.manager?.staffStatus ? `Staff ${department.manager.staffStatus}` : 'Assigned manager',
+        });
+    });
+
+    return [...options.values()].sort((left, right) => {
+        const groupCompare = (left.group ?? '').localeCompare(right.group ?? '');
+        if (groupCompare !== 0) return groupCompare;
+
+        return left.label.localeCompare(right.label);
+    });
+});
+
+const createValidationMessages = computed(() => Object.values(createFormErrors.value).flat());
+const editValidationMessages = computed(() => Object.values(editFormErrors.value).flat());
+
 function resetCreateForm() {
     createForm.code = '';
     createForm.name = '';
@@ -169,6 +354,8 @@ function resetCreateForm() {
     createForm.isAppointmentable = false;
     createForm.managerUserId = '';
     createForm.description = '';
+    createRequestError.value = null;
+    createFormErrors.value = {};
 }
 
 function setCreatePatientFacing(checked: boolean) {
@@ -202,6 +389,24 @@ function setEditAppointmentable(checked: boolean) {
 function openCreateDialog() {
     resetCreateForm();
     createOpen.value = true;
+    if (canReadStaff.value && managerProfiles.value.length === 0 && !managerOptionsLoading.value) {
+        void loadManagerOptions();
+    }
+}
+
+function closeCreateSheet(open: boolean) {
+    createOpen.value = open;
+    if (!open) {
+        resetCreateForm();
+    }
+}
+
+function closeEditSheet(open: boolean) {
+    editOpen.value = open;
+    if (!open) {
+        editRequestError.value = null;
+        editFormErrors.value = {};
+    }
 }
 
 function csrfToken(): string | null {
@@ -288,6 +493,24 @@ function staffProfileHref(profile: DepartmentStaffProfile): string | null {
     if (!canReadStaff.value || id === '') return null;
 
     return `/staff?staffId=${encodeURIComponent(id)}`;
+}
+
+function toSelectValue(value: string | null | undefined): string {
+    const normalized = String(value ?? '').trim();
+    return normalized === '' ? EMPTY_SELECT_VALUE : normalized;
+}
+
+function fromSelectValue(value: string | null | undefined): string {
+    const normalized = String(value ?? '').trim();
+    return normalized === EMPTY_SELECT_VALUE ? '' : normalized;
+}
+
+function fieldError(errors: ValidationErrors, field: string): string | null {
+    return errors[field]?.[0] ?? null;
+}
+
+function validationErrorsFromUnknown(error: unknown): ValidationErrors {
+    return ((error as { payload?: ApiError })?.payload?.errors ?? {}) as ValidationErrors;
 }
 
 function openDepartmentDetails(item: Department) {
@@ -392,6 +615,36 @@ async function loadCounts() {
     }
 }
 
+async function loadManagerOptions() {
+    if (!canReadStaff.value) {
+        managerProfiles.value = [];
+        managerOptionsError.value = null;
+        return;
+    }
+
+    managerOptionsLoading.value = true;
+    managerOptionsError.value = null;
+
+    try {
+        const response = await apiRequest<ListResponse<DepartmentStaffProfile>>('GET', '/staff', {
+            query: {
+                status: 'active',
+                page: 1,
+                perPage: 100,
+                sortBy: 'employeeNumber',
+                sortDir: 'asc',
+            },
+        });
+
+        managerProfiles.value = (response.data ?? []).filter((profile) => profile.userId !== null);
+    } catch (error) {
+        managerProfiles.value = [];
+        managerOptionsError.value = messageFromUnknown(error, 'Unable to load active staff managers.');
+    } finally {
+        managerOptionsLoading.value = false;
+    }
+}
+
 async function loadItems() {
     if (!canRead.value) {
         items.value = [];
@@ -436,6 +689,8 @@ async function createItem() {
     const manager = parseManager(createForm.managerUserId);
     if (Number.isNaN(manager)) return notifyError('Manager user ID must be numeric.');
     createLoading.value = true;
+    createRequestError.value = null;
+    createFormErrors.value = {};
     try {
         const response = await apiRequest<ItemResponse<Department>>('POST', '/departments', {
             body: {
@@ -454,7 +709,8 @@ async function createItem() {
         filters.page = 1;
         await refreshPage();
     } catch (error) {
-        notifyError(messageFromUnknown(error, 'Unable to create department.'));
+        createFormErrors.value = validationErrorsFromUnknown(error);
+        createRequestError.value = messageFromUnknown(error, 'Unable to create department.');
     } finally {
         createLoading.value = false;
     }
@@ -469,7 +725,12 @@ function openEdit(item: Department) {
     editForm.isAppointmentable = item.isAppointmentable === true;
     editForm.managerUserId = item.managerUserId === null ? '' : String(item.managerUserId);
     editForm.description = item.description || '';
+    editRequestError.value = null;
+    editFormErrors.value = {};
     editOpen.value = true;
+    if (canReadStaff.value && managerProfiles.value.length === 0 && !managerOptionsLoading.value) {
+        void loadManagerOptions();
+    }
 }
 
 async function saveEdit() {
@@ -478,6 +739,8 @@ async function saveEdit() {
     const manager = parseManager(editForm.managerUserId);
     if (Number.isNaN(manager)) return notifyError('Manager user ID must be numeric.');
     editLoading.value = true;
+    editRequestError.value = null;
+    editFormErrors.value = {};
     try {
         await apiRequest<ItemResponse<Department>>('PATCH', `/departments/${id}`, {
             body: {
@@ -494,7 +757,8 @@ async function saveEdit() {
         editOpen.value = false;
         await refreshPage();
     } catch (error) {
-        notifyError(messageFromUnknown(error, 'Unable to update department.'));
+        editFormErrors.value = validationErrorsFromUnknown(error);
+        editRequestError.value = messageFromUnknown(error, 'Unable to update department.');
     } finally {
         editLoading.value = false;
     }
@@ -549,12 +813,17 @@ async function loadAudit(item: Department) {
 }
 
 function search() { filters.page = 1; void refreshPage(); }
-function reset() { filters.q = ''; filters.status = ''; filters.serviceType = ''; filters.managerUserId = ''; filters.page = 1; void refreshPage(); }
+function reset() { filters.q = ''; filters.status = ''; filters.serviceType = ''; filters.managerUserId = ''; filters.perPage = 20; filters.page = 1; void refreshPage(); }
+function applyFiltersFromSheet() { departmentFiltersOpen.value = false; search(); }
+function resetFiltersFromSheet() { departmentFiltersOpen.value = false; reset(); }
 function setStatus(status: '' | 'active' | 'inactive') { filters.status = status; filters.page = 1; void refreshPage(); }
 function prevPage() { if ((pagination.value?.currentPage ?? 1) > 1) { filters.page -= 1; void loadItems(); } }
 function nextPage() { if (pagination.value && pagination.value.currentPage < pagination.value.lastPage) { filters.page += 1; void loadItems(); } }
 
-onMounted(refreshPage);
+onMounted(() => {
+    void refreshPage();
+    void loadManagerOptions();
+});
 </script>
 
 <template>
@@ -598,203 +867,206 @@ onMounted(refreshPage);
                 </AlertDescription>
             </Alert>
 
-            <div v-if="canRead" class="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-4 py-3">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    class="gap-2 bg-background"
-                    :class="{ 'border-primary bg-primary/5 hover:bg-primary/10': filters.status === 'active' }"
-                    @click="setStatus('active')"
-                >
-                    <span class="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-                    <span class="font-medium">{{ counts.active }}</span>
-                    <span class="text-muted-foreground">Active</span>
-                </Button>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    class="gap-2 bg-background"
-                    :class="{ 'border-primary bg-primary/5 hover:bg-primary/10': filters.status === 'inactive' }"
-                    @click="setStatus('inactive')"
-                >
-                    <span class="inline-block h-2 w-2 rounded-full bg-rose-500" />
-                    <span class="font-medium">{{ counts.inactive }}</span>
-                    <span class="text-muted-foreground">Inactive</span>
-                </Button>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    class="gap-2 bg-background"
-                    :class="{ 'border-primary bg-primary/5 hover:bg-primary/10': filters.status === '' }"
+            <div v-if="canRead" class="grid gap-3 sm:grid-cols-3">
+                <button
+                    type="button"
+                    class="rounded-lg border bg-background p-4 text-left transition-colors hover:bg-muted/30"
+                    :class="{ 'border-primary bg-primary/5': filters.status === '' }"
                     @click="setStatus('')"
                 >
-                    <span class="inline-block h-2 w-2 rounded-full bg-slate-400" />
-                    <span class="font-medium">{{ counts.total }}</span>
-                    <span class="text-muted-foreground">All</span>
-                </Button>
-                <div class="ml-auto flex items-center gap-2">
-                    <p class="hidden text-xs text-muted-foreground sm:block">{{ departmentScopeText }} | {{ departmentListSummaryText }}</p>
-                    <Button v-if="departmentFilterCount > 0" variant="ghost" size="sm" class="text-xs" @click="reset">
-                        <AppIcon name="sliders-horizontal" class="size-3" />
-                        Reset
-                    </Button>
-                </div>
+                    <div class="flex items-center justify-between gap-3">
+                        <p class="text-xs font-medium uppercase text-muted-foreground">Total registry</p>
+                        <span class="h-2.5 w-2.5 rounded-full bg-slate-400" />
+                    </div>
+                    <p class="mt-2 text-2xl font-semibold tabular-nums">{{ counts.total }}</p>
+                    <p class="mt-1 text-xs text-muted-foreground">Departments in the current facility scope</p>
+                </button>
+                <button
+                    type="button"
+                    class="rounded-lg border bg-background p-4 text-left transition-colors hover:bg-muted/30"
+                    :class="{ 'border-primary bg-primary/5': filters.status === 'active' }"
+                    @click="setStatus('active')"
+                >
+                    <div class="flex items-center justify-between gap-3">
+                        <p class="text-xs font-medium uppercase text-muted-foreground">Active</p>
+                        <span class="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                    </div>
+                    <p class="mt-2 text-2xl font-semibold tabular-nums">{{ counts.active }}</p>
+                    <p class="mt-1 text-xs text-muted-foreground">Selectable in workflows when permitted</p>
+                </button>
+                <button
+                    type="button"
+                    class="rounded-lg border bg-background p-4 text-left transition-colors hover:bg-muted/30"
+                    :class="{ 'border-primary bg-primary/5': filters.status === 'inactive' }"
+                    @click="setStatus('inactive')"
+                >
+                    <div class="flex items-center justify-between gap-3">
+                        <p class="text-xs font-medium uppercase text-muted-foreground">Inactive</p>
+                        <span class="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                    </div>
+                    <p class="mt-2 text-2xl font-semibold tabular-nums">{{ counts.inactive }}</p>
+                    <p class="mt-1 text-xs text-muted-foreground">Retained for audit and historical records</p>
+                </button>
             </div>
 
             <!-- Single column layout -->
             <div class="flex min-w-0 flex-col gap-4">
 
                 <!-- Departments card -->
-                <Card v-if="canRead" class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70">
-                                        <CardHeader class="shrink-0 gap-3 pt-4 pb-2">
-                        <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                            <div class="min-w-0 space-y-1">
-                                <CardTitle class="flex items-center gap-2 text-base">
-                                    <AppIcon name="layout-list" class="size-4.5 text-muted-foreground" />
-                                    Departments
-                                </CardTitle>
-                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                                    <span>Showing {{ items.length }} of {{ pagination?.total ?? 0 }} results</span>
-                                    <span>{{ departmentListSummaryText }}</span>
-                                </div>
-                            </div>
-                            <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center xl:max-w-2xl">
-                                <div class="relative min-w-0 flex-1 min-w-[12rem]">
-                                    <AppIcon
-                                        name="search"
-                                        class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                                    />
-                                    <Input
-                                        v-model="filters.q"
-                                        placeholder="Search code, name, or description"
-                                        class="h-9 pl-9"
-                                        @keyup.enter="search"
-                                    />
-                                </div>
-                                <Popover>
-                                    <PopoverTrigger as-child>
-                                        <Button variant="outline" size="sm" class="shrink-0 gap-1.5">
-                                            <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                            Queue options
-                                            <Badge v-if="departmentFilterCount > 0" variant="secondary" class="ml-1 text-[10px]">{{ departmentFilterCount }}</Badge>
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent align="end" class="flex max-h-[28rem] w-[20rem] flex-col overflow-hidden rounded-lg border bg-popover p-0 shadow-md">
-                                        <div class="space-y-3 border-b px-4 py-3">
-                                            <p class="flex items-center gap-2 text-sm font-medium">
-                                                <AppIcon name="sliders-horizontal" class="size-4 text-muted-foreground" />
-                                                Queue options
-                                            </p>
-                                            <div class="grid gap-2">
-                                                <Label for="dept-status-popover">Status</Label>
-                                                <Select v-model="filters.status">
-                                                    <SelectTrigger class="w-full">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                    <SelectItem value="">All statuses</SelectItem>
-                                                    <SelectItem value="active">Active</SelectItem>
-                                                    <SelectItem value="inactive">Inactive</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div class="grid gap-2">
-                                                <Label for="dept-service-type-popover">Category / Service Type</Label>
-                                                <Input id="dept-service-type-popover" v-model="filters.serviceType" placeholder="Clinical, Administrative, Support..." />
-                                            </div>
-                                            <div class="grid gap-2">
-                                                <Label for="dept-manager-popover">Manager User ID</Label>
-                                                <Input id="dept-manager-popover" v-model="filters.managerUserId" inputmode="numeric" placeholder="Numeric user ID" />
-                                            </div>
-                                            <div class="grid gap-2">
-                                                <Label for="dept-per-page-popover">Per page</Label>
-                                                <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event)">
-                                                    <SelectTrigger class="w-full">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                    <SelectItem value="20">20</SelectItem>
-                                                    <SelectItem value="50">50</SelectItem>
-                                                    <SelectItem value="100">100</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        </div>
-                                        <div class="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-4 py-3">
-                                            <Button variant="outline" size="sm" class="gap-1.5" @click="reset">Reset</Button>
-                                            <Button size="sm" class="gap-1.5" :disabled="listLoading" @click="search">
-                                                <AppIcon name="search" class="size-3.5" />
-                                                Apply
-                                            </Button>
-                                        </div>
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
+                <Card v-if="canRead" class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70 shadow-sm">
+                    <div class="flex flex-col gap-3 border-b px-4 py-3.5 lg:flex-row lg:items-center lg:justify-between">
+                        <div class="min-w-0">
+                            <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
+                                <AppIcon name="layout-list" class="size-4 text-muted-foreground" />
+                                Departments
+                            </h3>
+                            <p class="mt-1 text-xs text-muted-foreground">
+                                {{ departmentScopeText }} · {{ departmentListSummaryText }}
+                            </p>
                         </div>
-                    </CardHeader>
+                        <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:max-w-2xl">
+                            <SearchInput
+                                id="dept-search-q"
+                                v-model="filters.q"
+                                placeholder="Search code, name, or description"
+                                class="min-w-0 flex-1 text-xs"
+                                @keyup.enter="search"
+                            />
+                            <Button variant="outline" size="sm" class="h-9 gap-1.5 rounded-lg text-xs" @click="departmentFiltersOpen = true">
+                                <AppIcon name="sliders-horizontal" class="size-3.5" />
+                                Filters
+                                <Badge v-if="departmentFilterCount > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">
+                                    {{ departmentFilterCount }}
+                                </Badge>
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                class="hidden h-9 rounded-lg text-xs sm:inline-flex"
+                                @click="compactRows = !compactRows"
+                            >
+                                {{ compactRows ? 'Comfortable Rows' : 'Compact Rows' }}
+                            </Button>
+                        </div>
+                    </div>
+                    <div v-if="departmentFilterChips.length" class="flex flex-wrap items-center gap-1.5 border-b px-4 py-2">
+                        <span class="text-[11px] text-muted-foreground">Filters:</span>
+                        <button
+                            v-for="chip in departmentFilterChips"
+                            :key="chip.key"
+                            type="button"
+                            class="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] hover:bg-muted/80"
+                            @click="chip.clear"
+                        >
+                            {{ chip.label }}
+                            <AppIcon name="circle-x" class="size-3" />
+                        </button>
+                        <button class="ml-1 text-[11px] text-muted-foreground underline-offset-2 hover:underline" @click="reset">
+                            Clear all
+                        </button>
+                    </div>
                     <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
                         <ScrollArea class="min-h-0 flex-1">
-                            <div class="min-h-[12rem] px-4">
-                                <div v-if="loading || listLoading" class="divide-y">
-                                    <div v-for="index in 6" :key="`department-skeleton-${index}`" class="flex items-center gap-3 py-2.5">
-                                        <Skeleton class="h-4 w-40" />
-                                        <div class="ml-auto flex items-center gap-2">
-                                            <Skeleton class="hidden h-5 w-16 rounded-full sm:block" />
-                                            <Skeleton class="h-6 w-6 rounded-full" />
-                                            <Skeleton class="h-8 w-8 rounded-md" />
+                            <div class="min-h-[12rem] p-4" :class="compactRows ? 'space-y-2' : 'space-y-3'">
+                                <div v-if="loading || listLoading" class="space-y-2">
+                                    <div v-for="index in 6" :key="`department-skeleton-${index}`" class="rounded-lg border p-3">
+                                        <div class="flex items-center gap-3">
+                                            <Skeleton class="h-9 w-9 rounded-lg" />
+                                            <div class="min-w-0 flex-1 space-y-2">
+                                                <Skeleton class="h-4 w-48" />
+                                                <Skeleton class="h-3 w-72 max-w-full" />
+                                            </div>
+                                            <Skeleton class="h-8 w-20 rounded-md" />
                                         </div>
                                     </div>
                                 </div>
-                                <div v-else-if="items.length === 0" class="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                                    No departments found. Try adjusting your search or filters.
+                                <div v-else-if="items.length === 0" class="flex flex-col items-center gap-3 rounded-lg border border-dashed p-8 text-center">
+                                    <div class="flex h-11 w-11 items-center justify-center rounded-lg bg-muted">
+                                        <AppIcon name="building-2" class="size-5 text-muted-foreground" />
+                                    </div>
+                                    <div class="space-y-1">
+                                        <p class="text-sm font-medium">No departments found</p>
+                                        <p class="text-sm text-muted-foreground">
+                                            {{ departmentFilterCount > 0 ? 'Adjust or clear filters to widen the registry.' : 'Create the first department before configuring service points and staff teams.' }}
+                                        </p>
+                                    </div>
+                                    <div class="flex flex-wrap justify-center gap-2">
+                                        <Button v-if="departmentFilterCount > 0" variant="outline" size="sm" class="gap-1.5" @click="reset">
+                                            <AppIcon name="x" class="size-3.5" />
+                                            Clear filters
+                                        </Button>
+                                        <Button v-if="canCreate" size="sm" class="gap-1.5" @click="openCreateDialog">
+                                            <AppIcon name="plus" class="size-3.5" />
+                                            Create first department
+                                        </Button>
+                                    </div>
                                 </div>
-                                <div v-else class="divide-y">
+                                <div v-else :class="compactRows ? 'space-y-2' : 'space-y-3'">
                                     <div
                                         v-for="item in items"
                                         :key="item.id || item.code || item.name"
-                                        class="group flex items-center gap-3 py-2.5"
+                                        class="relative rounded-lg border bg-background transition-colors hover:bg-muted/30"
+                                        :class="compactRows ? 'p-2.5' : 'p-3'"
                                     >
-                                        <button
-                                            type="button"
-                                            class="min-w-0 flex-1 truncate text-left text-sm font-medium transition-colors hover:text-primary hover:underline"
-                                            @click="openDepartmentDetails(item)"
-                                        >
-                                            {{ labelOf(item) }}
-                                        </button>
-                                        <Badge class="hidden sm:inline-flex" :variant="statusVariant(item.status)">{{ item.status || 'unknown' }}</Badge>
-                                        <TooltipProvider v-if="item.managerUserId || item.manager" :delay-duration="100">
-                                            <Tooltip>
-                                                <TooltipTrigger as-child>
-                                                    <Link
-                                                        v-if="departmentManagerStaffHref(item)"
-                                                        :href="departmentManagerStaffHref(item)!"
-                                                        class="inline-flex items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                                                    >
-                                                        <Avatar class="h-6 w-6 border border-border/70">
-                                                            <AvatarFallback class="bg-primary/10 text-[10px] font-semibold text-primary">
-                                                                {{ departmentManagerInitials(item.manager, item.managerUserId) }}
-                                                            </AvatarFallback>
-                                                        </Avatar>
-                                                    </Link>
-                                                    <span v-else class="inline-flex items-center">
-                                                        <Avatar class="h-6 w-6 border border-border/70">
-                                                            <AvatarFallback class="bg-muted text-[10px] font-semibold text-muted-foreground">
-                                                                {{ departmentManagerInitials(item.manager, item.managerUserId) }}
-                                                            </AvatarFallback>
-                                                        </Avatar>
-                                                    </span>
-                                                </TooltipTrigger>
-                                                <TooltipContent side="top" class="space-y-0.5">
-                                                    <p class="text-sm font-medium">{{ departmentManagerDisplayName(item.manager, item.managerUserId) }}</p>
-                                                    <p v-if="item.manager?.email" class="text-xs text-muted-foreground">{{ item.manager.email }}</p>
-                                                    <p v-if="departmentManagerStaffHref(item)" class="text-xs text-muted-foreground">Open in Staff</p>
-                                                </TooltipContent>
-                                            </Tooltip>
-                                        </TooltipProvider>
-                                        <Button variant="ghost" size="icon-sm" @click="openDepartmentDetails(item)">
-                                            <AppIcon name="chevron-right" class="size-4" />
-                                            <span class="sr-only">Open department details</span>
-                                        </Button>
+                                        <div
+                                            class="absolute inset-y-0 left-0 w-[3px] rounded-l-lg"
+                                            :class="(item.status ?? '').toLowerCase() === 'active' ? 'bg-emerald-500' : 'bg-rose-500'"
+                                        />
+                                        <div class="flex flex-col gap-3 pl-2">
+                                            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                                <button type="button" class="min-w-0 text-left" @click="openDepartmentDetails(item)">
+                                                    <p class="truncate text-sm font-semibold transition-colors hover:text-primary hover:underline">
+                                                        {{ item.name || labelOf(item) }}
+                                                    </p>
+                                                    <p class="mt-1 text-xs text-muted-foreground">
+                                                        {{ item.code || 'No code' }} · {{ item.serviceType || 'Uncategorized' }}
+                                                    </p>
+                                                </button>
+                                                <div class="flex flex-wrap items-center gap-1.5">
+                                                    <Badge :variant="statusVariant(item.status)">{{ item.status || 'unknown' }}</Badge>
+                                                    <Badge v-if="item.isPatientFacing" variant="secondary">Patient-facing</Badge>
+                                                    <Badge v-if="item.isAppointmentable" variant="outline">Appointmentable</Badge>
+                                                </div>
+                                            </div>
+                                            <div class="grid gap-2 text-xs text-muted-foreground lg:grid-cols-[1.4fr_1fr_auto] lg:items-center">
+                                                <p class="line-clamp-2">{{ item.description || 'No operating note recorded for this department.' }}</p>
+                                                <TooltipProvider :delay-duration="100">
+                                                    <Tooltip>
+                                                        <TooltipTrigger as-child>
+                                                            <Link
+                                                                v-if="departmentManagerStaffHref(item)"
+                                                                :href="departmentManagerStaffHref(item)!"
+                                                                class="inline-flex min-w-0 items-center gap-2 rounded-md hover:text-primary hover:underline"
+                                                            >
+                                                                <Avatar class="h-7 w-7 border border-border/70">
+                                                                    <AvatarFallback class="bg-primary/10 text-[10px] font-semibold text-primary">
+                                                                        {{ departmentManagerInitials(item.manager, item.managerUserId) }}
+                                                                    </AvatarFallback>
+                                                                </Avatar>
+                                                                <span class="truncate">{{ departmentManagerDisplayName(item.manager, item.managerUserId) }}</span>
+                                                            </Link>
+                                                            <span v-else class="inline-flex min-w-0 items-center gap-2">
+                                                                <Avatar class="h-7 w-7 border border-border/70">
+                                                                    <AvatarFallback class="bg-muted text-[10px] font-semibold text-muted-foreground">
+                                                                        {{ departmentManagerInitials(item.manager, item.managerUserId) }}
+                                                                    </AvatarFallback>
+                                                                </Avatar>
+                                                                <span class="truncate">{{ departmentManagerDisplayName(item.manager, item.managerUserId) }}</span>
+                                                            </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="top" class="space-y-0.5">
+                                                            <p class="text-sm font-medium">{{ departmentManagerDisplayName(item.manager, item.managerUserId) }}</p>
+                                                            <p v-if="item.manager?.email" class="text-xs text-muted-foreground">{{ item.manager.email }}</p>
+                                                            <p v-if="departmentManagerStaffHref(item)" class="text-xs text-muted-foreground">Open in Staff</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                                <div class="flex flex-wrap gap-2 lg:justify-end">
+                                                    <Button size="sm" variant="outline" class="h-8 rounded-lg text-xs" @click="openDepartmentDetails(item)">Details</Button>
+                                                    <Button v-if="canUpdate" size="sm" variant="secondary" class="h-8 rounded-lg text-xs" @click="openEdit(item)">Edit</Button>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -845,6 +1117,90 @@ onMounted(refreshPage);
                         </Alert>
                     </CardContent>
                 </Card>
+
+                <Sheet v-if="canRead" :open="departmentFiltersOpen" @update:open="departmentFiltersOpen = $event">
+                    <SheetContent side="right" variant="form" size="md" class="flex h-full min-h-0 flex-col">
+                        <SheetHeader>
+                            <SheetTitle class="flex items-center gap-2">
+                                <AppIcon name="sliders-horizontal" class="size-4 text-muted-foreground" />
+                                Department Filters
+                            </SheetTitle>
+                            <SheetDescription>Filter the department registry without crowding the operational list.</SheetDescription>
+                        </SheetHeader>
+                        <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+                            <div class="rounded-lg border p-3">
+                                <div class="grid gap-3">
+                                    <div class="grid gap-2">
+                                        <Label for="dept-filter-q-sheet">Search</Label>
+                                        <Input
+                                            id="dept-filter-q-sheet"
+                                            v-model="filters.q"
+                                            placeholder="Department code, name, or note"
+                                            @keyup.enter="applyFiltersFromSheet"
+                                        />
+                                    </div>
+                                    <div class="grid gap-2">
+                                        <Label for="dept-filter-status-sheet">Status</Label>
+                                        <Select :model-value="toSelectValue(filters.status)" @update:model-value="filters.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
+                                            <SelectTrigger id="dept-filter-status-sheet" class="w-full">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
+                                                <SelectItem value="active">Active</SelectItem>
+                                                <SelectItem value="inactive">Inactive</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <SearchableSelectField
+                                        input-id="dept-filter-service-type-sheet"
+                                        label="Category / service type"
+                                        v-model="filters.serviceType"
+                                        :options="serviceTypeOptions"
+                                        placeholder="All categories"
+                                        search-placeholder="Search department categories"
+                                        empty-text="No matching category. Type a custom category."
+                                        :allow-custom-value="true"
+                                    />
+                                    <SearchableSelectField
+                                        input-id="dept-filter-manager-sheet"
+                                        label="Manager"
+                                        v-model="filters.managerUserId"
+                                        :options="departmentManagerOptions"
+                                        :disabled="managerOptionsLoading || !canReadStaff"
+                                        :placeholder="managerOptionsLoading ? 'Loading active staff...' : 'Any manager'"
+                                        search-placeholder="Search active staff managers"
+                                        empty-text="No active staff manager matched."
+                                        :helper-text="managerOptionsError || 'Search by staff name, employee number, role, email, or department.'"
+                                    />
+                                    <Separator />
+                                    <div class="grid gap-2">
+                                        <Label for="dept-filter-per-page-sheet">Results per page</Label>
+                                        <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event)">
+                                            <SelectTrigger id="dept-filter-per-page-sheet" class="w-full">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="20">20</SelectItem>
+                                                <SelectItem value="50">50</SelectItem>
+                                                <SelectItem value="100">100</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <SheetFooter class="gap-2 border-t px-4 py-3">
+                            <Button :disabled="listLoading" class="gap-1.5" @click="applyFiltersFromSheet">
+                                <AppIcon name="search" class="size-3.5" />
+                                Apply Filters
+                            </Button>
+                            <Button variant="outline" :disabled="listLoading && departmentFilterCount === 0" @click="resetFiltersFromSheet">
+                                Reset Filters
+                            </Button>
+                        </SheetFooter>
+                    </SheetContent>
+                </Sheet>
 
                 <Sheet :open="detailsOpen" @update:open="(open) => (open ? (detailsOpen = true) : closeDepartmentDetails())">
                     <SheetContent side="right" variant="workspace" size="3xl">
@@ -1015,129 +1371,245 @@ onMounted(refreshPage);
                     </SheetContent>
                 </Sheet>
 
-            <!-- Create Department dialog -->
-            <Dialog :open="createOpen" @update:open="(open) => { createOpen = open; if (!open) resetCreateForm(); }">
-                <DialogContent size="2xl">
-                    <DialogHeader>
-                        <DialogTitle>Create Department</DialogTitle>
-                        <DialogDescription>Add a new department record.</DialogDescription>
-                    </DialogHeader>
-                    <div class="grid gap-3 md:grid-cols-2">
-                        <div class="grid gap-2">
-                            <Label for="create-code">Code</Label>
-                            <Input id="create-code" v-model="createForm.code" />
-                        </div>
-                        <div class="grid gap-2">
-                            <Label for="create-name">Name</Label>
-                            <Input id="create-name" v-model="createForm.name" />
-                        </div>
-                        <div class="grid gap-2">
-                            <Label for="create-service-type">Service Type</Label>
-                            <Input id="create-service-type" v-model="createForm.serviceType" placeholder="Clinical, Administrative, Support, Pharmacy, Laboratory..." />
-                            <p class="text-xs text-muted-foreground">
-                                Use this as the department category, not just a clinic name. Staff selectors group departments by this value.
-                            </p>
-                        </div>
-                        <div class="grid gap-3 rounded-lg border border-border/70 bg-muted/20 p-3 md:col-span-2">
-                            <div class="space-y-1">
-                                <p class="text-sm font-medium">Patient access</p>
-                                <p class="text-xs text-muted-foreground">Use these flags to control whether patients can encounter this department and whether Appointments can offer it as a destination.</p>
-                            </div>
-                            <label class="flex items-start gap-3 rounded-lg border border-border/70 bg-background px-3 py-3">
-                                <Checkbox :model-value="createForm.isPatientFacing" class="mt-0.5" @update:model-value="setCreatePatientFacing($event === true)" />
-                                <div class="space-y-1">
-                                    <p class="text-sm font-medium">Patient-facing department</p>
-                                    <p class="text-xs text-muted-foreground">Enable this for services patients interact with directly, like OPD, diagnostics, pharmacy, medical records, or billing counseling.</p>
+            <!-- Create Department sheet -->
+            <Sheet :open="createOpen" @update:open="closeCreateSheet">
+                <SheetContent side="right" variant="form" size="3xl" class="flex h-full min-h-0 flex-col">
+                    <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
+                        <SheetTitle class="flex items-center gap-2">
+                            <AppIcon name="building-2" class="size-5 text-muted-foreground" />
+                            Create Department
+                        </SheetTitle>
+                        <SheetDescription>Define the operational unit once, then use it across staff, service points, appointments, billing, and inventory workflows.</SheetDescription>
+                    </SheetHeader>
+                    <ScrollArea class="min-h-0 flex-1">
+                        <div class="grid gap-4 px-6 py-4">
+                            <fieldset class="grid gap-3 rounded-lg border p-3 sm:grid-cols-2">
+                                <legend class="px-2 text-sm font-medium text-muted-foreground">Department identity</legend>
+                                <div class="grid gap-2">
+                                    <Label for="create-code">Code</Label>
+                                    <Input
+                                        id="create-code"
+                                        v-model="createForm.code"
+                                        :disabled="createLoading"
+                                        placeholder="OPD, LAB, PHARM"
+                                        :class="{ 'border-destructive': fieldError(createFormErrors, 'code') }"
+                                    />
+                                    <p v-if="fieldError(createFormErrors, 'code')" class="text-xs text-destructive">{{ fieldError(createFormErrors, 'code') }}</p>
                                 </div>
-                            </label>
-                            <label class="flex items-start gap-3 rounded-lg border border-border/70 bg-background px-3 py-3">
-                                <Checkbox :model-value="createForm.isAppointmentable" class="mt-0.5" @update:model-value="setCreateAppointmentable($event === true)" />
-                                <div class="space-y-1">
-                                    <p class="text-sm font-medium">Available in Appointments</p>
-                                    <p class="text-xs text-muted-foreground">Only patient-facing departments marked here will appear in the Schedule Appointment department picker.</p>
+                                <div class="grid gap-2">
+                                    <Label for="create-name">Name</Label>
+                                    <Input
+                                        id="create-name"
+                                        v-model="createForm.name"
+                                        :disabled="createLoading"
+                                        placeholder="Outpatient Department"
+                                        :class="{ 'border-destructive': fieldError(createFormErrors, 'name') }"
+                                    />
+                                    <p v-if="fieldError(createFormErrors, 'name')" class="text-xs text-destructive">{{ fieldError(createFormErrors, 'name') }}</p>
                                 </div>
-                            </label>
+                                <div class="sm:col-span-2">
+                                    <SearchableSelectField
+                                        input-id="create-service-type"
+                                        label="Category / service type"
+                                        v-model="createForm.serviceType"
+                                        :options="serviceTypeOptions"
+                                        placeholder="Select or type category"
+                                        search-placeholder="Clinical, diagnostic, pharmacy, revenue cycle..."
+                                        empty-text="No matching category. Type a custom category."
+                                        helper-text="This groups the department in setup, reporting, staff, and patient-flow selectors."
+                                        :allow-custom-value="true"
+                                        :disabled="createLoading"
+                                        :error-message="fieldError(createFormErrors, 'serviceType')"
+                                    />
+                                </div>
+                            </fieldset>
+
+                            <fieldset class="grid gap-3 rounded-lg border p-3 sm:grid-cols-2">
+                                <legend class="px-2 text-sm font-medium text-muted-foreground">Workflow exposure</legend>
+                                <label class="flex h-full items-start gap-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
+                                    <Checkbox :model-value="createForm.isPatientFacing" class="mt-0.5" :disabled="createLoading" @update:model-value="setCreatePatientFacing($event === true)" />
+                                    <span class="space-y-1">
+                                        <span class="block text-sm font-medium">Patient-facing department</span>
+                                        <span class="block text-xs text-muted-foreground">Enable for services patients interact with directly, such as OPD, diagnostics, pharmacy, records, or billing counselling.</span>
+                                    </span>
+                                </label>
+                                <label class="flex h-full items-start gap-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
+                                    <Checkbox :model-value="createForm.isAppointmentable" class="mt-0.5" :disabled="createLoading" @update:model-value="setCreateAppointmentable($event === true)" />
+                                    <span class="space-y-1">
+                                        <span class="block text-sm font-medium">Available in Appointments</span>
+                                        <span class="block text-xs text-muted-foreground">Use only for patient-facing destinations that should be selectable when scheduling a visit.</span>
+                                    </span>
+                                </label>
+                                <Alert class="sm:col-span-2">
+                                    <AlertTitle>Operational rule</AlertTitle>
+                                    <AlertDescription>Appointmentable departments are automatically kept patient-facing so scheduling, visit flow, and reports stay consistent.</AlertDescription>
+                                </Alert>
+                            </fieldset>
+
+                            <fieldset class="grid gap-3 rounded-lg border p-3">
+                                <legend class="px-2 text-sm font-medium text-muted-foreground">Ownership and notes</legend>
+                                <SearchableSelectField
+                                    input-id="create-manager"
+                                    label="Department manager"
+                                    v-model="createForm.managerUserId"
+                                    :options="departmentManagerOptions"
+                                    :disabled="createLoading || managerOptionsLoading || !canReadStaff"
+                                    :placeholder="managerOptionsLoading ? 'Loading active staff...' : 'Search active staff'"
+                                    search-placeholder="Search staff name, employee number, role, email, or department"
+                                    empty-text="No active staff manager matched."
+                                    :helper-text="managerOptionsError || 'Optional, but recommended before assigning service points and staff teams.'"
+                                    :error-message="fieldError(createFormErrors, 'managerUserId')"
+                                />
+                                <div class="grid gap-2">
+                                    <Label for="create-description">Operating note</Label>
+                                    <Textarea
+                                        id="create-description"
+                                        v-model="createForm.description"
+                                        class="min-h-24"
+                                        :disabled="createLoading"
+                                        placeholder="Purpose, coverage, handoff notes, or scope boundaries for this department."
+                                        :class="{ 'border-destructive': fieldError(createFormErrors, 'description') }"
+                                    />
+                                    <p v-if="fieldError(createFormErrors, 'description')" class="text-xs text-destructive">{{ fieldError(createFormErrors, 'description') }}</p>
+                                </div>
+                            </fieldset>
                         </div>
-                        <div class="grid gap-2">
-                            <Label for="create-manager">Manager User ID</Label>
-                            <Input id="create-manager" v-model="createForm.managerUserId" inputmode="numeric" />
-                        </div>
-                        <div class="grid gap-2 md:col-span-2">
-                            <Label for="create-description">Description</Label>
-                            <Textarea id="create-description" v-model="createForm.description" class="min-h-20" />
-                        </div>
-                    </div>
-                    <DialogFooter class="gap-2">
-                        <Button variant="outline" :disabled="createLoading" @click="createOpen = false">Cancel</Button>
-                        <Button :disabled="createLoading" class="gap-1.5" @click="createItem">
+                    </ScrollArea>
+                    <Alert v-if="createRequestError || createValidationMessages.length" variant="destructive" class="mx-4 mb-3 shrink-0">
+                        <AlertTitle>Create department needs attention</AlertTitle>
+                        <AlertDescription class="space-y-2">
+                            <p v-if="createRequestError">{{ createRequestError }}</p>
+                            <ul v-if="createValidationMessages.length" class="list-disc space-y-1 pl-4">
+                                <li v-for="message in createValidationMessages" :key="message" class="text-xs leading-5">{{ message }}</li>
+                            </ul>
+                        </AlertDescription>
+                    </Alert>
+                    <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
+                        <Button type="button" variant="outline" :disabled="createLoading" @click="closeCreateSheet(false)">Cancel</Button>
+                        <Button type="button" :disabled="createLoading" class="gap-1.5" @click="createItem">
                             <AppIcon name="plus" class="size-3.5" />
                             {{ createLoading ? 'Creating...' : 'Create Department' }}
                         </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                    </SheetFooter>
+                </SheetContent>
+            </Sheet>
 
-            <!-- Edit Department dialog -->
-            <Dialog :open="editOpen" @update:open="(open) => (editOpen = open)">
-                <DialogContent size="2xl">
-                    <DialogHeader>
-                        <DialogTitle>Edit Department</DialogTitle>
-                        <DialogDescription>Update department metadata.</DialogDescription>
-                    </DialogHeader>
-                    <div class="grid gap-3">
-                        <div class="grid gap-2">
-                            <Label for="edit-code">Code</Label>
-                            <Input id="edit-code" v-model="editForm.code" />
-                        </div>
-                        <div class="grid gap-2">
-                            <Label for="edit-name">Name</Label>
-                            <Input id="edit-name" v-model="editForm.name" />
-                        </div>
-                        <div class="grid gap-2">
-                            <Label for="edit-service-type">Service Type</Label>
-                            <Input id="edit-service-type" v-model="editForm.serviceType" placeholder="Clinical, Administrative, Support, Pharmacy, Laboratory..." />
-                            <p class="text-xs text-muted-foreground">
-                                Use this as the department category so staff selectors can group operational and clinical areas consistently.
-                            </p>
-                        </div>
-                        <div class="grid gap-3 rounded-lg border border-border/70 bg-muted/20 p-3">
-                            <div class="space-y-1">
-                                <p class="text-sm font-medium">Patient access</p>
-                                <p class="text-xs text-muted-foreground">These flags decide whether the department is patient-facing and whether it can be offered in Appointments.</p>
-                            </div>
-                            <label class="flex items-start gap-3 rounded-lg border border-border/70 bg-background px-3 py-3">
-                                <Checkbox :model-value="editForm.isPatientFacing" class="mt-0.5" @update:model-value="setEditPatientFacing($event === true)" />
-                                <div class="space-y-1">
-                                    <p class="text-sm font-medium">Patient-facing department</p>
-                                    <p class="text-xs text-muted-foreground">Turn this off for internal departments like HR, stores, ICT, or maintenance.</p>
+            <!-- Edit Department sheet -->
+            <Sheet :open="editOpen" @update:open="closeEditSheet">
+                <SheetContent side="right" variant="form" size="3xl" class="flex h-full min-h-0 flex-col">
+                    <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
+                        <SheetTitle class="flex items-center gap-2">
+                            <AppIcon name="pencil" class="size-5 text-muted-foreground" />
+                            Edit Department
+                        </SheetTitle>
+                        <SheetDescription>{{ editTarget ? labelOf(editTarget) : 'Update department metadata and workflow exposure.' }}</SheetDescription>
+                    </SheetHeader>
+                    <ScrollArea class="min-h-0 flex-1">
+                        <div class="grid gap-4 px-6 py-4">
+                            <fieldset class="grid gap-3 rounded-lg border p-3 sm:grid-cols-2">
+                                <legend class="px-2 text-sm font-medium text-muted-foreground">Department identity</legend>
+                                <div class="grid gap-2">
+                                    <Label for="edit-code">Code</Label>
+                                    <Input
+                                        id="edit-code"
+                                        v-model="editForm.code"
+                                        :disabled="editLoading"
+                                        :class="{ 'border-destructive': fieldError(editFormErrors, 'code') }"
+                                    />
+                                    <p v-if="fieldError(editFormErrors, 'code')" class="text-xs text-destructive">{{ fieldError(editFormErrors, 'code') }}</p>
                                 </div>
-                            </label>
-                            <label class="flex items-start gap-3 rounded-lg border border-border/70 bg-background px-3 py-3">
-                                <Checkbox :model-value="editForm.isAppointmentable" class="mt-0.5" @update:model-value="setEditAppointmentable($event === true)" />
-                                <div class="space-y-1">
-                                    <p class="text-sm font-medium">Available in Appointments</p>
-                                    <p class="text-xs text-muted-foreground">Only use this for patient-facing destinations that make sense as scheduled appointments.</p>
+                                <div class="grid gap-2">
+                                    <Label for="edit-name">Name</Label>
+                                    <Input
+                                        id="edit-name"
+                                        v-model="editForm.name"
+                                        :disabled="editLoading"
+                                        :class="{ 'border-destructive': fieldError(editFormErrors, 'name') }"
+                                    />
+                                    <p v-if="fieldError(editFormErrors, 'name')" class="text-xs text-destructive">{{ fieldError(editFormErrors, 'name') }}</p>
                                 </div>
-                            </label>
+                                <div class="sm:col-span-2">
+                                    <SearchableSelectField
+                                        input-id="edit-service-type"
+                                        label="Category / service type"
+                                        v-model="editForm.serviceType"
+                                        :options="serviceTypeOptions"
+                                        placeholder="Select or type category"
+                                        search-placeholder="Clinical, diagnostic, pharmacy, revenue cycle..."
+                                        empty-text="No matching category. Type a custom category."
+                                        helper-text="Changing this affects grouping in setup, reporting, staff, and patient-flow selectors."
+                                        :allow-custom-value="true"
+                                        :disabled="editLoading"
+                                        :error-message="fieldError(editFormErrors, 'serviceType')"
+                                    />
+                                </div>
+                            </fieldset>
+
+                            <fieldset class="grid gap-3 rounded-lg border p-3 sm:grid-cols-2">
+                                <legend class="px-2 text-sm font-medium text-muted-foreground">Workflow exposure</legend>
+                                <label class="flex h-full items-start gap-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
+                                    <Checkbox :model-value="editForm.isPatientFacing" class="mt-0.5" :disabled="editLoading" @update:model-value="setEditPatientFacing($event === true)" />
+                                    <span class="space-y-1">
+                                        <span class="block text-sm font-medium">Patient-facing department</span>
+                                        <span class="block text-xs text-muted-foreground">Turn this off for internal units such as HR, ICT, stores, maintenance, or finance back office.</span>
+                                    </span>
+                                </label>
+                                <label class="flex h-full items-start gap-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
+                                    <Checkbox :model-value="editForm.isAppointmentable" class="mt-0.5" :disabled="editLoading" @update:model-value="setEditAppointmentable($event === true)" />
+                                    <span class="space-y-1">
+                                        <span class="block text-sm font-medium">Available in Appointments</span>
+                                        <span class="block text-xs text-muted-foreground">Only patient-facing destinations that are scheduled should be visible to appointment clerks.</span>
+                                    </span>
+                                </label>
+                            </fieldset>
+
+                            <fieldset class="grid gap-3 rounded-lg border p-3">
+                                <legend class="px-2 text-sm font-medium text-muted-foreground">Ownership and notes</legend>
+                                <SearchableSelectField
+                                    input-id="edit-manager"
+                                    label="Department manager"
+                                    v-model="editForm.managerUserId"
+                                    :options="departmentManagerOptions"
+                                    :disabled="editLoading || managerOptionsLoading || !canReadStaff"
+                                    :placeholder="managerOptionsLoading ? 'Loading active staff...' : 'Search active staff'"
+                                    search-placeholder="Search staff name, employee number, role, email, or department"
+                                    empty-text="No active staff manager matched."
+                                    :helper-text="managerOptionsError || 'Optional, but recommended for accountability and approval workflows.'"
+                                    :error-message="fieldError(editFormErrors, 'managerUserId')"
+                                />
+                                <div class="grid gap-2">
+                                    <Label for="edit-description">Operating note</Label>
+                                    <Textarea
+                                        id="edit-description"
+                                        v-model="editForm.description"
+                                        class="min-h-24"
+                                        :disabled="editLoading"
+                                        placeholder="Purpose, coverage, handoff notes, or scope boundaries for this department."
+                                        :class="{ 'border-destructive': fieldError(editFormErrors, 'description') }"
+                                    />
+                                    <p v-if="fieldError(editFormErrors, 'description')" class="text-xs text-destructive">{{ fieldError(editFormErrors, 'description') }}</p>
+                                </div>
+                            </fieldset>
                         </div>
-                        <div class="grid gap-2">
-                            <Label for="edit-manager">Manager User ID</Label>
-                            <Input id="edit-manager" v-model="editForm.managerUserId" inputmode="numeric" />
-                        </div>
-                        <div class="grid gap-2">
-                            <Label for="edit-description">Description</Label>
-                            <Textarea id="edit-description" v-model="editForm.description" class="min-h-20" />
-                        </div>
-                    </div>
-                    <DialogFooter class="gap-2">
-                        <Button variant="outline" :disabled="editLoading" @click="editOpen = false">Cancel</Button>
-                        <Button :disabled="editLoading" class="gap-1.5" @click="saveEdit">
+                    </ScrollArea>
+                    <Alert v-if="editRequestError || editValidationMessages.length" variant="destructive" class="mx-4 mb-3 shrink-0">
+                        <AlertTitle>Save department needs attention</AlertTitle>
+                        <AlertDescription class="space-y-2">
+                            <p v-if="editRequestError">{{ editRequestError }}</p>
+                            <ul v-if="editValidationMessages.length" class="list-disc space-y-1 pl-4">
+                                <li v-for="message in editValidationMessages" :key="message" class="text-xs leading-5">{{ message }}</li>
+                            </ul>
+                        </AlertDescription>
+                    </Alert>
+                    <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
+                        <Button type="button" variant="outline" :disabled="editLoading" @click="closeEditSheet(false)">Cancel</Button>
+                        <Button type="button" :disabled="editLoading" class="gap-1.5" @click="saveEdit">
                             <AppIcon name="save" class="size-3.5" />
                             {{ editLoading ? 'Saving...' : 'Save Changes' }}
                         </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                    </SheetFooter>
+                </SheetContent>
+            </Sheet>
 
             <!-- Status update dialog -->
             <Dialog :open="statusOpen" @update:open="(open) => (statusOpen = open)">
