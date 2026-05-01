@@ -10,6 +10,7 @@ const FACILITY_SCOPE_COOKIE = 'platform_facility_code';
 type SharedAuthProps = {
     permissions?: string[];
     isFacilitySuperAdmin?: boolean;
+    isPlatformSuperAdmin?: boolean;
 };
 
 type SharedPageProps = {
@@ -85,6 +86,14 @@ export function usePlatformAccess() {
         Boolean(page.props.auth?.isFacilitySuperAdmin),
     );
 
+    const isPlatformSuperAdmin = computed<boolean>(() =>
+        Boolean(page.props.auth?.isPlatformSuperAdmin),
+    );
+
+    const hasUniversalAdminAccess = computed<boolean>(() =>
+        isFacilitySuperAdmin.value || isPlatformSuperAdmin.value,
+    );
+
     const scope = computed<SharedPlatformScope>(
         () => page.props.platform?.scope ?? null,
     );
@@ -136,7 +145,7 @@ export function usePlatformAccess() {
     function permissionState(name: string): PermissionState {
         const normalized = name.trim();
         if (!normalized) return 'denied';
-        if (isFacilitySuperAdmin.value) return 'allowed';
+        if (hasUniversalAdminAccess.value) return 'allowed';
         if (!permissionNames.value) return 'unknown';
         return permissionSet.value.has(normalized) ? 'allowed' : 'denied';
     }
@@ -148,6 +157,8 @@ export function usePlatformAccess() {
     return {
         permissionNames,
         isFacilitySuperAdmin,
+        isPlatformSuperAdmin,
+        hasUniversalAdminAccess,
         permissionState,
         hasPermission,
         scope,

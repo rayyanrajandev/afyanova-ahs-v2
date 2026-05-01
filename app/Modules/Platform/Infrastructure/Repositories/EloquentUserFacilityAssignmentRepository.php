@@ -7,9 +7,17 @@ use Illuminate\Support\Facades\DB;
 
 class EloquentUserFacilityAssignmentRepository implements UserFacilityAssignmentRepositoryInterface
 {
+    /**
+     * @var array<int, string>
+     */
+    private const PLATFORM_SUPER_ADMIN_ROLE_CODES = [
+        'PLATFORM.SUPER.ADMIN',
+        'SYSTEM.SUPER.ADMIN',
+    ];
+
     public function listActiveFacilityScopesByUserId(int $userId): array
     {
-        if ($this->hasActiveSuperAdminAssignment($userId)) {
+        if ($this->hasUniversalSuperAdminAccess($userId)) {
             return $this->listAllActiveFacilityScopesForSuperAdmin($userId);
         }
 
@@ -41,12 +49,28 @@ class EloquentUserFacilityAssignmentRepository implements UserFacilityAssignment
             ->all();
     }
 
+    private function hasUniversalSuperAdminAccess(int $userId): bool
+    {
+        return $this->hasActiveSuperAdminAssignment($userId)
+            || $this->hasActivePlatformSuperAdminRole($userId);
+    }
+
     private function hasActiveSuperAdminAssignment(int $userId): bool
     {
         return DB::table('facility_user')
             ->where('user_id', $userId)
             ->where('is_active', true)
             ->where('role', 'super_admin')
+            ->exists();
+    }
+
+    private function hasActivePlatformSuperAdminRole(int $userId): bool
+    {
+        return DB::table('role_user')
+            ->join('roles', 'roles.id', '=', 'role_user.role_id')
+            ->where('role_user.user_id', $userId)
+            ->where('roles.status', 'active')
+            ->whereIn('roles.code', self::PLATFORM_SUPER_ADMIN_ROLE_CODES)
             ->exists();
     }
 

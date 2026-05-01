@@ -19,6 +19,14 @@ class User extends Authenticatable
     use HasFactory, Notifiable, TwoFactorAuthenticatable;
 
     /**
+     * @var array<int, string>
+     */
+    private const PLATFORM_SUPER_ADMIN_ROLE_CODES = [
+        'PLATFORM.SUPER.ADMIN',
+        'SYSTEM.SUPER.ADMIN',
+    ];
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>
@@ -83,7 +91,7 @@ class User extends Authenticatable
 
     public function hasPermissionTo(string $permission): bool
     {
-        if ($this->isFacilitySuperAdmin()) {
+        if ($this->hasUniversalAdminAccess()) {
             return true;
         }
 
@@ -97,7 +105,6 @@ class User extends Authenticatable
             return true;
         }
 
-        $hasRolePermission = false;
         try {
             return $this->roles()
                 ->whereHas('permissions', fn ($query) => $query->where('name', $permission))
@@ -122,7 +129,7 @@ class User extends Authenticatable
      */
     public function permissionNames(): array
     {
-        if ($this->isFacilitySuperAdmin()) {
+        if ($this->hasUniversalAdminAccess()) {
             return Permission::query()
                 ->orderBy('name')
                 ->pluck('name')
@@ -153,7 +160,39 @@ class User extends Authenticatable
 
     public function isFacilitySuperAdminAccess(): bool
     {
-        return $this->isFacilitySuperAdmin();
+        return $this->hasUniversalAdminAccess();
+    }
+
+    public function isPlatformSuperAdminAccess(): bool
+    {
+        return $this->isPlatformSuperAdmin();
+    }
+
+    public function hasUniversalAdminAccess(): bool
+    {
+        return $this->isPlatformSuperAdmin() || $this->isFacilitySuperAdmin();
+    }
+
+    private function isPlatformSuperAdmin(): bool
+    {
+        if ($this->relationLoaded('roles')) {
+            return $this->roles->contains(function (mixed $role): bool {
+                $code = strtoupper(trim((string) ($role->code ?? '')));
+                $status = strtolower(trim((string) ($role->status ?? 'active')));
+
+                return $status === 'active'
+                    && in_array($code, self::PLATFORM_SUPER_ADMIN_ROLE_CODES, true);
+            });
+        }
+
+        try {
+            return $this->roles()
+                ->whereIn('code', self::PLATFORM_SUPER_ADMIN_ROLE_CODES)
+                ->where('status', 'active')
+                ->exists();
+        } catch (QueryException) {
+            return false;
+        }
     }
 
     private function isFacilitySuperAdmin(): bool

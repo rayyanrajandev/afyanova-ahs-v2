@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Modules\Platform\Infrastructure\Models\RoleModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -105,6 +106,55 @@ it('lets facility super admin switch across all active facilities', function ():
     DB::table('facility_user')
         ->where('user_id', $user->id)
         ->update(['role' => 'super_admin']);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/platform/access-scope')
+        ->assertOk()
+        ->assertJsonPath('data.userAccess.accessibleFacilityCount', 2)
+        ->assertJsonPath('data.userAccess.facilities.0.code', 'DAR-MAIN')
+        ->assertJsonPath('data.userAccess.facilities.1.code', 'DSK-DISP');
+
+    $this->actingAs($user)
+        ->withHeaders([
+            'X-Tenant-Code' => 'TZH',
+            'X-Facility-Code' => 'DSK-DISP',
+        ])
+        ->getJson('/api/v1/platform/access-scope')
+        ->assertOk()
+        ->assertJsonPath('data.resolvedFrom', 'headers')
+        ->assertJsonPath('data.facility.id', $secondFacility[1])
+        ->assertJsonPath('data.facility.code', 'DSK-DISP');
+});
+
+it('lets system super admin switch across all active facilities without facility assignment', function (): void {
+    $user = User::factory()->create();
+
+    $role = RoleModel::query()->create([
+        'tenant_id' => null,
+        'facility_id' => null,
+        'code' => 'PLATFORM.SUPER.ADMIN',
+        'name' => 'System Super Admin',
+        'status' => 'active',
+        'is_system' => true,
+    ]);
+
+    $user->roles()->syncWithoutDetaching([$role->id]);
+
+    seedTenantAndFacility(
+        tenantCode: 'TZH',
+        tenantName: 'Tanzania Health Network',
+        countryCode: 'TZ',
+        facilityCode: 'DAR-MAIN',
+        facilityName: 'Dar Main Hospital',
+    );
+
+    $secondFacility = seedTenantAndFacility(
+        tenantCode: 'TZH',
+        tenantName: 'Tanzania Health Network',
+        countryCode: 'TZ',
+        facilityCode: 'DSK-DISP',
+        facilityName: 'DSK Dispensary',
+    );
 
     $this->actingAs($user)
         ->getJson('/api/v1/platform/access-scope')

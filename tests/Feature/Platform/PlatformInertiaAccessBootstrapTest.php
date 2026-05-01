@@ -1,8 +1,10 @@
 <?php
 
+use App\Models\Permission;
 use App\Models\User;
 use App\Modules\Platform\Infrastructure\Models\FacilitySubscriptionModel;
 use App\Modules\Platform\Infrastructure\Models\PlatformSubscriptionPlanModel;
+use App\Modules\Platform\Infrastructure\Models\RoleModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -40,6 +42,45 @@ it('shares auth permissions and platform bootstrap scope in inertia payload', fu
             ->where('platform.scope.facility.code', 'DAR-MAIN')
             ->where('platform.featureFlags.multiTenantIsolation', false)
             ->where('platform.featureFlags.multiFacilityScoping', false));
+});
+
+it('shares universal platform access for system super admin without facility assignment', function (): void {
+    Permission::query()->firstOrCreate(['name' => 'platform.facilities.create']);
+    Permission::query()->firstOrCreate(['name' => 'platform.facilities.read']);
+
+    $user = User::factory()->create([
+        'email_verified_at' => now(),
+    ]);
+
+    $role = RoleModel::query()->create([
+        'tenant_id' => null,
+        'facility_id' => null,
+        'code' => 'PLATFORM.SUPER.ADMIN',
+        'name' => 'System Super Admin',
+        'status' => 'active',
+        'is_system' => true,
+    ]);
+
+    $user->roles()->syncWithoutDetaching([$role->id]);
+
+    expect($user->isPlatformSuperAdminAccess())->toBeTrue()
+        ->and($user->hasPermissionTo('platform.facilities.create'))->toBeTrue();
+
+    $this->actingAs($user)
+        ->get('/platform/admin/facility-config')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('platform/admin/facility-config/Index')
+            ->where('auth.isPlatformSuperAdmin', true)
+            ->where('auth.isFacilitySuperAdmin', true)
+            ->where('auth.permissions', function (mixed $permissions): bool {
+                $permissionNames = $permissions instanceof \Illuminate\Support\Collection
+                    ? $permissions->all()
+                    : (array) $permissions;
+
+                return in_array('platform.facilities.create', $permissionNames, true)
+                    && in_array('platform.facilities.read', $permissionNames, true);
+            }));
 });
 
 /**

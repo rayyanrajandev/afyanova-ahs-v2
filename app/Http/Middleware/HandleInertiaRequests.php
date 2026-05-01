@@ -51,6 +51,7 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user(),
                 'permissions' => fn (): array => $this->permissionNames($request),
                 'isFacilitySuperAdmin' => fn (): bool => $this->isFacilitySuperAdmin($request),
+                'isPlatformSuperAdmin' => fn (): bool => $this->isPlatformSuperAdmin($request),
             ],
             'platform' => [
                 'scope' => fn (): ?array => $this->platformScope($request),
@@ -86,6 +87,16 @@ class HandleInertiaRequests extends Middleware
         }
 
         return (bool) $user->isFacilitySuperAdminAccess();
+    }
+
+    private function isPlatformSuperAdmin(Request $request): bool
+    {
+        $user = $request->user();
+        if ($user === null || ! method_exists($user, 'isPlatformSuperAdminAccess')) {
+            return false;
+        }
+
+        return (bool) $user->isPlatformSuperAdminAccess();
     }
 
     /**

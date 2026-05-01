@@ -122,6 +122,7 @@ if (! function_exists('defaultHospitalRoleDisplayNames')) {
     function defaultHospitalRoleDisplayNames(): array
     {
         return [
+            'PLATFORM.SUPER.ADMIN' => 'System Super Admin',
             'PLATFORM.USER.ADMIN' => 'Platform User Administrator',
             'PLATFORM.RBAC.ADMIN' => 'Platform RBAC Administrator',
             'PLATFORM.SUBSCRIPTION.ADMIN' => 'Platform Subscription Administrator',
@@ -546,6 +547,7 @@ Artisan::command('app:bootstrap-super-admin {--email=admin@local.test} {--name=}
     $nameOption = trim((string) $this->option('name'));
     $passwordOption = $this->option('password');
     $hasExplicitPassword = is_string($passwordOption) && trim($passwordOption) !== '';
+    $systemSuperAdminRoleAssigned = false;
 
     if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $this->error('Provide a valid --email value.');
@@ -799,6 +801,33 @@ Artisan::command('app:bootstrap-super-admin {--email=admin@local.test} {--name=}
             Permission::query()->firstOrCreate(['name' => $permissionName]);
             $user->givePermissionTo($permissionName);
         }
+
+        $systemSuperAdminRole = RoleModel::query()
+            ->whereNull('tenant_id')
+            ->whereNull('facility_id')
+            ->where('code', 'PLATFORM.SUPER.ADMIN')
+            ->first();
+
+        if (! $systemSuperAdminRole instanceof RoleModel) {
+            $systemSuperAdminRole = RoleModel::query()->create([
+                'tenant_id' => null,
+                'facility_id' => null,
+                'code' => 'PLATFORM.SUPER.ADMIN',
+                'name' => 'System Super Admin',
+                'status' => 'active',
+                'description' => 'Unrestricted platform owner role for bootstrap and emergency administration.',
+                'is_system' => true,
+            ]);
+        }
+
+        $permissionIds = Permission::query()
+            ->whereIn('name', $allPermissions)
+            ->pluck('id')
+            ->all();
+
+        $systemSuperAdminRole->permissions()->syncWithoutDetaching($permissionIds);
+        $user->roles()->syncWithoutDetaching([$systemSuperAdminRole->id]);
+        $systemSuperAdminRoleAssigned = true;
     } catch (QueryException $exception) {
         $this->error('Unable to create/update super admin. Ensure PostgreSQL is running, the database exists, and migrations are applied.');
         $this->line('Database error: '.$exception->getCode());
@@ -812,6 +841,7 @@ Artisan::command('app:bootstrap-super-admin {--email=admin@local.test} {--name=}
     $this->line('User ID: '.$user->id);
     $this->line('Email verified: yes');
     $this->line('Granted permissions: '.count($allPermissions));
+    $this->line('System super admin role: '.($systemSuperAdminRoleAssigned ? 'assigned' : 'not assigned'));
 
     if ($generatedPassword && is_string($resolvedPassword) && $resolvedPassword !== '') {
         $this->warn('Password: '.$resolvedPassword);
@@ -830,6 +860,84 @@ Artisan::command('app:bootstrap-super-admin {--email=admin@local.test} {--name=}
 
     return 0;
 })->purpose('Create or update a local super admin user for UI testing and grant all current gate-backed permissions');
+
+Artisan::command('app:grant-system-super-admin {email}', function (string $email): int {
+    $email = trim($email);
+
+    if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $this->error('Provide a valid email address.');
+
+        return self::FAILURE;
+    }
+
+    try {
+        $user = User::query()->where('email', $email)->first();
+        if (! $user instanceof User) {
+            $this->error('User not found: '.$email);
+
+            return self::FAILURE;
+        }
+
+        $role = RoleModel::query()
+            ->whereNull('tenant_id')
+            ->whereNull('facility_id')
+            ->where('code', 'PLATFORM.SUPER.ADMIN')
+            ->first();
+
+        if (! $role instanceof RoleModel) {
+            $role = RoleModel::query()->create([
+                'tenant_id' => null,
+                'facility_id' => null,
+                'code' => 'PLATFORM.SUPER.ADMIN',
+                'name' => 'System Super Admin',
+                'status' => 'active',
+                'description' => 'Unrestricted platform owner role for bootstrap and emergency administration.',
+                'is_system' => true,
+            ]);
+        } else {
+            $role->forceFill([
+                'name' => $role->name ?: 'System Super Admin',
+                'status' => 'active',
+                'is_system' => true,
+            ])->save();
+        }
+
+        $permissionNames = Permission::query()
+            ->orderBy('name')
+            ->pluck('name')
+            ->all();
+
+        $permissionIds = Permission::query()
+            ->orderBy('name')
+            ->pluck('id')
+            ->all();
+
+        $role->permissions()->syncWithoutDetaching($permissionIds);
+        $user->roles()->syncWithoutDetaching([$role->id]);
+
+        foreach ($permissionNames as $permissionName) {
+            $user->givePermissionTo((string) $permissionName);
+        }
+
+        if ($user->email_verified_at === null) {
+            $user->email_verified_at = now();
+            $user->save();
+        }
+    } catch (QueryException $exception) {
+        $this->error('Unable to grant system super admin access.');
+        $this->line('Database error: '.$exception->getCode());
+
+        return self::FAILURE;
+    }
+
+    $this->info('System super admin access granted.');
+    $this->line('Email: '.$user->email);
+    $this->line('Role: PLATFORM.SUPER.ADMIN');
+    $this->line('Direct permissions synced: '.count($permissionNames));
+    $this->line('Password: unchanged');
+
+    return self::SUCCESS;
+})->purpose('Grant true system super admin access to an existing user without changing the password');
 
 Artisan::command('app:sync-billing-permissions {--profile=implemented} {--grant-user-email=} {--list}', function (): int {
     $profile = trim((string) $this->option('profile'));
