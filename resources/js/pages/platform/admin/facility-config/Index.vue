@@ -522,6 +522,9 @@ const subscriptionDraftAccessState = computed(() => {
 
   return 'pending';
 });
+const subscriptionSaveDisabled = computed(() =>
+  subscriptionSaving.value || subscriptionLoading.value || subscriptionPlans.value.length === 0,
+);
 const subscriptionCoveragePercent = computed(() => {
   const total = allSubscriptionEntitlements.value.length;
   if (total === 0) return 0;
@@ -2155,10 +2158,6 @@ onBeforeUnmount(() => {
                         <Badge variant="outline">{{ moneyLabel(subscriptionForm.priceAmount, subscriptionForm.currencyCode) }}</Badge>
                       </div>
                     </div>
-                    <Button v-if="canManageSubscriptions" size="sm" class="gap-1.5" :disabled="subscriptionSaving || subscriptionLoading || subscriptionPlans.length === 0" @click="saveSubscription">
-                      <AppIcon name="circle-check-big" class="size-3.5" />
-                      {{ subscriptionSaving ? 'Saving...' : 'Save Subscription' }}
-                    </Button>
                   </div>
 
                   <Alert v-if="!canManageSubscriptions">
@@ -2486,7 +2485,31 @@ onBeforeUnmount(() => {
               </ScrollArea>
             </Tabs>
           </div>
-          <SheetFooter class="shrink-0 border-t bg-background px-4 py-3"><Button variant="outline" @click="closeDetails">Close</Button></SheetFooter>
+          <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
+            <div class="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div v-if="selected && detailsWorkspaceTab === 'subscription'" class="min-w-0 text-xs">
+                <p class="font-medium text-foreground">Subscription changes</p>
+                <p class="truncate text-muted-foreground">
+                  {{ selectedSubscriptionPlan?.name || 'No service plan selected' }} | {{ subscriptionAccessSummary.label }} | {{ moneyLabel(subscriptionForm.priceAmount, subscriptionForm.currencyCode) }}
+                </p>
+              </div>
+              <p v-else class="text-xs text-muted-foreground">
+                {{ selected?.name || selected?.code || 'Facility details' }}
+              </p>
+              <div class="flex flex-wrap items-center justify-end gap-2">
+                <Button variant="outline" @click="closeDetails">Close</Button>
+                <Button
+                  v-if="selected && detailsWorkspaceTab === 'subscription' && canManageSubscriptions"
+                  class="gap-1.5"
+                  :disabled="subscriptionSaveDisabled"
+                  @click="saveSubscription"
+                >
+                  <AppIcon name="circle-check-big" class="size-3.5" />
+                  {{ subscriptionSaving ? 'Saving...' : 'Save Subscription' }}
+                </Button>
+              </div>
+            </div>
+          </SheetFooter>
         </SheetContent>
       </Sheet>
 
