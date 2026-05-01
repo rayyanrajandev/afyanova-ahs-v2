@@ -9,6 +9,7 @@ const FACILITY_SCOPE_COOKIE = 'platform_facility_code';
 
 type SharedAuthProps = {
     permissions?: string[];
+    roleCodes?: string[];
     isFacilitySuperAdmin?: boolean;
     isPlatformSuperAdmin?: boolean;
 };
@@ -76,6 +77,15 @@ export function usePlatformAccess() {
         return candidate
             .map((name) => String(name ?? '').trim())
             .filter((name) => name.length > 0);
+    });
+
+    const sessionRoleCodes = computed<string[]>(() => {
+        const candidate = page.props.auth?.roleCodes;
+        if (!Array.isArray(candidate)) return [];
+
+        return candidate
+            .map((code) => String(code ?? '').trim().toUpperCase())
+            .filter((code) => code.length > 0);
     });
 
     const permissionSet = computed(() =>
@@ -175,6 +185,7 @@ export function usePlatformAccess() {
 
     return {
         permissionNames,
+        sessionRoleCodes,
         isFacilitySuperAdmin,
         isPlatformSuperAdmin,
         hasUniversalAdminAccess,

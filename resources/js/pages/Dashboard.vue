@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -10,14 +10,22 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useDashboardWorkflowPresetStorage } from '@/composables/useDashboardWorkflowPreset';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
+import {
+    DASHBOARD_ADMIN_ROLE_CODES,
+    DASHBOARD_PRESETS,
+    eligibleDashboardPresets,
+    inferDashboardPreset,
+    presetMatchesRole,
+    type DashboardPresetKey,
+} from '@/config/dashboardPresets';
 import type { AppIconName } from '@/lib/icons';
 import { formatEnumLabel } from '@/lib/labels';
 import type { BreadcrumbItem } from '@/types';
 
-type PresetKey = 'front_desk' | 'clinician' | 'nursing' | 'direct_service' | 'cashier' | 'admin';
 type TabKey = 'overview' | 'resources';
 
 type ApiEnvelope<T> = { data: T };
@@ -35,58 +43,14 @@ type QueueRow = {
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/dashboard' }];
 const today = new Date(Date.now() - (new Date().getTimezoneOffset() * 60 * 1000)).toISOString().slice(0, 10);
 
-const presets = [
-    {
-        key: 'front_desk',
-        label: 'Front Desk',
-        description: 'Keep arrivals, registration, and appointment handoffs moving without losing queue context.',
-        modules: ['Patients', 'Appointments', 'Admissions'],
-    },
-    {
-        key: 'clinician',
-        label: 'Clinician',
-        description: 'Stay focused on consultation-ready encounters, open notes, and inpatient follow-up load.',
-        modules: ['Appointments', 'Medical Records', 'Admissions'],
-    },
-    {
-        key: 'nursing',
-        label: 'Nursing',
-        description: 'Watch occupancy, inpatient movement, and downstream orders that block bedside care.',
-        modules: ['Admissions', 'Inpatient Ward', 'Pharmacy'],
-    },
-    {
-        key: 'direct_service',
-        label: 'Direct Service',
-        description: 'Watch laboratory, pharmacy, and radiology queues without borrowing nursing-only census signals.',
-        modules: ['Laboratory', 'Pharmacy', 'Radiology'],
-    },
-    {
-        key: 'cashier',
-        label: 'Cashier',
-        description: 'Prioritize invoice follow-up and payer exception handling from a single landing view.',
-        modules: ['Billing', 'Claims', 'Pharmacy'],
-    },
-    {
-        key: 'admin',
-        label: 'Admin',
-        description: 'Monitor platform health, scope coverage, and operational controls across modules.',
-        modules: ['Audit Export', 'Users', 'Facility Config'],
-    },
-] as const;
-
-const adminRoles = ['PLATFORM.USER.ADMIN', 'PLATFORM.RBAC.ADMIN', 'HOSPITAL.FACILITY.ADMIN', 'HOSPITAL.DEPARTMENT.HEAD'];
-const cashierRoles = ['HOSPITAL.BILLING.CASHIER', 'HOSPITAL.BILLING.OFFICER', 'HOSPITAL.FINANCE.CONTROLLER'];
-const clinicianRoles = ['HOSPITAL.CLINICAL.USER', 'HOSPITAL.CLINICIAN.ORDERING'];
-const nursingRoles = ['HOSPITAL.NURSING.USER'];
-const directServiceRoles = ['HOSPITAL.LABORATORY.USER', 'HOSPITAL.PHARMACY.USER', 'HOSPITAL.RADIOLOGY.USER'];
-const frontDeskRoles = ['HOSPITAL.REGISTRATION.CLERK'];
-
-const { hasPermission, isFacilitySuperAdmin, multiTenantIsolationEnabled } = usePlatformAccess();
+const { hasPermission, isFacilitySuperAdmin, isPlatformSuperAdmin, multiTenantIsolationEnabled, sessionRoleCodes } =
+    usePlatformAccess();
 
 const loading = ref(true);
 const refreshing = ref(false);
+const dashboardHydrated = ref(false);
 const activeTab = ref<TabKey>('overview');
-const presetOverride = ref<PresetKey | 'auto'>('auto');
+const presetOverride = useDashboardWorkflowPresetStorage();
 const failures = ref<Array<{ label: string; message: string }>>([]);
 
 const scopeData = ref<any | null>(null);
@@ -97,6 +61,7 @@ const lists = ref<Record<string, any[]>>({});
 const auditExportHealth = ref<any | null>(null);
 const retryResumeHealth = ref<any | null>(null);
 const lastLoadedAt = ref<string | null>(null);
+const sharedOpsTelemetryLoaded = ref(false);
 
 const frontDeskHandoffOpen = useLocalStorageBoolean('dashboard.front-desk-handoff.open', false);
 const clinicianHandoffOpen = useLocalStorageBoolean('dashboard.clinician-handoff.open', false);
@@ -104,41 +69,80 @@ const nursingHandoffOpen = useLocalStorageBoolean('dashboard.nursing-handoff.ope
 const cashierHandoffOpen = useLocalStorageBoolean('dashboard.cashier-handoff.open', false);
 const adminHandoffOpen = useLocalStorageBoolean('dashboard.admin-handoff.open', false);
 
-const roleCodes = computed(() =>
-    (authMe.value?.roles ?? [])
+const roleCodes = computed(() => {
+    const fromApi = (authMe.value?.roles ?? [])
         .map((role: any) => String(role?.code ?? '').trim().toUpperCase())
-        .filter((code: string) => code.length > 0),
-);
+        .filter((code: string) => code.length > 0);
+    if (fromApi.length > 0) {
+        return fromApi;
+    }
 
-const canSwitchPreset = computed(() =>
-    isFacilitySuperAdmin.value || roleCodes.value.some((code: string) => adminRoles.includes(code)),
-);
-
-const inferredPreset = computed<PresetKey>(() => {
-    if (isFacilitySuperAdmin.value) return 'admin';
-    if (roleCodes.value.some((code: string) => adminRoles.includes(code))) return 'admin';
-    if (roleCodes.value.some((code: string) => cashierRoles.includes(code))) return 'cashier';
-    if (roleCodes.value.some((code: string) => clinicianRoles.includes(code))) return 'clinician';
-    if (roleCodes.value.some((code: string) => nursingRoles.includes(code))) return 'nursing';
-    if (roleCodes.value.some((code: string) => directServiceRoles.includes(code))) return 'direct_service';
-    if (roleCodes.value.some((code: string) => frontDeskRoles.includes(code))) return 'front_desk';
-    if (hasPermission('medical.records.read')) return 'clinician';
-    if (hasPermission('billing.invoices.read') || hasPermission('claims.insurance.read')) return 'cashier';
-    if (hasPermission('admissions.read') || hasPermission('inpatient.ward.read')) return 'nursing';
-    if (hasPermission('laboratory.orders.read') || hasPermission('pharmacy.orders.read') || hasPermission('radiology.orders.read')) return 'direct_service';
-    return 'front_desk';
+    return sessionRoleCodes.value;
 });
 
-const activePresetKey = computed<PresetKey>(() => presetOverride.value === 'auto' ? inferredPreset.value : presetOverride.value);
-const activePreset = computed(() => presets.find((preset) => preset.key === activePresetKey.value) ?? presets[0]);
-const visiblePresetOptions = computed(() => presets.filter((preset) => preset.key !== 'direct_service'));
+const presetContextInput = computed(() => ({
+    roleCodesUpper: roleCodes.value,
+    isFacilitySuperAdmin: isFacilitySuperAdmin.value,
+    isPlatformSuperAdmin: isPlatformSuperAdmin.value,
+    hasPermission,
+}));
+
+const rolesResolved = computed(
+    () =>
+        sessionRoleCodes.value.length > 0 ||
+        (Array.isArray(authMe.value?.roles) && authMe.value.roles.length > 0),
+);
+
+const eligiblePresets = computed(() => eligibleDashboardPresets(presetContextInput.value));
+
+const canSwitchPreset = computed(
+    () =>
+        isFacilitySuperAdmin.value ||
+        isPlatformSuperAdmin.value ||
+        presetMatchesRole(roleCodes.value, DASHBOARD_ADMIN_ROLE_CODES) ||
+        eligiblePresets.value.length > 1,
+);
+
+const inferredPreset = computed<DashboardPresetKey>(() => inferDashboardPreset(presetContextInput.value));
+
+const activePresetKey = computed<DashboardPresetKey>(() => {
+    const eligible = eligiblePresets.value;
+    const fallback = eligible[0] ?? 'front_desk';
+    if (presetOverride.value === 'auto') {
+        return fallback;
+    }
+    if (eligible.includes(presetOverride.value)) {
+        return presetOverride.value;
+    }
+    return fallback;
+});
+
+const activePreset = computed(
+    () => DASHBOARD_PRESETS.find((preset) => preset.key === activePresetKey.value) ?? DASHBOARD_PRESETS[0],
+);
+
+const visiblePresetOptions = computed(() =>
+    DASHBOARD_PRESETS.filter((preset) => eligiblePresets.value.includes(preset.key)),
+);
+
 const presetSelectValue = computed({
     get: () => presetOverride.value,
     set: (value: string) => {
         if (!canSwitchPreset.value) return;
-        presetOverride.value = value === 'auto' ? 'auto' : (value as PresetKey);
+        presetOverride.value = value === 'auto' ? 'auto' : (value as DashboardPresetKey);
     },
 });
+
+watch(
+    () => [rolesResolved.value, eligiblePresets.value, presetOverride.value] as const,
+    () => {
+        if (!rolesResolved.value) return;
+        if (presetOverride.value !== 'auto' && !eligiblePresets.value.includes(presetOverride.value)) {
+            presetOverride.value = 'auto';
+        }
+    },
+    { flush: 'post' },
+);
 
 const partialData = computed(() => failures.value.length > 0);
 const failureLabels = computed(() => failures.value.map((failure) => failure.label));
@@ -338,86 +342,272 @@ async function guardedRequest<T>(label: string, permission: string, callback: ()
     return safeRequest(label, callback);
 }
 
-async function loadDashboard() {
-    failures.value = [];
-
-    const [
-        scopeResponse,
-        authResponse,
-        securityResponse,
-        patientCountsResponse,
-        appointmentCountsResponse,
-        admissionCountsResponse,
-        medicalRecordCountsResponse,
-        wardTaskCountsResponse,
-        wardCarePlanCountsResponse,
-        wardDischargeChecklistCountsResponse,
-        laboratoryCountsResponse,
-        pharmacyCountsResponse,
-        radiologyCountsResponse,
-        billingCountsResponse,
-        claimOpenCountsResponse,
-        claimResolvedCountsResponse,
-        scheduledAppointmentsResponse,
-        checkedInAppointmentsResponse,
-        admissionsResponse,
-        draftInvoicesResponse,
-        auditExportHealthResponse,
-        retryResumeHealthResponse,
-    ] = await Promise.all([
-        safeRequest<ApiEnvelope<any>>('Scope', () => apiGet('/platform/access-scope')),
-        safeRequest<ApiEnvelope<any>>('Auth user', () => apiGet('/auth/me')),
-        safeRequest<ApiEnvelope<any>>('Security status', () => apiGet('/auth/me/security-status')),
-        guardedRequest<ApiEnvelope<any>>('Patient counts', 'patients.read', () => apiGet('/patients/status-counts')),
-        guardedRequest<ApiEnvelope<any>>('Appointment counts', 'appointments.read', () => apiGet('/appointments/status-counts')),
-        guardedRequest<ApiEnvelope<any>>('Admission counts', 'admissions.read', () => apiGet('/admissions/status-counts')),
-        guardedRequest<ApiEnvelope<any>>('Medical record counts', 'medical.records.read', () => apiGet('/medical-records/status-counts')),
-        guardedRequest<ApiEnvelope<any>>('Ward task counts', 'inpatient.ward.read', () => apiGet('/inpatient-ward/task-status-counts')),
-        guardedRequest<ApiEnvelope<any>>('Ward care plan counts', 'inpatient.ward.read', () => apiGet('/inpatient-ward/care-plan-status-counts')),
-        guardedRequest<ApiEnvelope<any>>('Ward discharge checklist counts', 'inpatient.ward.read', () => apiGet('/inpatient-ward/discharge-checklist-status-counts')),
-        guardedRequest<ApiEnvelope<any>>('Laboratory counts', 'laboratory.orders.read', () => apiGet('/laboratory-orders/status-counts')),
-        guardedRequest<ApiEnvelope<any>>('Pharmacy counts', 'pharmacy.orders.read', () => apiGet('/pharmacy-orders/status-counts')),
-        guardedRequest<ApiEnvelope<any>>('Radiology counts', 'radiology.orders.read', () => apiGet('/radiology-orders/status-counts')),
-        guardedRequest<ApiEnvelope<any>>('Billing counts', 'billing.invoices.read', () => apiGet('/billing-invoices/status-counts')),
-        guardedRequest<ApiEnvelope<any>>('Open claim exceptions', 'claims.insurance.read', () => apiGet('/claims-insurance/status-counts', { reconciliationExceptionStatus: 'open' })),
-        guardedRequest<ApiEnvelope<any>>('Resolved claim exceptions', 'claims.insurance.read', () => apiGet('/claims-insurance/status-counts', { reconciliationExceptionStatus: 'resolved' })),
-        guardedRequest<ApiEnvelope<any>>('Scheduled appointments', 'appointments.read', () => apiGet('/appointments', { status: 'scheduled', perPage: 3, sortBy: 'scheduledAt', sortDir: 'asc' })),
-        guardedRequest<ApiEnvelope<any>>('Checked-in appointments', 'appointments.read', () => apiGet('/appointments', { status: 'checked_in', perPage: 2, sortBy: 'scheduledAt', sortDir: 'asc' })),
-        guardedRequest<ApiEnvelope<any>>('Admissions', 'admissions.read', () => apiGet('/admissions', { status: 'admitted', perPage: 2, sortBy: 'admittedAt', sortDir: 'desc' })),
-        guardedRequest<ApiEnvelope<any>>('Draft invoices', 'billing.invoices.read', () => apiGet('/billing-invoices', { status: 'draft', perPage: 3 })),
-        safeRequest<ApiEnvelope<any>>('Audit export health', () => apiGet('/platform/audit-export-jobs/health', { days: 7, failureLimit: 5 })),
-        safeRequest<ApiEnvelope<any>>('Retry-resume telemetry', () => apiGet('/platform/audit-export-jobs/retry-resume-telemetry/health', { days: 7, failureLimit: 5 })),
+async function loadOpsTelemetry() {
+    const [auditExportHealthResponse, retryResumeHealthResponse] = await Promise.all([
+        safeRequest<ApiEnvelope<any>>('Audit export health', () =>
+            apiGet('/platform/audit-export-jobs/health', { days: 7, failureLimit: 5 }),
+        ),
+        safeRequest<ApiEnvelope<any>>('Retry-resume telemetry', () =>
+            apiGet('/platform/audit-export-jobs/retry-resume-telemetry/health', { days: 7, failureLimit: 5 }),
+        ),
     ]);
 
-    scopeData.value = scopeResponse?.data ?? null;
-    authMe.value = authResponse?.data ?? null;
-    securityStatus.value = securityResponse?.data ?? null;
+    auditExportHealth.value = auditExportHealthResponse?.data ?? auditExportHealth.value;
+    retryResumeHealth.value = retryResumeHealthResponse?.data ?? retryResumeHealth.value;
+}
+
+async function loadDashboard(depth = 0): Promise<void> {
+    if (depth > 5) return;
+
+    failures.value = [];
+    const presetAtStart = activePresetKey.value;
+    const preset = presetAtStart;
+
     counts.value = {
-        patients: patientCountsResponse?.data ?? null,
-        appointments: appointmentCountsResponse?.data ?? null,
-        admissions: admissionCountsResponse?.data ?? null,
-        medicalRecords: medicalRecordCountsResponse?.data ?? null,
-        wardTasks: wardTaskCountsResponse?.data ?? null,
-        wardCarePlans: wardCarePlanCountsResponse?.data ?? null,
-        wardDischargeChecklists: wardDischargeChecklistCountsResponse?.data ?? null,
-        laboratory: laboratoryCountsResponse?.data ?? null,
-        pharmacy: pharmacyCountsResponse?.data ?? null,
-        radiology: radiologyCountsResponse?.data ?? null,
-        billing: billingCountsResponse?.data ?? null,
-        claimOpen: claimOpenCountsResponse?.data ?? null,
-        claimResolved: claimResolvedCountsResponse?.data ?? null,
+        patients: null,
+        appointments: null,
+        admissions: null,
+        medicalRecords: null,
+        wardTasks: null,
+        wardCarePlans: null,
+        wardDischargeChecklists: null,
+        laboratory: null,
+        pharmacy: null,
+        radiology: null,
+        billing: null,
+        claimOpen: null,
+        claimResolved: null,
     };
     lists.value = {
-        scheduledAppointments: scheduledAppointmentsResponse?.data ?? [],
-        checkedInAppointments: checkedInAppointmentsResponse?.data ?? [],
-        admissions: admissionsResponse?.data ?? [],
-        draftInvoices: draftInvoicesResponse?.data ?? [],
+        scheduledAppointments: [],
+        checkedInAppointments: [],
+        admissions: [],
+        draftInvoices: [],
     };
-    auditExportHealth.value = auditExportHealthResponse?.data ?? null;
-    retryResumeHealth.value = retryResumeHealthResponse?.data ?? null;
+
+    if (preset !== 'admin' && !sharedOpsTelemetryLoaded.value) {
+        auditExportHealth.value = null;
+        retryResumeHealth.value = null;
+    }
+
+    type BatchEntry = readonly [string, () => Promise<unknown>];
+
+    const batch: BatchEntry[] = [
+        ['scope', () => safeRequest<ApiEnvelope<any>>('Scope', () => apiGet('/platform/access-scope'))],
+        ['authMe', () => safeRequest<ApiEnvelope<any>>('Auth user', () => apiGet('/auth/me'))],
+        ['securityStatus', () => safeRequest<ApiEnvelope<any>>('Security status', () => apiGet('/auth/me/security-status'))],
+    ];
+
+    switch (preset) {
+        case 'front_desk':
+            batch.push(
+                ['patientCounts', () => guardedRequest<ApiEnvelope<any>>('Patient counts', 'patients.read', () => apiGet('/patients/status-counts'))],
+                ['appointmentCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Appointment counts', 'appointments.read', () => apiGet('/appointments/status-counts')),
+                ],
+                ['admissionCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Admission counts', 'admissions.read', () => apiGet('/admissions/status-counts')),
+                ],
+                [
+                    'scheduledAppointments',
+                    () =>
+                        guardedRequest<ApiEnvelope<any>>('Scheduled appointments', 'appointments.read', () =>
+                            apiGet('/appointments', { status: 'scheduled', perPage: 3, sortBy: 'scheduledAt', sortDir: 'asc' }),
+                        ),
+                ],
+                [
+                    'checkedInAppointments',
+                    () =>
+                        guardedRequest<ApiEnvelope<any>>('Checked-in appointments', 'appointments.read', () =>
+                            apiGet('/appointments', { status: 'checked_in', perPage: 2, sortBy: 'scheduledAt', sortDir: 'asc' }),
+                        ),
+                ],
+            );
+            break;
+        case 'clinician':
+            batch.push(
+                ['appointmentCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Appointment counts', 'appointments.read', () => apiGet('/appointments/status-counts')),
+                ],
+                ['medicalRecordCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Medical record counts', 'medical.records.read', () => apiGet('/medical-records/status-counts')),
+                ],
+                ['admissionCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Admission counts', 'admissions.read', () => apiGet('/admissions/status-counts')),
+                ],
+                ['laboratoryCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Laboratory counts', 'laboratory.orders.read', () => apiGet('/laboratory-orders/status-counts')),
+                ],
+                [
+                    'checkedInAppointments',
+                    () =>
+                        guardedRequest<ApiEnvelope<any>>('Checked-in appointments', 'appointments.read', () =>
+                            apiGet('/appointments', { status: 'checked_in', perPage: 2, sortBy: 'scheduledAt', sortDir: 'asc' }),
+                        ),
+                ],
+            );
+            break;
+        case 'direct_service':
+            batch.push(
+                ['laboratoryCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Laboratory counts', 'laboratory.orders.read', () => apiGet('/laboratory-orders/status-counts')),
+                ],
+                ['pharmacyCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Pharmacy counts', 'pharmacy.orders.read', () => apiGet('/pharmacy-orders/status-counts')),
+                ],
+                ['radiologyCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Radiology counts', 'radiology.orders.read', () => apiGet('/radiology-orders/status-counts')),
+                ],
+            );
+            break;
+        case 'nursing':
+            batch.push(
+                ['admissionCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Admission counts', 'admissions.read', () => apiGet('/admissions/status-counts')),
+                ],
+                ['laboratoryCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Laboratory counts', 'laboratory.orders.read', () => apiGet('/laboratory-orders/status-counts')),
+                ],
+                ['pharmacyCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Pharmacy counts', 'pharmacy.orders.read', () => apiGet('/pharmacy-orders/status-counts')),
+                ],
+                ['wardTaskCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Ward task counts', 'inpatient.ward.read', () => apiGet('/inpatient-ward/task-status-counts')),
+                ],
+                ['wardCarePlanCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Ward care plan counts', 'inpatient.ward.read', () => apiGet('/inpatient-ward/care-plan-status-counts')),
+                ],
+                ['wardDischargeChecklistCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>(
+                        'Ward discharge checklist counts',
+                        'inpatient.ward.read',
+                        () => apiGet('/inpatient-ward/discharge-checklist-status-counts'),
+                    ),
+                ],
+                [
+                    'admissions',
+                    () =>
+                        guardedRequest<ApiEnvelope<any>>('Admissions', 'admissions.read', () =>
+                            apiGet('/admissions', { status: 'admitted', perPage: 2, sortBy: 'admittedAt', sortDir: 'desc' }),
+                        ),
+                ],
+            );
+            break;
+        case 'cashier':
+            batch.push(
+                ['billingCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Billing counts', 'billing.invoices.read', () => apiGet('/billing-invoices/status-counts')),
+                ],
+                [
+                    'claimOpenCounts',
+                    () =>
+                        guardedRequest<ApiEnvelope<any>>('Open claim exceptions', 'claims.insurance.read', () =>
+                            apiGet('/claims-insurance/status-counts', { reconciliationExceptionStatus: 'open' }),
+                        ),
+                ],
+                [
+                    'claimResolvedCounts',
+                    () =>
+                        guardedRequest<ApiEnvelope<any>>('Resolved claim exceptions', 'claims.insurance.read', () =>
+                            apiGet('/claims-insurance/status-counts', { reconciliationExceptionStatus: 'resolved' }),
+                        ),
+                ],
+                [
+                    'draftInvoices',
+                    () =>
+                        guardedRequest<ApiEnvelope<any>>('Draft invoices', 'billing.invoices.read', () =>
+                            apiGet('/billing-invoices', { status: 'draft', perPage: 3 }),
+                        ),
+                ],
+            );
+            break;
+        case 'admin':
+            batch.push(
+                ['wardTaskCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Ward task counts', 'inpatient.ward.read', () => apiGet('/inpatient-ward/task-status-counts')),
+                ],
+            );
+            break;
+    }
+
+    if (preset === 'admin' || sharedOpsTelemetryLoaded.value) {
+        batch.push(
+            ['auditExportHealth', () => safeRequest<ApiEnvelope<any>>('Audit export health', () => apiGet('/platform/audit-export-jobs/health', { days: 7, failureLimit: 5 }))],
+            [
+                'retryResumeHealth',
+                () =>
+                    safeRequest<ApiEnvelope<any>>('Retry-resume telemetry', () =>
+                        apiGet('/platform/audit-export-jobs/retry-resume-telemetry/health', { days: 7, failureLimit: 5 }),
+                    ),
+            ],
+        );
+    }
+
+    const outcomes = await Promise.all(batch.map(([, run]) => run()));
+    const bag = Object.fromEntries(batch.map(([key], index) => [key, outcomes[index]])) as Record<string, any>;
+
+    scopeData.value = bag.scope?.data ?? null;
+    authMe.value = bag.authMe?.data ?? null;
+    securityStatus.value = bag.securityStatus?.data ?? null;
+
+    counts.value = {
+        patients: bag.patientCounts?.data ?? null,
+        appointments: bag.appointmentCounts?.data ?? null,
+        admissions: bag.admissionCounts?.data ?? null,
+        medicalRecords: bag.medicalRecordCounts?.data ?? null,
+        wardTasks: bag.wardTaskCounts?.data ?? null,
+        wardCarePlans: bag.wardCarePlanCounts?.data ?? null,
+        wardDischargeChecklists: bag.wardDischargeChecklistCounts?.data ?? null,
+        laboratory: bag.laboratoryCounts?.data ?? null,
+        pharmacy: bag.pharmacyCounts?.data ?? null,
+        radiology: bag.radiologyCounts?.data ?? null,
+        billing: bag.billingCounts?.data ?? null,
+        claimOpen: bag.claimOpenCounts?.data ?? null,
+        claimResolved: bag.claimResolvedCounts?.data ?? null,
+    };
+
+    lists.value = {
+        scheduledAppointments: Array.isArray(bag.scheduledAppointments?.data) ? bag.scheduledAppointments.data : [],
+        checkedInAppointments: Array.isArray(bag.checkedInAppointments?.data) ? bag.checkedInAppointments.data : [],
+        admissions: Array.isArray(bag.admissions?.data) ? bag.admissions.data : [],
+        draftInvoices: Array.isArray(bag.draftInvoices?.data) ? bag.draftInvoices.data : [],
+    };
+
+    if (bag.auditExportHealth !== undefined) {
+        auditExportHealth.value = bag.auditExportHealth?.data ?? null;
+    }
+    if (bag.retryResumeHealth !== undefined) {
+        retryResumeHealth.value = bag.retryResumeHealth?.data ?? null;
+    }
+
+    if (preset === 'admin') {
+        sharedOpsTelemetryLoaded.value = true;
+    }
+
     lastLoadedAt.value = new Date().toISOString();
 
+    if (presetAtStart !== activePresetKey.value) {
+        await loadDashboard(depth + 1);
+    }
 }
+
+watch(activeTab, async (tab) => {
+    if (tab !== 'resources') {
+        return;
+    }
+    if (sharedOpsTelemetryLoaded.value) {
+        return;
+    }
+    await loadOpsTelemetry();
+    sharedOpsTelemetryLoaded.value = true;
+});
+
+watch(activePresetKey, async (_preset, prev) => {
+    if (!dashboardHydrated.value || prev === undefined) {
+        return;
+    }
+    await loadDashboard();
+});
 
 async function refreshDashboard() {
     if (refreshing.value) return;
@@ -1023,6 +1213,7 @@ onMounted(async () => {
         await loadDashboard();
     } finally {
         loading.value = false;
+        dashboardHydrated.value = true;
     }
 });
 </script>
@@ -1056,7 +1247,7 @@ onMounted(async () => {
                                 <SelectValue placeholder="View as" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="auto">Auto ({{ presets.find((preset) => preset.key === inferredPreset)?.label ?? 'Default' }})</SelectItem>
+                                <SelectItem value="auto">Auto ({{ DASHBOARD_PRESETS.find((preset) => preset.key === inferredPreset)?.label ?? 'Default' }})</SelectItem>
                                 <SelectItem v-for="preset in visiblePresetOptions" :key="preset.key" :value="preset.key">{{ preset.label }}</SelectItem>
                             </SelectContent>
                         </Select>

@@ -10,8 +10,12 @@ export type User = {
 };
 
 export type Auth = {
-    user: User;
+    user: User | null;
     permissions: string[];
+    /** Active role codes (uppercase); prefer server-sent list for preset inference without an extra round-trip. */
+    roleCodes?: string[];
+    isFacilitySuperAdmin?: boolean;
+    isPlatformSuperAdmin?: boolean;
 };
 
 export type TwoFactorConfigContent = {

@@ -52,6 +52,7 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
                 'permissions' => fn (): array => $this->permissionNames($request),
+                'roleCodes' => fn (): array => $this->roleCodes($request),
                 'isFacilitySuperAdmin' => fn (): bool => $this->isFacilitySuperAdmin($request),
                 'isPlatformSuperAdmin' => fn (): bool => $this->isPlatformSuperAdmin($request),
             ],
@@ -64,6 +65,19 @@ class HandleInertiaRequests extends Middleware
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function roleCodes(Request $request): array
+    {
+        $user = $request->user();
+        if ($user === null || ! method_exists($user, 'roleCodes')) {
+            return [];
+        }
+
+        return $user->roleCodes();
     }
 
     /**

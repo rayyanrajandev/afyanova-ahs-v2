@@ -159,6 +159,32 @@ class User extends Authenticatable implements MustVerifyEmail
         return $allPermissionNames;
     }
 
+    /**
+     * Role codes resolved from active RBAC memberships (uppercase codes only).
+     *
+     * @return array<int, string>
+     */
+    public function roleCodes(): array
+    {
+        try {
+            /** @var list<string> $codes */
+            $codes = $this->roles()
+                ->where('roles.status', 'active')
+                ->pluck('roles.code')
+                ->all();
+
+            $normalized = array_values(array_unique(array_filter(array_map(
+                static fn (mixed $code): string => strtoupper(trim((string) $code)),
+                $codes,
+            ))));
+            sort($normalized);
+
+            return $normalized;
+        } catch (QueryException) {
+            return [];
+        }
+    }
+
     public function isFacilitySuperAdminAccess(): bool
     {
         return $this->hasUniversalAdminAccess();
