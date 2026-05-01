@@ -451,6 +451,84 @@ it('bulk assigns platform roles for selected users when authorized', function ()
     )->toBe(2);
 });
 
+it('limits facility assigned user admins to hospital operational role assignment', function (): void {
+    $actor = makePlatformUserAdminActor(['platform.rbac.manage-user-roles']);
+    $tenant = TenantModel::query()->create([
+        'code' => 'ROLELIM',
+        'name' => 'Role Limit Hospital Group',
+        'country_code' => 'TZ',
+        'status' => 'active',
+    ]);
+    $facility = FacilityModel::query()->create([
+        'tenant_id' => $tenant->id,
+        'code' => 'ROLE-LIM',
+        'name' => 'Role Limit Facility',
+        'facility_type' => 'dispensary',
+        'timezone' => 'Africa/Dar_es_Salaam',
+        'status' => 'active',
+    ]);
+    $target = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'email' => 'facility-role-target@example.com',
+    ]);
+    $hospitalRole = RoleModel::query()->create([
+        'code' => 'HOSPITAL.REGISTRATION.CLERK',
+        'name' => 'Registration Clerk',
+        'status' => 'active',
+        'is_system' => true,
+    ]);
+    $platformRole = RoleModel::query()->create([
+        'code' => 'PLATFORM.USER.ADMIN',
+        'name' => 'Platform User Administrator',
+        'status' => 'active',
+        'is_system' => true,
+    ]);
+
+    DB::table('facility_user')->insert([
+        [
+            'facility_id' => $facility->id,
+            'user_id' => $actor->id,
+            'role' => 'facility_admin',
+            'is_primary' => true,
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+        [
+            'facility_id' => $facility->id,
+            'user_id' => $target->id,
+            'role' => 'staff',
+            'is_primary' => true,
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+    ]);
+
+    $headers = [
+        'X-Tenant-Code' => 'ROLELIM',
+        'X-Facility-Code' => 'ROLE-LIM',
+    ];
+
+    $this->actingAs($actor)
+        ->withHeaders($headers)
+        ->patchJson('/api/v1/platform/admin/users/'.$target->id.'/roles', [
+            'roleIds' => [$hospitalRole->id],
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.roleIds.0', $hospitalRole->id);
+
+    $this->actingAs($actor)
+        ->withHeaders($headers)
+        ->patchJson('/api/v1/platform/admin/users/'.$target->id.'/roles', [
+            'roleIds' => [$platformRole->id],
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['roleIds']);
+
+    expect($target->roles()->where('roles.id', $platformRole->id)->exists())->toBeFalse();
+});
+
 it('forbids bulk platform role assignment without permission', function (): void {
     $actor = makePlatformUserAdminActor();
     $target = User::factory()->create([

@@ -593,13 +593,6 @@ class EloquentPlatformUserAdminRepository implements PlatformUserAdminRepository
             return;
         }
 
-        $tenantId = $this->platformScopeContext->tenantId();
-        if ($tenantId !== null) {
-            $query->where('users.tenant_id', $tenantId);
-
-            return;
-        }
-
         $facilityId = $this->platformScopeContext->facilityId();
         if ($facilityId !== null) {
             $query->whereExists(function ($queryBuilder) use ($facilityId): void {
@@ -609,6 +602,13 @@ class EloquentPlatformUserAdminRepository implements PlatformUserAdminRepository
                     ->whereColumn('facility_user.user_id', 'users.id')
                     ->where('facility_user.facility_id', $facilityId);
             });
+
+            return;
+        }
+
+        $tenantId = $this->platformScopeContext->tenantId();
+        if ($tenantId !== null) {
+            $query->where('users.tenant_id', $tenantId);
         }
     }
 
@@ -646,16 +646,16 @@ class EloquentPlatformUserAdminRepository implements PlatformUserAdminRepository
             return;
         }
 
-        $tenantId = $this->platformScopeContext->tenantId();
-        if ($tenantId !== null) {
-            $query->where('facilities.tenant_id', $tenantId);
+        $facilityId = $this->platformScopeContext->facilityId();
+        if ($facilityId !== null) {
+            $query->where('facilities.id', $facilityId);
 
             return;
         }
 
-        $facilityId = $this->platformScopeContext->facilityId();
-        if ($facilityId !== null) {
-            $query->where('facilities.id', $facilityId);
+        $tenantId = $this->platformScopeContext->tenantId();
+        if ($tenantId !== null) {
+            $query->where('facilities.tenant_id', $tenantId);
         }
     }
 
@@ -665,16 +665,16 @@ class EloquentPlatformUserAdminRepository implements PlatformUserAdminRepository
             return;
         }
 
-        $tenantId = $this->platformScopeContext->tenantId();
-        if ($tenantId !== null) {
-            $query->where('facilities.tenant_id', $tenantId);
+        $facilityId = $this->platformScopeContext->facilityId();
+        if ($facilityId !== null) {
+            $query->where('facility_user.facility_id', $facilityId);
 
             return;
         }
 
-        $facilityId = $this->platformScopeContext->facilityId();
-        if ($facilityId !== null) {
-            $query->where('facility_user.facility_id', $facilityId);
+        $tenantId = $this->platformScopeContext->tenantId();
+        if ($tenantId !== null) {
+            $query->where('facilities.tenant_id', $tenantId);
         }
     }
 
@@ -684,24 +684,26 @@ class EloquentPlatformUserAdminRepository implements PlatformUserAdminRepository
             return;
         }
 
+        $facilityId = $this->platformScopeContext->facilityId();
+        if ($facilityId !== null) {
+            $query->where('facility_user.facility_id', $facilityId);
+
+            return;
+        }
+
         $tenantId = $this->platformScopeContext->tenantId();
         if ($tenantId !== null) {
             $query
                 ->join('facilities', 'facilities.id', '=', 'facility_user.facility_id')
                 ->where('facilities.tenant_id', $tenantId);
-
-            return;
-        }
-
-        $facilityId = $this->platformScopeContext->facilityId();
-        if ($facilityId !== null) {
-            $query->where('facility_user.facility_id', $facilityId);
         }
     }
 
     private function isPlatformScopingEnabled(): bool
     {
-        return $this->featureFlagResolver->isEnabled('platform.multi_facility_scoping')
+        return $this->platformScopeContext->hasFacility()
+            || $this->platformScopeContext->hasTenant()
+            || $this->featureFlagResolver->isEnabled('platform.multi_facility_scoping')
             || $this->featureFlagResolver->isEnabled('platform.multi_tenant_isolation');
     }
 }

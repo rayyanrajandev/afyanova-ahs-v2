@@ -162,11 +162,11 @@ Route::get('platform/admin/user-approval-cases', function () {
 
 Route::get('platform/admin/roles', function () {
     return Inertia::render('platform/admin/roles/Index');
-})->middleware(['auth', 'verified', 'can:platform.rbac.read'])->name('platform-admin-roles.page');
+})->middleware(['auth', 'verified', 'can:platform.rbac.manage-roles'])->name('platform-admin-roles.page');
 
 Route::get('platform/admin/permissions', function () {
     return Inertia::render('platform/admin/roles/Index');
-})->middleware(['auth', 'verified', 'can:platform.rbac.read'])->name('platform-admin-permissions.page');
+})->middleware(['auth', 'verified', 'can:platform.rbac.manage-roles'])->name('platform-admin-permissions.page');
 
 Route::get('platform/admin/specialties', function () {
     return Inertia::render('platform/admin/specialties/Index');

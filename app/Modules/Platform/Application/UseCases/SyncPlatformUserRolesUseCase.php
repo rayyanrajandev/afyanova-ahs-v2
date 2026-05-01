@@ -2,12 +2,15 @@
 
 namespace App\Modules\Platform\Application\UseCases;
 
+use App\Models\User;
 use App\Modules\Platform\Application\Exceptions\UnknownPlatformRbacRoleException;
 use App\Modules\Platform\Application\Support\PrivilegedPlatformUserChangePolicy;
 use App\Modules\Platform\Domain\Repositories\PlatformRbacRepositoryInterface;
 use App\Modules\Platform\Domain\Repositories\PlatformUserAdminRepositoryInterface;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
+use App\Modules\Platform\Infrastructure\Models\RoleModel;
+use Illuminate\Support\Facades\DB;
 
 class SyncPlatformUserRolesUseCase
 {
@@ -44,6 +47,10 @@ class SyncPlatformUserRolesUseCase
             $roleIds,
         ))));
 
+        if (! $this->actorCanAssignAnyRole($actorId)) {
+            $this->assertAssignableHospitalRoleIds($normalizedRoleIds);
+        }
+
         $resolvedRoleIds = $this->platformRbacRepository->resolveExistingRoleIdsInScope($normalizedRoleIds);
         if (count($resolvedRoleIds) !== count($normalizedRoleIds)) {
             throw new UnknownPlatformRbacRoleException('One or more role ids are invalid for the current scope.');
@@ -73,5 +80,63 @@ class SyncPlatformUserRolesUseCase
         );
 
         return $result;
+    }
+
+    private function actorCanAssignAnyRole(?int $actorId): bool
+    {
+        if ($actorId === null) {
+            return false;
+        }
+
+        $actor = User::query()->find($actorId);
+        if (! $actor) {
+            return false;
+        }
+
+        return $actor->hasUniversalAdminAccess()
+            || $actor->hasPermissionTo('platform.rbac.manage-roles')
+            || (
+                ! $this->platformScopeContext->hasFacility()
+                && ! $this->actorHasActiveFacilityAssignment($actorId)
+            );
+    }
+
+    private function actorHasActiveFacilityAssignment(int $actorId): bool
+    {
+        return DB::table('facility_user')
+            ->where('user_id', $actorId)
+            ->where('is_active', true)
+            ->exists();
+    }
+
+    /**
+     * @param  array<int, string>  $roleIds
+     */
+    private function assertAssignableHospitalRoleIds(array $roleIds): void
+    {
+        if ($roleIds === []) {
+            return;
+        }
+
+        $roles = RoleModel::query()
+            ->whereIn('id', $roleIds)
+            ->get(['id', 'code']);
+
+        if ($roles->count() !== count($roleIds)) {
+            throw new UnknownPlatformRbacRoleException('One or more role ids are invalid for the current scope.');
+        }
+
+        foreach ($roles as $role) {
+            $code = strtoupper(trim((string) ($role->code ?? '')));
+            if (
+                ! str_starts_with($code, 'HOSPITAL.')
+                || $code === 'HOSPITAL.FACILITY.ADMIN'
+                || str_contains($code, 'SUPER.ADMIN')
+            ) {
+                throw new UnknownPlatformRbacRoleException(
+                    'Facility administrators can assign hospital operational roles only.',
+                );
+            }
+        }
     }
 }

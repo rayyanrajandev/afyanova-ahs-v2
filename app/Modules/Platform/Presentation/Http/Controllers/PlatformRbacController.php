@@ -3,6 +3,7 @@
 namespace App\Modules\Platform\Presentation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Modules\Platform\Application\Exceptions\DuplicatePlatformRoleCodeException;
 use App\Modules\Platform\Application\Exceptions\PlatformRoleProtectedException;
 use App\Modules\Platform\Application\Exceptions\PrivilegedPlatformUserApprovalCaseException;
@@ -19,6 +20,7 @@ use App\Modules\Platform\Application\UseCases\ListPlatformRolesUseCase;
 use App\Modules\Platform\Application\UseCases\SyncPlatformRolePermissionsUseCase;
 use App\Modules\Platform\Application\UseCases\SyncPlatformUserRolesUseCase;
 use App\Modules\Platform\Application\UseCases\UpdatePlatformRoleUseCase;
+use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Presentation\Http\Requests\BulkSyncPlatformUserRolesRequest;
 use App\Modules\Platform\Presentation\Http\Requests\StorePlatformRoleRequest;
 use App\Modules\Platform\Presentation\Http\Requests\SyncPlatformRolePermissionsRequest;
@@ -29,6 +31,7 @@ use App\Modules\Platform\Presentation\Http\Transformers\PlatformRbacAuditLogResp
 use App\Modules\Platform\Presentation\Http\Transformers\PlatformRoleResponseTransformer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class PlatformRbacController extends Controller
 {
@@ -42,12 +45,28 @@ class PlatformRbacController extends Controller
         ]);
     }
 
-    public function roles(Request $request, ListPlatformRolesUseCase $useCase): JsonResponse
+    public function roles(
+        Request $request,
+        ListPlatformRolesUseCase $useCase,
+        CurrentPlatformScopeContextInterface $scopeContext
+    ): JsonResponse
     {
         $result = $useCase->execute($request->all());
+        $roles = $result['data'];
+
+        if ($this->shouldRestrictToAssignableHospitalRoles($request->user(), $scopeContext)) {
+            $roles = array_values(array_filter(
+                $roles,
+                fn (array $role): bool => $this->isAssignableHospitalRoleCode($role['code'] ?? null),
+            ));
+
+            $result['meta']['total'] = count($roles);
+            $result['meta']['currentPage'] = 1;
+            $result['meta']['lastPage'] = 1;
+        }
 
         return response()->json([
-            'data' => array_map([PlatformRoleResponseTransformer::class, 'transform'], $result['data']),
+            'data' => array_map([PlatformRoleResponseTransformer::class, 'transform'], $roles),
             'meta' => $result['meta'],
         ]);
     }
@@ -250,6 +269,40 @@ class PlatformRbacController extends Controller
             'code' => 'TENANT_SCOPE_REQUIRED',
             'message' => $message,
         ], 403);
+    }
+
+    private function shouldRestrictToAssignableHospitalRoles(
+        ?User $actor,
+        CurrentPlatformScopeContextInterface $scopeContext
+    ): bool
+    {
+        if (! $actor) {
+            return true;
+        }
+
+        if ($actor->hasUniversalAdminAccess() || $actor->hasPermissionTo('platform.rbac.manage-roles')) {
+            return false;
+        }
+
+        return $scopeContext->hasFacility()
+            || $this->actorHasActiveFacilityAssignment((int) $actor->id);
+    }
+
+    private function actorHasActiveFacilityAssignment(int $actorId): bool
+    {
+        return DB::table('facility_user')
+            ->where('user_id', $actorId)
+            ->where('is_active', true)
+            ->exists();
+    }
+
+    private function isAssignableHospitalRoleCode(mixed $roleCode): bool
+    {
+        $code = strtoupper(trim((string) $roleCode));
+
+        return str_starts_with($code, 'HOSPITAL.')
+            && $code !== 'HOSPITAL.FACILITY.ADMIN'
+            && ! str_contains($code, 'SUPER.ADMIN');
     }
 
     private function toRolePersistencePayload(array $validated): array

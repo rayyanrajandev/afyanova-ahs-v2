@@ -54,7 +54,7 @@ import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
 
 type AccessibleFacility = { id?: string | null; code?: string | null; name?: string | null };
-type ScopeData = { resolvedFrom: string; userAccess?: { facilities?: AccessibleFacility[]; accessibleFacilityCount?: number } };
+type ScopeData = { resolvedFrom: string; facility?: AccessibleFacility | null; userAccess?: { facilities?: AccessibleFacility[]; accessibleFacilityCount?: number } };
 type PlatformRole = { id: string | null; name: string | null; code: string | null };
 type PlatformUserFacilityAssignment = { facilityId: string | null; role?: string | null; isPrimary?: boolean; isActive?: boolean };
 type PlatformUserPrivilegedContext = {
@@ -184,6 +184,23 @@ const scopeUnresolved = computed(() => multiTenantIsolationEnabled.value && (sco
 const platformMailWarning = computed(() => platformMail.value?.warning ?? null);
 const platformMailDeliversExternally = computed(() => platformMail.value?.deliversExternally !== false);
 const platformMailSupportsCredentialLinkPreview = computed(() => platformMail.value?.supportsCredentialLinkPreview === true);
+const scopedFacilityLabel = computed(() => {
+    const facility = scope.value?.facility;
+    const name = String(facility?.name ?? '').trim();
+    const code = String(facility?.code ?? '').trim();
+
+    if (name && code) return `${name} (${code})`;
+    if (name) return name;
+    if (code) return code;
+
+    return null;
+});
+const usersWorkspaceTitle = computed(() => (scopedFacilityLabel.value ? 'Facility Users' : 'Platform Users'));
+const usersWorkspaceDescription = computed(() =>
+    scopedFacilityLabel.value
+        ? `Onboard, invite, and maintain user access for ${scopedFacilityLabel.value}.`
+        : 'Account queue, lifecycle actions, role mapping, and facility assignments for platform access.',
+);
 
 const pageLoading = ref(true);
 const listLoading = ref(false);
@@ -1710,7 +1727,7 @@ onMounted(async () => {
 </script>
 
 <template>
-    <Head title="Platform Users" />
+    <Head :title="usersWorkspaceTitle" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
 
@@ -1718,10 +1735,10 @@ onMounted(async () => {
             <div class="min-w-0">
                 <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
                     <AppIcon name="users" class="size-7 text-primary" />
-                    Platform Users
+                    {{ usersWorkspaceTitle }}
                 </h1>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    Account queue, lifecycle actions, role mapping, and facility assignments for platform access.
+                    {{ usersWorkspaceDescription }}
                 </p>
             </div>
 

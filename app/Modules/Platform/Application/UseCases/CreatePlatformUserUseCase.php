@@ -40,9 +40,25 @@ class CreatePlatformUserUseCase
             ? (int) $created['id']
             : null;
 
+        $facilityId = $this->platformScopeContext->facilityId();
+        if ($targetUserId !== null && $facilityId !== null) {
+            $assigned = $this->platformUserAdminRepository->syncUserFacilitiesInScope($targetUserId, [
+                [
+                    'facility_id' => $facilityId,
+                    'role' => 'staff',
+                    'is_primary' => true,
+                    'is_active' => true,
+                ],
+            ]);
+
+            if ($assigned !== null) {
+                $created = $assigned;
+            }
+        }
+
         $this->platformUserAdminRepository->writeAuditLog(
             tenantId: $this->platformScopeContext->tenantId(),
-            facilityId: $this->platformScopeContext->facilityId(),
+            facilityId: $facilityId,
             actorId: $actorId,
             targetUserId: $targetUserId,
             action: 'platform-user.created',
