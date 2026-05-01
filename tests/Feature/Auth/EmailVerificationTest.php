@@ -13,6 +13,14 @@ test('email verification screen can be rendered', function () {
     $response->assertOk();
 });
 
+test('unverified users are redirected to the verification prompt before protected workspaces', function () {
+    $user = User::factory()->unverified()->create();
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertRedirect(route('verification.notice', absolute: false));
+});
+
 test('email can be verified', function () {
     $user = User::factory()->unverified()->create();
 
