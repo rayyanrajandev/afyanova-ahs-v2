@@ -129,10 +129,17 @@ export function eligibleDashboardPresets(input: InferDashboardPresetInput): Dash
     if (presetMatchesRole(roleCodesUpper, DASHBOARD_CLINICIAN_ROLE_CODES)) {
         allow.add('clinician');
     }
-    if (hasPermission('medical.records.read')) {
+    /*
+     * Nurses often carry medical.records.read for bedside chart viewing, but that is not the same workflow
+     * as the Clinician (OPD) dashboard. Showing the Clinician preset here triggers medical-record KPI fetches that
+     * may not match the facility's subscribed MR bundle — and it hides Nursing as Auto when priority lists
+     * clinician ahead of nursing. Only derive Clinician from this permission when the user is not a nursing-role holder.
+     */
+    const holdsNursingRole = presetMatchesRole(roleCodesUpper, DASHBOARD_NURSING_ROLE_CODES);
+    if (hasPermission('medical.records.read') && !holdsNursingRole) {
         allow.add('clinician');
     }
-    if (presetMatchesRole(roleCodesUpper, DASHBOARD_NURSING_ROLE_CODES)) {
+    if (holdsNursingRole) {
         allow.add('nursing');
     }
     /*
