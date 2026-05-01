@@ -53,6 +53,10 @@ const routeAccessRules: RouteAccessRule[] = [
         requiredPermissions: ['departments.read'],
     },
     {
+        pathPrefix: '/platform/admin/branding',
+        requiredPermissions: ['platform.settings.manage-branding'],
+    },
+    {
         pathPrefix: '/platform/admin/users',
         requiredPermissions: ['platform.users.read'],
     },
@@ -167,15 +171,66 @@ function normalizePath(href: string): string {
     return pathOnly.startsWith('/') ? pathOnly : `/${pathOnly}`;
 }
 
-export function permissionsForHref(href: string): string[] {
+export function matchingRouteAccessRule(href: string): RouteAccessRule | undefined {
     const path = normalizePath(href);
-    if (path === '') return [];
+    if (path === '') {
+        return undefined;
+    }
 
-    const matchedRule = routeAccessRules.find((rule) =>
-        path === rule.pathPrefix || path.startsWith(`${rule.pathPrefix}/`),
+    const matches = routeAccessRules.filter(
+        (rule) => path === rule.pathPrefix || path.startsWith(`${rule.pathPrefix}/`),
     );
 
-    return matchedRule?.requiredPermissions ?? [];
+    matches.sort((left, right) => right.pathPrefix.length - left.pathPrefix.length);
+
+    return matches[0];
+}
+
+export function permissionsForHref(href: string): string[] {
+    return matchingRouteAccessRule(href)?.requiredPermissions ?? [];
+}
+
+function permissionMatchesPrefixRule(userPermission: string, rule: string): boolean {
+    if (rule.endsWith('.')) {
+        return userPermission.startsWith(rule);
+    }
+
+    return userPermission === rule;
+}
+
+/**
+ * Sidebar catalog items declare coarse permissionPrefixes; routes also have explicit guards in routeAccessRules.
+ * Explicit rules win; prefixes only apply when no route rule matched (avoids leaking items like branding).
+ */
+export function sidebarNavCatalogItemVisible(
+    item: { href: string; permissionPrefixes: readonly string[] },
+    permissionNames: readonly string[],
+): boolean {
+    const explicit = permissionsForHref(item.href);
+
+    if (explicit.length > 0) {
+        return explicit.some((permission) => permissionNames.includes(permission));
+    }
+
+    if (item.permissionPrefixes.length === 0) {
+        return false;
+    }
+
+    return item.permissionPrefixes.some((rule) =>
+        permissionNames.some((perm) => permissionMatchesPrefixRule(perm, rule)),
+    );
+}
+
+export function filterSidebarNavCatalogItems<
+    T extends { href: string; permissionPrefixes: readonly string[] },
+>(items: T[], permissionNames: readonly string[] | null | undefined, hasUnrestrictedAccess = false): T[] {
+    if (hasUnrestrictedAccess) {
+        return items.slice();
+    }
+
+    const perms = permissionNames ?? [];
+
+    return items.filter((entry) => sidebarNavCatalogItemVisible(entry, perms));
 }
 
 export function hasRouteAccess(
@@ -187,16 +242,14 @@ export function hasRouteAccess(
         return true;
     }
 
-    if (permissionNames === null || permissionNames === undefined) {
-        return true;
-    }
+    const perms = permissionNames ?? [];
 
     const requiredPermissions = permissionsForHref(href);
     if (requiredPermissions.length === 0) {
         return true;
     }
 
-    return requiredPermissions.some((permission) => permissionNames.includes(permission));
+    return requiredPermissions.some((permission) => perms.includes(permission));
 }
 
 export function filterItemsByRouteAccess<T extends { href: string }>(

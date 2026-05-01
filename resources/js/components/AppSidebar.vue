@@ -13,7 +13,7 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
-import { filterItemsByRouteAccess } from '@/lib/routeAccess';
+import { filterSidebarNavCatalogItems } from '@/lib/routeAccess';
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import AppLogo from './AppLogo.vue';
@@ -252,7 +252,7 @@ const navCatalog: NavCatalogItem[] = [
         href: '/staff-privileges',
         iconName: 'shield-check',
         section: 'configuration',
-        permissionPrefixes: ['staff.'],
+        permissionPrefixes: ['staff.privileges.', 'staff.privileges'],
     },
     {
         title: 'Privilege Catalog',
@@ -319,6 +319,9 @@ const navCatalog: NavCatalogItem[] = [
 
 const { permissionNames, hasUniversalAdminAccess } = usePlatformAccess();
 
+/** Resolved permission list — never omit filtering when null server-side gaps would otherwise show entire catalog */
+const resolvedPermissionNames = computed(() => permissionNames.value ?? []);
+
 const sectionLabels: Record<NavSectionKey, string> = {
     care_delivery: 'Care Delivery',
     revenue: 'Revenue',
@@ -333,21 +336,9 @@ const sectionOrder: NavSectionKey[] = [
     'configuration',
 ];
 
-const shouldRestrictByPermissions = computed(
-    () => permissionNames.value !== null,
+const visibleNavItems = computed<NavCatalogItem[]>(() =>
+    filterSidebarNavCatalogItems(navCatalog, resolvedPermissionNames.value, hasUniversalAdminAccess.value),
 );
-
-const visibleNavItems = computed<NavCatalogItem[]>(() => {
-    if (hasUniversalAdminAccess.value) {
-        return navCatalog;
-    }
-
-    if (!shouldRestrictByPermissions.value) {
-        return navCatalog;
-    }
-
-    return filterItemsByRouteAccess(navCatalog, permissionNames.value);
-});
 
 const homeItems = computed<NavItem[]>(() => [
     {
@@ -385,7 +376,7 @@ const navSections = computed<NavSection[]>(() =>
 );
 
 const showLimitedAccessHint = computed(
-    () => shouldRestrictByPermissions.value && visibleNavItems.value.length === 0,
+    () => !hasUniversalAdminAccess.value && visibleNavItems.value.length === 0,
 );
 </script>
 
