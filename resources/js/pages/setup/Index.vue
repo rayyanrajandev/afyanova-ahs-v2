@@ -2,6 +2,7 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import FacilityAdminSetupGuide from '@/components/setup/FacilityAdminSetupGuide.vue';
 import MasterDataSetupGuide from '@/components/setup/MasterDataSetupGuide.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,24 +19,37 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const refreshing = ref(false);
-const { permissionNames, hasUniversalAdminAccess } = usePlatformAccess();
+const { permissionNames, hasUniversalAdminAccess, facilityEntitlementNames } = usePlatformAccess();
+
+const wardBedSetupRequired = computed(() =>
+    ['inpatient.ward', 'inpatient.tasks', 'inpatient.care_plans'].some((entitlement) =>
+        facilityEntitlementNames.value.includes(entitlement),
+    ),
+);
 
 const {
     loading,
     steps,
     loadSetupReadiness,
+    departmentReady,
+    servicePointReady,
+    wardBedReady,
+    staffReady,
     clinicalReady,
     pricingReady,
     inventoryReady,
     openingStockReady,
+    patientRegistrationReady,
     departmentRequisitionReady,
     procurementRequestReady,
-} = useMasterDataSetupReadiness();
+} = useMasterDataSetupReadiness({ includeWardBeds: wardBedSetupRequired });
 
 const visibleSteps = computed(() =>
-    steps.value.filter((step) =>
-        hasRouteAccess(step.href, permissionNames.value, hasUniversalAdminAccess.value),
-    ),
+    steps.value.filter((step) => {
+        if (step.key === 'ward_beds' && !wardBedSetupRequired.value) return false;
+
+        return hasRouteAccess(step.href, permissionNames.value, hasUniversalAdminAccess.value);
+    }),
 );
 const visibleStepKeys = computed(() => visibleSteps.value.map((step) => step.key));
 const visibleReadyStepCount = computed(() => visibleSteps.value.filter((step) => step.ready).length);
@@ -58,6 +72,17 @@ const semanticLayers = computed<Array<{
     tone: 'outline' | 'secondary';
     href: string;
 }>>(() => [
+    {
+        title: 'Facility Operating Map',
+        description: wardBedSetupRequired.value
+            ? 'This is the local structure layer. Departments, service points, wards, beds, and accountable staff come before patient-flow testing.'
+            : 'This is the local structure layer. Departments, service points, and accountable staff come before patient-flow testing; wards and beds activate only when the plan includes ward operations.',
+        principle: 'Map the hospital first',
+        icon: 'building-2',
+        state: departmentReady.value && servicePointReady.value && staffReady.value && (!wardBedSetupRequired.value || wardBedReady.value) ? 'Ready' : 'Pending',
+        tone: departmentReady.value && servicePointReady.value && staffReady.value && (!wardBedSetupRequired.value || wardBedReady.value) ? 'secondary' : 'outline',
+        href: '/platform/admin/departments',
+    },
     {
         title: 'Clinical Care Catalog',
         description: 'This is the care-definition layer. Clinicians and cashiers select tests, procedures, and medicines from here.',
@@ -89,6 +114,13 @@ const semanticLayers = computed<Array<{
 
 const operationalChecklist = computed(() => [
     {
+        title: 'Register first patient',
+        description: 'Create the first real or test patient only after the facility structure and minimum service setup are in place.',
+        ready: patientRegistrationReady.value,
+        icon: 'users',
+        href: '/patients',
+    },
+    {
         title: 'Set opening stock',
         description: 'Load day-0 counted balances into the right warehouse. This is setup stock, not a purchase, expense, or requisition.',
         ready: openingStockReady.value,
@@ -113,8 +145,13 @@ const operationalChecklist = computed(() => [
 
 const setupPrinciples = [
     {
-        title: 'Create operating context',
-        description: 'Warehouses and suppliers come first so inventory has a real facility and vendor trail.',
+        title: 'Confirm scope first',
+        description: 'Facility admins must verify organization, facility, subscription, and active scope before creating operational data.',
+        icon: 'shield-check',
+    },
+    {
+        title: 'Map the facility',
+        description: 'Departments, service points, and staff form the local operating map. Wards and beds become required only when the facility plan includes ward operations.',
         icon: 'building-2',
     },
     {
@@ -129,7 +166,7 @@ const setupPrinciples = [
     },
     {
         title: 'Prove live operations',
-        description: 'Opening stock is go-live setup. Requisitions and procurement prove day-1 controls.',
+        description: 'Patient registration, opening stock, requisitions, and procurement prove day-1 controls.',
         icon: 'shield-check',
     },
 ];
@@ -156,23 +193,23 @@ onMounted(async () => {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-hidden p-4 md:p-6">
-            <section class="relative overflow-hidden rounded-lg border bg-[radial-gradient(circle_at_top_left,hsl(var(--primary)/0.16),transparent_32%),linear-gradient(135deg,hsl(var(--card)),hsl(var(--muted)/0.38))] p-4 shadow-sm md:p-6">
-                <div class="absolute right-0 top-0 h-32 w-32 rounded-full bg-primary/10 blur-3xl" />
+            <section class="relative overflow-hidden rounded-lg border bg-card p-4 shadow-sm md:p-6">
                 <div class="relative grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.36fr)]">
                     <div class="min-w-0 space-y-4">
                         <div class="flex flex-wrap items-center gap-2">
                             <Badge variant="secondary">Setup Center</Badge>
                             <Badge variant="outline">{{ readinessPercent }}% ready</Badge>
+                            <Badge variant="outline">Facility Admin Guide</Badge>
                             <Badge :variant="setupComplete ? 'secondary' : 'outline'">
                                 {{ setupComplete ? 'Ready for live workflow testing' : 'Guided setup active' }}
                             </Badge>
                         </div>
                         <div class="space-y-2">
                             <h1 class="max-w-4xl text-2xl font-semibold tracking-tight md:text-3xl">
-                                Build the facility in the same order the hospital will operate.
+                                Guide the facility admin from first login to first patient registration.
                             </h1>
                             <p class="max-w-3xl text-sm leading-6 text-muted-foreground">
-                                This center turns setup into a controlled readiness path: master data first, linked charging second, physical stock third, then live requisition and procurement smoke testing.
+                                This center turns setup into a controlled launch path: verify facility scope and plan, build departments and service points, add ward beds only when the plan includes ward operations, prepare staff, catalogs, pricing, and stock, then test patient registration and live operations.
                             </p>
                         </div>
                         <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -228,6 +265,12 @@ onMounted(async () => {
                 </div>
             </section>
 
+            <FacilityAdminSetupGuide
+                :steps="visibleSteps"
+                :loading="loading || refreshing"
+                :ward-bed-setup-required="wardBedSetupRequired"
+            />
+
             <MasterDataSetupGuide
                 :current-step="currentStep"
                 :steps="visibleSteps"
@@ -241,7 +284,7 @@ onMounted(async () => {
                         <CardTitle>Governance Split</CardTitle>
                         <CardDescription>Modern hospital systems keep clinical definitions, charging, and stock ownership separate.</CardDescription>
                     </CardHeader>
-                    <CardContent class="grid gap-3 md:grid-cols-3">
+                    <CardContent class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                         <div v-for="layer in semanticLayers" :key="layer.title" class="min-w-0 rounded-lg border bg-muted/20 p-3">
                             <div class="flex items-start justify-between gap-2">
                                 <div class="min-w-0">

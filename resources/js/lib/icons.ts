@@ -33,6 +33,7 @@ import {
     UserGroupIcon,
     UserIcon,
     UserRemove01Icon,
+    ViewOffIcon,
 } from '@hugeicons/core-free-icons';
 import type { IconArray } from '@hugeicons/vue';
 import {
@@ -52,6 +53,7 @@ import {
     ClipboardList,
     EllipsisVertical,
     Eye,
+    EyeOff,
     FileText,
     FlaskConical,
     Folder,
@@ -101,6 +103,7 @@ export type AppIconName =
     | 'clipboard-list'
     | 'ellipsis-vertical'
     | 'eye'
+    | 'eye-off'
     | 'file-text'
     | 'flask-conical'
     | 'folder'
@@ -148,6 +151,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     'clipboard-list': ClipboardList,
     'ellipsis-vertical': EllipsisVertical,
     eye: Eye,
+    'eye-off': EyeOff,
     'file-text': FileText,
     'flask-conical': FlaskConical,
     folder: Folder,
@@ -196,6 +200,7 @@ const HUGE_ICON_MAP = {
     'clipboard-list': CheckListIcon,
     'ellipsis-vertical': MoreVerticalIcon,
     eye: EyeIcon,
+    'eye-off': ViewOffIcon,
     'file-text': File02Icon,
     'flask-conical': TestTube01Icon,
     folder: Folder01Icon,

@@ -63,10 +63,30 @@ export type SharedPlatformUploadLimits = {
     documentMaxLabel?: string | null;
 };
 
+export type SharedPlatformSubscriptionSummary = {
+    id?: string | null;
+    status?: string | null;
+    planId?: string | null;
+    planCode?: string | null;
+    planName?: string | null;
+    currentPeriodEndsAt?: string | null;
+    gracePeriodEndsAt?: string | null;
+} | null;
+
+export type SharedPlatformSubscriptionAccess = {
+    accessEnabled?: boolean;
+    accessState?: string | null;
+    code?: string | null;
+    message?: string | null;
+    subscription?: SharedPlatformSubscriptionSummary;
+    entitlementKeys?: string[];
+    grantedEntitlements?: string[];
+};
+
 export type SharedPlatformContext = {
     scope: SharedPlatformScope;
     featureFlags: SharedPlatformFeatureFlags;
+    subscriptionAccess?: SharedPlatformSubscriptionAccess;
     mail?: SharedPlatformMail;
     uploadLimits?: SharedPlatformUploadLimits;
 };
-

@@ -82,14 +82,17 @@ const nursingRoles = ['HOSPITAL.NURSING.USER'];
 const directServiceRoles = ['HOSPITAL.LABORATORY.USER', 'HOSPITAL.PHARMACY.USER', 'HOSPITAL.RADIOLOGY.USER'];
 const frontDeskRoles = ['HOSPITAL.REGISTRATION.CLERK'];
 
-const { hasPermission, isFacilitySuperAdmin, multiTenantIsolationEnabled, permissionNames } = usePlatformAccess();
+const { hasPermission, isFacilitySuperAdmin, multiTenantIsolationEnabled, permissionNames, facilityEntitlementNames } = usePlatformAccess();
+const wardBedSetupRequired = computed(() =>
+    ['inpatient.ward', 'inpatient.tasks', 'inpatient.care_plans'].some((entitlement) =>
+        facilityEntitlementNames.value.includes(entitlement),
+    ),
+);
 const {
     loading: setupReadinessLoading,
     steps: setupSteps,
-    readyStepCount,
-    recommendedNextStep,
     loadSetupReadiness,
-} = useMasterDataSetupReadiness();
+} = useMasterDataSetupReadiness({ includeWardBeds: wardBedSetupRequired });
 
 const loading = ref(true);
 const refreshing = ref(false);
@@ -164,10 +167,21 @@ const canSeeSetupCenter = computed(() =>
     || permissionNames.value === null
     || hasPermission('inventory.procurement.read')
     || hasPermission('billing.service-catalog.read')
-    || hasPermission('platform.clinical-catalog.read'),
+    || hasPermission('platform.clinical-catalog.read')
+    || hasPermission('staff.read')
+    || hasPermission('patients.read')
+    || hasPermission('appointments.read'),
+);
+const setupStepsForReadiness = computed(() =>
+    setupSteps.value.filter((step) => step.key !== 'ward_beds' || wardBedSetupRequired.value),
+);
+const setupReadinessStepKeys = computed(() => setupStepsForReadiness.value.map((step) => step.key));
+const setupReadyStepCount = computed(() => setupStepsForReadiness.value.filter((step) => step.ready).length);
+const setupRecommendedNextStep = computed(() =>
+    setupStepsForReadiness.value.find((step) => !step.ready) ?? null,
 );
 const masterDataSetupReady = computed(() =>
-    readyStepCount.value === setupSteps.value.length && setupSteps.value.length > 0,
+    setupReadyStepCount.value === setupStepsForReadiness.value.length && setupStepsForReadiness.value.length > 0,
 );
 const showSetupReadinessCard = computed(() =>
     canSeeSetupCenter.value && (!masterDataSetupReady.value || activePresetKey.value === 'admin'),
@@ -177,18 +191,18 @@ const setupReadinessVariant = computed<'secondary' | 'outline'>(() =>
 );
 const setupReadinessSummary = computed(() => {
     if (setupReadinessLoading.value) {
-        return 'Checking warehouse, supplier, catalog, pricing, and inventory readiness.';
+        return 'Checking facility structure, staff, catalogs, pricing, stock, and patient-registration readiness.';
     }
 
     if (masterDataSetupReady.value) {
-        return 'Core master data is ready. Continue with opening stock, patients, and live operations.';
+        return 'Facility first-login setup is ready. Continue with patient flow, billing, orders, stock control, and live audit checks.';
     }
 
-    if (recommendedNextStep.value) {
-        return `${recommendedNextStep.value.label} is the next required setup step before deeper operations become safe.`;
+    if (setupRecommendedNextStep.value) {
+        return `${setupRecommendedNextStep.value.label} is the next required setup step before deeper facility testing becomes safe.`;
     }
 
-    return 'Follow the setup path so downstream workflows do not start from incomplete foundations.';
+    return 'Follow the facility admin setup path so downstream workflows do not start from incomplete foundations.';
 });
 
 type DirectServiceModuleSummary = {
@@ -458,7 +472,7 @@ async function loadDashboard() {
     lastLoadedAt.value = new Date().toISOString();
 
     if (canSeeSetupCenter.value) {
-        await loadSetupReadiness();
+        await loadSetupReadiness(setupReadinessStepKeys.value);
     }
 }
 
@@ -1136,16 +1150,16 @@ onMounted(async () => {
                         <CardContent class="flex flex-col gap-3 py-3 lg:flex-row lg:items-center lg:justify-between">
                             <div class="space-y-1">
                                 <div class="flex flex-wrap items-center gap-2">
-                                    <Badge variant="outline">Setup Center</Badge>
-                                    <Badge :variant="setupReadinessVariant">{{ readyStepCount }}/{{ setupSteps.length }} ready</Badge>
-                                    <Badge v-if="recommendedNextStep" variant="outline">Next: {{ recommendedNextStep.label }}</Badge>
+                                    <Badge variant="outline">Facility Admin Setup</Badge>
+                                    <Badge :variant="setupReadinessVariant">{{ setupReadyStepCount }}/{{ setupStepsForReadiness.length }} ready</Badge>
+                                    <Badge v-if="setupRecommendedNextStep" variant="outline">Next: {{ setupRecommendedNextStep.label }}</Badge>
                                 </div>
                                 <p class="text-sm text-muted-foreground">{{ setupReadinessSummary }}</p>
                             </div>
                             <Button size="sm" :variant="masterDataSetupReady ? 'outline' : 'default'" class="gap-1.5" as-child>
                                 <Link href="/setup-center">
                                     <AppIcon name="layout-list" class="size-3.5" />
-                                    {{ masterDataSetupReady ? 'Review setup' : 'Open setup center' }}
+                                    {{ masterDataSetupReady ? 'Review setup' : 'Open setup guide' }}
                                 </Link>
                             </Button>
                         </CardContent>

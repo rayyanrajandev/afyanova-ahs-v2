@@ -107,6 +107,18 @@ export function usePlatformAccess() {
     );
 
     const mail = computed(() => page.props.platform?.mail ?? null);
+    const subscriptionAccess = computed(() => page.props.platform?.subscriptionAccess ?? null);
+    const facilityEntitlementNames = computed<string[]>(() => {
+        const entitlementKeys = subscriptionAccess.value?.entitlementKeys;
+        const grantedEntitlements = subscriptionAccess.value?.grantedEntitlements;
+        const source = Array.isArray(entitlementKeys) ? entitlementKeys : grantedEntitlements;
+
+        if (!Array.isArray(source)) return [];
+
+        return source
+            .map((name) => String(name ?? '').trim().toLowerCase())
+            .filter((name) => name.length > 0);
+    });
 
     const effectiveTenantCode = computed<string | null>(() => {
         const cookie = cookieValue(TENANT_SCOPE_COOKIE);
@@ -154,6 +166,13 @@ export function usePlatformAccess() {
         return permissionState(name) === 'allowed';
     }
 
+    function hasFacilityEntitlement(name: string): boolean {
+        const normalized = String(name ?? '').trim().toLowerCase();
+        if (!normalized) return false;
+
+        return facilityEntitlementNames.value.includes(normalized);
+    }
+
     return {
         permissionNames,
         isFacilitySuperAdmin,
@@ -161,7 +180,10 @@ export function usePlatformAccess() {
         hasUniversalAdminAccess,
         permissionState,
         hasPermission,
+        hasFacilityEntitlement,
         scope,
+        subscriptionAccess,
+        facilityEntitlementNames,
         multiTenantIsolationEnabled,
         multiFacilityScopingEnabled,
         mail,

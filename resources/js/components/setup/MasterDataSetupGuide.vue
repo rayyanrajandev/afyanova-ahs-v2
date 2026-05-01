@@ -16,23 +16,33 @@ const props = defineProps<{
 }>();
 
 const iconByStep: Record<MasterDataSetupStepKey, string> = {
+    departments: 'building-2',
+    service_points: 'map-pin',
+    ward_beds: 'bed-double',
+    staff: 'users',
     warehouses: 'building-2',
     suppliers: 'package',
     clinical: 'book-open',
     pricing: 'receipt',
     inventory: 'package',
     opening_stock: 'activity',
+    patients: 'users',
     department_requisitions: 'clipboard-list',
     procurement_requests: 'package',
 };
 
 const phaseByStep: Record<MasterDataSetupStepKey, string> = {
+    departments: 'Facility map',
+    service_points: 'Facility map',
+    ward_beds: 'Facility map',
+    staff: 'People',
     warehouses: 'Foundation',
     suppliers: 'Foundation',
     clinical: 'Care model',
     pricing: 'Finance',
     inventory: 'Stock master',
     opening_stock: 'Go-live',
+    patients: 'Patient test',
     department_requisitions: 'Live operations',
     procurement_requests: 'Live operations',
 };
@@ -50,7 +60,7 @@ const currentStepReady = computed(() => currentStepConfig.value?.ready ?? false)
 
 const summaryText = computed(() => {
     if (props.loading) {
-        return 'Refreshing readiness across facility setup, care catalog, pricing, stock, and first live operations.';
+        return 'Refreshing readiness across facility structure, people, care catalog, pricing, stock, patient registration, and first live operations.';
     }
 
     if (!currentStepConfig.value) {
@@ -58,7 +68,7 @@ const summaryText = computed(() => {
     }
 
     if (props.recommendedNextStep === null) {
-        return 'Setup and first operational procurement checks are ready. The facility can continue into patient, order, billing, POS, transfer, and reporting workflows.';
+        return 'Setup, patient registration, and first operational procurement checks are ready. The facility can continue into appointments, orders, billing, POS, transfer, and reporting workflows.';
     }
 
     if (props.recommendedNextStep.key === props.currentStep && !currentStepReady.value) {

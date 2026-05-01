@@ -4,10 +4,12 @@ namespace App\Http\Middleware;
 
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
+use App\Modules\Platform\Application\Services\FacilitySubscriptionAccessService;
 use App\Modules\Platform\Application\Support\CredentialLinkDeliveryPolicy;
 use App\Support\Auth\EffectivePermissionNameResolver;
 use App\Support\Branding\SystemBrandingManager;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -56,6 +58,7 @@ class HandleInertiaRequests extends Middleware
             'platform' => [
                 'scope' => fn (): ?array => $this->platformScope($request),
                 'featureFlags' => fn (): array => $this->platformFeatureFlags(),
+                'subscriptionAccess' => fn (): array => $this->platformSubscriptionAccess($request),
                 'mail' => fn (): array => $this->platformMail(),
                 'uploadLimits' => fn (): array => $this->platformUploadLimits(),
             ],
@@ -126,6 +129,56 @@ class HandleInertiaRequests extends Middleware
             'multiTenantIsolation' => $featureFlagResolver->isEnabled('platform.multi_tenant_isolation'),
             'multiFacilityScoping' => $featureFlagResolver->isEnabled('platform.multi_facility_scoping'),
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function platformSubscriptionAccess(Request $request): array
+    {
+        if ($request->user() === null) {
+            return [
+                'accessEnabled' => false,
+                'accessState' => 'guest',
+                'code' => 'AUTH_REQUIRED',
+                'message' => null,
+                'facility' => null,
+                'subscription' => null,
+                'entitlementKeys' => [],
+                'grantedEntitlements' => [],
+            ];
+        }
+
+        try {
+            if (! Schema::hasTable('facility_subscriptions') || ! Schema::hasTable('platform_subscription_plan_entitlements')) {
+                return [
+                    'accessEnabled' => false,
+                    'accessState' => 'unavailable',
+                    'code' => 'SUBSCRIPTION_TABLES_UNAVAILABLE',
+                    'message' => 'Facility subscription tables are not ready yet.',
+                    'facility' => null,
+                    'subscription' => null,
+                    'entitlementKeys' => [],
+                    'grantedEntitlements' => [],
+                ];
+            }
+
+            /** @var FacilitySubscriptionAccessService $subscriptionAccessService */
+            $subscriptionAccessService = app(FacilitySubscriptionAccessService::class);
+
+            return $subscriptionAccessService->currentAccessSummary();
+        } catch (\Throwable) {
+            return [
+                'accessEnabled' => false,
+                'accessState' => 'unavailable',
+                'code' => 'SUBSCRIPTION_ACCESS_UNAVAILABLE',
+                'message' => 'Facility subscription access could not be resolved.',
+                'facility' => null,
+                'subscription' => null,
+                'entitlementKeys' => [],
+                'grantedEntitlements' => [],
+            ];
+        }
     }
 
     /**

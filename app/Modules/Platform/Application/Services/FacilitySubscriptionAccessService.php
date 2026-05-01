@@ -12,6 +12,59 @@ class FacilitySubscriptionAccessService
     public function __construct(private readonly CurrentPlatformScopeContextInterface $scopeContext) {}
 
     /**
+     * @return array<string, mixed>
+     */
+    public function currentAccessSummary(): array
+    {
+        $facility = $this->scopeContext->facility();
+        $facilityId = $this->scopeContext->facilityId();
+
+        if ($facilityId === null) {
+            return $this->currentSummary(
+                accessEnabled: false,
+                accessState: 'facility_scope_required',
+                code: 'FACILITY_SCOPE_REQUIRED',
+                message: 'Select a facility before using subscription-gated setup.',
+                facility: $facility,
+                subscription: null,
+                grantedEntitlements: [],
+            );
+        }
+
+        $subscription = FacilitySubscriptionModel::query()
+            ->with('plan.entitlements')
+            ->where('facility_id', $facilityId)
+            ->first();
+
+        if (! $subscription) {
+            return $this->currentSummary(
+                accessEnabled: false,
+                accessState: 'not_configured',
+                code: 'FACILITY_SUBSCRIPTION_REQUIRED',
+                message: 'This facility does not have a configured subscription plan.',
+                facility: $facility,
+                subscription: null,
+                grantedEntitlements: [],
+            );
+        }
+
+        $grantedEntitlements = $this->grantedEntitlements($subscription);
+        $status = (string) $subscription->status;
+        $isExpired = $this->isSubscriptionExpired($subscription);
+        $accessEnabled = FacilitySubscriptionStatus::allowsAccess($status) && ! $isExpired;
+
+        return $this->currentSummary(
+            accessEnabled: $accessEnabled,
+            accessState: $this->accessState($status, $isExpired, $accessEnabled),
+            code: $accessEnabled ? null : ($isExpired ? 'FACILITY_SUBSCRIPTION_EXPIRED' : 'FACILITY_SUBSCRIPTION_RESTRICTED'),
+            message: $accessEnabled ? null : 'This facility subscription is not active for all plan services.',
+            facility: $facility,
+            subscription: $this->subscriptionSummary($subscription),
+            grantedEntitlements: $grantedEntitlements,
+        );
+    }
+
+    /**
      * @param  array<int, string>  $requiredEntitlements
      * @return array<string, mixed>
      */
@@ -52,16 +105,7 @@ class FacilitySubscriptionAccessService
             );
         }
 
-        $grantedEntitlements = $subscription->plan
-            ? $subscription->plan->entitlements
-                ->where('enabled', true)
-                ->pluck('entitlement_key')
-                ->map(static fn (mixed $key): string => strtolower(trim((string) $key)))
-                ->filter()
-                ->unique()
-                ->values()
-                ->all()
-            : [];
+        $grantedEntitlements = $this->grantedEntitlements($subscription);
 
         if (! FacilitySubscriptionStatus::allowsAccess((string) $subscription->status)) {
             return $this->denied(
@@ -118,6 +162,23 @@ class FacilitySubscriptionAccessService
         ))));
     }
 
+    /**
+     * @return array<int, string>
+     */
+    private function grantedEntitlements(FacilitySubscriptionModel $subscription): array
+    {
+        return $subscription->plan
+            ? $subscription->plan->entitlements
+                ->where('enabled', true)
+                ->pluck('entitlement_key')
+                ->map(static fn (mixed $key): string => strtolower(trim((string) $key)))
+                ->filter()
+                ->unique()
+                ->values()
+                ->all()
+            : [];
+    }
+
     private function isSubscriptionExpired(FacilitySubscriptionModel $subscription): bool
     {
         $status = (string) $subscription->status;
@@ -155,6 +216,48 @@ class FacilitySubscriptionAccessService
             'planName' => $subscription->plan?->name,
             'currentPeriodEndsAt' => $subscription->current_period_ends_at?->format(DATE_ATOM),
             'gracePeriodEndsAt' => $subscription->grace_period_ends_at?->format(DATE_ATOM),
+        ];
+    }
+
+    private function accessState(string $status, bool $isExpired, bool $accessEnabled): string
+    {
+        if ($accessEnabled) {
+            return 'enabled';
+        }
+
+        if ($isExpired && FacilitySubscriptionStatus::allowsAccess($status)) {
+            return 'expired';
+        }
+
+        return in_array($status, [
+            FacilitySubscriptionStatus::PAST_DUE->value,
+            FacilitySubscriptionStatus::SUSPENDED->value,
+            FacilitySubscriptionStatus::CANCELLED->value,
+        ], true) ? 'restricted' : 'pending';
+    }
+
+    /**
+     * @param  array<int, string>  $grantedEntitlements
+     * @return array<string, mixed>
+     */
+    private function currentSummary(
+        bool $accessEnabled,
+        string $accessState,
+        ?string $code,
+        ?string $message,
+        ?array $facility,
+        ?array $subscription,
+        array $grantedEntitlements,
+    ): array {
+        return [
+            'accessEnabled' => $accessEnabled,
+            'accessState' => $accessState,
+            'code' => $code,
+            'message' => $message,
+            'facility' => $facility,
+            'subscription' => $subscription,
+            'entitlementKeys' => $grantedEntitlements,
+            'grantedEntitlements' => $grantedEntitlements,
         ];
     }
 
