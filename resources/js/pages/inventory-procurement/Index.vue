@@ -6695,8 +6695,7 @@ onMounted(async () => {
                     </CardContent>
                 </Card>
                 </TabsContent>
-
-                <!-- â”€â”€â”€ Supplier Lead Times Tab â”€â”€â”€ -->
+                <!-- Supplier Lead Times Tab -->
                 <!-- ─── Shortage Queue Tab ─── -->
                 <TabsContent value="shortage-queue" class="mt-0 flex flex-col gap-4">
 
@@ -7272,8 +7271,7 @@ onMounted(async () => {
                     </Card>
 
                 </TabsContent>
-
-                <!-- â”€â”€â”€ Warehouse Transfers Tab â”€â”€â”€ -->
+                <!-- Warehouse Transfers Tab -->
                 <!-- ─── Warehouse Transfers Tab ─── -->
                 <TabsContent value="transfers" class="mt-0 flex flex-col gap-4">
 
@@ -7536,7 +7534,7 @@ onMounted(async () => {
                             </div>
                         </div>
                     </div>
-                <!-- â”€â”€â”€ Claims Tab (Feature 5) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+                <!-- Claims Tab (Feature 5) -->
                 <Card class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col shadow-sm">
                     <div class="flex items-center justify-between gap-4 border-b px-4 py-3.5">
                         <div class="min-w-0">
@@ -7665,8 +7663,7 @@ onMounted(async () => {
                     </CardContent>
                 </Card>
                 </TabsContent>
-
-                <!-- â”€â”€â”€ MSD Orders Tab (Feature 6) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+                <!-- MSD Orders Tab (Feature 6) -->
                 <TabsContent value="msd-orders" class="mt-0 flex flex-col gap-4">
                     <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
                         <div class="flex items-center gap-3 rounded-lg border border-sidebar-border/70 bg-card px-4 py-3 shadow-sm">
@@ -7843,8 +7840,7 @@ onMounted(async () => {
                     </CardContent>
                 </Card>
                 </TabsContent>
-
-                <!-- â”€â”€â”€ Analytics Tab (Feature 8) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+                <!-- Analytics Tab (Feature 8) -->
                 <TabsContent value="analytics" class="mt-0 flex flex-col gap-4">
                     <div class="flex items-center justify-between gap-4 rounded-lg border border-sidebar-border/70 bg-card px-4 py-3.5 shadow-sm">
                         <div class="min-w-0">
@@ -8064,12 +8060,12 @@ onMounted(async () => {
                                     </div>
                                     <div class="rounded-lg border border-orange-400/30 bg-orange-50 p-3 text-center dark:bg-orange-950/20">
                                         <p class="text-2xl font-bold text-orange-600 dark:text-orange-400">{{ expiryWastage.summary.criticalCount }}</p>
-                                        <p class="text-xs text-muted-foreground">Critical (â‰¤30 days)</p>
+                                        <p class="text-xs text-muted-foreground">Critical (<=30 days)</p>
                                         <p v-if="expiryWastage.summary.criticalTotalValue" class="mt-1 text-xs font-medium text-orange-600 dark:text-orange-400">TZS {{ Number(expiryWastage.summary.criticalTotalValue).toLocaleString() }}</p>
                                     </div>
                                     <div class="rounded-lg border border-yellow-400/30 bg-yellow-50 p-3 text-center dark:bg-yellow-950/20">
                                         <p class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{{ expiryWastage.summary.warningCount }}</p>
-                                        <p class="text-xs text-muted-foreground">Warning (â‰¤90 days)</p>
+                                        <p class="text-xs text-muted-foreground">Warning (<=90 days)</p>
                                         <p v-if="expiryWastage.summary.warningTotalValue" class="mt-1 text-xs font-medium text-yellow-600 dark:text-yellow-400">TZS {{ Number(expiryWastage.summary.warningTotalValue).toLocaleString() }}</p>
                                     </div>
                                 </div>
@@ -8137,7 +8133,7 @@ onMounted(async () => {
                                             <td class="py-1.5 pr-4 text-right text-xs">{{ Number(item.currentStock).toLocaleString() }}</td>
                                             <td class="py-1.5 pr-4 text-right text-xs">{{ Number(item.totalIssued).toLocaleString() }}</td>
                                             <td class="py-1.5 pr-4 text-right text-xs font-medium">{{ item.turnoverRate }}×</td>
-                                            <td class="py-1.5 pr-4 text-right text-xs">{{ item.daysOfStock != null ? item.daysOfStock + 'd' : 'âˆž' }}</td>
+                                            <td class="py-1.5 pr-4 text-right text-xs">{{ item.daysOfStock != null ? item.daysOfStock + 'd' : 'N/A' }}</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -11242,10 +11238,10 @@ onMounted(async () => {
                             </Label>
                             <Select :model-value="toSelectValue(line.batchId)" @update:model-value="line.batchId = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
                                 <SelectTrigger :disabled="Boolean(transferBatchLoadingByItemId[line.itemId])">
-                                    <SelectValue placeholder="â€” Select â€”" />
+                                    <SelectValue placeholder="Select" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem :value="EMPTY_SELECT_VALUE">â€” Select â€”</SelectItem>
+                                    <SelectItem :value="EMPTY_SELECT_VALUE">Select</SelectItem>
                                     <SelectItem
                                         v-for="batch in transferLineBatches(line)"
                                         :key="batch.id"
