@@ -52,6 +52,7 @@ import {
     type PermissionState,
 } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { apiPost, isApiClientError } from '@/lib/apiClient';
 import { createLocaleTranslator } from '@/lib/locale';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { patientChartHref } from '@/lib/patientChart';
@@ -1823,6 +1824,23 @@ function visitHandoffDefaultMode(): PatientVisitHandoffMode {
     return 'chart';
 }
 
+function isFacilityPlan403Error(error: unknown): boolean {
+    if (!isApiClientError(error) || error.status !== 403) {
+        return false;
+    }
+    const payload = error.payload;
+    if (!payload || typeof payload !== 'object') {
+        return false;
+    }
+    const code = (payload as { code?: string }).code;
+    return (
+        code === 'FACILITY_ENTITLEMENT_REQUIRED'
+        || code === 'FACILITY_SUBSCRIPTION_REQUIRED'
+        || code === 'FACILITY_SUBSCRIPTION_EXPIRED'
+        || code === 'FACILITY_SUBSCRIPTION_RESTRICTED'
+    );
+}
+
 async function createDirectServiceRequest(serviceType: 'laboratory' | 'pharmacy' | 'radiology'): Promise<void> {
     const patient = visitHandoffPatient.value;
     if (!patient || directServiceSending.value !== null) return;
@@ -1835,28 +1853,76 @@ async function createDirectServiceRequest(serviceType: 'laboratory' | 'pharmacy'
 
     const appointment = visitHandoffActiveAppointment.value;
 
+    type ServiceRequestResponse = { data: { requestNumber: string; serviceType: string } };
+
     try {
-        type ServiceRequestResponse = { data: { requestNumber: string; serviceType: string } };
-        const response = await apiRequest<ServiceRequestResponse>('POST', '/service-requests', {
-            body: {
-                patientId: patient.id,
-                serviceType,
-                priority: 'routine',
-                ...(appointment ? { appointmentId: appointment.id } : {}),
-            },
-        });
+        let response: ServiceRequestResponse;
+        try {
+            response = await apiPost<ServiceRequestResponse>('/service-requests', {
+                body: {
+                    patientId: patient.id,
+                    serviceType,
+                    priority: 'routine',
+                    ...(appointment ? { appointmentId: appointment.id } : {}),
+                },
+                entitlementContext: 'Walk-in service request',
+            });
+        } catch (firstError: unknown) {
+            if (isApiClientError(firstError) && firstError.status === 419) {
+                await refreshCsrfToken();
+                response = await apiPost<ServiceRequestResponse>('/service-requests', {
+                    body: {
+                        patientId: patient.id,
+                        serviceType,
+                        priority: 'routine',
+                        ...(appointment ? { appointmentId: appointment.id } : {}),
+                    },
+                    entitlementContext: 'Walk-in service request',
+                });
+            } else {
+                throw firstError;
+            }
+        }
+
+        const requestNumber = response.data?.requestNumber;
+        if (!requestNumber) {
+            notifyError('Walk-in ticket was created but the response did not include a ticket number. Refresh and check the department queue.');
+            return;
+        }
+
         directServiceSentMap.value = {
             ...directServiceSentMap.value,
             [`${patient.id}:${serviceType}`]: {
                 serviceType,
-                requestNumber: response.data.requestNumber,
+                requestNumber,
             },
         };
         notifySuccess(
-            `Done — ${labelMap[serviceType]} walk-in ticket ${response.data.requestNumber} created for ${patient.firstName} ${patient.lastName}. This patient is listed on that department's queue.`,
+            `Done — ${labelMap[serviceType]} walk-in ticket ${requestNumber} created for ${patient.firstName} ${patient.lastName}. This patient is listed on that department's queue.`,
         );
-    } catch {
-        notifyError(`Could not send patient to ${labelMap[serviceType].toLowerCase()} queue. Try again or notify the department directly.`);
+    } catch (error: unknown) {
+        if (isFacilityPlan403Error(error)) {
+            return;
+        }
+
+        const fallback = `Could not send patient to ${labelMap[serviceType].toLowerCase()} queue. Try again or notify the department directly.`;
+
+        if (isApiClientError(error)) {
+            const payload = error.payload;
+            if (payload && typeof payload === 'object') {
+                const msg = (payload as { message?: string }).message;
+                if (typeof msg === 'string' && msg.trim() !== '') {
+                    notifyError(msg);
+                    return;
+                }
+            }
+            if (error.message.trim() !== '') {
+                notifyError(error.message);
+                return;
+            }
+        }
+
+        notifyError(messageFromUnknown(error, fallback));
     } finally {
         directServiceSending.value = null;
     }
@@ -2325,6 +2391,22 @@ const canPrev = computed(() => (pagination.value?.currentPage ?? 1) > 1);
 const canNext = computed(() => {
     if (!pagination.value) return false;
     return pagination.value.currentPage < pagination.value.lastPage;
+});
+
+const paginationPageNumbers = computed((): (number | '...')[] => {
+    const total = pagination.value?.lastPage ?? 1;
+    const current = pagination.value?.currentPage ?? 1;
+    if (total <= 7) {
+        return Array.from({ length: total }, (_, i) => i + 1);
+    }
+    const pages: (number | '...')[] = [1];
+    if (current > 3) pages.push('...');
+    for (let p = Math.max(2, current - 1); p <= Math.min(total - 1, current + 1); p++) {
+        pages.push(p);
+    }
+    if (current < total - 2) pages.push('...');
+    pages.push(total);
+    return pages;
 });
 
 const scopeStatusLabel = computed(() => {
@@ -3676,6 +3758,37 @@ function nextPage() {
     void loadPatients();
 }
 
+function goToPage(page: number) {
+    clearSearchDebounce();
+    searchForm.page = page;
+    void loadPatients();
+}
+
+function toggleColumnSort(field: string) {
+    if (searchForm.sortBy === field) {
+        searchForm.sortDir = searchForm.sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        searchForm.sortBy = field;
+        searchForm.sortDir = 'desc';
+    }
+    submitSearch();
+}
+
+function removeFilterChip(key: string) {
+    clearSearchDebounce();
+    switch (key) {
+        case 'q': searchForm.q = ''; break;
+        case 'status': searchForm.status = 'active'; break;
+        case 'gender': searchForm.gender = ''; break;
+        case 'region': searchForm.region = ''; break;
+        case 'district': searchForm.district = ''; break;
+        case 'sort': searchForm.sortBy = 'createdAt'; searchForm.sortDir = 'desc'; break;
+        case 'perPage': searchForm.perPage = 10; break;
+    }
+    searchForm.page = 1;
+    void Promise.all([loadPatients(), loadPatientStatusCounts()]);
+}
+
 function fieldError(key: string): string | null {
     return createErrors.value[key]?.[0] ?? null;
 }
@@ -4007,7 +4120,7 @@ onMounted(initialPageLoad);
                                 <div class="min-w-0">
                                     <CardTitle class="flex items-center gap-2">
                                         <AppIcon name="users" class="size-5 text-muted-foreground" />
-                                        Patients
+                                        Patient Registry
                                     </CardTitle>
                                     <CardDescription>
                                         Search, review, and open patient records.
@@ -4062,9 +4175,16 @@ onMounted(initialPageLoad);
                         </div>
 
                         <div v-if="patientFilterChips.length > 0" class="flex flex-wrap gap-1.5">
-                            <Badge v-for="chip in patientFilterChips" :key="chip.key" variant="outline">
+                            <button
+                                v-for="chip in patientFilterChips"
+                                :key="chip.key"
+                                type="button"
+                                class="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                                @click="removeFilterChip(chip.key)"
+                            >
                                 {{ chip.label }}
-                            </Badge>
+                                <AppIcon name="x" class="size-3 text-muted-foreground" />
+                            </button>
                         </div>
 
                     </div>
@@ -4075,9 +4195,29 @@ onMounted(initialPageLoad);
                     <div
                         class="shrink-0 hidden border-b bg-muted/30 px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground md:grid md:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,auto)]"
                     >
-                        <span>Patient</span>
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                            @click="toggleColumnSort('lastName')"
+                        >
+                            Patient
+                            <AppIcon
+                                :name="searchForm.sortBy === 'lastName' ? (searchForm.sortDir === 'asc' ? 'chevron-up' : 'chevron-down') : 'chevrons-up-down'"
+                                class="size-3.5"
+                            />
+                        </button>
                         <span>Status</span>
-                        <span>Date of Birth</span>
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                            @click="toggleColumnSort('createdAt')"
+                        >
+                            Date of Birth
+                            <AppIcon
+                                :name="searchForm.sortBy === 'createdAt' ? (searchForm.sortDir === 'asc' ? 'chevron-up' : 'chevron-down') : 'chevrons-up-down'"
+                                class="size-3.5"
+                            />
+                        </button>
                         <span>Contact</span>
                         <span class="text-right">Actions</span>
                     </div>
@@ -4272,13 +4412,24 @@ onMounted(initialPageLoad);
                             </template>
                             <template v-else>No pagination data</template>
                         </p>
-                        <div class="flex items-center gap-2">
-                                <Button variant="outline" size="sm" :disabled="!canPrev || listLoading" class="gap-1.5" @click="prevPage">
-                                    Previous
-                                </Button>
-                                <Button variant="outline" size="sm" :disabled="!canNext || listLoading" class="gap-1.5" @click="nextPage">
-                                    Next
-                                </Button>
+                        <div class="flex items-center gap-1">
+                            <Button variant="outline" size="icon" class="size-8" :disabled="!canPrev || listLoading" @click="prevPage">
+                                <AppIcon name="chevron-left" class="size-4" />
+                            </Button>
+                            <template v-for="page in paginationPageNumbers" :key="String(page)">
+                                <span v-if="page === '...'" class="px-1 text-xs text-muted-foreground">…</span>
+                                <Button
+                                    v-else
+                                    :variant="page === pagination?.currentPage ? 'default' : 'ghost'"
+                                    size="icon"
+                                    class="size-8 text-xs"
+                                    :disabled="listLoading"
+                                    @click="goToPage(page as number)"
+                                >{{ page }}</Button>
+                            </template>
+                            <Button variant="outline" size="icon" class="size-8" :disabled="!canNext || listLoading" @click="nextPage">
+                                <AppIcon name="chevron-right" class="size-4" />
+                            </Button>
                         </div>
                     </div>
                 </CardContent>

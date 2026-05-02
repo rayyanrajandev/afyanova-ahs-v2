@@ -15,8 +15,8 @@ return new class extends Migration
         Schema::create('service_requests', function (Blueprint $table): void {
             $table->uuid('id')->primary();
             $table->string('request_number')->unique();
-            $table->unsignedBigInteger('tenant_id')->nullable()->index();
-            $table->unsignedBigInteger('facility_id')->nullable()->index();
+            $table->uuid('tenant_id')->nullable()->index();
+            $table->uuid('facility_id')->nullable()->index();
             $table->uuid('patient_id')->index();
             $table->uuid('appointment_id')->nullable()->index();
             $table->foreignId('requested_by_user_id')->nullable()->constrained('users')->nullOnDelete();
@@ -30,6 +30,16 @@ return new class extends Migration
             $table->timestamp('completed_at')->nullable();
             $table->string('status_reason')->nullable();
             $table->timestamps();
+
+            $table->foreign('tenant_id')
+                ->references('id')
+                ->on('tenants')
+                ->nullOnDelete();
+
+            $table->foreign('facility_id')
+                ->references('id')
+                ->on('facilities')
+                ->nullOnDelete();
 
             $table->foreign('patient_id')
                 ->references('id')

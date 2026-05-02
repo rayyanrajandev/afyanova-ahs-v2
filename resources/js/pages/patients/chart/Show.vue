@@ -3317,8 +3317,8 @@ onMounted(() => {
                                     </p>
                                 </div>
                                 <div class="flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground">
-                                    <span>Phone: {{ patient.phone || 'Not recorded' }}</span>
-                                    <span>Email: {{ patient.email || 'Not recorded' }}</span>
+                                    <span class="inline-flex items-center gap-1.5"><AppIcon name="phone" class="size-3.5" />{{ patient.phone || 'Not recorded' }}</span>
+                                    <span class="inline-flex items-center gap-1.5"><AppIcon name="mail" class="size-3.5" />{{ patient.email || 'Not recorded' }}</span>
                                     <span class="inline-flex items-center gap-1.5"><AppIcon name="map-pin" class="size-3.5" />{{ patientLocationLabel }}</span>
                                 </div>
                             </div>

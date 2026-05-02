@@ -18,6 +18,7 @@ use App\Modules\Platform\Infrastructure\Models\RoleModel;
 use App\Modules\Platform\Infrastructure\Models\TenantModel;
 use App\Support\CatalogGovernance\CatalogPlacementAuditor;
 use Database\Seeders\Support\BaselineDepartmentCatalog;
+use Database\Seeders\Support\FacilitySubscriptionBootstrap;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -1324,6 +1325,11 @@ Artisan::command('app:bootstrap-staging-minimum
                     $registrationUser->roles()->syncWithoutDetaching([$registrationRole->id]);
                 }
             }
+
+            FacilitySubscriptionBootstrap::ensureActiveSubscription(
+                (string) $tenant->id,
+                (string) $facility->id,
+            );
         });
     } catch (QueryException $exception) {
         $this->error('Unable to bootstrap staging data. Ensure migrations are complete and database credentials are correct.');
@@ -1336,7 +1342,7 @@ Artisan::command('app:bootstrap-staging-minimum
     $this->line('Admin email: '.$adminEmail);
     $this->line('Tenant: '.$tenantCode);
     $this->line('Facility: '.$facilityCode);
-    $this->line('Created/updated: tenant, facility, departments, permissions, roles, admin user, facility assignment.');
+    $this->line('Created/updated: tenant, facility, facility subscription (active plan), departments, permissions, roles, admin user, facility assignment.');
 
     if ($generatedAdminPassword) {
         $this->warn('Generated admin password: '.$adminPassword);
@@ -1354,6 +1360,45 @@ Artisan::command('app:bootstrap-staging-minimum
 
     return self::SUCCESS;
 })->purpose('Create clean minimum staging data for first hospital testing without demo patient records');
+
+Artisan::command('app:ensure-facility-subscription {--tenant-code=TZH} {--facility-code=DAR-MAIN}', function (): int {
+    $tenantCode = strtoupper(trim((string) $this->option('tenant-code')));
+    $facilityCode = strtoupper(trim((string) $this->option('facility-code')));
+
+    if ($tenantCode === '' || $facilityCode === '') {
+        $this->error('Provide non-empty --tenant-code and --facility-code.');
+
+        return self::FAILURE;
+    }
+
+    $tenant = TenantModel::query()->where('code', $tenantCode)->first();
+    if ($tenant === null) {
+        $this->error('Unknown tenant code: '.$tenantCode);
+
+        return self::FAILURE;
+    }
+
+    $facility = FacilityModel::query()
+        ->where('tenant_id', $tenant->id)
+        ->where('code', $facilityCode)
+        ->first();
+
+    if ($facility === null) {
+        $this->error('Unknown facility code '.$facilityCode.' for tenant '.$tenantCode);
+
+        return self::FAILURE;
+    }
+
+    if (FacilitySubscriptionBootstrap::ensureActiveSubscription((string) $tenant->id, (string) $facility->id)) {
+        $this->info('Facility subscription ensured (active plan attached).');
+
+        return self::SUCCESS;
+    }
+
+    $this->warn('Could not attach subscription. Ensure migrations ran and platform_subscription_plans exists.');
+
+    return self::FAILURE;
+})->purpose('Attach an active platform subscription plan to a facility (repair local/staging API entitlement checks)');
 
 Artisan::command('app:seed-demo-opd-data {--user-email=admin@local.test} {--tenant-code=TZH} {--facility-code=DAR-MAIN}', function (): int {
     $userEmail = trim((string) $this->option('user-email'));
@@ -1407,6 +1452,11 @@ Artisan::command('app:seed-demo-opd-data {--user-email=admin@local.test} {--tena
                     'timezone' => 'Africa/Dar_es_Salaam',
                     'status' => 'active',
                 ],
+            );
+
+            FacilitySubscriptionBootstrap::ensureActiveSubscription(
+                (string) $tenant->id,
+                (string) $facility->id,
             );
 
             DB::table('facility_user')->updateOrInsert(
