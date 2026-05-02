@@ -549,6 +549,20 @@ const laboratoryOrderStatusCounts = ref<LaboratoryOrderStatusCounts | null>(
 const laboratoryExceptionLoading = ref(false);
 const laboratoryExceptionError = ref<string | null>(null);
 const patientDirectory = ref<Record<string, PatientSummary>>({});
+
+type WalkInServiceRequest = {
+    id: string;
+    requestNumber: string;
+    patientId: string;
+    priority: 'routine' | 'urgent' | string;
+    status: 'pending' | 'in_progress' | 'completed' | 'cancelled' | string;
+    notes: string | null;
+    requestedAt: string | null;
+};
+const walkInRequests = ref<WalkInServiceRequest[]>([]);
+const walkInRequestsLoading = ref(false);
+const walkInRequestsError = ref<string | null>(null);
+const walkInAcknowledging = ref<string | null>(null);
 const laboratoryReadPermissionState = ref<PermissionState>(
     permissionState('laboratory.orders.read'),
 );
@@ -599,6 +613,12 @@ const canUpdateLaboratoryOrderStatus = computed(
 );
 const canVerifyLaboratoryOrderResult = computed(
     () => laboratoryVerifyResultPermissionState.value === 'allowed',
+);
+const serviceRequestUpdateStatusPermissionState = ref<PermissionState>(
+    permissionState('service.requests.update-status'),
+);
+const canUpdateServiceRequestStatus = computed(
+    () => serviceRequestUpdateStatusPermissionState.value === 'allowed',
 );
 const canReadMedicalRecords = computed(
     () => medicalRecordsReadPermissionState.value === 'allowed',
@@ -2502,6 +2522,48 @@ async function loadDetailsTrendOrders(order: LaboratoryOrder) {
     }
 }
 
+async function fetchWalkInRequests() {
+    if (walkInRequestsLoading.value) return;
+    walkInRequestsLoading.value = true;
+    walkInRequestsError.value = null;
+    try {
+        const result = await apiRequest<{ data: WalkInServiceRequest[] }>('GET', '/service-requests', {
+            query: { serviceType: 'laboratory', status: 'pending', perPage: 50 },
+        });
+        walkInRequests.value = result.data;
+        for (const req of result.data) {
+            if (req.patientId) {
+                hydratePatientSummary(req.patientId);
+            }
+        }
+    } catch {
+        walkInRequestsError.value = 'Could not load walk-in requests.';
+    } finally {
+        walkInRequestsLoading.value = false;
+    }
+}
+
+async function acknowledgeWalkInRequest(requestId: string, patientId: string) {
+    if (walkInAcknowledging.value !== null) return;
+    walkInAcknowledging.value = requestId;
+    try {
+        await apiRequest('PATCH', `/service-requests/${requestId}/status`, {
+            body: { status: 'in_progress' },
+        });
+        walkInRequests.value = walkInRequests.value.filter((r) => r.id !== requestId);
+        notifySuccess('Walk-in acknowledged. Patient is now in progress.');
+        if (patientId) {
+            createForm.patientId = patientId;
+            createPatientContextLocked.value = false;
+        }
+        setLaboratoryWorkspaceView('new', { focusCreate: true });
+    } catch {
+        notifyError('Could not acknowledge walk-in request. Please try again.');
+    } finally {
+        walkInAcknowledging.value = null;
+    }
+}
+
 async function refreshPage() {
     clearSearchDebounce();
     await Promise.all([loadScope(), loadLaboratoryPermissions()]);
@@ -2510,6 +2572,7 @@ async function refreshPage() {
         loadOrderStatusCounts(),
         loadLaboratoryExceptionOrders(),
         loadLabTestCatalog(),
+        fetchWalkInRequests(),
     ]);
     await applyLaboratoryAuditExportRetryHandoff();
     await loadCreateLifecycleSourceOrder();
@@ -2527,6 +2590,7 @@ async function initialPageLoad() {
         loadOrderStatusCounts(),
         loadLaboratoryExceptionOrders(),
         loadLabTestCatalog(),
+        fetchWalkInRequests(),
     ]);
     await applyLaboratoryAuditExportRetryHandoff();
     await loadCreateLifecycleSourceOrder();
@@ -6691,6 +6755,59 @@ onMounted(async () => {
             </div>
             </div>
 
+            <!-- Walk-in service requests panel -->
+            <div
+                v-if="canUpdateServiceRequestStatus && (walkInRequestsLoading || walkInRequests.length > 0 || walkInRequestsError)"
+                class="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 px-4 py-3"
+            >
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-800 dark:text-amber-300">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Walk-in Patients Awaiting Lab
+                    </span>
+                    <span
+                        v-if="walkInRequests.length > 0"
+                        class="rounded-full bg-amber-200 dark:bg-amber-800 px-2 py-0.5 text-xs font-bold text-amber-900 dark:text-amber-200"
+                    >{{ walkInRequests.length }}</span>
+                </div>
+                <div v-if="walkInRequestsLoading" class="text-xs text-amber-700 dark:text-amber-400 py-1">Loading walk-in requests…</div>
+                <div v-else-if="walkInRequestsError" class="text-xs text-red-600 dark:text-red-400 py-1">{{ walkInRequestsError }}</div>
+                <ul v-else class="flex flex-col gap-1.5">
+                    <li
+                        v-for="req in walkInRequests"
+                        :key="req.id"
+                        class="flex flex-wrap items-center justify-between gap-2 rounded-md bg-white dark:bg-zinc-900 border border-amber-100 dark:border-amber-900 px-3 py-2"
+                    >
+                        <div class="flex flex-col gap-0.5 min-w-0">
+                            <span class="text-sm font-medium text-foreground truncate">
+                                {{ patientDirectory[req.patientId]?.fullName ?? req.patientId }}
+                            </span>
+                            <span class="text-xs text-muted-foreground">
+                                {{ req.requestNumber }}
+                                <span
+                                    v-if="req.priority === 'urgent'"
+                                    class="ml-1 inline-flex items-center rounded bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 text-xs font-semibold text-red-700 dark:text-red-300"
+                                >Urgent</span>
+                            </span>
+                            <span v-if="req.notes" class="text-xs text-muted-foreground italic truncate max-w-xs">{{ req.notes }}</span>
+                        </div>
+                        <Button
+                            size="sm"
+                            :disabled="walkInAcknowledging === req.id"
+                            class="shrink-0 bg-amber-600 hover:bg-amber-700 text-white"
+                            @click="acknowledgeWalkInRequest(req.id, req.patientId)"
+                        >
+                            <svg v-if="walkInAcknowledging === req.id" class="mr-1 h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                            </svg>
+                            Acknowledge &amp; Start Order
+                        </Button>
+                    </li>
+                </ul>
+            </div>
 
             <!-- Queue bar -->
             <div

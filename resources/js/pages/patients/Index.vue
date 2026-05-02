@@ -562,6 +562,7 @@ const canCreateLaboratoryOrders = ref(hasPermission('laboratory.orders.create'))
 const canCreatePharmacyOrders = ref(hasPermission('pharmacy.orders.create'));
 const canCreateRadiologyOrders = ref(hasPermission('radiology.orders.create'));
 const canCreateTheatreProcedures = ref(hasPermission('theatre.procedures.create'));
+const canCreateServiceRequests = ref(hasPermission('service.requests.create'));
 const canManageProviderSession = computed(() => canReadAppointments.value && canReadMedicalRecords.value);
 const tenantIsolationEnabled = ref(multiTenantIsolationEnabled.value);
 const SELECT_ALL_VALUE = '__all__';
@@ -598,6 +599,8 @@ const visitHandoffSubmitting = ref(false);
 const visitHandoffError = ref<string | null>(null);
 const visitHandoffActionError = ref<string | null>(null);
 let visitHandoffRequestToken = 0;
+const directServiceSending = ref<string | null>(null);
+const directServiceSentMap = ref<Record<string, { serviceType: string; requestNumber: string }>>({});
 const detailsSheetOpen = ref(false);
 const detailsSheetPatient = ref<Patient | null>(null);
 const detailsSheetTab = ref('overview');
@@ -1783,26 +1786,36 @@ function visitHandoffDefaultMode(): PatientVisitHandoffMode {
     return 'chart';
 }
 
-async function copyVisitHandoffDirectServiceLink(module: 'lab' | 'imaging' | 'pharmacy'): Promise<void> {
+async function createDirectServiceRequest(serviceType: 'laboratory' | 'pharmacy' | 'radiology'): Promise<void> {
     const patient = visitHandoffPatient.value;
-    if (!patient) return;
-    const pathMap = {
-        lab: '/laboratory-orders',
-        imaging: '/radiology-orders',
-        pharmacy: '/pharmacy-orders',
-    } as const;
-    const labelMap = {
-        lab: 'Lab',
-        imaging: 'Imaging',
-        pharmacy: 'Pharmacy',
-    } as const;
-    const path = patientContextHref(pathMap[module], patient, { includeTabNew: true });
-    const absolute = typeof window !== 'undefined' ? new URL(path, window.location.origin).href : path;
+    if (!patient || directServiceSending.value !== null) return;
+
+    directServiceSending.value = serviceType;
+    const labelMap = { laboratory: 'Lab', pharmacy: 'Pharmacy', radiology: 'Imaging' } as const;
+
     try {
-        await navigator.clipboard.writeText(absolute);
-        notifySuccess(`${labelMap[module]} link copied. Open it on the ${labelMap[module].toLowerCase()} workstation — the patient will be pre-loaded.`);
+        type ServiceRequestResponse = { data: { requestNumber: string; serviceType: string } };
+        const response = await apiRequest<ServiceRequestResponse>('POST', '/service-requests', {
+            body: {
+                patientId: patient.id,
+                serviceType,
+                priority: 'routine',
+            },
+        });
+        directServiceSentMap.value = {
+            ...directServiceSentMap.value,
+            [`${patient.id}:${serviceType}`]: {
+                serviceType,
+                requestNumber: response.data.requestNumber,
+            },
+        };
+        notifySuccess(
+            `${patient.firstName} ${patient.lastName} added to the ${labelMap[serviceType].toLowerCase()} walk-in queue (${response.data.requestNumber}). Staff will see them when they check in.`,
+        );
     } catch {
-        notifyError(`Could not copy automatically. Search for this patient in the ${labelMap[module].toLowerCase()} module.`);
+        notifyError(`Could not send patient to ${labelMap[serviceType].toLowerCase()} queue. Try again or notify the department directly.`);
+    } finally {
+        directServiceSending.value = null;
     }
 }
 
@@ -5118,54 +5131,52 @@ onMounted(initialPageLoad);
                                             <p class="max-w-xl text-xs leading-5 text-muted-foreground">{{ visitHandoffPrimaryDescription }}</p>
                                         </div>
 
-                                        <!-- Clerk (no ordering rights): copy-link handoff — same pattern as emergency triage -->
+                                        <!-- Clerk: send patient to walk-in queue via service request API -->
                                         <Alert
-                                            v-if="!visitHandoffHasAnyDirectServiceRight"
+                                            v-if="!visitHandoffHasAnyDirectServiceRight && canCreateServiceRequests"
                                             class="border-violet-200 bg-violet-50/90 text-violet-950 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-50"
                                         >
                                             <AlertTitle class="flex items-center gap-2 text-base text-violet-950 dark:text-violet-50">
-                                                <AppIcon name="flask-conical" class="size-4 shrink-0 text-violet-700 dark:text-violet-300" />
-                                                Direct patient to the service area
+                                                <AppIcon name="send" class="size-4 shrink-0 text-violet-700 dark:text-violet-300" />
+                                                Route patient to service area
                                             </AlertTitle>
                                             <AlertDescription class="space-y-3 text-sm text-violet-900/95 dark:text-violet-100/90">
                                                 <p>
-                                                    Direct the patient to the relevant counter.
-                                                    <span class="font-medium">The receiving staff opens the link below on their workstation</span>
-                                                    — this patient will be pre-loaded so they can add the order and process it immediately.
-                                                </p>
-                                                <p class="text-xs leading-relaxed">
-                                                    This is the normal split of duties: registration identifies and routes the patient; lab, imaging, or pharmacy staff create the service order on their end.
+                                                    Select the service this patient needs.
+                                                    <span class="font-medium">They will appear immediately in that department's walk-in queue</span>
+                                                    — staff will see the patient when they arrive at the counter.
                                                 </p>
                                                 <div class="flex flex-wrap gap-2">
                                                     <Button
+                                                        v-for="service in [
+                                                            { key: 'laboratory', label: 'Lab', icon: 'flask-conical' },
+                                                            { key: 'radiology', label: 'Imaging', icon: 'activity' },
+                                                            { key: 'pharmacy', label: 'Pharmacy', icon: 'pill' },
+                                                        ] as const"
+                                                        :key="service.key"
                                                         type="button"
                                                         variant="outline"
                                                         size="sm"
-                                                        class="border-violet-300 bg-white/90 text-violet-950 hover:bg-white dark:border-violet-700 dark:bg-violet-900/60 dark:text-violet-50 dark:hover:bg-violet-900"
-                                                        @click="copyVisitHandoffDirectServiceLink('lab')"
+                                                        :disabled="directServiceSending !== null"
+                                                        :class="[
+                                                            'border-violet-300 bg-white/90 text-violet-950 hover:bg-white dark:border-violet-700 dark:bg-violet-900/60 dark:text-violet-50 dark:hover:bg-violet-900',
+                                                            directServiceSentMap[`${visitHandoffPatient?.id}:${service.key}`]
+                                                                ? 'opacity-60 cursor-default'
+                                                                : '',
+                                                        ]"
+                                                        @click="createDirectServiceRequest(service.key)"
                                                     >
-                                                        <AppIcon name="flask-conical" class="size-3.5" />
-                                                        Copy lab link
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        class="border-violet-300 bg-white/90 text-violet-950 hover:bg-white dark:border-violet-700 dark:bg-violet-900/60 dark:text-violet-50 dark:hover:bg-violet-900"
-                                                        @click="copyVisitHandoffDirectServiceLink('imaging')"
-                                                    >
-                                                        <AppIcon name="activity" class="size-3.5" />
-                                                        Copy imaging link
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        class="border-violet-300 bg-white/90 text-violet-950 hover:bg-white dark:border-violet-700 dark:bg-violet-900/60 dark:text-violet-50 dark:hover:bg-violet-900"
-                                                        @click="copyVisitHandoffDirectServiceLink('pharmacy')"
-                                                    >
-                                                        <AppIcon name="pill" class="size-3.5" />
-                                                        Copy pharmacy link
+                                                        <AppIcon
+                                                            v-if="directServiceSending !== service.key"
+                                                            :name="directServiceSentMap[`${visitHandoffPatient?.id}:${service.key}`] ? 'check' : service.icon"
+                                                            class="size-3.5"
+                                                        />
+                                                        <AppIcon
+                                                            v-else
+                                                            name="loader-circle"
+                                                            class="size-3.5 animate-spin"
+                                                        />
+                                                        {{ directServiceSentMap[`${visitHandoffPatient?.id}:${service.key}`] ? `Sent to ${service.label}` : `Send to ${service.label}` }}
                                                     </Button>
                                                 </div>
                                             </AlertDescription>

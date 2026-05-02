@@ -14,6 +14,7 @@ use App\Modules\Billing\Presentation\Http\Controllers\BillingServiceCatalogContr
 use App\Modules\ClaimsInsurance\Presentation\Http\Controllers\ClaimsInsuranceCaseController;
 use App\Modules\Department\Presentation\Http\Controllers\DepartmentController;
 use App\Modules\EmergencyTriage\Presentation\Http\Controllers\EmergencyTriageCaseController;
+use App\Modules\ServiceRequest\Presentation\Http\Controllers\ServiceRequestController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryProcurementController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryExtendedController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryAnalyticsController;
@@ -1137,6 +1138,22 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('emergency-triage-cases/{id}/audit-logs', [EmergencyTriageCaseController::class, 'auditLogs'])
         ->middleware('can:emergency.triage.view-audit-logs')
         ->name('emergency-triage-cases.audit-logs');
+
+    Route::get('service-requests', [ServiceRequestController::class, 'index'])
+        ->middleware('can:service.requests.read')
+        ->name('service-requests.index');
+    Route::get('service-requests/status-counts', [ServiceRequestController::class, 'statusCounts'])
+        ->middleware('can:service.requests.read')
+        ->name('service-requests.status-counts');
+    Route::post('service-requests', [ServiceRequestController::class, 'store'])
+        ->middleware('can:service.requests.create')
+        ->name('service-requests.store');
+    Route::get('service-requests/{id}', [ServiceRequestController::class, 'show'])
+        ->middleware('can:service.requests.read')
+        ->name('service-requests.show');
+    Route::patch('service-requests/{id}/status', [ServiceRequestController::class, 'updateStatus'])
+        ->middleware('can:service.requests.update-status')
+        ->name('service-requests.update-status');
 
     Route::get('claims-insurance', [ClaimsInsuranceCaseController::class, 'index'])
         ->middleware('can:claims.insurance.read')
