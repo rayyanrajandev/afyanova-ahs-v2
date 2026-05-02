@@ -46,8 +46,11 @@ import {
     BookOpen,
     Calendar,
     CalendarClock,
+    ChevronDown,
     ChevronLeft,
     ChevronRight,
+    ChevronUp,
+    ChevronsUpDown,
     CircleCheck,
     CircleX,
     ClipboardList,
@@ -65,6 +68,7 @@ import {
     MapPin,
     Package,
     PanelRightOpen,
+    Phone,
     Pill,
     Plus,
     Receipt,
@@ -80,6 +84,7 @@ import {
     User,
     UserX,
     Users,
+    X,
 } from 'lucide-vue-next';
 import type { Component } from 'vue';
 import type { IconPack } from '@/types';
@@ -96,8 +101,11 @@ export type AppIconName =
     | 'calendar-plus-2'
     | 'calendar-clock'
     | 'check-circle'
+    | 'chevron-down'
     | 'chevron-left'
     | 'chevron-right'
+    | 'chevron-up'
+    | 'chevrons-up-down'
     | 'circle-check-big'
     | 'circle-x'
     | 'clipboard-list'
@@ -117,6 +125,7 @@ export type AppIconName =
     | 'package'
     | 'panel-right-open'
     | 'pencil'
+    | 'phone'
     | 'pill'
     | 'plus'
     | 'receipt'
@@ -130,7 +139,8 @@ export type AppIconName =
     | 'undo-2'
     | 'user'
     | 'user-x'
-    | 'users';
+    | 'users'
+    | 'x';
 
 const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     activity: Activity,
@@ -144,8 +154,11 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     'calendar-plus-2': Calendar,
     'calendar-clock': CalendarClock,
     'check-circle': CircleCheck,
+    'chevron-down': ChevronDown,
     'chevron-left': ChevronLeft,
     'chevron-right': ChevronRight,
+    'chevron-up': ChevronUp,
+    'chevrons-up-down': ChevronsUpDown,
     'circle-check-big': CircleCheck,
     'circle-x': CircleX,
     'clipboard-list': ClipboardList,
@@ -165,6 +178,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     package: Package,
     'panel-right-open': PanelRightOpen,
     pencil: SquarePen,
+    phone: Phone,
     pill: Pill,
     plus: Plus,
     receipt: Receipt,
@@ -179,6 +193,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     user: User,
     'user-x': UserX,
     users: Users,
+    x: X,
 };
 
 const HUGE_ICON_MAP = {
@@ -193,8 +208,11 @@ const HUGE_ICON_MAP = {
     'calendar-plus-2': Calendar01Icon,
     'calendar-clock': TimeScheduleIcon,
     'check-circle': CheckmarkCircle01Icon,
+    'chevron-down': ArrowRight01Icon,
     'chevron-left': ArrowLeft01Icon,
     'chevron-right': ArrowRight01Icon,
+    'chevron-up': ArrowLeft01Icon,
+    'chevrons-up-down': SlidersHorizontalIcon,
     'circle-check-big': CheckmarkCircle01Icon,
     'circle-x': CancelCircleIcon,
     'clipboard-list': CheckListIcon,
@@ -214,6 +232,7 @@ const HUGE_ICON_MAP = {
     package: PackageIcon,
     'panel-right-open': EyeIcon,
     pencil: Pen01Icon,
+    phone: UserIcon,
     pill: PillIcon,
     plus: Add01Icon,
     receipt: Invoice01Icon,
@@ -228,6 +247,7 @@ const HUGE_ICON_MAP = {
     user: UserIcon,
     'user-x': UserRemove01Icon,
     users: UserGroupIcon,
+    x: CancelCircleIcon,
 } as Record<AppIconName, IconArray>;
 
 export function resolveAppIcon(
