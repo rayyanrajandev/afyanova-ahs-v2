@@ -1070,7 +1070,10 @@ const visitHandoffPrimaryDescription = computed(() => {
         if (canAnyService) {
             return 'Matches common facility flow: registration identifies the patient and may send them to the lab, imaging suite, or pharmacy counter. Staff who are allowed to order then open the workspace below with this patient already attached and record the tests, imaging, or medications before collection or dispensing.';
         }
-        return 'Patient is registered. Direct them to the service counter. Use the copy links below — open them on the department workstation or share with the receiving staff. They will see this patient already loaded and can add the order immediately.';
+        if (canCreateServiceRequests.value) {
+            return 'Send this patient into the department walk-in queue so staff see them when they arrive. Choose Lab, Imaging, or Pharmacy below.';
+        }
+        return 'This login cannot enqueue walk-ins without order modules. Use the copy buttons below to share department workspace URLs with staff who enter orders, or ask an administrator to grant service.requests.create to registration or nursing.';
     }
 
     return 'Open chart-only when staff need context without starting a new visit.';
@@ -1831,6 +1834,29 @@ async function copyVisitHandoffEmergencyTriageLink(): Promise<void> {
         notifySuccess('Link copied. Share it with triage or emergency staff so they can start intake.');
     } catch {
         notifyError('Could not copy automatically. Open Emergency Triage from the sidebar and search for this patient.');
+    }
+}
+
+async function copyVisitHandoffDirectDeptLink(
+    dept: 'laboratory' | 'radiology' | 'pharmacy',
+): Promise<void> {
+    const patient = visitHandoffPatient.value;
+    if (!patient || typeof window === 'undefined') return;
+
+    const path =
+        dept === 'laboratory'
+            ? patientContextHref('/laboratory-orders', patient, { includeTabNew: true })
+            : dept === 'radiology'
+              ? patientContextHref('/radiology-orders', patient, { includeTabNew: true })
+              : patientContextHref('/pharmacy-orders', patient, { includeTabNew: true });
+    const absolute = new URL(path, window.location.origin).href;
+
+    try {
+        await navigator.clipboard.writeText(absolute);
+        const label = dept === 'laboratory' ? 'Laboratory' : dept === 'radiology' ? 'Imaging' : 'Pharmacy';
+        notifySuccess(`${label} workspace link copied for this patient.`);
+    } catch {
+        notifyError('Could not copy. Open the department module from the sidebar and search for this patient.');
     }
 }
 
@@ -5146,7 +5172,7 @@ onMounted(initialPageLoad);
                                             class="border-violet-200 bg-violet-50/90 text-violet-950 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-50"
                                         >
                                             <AlertTitle class="flex items-center gap-2 text-base text-violet-950 dark:text-violet-50">
-                                                <AppIcon name="send" class="size-4 shrink-0 text-violet-700 dark:text-violet-300" />
+                                                <AppIcon name="arrow-up-right" class="size-4 shrink-0 text-violet-700 dark:text-violet-300" />
                                                 Route patient to service area
                                             </AlertTitle>
                                             <AlertDescription class="space-y-3 text-sm text-violet-900/95 dark:text-violet-100/90">
@@ -5186,6 +5212,57 @@ onMounted(initialPageLoad);
                                                             class="size-3.5 animate-spin"
                                                         />
                                                         {{ directServiceSentMap[`${visitHandoffPatient?.id}:${service.key}`] ? `Sent to ${service.label}` : `Send to ${service.label}` }}
+                                                    </Button>
+                                                </div>
+                                            </AlertDescription>
+                                        </Alert>
+
+                                        <!-- No queue permission: share workspace URLs (clipboard) -->
+                                        <Alert
+                                            v-else-if="!visitHandoffHasAnyDirectServiceRight && !canCreateServiceRequests && visitHandoffPatient"
+                                            class="border-slate-200 bg-slate-50/90 text-slate-950 dark:border-slate-700 dark:bg-slate-950/35 dark:text-slate-50"
+                                        >
+                                            <AlertTitle class="flex items-center gap-2 text-base text-slate-950 dark:text-slate-50">
+                                                <AppIcon name="arrow-up-right" class="size-4 shrink-0 opacity-80" />
+                                                Share links with department staff
+                                            </AlertTitle>
+                                            <AlertDescription class="space-y-3 text-sm text-slate-800/95 dark:text-slate-100/90">
+                                                <p>
+                                                    Your role does not include
+                                                    <code class="rounded bg-muted px-1 py-0.5 text-xs">service.requests.create</code>
+                                                    yet, so queued walk-ins are hidden.
+                                                    Copy a URL for the workstation that will open this patient ready for a new order.
+                                                </p>
+                                                <div class="flex flex-wrap gap-2">
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        class="gap-1.5"
+                                                        @click="copyVisitHandoffDirectDeptLink('laboratory')"
+                                                    >
+                                                        <AppIcon name="flask-conical" class="size-3.5" />
+                                                        Copy lab link
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        class="gap-1.5"
+                                                        @click="copyVisitHandoffDirectDeptLink('radiology')"
+                                                    >
+                                                        <AppIcon name="activity" class="size-3.5" />
+                                                        Copy imaging link
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        class="gap-1.5"
+                                                        @click="copyVisitHandoffDirectDeptLink('pharmacy')"
+                                                    >
+                                                        <AppIcon name="pill" class="size-3.5" />
+                                                        Copy pharmacy link
                                                     </Button>
                                                 </div>
                                             </AlertDescription>
