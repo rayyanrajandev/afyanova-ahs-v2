@@ -1,17 +1,17 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
-use Laravel\Fortify\Features;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingInvoiceDocumentController;
 use App\Modules\ClaimsInsurance\Presentation\Http\Controllers\ClaimsInsuranceDocumentController;
-use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryWarehouseTransferDocumentController;
 use App\Modules\InpatientWard\Presentation\Http\Controllers\InpatientWardDischargeChecklistDocumentController;
+use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryWarehouseTransferDocumentController;
 use App\Modules\MedicalRecord\Presentation\Http\Controllers\MedicalRecordDocumentController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformBrandingController;
 use App\Modules\Pos\Presentation\Http\Controllers\PosRegisterSessionDocumentController;
 use App\Modules\Pos\Presentation\Http\Controllers\PosSaleDocumentController;
 use App\Support\Branding\SystemBrandingManager;
+use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
+use Laravel\Fortify\Features;
 
 Route::get('branding/logo', [PlatformBrandingController::class, 'logo'])->name('branding.logo');
 Route::get('branding/icon', [PlatformBrandingController::class, 'icon'])->name('branding.icon');
@@ -42,7 +42,13 @@ Route::get('appointments', function () {
 
 Route::get('admissions', function () {
     return Inertia::render('admissions/Index');
-})->middleware(['auth', 'verified', 'can:admissions.read', 'facility.entitlement:admissions.management'])->name('admissions.page');
+})->middleware([
+    'auth',
+    'verified',
+    'can:admissions.read',
+    // Scheduling-tier OR full admissions SKU (aligns with API admissions list + dashboard KPIs).
+    'facility.entitlement.any:admissions.management,appointments.scheduling',
+])->name('admissions.page');
 
 Route::get('medical-records', function () {
     return Inertia::render('medical-records/Index');

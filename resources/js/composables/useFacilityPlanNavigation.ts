@@ -4,7 +4,7 @@ import {
     facilityEntitlementsSatisfied,
     formatEntitlementLabel,
     normalizeAppPath,
-    requiredEntitlementsForAppPath,
+    pathEntitlementRequirement,
 } from '@/config/facilityPageEntitlements';
 
 /**
@@ -21,9 +21,14 @@ export function useFacilityPlanNavigation() {
     }
 
     function missingEntitlementsForPath(href: string): string[] {
-        const required = requiredEntitlementsForAppPath(normalizeAppPath(href));
-        if (!required) return [];
-        return required.filter((k) => !grantedSet.value.has(k.toLowerCase()));
+        const req = pathEntitlementRequirement(normalizeAppPath(href));
+        if (!req) return [];
+        if (req.type === 'all') {
+            return req.keys.filter((k) => !grantedSet.value.has(k));
+        }
+        const hasAny = req.keys.some((k) => grantedSet.value.has(k));
+        if (hasAny) return [];
+        return [...req.keys];
     }
 
     function missingEntitlementLabelsForPath(href: string): string[] {

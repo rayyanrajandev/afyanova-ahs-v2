@@ -5,6 +5,7 @@ import AppShell from '@/components/AppShell.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
 import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
 import FacilitySubscriptionBanner from '@/components/facility/FacilitySubscriptionBanner.vue';
+import CareQuickStrip from '@/components/workspace/CareQuickStrip.vue';
 import type { BreadcrumbItem } from '@/types';
 
 type Props = {
@@ -29,6 +30,7 @@ withDefaults(defineProps<Props>(), {
             <AppSidebarHeader :breadcrumbs="breadcrumbs" />
             <div class="mx-4 mt-3 space-y-3 lg:mx-6">
                 <FacilitySubscriptionBanner />
+                <CareQuickStrip />
             </div>
             <AppFacilityScopeNotice />
             <slot />

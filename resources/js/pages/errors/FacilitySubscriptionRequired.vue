@@ -90,6 +90,12 @@ function dateLabel(value: string | null | undefined): string {
                     <div class="grid gap-3 md:grid-cols-2">
                         <div class="rounded-lg border p-3">
                             <p class="text-sm font-medium">Required access</p>
+                            <p
+                                v-if="(props.access.requiredEntitlements ?? []).length > 1"
+                                class="mt-1 text-xs text-muted-foreground"
+                            >
+                                At least one of these service bundles must be on the facility plan (OR).
+                            </p>
                             <div class="mt-2 flex flex-wrap gap-1.5">
                                 <Badge v-for="entitlement in props.access.requiredEntitlements ?? []" :key="entitlement" variant="outline">
                                     {{ entitlementLabel(entitlement) }}

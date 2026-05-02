@@ -151,6 +151,99 @@ class FacilitySubscriptionAccessService
     }
 
     /**
+     * Allow access when the facility plan includes at least one of the given entitlements (OR).
+     * Used for front-office flows that are valid on either a full admissions SKU or a scheduling-tier plan.
+     *
+     * @param  array<int, string>  $alternativeEntitlements
+     * @return array<string, mixed>
+     */
+    public function evaluateAny(array $alternativeEntitlements): array
+    {
+        $alternatives = $this->normalizeEntitlements($alternativeEntitlements);
+
+        if ($alternatives === []) {
+            return $this->allowed($this->scopeContext->facility(), null, [], []);
+        }
+
+        $facility = $this->scopeContext->facility();
+        $facilityId = $this->scopeContext->facilityId();
+
+        if ($facilityId === null) {
+            return $this->denied(
+                code: 'FACILITY_SCOPE_REQUIRED',
+                message: 'Select a facility before using this service.',
+                facility: $facility,
+                subscription: null,
+                requiredEntitlements: $alternatives,
+                grantedEntitlements: [],
+            );
+        }
+
+        $subscription = FacilitySubscriptionModel::query()
+            ->with('plan.entitlements')
+            ->where('facility_id', $facilityId)
+            ->first();
+
+        if (! $subscription) {
+            return $this->denied(
+                code: 'FACILITY_SUBSCRIPTION_REQUIRED',
+                message: 'This facility does not have a configured subscription plan.',
+                facility: $facility,
+                subscription: null,
+                requiredEntitlements: $alternatives,
+                grantedEntitlements: [],
+            );
+        }
+
+        $grantedEntitlements = $this->grantedEntitlements($subscription);
+
+        if (! FacilitySubscriptionStatus::allowsAccess((string) $subscription->status)) {
+            return $this->denied(
+                code: 'FACILITY_SUBSCRIPTION_RESTRICTED',
+                message: 'This facility subscription is not active for the requested service.',
+                facility: $facility,
+                subscription: $this->subscriptionSummary($subscription),
+                requiredEntitlements: $alternatives,
+                grantedEntitlements: $grantedEntitlements,
+                missingEntitlements: array_values(array_diff($alternatives, $grantedEntitlements)),
+            );
+        }
+
+        if ($this->isSubscriptionExpired($subscription)) {
+            return $this->denied(
+                code: 'FACILITY_SUBSCRIPTION_EXPIRED',
+                message: 'This facility subscription period has expired.',
+                facility: $facility,
+                subscription: $this->subscriptionSummary($subscription),
+                requiredEntitlements: $alternatives,
+                grantedEntitlements: $grantedEntitlements,
+                missingEntitlements: array_values(array_diff($alternatives, $grantedEntitlements)),
+            );
+        }
+
+        foreach ($alternatives as $key) {
+            if (in_array($key, $grantedEntitlements, true)) {
+                return $this->allowed(
+                    facility: $facility,
+                    subscription: $this->subscriptionSummary($subscription),
+                    requiredEntitlements: [$key],
+                    grantedEntitlements: $grantedEntitlements,
+                );
+            }
+        }
+
+        return $this->denied(
+            code: 'FACILITY_ENTITLEMENT_REQUIRED',
+            message: 'This facility subscription plan does not include the requested service.',
+            facility: $facility,
+            subscription: $this->subscriptionSummary($subscription),
+            requiredEntitlements: $alternatives,
+            grantedEntitlements: $grantedEntitlements,
+            missingEntitlements: array_values(array_diff($alternatives, $grantedEntitlements)),
+        );
+    }
+
+    /**
      * @param  array<int, string>  $entitlements
      * @return array<int, string>
      */

@@ -1,7 +1,7 @@
 import {
     facilityEntitlementsSatisfied,
     normalizeAppPath,
-    requiredEntitlementsForAppPath,
+    pathEntitlementRequirement,
 } from '@/config/facilityPageEntitlements';
 
 type RouteAccessRule = {
@@ -317,11 +317,14 @@ export function routeAccessDenialReason(
         return 'permission';
     }
     const path = normalizeAppPath(href);
-    const required = requiredEntitlementsForAppPath(path);
-    if (required === null) {
+    const req = pathEntitlementRequirement(path);
+    if (req === null) {
         return null;
     }
     const set = grantedEntitlementSet(facilityEntitlementNames);
-    const planOk = required.every((k) => set.has(k.toLowerCase()));
+    const planOk =
+        req.type === 'all'
+            ? req.keys.every((k) => set.has(k))
+            : req.keys.some((k) => set.has(k));
     return planOk ? null : 'plan';
 }

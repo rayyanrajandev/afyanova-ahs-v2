@@ -1,13 +1,19 @@
 /**
  * Facility subscription entitlements required to load Inertia pages, aligned with
- * `routes/web.php` `facility.entitlement:*` middleware (longest path prefix wins).
+ * `routes/web.php` `facility.entitlement` / `facility.entitlement.any` middleware (longest path prefix wins).
  * Paths are normalized with {@link normalizeAppPath} before matching.
  */
 export type FacilityWebPathRule = {
     pathPrefix: string;
-    /** User must have every entitlement (AND). Keys are lowercase entitlement_key values from the plan catalog. */
-    requiredAll: string[];
+    /** AND: user must have every key. */
+    requiredAll?: string[];
+    /** OR: user must have at least one key (e.g. admissions page on scheduling or full admissions SKU). */
+    requiredAny?: string[];
 };
+
+export type PathEntitlementRequirement =
+    | { type: 'all'; keys: string[] }
+    | { type: 'any'; keys: string[] };
 
 /**
  * Ordered longest-prefix-first so nested routes resolve before parents.
@@ -42,7 +48,10 @@ export const FACILITY_WEB_PATH_RULES: readonly FacilityWebPathRule[] = [
     { pathPrefix: '/pharmacy-orders', requiredAll: ['pharmacy.orders'] },
     { pathPrefix: '/laboratory-orders', requiredAll: ['laboratory.orders'] },
     { pathPrefix: '/appointments', requiredAll: ['appointments.scheduling'] },
-    { pathPrefix: '/admissions', requiredAll: ['admissions.management'] },
+    {
+        pathPrefix: '/admissions',
+        requiredAny: ['admissions.management', 'appointments.scheduling'],
+    },
     { pathPrefix: '/patients', requiredAll: ['patients.search'] },
 ];
 
@@ -56,29 +65,48 @@ export function normalizeAppPath(href: string): string {
     return withSlash || '/';
 }
 
+function normalizeKeys(keys: readonly string[]): string[] {
+    return keys.map((k) => k.toLowerCase());
+}
+
 /**
- * @returns Required entitlement keys, or `null` when this path is not gated by a facility plan SKU
- * (e.g. dashboard, platform admin, help).
+ * @returns Entitlement requirement for this path, or `null` when not gated (e.g. dashboard, platform admin).
  */
-export function requiredEntitlementsForAppPath(normalizedPath: string): string[] | null {
+export function pathEntitlementRequirement(normalizedPath: string): PathEntitlementRequirement | null {
     const path = normalizedPath;
     for (const rule of FACILITY_WEB_PATH_RULES) {
         if (path === rule.pathPrefix || path.startsWith(`${rule.pathPrefix}/`)) {
-            return [...rule.requiredAll];
+            if (rule.requiredAny && rule.requiredAny.length > 0) {
+                return { type: 'any', keys: normalizeKeys(rule.requiredAny) };
+            }
+            if (rule.requiredAll && rule.requiredAll.length > 0) {
+                return { type: 'all', keys: normalizeKeys(rule.requiredAll) };
+            }
         }
     }
     return null;
+}
+
+/** @deprecated Use {@link pathEntitlementRequirement} for OR rules. */
+export function requiredEntitlementsForAppPath(normalizedPath: string): string[] | null {
+    const req = pathEntitlementRequirement(normalizedPath);
+    if (!req) return null;
+    if (req.type === 'all') return [...req.keys];
+    return [...req.keys];
 }
 
 export function facilityEntitlementsSatisfied(
     normalizedPath: string,
     grantedEntitlementLowercase: ReadonlySet<string>,
 ): boolean {
-    const required = requiredEntitlementsForAppPath(normalizedPath);
-    if (required === null) {
+    const req = pathEntitlementRequirement(normalizedPath);
+    if (req === null) {
         return true;
     }
-    return required.every((key) => grantedEntitlementLowercase.has(key.toLowerCase()));
+    if (req.type === 'all') {
+        return req.keys.every((key) => grantedEntitlementLowercase.has(key));
+    }
+    return req.keys.some((key) => grantedEntitlementLowercase.has(key));
 }
 
 /** Short labels for UI chips / toasts (not exhaustive). */
