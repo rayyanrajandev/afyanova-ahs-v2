@@ -44,5 +44,11 @@ return [
             'stage' => 'planned',
             'description' => 'Require LOINC code validation for laboratory orders in enabled profiles.',
         ],
+        'clinical.walk_ins.routing_summary_on_patient_list' => [
+            'enabled' => true,
+            'owner' => 'clinical',
+            'stage' => 'beta',
+            'description' => 'When enabled, patient index includes active walk-in (service request) summaries for anyone with patients.read—not only service.requests readers.',
+        ],
     ],
 ];

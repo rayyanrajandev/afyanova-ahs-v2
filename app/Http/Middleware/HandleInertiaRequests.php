@@ -2,10 +2,10 @@
 
 namespace App\Http\Middleware;
 
-use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
-use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\Platform\Application\Services\FacilitySubscriptionAccessService;
 use App\Modules\Platform\Application\Support\CredentialLinkDeliveryPolicy;
+use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
+use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Support\Auth\EffectivePermissionNameResolver;
 use App\Support\Branding\SystemBrandingManager;
 use Illuminate\Http\Request;
@@ -142,6 +142,10 @@ class HandleInertiaRequests extends Middleware
         return [
             'multiTenantIsolation' => $featureFlagResolver->isEnabled('platform.multi_tenant_isolation'),
             'multiFacilityScoping' => $featureFlagResolver->isEnabled('platform.multi_facility_scoping'),
+            'walkInsRoutingSummaryOnPatientList' => $featureFlagResolver->isEnabled(
+                'clinical.walk_ins.routing_summary_on_patient_list',
+                true,
+            ),
         ];
     }
 
@@ -273,5 +277,3 @@ class HandleInertiaRequests extends Middleware
         return $bytes.' bytes';
     }
 }
-
-

@@ -5,7 +5,7 @@ namespace App\Modules\ServiceRequest\Presentation\Http\Transformers;
 class ServiceRequestResponseTransformer
 {
     /**
-     * @param array<string, mixed> $serviceRequest
+     * @param  array<string, mixed>  $serviceRequest
      * @return array<string, mixed>
      */
     public static function transform(array $serviceRequest): array
@@ -14,6 +14,7 @@ class ServiceRequestResponseTransformer
             'id' => $serviceRequest['id'] ?? null,
             'requestNumber' => $serviceRequest['request_number'] ?? null,
             'patientId' => $serviceRequest['patient_id'] ?? null,
+            'appointmentId' => $serviceRequest['appointment_id'] ?? null,
             'requestedByUserId' => $serviceRequest['requested_by_user_id'] ?? null,
             'serviceType' => $serviceRequest['service_type'] ?? null,
             'priority' => $serviceRequest['priority'] ?? null,

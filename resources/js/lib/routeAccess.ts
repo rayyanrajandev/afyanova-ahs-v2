@@ -155,6 +155,10 @@ const routeAccessRules: RouteAccessRule[] = [
         requiredPermissions: ['radiology.orders.read'],
     },
     {
+        pathPrefix: '/walk-in-service-requests',
+        requiredPermissions: ['service.requests.read'],
+    },
+    {
         pathPrefix: '/patients',
         requiredPermissions: ['patients.read'],
     },

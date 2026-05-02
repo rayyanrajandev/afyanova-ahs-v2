@@ -128,6 +128,81 @@ export function apiGet<T>(path: string, query?: ApiJsonQuery, options?: Pick<Api
     return apiRequestJson<T>('GET', path, { query, entitlementContext: options?.entitlementContext });
 }
 
+export type ApiBlobDownloadOptions = {
+    query?: ApiJsonQuery;
+    entitlementContext?: string;
+    /** Default `text/csv` for UTF-8 exports; widen when downloading other streams. */
+    accept?: string;
+};
+
+function suggestedFilenameFromContentDisposition(header: string | null): string | null {
+    if (!header) return null;
+
+    const star = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header);
+    if (star?.[1]) {
+        try {
+            return decodeURIComponent(star[1].trim());
+        } catch {
+            return star[1].trim().replace(/^"+|"+$/g, '');
+        }
+    }
+
+    const plain = /filename\s*=\s*("?)([^\";]+)\1/i.exec(header);
+    if (plain?.[2]) {
+        return plain[2].trim();
+    }
+
+    return null;
+}
+
+/**
+ * Streams a binary/text body from `/api/v1` (typically CSV). Handles JSON errors the same way as {@link apiRequestJson}.
+ */
+export async function apiGetBlob(path: string, options?: ApiBlobDownloadOptions): Promise<{ blob: Blob; filename: string | null }> {
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    const url = new URL(`${API_V1_PREFIX}${normalizedPath}`, window.location.origin);
+    appendSearchParams(url, options?.query);
+
+    const response = await fetch(url.toString(), {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: {
+            Accept: options?.accept ?? 'text/csv, */*;q=0.1',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+    });
+
+    const contentType = response.headers.get('content-type') ?? '';
+
+    if (!response.ok) {
+        let payload: unknown = {};
+
+        if (contentType.includes('application/json')) {
+            payload = await parseJsonBody(response);
+        } else {
+            const text = await response.text();
+            payload = { message: text.trim() !== '' ? text : response.statusText };
+        }
+
+        if (response.status === 403) {
+            notifyFacilityEntitlementDenied(payload, options?.entitlementContext ?? normalizedPath);
+        }
+
+        throw new ApiClientError(
+            messageFromFailurePayload(payload, response.status, response.statusText),
+            response.status,
+            payload,
+        );
+    }
+
+    const blob = await response.blob();
+
+    return {
+        blob,
+        filename: suggestedFilenameFromContentDisposition(response.headers.get('content-disposition')),
+    };
+}
+
 export function apiPost<T>(path: string, options?: ApiJsonRequestOptions): Promise<T> {
     return apiRequestJson<T>('POST', path, options);
 }

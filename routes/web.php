@@ -70,6 +70,10 @@ Route::get('pharmacy-orders', function () {
     return Inertia::render('pharmacy-orders/Index');
 })->middleware(['auth', 'verified', 'can:pharmacy.orders.read', 'facility.entitlement:pharmacy.orders'])->name('pharmacy-orders.page');
 
+Route::get('walk-in-service-requests', function () {
+    return Inertia::render('walk-in-service-requests/Index');
+})->middleware(['auth', 'verified', 'can:service.requests.read', 'facility.entitlement:clinical.walk_in_queue'])->name('walk-in-service-requests.page');
+
 Route::get('billing-invoices', function () {
     return Inertia::render('billing-invoices/Index');
 })->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.invoices'])->name('billing-invoices.page');

@@ -37,6 +37,7 @@ class EnsureMappedFacilitySubscriptionEntitlement
         'laboratory-orders.' => ['laboratory.orders'],
         'pharmacy-orders.' => ['pharmacy.orders'],
         'radiology-orders.' => ['radiology.orders'],
+        'service-requests.' => ['clinical.walk_in_queue'],
         'theatre-procedures.' => ['theatre.procedures'],
         'claims-insurance.' => ['claims.insurance'],
 

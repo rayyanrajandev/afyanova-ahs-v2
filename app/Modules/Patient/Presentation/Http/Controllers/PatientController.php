@@ -5,18 +5,19 @@ namespace App\Modules\Patient\Presentation\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Patient\Application\UseCases\CreatePatientUseCase;
 use App\Modules\Patient\Application\UseCases\GetPatientUseCase;
-use App\Modules\Patient\Application\UseCases\ListPatientsUseCase;
 use App\Modules\Patient\Application\UseCases\ListPatientAuditLogsUseCase;
 use App\Modules\Patient\Application\UseCases\ListPatientStatusCountsUseCase;
+use App\Modules\Patient\Application\UseCases\ListPatientsUseCase;
 use App\Modules\Patient\Application\UseCases\UpdatePatientStatusUseCase;
 use App\Modules\Patient\Application\UseCases\UpdatePatientUseCase;
-use App\Modules\ServiceRequest\Application\UseCases\SummarizeActiveWalkInsForPatientIdsUseCase;
 use App\Modules\Patient\Presentation\Http\Requests\StorePatientRequest;
 use App\Modules\Patient\Presentation\Http\Requests\UpdatePatientRequest;
 use App\Modules\Patient\Presentation\Http\Requests\UpdatePatientStatusRequest;
 use App\Modules\Patient\Presentation\Http\Transformers\PatientAuditLogResponseTransformer;
 use App\Modules\Patient\Presentation\Http\Transformers\PatientResponseTransformer;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
+use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
+use App\Modules\ServiceRequest\Application\UseCases\SummarizeActiveWalkInsForPatientIdsUseCase;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -31,19 +32,30 @@ class PatientController extends Controller
         Request $request,
         ListPatientsUseCase $useCase,
         SummarizeActiveWalkInsForPatientIdsUseCase $walkInSummaries,
+        FeatureFlagResolverInterface $featureFlags,
     ): JsonResponse {
         $result = $useCase->execute($request->all());
 
         $user = $request->user();
         $summariesByPatientId = [];
 
-        if (
+        $walkInSummaryViaPatientRead = $featureFlags->isEnabled(
+            'clinical.walk_ins.routing_summary_on_patient_list',
+            true,
+        );
+
+        $canSummarizeWalkIns =
             $user !== null
             && (
                 $user->can('service.requests.read')
                 || $user->can('service.requests.create')
-            )
-        ) {
+                || (
+                    $user->can('patients.read')
+                    && $walkInSummaryViaPatientRead
+                )
+            );
+
+        if ($canSummarizeWalkIns) {
             /** @var list<array<string, mixed>> $rows */
             $rows = $result['data'];
             $ids = [];

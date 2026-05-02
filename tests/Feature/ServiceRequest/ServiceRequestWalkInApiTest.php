@@ -1,0 +1,205 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Http\Middleware\EnforceTenantIsolationWhenEnabled;
+use App\Http\Middleware\EnsureFacilitySubscriptionEntitlement;
+use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
+use App\Models\User;
+use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
+use App\Modules\Patient\Infrastructure\Models\PatientModel;
+use App\Modules\ServiceRequest\Infrastructure\Models\ServiceRequestAuditEventModel;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
+
+beforeEach(function (): void {
+    $this->withoutMiddleware(EnsureFacilitySubscriptionEntitlement::class);
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    $this->withoutMiddleware(EnforceTenantIsolationWhenEnabled::class);
+});
+
+afterEach(function (): void {
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+    config()->set('feature_flags.flags.platform.multi_facility_scoping.enabled', false);
+});
+
+function makeWalkInPatient(string $suffix = ''): PatientModel
+{
+    $stamp = Str::upper(Str::random(6));
+
+    return PatientModel::query()->create([
+        'patient_number' => 'PTSRA'.$stamp.$suffix,
+        'first_name' => 'Walk',
+        'middle_name' => null,
+        'last_name' => 'InPatient'.$suffix,
+        'gender' => 'female',
+        'date_of_birth' => '1998-06-01',
+        'phone' => '+255700'.substr($stamp.'000001', 0, 6),
+        'email' => null,
+        'national_id' => null,
+        'country_code' => 'TZ',
+        'region' => null,
+        'district' => null,
+        'address_line' => null,
+        'next_of_kin_name' => null,
+        'next_of_kin_phone' => null,
+        'status' => 'active',
+        'status_reason' => null,
+    ]);
+}
+
+function userWithWalkInRights(): User
+{
+    $user = User::factory()->create();
+
+    foreach (
+        [
+            'patients.read',
+            'patients.create',
+            'service.requests.create',
+            'service.requests.read',
+            'service.requests.update-status',
+        ] as $permission
+    ) {
+        $user->givePermissionTo($permission);
+    }
+
+    return $user;
+}
+
+it('records audit events when creating and updating walk-in ticket status', function (): void {
+    $user = userWithWalkInRights();
+    $patient = makeWalkInPatient('A');
+
+    $response = $this->actingAs($user)->postJson('/api/v1/service-requests', [
+        'patientId' => $patient->id,
+        'serviceType' => 'laboratory',
+        'priority' => 'routine',
+    ])->assertCreated();
+
+    $id = $response->json('data.id');
+    expect($id)->toBeString()
+        ->and(ServiceRequestAuditEventModel::query()->where('service_request_id', $id)->where('action', 'service_request.created')->exists())->toBeTrue();
+
+    $this->actingAs($user)->patchJson("/api/v1/service-requests/{$id}/status", [
+        'status' => 'in_progress',
+    ])->assertOk();
+
+    expect(
+        ServiceRequestAuditEventModel::query()
+            ->where('service_request_id', $id)
+            ->where('action', 'service_request.status_updated')
+            ->where('from_status', 'pending')
+            ->where('to_status', 'in_progress')
+            ->exists(),
+    )->toBeTrue();
+});
+
+it('stores optional appointment linkage when ids match patient', function (): void {
+    $user = userWithWalkInRights();
+    $patient = makeWalkInPatient('B');
+
+    $appointment = AppointmentModel::query()->create([
+        'id' => Str::uuid()->toString(),
+        'appointment_number' => 'APTWSR'.Str::upper(Str::random(4)),
+        'patient_id' => $patient->id,
+        'clinician_user_id' => null,
+        'department' => 'OPD',
+        'scheduled_at' => Carbon::now()->addHour(),
+        'duration_minutes' => 30,
+        'reason' => 'Labs only',
+        'notes' => null,
+        'status' => 'scheduled',
+        'status_reason' => null,
+    ]);
+
+    $this->actingAs($user)->postJson('/api/v1/service-requests', [
+        'patientId' => $patient->id,
+        'appointmentId' => $appointment->id,
+        'serviceType' => 'laboratory',
+    ])->assertCreated()
+        ->assertJsonPath('data.appointmentId', $appointment->id);
+});
+
+it('rejects appointment linkage that points at another patient', function (): void {
+    $user = userWithWalkInRights();
+    $patientA = makeWalkInPatient('C');
+    $patientB = makeWalkInPatient('D');
+
+    $appointmentOther = AppointmentModel::query()->create([
+        'id' => Str::uuid()->toString(),
+        'appointment_number' => 'APTWSRO'.Str::upper(Str::random(4)),
+        'patient_id' => $patientB->id,
+        'clinician_user_id' => null,
+        'department' => 'OPD',
+        'scheduled_at' => Carbon::now()->addHour(),
+        'duration_minutes' => 30,
+        'reason' => null,
+        'notes' => null,
+        'status' => 'scheduled',
+        'status_reason' => null,
+    ]);
+
+    $this->actingAs($user)->postJson('/api/v1/service-requests', [
+        'patientId' => $patientA->id,
+        'appointmentId' => $appointmentOther->id,
+        'serviceType' => 'laboratory',
+    ])->assertUnprocessable();
+});
+
+it('includes routing summary on patient index for plain patient readers when clinical flag grants it', function (): void {
+    $creator = userWithWalkInRights();
+    $patient = makeWalkInPatient('E');
+
+    $this->actingAs($creator)->postJson('/api/v1/service-requests', [
+        'patientId' => $patient->id,
+        'serviceType' => 'pharmacy',
+    ])->assertCreated();
+
+    $viewer = User::factory()->create();
+    $viewer->givePermissionTo('patients.read');
+
+    $listed = $this->actingAs($viewer)->getJson('/api/v1/patients?perPage=64')->assertOk();
+    $row = collect($listed->json('data'))->firstWhere('id', $patient->id);
+
+    expect($row)->toBeArray()
+        ->and($row['routingHandoffSummary'] ?? null)->not->toBeNull();
+});
+
+it('exposes immutable audit log list for authorized readers', function (): void {
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+    config()->set('feature_flags.flags.platform.multi_facility_scoping.enabled', false);
+
+    $user = userWithWalkInRights();
+    $patient = makeWalkInPatient('G');
+
+    $created = $this->actingAs($user)->postJson('/api/v1/service-requests', [
+        'patientId' => $patient->id,
+        'serviceType' => 'pharmacy',
+    ])->assertCreated()->json('data');
+
+    $user->givePermissionTo('service.requests.audit-logs.read');
+
+    $this->actingAs($user)->getJson('/api/v1/service-requests/'.$created['id'].'/audit-events')
+        ->assertOk()
+        ->assertJsonPath('data.0.action', 'service_request.created');
+});
+
+it('lets facility admin export csv', function (): void {
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+    config()->set('feature_flags.flags.platform.multi_facility_scoping.enabled', false);
+
+    $user = userWithWalkInRights();
+    $patient = makeWalkInPatient('F');
+
+    $this->actingAs($user)->postJson('/api/v1/service-requests', [
+        'patientId' => $patient->id,
+        'serviceType' => 'radiology',
+    ])->assertCreated();
+
+    $user->givePermissionTo('service.requests.export');
+
+    $this->actingAs($user)->get('/api/v1/service-requests/export/csv')
+        ->assertOk()
+        ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+});

@@ -1071,9 +1071,9 @@ const visitHandoffPrimaryDescription = computed(() => {
             return 'Matches common facility flow: registration identifies the patient and may send them to the lab, imaging suite, or pharmacy counter. Staff who are allowed to order then open the workspace below with this patient already attached and record the tests, imaging, or medications before collection or dispensing.';
         }
         if (canCreateServiceRequests.value) {
-            return 'Send this patient into the department walk-in queue so staff see them when they arrive. Choose Lab, Imaging, or Pharmacy below.';
+            return 'Same idea as check-in placing a visit on the nurse board—except this is Lab, Imaging, or Pharmacy\'s counter board. Tap the department once; staff there see this patient\'s queued ticket straight away.';
         }
-        return 'This login cannot enqueue walk-ins without order modules. Use the copy buttons below to share department workspace URLs with staff who enter orders, or ask an administrator to grant service.requests.create to registration or nursing.';
+        return 'This lane is unavailable for your login. Administrators assign service.requests.create to registration roles that should raise walk-in tickets—or staff use Laboratory / Imaging / Pharmacy modules when they capture orders.';
     }
 
     return 'Open chart-only when staff need context without starting a new visit.';
@@ -1085,6 +1085,35 @@ const visitHandoffHasAnyDirectServiceRight = computed(() =>
     || canCreateTheatreProcedures.value
     || canCreateBillingInvoices.value,
 );
+
+/** Walk-in handoff lane only applies when reception can queue or clinical staff can open order workspaces. */
+const visitHandoffCanUseDirectServicesRoute = computed(
+    () =>
+        canReadPatients.value
+        && (
+            canCreateServiceRequests.value
+            || visitHandoffHasAnyDirectServiceRight.value
+        ),
+);
+
+const visitHandoffDirectServiceSessionTickets = computed(() => {
+    const patient = visitHandoffPatient.value;
+    if (!patient) return [];
+    type Key = 'laboratory' | 'radiology' | 'pharmacy';
+    const defs: ReadonlyArray<{ key: Key; label: string }> = [
+        { key: 'laboratory', label: 'Lab' },
+        { key: 'radiology', label: 'Imaging' },
+        { key: 'pharmacy', label: 'Pharmacy' },
+    ];
+    const out: Array<{ key: Key; label: string; requestNumber: string }> = [];
+    for (const row of defs) {
+        const rec = directServiceSentMap.value[`${patient.id}:${row.key}`];
+        if (rec) {
+            out.push({ ...row, requestNumber: rec.requestNumber });
+        }
+    }
+    return out;
+});
 
 const visitHandoffEmergencyNeedsTriageStaff = computed(
     () => visitHandoffMode.value === 'emergency'
@@ -1795,8 +1824,13 @@ async function createDirectServiceRequest(serviceType: 'laboratory' | 'pharmacy'
     const patient = visitHandoffPatient.value;
     if (!patient || directServiceSending.value !== null) return;
 
+    const ticketKey = `${patient.id}:${serviceType}`;
+    if (directServiceSentMap.value[ticketKey]) return;
+
     directServiceSending.value = serviceType;
     const labelMap = { laboratory: 'Lab', pharmacy: 'Pharmacy', radiology: 'Imaging' } as const;
+
+    const appointment = visitHandoffActiveAppointment.value;
 
     try {
         type ServiceRequestResponse = { data: { requestNumber: string; serviceType: string } };
@@ -1805,6 +1839,7 @@ async function createDirectServiceRequest(serviceType: 'laboratory' | 'pharmacy'
                 patientId: patient.id,
                 serviceType,
                 priority: 'routine',
+                ...(appointment ? { appointmentId: appointment.id } : {}),
             },
         });
         directServiceSentMap.value = {
@@ -1815,7 +1850,7 @@ async function createDirectServiceRequest(serviceType: 'laboratory' | 'pharmacy'
             },
         };
         notifySuccess(
-            `${patient.firstName} ${patient.lastName} added to the ${labelMap[serviceType].toLowerCase()} walk-in queue (${response.data.requestNumber}). Staff will see them when they check in.`,
+            `Done — ${labelMap[serviceType]} walk-in ticket ${response.data.requestNumber} created for ${patient.firstName} ${patient.lastName}. This patient is listed on that department's queue.`,
         );
     } catch {
         notifyError(`Could not send patient to ${labelMap[serviceType].toLowerCase()} queue. Try again or notify the department directly.`);
@@ -1962,7 +1997,7 @@ function visitHandoffModeAvailable(mode: PatientVisitHandoffMode): boolean {
     }
 
     if (mode === 'direct-services') {
-        return canReadPatients.value;
+        return visitHandoffCanUseDirectServicesRoute.value;
     }
 
     if (mode === 'billing') {
@@ -1979,7 +2014,7 @@ function visitHandoffModeButtonClass(mode: PatientVisitHandoffMode): string {
         visitHandoffMode.value === mode
             ? 'border-primary/50 bg-primary/5'
             : 'bg-background hover:border-primary/30 hover:bg-muted/20',
-        visitHandoffModeAvailable(mode) ? '' : 'opacity-60',
+        visitHandoffModeAvailable(mode) ? '' : 'pointer-events-none cursor-not-allowed opacity-55',
     ].filter(Boolean).join(' ');
 }
 
@@ -5068,7 +5103,7 @@ onMounted(initialPageLoad);
                                                 <Badge variant="outline" class="text-xs">{{ visitHandoffModeBadge('direct-services') }}</Badge>
                                             </span>
                                             <span class="mt-1 block text-xs leading-5 text-muted-foreground">
-                                                When your site allows walk-ins: reception directs the patient; orders are usually entered by authorized clinical or service staff in each module—not reception.
+                                                Walk-in shortcut for lab, imaging, or pharmacy—no OPD/consult workflow. Reception clicks once to drop a queued ticket onto that counter’s board—same reassurance as arrival check-in gives triage—when your login can queue (<code class="rounded bg-muted/80 px-1 py-0.5 font-mono text-[0.68rem]">service.requests.create</code>) or can open departmental order screens. Greyed-out means neither applies; administrators adjust permissions first.
                                             </span>
                                         </span>
                                     </button>
@@ -5154,9 +5189,10 @@ onMounted(initialPageLoad);
                                             </AlertTitle>
                                             <AlertDescription class="space-y-3 text-sm text-violet-900/95 dark:text-violet-100/90">
                                                 <p>
-                                                    Select the service this patient needs.
-                                                    <span class="font-medium">They will appear immediately in that department's walk-in queue</span>
-                                                    — staff will see the patient when they arrive at the counter.
+                                                    Pick where you are routing the patient. Each tap raises
+                                                    <span class="font-medium">one walk-in ticket in that department's queue</span>
+                                                    (shown here with its number). Reception still escorts—as with OPD arrival, nothing is
+                                                    magically messaged elsewhere; counters see your ticket inside this system.
                                                 </p>
                                                 <div class="flex flex-wrap gap-2">
                                                     <Button
@@ -5169,7 +5205,10 @@ onMounted(initialPageLoad);
                                                         type="button"
                                                         variant="outline"
                                                         size="sm"
-                                                        :disabled="directServiceSending !== null"
+                                                        :disabled="
+                                                            directServiceSending !== null
+                                                            || !!directServiceSentMap[`${visitHandoffPatient?.id}:${service.key}`]
+                                                        "
                                                         :class="[
                                                             'border-violet-300 bg-white/90 text-violet-950 hover:bg-white dark:border-violet-700 dark:bg-violet-900/60 dark:text-violet-50 dark:hover:bg-violet-900',
                                                             directServiceSentMap[`${visitHandoffPatient?.id}:${service.key}`]
@@ -5188,82 +5227,31 @@ onMounted(initialPageLoad);
                                                             name="loader-circle"
                                                             class="size-3.5 animate-spin"
                                                         />
-                                                        {{ directServiceSentMap[`${visitHandoffPatient?.id}:${service.key}`] ? `Sent to ${service.label}` : `Send to ${service.label}` }}
+                                                        {{ directServiceSentMap[`${visitHandoffPatient?.id}:${service.key}`] ? `${service.label} ticket created` : `Send to ${service.label}` }}
                                                     </Button>
                                                 </div>
-                                            </AlertDescription>
-                                        </Alert>
-
-                                        <!-- No queue permission: open dept workspace locally (nothing is routed to staff in-app) -->
-                                        <Alert
-                                            v-else-if="!visitHandoffHasAnyDirectServiceRight && !canCreateServiceRequests && visitHandoffPatient"
-                                            class="border-slate-200 bg-slate-50/90 text-slate-950 dark:border-slate-700 dark:bg-slate-950/35 dark:text-slate-50"
-                                        >
-                                            <AlertTitle class="flex items-center gap-2 text-base text-slate-950 dark:text-slate-50">
-                                                <AppIcon name="arrow-up-right" class="size-4 shrink-0 opacity-80" />
-                                                No automated hand-off yet
-                                            </AlertTitle>
-                                            <AlertDescription class="space-y-3 text-sm text-slate-800/95 dark:text-slate-100/90">
-                                                <p>
-                                                    Without
-                                                    <code class="rounded bg-muted px-1 py-0.5 text-xs">service.requests.create</code>,
-                                                    departments are not notified in the app. The clinic still directs the patient
-                                                    physically; reception can use the buttons below to
-                                                    <strong class="font-medium">open Lab / Imaging / Pharmacy in a new tab</strong>
-                                                    with this patient’s context—for example on their own screen while escorting,
-                                                    or on the department workstation if someone is logged in there.
-                                                    Ask an administrator to grant queue permission when you want queued walk-ins
-                                                    visible to departments.
-                                                </p>
-                                                <div class="flex flex-wrap gap-2">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        as-child
-                                                        class="gap-1.5"
-                                                    >
-                                                        <Link
-                                                            :href="patientContextHref('/laboratory-orders', visitHandoffPatient, { includeTabNew: true })"
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            class="inline-flex items-center gap-1.5"
+                                                <div
+                                                    v-if="visitHandoffDirectServiceSessionTickets.length"
+                                                    class="rounded-md border border-violet-200/90 bg-white/95 px-3 py-2.5 dark:border-violet-800/70 dark:bg-violet-950/50"
+                                                    role="status"
+                                                    aria-live="polite"
+                                                >
+                                                    <p class="text-xs font-semibold uppercase tracking-wide text-violet-950 dark:text-violet-50">
+                                                        What happened (this sheet)
+                                                    </p>
+                                                    <ul class="mt-2 space-y-1.5 text-sm text-violet-950 dark:text-violet-50">
+                                                        <li
+                                                            v-for="row in visitHandoffDirectServiceSessionTickets"
+                                                            :key="`${row.key}-${row.requestNumber}`"
+                                                            class="flex flex-wrap gap-x-2 gap-y-0.5"
                                                         >
-                                                            <AppIcon name="flask-conical" class="size-3.5" />
-                                                            Open lab (new tab)
-                                                        </Link>
-                                                    </Button>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        as-child
-                                                        class="gap-1.5"
-                                                    >
-                                                        <Link
-                                                            :href="patientContextHref('/radiology-orders', visitHandoffPatient, { includeTabNew: true })"
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            class="inline-flex items-center gap-1.5"
-                                                        >
-                                                            <AppIcon name="activity" class="size-3.5" />
-                                                            Open imaging (new tab)
-                                                        </Link>
-                                                    </Button>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        as-child
-                                                        class="gap-1.5"
-                                                    >
-                                                        <Link
-                                                            :href="patientContextHref('/pharmacy-orders', visitHandoffPatient, { includeTabNew: true })"
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            class="inline-flex items-center gap-1.5"
-                                                        >
-                                                            <AppIcon name="pill" class="size-3.5" />
-                                                            Open pharmacy (new tab)
-                                                        </Link>
-                                                    </Button>
+                                                            <span class="font-medium">{{ row.label }}</span>
+                                                            <span class="tabular-nums text-violet-800 dark:text-violet-200">{{ row.requestNumber }}</span>
+                                                            <span class="text-xs text-violet-800/95 dark:text-violet-200/90">
+                                                                listed on queue for this patient
+                                                            </span>
+                                                        </li>
+                                                    </ul>
                                                 </div>
                                             </AlertDescription>
                                         </Alert>

@@ -19,6 +19,9 @@ class StoreServiceRequestRequest extends FormRequest
     {
         return [
             'patientId' => ['required', 'uuid'],
+            'appointmentId' => ['nullable', 'uuid', Rule::exists('appointments', 'id')->where(
+                fn ($query) => $query->where('patient_id', (string) $this->input('patientId')),
+            )],
             'serviceType' => ['required', Rule::in(['laboratory', 'pharmacy', 'radiology'])],
             'priority' => ['nullable', Rule::in(['routine', 'urgent'])],
             'notes' => ['nullable', 'string', 'max:1000'],

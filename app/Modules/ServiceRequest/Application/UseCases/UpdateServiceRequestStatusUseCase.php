@@ -12,6 +12,7 @@ class UpdateServiceRequestStatusUseCase
     public function __construct(
         private readonly ServiceRequestRepositoryInterface $serviceRequestRepository,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
+        private readonly AppendServiceRequestAuditEventUseCase $appendServiceRequestAuditEvent,
     ) {}
 
     public function execute(string $id, string $newStatus, ?int $actorId = null): ?array
@@ -34,6 +35,8 @@ class UpdateServiceRequestStatusUseCase
             );
         }
 
+        $previousStatus = (string) ($existing['status'] ?? 'unknown');
+
         $payload = ['status' => $newStatus];
 
         if ($newStatus === ServiceRequestStatus::IN_PROGRESS->value) {
@@ -45,6 +48,18 @@ class UpdateServiceRequestStatusUseCase
             $payload['completed_at'] = now();
         }
 
-        return $this->serviceRequestRepository->update($id, $payload);
+        $updated = $this->serviceRequestRepository->update($id, $payload);
+        if ($updated !== null) {
+            $this->appendServiceRequestAuditEvent->execute(
+                $id,
+                'service_request.status_updated',
+                $actorId,
+                $previousStatus,
+                $newStatus,
+                null,
+            );
+        }
+
+        return $updated;
     }
 }

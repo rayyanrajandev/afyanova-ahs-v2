@@ -1,7 +1,7 @@
 <?php
 
-use App\Models\User;
 use App\Models\Permission;
+use App\Models\User;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
 use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
@@ -11,9 +11,9 @@ use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Modules\Platform\Infrastructure\Models\AuditExportJobModel;
 use App\Modules\Platform\Infrastructure\Models\AuditExportRetryResumeTelemetryEventModel;
-use App\Modules\Platform\Infrastructure\Models\FacilityModel;
-use App\Modules\Platform\Infrastructure\Models\CrossTenantAdminAuditLogModel;
 use App\Modules\Platform\Infrastructure\Models\CrossTenantAdminAuditLogHoldModel;
+use App\Modules\Platform\Infrastructure\Models\CrossTenantAdminAuditLogModel;
+use App\Modules\Platform\Infrastructure\Models\FacilityModel;
 use App\Modules\Platform\Infrastructure\Models\RoleModel;
 use App\Modules\Platform\Infrastructure\Models\TenantModel;
 use App\Support\CatalogGovernance\CatalogPlacementAuditor;
@@ -218,6 +218,11 @@ if (! function_exists('defaultHospitalRolePermissionProfiles')) {
                 'billing.invoices.read',
                 'billing.payments.view-history',
                 'billing.financial-controls.read',
+                'service.requests.create',
+                'service.requests.read',
+                'service.requests.update-status',
+                'service.requests.export',
+                'service.requests.audit-logs.read',
                 'pos.registers.read',
                 'pos.sessions.read',
                 'pos.sales.read',
@@ -300,6 +305,8 @@ if (! function_exists('defaultHospitalRolePermissionProfiles')) {
                 'appointments.create',
                 'appointments.update',
                 'appointments.update-status',
+                'service.requests.create',
+                'service.requests.read',
                 'staff.clinical-directory.read',
             ],
             'HOSPITAL.MEDICAL.RECORDS.OFFICER' => [
@@ -486,6 +493,8 @@ if (! function_exists('defaultHospitalRolePermissionProfiles')) {
             ],
             'HOSPITAL.NURSING.USER' => [
                 'patients.read',
+                'service.requests.create',
+                'service.requests.read',
                 'admissions.read',
                 'medical.records.read',
                 'inpatient.ward.read',
@@ -524,6 +533,8 @@ if (! function_exists('defaultHospitalRolePermissionProfiles')) {
             'HOSPITAL.LABORATORY.USER' => [
                 'laboratory.orders.read',
                 'laboratory.orders.update-status',
+                'service.requests.read',
+                'service.requests.update-status',
                 'laboratory.orders.verify-result',
                 'laboratory-orders.view-audit-logs',
                 'inventory.procurement.read',
@@ -538,6 +549,8 @@ if (! function_exists('defaultHospitalRolePermissionProfiles')) {
             ],
             'HOSPITAL.PHARMACY.USER' => [
                 'patients.read',
+                'service.requests.read',
+                'service.requests.update-status',
                 'pharmacy.orders.read',
                 'pharmacy.orders.update-status',
                 'pharmacy.orders.verify-dispense',
@@ -556,6 +569,8 @@ if (! function_exists('defaultHospitalRolePermissionProfiles')) {
             ],
             'HOSPITAL.RADIOLOGY.USER' => [
                 'radiology.orders.read',
+                'service.requests.read',
+                'service.requests.update-status',
                 'radiology.orders.update',
                 'radiology.orders.update-status',
                 'radiology.orders.view-audit-logs',
@@ -653,6 +668,11 @@ Artisan::command('app:bootstrap-super-admin {--email=admin@local.test} {--name=}
         'theatre.procedures.view-audit-logs',
         'theatre.procedures.manage-resources',
         'theatre.procedures.view-resource-audit-logs',
+        'service.requests.create',
+        'service.requests.read',
+        'service.requests.update-status',
+        'service.requests.export',
+        'service.requests.audit-logs.read',
         'inpatient.ward.read',
         'inpatient.ward.create-task',
         'inpatient.ward.update-task-status',
@@ -2456,7 +2476,7 @@ Artisan::command('platform:cross-tenant-audit-logs:retention-report {--days=400}
         $purgeCandidatesQuery = (clone $candidateRowsBeforeHoldExclusionQuery);
         $purgeCandidatesQuery->whereNotExists(function ($holdQuery): void {
             $holdQuery->selectRaw('1')
-                ->from((new CrossTenantAdminAuditLogHoldModel())->getTable().' as holds')
+                ->from((new CrossTenantAdminAuditLogHoldModel)->getTable().' as holds')
                 ->where('holds.is_active', true)
                 ->whereNull('holds.released_at')
                 ->where(function ($tenantScope): void {
@@ -2572,7 +2592,7 @@ Artisan::command('platform:cross-tenant-audit-logs:retention-purge {--days=400} 
         $purgeCandidatesQuery = (clone $candidateRowsBeforeHoldExclusionQuery);
         $purgeCandidatesQuery->whereNotExists(function ($holdQuery): void {
             $holdQuery->selectRaw('1')
-                ->from((new CrossTenantAdminAuditLogHoldModel())->getTable().' as holds')
+                ->from((new CrossTenantAdminAuditLogHoldModel)->getTable().' as holds')
                 ->where('holds.is_active', true)
                 ->whereNull('holds.released_at')
                 ->where(function ($tenantScope): void {
@@ -2675,7 +2695,7 @@ Artisan::command('platform:cross-tenant-audit-logs:retention-purge {--days=400} 
 
         $remainingCandidateRowsQuery->whereNotExists(function ($holdQuery): void {
             $holdQuery->selectRaw('1')
-                ->from((new CrossTenantAdminAuditLogHoldModel())->getTable().' as holds')
+                ->from((new CrossTenantAdminAuditLogHoldModel)->getTable().' as holds')
                 ->where('holds.is_active', true)
                 ->whereNull('holds.released_at')
                 ->where(function ($tenantScope): void {
@@ -2952,7 +2972,7 @@ Artisan::command('platform:cross-tenant-audit-logs:retention-purge-scheduled {--
         return 1;
     }
 
-    $purgeOutputBuffer = new BufferedOutput();
+    $purgeOutputBuffer = new BufferedOutput;
 
     $purgeExitCode = Artisan::call('platform:cross-tenant-audit-logs:retention-purge', [
         '--days' => $days,
@@ -3626,12 +3646,3 @@ $auditExportRetryResumeTelemetryCleanupScheduleEnvironments = array_values(array
 if ($auditExportRetryResumeTelemetryCleanupScheduleEnvironments !== []) {
     $auditExportRetryResumeTelemetryCleanupScheduleEvent->environments($auditExportRetryResumeTelemetryCleanupScheduleEnvironments);
 }
-
-
-
-
-
-
-
-
-

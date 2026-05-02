@@ -18,11 +18,17 @@ class CreateServiceRequestUseCase
         private readonly PatientLookupServiceInterface $patientLookupService,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
+        private readonly AppendServiceRequestAuditEventUseCase $appendServiceRequestAuditEvent,
     ) {}
 
     public function execute(array $payload, ?int $actorId = null): array
     {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
+
+        if (isset($payload['appointment_id'])) {
+            $aid = trim((string) $payload['appointment_id']);
+            $payload['appointment_id'] = $aid !== '' ? $aid : null;
+        }
 
         $patientId = (string) $payload['patient_id'];
         if (! $this->patientLookupService->patientExists($patientId)) {
@@ -42,7 +48,26 @@ class CreateServiceRequestUseCase
             $payload['priority'] = 'routine';
         }
 
-        return $this->serviceRequestRepository->create($payload);
+        $created = $this->serviceRequestRepository->create($payload);
+        $id = is_string($created['id'] ?? null) ? (string) $created['id'] : '';
+
+        if ($id !== '') {
+            $this->appendServiceRequestAuditEvent->execute(
+                $id,
+                'service_request.created',
+                $actorId,
+                null,
+                ServiceRequestStatus::PENDING->value,
+                [
+                    'patientId' => $patientId,
+                    'appointmentId' => $created['appointment_id'] ?? null,
+                    'requestNumber' => $created['request_number'] ?? null,
+                    'serviceType' => $created['service_type'] ?? null,
+                ],
+            );
+        }
+
+        return $created;
     }
 
     private function generateRequestNumber(): string

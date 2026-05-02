@@ -23,6 +23,7 @@ class ServiceRequestModel extends Model
         'tenant_id',
         'facility_id',
         'patient_id',
+        'appointment_id',
         'requested_by_user_id',
         'service_type',
         'priority',

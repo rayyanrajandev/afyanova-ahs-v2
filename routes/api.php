@@ -4,48 +4,48 @@ use App\Http\Middleware\EnforceTenantIsolationWhenEnabled;
 use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
 use App\Http\Middleware\ResolvePlatformScopeContext;
 use App\Modules\Admission\Presentation\Http\Controllers\AdmissionController;
-use App\Modules\Authentication\Presentation\Http\Controllers\AuthenticatedUserController;
 use App\Modules\Appointment\Presentation\Http\Controllers\AppointmentController;
+use App\Modules\Authentication\Presentation\Http\Controllers\AuthenticatedUserController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingCorporateBillingController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingInvoiceController;
-use App\Modules\Billing\Presentation\Http\Controllers\BillingPaymentPlanController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingPayerContractController;
+use App\Modules\Billing\Presentation\Http\Controllers\BillingPaymentPlanController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingServiceCatalogController;
 use App\Modules\ClaimsInsurance\Presentation\Http\Controllers\ClaimsInsuranceCaseController;
 use App\Modules\Department\Presentation\Http\Controllers\DepartmentController;
 use App\Modules\EmergencyTriage\Presentation\Http\Controllers\EmergencyTriageCaseController;
-use App\Modules\ServiceRequest\Presentation\Http\Controllers\ServiceRequestController;
-use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryProcurementController;
-use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryExtendedController;
+use App\Modules\InpatientWard\Presentation\Http\Controllers\InpatientWardController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryAnalyticsController;
+use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryExtendedController;
+use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryProcurementController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventorySupplierController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryWarehouseController;
-use App\Modules\InpatientWard\Presentation\Http\Controllers\InpatientWardController;
 use App\Modules\Laboratory\Presentation\Http\Controllers\LaboratoryOrderController;
 use App\Modules\MedicalRecord\Presentation\Http\Controllers\MedicalRecordController;
-use App\Modules\Pharmacy\Presentation\Http\Controllers\PharmacyOrderController;
-use App\Modules\Radiology\Presentation\Http\Controllers\RadiologyOrderController;
-use App\Modules\Platform\Presentation\Http\Controllers\PlatformConfigurationController;
-use App\Modules\Platform\Presentation\Http\Controllers\PlatformBrandingController;
-use App\Modules\Platform\Presentation\Http\Controllers\PlatformAdminController;
-use App\Modules\Platform\Presentation\Http\Controllers\PlatformRbacController;
-use App\Modules\Platform\Presentation\Http\Controllers\PlatformUserApprovalCaseController;
-use App\Modules\Platform\Presentation\Http\Controllers\PlatformUserAdminController;
-use App\Modules\Platform\Presentation\Http\Controllers\FacilityConfigurationController;
-use App\Modules\Platform\Presentation\Http\Controllers\PlatformClinicalCatalogController;
-use App\Modules\Platform\Presentation\Http\Controllers\FacilityResourceRegistryController;
-use App\Modules\Platform\Presentation\Http\Controllers\MultiFacilityRolloutController;
-use App\Modules\Platform\Presentation\Http\Controllers\PlatformSubscriptionPlanController;
 use App\Modules\Patient\Presentation\Http\Controllers\PatientController;
 use App\Modules\Patient\Presentation\Http\Controllers\PatientMedicationSafetyController;
+use App\Modules\Pharmacy\Presentation\Http\Controllers\PharmacyOrderController;
+use App\Modules\Platform\Presentation\Http\Controllers\FacilityConfigurationController;
+use App\Modules\Platform\Presentation\Http\Controllers\FacilityResourceRegistryController;
+use App\Modules\Platform\Presentation\Http\Controllers\MultiFacilityRolloutController;
+use App\Modules\Platform\Presentation\Http\Controllers\PlatformAdminController;
+use App\Modules\Platform\Presentation\Http\Controllers\PlatformBrandingController;
+use App\Modules\Platform\Presentation\Http\Controllers\PlatformClinicalCatalogController;
+use App\Modules\Platform\Presentation\Http\Controllers\PlatformConfigurationController;
+use App\Modules\Platform\Presentation\Http\Controllers\PlatformRbacController;
+use App\Modules\Platform\Presentation\Http\Controllers\PlatformSubscriptionPlanController;
+use App\Modules\Platform\Presentation\Http\Controllers\PlatformUserAdminController;
+use App\Modules\Platform\Presentation\Http\Controllers\PlatformUserApprovalCaseController;
 use App\Modules\Pos\Presentation\Http\Controllers\PosController;
-use App\Modules\Staff\Presentation\Http\Controllers\StaffProfileController;
-use App\Modules\Staff\Presentation\Http\Controllers\StaffDocumentController;
+use App\Modules\Radiology\Presentation\Http\Controllers\RadiologyOrderController;
+use App\Modules\ServiceRequest\Presentation\Http\Controllers\ServiceRequestController;
 use App\Modules\Staff\Presentation\Http\Controllers\ClinicalPrivilegeCatalogController;
 use App\Modules\Staff\Presentation\Http\Controllers\ClinicalSpecialtyController;
 use App\Modules\Staff\Presentation\Http\Controllers\StaffCredentialingController;
-use App\Modules\Staff\Presentation\Http\Controllers\StaffProfileSpecialtyController;
+use App\Modules\Staff\Presentation\Http\Controllers\StaffDocumentController;
 use App\Modules\Staff\Presentation\Http\Controllers\StaffPrivilegeGrantController;
+use App\Modules\Staff\Presentation\Http\Controllers\StaffProfileController;
+use App\Modules\Staff\Presentation\Http\Controllers\StaffProfileSpecialtyController;
 use App\Modules\TheatreProcedure\Presentation\Http\Controllers\TheatreProcedureController;
 use Illuminate\Support\Facades\Route;
 
@@ -1145,9 +1145,15 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('service-requests/status-counts', [ServiceRequestController::class, 'statusCounts'])
         ->middleware('can:service.requests.read')
         ->name('service-requests.status-counts');
+    Route::get('service-requests/export/csv', [ServiceRequestController::class, 'exportCsv'])
+        ->middleware('can:service.requests.export')
+        ->name('service-requests.export.csv');
     Route::post('service-requests', [ServiceRequestController::class, 'store'])
         ->middleware('can:service.requests.create')
         ->name('service-requests.store');
+    Route::get('service-requests/{id}/audit-events', [ServiceRequestController::class, 'auditEvents'])
+        ->middleware('can:service.requests.audit-logs.read')
+        ->name('service-requests.audit-events.index');
     Route::get('service-requests/{id}', [ServiceRequestController::class, 'show'])
         ->middleware('can:service.requests.read')
         ->name('service-requests.show');
@@ -1743,7 +1749,3 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:departments.view-audit-logs')
         ->name('departments.audit-logs');
 });
-
-
-
-

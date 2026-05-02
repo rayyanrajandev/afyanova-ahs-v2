@@ -7,15 +7,18 @@ use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationE
 use App\Modules\ServiceRequest\Application\Exceptions\PatientNotEligibleForServiceRequestException;
 use App\Modules\ServiceRequest\Application\Exceptions\ServiceRequestStatusTransitionException;
 use App\Modules\ServiceRequest\Application\UseCases\CreateServiceRequestUseCase;
+use App\Modules\ServiceRequest\Application\UseCases\ExportServiceRequestsCsvUseCase;
 use App\Modules\ServiceRequest\Application\UseCases\GetServiceRequestUseCase;
-use App\Modules\ServiceRequest\Application\UseCases\ListServiceRequestsUseCase;
+use App\Modules\ServiceRequest\Application\UseCases\ListServiceRequestAuditEventsUseCase;
 use App\Modules\ServiceRequest\Application\UseCases\ListServiceRequestStatusCountsUseCase;
+use App\Modules\ServiceRequest\Application\UseCases\ListServiceRequestsUseCase;
 use App\Modules\ServiceRequest\Application\UseCases\UpdateServiceRequestStatusUseCase;
 use App\Modules\ServiceRequest\Presentation\Http\Requests\StoreServiceRequestRequest;
 use App\Modules\ServiceRequest\Presentation\Http\Requests\UpdateServiceRequestStatusRequest;
 use App\Modules\ServiceRequest\Presentation\Http\Transformers\ServiceRequestResponseTransformer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ServiceRequestController extends Controller
 {
@@ -26,6 +29,39 @@ class ServiceRequestController extends Controller
         return response()->json([
             'data' => array_map([ServiceRequestResponseTransformer::class, 'transform'], $result['data']),
             'meta' => $result['meta'],
+        ]);
+    }
+
+    public function exportCsv(Request $request, ExportServiceRequestsCsvUseCase $useCase): StreamedResponse
+    {
+        return $useCase->execute($request->all());
+    }
+
+    public function auditEvents(
+        string $id,
+        GetServiceRequestUseCase $getServiceRequest,
+        ListServiceRequestAuditEventsUseCase $useCase,
+    ): JsonResponse {
+        abort_if($getServiceRequest->execute($id) === null, 404, 'Service request not found.');
+
+        $events = $useCase->execute($id);
+
+        return response()->json([
+            'data' => array_map(static function (array $row): array {
+                return [
+                    'id' => $row['id'] ?? null,
+                    'action' => $row['action'] ?? null,
+                    'actorUserId' => $row['actor_user_id'] ?? null,
+                    'fromStatus' => $row['from_status'] ?? null,
+                    'toStatus' => $row['to_status'] ?? null,
+                    'metadata' => $row['metadata'] ?? null,
+                    'createdAt' => isset($row['created_at'])
+                        ? (is_string($row['created_at'])
+                            ? $row['created_at']
+                            : optional($row['created_at'])->toISOString())
+                        : null,
+                ];
+            }, $events),
         ]);
     }
 
@@ -91,13 +127,14 @@ class ServiceRequestController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $validated
+     * @param  array<string, mixed>  $validated
      * @return array<string, mixed>
      */
     private function toPersistencePayload(array $validated): array
     {
         $fieldMap = [
             'patientId' => 'patient_id',
+            'appointmentId' => 'appointment_id',
             'serviceType' => 'service_type',
             'priority' => 'priority',
             'notes' => 'notes',

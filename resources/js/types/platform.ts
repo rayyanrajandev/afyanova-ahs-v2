@@ -46,6 +46,8 @@ export type SharedPlatformScope = {
 export type SharedPlatformFeatureFlags = {
     multiTenantIsolation: boolean;
     multiFacilityScoping: boolean;
+    /** When false, patient list walk-in routing summaries require service.requests read/create. */
+    walkInsRoutingSummaryOnPatientList?: boolean;
 };
 
 export type SharedPlatformMail = {
