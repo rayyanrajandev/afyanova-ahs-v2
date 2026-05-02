@@ -72,19 +72,29 @@ it('lists active department options for walk-in readers', function (): void {
     $user = userWithWalkInRights();
 
     $dept = DepartmentModel::query()->create([
-        'code' => 'WID',
-        'name' => 'Walk-in Department',
-        'service_type' => 'Clinical',
+        'code' => 'PHARM',
+        'name' => 'Main Pharmacy',
+        'service_type' => 'Pharmacy & Dispensing',
         'status' => 'active',
     ]);
 
-    $response = $this->actingAs($user)->getJson('/api/v1/service-requests/department-options')->assertOk();
+    DepartmentModel::query()->create([
+        'code' => 'REC',
+        'name' => 'Medical Records',
+        'service_type' => 'Medical Records',
+        'status' => 'active',
+    ]);
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/service-requests/department-options?serviceType=pharmacy')
+        ->assertOk();
 
     $rows = $response->json('data');
     expect($rows)->toBeArray();
     $match = collect($rows)->firstWhere('value', $dept->id);
     expect($match)->not->toBeNull()
-        ->and($match['label'] ?? '')->toContain('Walk-in Department');
+        ->and($match['label'] ?? '')->toContain('Main Pharmacy')
+        ->and(collect($rows)->pluck('label')->implode(' '))->not->toContain('Medical Records');
 });
 
 it('stores optional department id when creating a walk-in ticket', function (): void {

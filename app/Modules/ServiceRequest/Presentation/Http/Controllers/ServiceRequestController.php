@@ -76,10 +76,14 @@ class ServiceRequestController extends Controller
         ]);
     }
 
-    public function departmentOptions(ListWalkInDepartmentOptionsUseCase $useCase): JsonResponse
+    public function departmentOptions(Request $request, ListWalkInDepartmentOptionsUseCase $useCase): JsonResponse
     {
         return response()->json([
-            'data' => $useCase->execute(),
+            'data' => $useCase->execute(
+                serviceType: $request->query('serviceType') !== null
+                    ? (string) $request->query('serviceType')
+                    : null,
+            ),
         ]);
     }
 

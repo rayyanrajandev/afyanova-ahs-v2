@@ -315,6 +315,7 @@ const createForm = reactive({
 });
 
 const departmentOptions = ref<DepartmentOptionRow[]>([]);
+const createDepartmentOptions = ref<DepartmentOptionRow[]>([]);
 const departmentOptionsLoading = ref(false);
 
 function resetCreateForm(): void {
@@ -323,6 +324,7 @@ function resetCreateForm(): void {
     createForm.serviceType = '';
     createForm.priority = 'routine';
     createForm.notes = '';
+    createDepartmentOptions.value = [];
     createErrors.value = {};
 }
 
@@ -341,6 +343,33 @@ async function loadDepartmentOptions(): Promise<void> {
         departmentOptions.value = result.data ?? [];
     } catch {
         departmentOptions.value = [];
+    } finally {
+        departmentOptionsLoading.value = false;
+    }
+}
+
+async function loadCreateDepartmentOptions(): Promise<void> {
+    createForm.departmentId = '';
+    createErrors.value.departmentId = '';
+    if (!createForm.serviceType) {
+        createDepartmentOptions.value = [];
+        return;
+    }
+
+    departmentOptionsLoading.value = true;
+    try {
+        const result = await apiGet<{ data: DepartmentOptionRow[] }>(
+            '/service-requests/department-options',
+            { serviceType: createForm.serviceType },
+            { entitlementContext: 'Walk-in queue' },
+        );
+        createDepartmentOptions.value = result.data ?? [];
+        departmentOptions.value = [
+            ...departmentOptions.value,
+            ...createDepartmentOptions.value.filter((option) => !departmentOptions.value.some((existing) => existing.value === option.value)),
+        ];
+    } catch {
+        createDepartmentOptions.value = [];
     } finally {
         departmentOptionsLoading.value = false;
     }
@@ -555,6 +584,10 @@ async function loadAuditForDetails(): Promise<void> {
 
 watch(detailsTab, (tab) => {
     if (tab === 'audit') void loadAuditForDetails();
+});
+
+watch(() => createForm.serviceType, () => {
+    if (createOpen.value) void loadCreateDepartmentOptions();
 });
 
 onMounted(() => {
@@ -1186,33 +1219,6 @@ onMounted(() => {
                         <p v-if="createErrors.patientId" class="text-xs text-destructive">{{ createErrors.patientId }}</p>
                     </div>
 
-                    <!-- Department (patient destination) -->
-                    <div class="flex w-full flex-col gap-1.5">
-                        <Label>Department patient is sent to <span class="text-xs text-muted-foreground">(optional)</span></Label>
-                        <Select
-                            :model-value="createForm.departmentId || undefined"
-                            :disabled="departmentOptionsLoading"
-                            @update:model-value="createForm.departmentId = $event ? String($event) : ''"
-                        >
-                            <SelectTrigger
-                                class="w-full"
-                                :class="createErrors.departmentId ? 'border-destructive' : ''"
-                            >
-                                <SelectValue placeholder="Select department…" />
-                            </SelectTrigger>
-                            <SelectContent class="z-[80]">
-                                <SelectItem
-                                    v-for="opt in departmentOptions"
-                                    :key="opt.value"
-                                    :value="opt.value"
-                                >
-                                    {{ opt.label }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <p v-if="createErrors.departmentId" class="text-xs text-destructive">{{ createErrors.departmentId }}</p>
-                    </div>
-
                     <!-- Service desk -->
                     <div class="flex w-full flex-col gap-1.5">
                         <Label>Service desk <span class="text-destructive">*</span></Label>
@@ -1233,6 +1239,36 @@ onMounted(() => {
                             </SelectContent>
                         </Select>
                         <p v-if="createErrors.serviceType" class="text-xs text-destructive">{{ createErrors.serviceType }}</p>
+                    </div>
+
+                    <!-- Department (patient destination) -->
+                    <div class="flex w-full flex-col gap-1.5">
+                        <Label>Department patient is sent to <span class="text-xs text-muted-foreground">(optional)</span></Label>
+                        <Select
+                            :model-value="createForm.departmentId || undefined"
+                            :disabled="!createForm.serviceType || departmentOptionsLoading"
+                            @update:model-value="createForm.departmentId = $event ? String($event) : ''"
+                        >
+                            <SelectTrigger
+                                class="w-full"
+                                :class="createErrors.departmentId ? 'border-destructive' : ''"
+                            >
+                                <SelectValue :placeholder="createForm.serviceType ? 'Select matching department…' : 'Select service desk first…'" />
+                            </SelectTrigger>
+                            <SelectContent class="z-[80]">
+                                <SelectItem
+                                    v-for="opt in createDepartmentOptions"
+                                    :key="opt.value"
+                                    :value="opt.value"
+                                >
+                                    {{ opt.label }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <p v-if="createForm.serviceType && !departmentOptionsLoading && createDepartmentOptions.length === 0" class="text-xs text-muted-foreground">
+                            No matching departments found for this desk.
+                        </p>
+                        <p v-if="createErrors.departmentId" class="text-xs text-destructive">{{ createErrors.departmentId }}</p>
                     </div>
 
                     <!-- Priority -->
