@@ -13,7 +13,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useDashboardWorkflowPresetStorage } from '@/composables/useDashboardWorkflowPreset';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
-import AppLayout from '@/layouts/AppLayout.vue';
 import {
     DASHBOARD_ADMIN_ROLE_CODES,
     DASHBOARD_PRESETS,
@@ -22,6 +21,8 @@ import {
     presetMatchesRole,
     type DashboardPresetKey,
 } from '@/config/dashboardPresets';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { notifyFacilityEntitlementDenied } from '@/lib/facilityEntitlementNotify';
 import type { AppIconName } from '@/lib/icons';
 import { formatEnumLabel } from '@/lib/labels';
 import type { BreadcrumbItem } from '@/types';
@@ -321,6 +322,9 @@ async function apiGet<T>(path: string, query?: Record<string, string | number | 
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
+        if (response.status === 403) {
+            notifyFacilityEntitlementDenied(payload, path);
+        }
         throw new Error(typeof payload?.message === 'string' ? payload.message : `${response.status} ${response.statusText}`);
     }
 

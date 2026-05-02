@@ -1,5 +1,5 @@
-﻿import { computed } from 'vue';
-import { usePage } from '@inertiajs/vue3';
+﻿import { usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 import type { SharedPlatformContext, SharedPlatformScope } from '@/types';
 
 export type PermissionState = 'unknown' | 'allowed' | 'denied';
@@ -183,6 +183,13 @@ export function usePlatformAccess() {
         return facilityEntitlementNames.value.includes(normalized);
     }
 
+    /** True when every key is included in the active facility plan (AND). */
+    function hasAllFacilityEntitlements(keys: readonly string[]): boolean {
+        if (keys.length === 0) return true;
+        const set = new Set(facilityEntitlementNames.value);
+        return keys.every((k) => set.has(String(k).trim().toLowerCase()));
+    }
+
     return {
         permissionNames,
         sessionRoleCodes,
@@ -192,6 +199,7 @@ export function usePlatformAccess() {
         permissionState,
         hasPermission,
         hasFacilityEntitlement,
+        hasAllFacilityEntitlements,
         scope,
         subscriptionAccess,
         facilityEntitlementNames,

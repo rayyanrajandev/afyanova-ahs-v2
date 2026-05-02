@@ -62,8 +62,13 @@ function dateLabel(value: string | null | undefined): string {
                             <AppIcon name="receipt" class="size-5" />
                         </span>
                         <div class="min-w-0">
-                            <CardTitle>Subscription Required</CardTitle>
-                            <CardDescription>{{ props.access.message || 'This facility subscription does not include this service.' }}</CardDescription>
+                            <CardTitle>Not included in this facility’s plan</CardTitle>
+                            <CardDescription>
+                                {{
+                                    props.access.message ||
+                                        'Your account may be authorized, but this facility’s active service plan does not include this module.'
+                                }}
+                            </CardDescription>
                         </div>
                     </div>
                 </CardHeader>
@@ -104,12 +109,17 @@ function dateLabel(value: string | null | undefined): string {
                         </div>
                     </div>
 
+                    <p class="text-xs text-muted-foreground">
+                        If you believe this is a mistake, contact your facility administrator to update the subscription or
+                        assign a plan that includes the required entitlements.
+                    </p>
+
                     <div class="flex flex-wrap justify-end gap-2 border-t pt-4">
                         <Button variant="outline" as-child>
                             <Link href="/dashboard">Dashboard</Link>
                         </Button>
                         <Button as-child>
-                            <Link href="/platform/admin/facility-config">Facility Configuration</Link>
+                            <Link href="/platform/admin/facility-config">Facility configuration</Link>
                         </Button>
                     </div>
                 </CardContent>

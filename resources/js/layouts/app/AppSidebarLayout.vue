@@ -4,6 +4,7 @@ import AppFacilityScopeNotice from '@/components/AppFacilityScopeNotice.vue';
 import AppShell from '@/components/AppShell.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
 import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
+import FacilitySubscriptionBanner from '@/components/facility/FacilitySubscriptionBanner.vue';
 import type { BreadcrumbItem } from '@/types';
 
 type Props = {
@@ -26,6 +27,9 @@ withDefaults(defineProps<Props>(), {
         <AppSidebar />
         <AppContent variant="sidebar" class="overflow-x-hidden">
             <AppSidebarHeader :breadcrumbs="breadcrumbs" />
+            <div class="mx-4 mt-3 space-y-3 lg:mx-6">
+                <FacilitySubscriptionBanner />
+            </div>
             <AppFacilityScopeNotice />
             <slot />
         </AppContent>

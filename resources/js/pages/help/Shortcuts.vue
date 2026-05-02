@@ -82,10 +82,15 @@ const queuePages = [
     { title: 'Facility Rollouts', href: '/platform/admin/facility-rollouts', note: 'Multi-facility rollout queue and command-center controls' },
 ];
 
-const { permissionNames, hasUniversalAdminAccess } = usePlatformAccess();
+const { permissionNames, hasUniversalAdminAccess, facilityEntitlementNames } = usePlatformAccess();
 
 const visibleQueuePages = computed(() =>
-    filterItemsByRouteAccess(queuePages, permissionNames.value, hasUniversalAdminAccess.value),
+    filterItemsByRouteAccess(
+        queuePages,
+        permissionNames.value,
+        hasUniversalAdminAccess.value,
+        facilityEntitlementNames.value,
+    ),
 );
 </script>
 
@@ -114,6 +119,18 @@ const visibleQueuePages = computed(() =>
                     </Button>
                 </div>
             </div>
+
+            <Card class="rounded-lg border-sidebar-border/70 border-dashed bg-muted/20">
+                <CardHeader class="pb-2">
+                    <CardTitle class="text-base">Service plan & navigation</CardTitle>
+                    <CardDescription>
+                        The sidebar, command palette, and this list hide modules that are not included in your facility’s
+                        active subscription, even when your user account has role permissions. That keeps navigation aligned
+                        with what the server will allow. If something you expect is missing, ask a facility administrator to
+                        review the subscription plan and entitlements.
+                    </CardDescription>
+                </CardHeader>
+            </Card>
 
             <Card class="border-sidebar-border/70 rounded-lg">
                 <CardHeader class="pb-2">

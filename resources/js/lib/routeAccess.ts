@@ -1,3 +1,9 @@
+import {
+    facilityEntitlementsSatisfied,
+    normalizeAppPath,
+    requiredEntitlementsForAppPath,
+} from '@/config/facilityPageEntitlements';
+
 type RouteAccessRule = {
     pathPrefix: string;
     requiredPermissions: string[];
@@ -202,41 +208,63 @@ function permissionMatchesPrefixRule(userPermission: string, rule: string): bool
  * Sidebar catalog items declare coarse permissionPrefixes; routes also have explicit guards in routeAccessRules.
  * Explicit rules win; prefixes only apply when no route rule matched (avoids leaking items like branding).
  */
+function grantedEntitlementSet(facilityEntitlementNames: readonly string[] | null | undefined): ReadonlySet<string> {
+    const raw = facilityEntitlementNames ?? [];
+    return new Set(raw.map((k) => String(k).trim().toLowerCase()).filter(Boolean));
+}
+
 export function sidebarNavCatalogItemVisible(
     item: { href: string; permissionPrefixes: readonly string[] },
     permissionNames: readonly string[],
+    facilityEntitlementNames?: readonly string[] | null,
 ): boolean {
     const explicit = permissionsForHref(item.href);
 
+    let permissionOk: boolean;
     if (explicit.length > 0) {
-        return explicit.some((permission) => permissionNames.includes(permission));
+        permissionOk = explicit.some((permission) => permissionNames.includes(permission));
+    } else if (item.permissionPrefixes.length === 0) {
+        permissionOk = false;
+    } else {
+        permissionOk = item.permissionPrefixes.some((rule) =>
+            permissionNames.some((perm) => permissionMatchesPrefixRule(perm, rule)),
+        );
     }
 
-    if (item.permissionPrefixes.length === 0) {
+    if (!permissionOk) {
         return false;
     }
 
-    return item.permissionPrefixes.some((rule) =>
-        permissionNames.some((perm) => permissionMatchesPrefixRule(perm, rule)),
-    );
+    if (facilityEntitlementNames === undefined) {
+        return true;
+    }
+
+    const path = normalizeAppPath(item.href);
+    return facilityEntitlementsSatisfied(path, grantedEntitlementSet(facilityEntitlementNames));
 }
 
 export function filterSidebarNavCatalogItems<
     T extends { href: string; permissionPrefixes: readonly string[] },
->(items: T[], permissionNames: readonly string[] | null | undefined, hasUnrestrictedAccess = false): T[] {
+>(
+    items: T[],
+    permissionNames: readonly string[] | null | undefined,
+    hasUnrestrictedAccess = false,
+    facilityEntitlementNames?: readonly string[] | null,
+): T[] {
     if (hasUnrestrictedAccess) {
         return items.slice();
     }
 
     const perms = permissionNames ?? [];
 
-    return items.filter((entry) => sidebarNavCatalogItemVisible(entry, perms));
+    return items.filter((entry) => sidebarNavCatalogItemVisible(entry, perms, facilityEntitlementNames));
 }
 
 export function hasRouteAccess(
     href: string,
     permissionNames: string[] | null | undefined,
     hasUnrestrictedAccess = false,
+    facilityEntitlementNames?: readonly string[] | null,
 ): boolean {
     if (hasUnrestrictedAccess) {
         return true;
@@ -245,17 +273,55 @@ export function hasRouteAccess(
     const perms = permissionNames ?? [];
 
     const requiredPermissions = permissionsForHref(href);
-    if (requiredPermissions.length === 0) {
+    const permissionOk =
+        requiredPermissions.length === 0
+            ? true
+            : requiredPermissions.some((permission) => perms.includes(permission));
+
+    if (!permissionOk) {
+        return false;
+    }
+
+    if (facilityEntitlementNames === undefined) {
         return true;
     }
 
-    return requiredPermissions.some((permission) => perms.includes(permission));
+    const path = normalizeAppPath(href);
+    return facilityEntitlementsSatisfied(path, grantedEntitlementSet(facilityEntitlementNames));
 }
 
 export function filterItemsByRouteAccess<T extends { href: string }>(
     items: T[],
     permissionNames: string[] | null | undefined,
     hasUnrestrictedAccess = false,
+    facilityEntitlementNames?: readonly string[] | null,
 ): T[] {
-    return items.filter((item) => hasRouteAccess(item.href, permissionNames, hasUnrestrictedAccess));
+    return items.filter((item) =>
+        hasRouteAccess(item.href, permissionNames, hasUnrestrictedAccess, facilityEntitlementNames),
+    );
+}
+
+/** When a link is hidden by RBAC vs missing plan SKU (for tooltips / diagnostics). */
+export function routeAccessDenialReason(
+    href: string,
+    permissionNames: readonly string[] | null | undefined,
+    facilityEntitlementNames: readonly string[] | null | undefined,
+): 'permission' | 'plan' | null {
+    const perms = permissionNames ?? [];
+    const requiredPermissions = permissionsForHref(href);
+    const permissionOk =
+        requiredPermissions.length === 0
+            ? true
+            : requiredPermissions.some((permission) => perms.includes(permission));
+    if (!permissionOk) {
+        return 'permission';
+    }
+    const path = normalizeAppPath(href);
+    const required = requiredEntitlementsForAppPath(path);
+    if (required === null) {
+        return null;
+    }
+    const set = grantedEntitlementSet(facilityEntitlementNames);
+    const planOk = required.every((k) => set.has(k.toLowerCase()));
+    return planOk ? null : 'plan';
 }

@@ -317,7 +317,7 @@ const navCatalog: NavCatalogItem[] = [
     },
 ];
 
-const { permissionNames, hasUniversalAdminAccess } = usePlatformAccess();
+const { permissionNames, hasUniversalAdminAccess, facilityEntitlementNames } = usePlatformAccess();
 
 /** Resolved permission list — never omit filtering when null server-side gaps would otherwise show entire catalog */
 const resolvedPermissionNames = computed(() => permissionNames.value ?? []);
@@ -337,7 +337,12 @@ const sectionOrder: NavSectionKey[] = [
 ];
 
 const visibleNavItems = computed<NavCatalogItem[]>(() =>
-    filterSidebarNavCatalogItems(navCatalog, resolvedPermissionNames.value, hasUniversalAdminAccess.value),
+    filterSidebarNavCatalogItems(
+        navCatalog,
+        resolvedPermissionNames.value,
+        hasUniversalAdminAccess.value,
+        facilityEntitlementNames.value,
+    ),
 );
 
 const homeItems = computed<NavItem[]>(() => [
