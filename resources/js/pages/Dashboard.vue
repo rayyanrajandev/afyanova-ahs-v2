@@ -22,7 +22,7 @@ import {
     type DashboardPresetKey,
 } from '@/config/dashboardPresets';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { notifyFacilityEntitlementDenied } from '@/lib/facilityEntitlementNotify';
+import { apiGet } from '@/lib/apiClient';
 import type { AppIconName } from '@/lib/icons';
 import { formatEnumLabel } from '@/lib/labels';
 import type { BreadcrumbItem } from '@/types';
@@ -308,29 +308,6 @@ function isUnauthorized(message: string) {
     const normalized = message.trim().toLowerCase();
     return normalized.includes('unauthorized') || normalized.startsWith('403 ');
 }
-async function apiGet<T>(path: string, query?: Record<string, string | number | null | undefined>) {
-    const url = new URL(`/api/v1${path}`, window.location.origin);
-    Object.entries(query ?? {}).forEach(([key, value]) => {
-        if (value === null || value === undefined || value === '') return;
-        url.searchParams.set(key, String(value));
-    });
-
-    const response = await fetch(url.toString(), {
-        credentials: 'same-origin',
-        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-    });
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-        if (response.status === 403) {
-            notifyFacilityEntitlementDenied(payload, path);
-        }
-        throw new Error(typeof payload?.message === 'string' ? payload.message : `${response.status} ${response.statusText}`);
-    }
-
-    return payload as T;
-}
-
 async function safeRequest<T>(label: string, callback: () => Promise<T>) {
     try {
         return await callback();

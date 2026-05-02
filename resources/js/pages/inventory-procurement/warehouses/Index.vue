@@ -18,6 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { apiRequestJson } from '@/lib/apiClient';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
 
@@ -46,7 +47,6 @@ type AuditLog = {
     actionLabel?: string | null;
     createdAt: string | null;
 };
-type ApiError = { message?: string };
 type ListResponse<T> = { data: T[]; meta: Pagination };
 type ItemResponse<T> = { data: T };
 type StatusResponse = { data: StatusCounts };
@@ -120,32 +120,12 @@ const auditLoading = ref(false);
 const auditError = ref<string | null>(null);
 const auditLogs = ref<AuditLog[]>([]);
 
-function csrfToken(): string | null {
-    return document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? null;
-}
-
 async function apiRequest<T>(
     method: 'GET' | 'POST' | 'PATCH',
     path: string,
     options?: { query?: Record<string, string | number | null>; body?: Record<string, unknown> },
 ): Promise<T> {
-    const url = new URL(`/api/v1${path}`, window.location.origin);
-    Object.entries(options?.query ?? {}).forEach(([key, value]) => {
-        if (value === null || value === '') return;
-        url.searchParams.set(key, String(value));
-    });
-    const headers: Record<string, string> = { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
-    let body: string | undefined;
-    if (method !== 'GET') {
-        headers['Content-Type'] = 'application/json';
-        const token = csrfToken();
-        if (token) headers['X-CSRF-TOKEN'] = token;
-        body = JSON.stringify(options?.body ?? {});
-    }
-    const response = await fetch(url.toString(), { method, credentials: 'same-origin', headers, body });
-    const payload = (await response.json().catch(() => ({}))) as ApiError;
-    if (!response.ok) throw new Error(payload.message ?? `${response.status} ${response.statusText}`);
-    return payload as T;
+    return apiRequestJson<T>(method, path, options);
 }
 
 function labelOf(item: Warehouse | null): string {

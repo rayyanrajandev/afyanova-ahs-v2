@@ -32,6 +32,7 @@ import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersistence';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { apiRequestJson } from '@/lib/apiClient';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
@@ -2001,11 +2002,6 @@ const detailsAuditFilters = reactive({
     perPage: 20,
 });
 
-function csrfToken(): string | null {
-    const element = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]');
-    return element?.content ?? null;
-}
-
 function formatDateTime(value: string | null | undefined): string {
     if (!value) return 'N/A';
     const date = new Date(value);
@@ -2108,30 +2104,7 @@ function nullableNumericFormValue(value: unknown): number | null {
 }
 
 async function apiRequest<T>(method: 'GET' | 'POST' | 'PATCH', path: string, opts?: { query?: Record<string, string | number | null>; body?: Record<string, unknown> }): Promise<T> {
-    const url = new URL(`/api/v1${path}`, window.location.origin);
-    Object.entries(opts?.query ?? {}).forEach(([key, value]) => {
-        if (value === null || value === '') return;
-        url.searchParams.set(key, String(value));
-    });
-
-    const headers: Record<string, string> = { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
-    let body: string | undefined;
-    if (method !== 'GET') {
-        headers['Content-Type'] = 'application/json';
-        const token = csrfToken();
-        if (token) headers['X-CSRF-TOKEN'] = token;
-        body = JSON.stringify(opts?.body ?? {});
-    }
-
-    const response = await fetch(url.toString(), { method, credentials: 'same-origin', headers, body });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-        const error = new Error(payload.message ?? `${response.status} ${response.statusText}`) as ApiError;
-        error.payload = payload;
-        throw error;
-    }
-
-    return payload as T;
+    return apiRequestJson<T>(method, path, opts);
 }
 
 async function loadPermissions() {
