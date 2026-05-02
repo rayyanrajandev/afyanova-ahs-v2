@@ -10,6 +10,7 @@ use App\Modules\Patient\Application\UseCases\ListPatientAuditLogsUseCase;
 use App\Modules\Patient\Application\UseCases\ListPatientStatusCountsUseCase;
 use App\Modules\Patient\Application\UseCases\UpdatePatientStatusUseCase;
 use App\Modules\Patient\Application\UseCases\UpdatePatientUseCase;
+use App\Modules\ServiceRequest\Application\UseCases\SummarizeActiveWalkInsForPatientIdsUseCase;
 use App\Modules\Patient\Presentation\Http\Requests\StorePatientRequest;
 use App\Modules\Patient\Presentation\Http\Requests\UpdatePatientRequest;
 use App\Modules\Patient\Presentation\Http\Requests\UpdatePatientStatusRequest;
@@ -26,12 +27,52 @@ class PatientController extends Controller
 
     private const AUDIT_CSV_COLUMNS = ['createdAt', 'action', 'actorType', 'actorId', 'changes', 'metadata'];
 
-    public function index(Request $request, ListPatientsUseCase $useCase): JsonResponse
-    {
+    public function index(
+        Request $request,
+        ListPatientsUseCase $useCase,
+        SummarizeActiveWalkInsForPatientIdsUseCase $walkInSummaries,
+    ): JsonResponse {
         $result = $useCase->execute($request->all());
 
+        $user = $request->user();
+        $summariesByPatientId = [];
+
+        if (
+            $user !== null
+            && (
+                $user->can('service.requests.read')
+                || $user->can('service.requests.create')
+            )
+        ) {
+            /** @var list<array<string, mixed>> $rows */
+            $rows = $result['data'];
+            $ids = [];
+
+            foreach ($rows as $row) {
+                if (isset($row['id']) && is_string($row['id']) && $row['id'] !== '') {
+                    $ids[] = $row['id'];
+                }
+            }
+
+            $summariesByPatientId = $walkInSummaries->execute($ids);
+        }
+
+        $data = array_map(function (array $patient) use ($summariesByPatientId): array {
+            $transformed = PatientResponseTransformer::transform($patient);
+
+            $id = is_string($transformed['id'] ?? null) ? (string) $transformed['id'] : '';
+            $summary = $id !== '' && isset($summariesByPatientId[$id])
+                ? $summariesByPatientId[$id]
+                : null;
+
+            return array_merge($transformed, [
+                /** One-line clerk visibility for active lab / pharmacy / imaging walk-ins */
+                'routingHandoffSummary' => $summary,
+            ]);
+        }, $result['data']);
+
         return response()->json([
-            'data' => array_map([PatientResponseTransformer::class, 'transform'], $result['data']),
+            'data' => $data,
             'meta' => $result['meta'],
         ]);
     }

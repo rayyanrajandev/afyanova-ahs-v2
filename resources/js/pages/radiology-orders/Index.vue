@@ -7,6 +7,7 @@ import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycleActionDialog.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
+import WalkInServiceRequestsPanel from '@/components/service-requests/WalkInServiceRequestsPanel.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -286,6 +287,11 @@ const canReadBillingInvoices = ref(false);
 const canReadRadiologyProcedureCatalog = ref(false);
 const isRadiologyCreatePermissionResolved = ref(false);
 const isRadiologyProcedureCatalogReadPermissionResolved = ref(false);
+const canUpdateServiceRequestStatus = ref(false);
+
+const radiologyWalkInPanelRef = ref<InstanceType<
+    typeof WalkInServiceRequestsPanel
+> | null>(null);
 
 const isRadiologyOperator = computed(() => canUpdateStatus.value);
 const showRadiologyOperatorDashboard = computed(() => canUpdateStatus.value);
@@ -2693,6 +2699,7 @@ async function loadPermissions() {
         canReadRadiologyProcedureCatalog.value = names.has(
             'platform.clinical-catalog.read',
         );
+        canUpdateServiceRequestStatus.value = names.has('service.requests.update-status');
         isRadiologyCreatePermissionResolved.value = true;
         isRadiologyProcedureCatalogReadPermissionResolved.value = true;
     } catch {
@@ -2708,6 +2715,7 @@ async function loadPermissions() {
         canCreateTheatreProcedures.value = false;
         canReadBillingInvoices.value = false;
         canReadRadiologyProcedureCatalog.value = false;
+        canUpdateServiceRequestStatus.value = false;
         isRadiologyCreatePermissionResolved.value = true;
         isRadiologyProcedureCatalogReadPermissionResolved.value = true;
     }
@@ -2904,10 +2912,24 @@ function nextPage() {
     void loadQueue();
 }
 
+function onRadiologyWalkInAcknowledged(payload: { patientId: string }): void {
+    if (payload.patientId) {
+        createForm.patientId = payload.patientId;
+        createPatientContextLocked.value = false;
+        void hydratePatientSummary(payload.patientId);
+    }
+    setRadiologyWorkspaceView('create');
+    void loadRadiologyProcedureCatalog();
+}
+
 async function refreshPage() {
     clearSearchDebounce();
     await loadPermissions();
-    await Promise.all([loadQueue(), loadRadiologyProcedureCatalog()]);
+    await Promise.all([
+        loadQueue(),
+        loadRadiologyProcedureCatalog(),
+        radiologyWalkInPanelRef.value?.reload() ?? Promise.resolve(),
+    ]);
     await loadCreateLifecycleSourceOrder();
 }
 
@@ -4257,6 +4279,14 @@ onMounted(async () => {
                 <AlertTitle>Scope warning</AlertTitle>
                 <AlertDescription>{{ scopeWarning }}</AlertDescription>
             </Alert>
+
+            <WalkInServiceRequestsPanel
+                ref="radiologyWalkInPanelRef"
+                service-type="radiology"
+                :enabled="canUpdateServiceRequestStatus"
+                panel-title="Walk-in patients awaiting imaging"
+                @acknowledged="onRadiologyWalkInAcknowledged"
+            />
 
             <!-- Queue bar -->
             <div

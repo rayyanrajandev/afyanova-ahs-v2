@@ -130,6 +130,39 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
         return $counts;
     }
 
+    public function findActiveByPatientIds(array $patientIds): array
+    {
+        $patientIds = array_values(array_unique(array_filter(array_map(
+            static fn (mixed $id): string => is_string($id) ? trim($id) : '',
+            $patientIds,
+        ), static fn (string $id): bool => $id !== '')));
+
+        if ($patientIds === []) {
+            return [];
+        }
+
+        $queryBuilder = ServiceRequestModel::query();
+        $this->applyPlatformScopeIfEnabled($queryBuilder);
+
+        $models = $queryBuilder
+            ->whereIn('patient_id', $patientIds)
+            ->whereIn('status', ['pending', 'in_progress'])
+            ->orderByRaw("CASE WHEN priority = 'urgent' THEN 0 ELSE 1 END")
+            ->orderByRaw("CASE WHEN status = 'pending' THEN 0 ELSE 1 END")
+            ->orderByDesc('requested_at')
+            ->get();
+
+        /** @var array<string, array<int, array<string, mixed>>> */
+        $grouped = [];
+
+        foreach ($models as $model) {
+            $patientId = (string) $model->patient_id;
+            $grouped[$patientId][] = $model->toArray();
+        }
+
+        return $grouped;
+    }
+
     private function applyPlatformScopeIfEnabled(Builder $query): void
     {
         if (! $this->isPlatformScopingEnabled()) {

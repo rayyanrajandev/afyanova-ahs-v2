@@ -30,4 +30,13 @@ interface ServiceRequestRepositoryInterface
         ?string $fromDateTime,
         ?string $toDateTime,
     ): array;
+
+    /**
+     * Active walk-ins (pending / in_progress), grouped by patient id.
+     * Each value is a list of model rows (newest-first within group).
+     *
+     * @param  array<int, string>  $patientIds
+     * @return array<string, array<int, array<string, mixed>>>
+     */
+    public function findActiveByPatientIds(array $patientIds): array;
 }

@@ -128,6 +128,8 @@ type Patient = {
     statusReason: string | null;
     createdAt: string | null;
     updatedAt: string | null;
+    /** Active lab / pharmacy / imaging walk-in handoff (clerks with service request access). */
+    routingHandoffSummary?: string | null;
 };
 
 type PatientListResponse = {
@@ -4095,6 +4097,13 @@ onMounted(initialPageLoad);
                                     </button>
                                     <p class="truncate text-xs text-muted-foreground">
                                         {{ patient.patientNumber || 'No MRN assigned' }}
+                                    </p>
+                                    <p
+                                        v-if="patient.routingHandoffSummary"
+                                        class="mt-0.5 line-clamp-2 text-[11px] font-medium leading-snug text-violet-800 dark:text-violet-200"
+                                        :title="patient.routingHandoffSummary"
+                                    >
+                                        {{ patient.routingHandoffSummary }}
                                     </p>
                                 </div>
                             </div>

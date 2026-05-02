@@ -15,6 +15,7 @@ import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycleActionDialog.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
+import WalkInServiceRequestsPanel from '@/components/service-requests/WalkInServiceRequestsPanel.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -828,6 +829,10 @@ const canCreateTheatreProcedures = ref(false);
 const canReadBillingInvoices = ref(false);
 const canUpdatePharmacyOrderStatus = ref(false);
 const canVerifyPharmacyDispense = ref(false);
+const canUpdateServiceRequestStatus = ref(false);
+const pharmacyWalkInPanelRef = ref<InstanceType<
+    typeof WalkInServiceRequestsPanel
+> | null>(null);
 const isApprovedMedicinesCatalogReadPermissionResolved = ref(false);
 const approvedMedicinesCatalogAccessDenied = ref(false);
 const approvedMedicinesCatalogLoading = ref(false);
@@ -3584,6 +3589,7 @@ async function loadPharmacyPermissions() {
         canViewPharmacyOrderAuditLogs.value =
             names.has('pharmacy-orders.view-audit-logs') ||
             names.has('pharmacy.orders.view-audit-logs');
+        canUpdateServiceRequestStatus.value = names.has('service.requests.update-status');
 
     } catch {
         canReadPharmacyOrders.value = false;
@@ -3604,6 +3610,7 @@ async function loadPharmacyPermissions() {
         canManagePharmacyPolicy.value = false;
         canReconcilePharmacyOrders.value = false;
         canViewPharmacyOrderAuditLogs.value = false;
+        canUpdateServiceRequestStatus.value = false;
     }
 }
 
@@ -4189,6 +4196,15 @@ async function loadOrderStatusCounts() {
     }
 }
 
+function onPharmacyWalkInAcknowledged(payload: { patientId: string }): void {
+    if (payload.patientId) {
+        createForm.patientId = payload.patientId;
+        createPatientContextLocked.value = false;
+        void hydratePatientSummary(payload.patientId);
+    }
+    setPharmacyWorkspaceView('new', { focusCreate: true });
+}
+
 async function refreshPage() {
     clearSearchDebounce();
     await Promise.all([loadScope(), loadPharmacyPermissions()]);
@@ -4196,6 +4212,7 @@ async function refreshPage() {
         loadOrders(),
         loadOrderStatusCounts(),
         loadApprovedMedicinesCatalog(),
+        pharmacyWalkInPanelRef.value?.reload() ?? Promise.resolve(),
     ]);
     await applyPharmacyAuditExportRetryHandoff();
     await loadCreateLifecycleSourceOrder();
@@ -10096,6 +10113,14 @@ onMounted(async () => {
                 <AlertTitle>Queue read access restricted</AlertTitle>
                 <AlertDescription>Request <code>pharmacy.orders.read</code> permission to view queue metrics and list results.</AlertDescription>
             </Alert>
+
+            <WalkInServiceRequestsPanel
+                ref="pharmacyWalkInPanelRef"
+                service-type="pharmacy"
+                :enabled="canUpdateServiceRequestStatus"
+                panel-title="Walk-in patients awaiting pharmacy"
+                @acknowledged="onPharmacyWalkInAcknowledged"
+            />
 
             <div
                 v-if="
