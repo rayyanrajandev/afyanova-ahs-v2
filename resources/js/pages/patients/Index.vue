@@ -1034,7 +1034,7 @@ const visitHandoffPrimaryDisabledReason = computed(() => {
             || canCreateTheatreProcedures.value
             || canCreateBillingInvoices.value;
         if (!canAnyService) {
-            return 'This account cannot start lab, imaging, pharmacy, procedures, or invoices. Use Chart only or ask dispensary or clinical staff.';
+            return 'This login cannot open order workspaces (typical for pure registration). In most hospitals reception registers and directs the patient; a clinician or authorized staff member enters lab, imaging, or pharmacy orders. Open Chart only for context, send the patient to the right area, or ask a colleague with ordering rights to continue in Laboratory, Imaging, or Pharmacy.';
         }
     }
 
@@ -1068,7 +1068,16 @@ const visitHandoffPrimaryDescription = computed(() => {
     }
 
     if (visitHandoffMode.value === 'direct-services') {
-        return 'Typical for walk-in labs, imaging, or dispensary—no OPD visit required when your site allows. Open the right workspace with this patient already attached.';
+        const canAnyService =
+            canCreateLaboratoryOrders.value
+            || canCreatePharmacyOrders.value
+            || canCreateRadiologyOrders.value
+            || canCreateTheatreProcedures.value
+            || canCreateBillingInvoices.value;
+        if (canAnyService) {
+            return 'Matches common facility flow: registration identifies the patient and may send them to the lab, imaging suite, or pharmacy counter. Staff who are allowed to order then open the workspace below with this patient already attached and record the tests, imaging, or medications before collection or dispensing.';
+        }
+        return 'Matches common facility flow: after registration, reception directs the patient to the correct area. Entering lab, imaging, or pharmacy orders is usually done by clinicians or other authorized roles—not the front desk. If your account cannot start those modules, use Chart only or hand off to the department.';
     }
 
     return 'Open chart-only when staff need context without starting a new visit.';
@@ -5015,7 +5024,7 @@ onMounted(initialPageLoad);
                                                 <Badge variant="outline" class="text-xs">{{ visitHandoffModeBadge('direct-services') }}</Badge>
                                             </span>
                                             <span class="mt-1 block text-xs leading-5 text-muted-foreground">
-                                                Walk-in lab, imaging, pharmacy, or minor procedures without an OPD or ER visit when allowed.
+                                                When your site allows walk-ins: reception directs the patient; orders are usually entered by authorized clinical or service staff in each module—not reception.
                                             </span>
                                         </span>
                                     </button>
