@@ -1928,7 +1928,8 @@ function visitHandoffModeAvailable(mode: PatientVisitHandoffMode): boolean {
 
 function visitHandoffModeButtonClass(mode: PatientVisitHandoffMode): string {
     return [
-        'flex min-h-[92px] w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors',
+        'flex min-h-[92px] min-w-0 max-w-full flex-[1_1_15rem] items-start gap-3 rounded-lg border p-3 text-left transition-colors',
+        'min-w-[min(100%,15rem)]',
         visitHandoffMode.value === mode
             ? 'border-primary/50 bg-primary/5'
             : 'bg-background hover:border-primary/30 hover:bg-muted/20',
@@ -4973,7 +4974,7 @@ onMounted(initialPageLoad);
                                     </p>
                                 </div>
 
-                                <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                                <div class="flex flex-wrap gap-3">
                                     <button type="button" :class="visitHandoffModeButtonClass('outpatient')" @click="visitHandoffMode = 'outpatient'">
                                         <span class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
                                             <AppIcon name="calendar-clock" class="size-4" />
