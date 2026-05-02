@@ -2,6 +2,7 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import CareQuickStrip from '@/components/workspace/CareQuickStrip.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -222,7 +223,7 @@ type PatientWorkflowRecommendation = {
     primaryIcon: string;
 };
 
-type PatientVisitHandoffMode = 'outpatient' | 'emergency' | 'billing' | 'chart';
+type PatientVisitHandoffMode = 'outpatient' | 'emergency' | 'direct-services' | 'billing' | 'chart';
 
 type PatientVisitHandoffSource = 'post-registration' | 'list' | 'details';
 
@@ -560,6 +561,7 @@ const canRecordOpdTriage = ref(
 );
 const canCreateLaboratoryOrders = ref(hasPermission('laboratory.orders.create'));
 const canCreatePharmacyOrders = ref(hasPermission('pharmacy.orders.create'));
+const canCreateRadiologyOrders = ref(hasPermission('radiology.orders.create'));
 const canCreateTheatreProcedures = ref(hasPermission('theatre.procedures.create'));
 const canManageProviderSession = computed(() => canReadAppointments.value && canReadMedicalRecords.value);
 const tenantIsolationEnabled = ref(multiTenantIsolationEnabled.value);
@@ -956,6 +958,10 @@ const visitHandoffPrimaryHref = computed(() => {
         });
     }
 
+    if (visitHandoffMode.value === 'direct-services') {
+        return null;
+    }
+
     return patientChartContextHref(patient, {
         appointmentId: visitHandoffActiveAppointment.value?.id ?? null,
         from: 'patients',
@@ -982,11 +988,13 @@ const visitHandoffPrimaryLabel = computed(() => {
 
     if (visitHandoffMode.value === 'emergency') return 'Start emergency triage';
     if (visitHandoffMode.value === 'billing') return 'Create invoice';
+    if (visitHandoffMode.value === 'direct-services') return 'Walk-in lab, imaging, or pharmacy';
     return 'Open patient chart';
 });
 const visitHandoffPrimaryIcon = computed(() => {
     if (visitHandoffMode.value === 'emergency') return 'activity';
     if (visitHandoffMode.value === 'billing') return 'receipt';
+    if (visitHandoffMode.value === 'direct-services') return 'flask-conical';
     if (visitHandoffMode.value === 'chart') return 'book-open';
     return visitHandoffActiveAppointment.value ? 'calendar-clock' : 'calendar-plus-2';
 });
@@ -1000,23 +1008,35 @@ const visitHandoffPrimaryDisabledReason = computed(() => {
 
     if (visitHandoffMode.value === 'outpatient') {
         if (visitHandoffActiveAppointment.value && !canReadAppointments.value) {
-            return 'Request appointments.read permission to open the current visit.';
+            return 'This account cannot open the appointment workspace. Ask scheduling, or use Chart only if you only need to review details.';
         }
         if (!visitHandoffActiveAppointment.value && !canCreateAppointments.value) {
-            return 'Request appointments.create permission to schedule a visit.';
+            return 'This account cannot create visits. Ask scheduling to book, or choose another handoff route.';
         }
     }
 
     if (visitHandoffMode.value === 'emergency' && !canRecordOpdTriage.value) {
-        return 'Request emergency triage permission to start urgent intake.';
+        return null;
     }
 
     if (visitHandoffMode.value === 'billing' && !canCreateBillingInvoices.value) {
-        return 'Request billing.invoices.create permission to create an invoice.';
+        return 'This account cannot create invoices. Ask billing or cashier staff, or choose another route.';
     }
 
     if (visitHandoffMode.value === 'chart' && !canReadPatients.value) {
-        return 'Request patients.read permission to open the patient chart.';
+        return 'This account cannot open the chart. Ask a clinician or supervisor for access.';
+    }
+
+    if (visitHandoffMode.value === 'direct-services') {
+        const canAnyService =
+            canCreateLaboratoryOrders.value
+            || canCreatePharmacyOrders.value
+            || canCreateRadiologyOrders.value
+            || canCreateTheatreProcedures.value
+            || canCreateBillingInvoices.value;
+        if (!canAnyService) {
+            return 'This account cannot start lab, imaging, pharmacy, procedures, or invoices. Use Chart only or ask dispensary or clinical staff.';
+        }
     }
 
     return null;
@@ -1037,6 +1057,10 @@ const visitHandoffPrimaryDescription = computed(() => {
     }
 
     if (visitHandoffMode.value === 'emergency') {
+        if (!canRecordOpdTriage.value) {
+            return 'Use this when the patient should go to emergency or triage. You can register and direct them; triage staff complete urgent intake in the system.';
+        }
+
         return 'Use urgent intake when the patient needs immediate nursing assessment or emergency routing.';
     }
 
@@ -1044,8 +1068,19 @@ const visitHandoffPrimaryDescription = computed(() => {
         return 'Use billing-first only for registration fees, deposits, or cashier workflows that happen before clinical care.';
     }
 
+    if (visitHandoffMode.value === 'direct-services') {
+        return 'Typical for walk-in labs, imaging, or dispensary—no OPD visit required when your site allows. Open the right workspace with this patient already attached.';
+    }
+
     return 'Open chart-only when staff need context without starting a new visit.';
 });
+const visitHandoffEmergencyNeedsTriageStaff = computed(
+    () => visitHandoffMode.value === 'emergency'
+        && Boolean(visitHandoffPatient.value)
+        && visitHandoffPatient.value!.status === 'active'
+        && !canRecordOpdTriage.value,
+);
+
 const visitHandoffSourceLabel = computed(() => {
     if (visitHandoffSource.value === 'post-registration') return 'Post registration';
     if (visitHandoffSource.value === 'details') return 'Patient details';
@@ -1728,11 +1763,33 @@ function visitHandoffDefaultMode(): PatientVisitHandoffMode {
         return 'emergency';
     }
 
+    if (
+        canCreateLaboratoryOrders.value
+        || canCreatePharmacyOrders.value
+        || canCreateRadiologyOrders.value
+        || canCreateTheatreProcedures.value
+    ) {
+        return 'direct-services';
+    }
+
     if (canCreateBillingInvoices.value) {
         return 'billing';
     }
 
     return 'chart';
+}
+
+async function copyVisitHandoffEmergencyTriageLink(): Promise<void> {
+    const patient = visitHandoffPatient.value;
+    if (!patient) return;
+    const path = patientContextHref('/emergency-triage', patient, { includeTabNew: true });
+    const absolute = typeof window !== 'undefined' ? new URL(path, window.location.origin).href : path;
+    try {
+        await navigator.clipboard.writeText(absolute);
+        notifySuccess('Link copied. Share it with triage or emergency staff so they can start intake.');
+    } catch {
+        notifyError('Could not copy automatically. Open Emergency Triage from the sidebar and search for this patient.');
+    }
 }
 
 function closePatientVisitHandoff() {
@@ -1856,7 +1913,11 @@ function visitHandoffModeAvailable(mode: PatientVisitHandoffMode): boolean {
     }
 
     if (mode === 'emergency') {
-        return canRecordOpdTriage.value;
+        return true;
+    }
+
+    if (mode === 'direct-services') {
+        return canReadPatients.value;
     }
 
     if (mode === 'billing') {
@@ -1883,6 +1944,7 @@ function visitHandoffModeBadge(mode: PatientVisitHandoffMode): string {
 
     if (mode === 'outpatient') return 'Standard';
     if (mode === 'emergency') return 'Urgent';
+    if (mode === 'direct-services') return 'Walk-in';
     if (mode === 'billing') return 'Cashier';
     return 'Chart';
 }
@@ -2429,6 +2491,7 @@ async function loadPatientPermissions() {
             names.has('emergency.triage.create') || names.has('emergency.triage.update-status');
         canCreateLaboratoryOrders.value = names.has('laboratory.orders.create');
         canCreatePharmacyOrders.value = names.has('pharmacy.orders.create');
+        canCreateRadiologyOrders.value = names.has('radiology.orders.create');
         canCreateTheatreProcedures.value = names.has('theatre.procedures.create');
     } catch {
         patientReadPermissionState.value = 'denied';
@@ -2445,6 +2508,7 @@ async function loadPatientPermissions() {
         canRecordOpdTriage.value = false;
         canCreateLaboratoryOrders.value = false;
         canCreatePharmacyOrders.value = false;
+        canCreateRadiologyOrders.value = false;
         canCreateTheatreProcedures.value = false;
     }
 }
@@ -3754,6 +3818,8 @@ onMounted(initialPageLoad);
                         </PopoverContent>
                     </Popover>
 
+                    <CareQuickStrip />
+
                     <Button
                         variant="outline"
                         size="sm"
@@ -4750,7 +4816,7 @@ onMounted(initialPageLoad);
                                 <div class="space-y-1">
                                     <p class="text-sm font-semibold text-foreground">Start visit handoff</p>
                                     <p class="text-xs text-muted-foreground">
-                                        Route the patient into appointment, emergency triage, billing, or chart review with one controlled flow.
+                                        Route the patient into OPD, emergency triage, walk-in lab or dispensary, billing, or chart review in one flow.
                                     </p>
                                 </div>
                                 <Button class="gap-1.5 sm:shrink-0" @click="openPatientVisitHandoff(postRegistrationPatient, 'post-registration')">
@@ -4910,7 +4976,7 @@ onMounted(initialPageLoad);
                                     </p>
                                 </div>
 
-                                <div class="grid gap-3 md:grid-cols-2">
+                                <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                                     <button type="button" :class="visitHandoffModeButtonClass('outpatient')" @click="visitHandoffMode = 'outpatient'">
                                         <span class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
                                             <AppIcon name="calendar-clock" class="size-4" />
@@ -4927,7 +4993,7 @@ onMounted(initialPageLoad);
                                     </button>
 
                                     <button type="button" :class="visitHandoffModeButtonClass('emergency')" @click="visitHandoffMode = 'emergency'">
-                                        <span class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-destructive/10 text-destructive">
+                                        <span class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-amber-500/15 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
                                             <AppIcon name="activity" class="size-4" />
                                         </span>
                                         <span class="min-w-0 flex-1">
@@ -4937,6 +5003,21 @@ onMounted(initialPageLoad);
                                             </span>
                                             <span class="mt-1 block text-xs leading-5 text-muted-foreground">
                                                 Use when the patient needs immediate assessment, stabilization, transfer, or admission routing.
+                                            </span>
+                                        </span>
+                                    </button>
+
+                                    <button type="button" :class="visitHandoffModeButtonClass('direct-services')" @click="visitHandoffMode = 'direct-services'">
+                                        <span class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-violet-500/10 text-violet-800 dark:bg-violet-500/15 dark:text-violet-200">
+                                            <AppIcon name="flask-conical" class="size-4" />
+                                        </span>
+                                        <span class="min-w-0 flex-1">
+                                            <span class="flex items-center justify-between gap-2">
+                                                <span class="text-sm font-semibold text-foreground">Direct services</span>
+                                                <Badge variant="outline" class="text-xs">{{ visitHandoffModeBadge('direct-services') }}</Badge>
+                                            </span>
+                                            <span class="mt-1 block text-xs leading-5 text-muted-foreground">
+                                                Walk-in lab, imaging, pharmacy, or minor procedures without an OPD or ER visit when allowed.
                                             </span>
                                         </span>
                                     </button>
@@ -4974,11 +5055,137 @@ onMounted(initialPageLoad);
                             </section>
 
                             <section class="rounded-lg border bg-muted/20 p-4">
-                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <Alert
+                                    v-if="visitHandoffEmergencyNeedsTriageStaff"
+                                    class="mb-4 border-sky-200 bg-sky-50/90 text-sky-950 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-50"
+                                >
+                                    <AlertTitle class="flex items-center gap-2 text-base text-sky-950 dark:text-sky-50">
+                                        <AppIcon name="heart-pulse" class="size-4 shrink-0 text-sky-700 dark:text-sky-300" />
+                                        Hand off to emergency triage
+                                    </AlertTitle>
+                                    <AlertDescription class="space-y-3 text-sm text-sky-900/95 dark:text-sky-100/90">
+                                        <p>
+                                            Front desk staff register and direct patients.
+                                            <span class="font-medium">Starting urgent intake in the system</span>
+                                            is usually done by triage or emergency staff. That split of duties is normal for registration roles.
+                                        </p>
+                                        <p class="text-xs leading-relaxed">
+                                            Direct the patient to the emergency or triage area, then send the link below to a colleague who can open Emergency Triage.
+                                        </p>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            class="border-sky-300 bg-white/90 text-sky-950 hover:bg-white dark:border-sky-700 dark:bg-sky-900/60 dark:text-sky-50 dark:hover:bg-sky-900"
+                                            @click="copyVisitHandoffEmergencyTriageLink"
+                                        >
+                                            <AppIcon name="arrow-up-right" class="size-3.5" />
+                                            Copy link for triage desk
+                                        </Button>
+                                    </AlertDescription>
+                                </Alert>
+
+                                <template v-if="visitHandoffMode === 'direct-services'">
+                                    <div class="space-y-4">
+                                        <div class="space-y-1">
+                                            <p class="text-sm font-semibold text-foreground">{{ visitHandoffPrimaryLabel }}</p>
+                                            <p class="max-w-xl text-xs leading-5 text-muted-foreground">{{ visitHandoffPrimaryDescription }}</p>
+                                            <p
+                                                v-if="visitHandoffPrimaryDisabledReason"
+                                                class="text-xs font-medium leading-relaxed text-muted-foreground"
+                                            >
+                                                {{ visitHandoffPrimaryDisabledReason }}
+                                            </p>
+                                        </div>
+
+                                        <div
+                                            v-if="!visitHandoffPrimaryDisabledReason"
+                                            class="grid gap-2 sm:grid-cols-2"
+                                        >
+                                            <Button
+                                                v-if="canCreateLaboratoryOrders"
+                                                size="sm"
+                                                variant="secondary"
+                                                as-child
+                                                class="justify-start gap-1.5"
+                                            >
+                                                <Link :href="patientContextHref('/laboratory-orders', visitHandoffPatient, { includeTabNew: true })">
+                                                    <AppIcon name="flask-conical" class="size-3.5" />
+                                                    Laboratory
+                                                </Link>
+                                            </Button>
+                                            <Button
+                                                v-if="canCreateRadiologyOrders"
+                                                size="sm"
+                                                variant="secondary"
+                                                as-child
+                                                class="justify-start gap-1.5"
+                                            >
+                                                <Link :href="patientContextHref('/radiology-orders', visitHandoffPatient, { includeTabNew: true })">
+                                                    <AppIcon name="activity" class="size-3.5" />
+                                                    Imaging / radiology
+                                                </Link>
+                                            </Button>
+                                            <Button
+                                                v-if="canCreatePharmacyOrders"
+                                                size="sm"
+                                                variant="secondary"
+                                                as-child
+                                                class="justify-start gap-1.5"
+                                            >
+                                                <Link :href="patientContextHref('/pharmacy-orders', visitHandoffPatient, { includeTabNew: true })">
+                                                    <AppIcon name="pill" class="size-3.5" />
+                                                    Pharmacy / dispensary
+                                                </Link>
+                                            </Button>
+                                            <Button
+                                                v-if="canCreateTheatreProcedures"
+                                                size="sm"
+                                                variant="secondary"
+                                                as-child
+                                                class="justify-start gap-1.5"
+                                            >
+                                                <Link :href="patientContextHref('/theatre-procedures', visitHandoffPatient, { includeTabNew: true })">
+                                                    <AppIcon name="scissors" class="size-3.5" />
+                                                    Procedure
+                                                </Link>
+                                            </Button>
+                                            <Button
+                                                v-if="canCreateBillingInvoices"
+                                                size="sm"
+                                                variant="secondary"
+                                                as-child
+                                                class="justify-start gap-1.5"
+                                            >
+                                                <Link :href="patientTimelineHref('/billing-invoices', visitHandoffPatient.id, { appointmentId: visitHandoffActiveAppointment?.id ?? null })">
+                                                    <AppIcon name="receipt" class="size-3.5" />
+                                                    Invoice / billing
+                                                </Link>
+                                            </Button>
+                                        </div>
+
+                                        <div v-if="canReadPatients" class="flex flex-wrap gap-2 border-t border-border/60 pt-3">
+                                            <Button size="sm" variant="outline" as-child class="gap-1.5">
+                                                <Link :href="patientChartContextHref(visitHandoffPatient, { from: 'patients' })">
+                                                    <AppIcon name="book-open" class="size-3.5" />
+                                                    Open patient chart
+                                                </Link>
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <div
+                                    v-else
+                                    class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+                                >
                                     <div class="space-y-1">
                                         <p class="text-sm font-semibold text-foreground">{{ visitHandoffPrimaryLabel }}</p>
                                         <p class="max-w-xl text-xs leading-5 text-muted-foreground">{{ visitHandoffPrimaryDescription }}</p>
-                                        <p v-if="visitHandoffPrimaryDisabledReason" class="text-xs font-medium text-destructive">
+                                        <p
+                                            v-if="visitHandoffPrimaryDisabledReason"
+                                            class="text-xs font-medium leading-relaxed text-muted-foreground"
+                                        >
                                             {{ visitHandoffPrimaryDisabledReason }}
                                         </p>
                                     </div>
@@ -5310,13 +5517,19 @@ onMounted(initialPageLoad);
                                                 <div class="rounded-lg border p-3">
                                                     <p class="text-sm font-medium text-foreground">Orders and billing</p>
                                                     <p class="mt-1 text-xs text-muted-foreground">
-                                                        Open investigations, medicines, procedures, or billing after clinical assessment.
+                                                        Lab, imaging, pharmacy, procedures, or billing with this patient—including walk-ins without a consult when your site allows.
                                                     </p>
                                                     <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                                                         <Button v-if="canCreateLaboratoryOrders" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
                                                             <Link :href="patientContextHref('/laboratory-orders', detailsSheetPatient, { includeTabNew: true })">
                                                                 <AppIcon name="flask-conical" class="size-3.5" />
                                                                 Lab Order
+                                                            </Link>
+                                                        </Button>
+                                                        <Button v-if="canCreateRadiologyOrders" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
+                                                            <Link :href="patientContextHref('/radiology-orders', detailsSheetPatient, { includeTabNew: true })">
+                                                                <AppIcon name="activity" class="size-3.5" />
+                                                                Imaging Order
                                                             </Link>
                                                         </Button>
                                                         <Button v-if="canCreatePharmacyOrders" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
