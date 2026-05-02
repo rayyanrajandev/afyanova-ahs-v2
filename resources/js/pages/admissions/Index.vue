@@ -2,6 +2,7 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import CareQuickStrip from '@/components/workspace/CareQuickStrip.vue';
 import LinkedContextLookupField from '@/components/context/LinkedContextLookupField.vue';
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
@@ -5135,7 +5136,7 @@ onMounted(initialPageLoad);
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
             <!-- PAGE HEADER -->
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div class="min-w-0 flex flex-wrap items-center gap-1.5">
+                <div class="min-w-0">
                     <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
                         <AppIcon name="bed-double" class="size-7 text-primary" />
                         Admissions
@@ -5150,6 +5151,7 @@ onMounted(initialPageLoad);
                     >
                         {{ tW2('return.backToAppointments') }}
                     </Link>
+                    <CareQuickStrip class="mt-3" />
                 </div>
                 <div class="flex flex-shrink-0 items-center gap-2">
                     <Popover>

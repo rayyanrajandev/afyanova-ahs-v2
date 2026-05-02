@@ -3,6 +3,7 @@ import { Head, Link, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AdmissionLookupField from '@/components/admissions/AdmissionLookupField.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import CareQuickStrip from '@/components/workspace/CareQuickStrip.vue';
 import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -2230,6 +2231,7 @@ async function refreshWardPage(): Promise<void> {
                         Inpatient Ward Operations
                     </h1>
                     <p class='mt-1 text-sm text-muted-foreground'>Coordinate ward tasks, bed occupancy, care plans, discharge readiness, and bedside documentation from one operational surface.</p>
+                    <CareQuickStrip class='mt-3' />
                 </div>
 
                 <div class='flex flex-wrap items-center gap-2'>

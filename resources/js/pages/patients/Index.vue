@@ -3794,6 +3794,7 @@ onMounted(initialPageLoad);
                     <p class="mt-1 text-sm text-muted-foreground">
                         Look up existing patients or register new ones with duplicate checks.
                     </p>
+                    <CareQuickStrip class="mt-3" />
                 </div>
                 <div class="flex flex-shrink-0 items-center gap-2">
                     <Badge variant="outline" class="hidden sm:inline-flex">Patient Registry</Badge>
@@ -3817,8 +3818,6 @@ onMounted(initialPageLoad);
                             <p v-if="!scope" class="text-destructive">Scope could not be loaded.</p>
                         </PopoverContent>
                     </Popover>
-
-                    <CareQuickStrip />
 
                     <Button
                         variant="outline"
