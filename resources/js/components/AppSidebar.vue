@@ -3,7 +3,6 @@ import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
-import CareQuickStrip from '@/components/workspace/CareQuickStrip.vue';
 import {
     Sidebar,
     SidebarContent,
@@ -417,9 +416,6 @@ const showLimitedAccessHint = computed(
         </SidebarContent>
 
         <SidebarFooter>
-            <div class="border-t border-sidebar-border/60 px-2 py-2 group-data-[collapsible=icon]:hidden">
-                <CareQuickStrip placement="sidebar" />
-            </div>
             <NavUser />
         </SidebarFooter>
     </Sidebar>

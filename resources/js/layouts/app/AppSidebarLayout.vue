@@ -4,6 +4,7 @@ import AppFacilityScopeNotice from '@/components/AppFacilityScopeNotice.vue';
 import AppShell from '@/components/AppShell.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
 import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
+import CareQuickLauncher from '@/components/workspace/CareQuickLauncher.vue';
 import FacilitySubscriptionBanner from '@/components/facility/FacilitySubscriptionBanner.vue';
 import type { BreadcrumbItem } from '@/types';
 
@@ -33,5 +34,6 @@ withDefaults(defineProps<Props>(), {
             <AppFacilityScopeNotice />
             <slot />
         </AppContent>
+        <CareQuickLauncher />
     </AppShell>
 </template>

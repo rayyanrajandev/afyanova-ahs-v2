@@ -1,0 +1,17 @@
+---
+description: After substantive code edits, publish to git (commit + push)
+alwaysApply: true
+---
+
+# Publish changes to git
+
+When you **change application or backend code** in this repo (not only docs the user asked to skip), **before ending the turn**:
+
+1. Run **`npm run build`** if the change touches frontend (`resources/js`, `resources/css`, Vite, Vue, TS used by the client).
+2. **`git add`** the relevant files, **`git commit`** with a clear imperative message, and **`git push`** to `origin` (same branch).
+
+If there is nothing to commit, still **`git push`** when the branch might be ahead.
+
+The user can run the same flow locally with **`npm run ship -- "your message"`** (runs build, commit all, push).
+
+Do not skip publish because the session is long—treat it as part of “done” for code tasks unless the user explicitly asks not to push.
