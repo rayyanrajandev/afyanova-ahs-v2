@@ -2,7 +2,6 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import CareQuickStrip from '@/components/workspace/CareQuickStrip.vue';
 import LinkedContextLookupField from '@/components/context/LinkedContextLookupField.vue';
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
@@ -5151,7 +5150,6 @@ onMounted(initialPageLoad);
                     >
                         {{ tW2('return.backToAppointments') }}
                     </Link>
-                    <CareQuickStrip class="mt-3" />
                 </div>
                 <div class="flex flex-shrink-0 items-center gap-2">
                     <Popover>

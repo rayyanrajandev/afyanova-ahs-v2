@@ -2,7 +2,6 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import CareQuickStrip from '@/components/workspace/CareQuickStrip.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -3794,7 +3793,6 @@ onMounted(initialPageLoad);
                     <p class="mt-1 text-sm text-muted-foreground">
                         Look up existing patients or register new ones with duplicate checks.
                     </p>
-                    <CareQuickStrip class="mt-3" />
                 </div>
                 <div class="flex flex-shrink-0 items-center gap-2">
                     <Badge variant="outline" class="hidden sm:inline-flex">Patient Registry</Badge>

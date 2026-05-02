@@ -3,7 +3,6 @@
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import CareQuickStrip from '@/components/workspace/CareQuickStrip.vue';
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
@@ -4276,7 +4275,6 @@ function submitSearch(): void {
                     <p class="mt-1 text-sm text-muted-foreground">
                         {{ workspaceIntroText }}
                     </p>
-                    <CareQuickStrip class="mt-3" />
                 </div>
                 <div class="flex flex-shrink-0 items-center gap-2">
                     <Button
