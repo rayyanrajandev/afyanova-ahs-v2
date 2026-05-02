@@ -1837,29 +1837,6 @@ async function copyVisitHandoffEmergencyTriageLink(): Promise<void> {
     }
 }
 
-async function copyVisitHandoffDirectDeptLink(
-    dept: 'laboratory' | 'radiology' | 'pharmacy',
-): Promise<void> {
-    const patient = visitHandoffPatient.value;
-    if (!patient || typeof window === 'undefined') return;
-
-    const path =
-        dept === 'laboratory'
-            ? patientContextHref('/laboratory-orders', patient, { includeTabNew: true })
-            : dept === 'radiology'
-              ? patientContextHref('/radiology-orders', patient, { includeTabNew: true })
-              : patientContextHref('/pharmacy-orders', patient, { includeTabNew: true });
-    const absolute = new URL(path, window.location.origin).href;
-
-    try {
-        await navigator.clipboard.writeText(absolute);
-        const label = dept === 'laboratory' ? 'Laboratory' : dept === 'radiology' ? 'Imaging' : 'Pharmacy';
-        notifySuccess(`${label} workspace link copied for this patient.`);
-    } catch {
-        notifyError('Could not copy. Open the department module from the sidebar and search for this patient.');
-    }
-}
-
 function closePatientVisitHandoff() {
     visitHandoffRequestToken += 1;
     visitHandoffSheetOpen.value = false;
@@ -5217,52 +5194,75 @@ onMounted(initialPageLoad);
                                             </AlertDescription>
                                         </Alert>
 
-                                        <!-- No queue permission: share workspace URLs (clipboard) -->
+                                        <!-- No queue permission: open dept workspace locally (nothing is routed to staff in-app) -->
                                         <Alert
                                             v-else-if="!visitHandoffHasAnyDirectServiceRight && !canCreateServiceRequests && visitHandoffPatient"
                                             class="border-slate-200 bg-slate-50/90 text-slate-950 dark:border-slate-700 dark:bg-slate-950/35 dark:text-slate-50"
                                         >
                                             <AlertTitle class="flex items-center gap-2 text-base text-slate-950 dark:text-slate-50">
                                                 <AppIcon name="arrow-up-right" class="size-4 shrink-0 opacity-80" />
-                                                Share links with department staff
+                                                No automated hand-off yet
                                             </AlertTitle>
                                             <AlertDescription class="space-y-3 text-sm text-slate-800/95 dark:text-slate-100/90">
                                                 <p>
-                                                    Your role does not include
-                                                    <code class="rounded bg-muted px-1 py-0.5 text-xs">service.requests.create</code>
-                                                    yet, so queued walk-ins are hidden.
-                                                    Copy a URL for the workstation that will open this patient ready for a new order.
+                                                    Without
+                                                    <code class="rounded bg-muted px-1 py-0.5 text-xs">service.requests.create</code>,
+                                                    departments are not notified in the app. The clinic still directs the patient
+                                                    physically; reception can use the buttons below to
+                                                    <strong class="font-medium">open Lab / Imaging / Pharmacy in a new tab</strong>
+                                                    with this patient’s context—for example on their own screen while escorting,
+                                                    or on the department workstation if someone is logged in there.
+                                                    Ask an administrator to grant queue permission when you want queued walk-ins
+                                                    visible to departments.
                                                 </p>
                                                 <div class="flex flex-wrap gap-2">
                                                     <Button
-                                                        type="button"
                                                         variant="outline"
                                                         size="sm"
+                                                        as-child
                                                         class="gap-1.5"
-                                                        @click="copyVisitHandoffDirectDeptLink('laboratory')"
                                                     >
-                                                        <AppIcon name="flask-conical" class="size-3.5" />
-                                                        Copy lab link
+                                                        <Link
+                                                            :href="patientContextHref('/laboratory-orders', visitHandoffPatient, { includeTabNew: true })"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            class="inline-flex items-center gap-1.5"
+                                                        >
+                                                            <AppIcon name="flask-conical" class="size-3.5" />
+                                                            Open lab (new tab)
+                                                        </Link>
                                                     </Button>
                                                     <Button
-                                                        type="button"
                                                         variant="outline"
                                                         size="sm"
+                                                        as-child
                                                         class="gap-1.5"
-                                                        @click="copyVisitHandoffDirectDeptLink('radiology')"
                                                     >
-                                                        <AppIcon name="activity" class="size-3.5" />
-                                                        Copy imaging link
+                                                        <Link
+                                                            :href="patientContextHref('/radiology-orders', visitHandoffPatient, { includeTabNew: true })"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            class="inline-flex items-center gap-1.5"
+                                                        >
+                                                            <AppIcon name="activity" class="size-3.5" />
+                                                            Open imaging (new tab)
+                                                        </Link>
                                                     </Button>
                                                     <Button
-                                                        type="button"
                                                         variant="outline"
                                                         size="sm"
+                                                        as-child
                                                         class="gap-1.5"
-                                                        @click="copyVisitHandoffDirectDeptLink('pharmacy')"
                                                     >
-                                                        <AppIcon name="pill" class="size-3.5" />
-                                                        Copy pharmacy link
+                                                        <Link
+                                                            :href="patientContextHref('/pharmacy-orders', visitHandoffPatient, { includeTabNew: true })"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            class="inline-flex items-center gap-1.5"
+                                                        >
+                                                            <AppIcon name="pill" class="size-3.5" />
+                                                            Open pharmacy (new tab)
+                                                        </Link>
                                                     </Button>
                                                 </div>
                                             </AlertDescription>
