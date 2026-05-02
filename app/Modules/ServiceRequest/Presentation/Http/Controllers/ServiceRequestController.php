@@ -4,6 +4,7 @@ namespace App\Modules\ServiceRequest\Presentation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
+use App\Modules\ServiceRequest\Application\Exceptions\ActiveServiceRequestAlreadyExistsException;
 use App\Modules\ServiceRequest\Application\Exceptions\PatientNotEligibleForServiceRequestException;
 use App\Modules\ServiceRequest\Application\Exceptions\ServiceRequestStatusTransitionException;
 use App\Modules\ServiceRequest\Application\UseCases\CreateServiceRequestUseCase;
@@ -85,6 +86,16 @@ class ServiceRequestController extends Controller
             return $this->tenantScopeRequiredError($exception->getMessage());
         } catch (PatientNotEligibleForServiceRequestException $exception) {
             return $this->validationError('patientId', $exception->getMessage());
+        } catch (ActiveServiceRequestAlreadyExistsException $exception) {
+            $existing = $exception->existingRequest();
+            $requestNumber = is_string($existing['request_number'] ?? null)
+                ? (string) $existing['request_number']
+                : 'existing ticket';
+
+            return $this->validationError(
+                'serviceType',
+                sprintf('This patient already has an active %s walk-in ticket.', $requestNumber),
+            );
         }
 
         return response()->json([

@@ -129,9 +129,22 @@ type Patient = {
     statusReason: string | null;
     createdAt: string | null;
     updatedAt: string | null;
-    /** Active lab / pharmacy / imaging walk-in handoff (clerks with service request access). */
+    /** Active direct-service walk-in handoff. */
     routingHandoffSummary?: string | null;
+    activeRoutingTickets?: ActiveRoutingTicket[];
 };
+
+type ActiveRoutingTicket = {
+    id: string;
+    requestNumber: string | null;
+    serviceType: DirectServiceRequestType | string | null;
+    priority: string | null;
+    status: string | null;
+    requestedAt?: string | null;
+    linkedOrderNumber?: string | null;
+};
+
+type DirectServiceRequestType = 'laboratory' | 'radiology' | 'pharmacy' | 'theatre_procedure';
 
 type PatientListResponse = {
     data: Patient[];
@@ -608,7 +621,7 @@ const visitHandoffError = ref<string | null>(null);
 const visitHandoffActionError = ref<string | null>(null);
 let visitHandoffRequestToken = 0;
 const directServiceSending = ref<string | null>(null);
-const directServiceSentMap = ref<Record<string, { serviceType: string; requestNumber: string }>>({});
+const directServiceSentMap = ref<Record<string, { serviceType: DirectServiceRequestType; requestNumber: string }>>({});
 const detailsSheetOpen = ref(false);
 const detailsSheetPatient = ref<Patient | null>(null);
 const detailsSheetTab = ref('overview');
@@ -1103,13 +1116,13 @@ const visitHandoffPrimaryDescription = computed(() => {
 const visitHandoffDirectServiceSessionTickets = computed(() => {
     const patient = visitHandoffPatient.value;
     if (!patient) return [];
-    type Key = 'laboratory' | 'radiology' | 'pharmacy';
-    const defs: ReadonlyArray<{ key: Key; label: string }> = [
+    const defs: ReadonlyArray<{ key: DirectServiceRequestType; label: string }> = [
         { key: 'laboratory', label: 'Lab' },
         { key: 'radiology', label: 'Imaging' },
         { key: 'pharmacy', label: 'Pharmacy' },
+        { key: 'theatre_procedure', label: 'Procedure' },
     ];
-    const out: Array<{ key: Key; label: string; requestNumber: string }> = [];
+    const out: Array<{ key: DirectServiceRequestType; label: string; requestNumber: string }> = [];
     for (const row of defs) {
         const rec = directServiceSentMap.value[`${patient.id}:${row.key}`];
         if (rec) {
@@ -1719,6 +1732,27 @@ function patientInitials(patient: Patient): string {
     return (first + last) || '?';
 }
 
+function routingTicketLabel(ticket: ActiveRoutingTicket): string {
+    const label = directServiceLabel(ticket.serviceType);
+    const number = ticket.requestNumber?.trim();
+    return number ? `${label} ${number}` : label;
+}
+
+function directServiceLabel(serviceType: string | null | undefined): string {
+    switch (serviceType) {
+        case 'laboratory':
+            return 'Lab';
+        case 'radiology':
+            return 'Imaging';
+        case 'pharmacy':
+            return 'Pharmacy';
+        case 'theatre_procedure':
+            return 'Procedure';
+        default:
+            return serviceType ? formatEnumLabel(serviceType) : 'Routing';
+    }
+}
+
 function patientStatusActionLabel(patient: Patient): string {
     return patient.status === 'active' ? 'Mark Inactive' : 'Mark Active';
 }
@@ -1841,7 +1875,7 @@ function isFacilityPlan403Error(error: unknown): boolean {
     );
 }
 
-async function createDirectServiceRequest(serviceType: 'laboratory' | 'pharmacy' | 'radiology'): Promise<void> {
+async function createDirectServiceRequest(serviceType: DirectServiceRequestType): Promise<void> {
     const patient = visitHandoffPatient.value;
     if (!patient || directServiceSending.value !== null) return;
 
@@ -1849,7 +1883,7 @@ async function createDirectServiceRequest(serviceType: 'laboratory' | 'pharmacy'
     if (directServiceSentMap.value[ticketKey]) return;
 
     directServiceSending.value = serviceType;
-    const labelMap = { laboratory: 'Lab', pharmacy: 'Pharmacy', radiology: 'Imaging' } as const;
+    const labelMap = { laboratory: 'Lab', pharmacy: 'Pharmacy', radiology: 'Imaging', theatre_procedure: 'Procedure' } as const;
 
     const appointment = visitHandoffActiveAppointment.value;
 
@@ -1938,6 +1972,20 @@ async function copyVisitHandoffEmergencyTriageLink(): Promise<void> {
         notifySuccess('Link copied. Share it with triage or emergency staff so they can start intake.');
     } catch {
         notifyError('Could not copy automatically. Open Emergency Triage from the sidebar and search for this patient.');
+    }
+}
+
+function directServiceQueueHref(serviceType: DirectServiceRequestType): string {
+    const params = new URLSearchParams({ serviceType, status: 'pending' });
+    return `/walk-in-service-requests?${params.toString()}`;
+}
+
+async function copyDirectServiceTicket(ticket: { label: string; requestNumber: string }): Promise<void> {
+    try {
+        await navigator.clipboard.writeText(`${ticket.label} walk-in ticket ${ticket.requestNumber}`);
+        notifySuccess('Ticket number copied.');
+    } catch {
+        notifyError('Could not copy the ticket number automatically.');
     }
 }
 
@@ -4281,13 +4329,33 @@ onMounted(initialPageLoad);
                                     <p class="truncate text-xs text-muted-foreground">
                                         {{ patient.patientNumber || 'No MRN assigned' }}
                                     </p>
-                                    <p
-                                        v-if="patient.routingHandoffSummary"
-                                        class="mt-0.5 line-clamp-2 text-[11px] font-medium leading-snug text-violet-800 dark:text-violet-200"
-                                        :title="patient.routingHandoffSummary"
+                                    <div
+                                        v-if="patient.activeRoutingTickets?.length || patient.routingHandoffSummary"
+                                        class="mt-1 flex flex-wrap gap-1"
+                                        :title="patient.routingHandoffSummary || undefined"
                                     >
-                                        {{ patient.routingHandoffSummary }}
-                                    </p>
+                                        <span
+                                            v-for="ticket in (patient.activeRoutingTickets ?? []).slice(0, 2)"
+                                            :key="ticket.id"
+                                            class="inline-flex max-w-full items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-900 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-100"
+                                        >
+                                            <AppIcon name="route" class="size-3" />
+                                            <span class="truncate">{{ routingTicketLabel(ticket) }}</span>
+                                            <span class="text-violet-700 dark:text-violet-300">· {{ formatEnumLabel(ticket.status || 'waiting') }}</span>
+                                        </span>
+                                        <span
+                                            v-if="(patient.activeRoutingTickets?.length ?? 0) > 2"
+                                            class="inline-flex items-center rounded-full border border-violet-200 px-2 py-0.5 text-[11px] font-medium text-violet-800 dark:border-violet-800 dark:text-violet-200"
+                                        >
+                                            +{{ (patient.activeRoutingTickets?.length ?? 0) - 2 }}
+                                        </span>
+                                        <span
+                                            v-else-if="!(patient.activeRoutingTickets?.length) && patient.routingHandoffSummary"
+                                            class="line-clamp-1 text-[11px] font-medium text-violet-800 dark:text-violet-200"
+                                        >
+                                            {{ patient.routingHandoffSummary }}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
 
@@ -4655,7 +4723,7 @@ onMounted(initialPageLoad);
                             </Alert>
                         </div>
 
-                        <!-- ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ PRIMARY INTAKE STRIP ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ -->
+                        <!-- ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬                         <!-- PRIMARY INTAKE STRIP -->  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ -->
                         <fieldset class="grid gap-4 rounded-lg border p-3">
                             <legend class="px-2 text-sm font-medium text-muted-foreground">Patient identity</legend>
 
@@ -5347,6 +5415,7 @@ onMounted(initialPageLoad);
                                                         { key: 'laboratory', label: 'Lab', icon: 'flask-conical' },
                                                         { key: 'radiology', label: 'Imaging', icon: 'activity' },
                                                         { key: 'pharmacy', label: 'Pharmacy', icon: 'pill' },
+                                                        { key: 'theatre_procedure', label: 'Procedure', icon: 'scissors' },
                                                     ] as const"
                                                     :key="service.key"
                                                     type="button"
@@ -5394,6 +5463,36 @@ onMounted(initialPageLoad);
                                                         .join(' · ')
                                                 }}
                                             </p>
+                                            <div
+                                                v-if="visitHandoffDirectServiceSessionTickets.length > 0"
+                                                class="flex flex-wrap gap-2"
+                                            >
+                                                <Button
+                                                    v-for="ticket in visitHandoffDirectServiceSessionTickets"
+                                                    :key="`copy-${ticket.key}`"
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    class="h-7 gap-1.5 text-xs"
+                                                    @click="copyDirectServiceTicket(ticket)"
+                                                >
+                                                    <AppIcon name="copy" class="size-3.5" />
+                                                    Copy {{ ticket.label }} ticket
+                                                </Button>
+                                                <Button
+                                                    v-for="ticket in visitHandoffDirectServiceSessionTickets"
+                                                    :key="`queue-${ticket.key}`"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    as-child
+                                                    class="h-7 gap-1.5 text-xs"
+                                                >
+                                                    <Link :href="directServiceQueueHref(ticket.key)">
+                                                        <AppIcon name="list-checks" class="size-3.5" />
+                                                        Open {{ ticket.label }} queue
+                                                    </Link>
+                                                </Button>
+                                            </div>
                                         </div>
 
                                         <!-- Ordering staff: direct workspace links -->
@@ -5664,6 +5763,33 @@ onMounted(initialPageLoad);
                                                 {{ detailsSheetPatient.statusReason }}
                                             </span>
                                         </div>
+
+                                        <Card
+                                            v-if="detailsSheetPatient.activeRoutingTickets?.length"
+                                            class="rounded-lg border-violet-200 bg-violet-50/60 !gap-0 overflow-hidden dark:border-violet-900 dark:bg-violet-950/20"
+                                        >
+                                            <CardHeader class="px-4 py-2.5">
+                                                <CardTitle class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-violet-900 dark:text-violet-100">
+                                                    <AppIcon name="route" class="size-3.5" />
+                                                    Active Routing / Handoff
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent class="space-y-2 px-4 pb-3 pt-0">
+                                                <div
+                                                    v-for="ticket in detailsSheetPatient.activeRoutingTickets"
+                                                    :key="ticket.id"
+                                                    class="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background px-3 py-2 text-sm"
+                                                >
+                                                    <div class="min-w-0">
+                                                        <p class="font-medium">{{ routingTicketLabel(ticket) }}</p>
+                                                        <p class="text-xs text-muted-foreground">
+                                                            {{ directServiceLabel(ticket.serviceType) }} desk · {{ formatEnumLabel(ticket.status || 'waiting') }}
+                                                        </p>
+                                                    </div>
+                                                    <Badge variant="outline">{{ ticket.priority ? formatEnumLabel(ticket.priority) : 'Routine' }}</Badge>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
 
                                         <!-- Identity & Contact -->
                                         <div class="grid gap-3 sm:grid-cols-2">

@@ -7,6 +7,7 @@ enum ServiceRequestServiceType: string
     case LABORATORY = 'laboratory';
     case PHARMACY = 'pharmacy';
     case RADIOLOGY = 'radiology';
+    case THEATRE_PROCEDURE = 'theatre_procedure';
 
     /**
      * @return string[]

@@ -56,6 +56,18 @@ type Patient = {
     district: string | null;
     addressLine: string | null;
     status: string | null;
+    routingHandoffSummary?: string | null;
+    activeRoutingTickets?: ActiveRoutingTicket[];
+};
+
+type ActiveRoutingTicket = {
+    id: string;
+    requestNumber: string | null;
+    serviceType: string | null;
+    priority: string | null;
+    status: string | null;
+    requestedAt?: string | null;
+    linkedOrderNumber?: string | null;
 };
 
 type MedicalRecord = {
@@ -2156,6 +2168,27 @@ function patientName(target: Patient | null): string {
     return [target.firstName, target.middleName, target.lastName].filter(Boolean).join(' ').trim() || target.patientNumber || target.id;
 }
 
+function directServiceLabel(serviceType: string | null | undefined): string {
+    switch (serviceType) {
+        case 'laboratory':
+            return 'Lab';
+        case 'radiology':
+            return 'Imaging';
+        case 'pharmacy':
+            return 'Pharmacy';
+        case 'theatre_procedure':
+            return 'Procedure';
+        default:
+            return serviceType ? formatEnumLabel(serviceType) : 'Routing';
+    }
+}
+
+function routingTicketLabel(ticket: ActiveRoutingTicket): string {
+    const label = directServiceLabel(ticket.serviceType);
+    const number = ticket.requestNumber?.trim();
+    return number ? `${label} ${number}` : label;
+}
+
 function formatDate(value: string | null | undefined): string {
     if (!value) return 'Not recorded';
     const date = new Date(value);
@@ -3569,6 +3602,32 @@ onMounted(() => {
                                                 </CardContent>
                                             </Card>
                                         </div>
+
+                                        <Card
+                                            v-if="patient.activeRoutingTickets?.length"
+                                            class="rounded-lg border-violet-200 bg-violet-50/60 dark:border-violet-900 dark:bg-violet-950/20"
+                                        >
+                                            <CardHeader class="px-4 pb-2 pt-4">
+                                                <CardTitle class="flex items-center gap-2 text-base">
+                                                    <AppIcon name="route" class="size-4 text-violet-700 dark:text-violet-300" />
+                                                    Active Routing / Handoff
+                                                </CardTitle>
+                                                <CardDescription>Read-only direct-service tickets currently moving this patient through the hospital.</CardDescription>
+                                            </CardHeader>
+                                            <CardContent class="grid gap-2 px-4 pb-4 sm:grid-cols-2 xl:grid-cols-4">
+                                                <div
+                                                    v-for="ticket in patient.activeRoutingTickets"
+                                                    :key="ticket.id"
+                                                    class="rounded-md border bg-background px-3 py-2"
+                                                >
+                                                    <p class="text-sm font-medium text-foreground">{{ routingTicketLabel(ticket) }}</p>
+                                                    <p class="mt-1 text-xs text-muted-foreground">
+                                                        {{ directServiceLabel(ticket.serviceType) }} · {{ formatEnumLabel(ticket.status || 'waiting') }}
+                                                    </p>
+                                                    <p v-if="ticket.priority" class="mt-1 text-xs text-muted-foreground">Priority: {{ formatEnumLabel(ticket.priority) }}</p>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
                                     </div>
                                 </TabsContent>
 

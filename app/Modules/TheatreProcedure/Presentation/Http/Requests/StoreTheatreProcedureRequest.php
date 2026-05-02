@@ -24,6 +24,7 @@ class StoreTheatreProcedureRequest extends FormRequest
             'appointmentId' => ['nullable', 'uuid'],
             'entryMode' => ['nullable', Rule::in(['draft', 'active'])],
             'orderSessionId' => ['nullable', 'uuid'],
+            'serviceRequestId' => ['nullable', 'uuid'],
             'replacesOrderId' => ['nullable', 'uuid', 'prohibits:addOnToOrderId'],
             'addOnToOrderId' => ['nullable', 'uuid', 'prohibits:replacesOrderId'],
             'theatreProcedureCatalogItemId' => ['nullable', 'uuid'],

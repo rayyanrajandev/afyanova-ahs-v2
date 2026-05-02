@@ -7,6 +7,7 @@ import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycleActionDialog.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
+import WalkInServiceRequestsPanel from '@/components/service-requests/WalkInServiceRequestsPanel.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -274,8 +275,10 @@ const canViewResourceAudit = ref(false);
 const canReadTheatreProcedureCatalog = ref(false);
 const canReadTheatreRoomRegistry = ref(false);
 const canReadTheatreClinicianDirectory = ref(false);
+const canUpdateServiceRequestStatus = ref(false);
 const pageLoading = ref(true);
 const theatreWorkspaceView = ref<TheatreWorkspaceView>('queue');
+const theatreWalkInPanelRef = ref<InstanceType<typeof WalkInServiceRequestsPanel> | null>(null);
 
 const queueLoading = ref(false);
 const queueError = ref<string | null>(null);
@@ -298,6 +301,7 @@ const createForm = reactive({
     patientId: queryParam('patientId'),
     admissionId: queryParam('admissionId'),
     appointmentId: queryParam('appointmentId'),
+    serviceRequestId: queryParam('serviceRequestId'),
     theatreProcedureCatalogItemId: '',
     procedureType: '',
     procedureName: '',
@@ -1422,6 +1426,7 @@ const {
         patientId: createForm.patientId,
         admissionId: createForm.admissionId,
         appointmentId: createForm.appointmentId,
+        serviceRequestId: createForm.serviceRequestId,
         serverDraftId: createServerDraftId.value,
         theatreProcedureCatalogItemId: createForm.theatreProcedureCatalogItemId,
         procedureType: createForm.procedureType,
@@ -1437,6 +1442,7 @@ const {
         createForm.patientId = draft.patientId;
         createForm.admissionId = draft.admissionId;
         createForm.appointmentId = draft.appointmentId;
+        createForm.serviceRequestId = draft.serviceRequestId ?? '';
         createServerDraftId.value = draft.serverDraftId?.trim?.() ?? '';
         createForm.theatreProcedureCatalogItemId = draft.theatreProcedureCatalogItemId;
         createForm.procedureType = draft.procedureType;
@@ -2878,6 +2884,7 @@ async function loadPermissions() {
         canViewResourceAudit.value = names.has('theatre.procedures.view-resource-audit-logs');
         canReadTheatreProcedureCatalog.value = names.has('platform.clinical-catalog.read');
         canReadTheatreRoomRegistry.value = canRead.value || canCreate.value || canUpdate.value;
+        canUpdateServiceRequestStatus.value = names.has('service.requests.update-status');
         canReadTheatreClinicianDirectory.value =
             canRead.value ||
             canCreate.value ||
@@ -2903,6 +2910,7 @@ async function loadPermissions() {
         canReadTheatreProcedureCatalog.value = false;
         canReadTheatreRoomRegistry.value = false;
         canReadTheatreClinicianDirectory.value = false;
+        canUpdateServiceRequestStatus.value = false;
     }
 }
 
@@ -3066,6 +3074,18 @@ async function loadQueue() {
     }
 }
 
+function onTheatreWalkInAcknowledged(payload: { patientId: string; requestId: string }): void {
+    if (payload.patientId) {
+        createForm.patientId = payload.patientId;
+        createForm.serviceRequestId = payload.requestId;
+        createPatientContextLocked.value = false;
+        void hydratePatientSummary(payload.patientId);
+        void loadCreateContextSuggestions(payload.patientId);
+    }
+
+    theatreWorkspaceView.value = 'create';
+}
+
 async function submitCreate() {
     if (
         !canCreate.value ||
@@ -3136,6 +3156,7 @@ function buildCreateTheatreProcedurePayload(options?: {
         patientId,
         admissionId: admissionId || null,
         appointmentId: appointmentId || null,
+        serviceRequestId: createForm.serviceRequestId.trim() || null,
         orderSessionId: generateClinicalOrderSessionId('theatre-session'),
         replacesOrderId: createLifecycleReplaceOrderId.value || null,
         addOnToOrderId: createLifecycleAddOnOrderId.value || null,
@@ -3153,6 +3174,7 @@ function buildCreateTheatreProcedurePayload(options?: {
 }
 
 function resetCreateProcedureDraftFields(): void {
+    createForm.serviceRequestId = '';
     createForm.theatreProcedureCatalogItemId = '';
     createForm.procedureType = '';
     createForm.procedureName = '';
@@ -4277,6 +4299,17 @@ onMounted(async () => {
                 </AlertTitle>
                 <AlertDescription>{{ queueError }}</AlertDescription>
             </Alert>
+
+            <WalkInServiceRequestsPanel
+                v-if="theatreWorkspaceView !== 'create'"
+                ref="theatreWalkInPanelRef"
+                service-type="theatre_procedure"
+                :enabled="canUpdateServiceRequestStatus"
+                panel-title="Walk-in patients awaiting procedures"
+                acknowledge-button-label="Acknowledge & schedule procedure"
+                success-message="Walk-in acknowledged. Patient is ready for procedure scheduling."
+                @acknowledged="onTheatreWalkInAcknowledged"
+            />
 
             <!-- Queue bar -->
             <div

@@ -17,6 +17,7 @@ return new class extends Migration
             'HOSPITAL.LABORATORY.USER',
             'HOSPITAL.PHARMACY.USER',
             'HOSPITAL.RADIOLOGY.USER',
+            'HOSPITAL.THEATRE.USER',
             'HOSPITAL.NURSING.USER',
             'HOSPITAL.FACILITY.ADMIN',
         ],
@@ -24,6 +25,7 @@ return new class extends Migration
             'HOSPITAL.LABORATORY.USER',
             'HOSPITAL.PHARMACY.USER',
             'HOSPITAL.RADIOLOGY.USER',
+            'HOSPITAL.THEATRE.USER',
             'HOSPITAL.FACILITY.ADMIN',
         ],
     ];

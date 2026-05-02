@@ -55,6 +55,7 @@ class SummarizeActiveWalkInsForPatientIdsUseCase
             'laboratory' => 'Lab',
             'pharmacy' => 'Pharmacy',
             'radiology' => 'Imaging',
+            'theatre_procedure' => 'Procedure',
             default => $serviceType !== '' ? $serviceType : 'Service',
         };
     }

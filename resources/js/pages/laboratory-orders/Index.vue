@@ -426,6 +426,7 @@ type CreateForm = {
     patientId: string;
     appointmentId: string;
     admissionId: string;
+    serviceRequestId: string;
     labTestCatalogItemId: string;
     testCode: string;
     testName: string;
@@ -439,6 +440,7 @@ type LaboratoryOrderBasketItem = {
     patientId: string;
     appointmentId: string;
     admissionId: string;
+    serviceRequestId: string;
     labTestCatalogItemId: string;
     testCode: string;
     testName: string;
@@ -1081,6 +1083,7 @@ const createForm = reactive<CreateForm>({
     patientId: queryParam('patientId'),
     appointmentId: queryParam('appointmentId'),
     admissionId: queryParam('admissionId'),
+    serviceRequestId: queryParam('serviceRequestId'),
     labTestCatalogItemId: '',
     testCode: '',
     testName: '',
@@ -1271,6 +1274,7 @@ const {
         patientId: createForm.patientId,
         appointmentId: createForm.appointmentId,
         admissionId: createForm.admissionId,
+        serviceRequestId: createForm.serviceRequestId,
         serverDraftId: createServerDraftId.value,
         labTestCatalogItemId: createForm.labTestCatalogItemId,
         testCode: createForm.testCode,
@@ -1284,6 +1288,7 @@ const {
         createForm.patientId = draft.patientId;
         createForm.appointmentId = draft.appointmentId;
         createForm.admissionId = draft.admissionId;
+        createForm.serviceRequestId = draft.serviceRequestId ?? '';
         createServerDraftId.value = draft.serverDraftId?.trim?.() ?? '';
         createForm.labTestCatalogItemId = draft.labTestCatalogItemId;
         createForm.testCode = draft.testCode;
@@ -1458,6 +1463,7 @@ function resetCreateOrderDraftFields(options?: {
     preservePriority?: boolean;
     preserveClinicalNotes?: boolean;
 }) {
+    createForm.serviceRequestId = '';
     createForm.labTestCatalogItemId = '';
     clearCreateLabTestCatalogDerivedFields();
     createForm.specimenType = '';
@@ -1482,6 +1488,7 @@ function restoreCreateOrderDraftFromBasketItem(
     createForm.patientId = item.patientId;
     createForm.appointmentId = item.appointmentId;
     createForm.admissionId = item.admissionId;
+    createForm.serviceRequestId = item.serviceRequestId;
     createForm.labTestCatalogItemId = item.labTestCatalogItemId;
     createForm.testCode = item.testCode;
     createForm.testName = item.testName;
@@ -2513,9 +2520,10 @@ async function loadDetailsTrendOrders(order: LaboratoryOrder) {
     }
 }
 
-function onLaboratoryWalkInAcknowledged(payload: { patientId: string }): void {
+function onLaboratoryWalkInAcknowledged(payload: { patientId: string; requestId: string }): void {
     if (payload.patientId) {
         createForm.patientId = payload.patientId;
+        createForm.serviceRequestId = payload.requestId;
         createPatientContextLocked.value = false;
         void hydratePatientSummary(payload.patientId);
     }
@@ -2560,6 +2568,7 @@ function buildCreateLaboratoryOrderPayload(
         | 'patientId'
         | 'appointmentId'
         | 'admissionId'
+        | 'serviceRequestId'
         | 'labTestCatalogItemId'
         | 'testCode'
         | 'testName'
@@ -2578,6 +2587,7 @@ function buildCreateLaboratoryOrderPayload(
         patientId: item.patientId.trim(),
         appointmentId: item.appointmentId.trim() || null,
         admissionId: item.admissionId.trim() || null,
+        serviceRequestId: item.serviceRequestId.trim() || null,
         orderSessionId: options?.orderSessionId?.trim() || null,
         replacesOrderId: options?.replacesOrderId?.trim() || null,
         addOnToOrderId: options?.addOnToOrderId?.trim() || null,
@@ -2678,6 +2688,7 @@ function validateCurrentCreateOrderDraft(): LaboratoryOrderBasketItem | null {
         patientId: createForm.patientId.trim(),
         appointmentId: createForm.appointmentId.trim(),
         admissionId: createForm.admissionId.trim(),
+        serviceRequestId: createForm.serviceRequestId.trim(),
         labTestCatalogItemId: createForm.labTestCatalogItemId.trim(),
         testCode: createForm.testCode.trim(),
         testName: createForm.testName.trim(),

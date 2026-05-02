@@ -73,12 +73,14 @@ const { hasPermission } = usePlatformAccess();
 
 const canExport = () => hasPermission('service.requests.export');
 const canViewAudit = () => hasPermission('service.requests.audit-logs.read');
+const routeSearchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
 
 const serviceTypeOptions = [
     { value: '', label: 'All desks' },
     { value: 'laboratory', label: formatEnumLabel('laboratory') },
     { value: 'pharmacy', label: formatEnumLabel('pharmacy') },
     { value: 'radiology', label: formatEnumLabel('radiology') },
+    { value: 'theatre_procedure', label: 'Procedure' },
 ];
 
 const statusFilterOptions = [
@@ -96,9 +98,9 @@ const priorityFilterOptions = [
 ];
 
 const filters = reactive({
-    serviceType: '',
-    status: '',
-    priority: '',
+    serviceType: routeSearchParams.get('serviceType') ?? '',
+    status: routeSearchParams.get('status') ?? '',
+    priority: routeSearchParams.get('priority') ?? '',
     page: 1,
     perPage: 25,
 });

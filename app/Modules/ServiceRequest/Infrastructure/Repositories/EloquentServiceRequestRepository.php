@@ -55,6 +55,21 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
             ->exists();
     }
 
+    public function findActiveForPatientAndServiceType(string $patientId, string $serviceType): ?array
+    {
+        $queryBuilder = ServiceRequestModel::query();
+        $this->applyPlatformScopeIfEnabled($queryBuilder);
+
+        return $queryBuilder
+            ->where('patient_id', $patientId)
+            ->where('service_type', $serviceType)
+            ->whereIn('status', ['pending', 'in_progress'])
+            ->orderByRaw("CASE WHEN status = 'pending' THEN 0 ELSE 1 END")
+            ->orderByDesc('requested_at')
+            ->first()
+            ?->toArray();
+    }
+
     public function search(
         ?string $patientId,
         ?string $serviceType,

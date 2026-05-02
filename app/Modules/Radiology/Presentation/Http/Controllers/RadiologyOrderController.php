@@ -336,6 +336,7 @@ class RadiologyOrderController extends Controller
             'appointmentId' => 'appointment_id',
             'entryMode' => 'entry_mode',
             'orderSessionId' => 'clinical_order_session_id',
+            'serviceRequestId' => 'service_request_id',
             'replacesOrderId' => 'replaces_order_id',
             'addOnToOrderId' => 'add_on_to_order_id',
             'orderedByUserId' => 'ordered_by_user_id',

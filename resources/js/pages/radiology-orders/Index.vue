@@ -220,6 +220,7 @@ type CreateForm = {
     patientId: string;
     appointmentId: string;
     admissionId: string;
+    serviceRequestId: string;
     radiologyProcedureCatalogItemId: string;
     procedureCode: string;
     modality: string;
@@ -232,6 +233,7 @@ type RadiologyOrderBasketItem = {
     patientId: string;
     appointmentId: string;
     admissionId: string;
+    serviceRequestId: string;
     radiologyProcedureCatalogItemId: string;
     procedureCode: string;
     modality: string;
@@ -392,6 +394,7 @@ const createForm = reactive<CreateForm>({
     patientId: queryParam('patientId'),
     appointmentId: queryParam('appointmentId'),
     admissionId: queryParam('admissionId'),
+    serviceRequestId: queryParam('serviceRequestId'),
     radiologyProcedureCatalogItemId: '',
     procedureCode: '',
     modality: 'xray',
@@ -523,6 +526,7 @@ const {
         patientId: createForm.patientId,
         appointmentId: createForm.appointmentId,
         admissionId: createForm.admissionId,
+        serviceRequestId: createForm.serviceRequestId,
         serverDraftId: createServerDraftId.value,
         radiologyProcedureCatalogItemId:
             createForm.radiologyProcedureCatalogItemId,
@@ -537,6 +541,7 @@ const {
         createForm.patientId = draft.patientId;
         createForm.appointmentId = draft.appointmentId;
         createForm.admissionId = draft.admissionId;
+        createForm.serviceRequestId = draft.serviceRequestId ?? '';
         createServerDraftId.value = draft.serverDraftId?.trim?.() ?? '';
         createForm.radiologyProcedureCatalogItemId =
             draft.radiologyProcedureCatalogItemId;
@@ -2912,9 +2917,10 @@ function nextPage() {
     void loadQueue();
 }
 
-function onRadiologyWalkInAcknowledged(payload: { patientId: string }): void {
+function onRadiologyWalkInAcknowledged(payload: { patientId: string; requestId: string }): void {
     if (payload.patientId) {
         createForm.patientId = payload.patientId;
+        createForm.serviceRequestId = payload.requestId;
         createPatientContextLocked.value = false;
         void hydratePatientSummary(payload.patientId);
     }
@@ -3045,6 +3051,7 @@ function buildCreateRadiologyOrderPayload(
         patientId: item.patientId.trim(),
         appointmentId: item.appointmentId.trim() || null,
         admissionId: item.admissionId.trim() || null,
+        serviceRequestId: item.serviceRequestId.trim() || null,
         orderSessionId: options?.orderSessionId?.trim() || null,
         replacesOrderId: options?.replacesOrderId?.trim() || null,
         addOnToOrderId: options?.addOnToOrderId?.trim() || null,
@@ -3153,6 +3160,7 @@ function validateCurrentCreateOrderDraft(): RadiologyOrderBasketItem | null {
         patientId: createForm.patientId.trim(),
         appointmentId: createForm.appointmentId.trim(),
         admissionId: createForm.admissionId.trim(),
+        serviceRequestId: createForm.serviceRequestId.trim(),
         radiologyProcedureCatalogItemId:
             createForm.radiologyProcedureCatalogItemId.trim(),
         procedureCode: createForm.procedureCode.trim(),
@@ -3164,6 +3172,7 @@ function validateCurrentCreateOrderDraft(): RadiologyOrderBasketItem | null {
 }
 
 function resetCreateOrderDraftFields(): void {
+    createForm.serviceRequestId = '';
     createForm.radiologyProcedureCatalogItemId = '';
     createForm.procedureCode = '';
     createForm.modality = 'xray';
@@ -3175,6 +3184,7 @@ function resetCreateOrderDraftFields(): void {
 function restoreCreateOrderDraftFromBasketItem(
     item: RadiologyOrderBasketItem,
 ): void {
+    createForm.serviceRequestId = item.serviceRequestId;
     createForm.radiologyProcedureCatalogItemId =
         item.radiologyProcedureCatalogItemId;
     createForm.procedureCode = item.procedureCode;

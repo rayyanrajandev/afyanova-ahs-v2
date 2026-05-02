@@ -36,6 +36,10 @@ class ServiceRequestResponseTransformer
                     ? $serviceRequest['completed_at']
                     : optional($serviceRequest['completed_at'])->toISOString())
                 : null,
+            'statusReason' => $serviceRequest['status_reason'] ?? null,
+            'linkedOrderType' => $serviceRequest['linked_order_type'] ?? null,
+            'linkedOrderId' => $serviceRequest['linked_order_id'] ?? null,
+            'linkedOrderNumber' => $serviceRequest['linked_order_number'] ?? null,
             'createdAt' => isset($serviceRequest['created_at'])
                 ? (is_string($serviceRequest['created_at'])
                     ? $serviceRequest['created_at']

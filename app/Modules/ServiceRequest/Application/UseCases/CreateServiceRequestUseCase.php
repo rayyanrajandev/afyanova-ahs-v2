@@ -2,6 +2,7 @@
 
 namespace App\Modules\ServiceRequest\Application\UseCases;
 
+use App\Modules\ServiceRequest\Application\Exceptions\ActiveServiceRequestAlreadyExistsException;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use App\Modules\ServiceRequest\Application\Exceptions\PatientNotEligibleForServiceRequestException;
@@ -35,6 +36,12 @@ class CreateServiceRequestUseCase
             throw new PatientNotEligibleForServiceRequestException(
                 'Service request can only be created for an existing patient.',
             );
+        }
+
+        $serviceType = (string) $payload['service_type'];
+        $activeRequest = $this->serviceRequestRepository->findActiveForPatientAndServiceType($patientId, $serviceType);
+        if ($activeRequest !== null) {
+            throw new ActiveServiceRequestAlreadyExistsException($activeRequest);
         }
 
         $payload['status'] = ServiceRequestStatus::PENDING->value;

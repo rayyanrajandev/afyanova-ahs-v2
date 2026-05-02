@@ -5,6 +5,7 @@ namespace App\Modules\TheatreProcedure\Application\UseCases;
 use App\Modules\Platform\Domain\Repositories\FacilityResourceRepositoryInterface;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
+use App\Modules\ServiceRequest\Application\UseCases\LinkServiceRequestToClinicalOrderUseCase;
 use App\Modules\TheatreProcedure\Application\Exceptions\TheatreProcedureCatalogItemNotEligibleException;
 use App\Modules\TheatreProcedure\Application\Exceptions\TheatreRoomServicePointNotEligibleException;
 use App\Modules\TheatreProcedure\Domain\Repositories\TheatreProcedureAuditLogRepositoryInterface;
@@ -26,11 +27,19 @@ class CreateTheatreProcedureUseCase
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
         private readonly OrderSessionManager $orderSessionManager,
+        private readonly LinkServiceRequestToClinicalOrderUseCase $serviceRequestLinker,
     ) {}
 
     public function execute(array $payload, ?int $actorId = null): array
     {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
+
+        $patientId = (string) $payload['patient_id'];
+        $serviceRequestId = trim((string) ($payload['service_request_id'] ?? ''));
+        unset($payload['service_request_id']);
+        if ($serviceRequestId !== '') {
+            $this->serviceRequestLinker->assertLinkable($serviceRequestId, $patientId, 'theatre_procedure');
+        }
 
         $scheduledAt = $payload['scheduled_at'] ?? null;
         $status = $payload['status'] ?? TheatreProcedureStatus::PLANNED->value;
@@ -106,6 +115,18 @@ class CreateTheatreProcedureUseCase
                 'after' => $created,
             ],
         );
+
+        if ($serviceRequestId !== '') {
+            $this->serviceRequestLinker->complete(
+                serviceRequestId: $serviceRequestId,
+                patientId: $patientId,
+                serviceType: 'theatre_procedure',
+                linkedOrderType: 'theatre_procedure',
+                linkedOrderId: (string) $created['id'],
+                linkedOrderNumber: isset($created['procedure_number']) ? (string) $created['procedure_number'] : null,
+                actorId: $actorId,
+            );
+        }
 
         return $created;
     }

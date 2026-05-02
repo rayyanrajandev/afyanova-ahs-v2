@@ -613,6 +613,7 @@ type CreateForm = {
     patientId: string;
     appointmentId: string;
     admissionId: string;
+    serviceRequestId: string;
     approvedMedicineCatalogItemId: string;
     medicationCode: string;
     medicationName: string;
@@ -627,6 +628,7 @@ type PharmacyOrderBasketItem = {
     patientId: string;
     appointmentId: string;
     admissionId: string;
+    serviceRequestId: string;
     approvedMedicineCatalogItemId: string;
     medicationCode: string;
     medicationName: string;
@@ -1324,6 +1326,7 @@ const createForm = reactive<CreateForm>({
     patientId: queryParam('patientId'),
     appointmentId: queryParam('appointmentId'),
     admissionId: queryParam('admissionId'),
+    serviceRequestId: queryParam('serviceRequestId'),
     approvedMedicineCatalogItemId: '',
     medicationCode: '',
     medicationName: '',
@@ -1715,6 +1718,7 @@ const {
         patientId: createForm.patientId,
         appointmentId: createForm.appointmentId,
         admissionId: createForm.admissionId,
+        serviceRequestId: createForm.serviceRequestId,
         serverDraftId: createServerDraftId.value,
         approvedMedicineCatalogItemId: createForm.approvedMedicineCatalogItemId,
         medicationCode: createForm.medicationCode,
@@ -1731,6 +1735,7 @@ const {
         createForm.patientId = draft.patientId;
         createForm.appointmentId = draft.appointmentId;
         createForm.admissionId = draft.admissionId;
+        createForm.serviceRequestId = draft.serviceRequestId ?? '';
         createServerDraftId.value = draft.serverDraftId?.trim?.() ?? '';
         createForm.approvedMedicineCatalogItemId =
             draft.approvedMedicineCatalogItemId;
@@ -1894,6 +1899,7 @@ function nextCreateOrderBasketItemKey(): string {
 }
 
 function resetCreateOrderDraftFields() {
+    createForm.serviceRequestId = '';
     createForm.approvedMedicineCatalogItemId = '';
     clearCreateApprovedMedicineDerivedFields();
     createForm.dosageInstruction = '';
@@ -1913,6 +1919,7 @@ function restoreCreateOrderDraftFromBasketItem(
     createForm.patientId = item.patientId;
     createForm.appointmentId = item.appointmentId;
     createForm.admissionId = item.admissionId;
+    createForm.serviceRequestId = item.serviceRequestId;
     createForm.approvedMedicineCatalogItemId = item.approvedMedicineCatalogItemId;
     createForm.medicationCode = item.medicationCode;
     createForm.medicationName = item.medicationName;
@@ -3010,6 +3017,7 @@ function validateCurrentCreateOrderDraft(options?: {
         patientId: createForm.patientId.trim(),
         appointmentId: createForm.appointmentId.trim(),
         admissionId: createForm.admissionId.trim(),
+        serviceRequestId: createForm.serviceRequestId.trim(),
         approvedMedicineCatalogItemId:
             createForm.approvedMedicineCatalogItemId.trim(),
         medicationCode: createForm.medicationCode.trim(),
@@ -3034,6 +3042,7 @@ function buildCreatePharmacyOrderPayload(
         patientId: item.patientId,
         appointmentId: item.appointmentId || null,
         admissionId: item.admissionId || null,
+        serviceRequestId: item.serviceRequestId || null,
         orderSessionId: options?.orderSessionId?.trim() || null,
         replacesOrderId: options?.replacesOrderId?.trim() || null,
         addOnToOrderId: options?.addOnToOrderId?.trim() || null,
@@ -4196,9 +4205,10 @@ async function loadOrderStatusCounts() {
     }
 }
 
-function onPharmacyWalkInAcknowledged(payload: { patientId: string }): void {
+function onPharmacyWalkInAcknowledged(payload: { patientId: string; requestId: string }): void {
     if (payload.patientId) {
         createForm.patientId = payload.patientId;
+        createForm.serviceRequestId = payload.requestId;
         createPatientContextLocked.value = false;
         void hydratePatientSummary(payload.patientId);
     }

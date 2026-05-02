@@ -18,6 +18,7 @@ use App\Modules\Pharmacy\Domain\Services\PatientLookupServiceInterface;
 use App\Modules\Pharmacy\Domain\ValueObjects\PharmacyOrderStatus;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
+use App\Modules\ServiceRequest\Application\UseCases\LinkServiceRequestToClinicalOrderUseCase;
 use App\Support\ClinicalOrders\ClinicalOrderLifecycle;
 use App\Support\ClinicalOrders\OrderSessionManager;
 use Illuminate\Support\Str;
@@ -37,6 +38,7 @@ class CreatePharmacyOrderUseCase
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
         private readonly OrderSessionManager $orderSessionManager,
         private readonly MedicationSafetyReviewGate $medicationSafetyReviewGate,
+        private readonly LinkServiceRequestToClinicalOrderUseCase $serviceRequestLinker,
     ) {}
 
     public function execute(array $payload, ?int $actorId = null): array
@@ -48,6 +50,12 @@ class CreatePharmacyOrderUseCase
             throw new PatientNotEligibleForPharmacyOrderException(
                 'Pharmacy order can only be created for an existing patient.',
             );
+        }
+
+        $serviceRequestId = trim((string) ($payload['service_request_id'] ?? ''));
+        unset($payload['service_request_id']);
+        if ($serviceRequestId !== '') {
+            $this->serviceRequestLinker->assertLinkable($serviceRequestId, $patientId, 'pharmacy');
         }
 
         $appointmentId = $payload['appointment_id'] ?? null;
@@ -173,6 +181,18 @@ class CreatePharmacyOrderUseCase
                 ],
             ],
         );
+
+        if ($serviceRequestId !== '') {
+            $this->serviceRequestLinker->complete(
+                serviceRequestId: $serviceRequestId,
+                patientId: $patientId,
+                serviceType: 'pharmacy',
+                linkedOrderType: 'pharmacy_order',
+                linkedOrderId: (string) $createdOrder['id'],
+                linkedOrderNumber: isset($createdOrder['order_number']) ? (string) $createdOrder['order_number'] : null,
+                actorId: $actorId,
+            );
+        }
 
         return $createdOrder;
     }

@@ -27,7 +27,7 @@ type PatientLookupResponse = {
 
 const props = withDefaults(
     defineProps<{
-        serviceType: 'laboratory' | 'pharmacy' | 'radiology';
+        serviceType: 'laboratory' | 'pharmacy' | 'radiology' | 'theatre_procedure';
         /** User has service.requests.update-status */
         enabled: boolean;
         panelTitle: string;

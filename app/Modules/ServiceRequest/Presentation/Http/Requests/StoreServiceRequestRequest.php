@@ -2,6 +2,7 @@
 
 namespace App\Modules\ServiceRequest\Presentation\Http\Requests;
 
+use App\Modules\ServiceRequest\Domain\ValueObjects\ServiceRequestServiceType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -22,7 +23,7 @@ class StoreServiceRequestRequest extends FormRequest
             'appointmentId' => ['nullable', 'uuid', Rule::exists('appointments', 'id')->where(
                 fn ($query) => $query->where('patient_id', (string) $this->input('patientId')),
             )],
-            'serviceType' => ['required', Rule::in(['laboratory', 'pharmacy', 'radiology'])],
+            'serviceType' => ['required', Rule::in(ServiceRequestServiceType::values())],
             'priority' => ['nullable', Rule::in(['routine', 'urgent'])],
             'notes' => ['nullable', 'string', 'max:1000'],
         ];

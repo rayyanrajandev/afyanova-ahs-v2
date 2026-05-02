@@ -34,6 +34,9 @@ class ServiceRequestModel extends Model
         'acknowledged_by_user_id',
         'completed_at',
         'status_reason',
+        'linked_order_type',
+        'linked_order_id',
+        'linked_order_number',
     ];
 
     /**

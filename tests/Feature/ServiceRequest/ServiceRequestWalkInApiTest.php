@@ -121,6 +121,34 @@ it('stores optional appointment linkage when ids match patient', function (): vo
         ->assertJsonPath('data.appointmentId', $appointment->id);
 });
 
+it('can create a procedure walk-in ticket', function (): void {
+    $user = userWithWalkInRights();
+    $patient = makeWalkInPatient('P');
+
+    $this->actingAs($user)->postJson('/api/v1/service-requests', [
+        'patientId' => $patient->id,
+        'serviceType' => 'theatre_procedure',
+    ])->assertCreated()
+        ->assertJsonPath('data.serviceType', 'theatre_procedure');
+});
+
+it('rejects duplicate active tickets for the same patient and service desk', function (): void {
+    $user = userWithWalkInRights();
+    $patient = makeWalkInPatient('Q');
+
+    $payload = [
+        'patientId' => $patient->id,
+        'serviceType' => 'pharmacy',
+    ];
+
+    $this->actingAs($user)->postJson('/api/v1/service-requests', $payload)
+        ->assertCreated();
+
+    $this->actingAs($user)->postJson('/api/v1/service-requests', $payload)
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['serviceType']);
+});
+
 it('rejects appointment linkage that points at another patient', function (): void {
     $user = userWithWalkInRights();
     $patientA = makeWalkInPatient('C');

@@ -17,7 +17,9 @@ use App\Modules\Patient\Presentation\Http\Transformers\PatientAuditLogResponseTr
 use App\Modules\Patient\Presentation\Http\Transformers\PatientResponseTransformer;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
+use App\Modules\ServiceRequest\Application\UseCases\ListActiveWalkInsForPatientIdsUseCase;
 use App\Modules\ServiceRequest\Application\UseCases\SummarizeActiveWalkInsForPatientIdsUseCase;
+use App\Modules\ServiceRequest\Presentation\Http\Transformers\ServiceRequestResponseTransformer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -32,12 +34,14 @@ class PatientController extends Controller
         Request $request,
         ListPatientsUseCase $useCase,
         SummarizeActiveWalkInsForPatientIdsUseCase $walkInSummaries,
+        ListActiveWalkInsForPatientIdsUseCase $activeWalkIns,
         FeatureFlagResolverInterface $featureFlags,
     ): JsonResponse {
         $result = $useCase->execute($request->all());
 
         $user = $request->user();
         $summariesByPatientId = [];
+        $activeWalkInsByPatientId = [];
 
         $walkInSummaryViaPatientRead = $featureFlags->isEnabled(
             'clinical.walk_ins.routing_summary_on_patient_list',
@@ -67,9 +71,10 @@ class PatientController extends Controller
             }
 
             $summariesByPatientId = $walkInSummaries->execute($ids);
+            $activeWalkInsByPatientId = $activeWalkIns->execute($ids);
         }
 
-        $data = array_map(function (array $patient) use ($summariesByPatientId): array {
+        $data = array_map(function (array $patient) use ($summariesByPatientId, $activeWalkInsByPatientId): array {
             $transformed = PatientResponseTransformer::transform($patient);
 
             $id = is_string($transformed['id'] ?? null) ? (string) $transformed['id'] : '';
@@ -78,8 +83,12 @@ class PatientController extends Controller
                 : null;
 
             return array_merge($transformed, [
-                /** One-line clerk visibility for active lab / pharmacy / imaging walk-ins */
+                /** One-line clerk visibility for active walk-ins */
                 'routingHandoffSummary' => $summary,
+                'activeRoutingTickets' => array_map(
+                    [ServiceRequestResponseTransformer::class, 'transform'],
+                    $id !== '' ? ($activeWalkInsByPatientId[$id] ?? []) : [],
+                ),
             ]);
         }, $result['data']);
 
@@ -115,13 +124,33 @@ class PatientController extends Controller
         ], 201);
     }
 
-    public function show(string $id, GetPatientUseCase $useCase): JsonResponse
-    {
+    public function show(
+        string $id,
+        Request $request,
+        GetPatientUseCase $useCase,
+        SummarizeActiveWalkInsForPatientIdsUseCase $walkInSummaries,
+        ListActiveWalkInsForPatientIdsUseCase $activeWalkIns,
+        FeatureFlagResolverInterface $featureFlags,
+    ): JsonResponse {
         $patient = $useCase->execute($id);
         abort_if($patient === null, 404, 'Patient not found.');
 
+        $routingHandoffSummary = null;
+        $activeRoutingTickets = [];
+
+        if ($this->canViewRoutingHandoff($request, $featureFlags)) {
+            $routingHandoffSummary = $walkInSummaries->execute([$id])[$id] ?? null;
+            $activeRoutingTickets = array_map(
+                [ServiceRequestResponseTransformer::class, 'transform'],
+                $activeWalkIns->execute([$id])[$id] ?? [],
+            );
+        }
+
         return response()->json([
-            'data' => PatientResponseTransformer::transform($patient),
+            'data' => array_merge(PatientResponseTransformer::transform($patient), [
+                'routingHandoffSummary' => $routingHandoffSummary,
+                'activeRoutingTickets' => $activeRoutingTickets,
+            ]),
         ]);
     }
 
@@ -216,6 +245,21 @@ class PatientController extends Controller
             'code' => 'TENANT_SCOPE_REQUIRED',
             'message' => $message,
         ], 403);
+    }
+
+    private function canViewRoutingHandoff(Request $request, FeatureFlagResolverInterface $featureFlags): bool
+    {
+        $user = $request->user();
+        if ($user === null) {
+            return false;
+        }
+
+        return $user->can('service.requests.read')
+            || $user->can('service.requests.create')
+            || (
+                $user->can('patients.read')
+                && $featureFlags->isEnabled('clinical.walk_ins.routing_summary_on_patient_list', true)
+            );
     }
 
     private function toPersistencePayload(array $validated): array

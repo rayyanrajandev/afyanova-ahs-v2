@@ -12,6 +12,8 @@ interface ServiceRequestRepositoryInterface
 
     public function existsByRequestNumber(string $requestNumber): bool;
 
+    public function findActiveForPatientAndServiceType(string $patientId, string $serviceType): ?array;
+
     public function search(
         ?string $patientId,
         ?string $serviceType,
