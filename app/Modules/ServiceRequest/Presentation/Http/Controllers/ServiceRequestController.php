@@ -13,6 +13,7 @@ use App\Modules\ServiceRequest\Application\UseCases\GetServiceRequestUseCase;
 use App\Modules\ServiceRequest\Application\UseCases\ListServiceRequestAuditEventsUseCase;
 use App\Modules\ServiceRequest\Application\UseCases\ListServiceRequestStatusCountsUseCase;
 use App\Modules\ServiceRequest\Application\UseCases\ListServiceRequestsUseCase;
+use App\Modules\ServiceRequest\Application\UseCases\ListWalkInDepartmentOptionsUseCase;
 use App\Modules\ServiceRequest\Application\UseCases\UpdateServiceRequestStatusUseCase;
 use App\Modules\ServiceRequest\Presentation\Http\Requests\StoreServiceRequestRequest;
 use App\Modules\ServiceRequest\Presentation\Http\Requests\UpdateServiceRequestStatusRequest;
@@ -72,6 +73,13 @@ class ServiceRequestController extends Controller
 
         return response()->json([
             'data' => $counts,
+        ]);
+    }
+
+    public function departmentOptions(ListWalkInDepartmentOptionsUseCase $useCase): JsonResponse
+    {
+        return response()->json([
+            'data' => $useCase->execute(),
         ]);
     }
 
@@ -146,6 +154,7 @@ class ServiceRequestController extends Controller
         $fieldMap = [
             'patientId' => 'patient_id',
             'appointmentId' => 'appointment_id',
+            'departmentId' => 'department_id',
             'serviceType' => 'service_type',
             'priority' => 'priority',
             'notes' => 'notes',

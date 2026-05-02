@@ -7,6 +7,7 @@ use App\Http\Middleware\EnsureFacilitySubscriptionEntitlement;
 use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
 use App\Models\User;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
+use App\Modules\Department\Infrastructure\Models\DepartmentModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\ServiceRequest\Infrastructure\Models\ServiceRequestAuditEventModel;
 use Illuminate\Support\Carbon;
@@ -66,6 +67,44 @@ function userWithWalkInRights(): User
 
     return $user;
 }
+
+it('lists active department options for walk-in readers', function (): void {
+    $user = userWithWalkInRights();
+
+    $dept = DepartmentModel::query()->create([
+        'code' => 'WID',
+        'name' => 'Walk-in Department',
+        'service_type' => 'Clinical',
+        'status' => 'active',
+    ]);
+
+    $response = $this->actingAs($user)->getJson('/api/v1/service-requests/department-options')->assertOk();
+
+    $rows = $response->json('data');
+    expect($rows)->toBeArray();
+    $match = collect($rows)->firstWhere('value', $dept->id);
+    expect($match)->not->toBeNull()
+        ->and($match['label'] ?? '')->toContain('Walk-in Department');
+});
+
+it('stores optional department id when creating a walk-in ticket', function (): void {
+    $user = userWithWalkInRights();
+    $patient = makeWalkInPatient('H');
+
+    $dept = DepartmentModel::query()->create([
+        'code' => 'WID2',
+        'name' => 'Destination Dept',
+        'service_type' => 'Clinical',
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($user)->postJson('/api/v1/service-requests', [
+        'patientId' => $patient->id,
+        'serviceType' => 'laboratory',
+        'departmentId' => $dept->id,
+    ])->assertCreated()
+        ->assertJsonPath('data.departmentId', $dept->id);
+});
 
 it('records audit events when creating and updating walk-in ticket status', function (): void {
     $user = userWithWalkInRights();

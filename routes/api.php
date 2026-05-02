@@ -1148,6 +1148,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('service-requests/export/csv', [ServiceRequestController::class, 'exportCsv'])
         ->middleware('can:service.requests.export')
         ->name('service-requests.export.csv');
+    Route::get('service-requests/department-options', [ServiceRequestController::class, 'departmentOptions'])
+        ->middleware('can:service.requests.read')
+        ->name('service-requests.department-options');
     Route::post('service-requests', [ServiceRequestController::class, 'store'])
         ->middleware('can:service.requests.create')
         ->name('service-requests.store');

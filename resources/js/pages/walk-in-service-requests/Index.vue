@@ -46,11 +46,19 @@ import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { patientChartHref } from '@/lib/patientChart';
 import type { BreadcrumbItem } from '@/types';
 
+type DepartmentOptionRow = {
+    value: string;
+    label: string;
+    code?: string | null;
+    serviceType?: string | null;
+};
+
 type ServiceRequestRow = {
     id: string;
     requestNumber: string | null;
     patientId: string | null;
     appointmentId?: string | null;
+    departmentId?: string | null;
     requestedByUserId?: string | number | null;
     serviceType: string | null;
     priority: string | null;
@@ -300,17 +308,42 @@ const createLoading = ref(false);
 const createErrors = ref<Record<string, string>>({});
 const createForm = reactive({
     patientId: '',
+    departmentId: '',
     serviceType: '',
     priority: 'routine',
     notes: '',
 });
 
+const departmentOptions = ref<DepartmentOptionRow[]>([]);
+const departmentOptionsLoading = ref(false);
+
 function resetCreateForm(): void {
     createForm.patientId = '';
+    createForm.departmentId = '';
     createForm.serviceType = '';
     createForm.priority = 'routine';
     createForm.notes = '';
     createErrors.value = {};
+}
+
+function departmentLabel(id: string | null | undefined): string | null {
+    if (!id) return null;
+    return departmentOptions.value.find((o) => o.value === id)?.label ?? null;
+}
+
+async function loadDepartmentOptions(): Promise<void> {
+    if (departmentOptionsLoading.value) return;
+    departmentOptionsLoading.value = true;
+    try {
+        const result = await apiGet<{ data: DepartmentOptionRow[] }>('/service-requests/department-options', undefined, {
+            entitlementContext: 'Walk-in queue',
+        });
+        departmentOptions.value = result.data ?? [];
+    } catch {
+        departmentOptions.value = [];
+    } finally {
+        departmentOptionsLoading.value = false;
+    }
 }
 
 async function submitCreate(): Promise<void> {
@@ -329,6 +362,7 @@ async function submitCreate(): Promise<void> {
         await apiPost<{ data: ServiceRequestRow }>('/service-requests', {
             body: {
                 patientId: createForm.patientId,
+                departmentId: createForm.departmentId.trim() || null,
                 serviceType: createForm.serviceType,
                 priority: createForm.priority || null,
                 notes: createForm.notes.trim() || null,
@@ -526,6 +560,7 @@ watch(detailsTab, (tab) => {
 onMounted(() => {
     void loadList();
     void loadStatusCounts();
+    void loadDepartmentOptions();
 });
 </script>
 
@@ -768,6 +803,16 @@ onMounted(() => {
                                             <span v-else>No patient linked</span>
                                         </div>
 
+                                        <div class="mt-1 pl-2 text-xs text-muted-foreground">
+                                            Department:
+                                            <span class="font-medium text-foreground">
+                                                <template v-if="row.departmentId">
+                                                    {{ departmentLabel(row.departmentId) ?? '—' }}
+                                                </template>
+                                                <template v-else>—</template>
+                                            </span>
+                                        </div>
+
                                         <!-- Action buttons -->
                                         <div class="mt-2.5 flex flex-wrap gap-2 pl-2" @click.stop>
                                             <Button
@@ -981,6 +1026,16 @@ onMounted(() => {
                                             {{ detailsRow.priority ? formatEnumLabel(detailsRow.priority) : '—' }}
                                         </dd>
                                     </div>
+                                    <div class="col-span-2">
+                                        <dt class="text-xs font-medium text-muted-foreground">Department (patient destination)</dt>
+                                        <dd class="mt-0.5 text-foreground">
+                                            {{
+                                                detailsRow.departmentId
+                                                    ? (departmentLabel(detailsRow.departmentId) ?? '—')
+                                                    : '—'
+                                            }}
+                                        </dd>
+                                    </div>
                                     <div>
                                         <dt class="text-xs font-medium text-muted-foreground">Requested</dt>
                                         <dd class="mt-0.5 text-foreground">
@@ -1131,11 +1186,44 @@ onMounted(() => {
                         <p v-if="createErrors.patientId" class="text-xs text-destructive">{{ createErrors.patientId }}</p>
                     </div>
 
+                    <!-- Department (patient destination) -->
+                    <div class="flex w-full flex-col gap-1.5">
+                        <Label>Department patient is sent to <span class="text-xs text-muted-foreground">(optional)</span></Label>
+                        <Select
+                            :model-value="createForm.departmentId || undefined"
+                            :disabled="departmentOptionsLoading"
+                            @update:model-value="createForm.departmentId = $event ? String($event) : ''"
+                        >
+                            <SelectTrigger
+                                class="w-full"
+                                :class="createErrors.departmentId ? 'border-destructive' : ''"
+                            >
+                                <SelectValue placeholder="Select department…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem
+                                    v-for="opt in departmentOptions"
+                                    :key="opt.value"
+                                    :value="opt.value"
+                                >
+                                    {{ opt.label }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <p v-if="createErrors.departmentId" class="text-xs text-destructive">{{ createErrors.departmentId }}</p>
+                    </div>
+
                     <!-- Service desk -->
-                    <div class="flex flex-col gap-1.5">
+                    <div class="flex w-full flex-col gap-1.5">
                         <Label>Service desk <span class="text-destructive">*</span></Label>
-                        <Select :model-value="createForm.serviceType" @update:model-value="createForm.serviceType = $event">
-                            <SelectTrigger :class="createErrors.serviceType ? 'border-destructive' : ''">
+                        <Select
+                            :model-value="createForm.serviceType"
+                            @update:model-value="createForm.serviceType = $event ? String($event) : ''"
+                        >
+                            <SelectTrigger
+                                class="w-full"
+                                :class="createErrors.serviceType ? 'border-destructive' : ''"
+                            >
                                 <SelectValue placeholder="Select desk…" />
                             </SelectTrigger>
                             <SelectContent>
@@ -1148,10 +1236,15 @@ onMounted(() => {
                     </div>
 
                     <!-- Priority -->
-                    <div class="flex flex-col gap-1.5">
+                    <div class="flex w-full flex-col gap-1.5">
                         <Label>Priority</Label>
-                        <Select :model-value="createForm.priority" @update:model-value="createForm.priority = $event">
-                            <SelectTrigger><SelectValue /></SelectTrigger>
+                        <Select
+                            :model-value="createForm.priority"
+                            @update:model-value="createForm.priority = $event ? String($event) : 'routine'"
+                        >
+                            <SelectTrigger class="w-full">
+                                <SelectValue placeholder="Priority" />
+                            </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="routine">Routine</SelectItem>
                                 <SelectItem value="urgent">Urgent</SelectItem>

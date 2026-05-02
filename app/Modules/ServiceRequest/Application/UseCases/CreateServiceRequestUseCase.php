@@ -2,9 +2,9 @@
 
 namespace App\Modules\ServiceRequest\Application\UseCases;
 
-use App\Modules\ServiceRequest\Application\Exceptions\ActiveServiceRequestAlreadyExistsException;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
+use App\Modules\ServiceRequest\Application\Exceptions\ActiveServiceRequestAlreadyExistsException;
 use App\Modules\ServiceRequest\Application\Exceptions\PatientNotEligibleForServiceRequestException;
 use App\Modules\ServiceRequest\Domain\Repositories\ServiceRequestRepositoryInterface;
 use App\Modules\ServiceRequest\Domain\Services\PatientLookupServiceInterface;
@@ -68,6 +68,7 @@ class CreateServiceRequestUseCase
                 [
                     'patientId' => $patientId,
                     'appointmentId' => $created['appointment_id'] ?? null,
+                    'departmentId' => $created['department_id'] ?? null,
                     'requestNumber' => $created['request_number'] ?? null,
                     'serviceType' => $created['service_type'] ?? null,
                 ],

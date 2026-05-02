@@ -15,6 +15,7 @@ class ServiceRequestResponseTransformer
             'requestNumber' => $serviceRequest['request_number'] ?? null,
             'patientId' => $serviceRequest['patient_id'] ?? null,
             'appointmentId' => $serviceRequest['appointment_id'] ?? null,
+            'departmentId' => $serviceRequest['department_id'] ?? null,
             'requestedByUserId' => $serviceRequest['requested_by_user_id'] ?? null,
             'serviceType' => $serviceRequest['service_type'] ?? null,
             'priority' => $serviceRequest['priority'] ?? null,
