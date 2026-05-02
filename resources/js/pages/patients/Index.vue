@@ -1026,18 +1026,6 @@ const visitHandoffPrimaryDisabledReason = computed(() => {
         return 'This account cannot open the chart. Ask a clinician or supervisor for access.';
     }
 
-    if (visitHandoffMode.value === 'direct-services') {
-        const canAnyService =
-            canCreateLaboratoryOrders.value
-            || canCreatePharmacyOrders.value
-            || canCreateRadiologyOrders.value
-            || canCreateTheatreProcedures.value
-            || canCreateBillingInvoices.value;
-        if (!canAnyService) {
-            return 'This login cannot open order workspaces (typical for pure registration). In most hospitals reception registers and directs the patient; a clinician or authorized staff member enters lab, imaging, or pharmacy orders. Open Chart only for context, send the patient to the right area, or ask a colleague with ordering rights to continue in Laboratory, Imaging, or Pharmacy.';
-        }
-    }
-
     return null;
 });
 const visitHandoffPrimaryDescription = computed(() => {
@@ -1077,11 +1065,19 @@ const visitHandoffPrimaryDescription = computed(() => {
         if (canAnyService) {
             return 'Matches common facility flow: registration identifies the patient and may send them to the lab, imaging suite, or pharmacy counter. Staff who are allowed to order then open the workspace below with this patient already attached and record the tests, imaging, or medications before collection or dispensing.';
         }
-        return 'Matches common facility flow: after registration, reception directs the patient to the correct area. Entering lab, imaging, or pharmacy orders is usually done by clinicians or other authorized roles—not the front desk. If your account cannot start those modules, use Chart only or hand off to the department.';
+        return 'Patient is registered. Direct them to the service counter. Use the copy links below — open them on the department workstation or share with the receiving staff. They will see this patient already loaded and can add the order immediately.';
     }
 
     return 'Open chart-only when staff need context without starting a new visit.';
 });
+const visitHandoffHasAnyDirectServiceRight = computed(() =>
+    canCreateLaboratoryOrders.value
+    || canCreatePharmacyOrders.value
+    || canCreateRadiologyOrders.value
+    || canCreateTheatreProcedures.value
+    || canCreateBillingInvoices.value,
+);
+
 const visitHandoffEmergencyNeedsTriageStaff = computed(
     () => visitHandoffMode.value === 'emergency'
         && Boolean(visitHandoffPatient.value)
@@ -1785,6 +1781,29 @@ function visitHandoffDefaultMode(): PatientVisitHandoffMode {
     }
 
     return 'chart';
+}
+
+async function copyVisitHandoffDirectServiceLink(module: 'lab' | 'imaging' | 'pharmacy'): Promise<void> {
+    const patient = visitHandoffPatient.value;
+    if (!patient) return;
+    const pathMap = {
+        lab: '/laboratory-orders',
+        imaging: '/radiology-orders',
+        pharmacy: '/pharmacy-orders',
+    } as const;
+    const labelMap = {
+        lab: 'Lab',
+        imaging: 'Imaging',
+        pharmacy: 'Pharmacy',
+    } as const;
+    const path = patientContextHref(pathMap[module], patient, { includeTabNew: true });
+    const absolute = typeof window !== 'undefined' ? new URL(path, window.location.origin).href : path;
+    try {
+        await navigator.clipboard.writeText(absolute);
+        notifySuccess(`${labelMap[module]} link copied. Open it on the ${labelMap[module].toLowerCase()} workstation — the patient will be pre-loaded.`);
+    } catch {
+        notifyError(`Could not copy automatically. Search for this patient in the ${labelMap[module].toLowerCase()} module.`);
+    }
 }
 
 async function copyVisitHandoffEmergencyTriageLink(): Promise<void> {
@@ -5097,16 +5116,64 @@ onMounted(initialPageLoad);
                                         <div class="space-y-1">
                                             <p class="text-sm font-semibold text-foreground">{{ visitHandoffPrimaryLabel }}</p>
                                             <p class="max-w-xl text-xs leading-5 text-muted-foreground">{{ visitHandoffPrimaryDescription }}</p>
-                                            <p
-                                                v-if="visitHandoffPrimaryDisabledReason"
-                                                class="text-xs font-medium leading-relaxed text-muted-foreground"
-                                            >
-                                                {{ visitHandoffPrimaryDisabledReason }}
-                                            </p>
                                         </div>
 
+                                        <!-- Clerk (no ordering rights): copy-link handoff — same pattern as emergency triage -->
+                                        <Alert
+                                            v-if="!visitHandoffHasAnyDirectServiceRight"
+                                            class="border-violet-200 bg-violet-50/90 text-violet-950 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-50"
+                                        >
+                                            <AlertTitle class="flex items-center gap-2 text-base text-violet-950 dark:text-violet-50">
+                                                <AppIcon name="flask-conical" class="size-4 shrink-0 text-violet-700 dark:text-violet-300" />
+                                                Direct patient to the service area
+                                            </AlertTitle>
+                                            <AlertDescription class="space-y-3 text-sm text-violet-900/95 dark:text-violet-100/90">
+                                                <p>
+                                                    Direct the patient to the relevant counter.
+                                                    <span class="font-medium">The receiving staff opens the link below on their workstation</span>
+                                                    — this patient will be pre-loaded so they can add the order and process it immediately.
+                                                </p>
+                                                <p class="text-xs leading-relaxed">
+                                                    This is the normal split of duties: registration identifies and routes the patient; lab, imaging, or pharmacy staff create the service order on their end.
+                                                </p>
+                                                <div class="flex flex-wrap gap-2">
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        class="border-violet-300 bg-white/90 text-violet-950 hover:bg-white dark:border-violet-700 dark:bg-violet-900/60 dark:text-violet-50 dark:hover:bg-violet-900"
+                                                        @click="copyVisitHandoffDirectServiceLink('lab')"
+                                                    >
+                                                        <AppIcon name="flask-conical" class="size-3.5" />
+                                                        Copy lab link
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        class="border-violet-300 bg-white/90 text-violet-950 hover:bg-white dark:border-violet-700 dark:bg-violet-900/60 dark:text-violet-50 dark:hover:bg-violet-900"
+                                                        @click="copyVisitHandoffDirectServiceLink('imaging')"
+                                                    >
+                                                        <AppIcon name="activity" class="size-3.5" />
+                                                        Copy imaging link
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        class="border-violet-300 bg-white/90 text-violet-950 hover:bg-white dark:border-violet-700 dark:bg-violet-900/60 dark:text-violet-50 dark:hover:bg-violet-900"
+                                                        @click="copyVisitHandoffDirectServiceLink('pharmacy')"
+                                                    >
+                                                        <AppIcon name="pill" class="size-3.5" />
+                                                        Copy pharmacy link
+                                                    </Button>
+                                                </div>
+                                            </AlertDescription>
+                                        </Alert>
+
+                                        <!-- Ordering staff: direct workspace links -->
                                         <div
-                                            v-if="!visitHandoffPrimaryDisabledReason"
+                                            v-if="visitHandoffHasAnyDirectServiceRight"
                                             class="grid gap-2 sm:grid-cols-2"
                                         >
                                             <Button
