@@ -2,7 +2,6 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import CareQuickStrip from '@/components/workspace/CareQuickStrip.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -1304,7 +1303,6 @@ function switchPreset(key: DashboardPresetKey): void {
                             </div>
                         </template>
                     </div>
-                    <CareQuickStrip />
                     <Button size="sm" variant="outline" class="h-8 rounded-lg gap-1.5" :disabled="refreshing" @click="refreshDashboard">
                         <AppIcon name="activity" class="size-3.5" />
                         {{ refreshing ? 'Refreshing...' : 'Refresh' }}
