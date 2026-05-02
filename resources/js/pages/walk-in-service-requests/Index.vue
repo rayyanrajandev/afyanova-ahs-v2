@@ -763,13 +763,13 @@ onMounted(() => {
                                 </div>
 
                                 <!-- Empty state -->
-                                <div v-else-if="rows.length === 0" class="flex flex-col items-center gap-3 py-16 text-center">
-                                    <span class="flex size-12 items-center justify-center rounded-full bg-muted/60">
-                                        <AppIcon name="inbox" class="size-6 text-muted-foreground/50" />
-                                    </span>
-                                    <div>
-                                        <p class="text-sm font-medium text-foreground">No requests found</p>
-                                        <p class="mt-1 text-xs text-muted-foreground">No walk-in requests match the current filters.</p>
+                                <div v-else-if="rows.length === 0" class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center">
+                                    <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                        <AppIcon name="ticket" class="size-5 text-muted-foreground/40" />
+                                    </div>
+                                    <div class="space-y-1">
+                                        <p class="text-sm font-semibold">No requests found</p>
+                                        <p class="max-w-xs text-xs text-muted-foreground">No walk-in requests match the current filters.</p>
                                     </div>
                                 </div>
 
