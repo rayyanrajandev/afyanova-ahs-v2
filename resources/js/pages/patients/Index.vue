@@ -1732,27 +1732,6 @@ function patientInitials(patient: Patient): string {
     return (first + last) || '?';
 }
 
-function routingTicketLabel(ticket: ActiveRoutingTicket): string {
-    const label = directServiceLabel(ticket.serviceType);
-    const number = ticket.requestNumber?.trim();
-    return number ? `${label} ${number}` : label;
-}
-
-function directServiceLabel(serviceType: string | null | undefined): string {
-    switch (serviceType) {
-        case 'laboratory':
-            return 'Lab';
-        case 'radiology':
-            return 'Imaging';
-        case 'pharmacy':
-            return 'Pharmacy';
-        case 'theatre_procedure':
-            return 'Procedure';
-        default:
-            return serviceType ? formatEnumLabel(serviceType) : 'Routing';
-    }
-}
-
 function patientStatusActionLabel(patient: Patient): string {
     return patient.status === 'active' ? 'Mark Inactive' : 'Mark Active';
 }
@@ -4329,33 +4308,6 @@ onMounted(initialPageLoad);
                                     <p class="truncate text-xs text-muted-foreground">
                                         {{ patient.patientNumber || 'No MRN assigned' }}
                                     </p>
-                                    <div
-                                        v-if="patient.activeRoutingTickets?.length || patient.routingHandoffSummary"
-                                        class="mt-1 flex flex-wrap gap-1"
-                                        :title="patient.routingHandoffSummary || undefined"
-                                    >
-                                        <span
-                                            v-for="ticket in (patient.activeRoutingTickets ?? []).slice(0, 2)"
-                                            :key="ticket.id"
-                                            class="inline-flex max-w-full items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-900 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-100"
-                                        >
-                                            <AppIcon name="route" class="size-3" />
-                                            <span class="truncate">{{ routingTicketLabel(ticket) }}</span>
-                                            <span class="text-violet-700 dark:text-violet-300">· {{ formatEnumLabel(ticket.status || 'waiting') }}</span>
-                                        </span>
-                                        <span
-                                            v-if="(patient.activeRoutingTickets?.length ?? 0) > 2"
-                                            class="inline-flex items-center rounded-full border border-violet-200 px-2 py-0.5 text-[11px] font-medium text-violet-800 dark:border-violet-800 dark:text-violet-200"
-                                        >
-                                            +{{ (patient.activeRoutingTickets?.length ?? 0) - 2 }}
-                                        </span>
-                                        <span
-                                            v-else-if="!(patient.activeRoutingTickets?.length) && patient.routingHandoffSummary"
-                                            class="line-clamp-1 text-[11px] font-medium text-violet-800 dark:text-violet-200"
-                                        >
-                                            {{ patient.routingHandoffSummary }}
-                                        </span>
-                                    </div>
                                 </div>
                             </div>
 
@@ -5763,33 +5715,6 @@ onMounted(initialPageLoad);
                                                 {{ detailsSheetPatient.statusReason }}
                                             </span>
                                         </div>
-
-                                        <Card
-                                            v-if="detailsSheetPatient.activeRoutingTickets?.length"
-                                            class="rounded-lg border-violet-200 bg-violet-50/60 !gap-0 overflow-hidden dark:border-violet-900 dark:bg-violet-950/20"
-                                        >
-                                            <CardHeader class="px-4 py-2.5">
-                                                <CardTitle class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-violet-900 dark:text-violet-100">
-                                                    <AppIcon name="route" class="size-3.5" />
-                                                    Active Routing / Handoff
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent class="space-y-2 px-4 pb-3 pt-0">
-                                                <div
-                                                    v-for="ticket in detailsSheetPatient.activeRoutingTickets"
-                                                    :key="ticket.id"
-                                                    class="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background px-3 py-2 text-sm"
-                                                >
-                                                    <div class="min-w-0">
-                                                        <p class="font-medium">{{ routingTicketLabel(ticket) }}</p>
-                                                        <p class="text-xs text-muted-foreground">
-                                                            {{ directServiceLabel(ticket.serviceType) }} desk · {{ formatEnumLabel(ticket.status || 'waiting') }}
-                                                        </p>
-                                                    </div>
-                                                    <Badge variant="outline">{{ ticket.priority ? formatEnumLabel(ticket.priority) : 'Routine' }}</Badge>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
 
                                         <!-- Identity & Contact -->
                                         <div class="grid gap-3 sm:grid-cols-2">
