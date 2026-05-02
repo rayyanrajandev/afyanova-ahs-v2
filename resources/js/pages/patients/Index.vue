@@ -535,6 +535,7 @@ const createdWarnings = ref<PatientWarning[]>([]);
 const {
     permissionState,
     hasPermission,
+    hasFacilityEntitlement,
     scope: sharedScope,
     multiTenantIsolationEnabled,
 } = usePlatformAccess();
@@ -553,6 +554,10 @@ const canCreateAppointments = ref(hasPermission('appointments.create'));
 const canUpdateAppointmentsStatus = ref(hasPermission('appointments.update-status'));
 const canReadAdmissions = ref(hasPermission('admissions.read'));
 const canReadMedicalRecords = ref(hasPermission('medical.records.read'));
+/** With permission only, API still requires plan SKU `medical_records.core` via subscription middleware. */
+const canFetchMedicalRecordsForTimeline = computed(
+    () => canReadMedicalRecords.value && hasFacilityEntitlement('medical_records.core'),
+);
 const canCreateBillingInvoices = ref(hasPermission('billing.invoices.create'));
 const canCreatePatients = ref(hasPermission('patients.create'));
 const canUpdatePatients = ref(hasPermission('patients.update'));
@@ -755,7 +760,7 @@ const detailsTimelineSummary = computed(() =>
     ].filter((section) => {
         if (section.key === 'appointment') return canReadAppointments.value;
         if (section.key === 'admission') return canReadAdmissions.value;
-        if (section.key === 'medical-record') return canReadMedicalRecords.value;
+        if (section.key === 'medical-record') return canFetchMedicalRecordsForTimeline.value;
         return true;
     }),
 );
@@ -992,7 +997,7 @@ const visitHandoffPrimaryLabel = computed(() => {
 
     if (visitHandoffMode.value === 'emergency') return 'Start emergency triage';
     if (visitHandoffMode.value === 'billing') return 'Create invoice';
-    if (visitHandoffMode.value === 'direct-services') return 'Walk-in lab, imaging, or pharmacy';
+    if (visitHandoffMode.value === 'direct-services') return 'Direct services';
     return 'Open patient chart';
 });
 const visitHandoffPrimaryIcon = computed(() => {
@@ -1033,6 +1038,24 @@ const visitHandoffPrimaryDisabledReason = computed(() => {
 
     return null;
 });
+const visitHandoffHasAnyDirectServiceRight = computed(() =>
+    canCreateLaboratoryOrders.value
+    || canCreatePharmacyOrders.value
+    || canCreateRadiologyOrders.value
+    || canCreateTheatreProcedures.value
+    || canCreateBillingInvoices.value,
+);
+
+/** Walk-in handoff when reception can queue or staff can open order workspaces. */
+const visitHandoffCanUseDirectServicesRoute = computed(
+    () =>
+        canReadPatients.value
+        && (
+            canCreateServiceRequests.value
+            || visitHandoffHasAnyDirectServiceRight.value
+        ),
+);
+
 const visitHandoffPrimaryDescription = computed(() => {
     const appointment = visitHandoffActiveAppointment.value;
 
@@ -1061,40 +1084,20 @@ const visitHandoffPrimaryDescription = computed(() => {
     }
 
     if (visitHandoffMode.value === 'direct-services') {
-        const canAnyService =
-            canCreateLaboratoryOrders.value
-            || canCreatePharmacyOrders.value
-            || canCreateRadiologyOrders.value
-            || canCreateTheatreProcedures.value
-            || canCreateBillingInvoices.value;
-        if (canAnyService) {
-            return 'Matches common facility flow: registration identifies the patient and may send them to the lab, imaging suite, or pharmacy counter. Staff who are allowed to order then open the workspace below with this patient already attached and record the tests, imaging, or medications before collection or dispensing.';
+        if (!visitHandoffCanUseDirectServicesRoute.value) {
+            return 'You need walk-in queue permission (service.requests.create) or departmental order access to use this lane. Choose another route or ask a supervisor.';
+        }
+        if (visitHandoffHasAnyDirectServiceRight.value) {
+            return 'Open the department workspace below; the patient is attached so you can enter the order there.';
         }
         if (canCreateServiceRequests.value) {
-            return 'Same idea as check-in placing a visit on the nurse board—except this is Lab, Imaging, or Pharmacy\'s counter board. Tap the department once; staff there see this patient\'s queued ticket straight away.';
+            return 'Tap a counter to add one walk-in ticket to that department queue.';
         }
-        return 'This lane is unavailable for your login. Administrators assign service.requests.create to registration roles that should raise walk-in tickets—or staff use Laboratory / Imaging / Pharmacy modules when they capture orders.';
+        return 'Choose an action below.';
     }
 
     return 'Open chart-only when staff need context without starting a new visit.';
 });
-const visitHandoffHasAnyDirectServiceRight = computed(() =>
-    canCreateLaboratoryOrders.value
-    || canCreatePharmacyOrders.value
-    || canCreateRadiologyOrders.value
-    || canCreateTheatreProcedures.value
-    || canCreateBillingInvoices.value,
-);
-
-/** Walk-in handoff lane only applies when reception can queue or clinical staff can open order workspaces. */
-const visitHandoffCanUseDirectServicesRoute = computed(
-    () =>
-        canReadPatients.value
-        && (
-            canCreateServiceRequests.value
-            || visitHandoffHasAnyDirectServiceRight.value
-        ),
-);
 
 const visitHandoffDirectServiceSessionTickets = computed(() => {
     const patient = visitHandoffPatient.value;
@@ -1997,7 +2000,7 @@ function visitHandoffModeAvailable(mode: PatientVisitHandoffMode): boolean {
     }
 
     if (mode === 'direct-services') {
-        return visitHandoffCanUseDirectServicesRoute.value;
+        return canReadPatients.value;
     }
 
     if (mode === 'billing') {
@@ -2155,7 +2158,7 @@ async function loadPatientTimeline(patient: Patient) {
                   },
               })
             : Promise.resolve(emptyTimelineListResponse<PatientTimelineAdmission>()),
-        canReadMedicalRecords.value
+        canFetchMedicalRecordsForTimeline.value
             ? apiRequest<PatientTimelineListResponse<PatientTimelineMedicalRecord>>('GET', '/medical-records', {
                   query: {
                       patientId: patient.id,
@@ -2574,6 +2577,7 @@ async function loadPatientPermissions() {
         canCreatePharmacyOrders.value = names.has('pharmacy.orders.create');
         canCreateRadiologyOrders.value = names.has('radiology.orders.create');
         canCreateTheatreProcedures.value = names.has('theatre.procedures.create');
+        canCreateServiceRequests.value = names.has('service.requests.create');
     } catch {
         patientReadPermissionState.value = 'denied';
         canViewPatientAudit.value = false;
@@ -2591,6 +2595,7 @@ async function loadPatientPermissions() {
         canCreatePharmacyOrders.value = false;
         canCreateRadiologyOrders.value = false;
         canCreateTheatreProcedures.value = false;
+        canCreateServiceRequests.value = false;
     }
 }
 
@@ -4348,7 +4353,7 @@ onMounted(initialPageLoad);
             <SheetContent
                 side="right"
                 variant="form"
-                size="4xl"
+                size="5xl"
             >
                 <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
                     <SheetTitle class="flex items-center gap-2">
@@ -4933,7 +4938,7 @@ onMounted(initialPageLoad);
                 :open="visitHandoffSheetOpen"
                 @update:open="(open) => (open ? (visitHandoffSheetOpen = true) : closePatientVisitHandoff())"
             >
-                <SheetContent side="right" variant="form" size="3xl" class="flex h-full min-h-0 flex-col">
+                <SheetContent side="right" variant="form" size="5xl" class="flex h-full min-h-0 flex-col">
                     <SheetHeader v-if="visitHandoffPatient" class="shrink-0 border-b px-6 py-4 text-left pr-12">
                         <SheetTitle class="flex items-center gap-2">
                             <AppIcon name="clipboard-list" class="size-5 text-primary" />
@@ -5103,7 +5108,7 @@ onMounted(initialPageLoad);
                                                 <Badge variant="outline" class="text-xs">{{ visitHandoffModeBadge('direct-services') }}</Badge>
                                             </span>
                                             <span class="mt-1 block text-xs leading-5 text-muted-foreground">
-                                                Walk-in shortcut for lab, imaging, or pharmacy—no OPD/consult workflow. Reception clicks once to drop a queued ticket onto that counter’s board—same reassurance as arrival check-in gives triage—when your login can queue (<code class="rounded bg-muted/80 px-1 py-0.5 font-mono text-[0.68rem]">service.requests.create</code>) or can open departmental order screens. Greyed-out means neither applies; administrators adjust permissions first.
+                                                Walk-in lab, imaging, or pharmacy without booking OPD—queue a ticket or open the department workspace when your login allows it.
                                             </span>
                                         </span>
                                     </button>
@@ -5173,88 +5178,72 @@ onMounted(initialPageLoad);
 
                                 <template v-if="visitHandoffMode === 'direct-services'">
                                     <div class="space-y-4">
-                                        <div class="space-y-1">
-                                            <p class="text-sm font-semibold text-foreground">{{ visitHandoffPrimaryLabel }}</p>
-                                            <p class="max-w-xl text-xs leading-5 text-muted-foreground">{{ visitHandoffPrimaryDescription }}</p>
-                                        </div>
+                                        <p class="max-w-xl text-sm leading-relaxed text-muted-foreground">
+                                            {{ visitHandoffPrimaryDescription }}
+                                        </p>
 
-                                        <!-- Clerk: send patient to walk-in queue via service request API -->
-                                        <Alert
-                                            v-if="!visitHandoffHasAnyDirectServiceRight && canCreateServiceRequests"
-                                            class="border-violet-200 bg-violet-50/90 text-violet-950 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-50"
+                                        <div
+                                            v-if="
+                                                visitHandoffCanUseDirectServicesRoute
+                                                && !visitHandoffHasAnyDirectServiceRight
+                                                && canCreateServiceRequests
+                                            "
+                                            class="space-y-2"
                                         >
-                                            <AlertTitle class="flex items-center gap-2 text-base text-violet-950 dark:text-violet-50">
-                                                <AppIcon name="arrow-up-right" class="size-4 shrink-0 text-violet-700 dark:text-violet-300" />
-                                                Route patient to service area
-                                            </AlertTitle>
-                                            <AlertDescription class="space-y-3 text-sm text-violet-900/95 dark:text-violet-100/90">
-                                                <p>
-                                                    Pick where you are routing the patient. Each tap raises
-                                                    <span class="font-medium">one walk-in ticket in that department's queue</span>
-                                                    (shown here with its number). Reception still escorts—as with OPD arrival, nothing is
-                                                    magically messaged elsewhere; counters see your ticket inside this system.
-                                                </p>
-                                                <div class="flex flex-wrap gap-2">
-                                                    <Button
-                                                        v-for="service in [
-                                                            { key: 'laboratory', label: 'Lab', icon: 'flask-conical' },
-                                                            { key: 'radiology', label: 'Imaging', icon: 'activity' },
-                                                            { key: 'pharmacy', label: 'Pharmacy', icon: 'pill' },
-                                                        ] as const"
-                                                        :key="service.key"
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        :disabled="
-                                                            directServiceSending !== null
-                                                            || !!directServiceSentMap[`${visitHandoffPatient?.id}:${service.key}`]
-                                                        "
-                                                        :class="[
-                                                            'border-violet-300 bg-white/90 text-violet-950 hover:bg-white dark:border-violet-700 dark:bg-violet-900/60 dark:text-violet-50 dark:hover:bg-violet-900',
-                                                            directServiceSentMap[`${visitHandoffPatient?.id}:${service.key}`]
-                                                                ? 'opacity-60 cursor-default'
-                                                                : '',
-                                                        ]"
-                                                        @click="createDirectServiceRequest(service.key)"
-                                                    >
-                                                        <AppIcon
-                                                            v-if="directServiceSending !== service.key"
-                                                            :name="directServiceSentMap[`${visitHandoffPatient?.id}:${service.key}`] ? 'check' : service.icon"
-                                                            class="size-3.5"
-                                                        />
-                                                        <AppIcon
-                                                            v-else
-                                                            name="loader-circle"
-                                                            class="size-3.5 animate-spin"
-                                                        />
-                                                        {{ directServiceSentMap[`${visitHandoffPatient?.id}:${service.key}`] ? `${service.label} ticket created` : `Send to ${service.label}` }}
-                                                    </Button>
-                                                </div>
-                                                <div
-                                                    v-if="visitHandoffDirectServiceSessionTickets.length"
-                                                    class="rounded-md border border-violet-200/90 bg-white/95 px-3 py-2.5 dark:border-violet-800/70 dark:bg-violet-950/50"
-                                                    role="status"
-                                                    aria-live="polite"
+                                            <div class="flex flex-wrap gap-2">
+                                                <Button
+                                                    v-for="service in [
+                                                        { key: 'laboratory', label: 'Lab', icon: 'flask-conical' },
+                                                        { key: 'radiology', label: 'Imaging', icon: 'activity' },
+                                                        { key: 'pharmacy', label: 'Pharmacy', icon: 'pill' },
+                                                    ] as const"
+                                                    :key="service.key"
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    :disabled="
+                                                        directServiceSending !== null
+                                                        || !!directServiceSentMap[`${visitHandoffPatient?.id}:${service.key}`]
+                                                    "
+                                                    :class="[
+                                                        'border-border bg-background',
+                                                        directServiceSentMap[`${visitHandoffPatient?.id}:${service.key}`]
+                                                            ? 'opacity-60 cursor-default'
+                                                            : '',
+                                                    ]"
+                                                    @click="createDirectServiceRequest(service.key)"
                                                 >
-                                                    <p class="text-xs font-semibold uppercase tracking-wide text-violet-950 dark:text-violet-50">
-                                                        What happened (this sheet)
-                                                    </p>
-                                                    <ul class="mt-2 space-y-1.5 text-sm text-violet-950 dark:text-violet-50">
-                                                        <li
-                                                            v-for="row in visitHandoffDirectServiceSessionTickets"
-                                                            :key="`${row.key}-${row.requestNumber}`"
-                                                            class="flex flex-wrap gap-x-2 gap-y-0.5"
-                                                        >
-                                                            <span class="font-medium">{{ row.label }}</span>
-                                                            <span class="tabular-nums text-violet-800 dark:text-violet-200">{{ row.requestNumber }}</span>
-                                                            <span class="text-xs text-violet-800/95 dark:text-violet-200/90">
-                                                                listed on queue for this patient
-                                                            </span>
-                                                        </li>
-                                                    </ul>
-                                                </div>
-                                            </AlertDescription>
-                                        </Alert>
+                                                    <AppIcon
+                                                        v-if="directServiceSending !== service.key"
+                                                        :name="
+                                                            directServiceSentMap[`${visitHandoffPatient?.id}:${service.key}`]
+                                                                ? 'check-circle'
+                                                                : service.icon
+                                                        "
+                                                        class="size-3.5"
+                                                    />
+                                                    <AppIcon v-else name="loader-circle" class="size-3.5 animate-spin" />
+                                                    {{
+                                                        directServiceSentMap[`${visitHandoffPatient?.id}:${service.key}`]
+                                                            ? `${service.label} ✓`
+                                                            : `Send to ${service.label}`
+                                                    }}
+                                                </Button>
+                                            </div>
+                                            <p
+                                                v-if="visitHandoffDirectServiceSessionTickets.length > 0"
+                                                class="text-xs text-muted-foreground"
+                                                role="status"
+                                                aria-live="polite"
+                                            >
+                                                <span class="font-medium text-foreground">Tickets:</span>
+                                                {{
+                                                    visitHandoffDirectServiceSessionTickets
+                                                        .map((row) => `${row.label} ${row.requestNumber}`)
+                                                        .join(' · ')
+                                                }}
+                                            </p>
+                                        </div>
 
                                         <!-- Ordering staff: direct workspace links -->
                                         <div
@@ -5393,7 +5382,7 @@ onMounted(initialPageLoad);
                 <SheetContent
                     side="right"
                     variant="workspace"
-                    size="4xl"
+                    size="5xl"
                     class="flex h-full min-h-0 flex-col"
                 >
                     <SheetHeader v-if="detailsSheetPatient" class="shrink-0 border-b bg-background px-4 py-3 text-left pr-12">
