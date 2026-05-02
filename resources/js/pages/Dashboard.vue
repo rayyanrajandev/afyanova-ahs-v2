@@ -2,6 +2,7 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import CareQuickStrip from '@/components/workspace/CareQuickStrip.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -39,6 +40,7 @@ type QueueRow = {
     status: string;
     href: string;
     actionLabel: string;
+    isOverdue?: boolean;
 };
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/dashboard' }];
@@ -64,9 +66,9 @@ const retryResumeHealth = ref<any | null>(null);
 const lastLoadedAt = ref<string | null>(null);
 const sharedOpsTelemetryLoaded = ref(false);
 
-const frontDeskHandoffOpen = useLocalStorageBoolean('dashboard.front-desk-handoff.open', false);
+const frontDeskHandoffOpen = useLocalStorageBoolean('dashboard.front-desk-handoff.open', true);
 const clinicianHandoffOpen = useLocalStorageBoolean('dashboard.clinician-handoff.open', false);
-const nursingHandoffOpen = useLocalStorageBoolean('dashboard.nursing-handoff.open', false);
+const nursingHandoffOpen = useLocalStorageBoolean('dashboard.nursing-handoff.open', true);
 const cashierHandoffOpen = useLocalStorageBoolean('dashboard.cashier-handoff.open', false);
 const adminHandoffOpen = useLocalStorageBoolean('dashboard.admin-handoff.open', false);
 
@@ -291,8 +293,9 @@ function formatMoney(value: string | number | null | undefined, currencyCode: st
 
 function statusVariant(status: string | null | undefined) {
     const normalized = String(status ?? '').trim().toLowerCase();
-    if (['checked_in', 'admitted', 'completed', 'paid', 'approved'].includes(normalized)) return 'secondary';
-    if (['failed', 'cancelled', 'voided', 'rejected', 'escalated'].includes(normalized)) return 'destructive';
+    if (['completed', 'paid', 'approved', 'dispensed', 'resolved'].includes(normalized)) return 'secondary';
+    if (['checked_in', 'admitted', 'in_progress'].includes(normalized)) return 'default';
+    if (['failed', 'cancelled', 'voided', 'rejected', 'escalated', 'urgent', 'emergency'].includes(normalized)) return 'destructive';
     return 'outline';
 }
 
@@ -393,7 +396,7 @@ async function loadDashboard(depth = 0): Promise<void> {
                     'scheduledAppointments',
                     () =>
                         guardedRequest<ApiEnvelope<any>>('Scheduled appointments', 'appointments.read', () =>
-                            apiGet('/appointments', { status: 'scheduled', perPage: 3, sortBy: 'scheduledAt', sortDir: 'asc' }),
+                            apiGet('/appointments', { status: 'scheduled', perPage: 8, sortBy: 'scheduledAt', sortDir: 'asc' }),
                         ),
                 ],
                 [
@@ -470,6 +473,16 @@ async function loadDashboard(depth = 0): Promise<void> {
                     () =>
                         guardedRequest<ApiEnvelope<any>>('Admissions', 'admissions.read', () =>
                             apiGet('/admissions', { status: 'admitted', perPage: 2, sortBy: 'admittedAt', sortDir: 'desc' }),
+                        ),
+                ],
+                ['appointmentCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Appointment counts', 'appointments.read', () => apiGet('/appointments/status-counts')),
+                ],
+                [
+                    'checkedInAppointments',
+                    () =>
+                        guardedRequest<ApiEnvelope<any>>('Checked-in appointments', 'appointments.read', () =>
+                            apiGet('/appointments', { status: 'checked_in', perPage: 5, sortBy: 'scheduledAt', sortDir: 'asc' }),
                         ),
                 ],
             );
@@ -632,10 +645,10 @@ const kpis = computed(() => {
     }
     if (activePresetKey.value === 'nursing') {
         return [
+            metric('Waiting for triage', 'Checked-in patients pending nurse assessment.', 'users', numberValue(counts.value.appointments, 'checked_in')),
             metric('Admitted now', 'Current admitted census in scope.', 'bed-double', numberValue(counts.value.admissions, 'admitted')),
-            metric('Pending lab orders', 'Laboratory work still blocking bedside flow.', 'flask-conical', numberValue(counts.value.laboratory, ['ordered', 'collected', 'in_progress'])),
-            metric('Pending pharmacy orders', 'Pharmacy work that still needs completion.', 'pill', numberValue(counts.value.pharmacy, ['pending', 'in_preparation', 'partially_dispensed'])),
             metric('Escalated ward tasks', 'Ward follow-up items marked escalated.', 'alert-triangle', numberValue(counts.value.wardTasks, 'escalated')),
+            metric('Pending pharmacy orders', 'Pharmacy work that still needs completion.', 'pill', numberValue(counts.value.pharmacy, ['pending', 'in_preparation', 'partially_dispensed'])),
         ];
     }
     if (activePresetKey.value === 'cashier') {
@@ -656,9 +669,9 @@ const kpis = computed(() => {
 const actions = computed(() => {
     if (activePresetKey.value === 'front_desk') {
         return [
-            { label: 'Patients', icon: 'users', variant: 'default', href: '/patients' },
+            { label: 'Register Patient', icon: 'user-plus', variant: 'default', href: '/patients' },
             { label: 'Today queue', icon: 'calendar-clock', variant: 'outline', href: `/appointments?view=queue&from=${today}` },
-            { label: 'Admissions', icon: 'bed-double', variant: 'outline', href: '/admissions?view=queue' },
+            { label: 'Walk-in', icon: 'door-open', variant: 'outline', href: `/appointments?type=walkin&view=queue&from=${today}` },
         ];
     }
     if (activePresetKey.value === 'clinician') {
@@ -678,8 +691,8 @@ const actions = computed(() => {
     }
     if (activePresetKey.value === 'nursing') {
         return [
-            { label: 'Admission queue', icon: 'layout-list', variant: 'default', href: '/admissions?view=queue' },
-            { label: 'Bed board', icon: 'layout-grid', variant: 'outline', href: '/admissions?view=board' },
+            { label: 'Triage queue', icon: 'users', variant: 'default', href: `/appointments?view=queue&status=checked_in&from=${today}` },
+            { label: 'Admission queue', icon: 'layout-list', variant: 'outline', href: '/admissions?view=queue' },
             { label: 'Inpatient ward', icon: 'bed-double', variant: 'outline', href: '/inpatient-ward' },
         ];
     }
@@ -698,15 +711,21 @@ const actions = computed(() => {
 
 const queueRows = computed<QueueRow[]>(() => {
     if (activePresetKey.value === 'front_desk') {
-        return (lists.value.scheduledAppointments ?? []).slice(0, 3).map((item: any) => ({
-            id: String(item.id ?? item.appointmentNumber ?? Math.random()),
-            title: String(item.appointmentNumber ?? 'Scheduled appointment'),
-            subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Arrival still needs front-desk handling.',
-            meta: `Scheduled ${formatDateTime(item.scheduledAt)}`,
-            status: formatEnumLabel(String(item.status ?? 'scheduled')),
-            href: `/appointments?view=queue&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${today}`,
-            actionLabel: 'Open queue',
-        }));
+        const now = Date.now();
+        return (lists.value.scheduledAppointments ?? []).slice(0, 8).map((item: any) => {
+            const scheduledAt = item.scheduledAt ? new Date(item.scheduledAt).getTime() : null;
+            const isOverdue = scheduledAt !== null && scheduledAt < now && String(item.status ?? '').toLowerCase() === 'scheduled';
+            return {
+                id: String(item.id ?? item.appointmentNumber ?? Math.random()),
+                title: String(item.appointmentNumber ?? 'Scheduled appointment'),
+                subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Arrival still needs front-desk handling.',
+                meta: `Scheduled ${formatDateTime(item.scheduledAt)}`,
+                status: formatEnumLabel(String(item.status ?? 'scheduled')),
+                href: `/appointments?view=queue&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${today}`,
+                actionLabel: 'Open queue',
+                isOverdue,
+            };
+        });
     }
     if (activePresetKey.value === 'clinician') {
         return (lists.value.checkedInAppointments ?? []).slice(0, 2).map((item: any) => ({
@@ -731,7 +750,17 @@ const queueRows = computed<QueueRow[]>(() => {
         }));
     }
     if (activePresetKey.value === 'nursing') {
-        return (lists.value.admissions ?? []).slice(0, 2).map((item: any) => ({
+        const triageItems = (lists.value.checkedInAppointments ?? []).slice(0, 3).map((item: any) => ({
+            id: `triage-${String(item.id ?? item.appointmentNumber ?? Math.random())}`,
+            title: String(item.appointmentNumber ?? 'Triage patient'),
+            subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Checked-in and waiting for nurse assessment.',
+            meta: `Checked in ${formatDateTime(item.scheduledAt)}`,
+            status: formatEnumLabel(String(item.status ?? 'checked_in')),
+            href: `/appointments?view=queue&status=checked_in&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${today}`,
+            actionLabel: 'Open triage queue',
+            isOverdue: false,
+        }));
+        const admissionItems = (lists.value.admissions ?? []).slice(0, 2).map((item: any) => ({
             id: String(item.id ?? item.admissionNumber ?? Math.random()),
             title: String(item.admissionNumber ?? 'Active admission'),
             subtitle: [item.ward, item.bed, item.admissionReason].filter(Boolean).join(' | ') || 'Admission needs ward or bed-flow review.',
@@ -739,7 +768,9 @@ const queueRows = computed<QueueRow[]>(() => {
             status: formatEnumLabel(String(item.status ?? 'admitted')),
             href: '/admissions?view=queue',
             actionLabel: 'Open admissions',
+            isOverdue: false,
         }));
+        return [...triageItems, ...admissionItems];
     }
     if (activePresetKey.value === 'cashier') {
         return (lists.value.draftInvoices ?? []).slice(0, 3).map((item: any) => ({
@@ -767,7 +798,7 @@ const queueTitle = computed(() => {
     if (activePresetKey.value === 'front_desk') return 'Upcoming arrivals';
     if (activePresetKey.value === 'clinician') return 'Consultation-ready queue';
     if (activePresetKey.value === 'direct_service') return 'Direct-service queues';
-    if (activePresetKey.value === 'nursing') return 'Live admissions view';
+    if (activePresetKey.value === 'nursing') return 'Triage & admissions queue';
     if (activePresetKey.value === 'cashier') return 'Live billing preview';
     return 'Recent export failures';
 });
@@ -776,7 +807,7 @@ const queueDescription = computed(() => {
     if (activePresetKey.value === 'front_desk') return 'Scheduled arrivals that still need registration or queue attention.';
     if (activePresetKey.value === 'clinician') return 'Checked-in encounters ready for consultation pickup.';
     if (activePresetKey.value === 'direct_service') return 'Accessible laboratory, pharmacy, and radiology worklists for this session.';
-    if (activePresetKey.value === 'nursing') return 'Admitted patients that still need ward action or bed review.';
+    if (activePresetKey.value === 'nursing') return 'Checked-in patients waiting for triage and active inpatient admissions.';
     if (activePresetKey.value === 'cashier') return 'Draft billing work that still needs invoice follow-up.';
     return 'Failures and backlog signals from audit export health.';
 });
@@ -898,33 +929,43 @@ const handoff = computed(() => {
         const blockedDischarge = numberValue(counts.value.wardDischargeChecklists, ['blocked', 'pending']);
         const pendingLab = numberValue(counts.value.laboratory, ['ordered', 'collected', 'in_progress']);
         const pendingPharmacy = numberValue(counts.value.pharmacy, ['pending', 'in_preparation', 'partially_dispensed']);
+        const waitingTriage = numberValue(counts.value.appointments, 'checked_in');
         const hasEscalated = Number(escalatedTasks ?? 0) > 0;
+        const hasWaitingTriage = Number(waitingTriage ?? 0) > 0;
 
         return {
             title: 'Nursing handoff',
-            note: 'Ward operations',
-            blockerTitle: hasEscalated
-                ? 'Immediate bedside follow-up still needs acknowledgement.'
-                : Number(blockedDischarge ?? 0) > 0
-                    ? 'Blocked discharge checklists'
-                    : Number(pendingLab ?? 0) > 0
-                        ? 'Pending lab follow-up'
-                        : 'No critical nursing blockers',
-            blockerNote: hasEscalated
+            note: 'Triage and ward operations',
+            blockerTitle: hasWaitingTriage
+                ? 'Patients waiting for triage assessment'
+                : hasEscalated
+                    ? 'Immediate bedside follow-up still needs acknowledgement.'
+                    : Number(blockedDischarge ?? 0) > 0
+                        ? 'Blocked discharge checklists'
+                        : Number(pendingLab ?? 0) > 0
+                            ? 'Pending lab follow-up'
+                            : 'No critical nursing blockers',
+            blockerNote: hasWaitingTriage
+                ? 'Check-in queue has patients waiting for initial nursing assessment.'
+                : hasEscalated
                 ? 'Review task escalation or discharge blockers before closing handoff.'
                 : Number(blockedDischarge ?? 0) > 0
                     ? 'Bed occupancy and discharge readiness need another pass.'
                     : Number(pendingLab ?? 0) > 0
                         ? 'Check which laboratory work is still blocking bedside care.'
                         : 'Bed occupancy and discharge readiness look stable for the next shift.',
-            nextAction: Number(blockedDischarge ?? 0) > 0
+            nextAction: hasWaitingTriage
+                ? 'Start from the triage queue to clear patients waiting for assessment.'
+                : Number(blockedDischarge ?? 0) > 0
                 ? 'Review current occupancy and placement before the next handoff.'
                 : 'Start from the live admissions view, then step into ward follow-up.',
-            primaryAction: { label: 'Open bed board', href: '/admissions?view=board' },
+            primaryAction: hasWaitingTriage
+                ? { label: 'Open triage queue', href: `/appointments?view=queue&status=checked_in&from=${today}` }
+                : { label: 'Open bed board', href: '/admissions?view=board' },
             secondaryAction: { label: 'Open inpatient ward', href: '/inpatient-ward' },
             chips: [
+                { label: 'Waiting triage', value: waitingTriage },
                 { label: 'Admitted now', value: numberValue(counts.value.admissions, 'admitted') },
-                { label: 'Pending pharmacy', value: pendingPharmacy },
                 { label: 'Escalated tasks', value: escalatedTasks },
             ],
         };
@@ -1077,20 +1118,20 @@ const watchItems = computed(() => {
     if (activePresetKey.value === 'nursing') {
         return [
             {
+                label: 'Triage queue',
+                note: 'Checked-in patients waiting for nurse assessment.',
+                value: numberValue(counts.value.appointments, 'checked_in'),
+                href: `/appointments?view=queue&status=checked_in&from=${today}`,
+                actionLabel: 'Open triage',
+                icon: 'users' as AppIconName,
+            },
+            {
                 label: 'Blocked discharge checklists',
                 note: 'Discharge blockers are still open on active inpatients.',
                 value: numberValue(counts.value.wardDischargeChecklists, ['blocked', 'pending']),
                 href: '/inpatient-ward',
                 actionLabel: 'Open inpatient ward',
                 icon: 'bed-double' as AppIconName,
-            },
-            {
-                label: 'Pending lab follow-up',
-                note: 'Orders are still waiting on collection or result handoff.',
-                value: numberValue(counts.value.laboratory, ['ordered', 'collected', 'in_progress']),
-                href: '/laboratory-orders',
-                actionLabel: 'Open laboratory',
-                icon: 'flask-conical' as AppIconName,
             },
             {
                 label: 'Pending medication dispense',
@@ -1197,6 +1238,18 @@ onMounted(async () => {
         dashboardHydrated.value = true;
     }
 });
+
+const queueViewAllHref = computed(() => {
+    if (activePresetKey.value === 'front_desk') return `/appointments?view=queue&from=${today}`;
+    if (activePresetKey.value === 'clinician') return `/appointments?view=queue&status=checked_in&from=${today}`;
+    if (activePresetKey.value === 'nursing') return `/appointments?view=queue&status=checked_in&from=${today}`;
+    if (activePresetKey.value === 'cashier') return '/billing-invoices?status=draft';
+    return '#';
+});
+
+function switchPreset(key: DashboardPresetKey): void {
+    presetSelectValue.value = key;
+}
 </script>
 <template>
     <Head title="Dashboard" />
@@ -1222,17 +1275,36 @@ onMounted(async () => {
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
-                    <div v-if="canSwitchPreset" class="min-w-[13rem]">
-                        <Select v-model="presetSelectValue">
-                            <SelectTrigger class="h-8 rounded-lg">
-                                <SelectValue placeholder="View as" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="auto">Auto ({{ DASHBOARD_PRESETS.find((preset) => preset.key === inferredPreset)?.label ?? 'Default' }})</SelectItem>
-                                <SelectItem v-for="preset in visiblePresetOptions" :key="preset.key" :value="preset.key">{{ preset.label }}</SelectItem>
-                            </SelectContent>
-                        </Select>
+                    <div v-if="canSwitchPreset">
+                        <template v-if="visiblePresetOptions.length <= 3">
+                            <div class="flex items-center rounded-lg border bg-muted/40 p-0.5 gap-0.5">
+                                <Button
+                                    v-for="preset in visiblePresetOptions"
+                                    :key="preset.key"
+                                    size="sm"
+                                    :variant="activePresetKey === preset.key ? 'default' : 'ghost'"
+                                    class="h-7 rounded-md px-3 text-xs"
+                                    @click="switchPreset(preset.key)"
+                                >
+                                    {{ preset.label }}
+                                </Button>
+                            </div>
+                        </template>
+                        <template v-else>
+                            <div class="min-w-[13rem]">
+                                <Select v-model="presetSelectValue">
+                                    <SelectTrigger class="h-8 rounded-lg">
+                                        <SelectValue placeholder="View as" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="auto">Auto ({{ DASHBOARD_PRESETS.find((preset) => preset.key === inferredPreset)?.label ?? 'Default' }})</SelectItem>
+                                        <SelectItem v-for="preset in visiblePresetOptions" :key="preset.key" :value="preset.key">{{ preset.label }}</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </template>
                     </div>
+                    <CareQuickStrip />
                     <Button size="sm" variant="outline" class="h-8 rounded-lg gap-1.5" :disabled="refreshing" @click="refreshDashboard">
                         <AppIcon name="activity" class="size-3.5" />
                         {{ refreshing ? 'Refreshing...' : 'Refresh' }}
@@ -1336,7 +1408,10 @@ onMounted(async () => {
                                                 <p class="truncate text-sm font-medium">{{ row.title }}</p>
                                                 <p class="truncate text-[11px] text-muted-foreground">{{ row.subtitle }}</p>
                                             </div>
-                                            <Badge :variant="statusVariant(row.status)" class="shrink-0">{{ row.status }}</Badge>
+                                            <div class="flex shrink-0 items-center gap-1">
+                                                <Badge v-if="row.isOverdue" variant="destructive" class="text-[10px]">Overdue</Badge>
+                                                <Badge :variant="statusVariant(row.status)">{{ row.status }}</Badge>
+                                            </div>
                                         </div>
                                         <div class="mt-1 flex flex-wrap items-center justify-between gap-1.5">
                                             <p class="text-[11px] text-muted-foreground">{{ row.meta }}</p>
@@ -1346,6 +1421,14 @@ onMounted(async () => {
                                             </span>
                                         </div>
                                     </Link>
+                                </div>
+                                <div v-if="!loading && queueRows.length > 0" class="mt-2 border-t pt-2">
+                                    <Button as-child size="sm" variant="ghost" class="h-7 w-full rounded-md text-[11px]">
+                                        <Link :href="queueViewAllHref">
+                                            View full queue
+                                            <AppIcon name="chevron-right" class="ml-1 size-3" />
+                                        </Link>
+                                    </Button>
                                 </div>
                             </CardContent>
                         </Card>

@@ -65,8 +65,8 @@ export const DASHBOARD_PRESETS = [
         key: 'nursing',
         label: 'Nursing',
         description:
-            'Watch occupancy, inpatient movement, and downstream orders that block bedside care.',
-        modules: ['Admissions', 'Inpatient Ward', 'Pharmacy'],
+            'Monitor triage queue, inpatient movement, and downstream orders that block bedside care.',
+        modules: ['Triage', 'Admissions', 'Inpatient Ward'],
     },
     {
         key: 'direct_service',
@@ -173,15 +173,10 @@ export function eligibleDashboardPresets(input: InferDashboardPresetInput): Dash
 /** Default landing preset when Override is Auto: highest-precedence stripe among eligible. */
 export function inferDashboardPreset(input: InferDashboardPresetInput): DashboardPresetKey {
     const ordered = eligibleDashboardPresets(input);
-    const codes = input.roleCodesUpper.map((c) => String(c).trim().toUpperCase());
-    const isRegistrationClerk = codes.includes('HOSPITAL.REGISTRATION.CLERK');
-    const isNurse = codes.includes('HOSPITAL.NURSING.USER');
     /*
-     * Combined registrar + nurse: default to Front desk for patient throughput (triage, arrivals, bookings),
-     * while Nursing stays one click away in the switcher.
+     * Natural priority order (admin > cashier > clinician > nursing > direct_service > front_desk).
+     * A Nurse+Clerk combo lands on Nursing by default — the clinically higher-stakes workflow.
+     * Users can switch to Front Desk in one click via the preset switcher.
      */
-    if (isRegistrationClerk && isNurse && ordered.includes('front_desk')) {
-        return 'front_desk';
-    }
     return ordered[0] ?? 'front_desk';
 }
