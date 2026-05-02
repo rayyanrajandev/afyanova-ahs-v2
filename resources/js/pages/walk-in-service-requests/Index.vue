@@ -1200,7 +1200,7 @@ onMounted(() => {
                             >
                                 <SelectValue placeholder="Select department…" />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent class="z-[80]">
                                 <SelectItem
                                     v-for="opt in departmentOptions"
                                     :key="opt.value"
@@ -1217,7 +1217,7 @@ onMounted(() => {
                     <div class="flex w-full flex-col gap-1.5">
                         <Label>Service desk <span class="text-destructive">*</span></Label>
                         <Select
-                            :model-value="createForm.serviceType"
+                            :model-value="createForm.serviceType || undefined"
                             @update:model-value="createForm.serviceType = $event ? String($event) : ''"
                         >
                             <SelectTrigger
@@ -1226,7 +1226,7 @@ onMounted(() => {
                             >
                                 <SelectValue placeholder="Select desk…" />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent class="z-[80]">
                                 <SelectItem v-for="opt in serviceTypeCreateOptions" :key="opt.value" :value="opt.value">
                                     {{ opt.label }}
                                 </SelectItem>
@@ -1245,7 +1245,7 @@ onMounted(() => {
                             <SelectTrigger class="w-full">
                                 <SelectValue placeholder="Priority" />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent class="z-[80]">
                                 <SelectItem value="routine">Routine</SelectItem>
                                 <SelectItem value="urgent">Urgent</SelectItem>
                             </SelectContent>
