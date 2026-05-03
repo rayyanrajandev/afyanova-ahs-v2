@@ -45,7 +45,7 @@ type QueueRow = {
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/dashboard' }];
 const today = new Date(Date.now() - (new Date().getTimezoneOffset() * 60 * 1000)).toISOString().slice(0, 10);
 
-const { hasPermission, isFacilitySuperAdmin, isPlatformSuperAdmin, multiTenantIsolationEnabled, sessionRoleCodes } =
+const { hasPermission, isFacilitySuperAdmin, isPlatformSuperAdmin, multiTenantIsolationEnabled, sessionRoleCodes, scope: platformScope } =
     usePlatformAccess();
 
 const loading = ref(true);
@@ -595,12 +595,34 @@ watch(activeTab, async (tab) => {
     sharedOpsTelemetryLoaded.value = true;
 });
 
-watch(activePresetKey, async (_preset, prev) => {
-    if (!dashboardHydrated.value || prev === undefined) {
-        return;
-    }
-    await loadDashboard();
-});
+watch(
+    () => [
+        activePresetKey.value,
+        platformScope.value?.facility?.code ?? null,
+        platformScope.value?.tenant?.code ?? null,
+    ] as const,
+    async (next, prev) => {
+        if (!dashboardHydrated.value || prev === undefined) {
+            return;
+        }
+        const [nextPreset, nextFacility, nextTenant] = next;
+        const [prevPreset, prevFacility, prevTenant] = prev;
+        const presetChanged = nextPreset !== prevPreset;
+        const scopeChanged = nextFacility !== prevFacility || nextTenant !== prevTenant;
+        if (!presetChanged && !scopeChanged) {
+            return;
+        }
+
+        if (scopeChanged) {
+            refreshing.value = true;
+        }
+        try {
+            await loadDashboard();
+        } finally {
+            refreshing.value = false;
+        }
+    },
+);
 
 async function refreshDashboard() {
     if (refreshing.value) return;
