@@ -607,7 +607,7 @@ async function loadDashboard(depth = 0): Promise<void> {
                     'checkedInAppointments',
                     () =>
                         guardedRequest<ApiEnvelope<any>>('Checked-in appointments', 'appointments.read', () =>
-                            apiGet('/appointments', { status: 'checked_in', perPage: 5, sortBy: 'checkedInAt', sortDir: 'asc' }),
+                            apiGet('/appointments', { status: 'checked_in', perPage: 5, sortBy: 'scheduledAt', sortDir: 'asc' }),
                         ),
                 ],
             );
@@ -633,7 +633,7 @@ async function loadDashboard(depth = 0): Promise<void> {
                     'checkedInAppointments',
                     () =>
                         guardedRequest<ApiEnvelope<any>>('Triage queue', 'appointments.read', () =>
-                            apiGet('/appointments', { status: 'checked_in', perPage: 10, sortBy: 'checkedInAt', sortDir: 'asc' }),
+                            apiGet('/appointments', { status: 'checked_in', perPage: 10, sortBy: 'scheduledAt', sortDir: 'asc' }),
                         ),
                 ],
             );
@@ -946,7 +946,18 @@ const actions = computed(() => {
 const queueRows = computed<QueueRow[]>(() => {
     if (activePresetKey.value === 'front_desk') {
         const now = Date.now();
-        const checkedInRows = (lists.value.checkedInAppointments ?? []).slice(0, 5).map((item: any) => ({
+        const sortByArrival = (a: any, b: any) => {
+            const ta = a.checkedInAt ?? a.scheduledAt;
+            const tb = b.checkedInAt ?? b.scheduledAt;
+            if (!ta && !tb) return 0;
+            if (!ta) return 1;
+            if (!tb) return -1;
+            return new Date(ta).getTime() - new Date(tb).getTime();
+        };
+        const checkedInRows = [...(lists.value.checkedInAppointments ?? [])]
+            .sort(sortByArrival)
+            .slice(0, 5)
+            .map((item: any) => ({
             id: `checkedin-${String(item.id ?? item.appointmentNumber ?? Math.random())}`,
             title: String(item.appointmentNumber ?? 'Checked-in patient'),
             subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Checked-in and waiting for clinical handoff.',
@@ -997,7 +1008,18 @@ const queueRows = computed<QueueRow[]>(() => {
         }));
     }
     if (activePresetKey.value === 'nursing') {
-        const triageItems = (lists.value.checkedInAppointments ?? []).slice(0, 3).map((item: any) => ({
+        const sortByArrival = (a: any, b: any) => {
+            const ta = a.checkedInAt ?? a.scheduledAt;
+            const tb = b.checkedInAt ?? b.scheduledAt;
+            if (!ta && !tb) return 0;
+            if (!ta) return 1;
+            if (!tb) return -1;
+            return new Date(ta).getTime() - new Date(tb).getTime();
+        };
+        const triageItems = [...(lists.value.checkedInAppointments ?? [])]
+            .sort(sortByArrival)
+            .slice(0, 3)
+            .map((item: any) => ({
             id: `triage-${String(item.id ?? item.appointmentNumber ?? Math.random())}`,
             title: String(item.appointmentNumber ?? 'Triage patient'),
             subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Checked-in and waiting for nurse assessment.',
@@ -1023,7 +1045,18 @@ const queueRows = computed<QueueRow[]>(() => {
     }
     if (activePresetKey.value === 'emergency') {
         const now = nowTick.value;
-        return (lists.value.checkedInAppointments ?? []).slice(0, 10).map((item: any) => {
+        const sortByArrival = (a: any, b: any) => {
+            const ta = a.checkedInAt ?? a.scheduledAt;
+            const tb = b.checkedInAt ?? b.scheduledAt;
+            if (!ta && !tb) return 0;
+            if (!ta) return 1;
+            if (!tb) return -1;
+            return new Date(ta).getTime() - new Date(tb).getTime();
+        };
+        return [...(lists.value.checkedInAppointments ?? [])]
+            .sort(sortByArrival)
+            .slice(0, 10)
+            .map((item: any) => {
             const arrivalTime = item.checkedInAt ?? item.scheduledAt;
             const waitMs = arrivalTime ? now - new Date(arrivalTime).getTime() : 0;
             const waitMins = Math.max(0, Math.floor(waitMs / 60_000));
@@ -1060,6 +1093,16 @@ const queueRows = computed<QueueRow[]>(() => {
         href: '#dashboard-resources',
         actionLabel: 'Open resources',
     }));
+});
+
+const queueGroupCounts = computed<Map<string, number>>(() => {
+    const map = new Map<string, number>();
+    for (const row of queueRows.value) {
+        if (row.group) {
+            map.set(row.group, (map.get(row.group) ?? 0) + 1);
+        }
+    }
+    return map;
 });
 
 const queueTitle = computed(() => {
@@ -2077,7 +2120,7 @@ function switchPreset(key: DashboardPresetKey): void {
                                     >
                                         <span class="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{{ row.group }}</span>
                                         <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
-                                            {{ queueRows.filter((r) => r.group === row.group).length }}
+                                            {{ queueGroupCounts.get(row.group) ?? 0 }}
                                         </span>
                                     </div>
                                     <Link
