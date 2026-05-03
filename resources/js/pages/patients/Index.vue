@@ -3712,6 +3712,8 @@ async function createPatient() {
 
     const payload = payloadFromForm();
 
+    // Fast client-side pre-check (avoids round-trip for obvious duplicates).
+    // The backend is the authoritative gate — a 409 will catch anything missed here.
     if (!preSubmitDuplicateConfirmed.value) {
         preSubmitDuplicateCheckLoading.value = true;
         try {
@@ -3720,11 +3722,9 @@ async function createPatient() {
             if (matches.length > 0) {
                 return;
             }
-        } catch (error) {
-            preSubmitDuplicateCheckError.value = messageFromUnknown(
-                error,
-                tW2('duplicate.precheckFailedSubmitStillAllowed'),
-            );
+        } catch {
+            // Pre-check failure is non-fatal — let the submit proceed so the
+            // backend 409 catches any real duplicate.
         } finally {
             preSubmitDuplicateCheckLoading.value = false;
         }
@@ -3734,7 +3734,10 @@ async function createPatient() {
 
     try {
         const response = await apiRequest<PatientStoreResponse>('POST', '/patients', {
-            body: payload,
+            body: {
+                ...payload,
+                bypassDuplicateCheck: preSubmitDuplicateConfirmed.value ? true : undefined,
+            },
         });
 
         createMessage.value = response.data.patientNumber
@@ -3754,10 +3757,22 @@ async function createPatient() {
         searchForm.page = 1;
         await Promise.all([loadPatients(), loadPatientStatusCounts()]);
     } catch (error) {
-        const apiError = error as Error & { status?: number; payload?: ValidationErrorResponse };
+        const apiError = error as Error & { status?: number; payload?: unknown };
 
-        if (apiError.status === 422 && apiError.payload?.errors) {
-            createErrors.value = apiError.payload.errors;
+        // Backend duplicate guard — extract matches and show the same confirmation UI
+        if (apiError.status === 409) {
+            const body = apiError.payload as { duplicates?: Patient[] } | undefined;
+            const backendDuplicates = body?.duplicates ?? [];
+            if (backendDuplicates.length > 0) {
+                preSubmitDuplicateMatches.value = backendDuplicates;
+                createLoading.value = false;
+                return;
+            }
+        }
+
+        const typedError = apiError as Error & { payload?: ValidationErrorResponse };
+        if (apiError.status === 422 && typedError.payload?.errors) {
+            createErrors.value = typedError.payload.errors;
             void focusRegistrationErrorSummary();
         } else {
             createMessage.value = null;

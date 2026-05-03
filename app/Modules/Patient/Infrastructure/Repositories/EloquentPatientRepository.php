@@ -205,10 +205,10 @@ class EloquentPatientRepository implements PatientRepositoryInterface
 
         return $query
             ->where('status', 'active')
-            ->where('first_name', $firstName)
-            ->where('last_name', $lastName)
+            ->whereRaw('LOWER(first_name) = LOWER(?)', [$firstName])
+            ->whereRaw('LOWER(last_name) = LOWER(?)', [$lastName])
             ->whereDate('date_of_birth', $dateOfBirth)
-            ->where('phone', $phone)
+            ->whereRaw('LOWER(REPLACE(phone, \' \', \'\')) = LOWER(REPLACE(?, \' \', \'\'))', [$phone])
             ->when($excludePatientId, fn (Builder $builder, string $patientId) => $builder->where('id', '!=', $patientId))
             ->limit(5)
             ->get()

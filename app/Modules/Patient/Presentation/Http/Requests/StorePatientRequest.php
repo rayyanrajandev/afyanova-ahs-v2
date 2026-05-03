@@ -32,6 +32,7 @@ class StorePatientRequest extends FormRequest
             'addressLine' => ['required', 'string', 'max:255'],
             'nextOfKinName' => ['nullable', 'string', 'max:150'],
             'nextOfKinPhone' => ['nullable', 'string', 'max:30'],
+            'bypassDuplicateCheck' => ['nullable', 'boolean'],
             'status' => ['prohibited'],
             'statusReason' => ['prohibited'],
             'reason' => ['prohibited'],

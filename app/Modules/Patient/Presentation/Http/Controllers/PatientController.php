@@ -15,6 +15,7 @@ use App\Modules\Patient\Presentation\Http\Requests\UpdatePatientRequest;
 use App\Modules\Patient\Presentation\Http\Requests\UpdatePatientStatusRequest;
 use App\Modules\Patient\Presentation\Http\Transformers\PatientAuditLogResponseTransformer;
 use App\Modules\Patient\Presentation\Http\Transformers\PatientResponseTransformer;
+use App\Modules\Patient\Application\Exceptions\DuplicatePatientException;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\ServiceRequest\Application\UseCases\ListActiveWalkInsForPatientIdsUseCase;
@@ -109,11 +110,20 @@ class PatientController extends Controller
 
     public function store(StorePatientRequest $request, CreatePatientUseCase $useCase): JsonResponse
     {
+        $validated = $request->validated();
+        $bypassDuplicateCheck = (bool) ($validated['bypassDuplicateCheck'] ?? false);
+
         try {
             $result = $useCase->execute(
-                payload: $this->toPersistencePayload($request->validated()),
+                payload: $this->toPersistencePayload($validated),
                 actorId: $request->user()?->id,
+                bypassDuplicateCheck: $bypassDuplicateCheck,
             );
+        } catch (DuplicatePatientException $exception) {
+            return response()->json([
+                'message' => 'Duplicate active patient record(s) found. Confirm to register anyway.',
+                'duplicates' => $exception->getDuplicates(),
+            ], 409);
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return $this->tenantScopeRequiredError($exception->getMessage());
         }
