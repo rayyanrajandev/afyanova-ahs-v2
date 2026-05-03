@@ -32,7 +32,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
@@ -4276,21 +4275,6 @@ onMounted(initialPageLoad);
 
                     <!-- Right: actions -->
                     <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
-                        <Popover>
-                            <PopoverTrigger as-child>
-                                <Button variant="outline" size="sm" class="h-8 px-2.5">
-                                    <Badge :variant="scopeWarning ? 'destructive' : 'secondary'">
-                                        {{ scopeStatusLabel }}
-                                    </Badge>
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent align="end" class="w-72 space-y-1 text-xs">
-                                <p v-if="scope?.tenant">Tenant: {{ scope.tenant.name }} ({{ scope.tenant.code }})</p>
-                                <p v-if="scope?.facility">Facility: {{ scope.facility.name }} ({{ scope.facility.code }})</p>
-                                <p>Accessible facilities: {{ scope?.userAccess?.accessibleFacilityCount ?? 'N/A' }}</p>
-                                <p v-if="!scope" class="text-destructive">Scope could not be loaded.</p>
-                            </PopoverContent>
-                        </Popover>
                         <Button variant="outline" size="sm" :disabled="listLoading" class="h-8 gap-1.5" @click="refreshPage">
                             <AppIcon name="activity" class="size-3.5" />
                             {{ listLoading ? 'Refreshing...' : 'Refresh' }}
