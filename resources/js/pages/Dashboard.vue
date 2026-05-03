@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -67,6 +67,45 @@ const sharedOpsTelemetryLoaded = ref(false);
 
 const nowTick = ref(Date.now());
 let nowTickerHandle: ReturnType<typeof setInterval> | null = null;
+
+type DensityMode = 'comfortable' | 'compact';
+type AutoRefreshKey = 'off' | '30s' | '1m' | '5m';
+
+const AUTO_REFRESH_INTERVAL_MS: Record<AutoRefreshKey, number> = {
+    off: 0,
+    '30s': 30_000,
+    '1m': 60_000,
+    '5m': 300_000,
+};
+const AUTO_REFRESH_LABEL: Record<AutoRefreshKey, string> = {
+    off: 'Auto: Off',
+    '30s': 'Auto: 30s',
+    '1m': 'Auto: 1m',
+    '5m': 'Auto: 5m',
+};
+
+function useLocalStorageString<T extends string>(key: string, defaultValue: T, valid: readonly T[]): Ref<T> {
+    const state = ref(defaultValue) as Ref<T>;
+    onMounted(() => {
+        if (typeof window === 'undefined') return;
+        const raw = window.localStorage.getItem(key);
+        if (raw && (valid as readonly string[]).includes(raw)) {
+            state.value = raw as T;
+        }
+    });
+    watch(state, (value) => {
+        if (typeof window === 'undefined') return;
+        window.localStorage.setItem(key, value);
+    });
+    return state;
+}
+
+const density = useLocalStorageString<DensityMode>('dashboard.density', 'comfortable', ['comfortable', 'compact']);
+const autoRefreshInterval = useLocalStorageString<AutoRefreshKey>('dashboard.auto-refresh', 'off', ['off', '30s', '1m', '5m']);
+
+const PINNED_METRICS_KEY = 'dashboard.pinned-metrics';
+const pinnedMetrics = ref<Set<string>>(new Set());
+let autoRefreshHandle: ReturnType<typeof setInterval> | null = null;
 
 const frontDeskHandoffOpen = useLocalStorageBoolean('dashboard.front-desk-handoff.open', true);
 const clinicianHandoffOpen = useLocalStorageBoolean('dashboard.clinician-handoff.open', false);
@@ -343,6 +382,54 @@ const KPI_TONE_STYLES: Record<KpiTone, { ring: string; iconBg: string; iconText:
     violet: { ring: 'ring-violet-500/15', iconBg: 'bg-violet-500/10', iconText: 'text-violet-600 dark:text-violet-400', accent: 'from-violet-500/8 via-transparent to-transparent' },
     slate: { ring: 'ring-border/60', iconBg: 'bg-muted', iconText: 'text-muted-foreground', accent: 'from-muted/40 via-transparent to-transparent' },
 };
+
+const cardHeaderPaddingClass = computed(() => (density.value === 'compact' ? 'py-2.5' : 'py-3.5'));
+const kpiPaddingClass = computed(() => (density.value === 'compact' ? 'p-2.5' : 'p-3.5'));
+const kpiValueClass = computed(() => (density.value === 'compact' ? 'text-lg' : 'text-2xl'));
+const gridGapClass = computed(() => (density.value === 'compact' ? 'gap-2' : 'gap-3'));
+const isCompact = computed(() => density.value === 'compact');
+
+function persistPinnedMetrics(): void {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(PINNED_METRICS_KEY, [...pinnedMetrics.value].join('|'));
+}
+
+function loadPinnedMetrics(): void {
+    if (typeof window === 'undefined') return;
+    const raw = window.localStorage.getItem(PINNED_METRICS_KEY);
+    if (!raw) return;
+    pinnedMetrics.value = new Set(raw.split('|').filter(Boolean));
+}
+
+function togglePin(label: string): void {
+    const next = new Set(pinnedMetrics.value);
+    if (next.has(label)) {
+        next.delete(label);
+    } else {
+        next.add(label);
+    }
+    pinnedMetrics.value = next;
+    persistPinnedMetrics();
+}
+
+function applyAutoRefresh(): void {
+    if (autoRefreshHandle !== null) {
+        clearInterval(autoRefreshHandle);
+        autoRefreshHandle = null;
+    }
+    const ms = AUTO_REFRESH_INTERVAL_MS[autoRefreshInterval.value] ?? 0;
+    if (ms > 0) {
+        autoRefreshHandle = setInterval(() => {
+            void refreshDashboard();
+        }, ms);
+    }
+}
+
+function printHandoff(): void {
+    if (typeof window !== 'undefined') {
+        window.print();
+    }
+}
 
 function formatMoney(value: string | number | null | undefined, currencyCode: string | null | undefined): string {
     const numeric = Number(value ?? 0);
@@ -752,6 +839,42 @@ const kpis = computed(() => {
         metric('Ward escalations', 'Escalated inpatient tasks still visible in scope.', 'bed-double', numberValue(counts.value.wardTasks, 'escalated')),
     ];
 });
+
+const orderedKpis = computed(() => {
+    return kpis.value
+        .map((kpi, index) => ({ ...kpi, originalIndex: index, pinned: pinnedMetrics.value.has(kpi.label) }))
+        .sort((a, b) => {
+            if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+            return a.originalIndex - b.originalIndex;
+        });
+});
+
+type ActivityEntry = {
+    id: string;
+    kind: 'failure' | 'info';
+    title: string;
+    subtitle: string;
+    meta: string;
+};
+
+const activityFeed = computed<ActivityEntry[]>(() => {
+    const items: ActivityEntry[] = [];
+    const failures = firstArray<any>(auditExportHealth.value, ['recentFailures', 'failures']);
+    failures.slice(0, 5).forEach((item, index) => {
+        const moduleKey = String(item?.moduleKey ?? item?.module ?? 'module');
+        const error = String(item?.errorMessage ?? item?.message ?? 'No error message captured.');
+        const failedAt = item?.failedAt ?? item?.createdAt ?? item?.updatedAt ?? null;
+        items.push({
+            id: `audit-${String(item?.id ?? `${moduleKey}-${index}-${failedAt ?? ''}`)}`,
+            kind: 'failure',
+            title: `${formatEnumLabel(moduleKey)} export failed`,
+            subtitle: error,
+            meta: formatRelativeTime(failedAt, nowTick.value),
+        });
+    });
+    return items;
+});
+
 const actions = computed(() => {
     if (activePresetKey.value === 'front_desk') {
         return [
@@ -1317,6 +1440,7 @@ const retryModuleRows = computed(() =>
 );
 
 onMounted(async () => {
+    loadPinnedMetrics();
     nowTickerHandle = setInterval(() => {
         nowTick.value = Date.now();
     }, 15_000);
@@ -1326,6 +1450,13 @@ onMounted(async () => {
         loading.value = false;
         dashboardHydrated.value = true;
         nowTick.value = Date.now();
+        applyAutoRefresh();
+    }
+});
+
+watch(autoRefreshInterval, () => {
+    if (dashboardHydrated.value) {
+        applyAutoRefresh();
     }
 });
 
@@ -1333,6 +1464,10 @@ onBeforeUnmount(() => {
     if (nowTickerHandle !== null) {
         clearInterval(nowTickerHandle);
         nowTickerHandle = null;
+    }
+    if (autoRefreshHandle !== null) {
+        clearInterval(autoRefreshHandle);
+        autoRefreshHandle = null;
     }
 });
 
@@ -1352,97 +1487,81 @@ function switchPreset(key: DashboardPresetKey): void {
     <Head title="Dashboard" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-full flex-1 flex-col gap-5 overflow-x-auto p-4 md:p-6">
+        <div class="dashboard-root flex h-full flex-1 flex-col gap-3 overflow-x-auto p-3 md:p-4 lg:p-5">
             <section
-                class="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-primary/5 via-background to-background shadow-sm"
+                class="overflow-hidden rounded-lg border border-border/60 bg-card/50"
                 :aria-busy="refreshing"
             >
-                <div
-                    class="absolute inset-x-0 top-0 h-0.5 overflow-hidden"
-                    aria-hidden="true"
-                >
-                    <div
-                        class="h-full bg-gradient-to-r from-transparent via-primary to-transparent transition-opacity duration-300"
-                        :class="refreshing ? 'opacity-100 animate-[shimmer_1.4s_ease-in-out_infinite]' : 'opacity-0'"
-                    ></div>
-                </div>
-
-                <div class="flex flex-col gap-4 p-5 md:p-6 lg:flex-row lg:items-start lg:justify-between">
-                    <div class="min-w-0 space-y-3">
-                        <div class="flex items-center gap-2.5">
-                            <div class="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15">
-                                <AppIcon name="layout-grid" class="size-4" />
-                            </div>
-                            <div class="min-w-0">
-                                <h1 class="text-xl font-semibold tracking-tight md:text-[1.35rem]">Dashboard</h1>
-                                <p class="line-clamp-1 text-xs text-muted-foreground">{{ activePreset.description }}</p>
-                            </div>
+                <div class="flex flex-col gap-2 p-3 md:p-3.5 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
+                    <div class="flex min-w-0 items-center gap-2.5">
+                        <div class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
+                            <AppIcon name="layout-grid" class="size-4" />
                         </div>
-
-                        <Transition
-                            enter-active-class="transition-all duration-300 ease-out"
-                            enter-from-class="-translate-y-1 opacity-0"
-                            enter-to-class="translate-y-0 opacity-100"
-                            mode="out-in"
-                        >
-                            <div :key="currentFacilityLabel" class="flex flex-wrap items-center gap-2">
-                                <span
-                                    class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors"
-                                    :class="hasResolvedFacility ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'"
-                                >
-                                    <span
-                                        class="relative flex size-2 items-center justify-center"
-                                        aria-hidden="true"
-                                    >
-                                        <span
-                                            v-if="hasResolvedFacility"
-                                            class="absolute inline-flex size-full rounded-full opacity-60"
-                                            :class="refreshing ? 'animate-ping bg-emerald-500/70' : 'bg-emerald-500/40'"
-                                        ></span>
-                                        <span
-                                            class="relative inline-flex size-2 rounded-full"
-                                            :class="hasResolvedFacility ? 'bg-emerald-500' : 'bg-amber-500'"
-                                        ></span>
-                                    </span>
-                                    <AppIcon name="building-2" class="size-3.5" />
-                                    <span class="truncate max-w-[14rem]">{{ currentFacilityLabel }}</span>
-                                </span>
-                                <span class="text-[11px] text-muted-foreground truncate max-w-[14rem]">{{ currentTenantLabel }}</span>
+                        <div class="min-w-0">
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <h1 class="text-sm font-semibold tracking-tight md:text-base">Dashboard</h1>
+                                <Badge variant="secondary" class="rounded-md px-1.5 py-0 text-[10px] font-medium">{{ activePreset.label }}</Badge>
+                                <span class="hidden text-[11px] text-muted-foreground md:inline">·</span>
+                                <p class="hidden line-clamp-1 text-[11px] text-muted-foreground md:inline">{{ activePreset.description }}</p>
                             </div>
-                        </Transition>
-
-                        <div class="flex flex-wrap items-center gap-1.5">
-                            <Badge variant="secondary" class="rounded-full px-2.5 text-[11px] font-medium">{{ activePreset.label }}</Badge>
-                            <Badge v-for="module in activePreset.modules" :key="module" variant="outline" class="rounded-full px-2.5 text-[11px]">{{ module }}</Badge>
-                            <Badge
-                                v-if="lastLoadedAt"
-                                variant="outline"
-                                class="rounded-full px-2.5 text-[11px] tabular-nums"
-                                :class="isFresh ? 'border-emerald-500/30 text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground'"
+                            <Transition
+                                enter-active-class="transition-all duration-200 ease-out"
+                                enter-from-class="-translate-y-0.5 opacity-0"
+                                enter-to-class="translate-y-0 opacity-100"
+                                mode="out-in"
                             >
-                                <span class="mr-1 inline-block size-1.5 rounded-full" :class="isFresh ? 'bg-emerald-500' : 'bg-muted-foreground/50'"></span>
-                                Updated {{ lastLoadedRelative }}
-                            </Badge>
-                            <Badge
-                                v-if="partialData"
-                                variant="outline"
-                                class="rounded-full border-amber-500/30 px-2.5 text-[11px] text-amber-700 dark:text-amber-300"
-                            >
-                                {{ failures.length }} source{{ failures.length === 1 ? '' : 's' }} unavailable
-                            </Badge>
+                                <div :key="`${currentTenantLabel}|${currentFacilityLabel}`" class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                                    <span
+                                        class="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-medium transition-colors"
+                                        :class="hasResolvedFacility ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'"
+                                    >
+                                        <span class="relative inline-flex size-1.5 items-center justify-center" aria-hidden="true">
+                                            <span
+                                                v-if="hasResolvedFacility"
+                                                class="absolute inline-flex size-full rounded-full"
+                                                :class="refreshing ? 'animate-ping bg-emerald-500/70' : 'bg-emerald-500/0'"
+                                            ></span>
+                                            <span class="relative inline-flex size-1.5 rounded-full" :class="hasResolvedFacility ? 'bg-emerald-500' : 'bg-amber-500'"></span>
+                                        </span>
+                                        <AppIcon name="building-2" class="size-3" />
+                                        <span class="truncate max-w-[12rem]">{{ currentFacilityLabel }}</span>
+                                    </span>
+                                    <span class="truncate text-muted-foreground max-w-[12rem]">{{ currentTenantLabel }}</span>
+                                </div>
+                            </Transition>
                         </div>
                     </div>
 
-                    <div class="flex flex-wrap items-center gap-2">
-                        <div v-if="canSwitchPreset">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <Badge
+                            v-if="lastLoadedAt"
+                            variant="outline"
+                            class="h-6 rounded-md px-2 py-0 text-[10px] tabular-nums"
+                            :class="isFresh ? 'border-emerald-500/30 text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground'"
+                            :title="`Last refreshed at ${lastLoadedAt}`"
+                        >
+                            <span class="mr-1 inline-block size-1 rounded-full" :class="isFresh ? 'bg-emerald-500' : 'bg-muted-foreground/50'"></span>
+                            {{ lastLoadedRelative }}
+                        </Badge>
+                        <Badge
+                            v-if="partialData"
+                            variant="outline"
+                            class="h-6 rounded-md border-amber-500/30 px-2 py-0 text-[10px] text-amber-700 dark:text-amber-300"
+                            :title="failureLabels.join(', ')"
+                        >
+                            <AppIcon name="alert-triangle" class="mr-1 size-3" />
+                            {{ failures.length }} unavailable
+                        </Badge>
+
+                        <div v-if="canSwitchPreset" class="hidden lg:block">
                             <template v-if="visiblePresetOptions.length <= 3">
-                                <div class="flex items-center rounded-full border border-border/70 bg-background/80 p-0.5 gap-0.5 backdrop-blur">
+                                <div class="flex h-7 items-center gap-0.5 rounded-md border border-border/70 bg-background/80 p-0.5">
                                     <Button
                                         v-for="preset in visiblePresetOptions"
                                         :key="preset.key"
                                         size="sm"
                                         :variant="activePresetKey === preset.key ? 'default' : 'ghost'"
-                                        class="h-7 rounded-full px-3 text-xs transition-colors"
+                                        class="h-6 rounded-md px-2 text-[11px] font-medium"
                                         @click="switchPreset(preset.key)"
                                     >
                                         {{ preset.label }}
@@ -1450,9 +1569,9 @@ function switchPreset(key: DashboardPresetKey): void {
                                 </div>
                             </template>
                             <template v-else>
-                                <div class="min-w-[13rem]">
+                                <div class="min-w-[11rem]">
                                     <Select v-model="presetSelectValue">
-                                        <SelectTrigger class="h-8 rounded-full">
+                                        <SelectTrigger class="h-7 rounded-md text-[11px]">
                                             <SelectValue placeholder="View as" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -1463,105 +1582,144 @@ function switchPreset(key: DashboardPresetKey): void {
                                 </div>
                             </template>
                         </div>
+
                         <Button
                             size="sm"
                             variant="outline"
-                            class="h-8 rounded-full gap-1.5 transition-all hover:shadow-sm"
+                            class="h-7 gap-1 rounded-md px-2 text-[11px]"
+                            :title="`Switch to ${density === 'compact' ? 'comfortable' : 'compact'} layout`"
+                            @click="density = density === 'compact' ? 'comfortable' : 'compact'"
+                        >
+                            <AppIcon :name="density === 'compact' ? 'layout-list' : 'layout-grid'" class="size-3.5" />
+                            <span class="hidden xl:inline">{{ density === 'compact' ? 'Compact' : 'Comfort' }}</span>
+                        </Button>
+
+                        <div class="min-w-[7.5rem]">
+                            <Select v-model="autoRefreshInterval">
+                                <SelectTrigger class="h-7 gap-1 rounded-md px-2 text-[11px]" :title="autoRefreshInterval !== 'off' ? `Auto-refreshing every ${autoRefreshInterval}` : 'Auto-refresh disabled'">
+                                    <AppIcon name="activity" class="size-3" :class="autoRefreshInterval !== 'off' ? 'text-primary' : 'text-muted-foreground'" />
+                                    <SelectValue placeholder="Auto" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem v-for="key in (['off', '30s', '1m', '5m'] as const)" :key="key" :value="key">{{ AUTO_REFRESH_LABEL[key] }}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            class="h-7 gap-1 rounded-md px-2 text-[11px]"
                             :disabled="refreshing"
                             @click="refreshDashboard"
                         >
-                            <AppIcon
-                                name="activity"
-                                class="size-3.5 transition-transform"
-                                :class="refreshing ? 'animate-spin text-primary' : ''"
-                            />
-                            {{ refreshing ? 'Refreshing...' : 'Refresh' }}
+                            <AppIcon name="refresh-cw" class="size-3.5" :class="refreshing ? 'animate-spin text-primary' : ''" />
+                            <span class="hidden md:inline">{{ refreshing ? 'Refreshing' : 'Refresh' }}</span>
                         </Button>
                     </div>
+                </div>
+
+                <div class="h-0.5 overflow-hidden bg-muted/30" aria-hidden="true">
+                    <div
+                        class="h-full bg-gradient-to-r from-transparent via-primary to-transparent transition-opacity duration-300"
+                        :class="refreshing ? 'opacity-100 animate-[shimmer_1.4s_ease-in-out_infinite]' : 'opacity-0'"
+                    ></div>
                 </div>
             </section>
 
             <Alert
                 v-if="partialData"
-                class="rounded-xl border-dashed border-amber-500/40 bg-amber-500/5 text-amber-900 dark:text-amber-200"
+                class="rounded-lg border-dashed border-amber-500/40 bg-amber-500/5 py-2 text-amber-900 dark:text-amber-200"
             >
                 <AppIcon name="alert-triangle" class="size-4" />
-                <AlertTitle>Partial data load</AlertTitle>
-                <AlertDescription>
-                    <div class="space-y-2">
-                        <p>Some dashboard modules are unavailable right now. The rest of the dashboard is still usable.</p>
-                        <div class="flex flex-wrap gap-1.5">
-                            <Badge v-for="label in failureLabels" :key="label" variant="outline" class="rounded-full bg-background/60">{{ label }}</Badge>
-                        </div>
+                <AlertTitle class="text-sm">Partial data load</AlertTitle>
+                <AlertDescription class="text-xs">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <span>Sources unavailable:</span>
+                        <Badge v-for="label in failureLabels" :key="label" variant="outline" class="rounded-md bg-background/60 text-[10px]">{{ label }}</Badge>
                     </div>
                 </AlertDescription>
             </Alert>
 
-            <Tabs v-model="activeTab" class="space-y-4">
-                <TabsList class="grid w-full grid-cols-2 rounded-full bg-muted/60 p-1 sm:w-auto">
-                    <TabsTrigger value="overview" class="rounded-full text-xs">Overview</TabsTrigger>
-                    <TabsTrigger value="resources" class="rounded-full text-xs">Resources</TabsTrigger>
+            <Tabs v-model="activeTab" class="space-y-3">
+                <TabsList class="h-8 rounded-lg bg-muted/60 p-0.5">
+                    <TabsTrigger value="overview" class="h-7 rounded-md text-[11px]">Overview</TabsTrigger>
+                    <TabsTrigger value="resources" class="h-7 rounded-md text-[11px]">Resources</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="overview" class="space-y-4">
+                <TabsContent value="overview" class="space-y-3">
                     <div
-                        class="grid gap-3 md:grid-cols-2 xl:grid-cols-4 transition-opacity duration-300"
-                        :class="refreshing ? 'opacity-70' : 'opacity-100'"
+                        class="grid sm:grid-cols-2 lg:grid-cols-4 transition-opacity duration-300"
+                        :class="[gridGapClass, refreshing ? 'opacity-75' : 'opacity-100']"
                     >
                         <Card
-                            v-for="item in kpis"
+                            v-for="item in orderedKpis"
                             :key="item.label"
-                            class="group relative overflow-hidden rounded-xl border border-border/60 bg-card ring-1 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
-                            :class="KPI_TONE_STYLES[kpiToneFor(item.label, item.unavailable)].ring"
+                            class="group relative overflow-hidden rounded-lg border border-border/60 bg-card transition-all duration-150 hover:-translate-y-0.5 hover:shadow-sm"
+                            :class="[KPI_TONE_STYLES[kpiToneFor(item.label, item.unavailable)].ring, item.pinned ? 'ring-2' : 'ring-1']"
                         >
                             <div
                                 class="pointer-events-none absolute inset-0 bg-gradient-to-br opacity-80"
                                 :class="KPI_TONE_STYLES[kpiToneFor(item.label, item.unavailable)].accent"
                                 aria-hidden="true"
                             ></div>
-                            <CardHeader class="relative gap-2 py-4">
-                                <div class="flex items-start justify-between gap-2">
-                                    <CardDescription class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{{ item.label }}</CardDescription>
+                            <div :class="['relative flex items-start justify-between gap-2', kpiPaddingClass]">
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{{ item.label }}</p>
+                                    <template v-if="loading">
+                                        <Skeleton :class="['mt-1.5', isCompact ? 'h-5' : 'h-7', 'w-20']" />
+                                        <Skeleton class="mt-1 h-2.5 w-full" />
+                                    </template>
+                                    <template v-else>
+                                        <p
+                                            :class="[
+                                                kpiValueClass,
+                                                item.unavailable ? 'font-medium text-muted-foreground' : 'font-semibold tracking-tight',
+                                                'mt-0.5 leading-tight tabular-nums',
+                                            ]"
+                                        >
+                                            {{ item.value }}
+                                        </p>
+                                        <p class="mt-0.5 line-clamp-2 text-[10px] leading-snug text-muted-foreground">{{ item.help }}</p>
+                                    </template>
+                                </div>
+                                <div class="flex shrink-0 flex-col items-end gap-1">
                                     <span
-                                        class="flex size-7 items-center justify-center rounded-lg ring-1 transition-transform group-hover:scale-105"
                                         :class="[
+                                            'flex items-center justify-center rounded-md ring-1 transition-transform group-hover:scale-105',
+                                            isCompact ? 'size-6' : 'size-7',
                                             KPI_TONE_STYLES[kpiToneFor(item.label, item.unavailable)].iconBg,
                                             KPI_TONE_STYLES[kpiToneFor(item.label, item.unavailable)].ring,
                                         ]"
                                     >
-                                        <AppIcon
-                                            :name="item.icon"
-                                            class="size-3.5"
-                                            :class="KPI_TONE_STYLES[kpiToneFor(item.label, item.unavailable)].iconText"
-                                        />
+                                        <AppIcon :name="item.icon" class="size-3.5" :class="KPI_TONE_STYLES[kpiToneFor(item.label, item.unavailable)].iconText" />
                                     </span>
-                                </div>
-                                <template v-if="loading">
-                                    <Skeleton class="h-8 w-24" />
-                                    <Skeleton class="h-3 w-full" />
-                                </template>
-                                <template v-else>
-                                    <CardTitle
-                                        class="tabular-nums transition-colors"
-                                        :class="item.unavailable ? 'text-lg font-semibold text-muted-foreground' : 'text-2xl font-semibold tracking-tight'"
+                                    <button
+                                        type="button"
+                                        class="rounded-md text-[13px] leading-none transition-colors hover:text-amber-500 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                        :class="item.pinned ? 'text-amber-500' : 'text-muted-foreground/40 opacity-0 group-hover:opacity-100'"
+                                        :title="item.pinned ? 'Unpin metric' : 'Pin to top'"
+                                        :aria-pressed="item.pinned"
+                                        @click="togglePin(item.label)"
                                     >
-                                        {{ item.value }}
-                                    </CardTitle>
-                                    <CardDescription class="text-[11px] leading-relaxed text-muted-foreground">{{ item.help }}</CardDescription>
-                                </template>
-                            </CardHeader>
+                                        <span aria-hidden="true">{{ item.pinned ? '★' : '☆' }}</span>
+                                        <span class="sr-only">{{ item.pinned ? 'Unpin' : 'Pin' }} {{ item.label }}</span>
+                                    </button>
+                                </div>
+                            </div>
                         </Card>
                     </div>
 
-                    <div class="rounded-xl border border-border/60 bg-muted/30 p-2 backdrop-blur-sm">
-                        <div class="grid gap-2 md:grid-cols-3">
+                    <div class="rounded-lg border border-border/60 bg-muted/30 p-1.5">
+                        <div class="flex flex-wrap items-center gap-1.5">
+                            <span class="px-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Quick:</span>
                             <template v-for="action in actions" :key="action.label">
                                 <Button
                                     v-if="action.href"
                                     as-child
                                     size="sm"
                                     :variant="action.variant"
-                                    class="h-9 w-full justify-center rounded-lg gap-1.5 transition-all hover:-translate-y-0.5 hover:shadow-sm"
+                                    class="h-7 gap-1.5 rounded-md px-2.5 text-[11px] transition-all hover:-translate-y-0.5 hover:shadow-sm"
                                 >
                                     <Link :href="action.href">
                                         <AppIcon :name="action.icon" class="size-3.5" />
@@ -1572,7 +1730,7 @@ function switchPreset(key: DashboardPresetKey): void {
                                     v-else
                                     size="sm"
                                     :variant="action.variant"
-                                    class="h-9 w-full justify-center rounded-lg gap-1.5 transition-all hover:-translate-y-0.5 hover:shadow-sm"
+                                    class="h-7 gap-1.5 rounded-md px-2.5 text-[11px] transition-all hover:-translate-y-0.5 hover:shadow-sm"
                                     @click="action.onClick?.()"
                                 >
                                     <AppIcon :name="action.icon" class="size-3.5" />
@@ -1581,123 +1739,130 @@ function switchPreset(key: DashboardPresetKey): void {
                             </template>
                         </div>
                     </div>
+
                     <div
-                        class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(19rem,24rem)] transition-opacity duration-300"
-                        :class="refreshing ? 'opacity-80' : 'opacity-100'"
+                        class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,21rem)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,21rem)_minmax(0,17rem)] transition-opacity duration-300"
+                        :class="refreshing ? 'opacity-85' : 'opacity-100'"
                     >
-                        <Card class="rounded-xl border border-border/60 shadow-sm">
-                            <CardHeader class="gap-1.5 py-4">
+                        <Card class="rounded-lg border border-border/60 shadow-sm">
+                            <CardHeader :class="['gap-1.5', cardHeaderPaddingClass]">
                                 <div class="flex items-center justify-between gap-2">
-                                    <CardTitle class="text-base">{{ queueTitle }}</CardTitle>
-                                    <Badge v-if="!loading" variant="outline" class="rounded-full text-[10px] tabular-nums">{{ queueRows.length }}</Badge>
+                                    <div class="flex items-center gap-2">
+                                        <CardTitle class="text-[13px] font-semibold">{{ queueTitle }}</CardTitle>
+                                        <Badge v-if="!loading" variant="outline" class="rounded-md px-1.5 py-0 text-[10px] tabular-nums">{{ queueRows.length }}</Badge>
+                                    </div>
+                                    <Button v-if="queueRows.length > 0 && !loading" as-child size="sm" variant="ghost" class="h-6 rounded-md px-2 text-[10px]">
+                                        <Link :href="queueViewAllHref">
+                                            View all
+                                            <AppIcon name="arrow-right" class="ml-1 size-3" />
+                                        </Link>
+                                    </Button>
                                 </div>
-                                <CardDescription>{{ queueDescription }}</CardDescription>
+                                <CardDescription class="text-[11px]">{{ queueDescription }}</CardDescription>
                             </CardHeader>
                             <CardContent class="pt-0">
-                                <div v-if="loading" class="space-y-2">
-                                    <div v-for="index in 3" :key="index" class="rounded-lg border px-3 py-2">
-                                        <Skeleton class="h-4 w-32" />
-                                        <Skeleton class="mt-2 h-3 w-full" />
-                                        <Skeleton class="mt-1 h-3 w-40" />
+                                <div v-if="loading" class="space-y-1.5">
+                                    <div v-for="index in 4" :key="index" class="rounded-md border px-3 py-2">
+                                        <Skeleton class="h-3 w-32" />
+                                        <Skeleton class="mt-1.5 h-2.5 w-full" />
+                                        <Skeleton class="mt-1 h-2.5 w-32" />
                                     </div>
                                 </div>
-                                <div v-else-if="queueRows.length === 0" class="rounded-xl border border-dashed bg-muted/20 p-6 text-center">
-                                    <div class="mx-auto flex size-9 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                <div v-else-if="queueRows.length === 0" class="rounded-lg border border-dashed bg-muted/20 p-5 text-center">
+                                    <div class="mx-auto flex size-8 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                                         <AppIcon name="check-circle" class="size-4" />
                                     </div>
-                                    <p class="mt-2 text-xs font-medium">All clear</p>
-                                    <p class="text-[11px] text-muted-foreground">No queue items are currently visible for this preset.</p>
+                                    <p class="mt-1.5 text-xs font-medium">All clear</p>
+                                    <p class="text-[11px] text-muted-foreground">No queue items for this preset.</p>
                                 </div>
-                                <div v-else class="space-y-2">
+                                <div v-else class="space-y-1.5">
                                     <Link
                                         v-for="row in queueRows"
                                         :key="row.id"
                                         :href="row.href"
-                                        class="group relative block rounded-lg border border-border/60 bg-background/40 px-3 py-2.5 pl-3.5 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:bg-muted/40 hover:shadow-sm"
+                                        class="group relative block rounded-md border border-border/60 bg-background/40 px-3 py-2 pl-3.5 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:bg-muted/40 hover:shadow-sm"
                                     >
                                         <span
-                                            class="absolute inset-y-2 left-1 w-0.5 rounded-full transition-colors"
+                                            class="absolute inset-y-2 left-1 w-0.5 rounded-sm transition-colors"
                                             :class="row.isOverdue ? 'bg-rose-500' : statusVariant(row.status) === 'destructive' ? 'bg-rose-400' : statusVariant(row.status) === 'default' ? 'bg-sky-500' : statusVariant(row.status) === 'secondary' ? 'bg-emerald-500' : 'bg-muted-foreground/30'"
                                             aria-hidden="true"
                                         ></span>
                                         <div class="flex items-start justify-between gap-1.5">
                                             <div class="min-w-0">
-                                                <p class="truncate text-sm font-medium">{{ row.title }}</p>
+                                                <p class="truncate text-[12px] font-medium">{{ row.title }}</p>
                                                 <p class="truncate text-[11px] text-muted-foreground">{{ row.subtitle }}</p>
                                             </div>
                                             <div class="flex shrink-0 items-center gap-1">
-                                                <Badge v-if="row.isOverdue" variant="destructive" class="text-[10px]">Overdue</Badge>
-                                                <Badge :variant="statusVariant(row.status)" class="text-[10px]">{{ row.status }}</Badge>
+                                                <Badge v-if="row.isOverdue" variant="destructive" class="rounded-md px-1.5 py-0 text-[10px]">Overdue</Badge>
+                                                <Badge :variant="statusVariant(row.status)" class="rounded-md px-1.5 py-0 text-[10px]">{{ row.status }}</Badge>
                                             </div>
                                         </div>
-                                        <div class="mt-1 flex flex-wrap items-center justify-between gap-1.5">
-                                            <p class="text-[11px] text-muted-foreground">{{ row.meta }}</p>
-                                            <span class="inline-flex items-center gap-1 text-[11px] font-medium text-primary">
+                                        <div class="mt-0.5 flex items-center justify-between gap-1.5 text-[10px]">
+                                            <span class="truncate text-muted-foreground">{{ row.meta }}</span>
+                                            <span class="inline-flex items-center gap-0.5 font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
                                                 {{ row.actionLabel }}
                                                 <AppIcon name="chevron-right" class="size-3" />
                                             </span>
                                         </div>
                                     </Link>
                                 </div>
-                                <div v-if="!loading && queueRows.length > 0" class="mt-2 border-t pt-2">
-                                    <Button as-child size="sm" variant="ghost" class="h-7 w-full rounded-md text-[11px]">
-                                        <Link :href="queueViewAllHref">
-                                            View full queue
-                                            <AppIcon name="chevron-right" class="ml-1 size-3" />
-                                        </Link>
-                                    </Button>
-                                </div>
                             </CardContent>
                         </Card>
 
-                        <div class="space-y-4">
+                        <div class="space-y-3">
                             <Collapsible v-if="shouldShowHandoff" v-model:open="handoffOpen">
-                                <Card class="overflow-hidden rounded-xl border border-border/60 bg-gradient-to-br from-primary/5 via-card to-card shadow-sm">
-                                    <CardHeader class="gap-1.5 py-4">
-                                        <div class="flex items-start justify-between gap-3">
+                                <Card class="rounded-lg border border-border/60 shadow-sm dashboard-handoff-card">
+                                    <CardHeader :class="['gap-1', cardHeaderPaddingClass]">
+                                        <div class="flex items-start justify-between gap-2">
                                             <div class="min-w-0">
-                                                <div class="flex items-center gap-2">
-                                                    <span class="flex size-6 items-center justify-center rounded-md bg-primary/10 text-primary ring-1 ring-primary/15">
+                                                <div class="flex items-center gap-1.5">
+                                                    <span class="flex size-5 items-center justify-center rounded-md bg-primary/10 text-primary">
                                                         <AppIcon name="alert-triangle" class="size-3" />
                                                     </span>
-                                                    <CardTitle class="text-base">Shift handoff</CardTitle>
+                                                    <CardTitle class="text-[13px] font-semibold">Shift handoff</CardTitle>
                                                 </div>
-                                                <CardDescription class="mt-0.5 line-clamp-1">{{ handoff.title }} | {{ handoff.note }}</CardDescription>
+                                                <CardDescription class="mt-0.5 line-clamp-1 text-[11px]">{{ handoff.title }} | {{ handoff.note }}</CardDescription>
                                             </div>
-                                            <CollapsibleTrigger as-child>
-                                                <Button size="sm" variant="outline" class="h-8 rounded-full gap-1.5">
-                                                    <AppIcon :name="handoffOpen ? 'chevron-left' : 'chevron-right'" class="size-3.5" />
-                                                    {{ handoffOpen ? 'Hide' : 'Show' }}
+                                            <div class="flex shrink-0 items-center gap-1">
+                                                <Button size="sm" variant="ghost" class="h-6 rounded-md px-1.5" title="Print handoff" @click="printHandoff">
+                                                    <AppIcon name="file-text" class="size-3" />
+                                                    <span class="sr-only">Print handoff</span>
                                                 </Button>
-                                            </CollapsibleTrigger>
+                                                <CollapsibleTrigger as-child>
+                                                    <Button size="sm" variant="outline" class="h-6 rounded-md px-1.5">
+                                                        <AppIcon :name="handoffOpen ? 'chevron-up' : 'chevron-down'" class="size-3" />
+                                                        <span class="sr-only">{{ handoffOpen ? 'Hide handoff' : 'Show handoff' }}</span>
+                                                    </Button>
+                                                </CollapsibleTrigger>
+                                            </div>
                                         </div>
                                     </CardHeader>
                                     <CollapsibleContent>
-                                        <CardContent class="space-y-3 pt-0">
-                                            <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
-                                                <p class="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-amber-700 dark:text-amber-300">
-                                                    <span class="inline-block size-1.5 rounded-full bg-amber-500"></span>
+                                        <CardContent class="space-y-2 pt-0">
+                                            <div class="rounded-md border border-amber-500/30 bg-amber-500/5 p-2.5">
+                                                <p class="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                                                    <span class="inline-block size-1 rounded-full bg-amber-500"></span>
                                                     Current blocker
                                                 </p>
-                                                <p class="mt-1 text-sm font-semibold">{{ handoff.blockerTitle }}</p>
-                                                <p class="mt-1 text-xs text-muted-foreground">{{ handoff.blockerNote }}</p>
+                                                <p class="mt-0.5 text-[12px] font-semibold">{{ handoff.blockerTitle }}</p>
+                                                <p class="mt-0.5 text-[11px] text-muted-foreground">{{ handoff.blockerNote }}</p>
                                             </div>
-                                            <div class="rounded-xl border border-border/60 bg-background/40 p-3">
-                                                <p class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Next action</p>
-                                                <p class="mt-1 text-sm">{{ handoff.nextAction }}</p>
-                                                <div class="mt-3 flex flex-wrap gap-2">
-                                                    <Button as-child size="sm" class="h-8 rounded-full gap-1.5 transition-all hover:shadow-sm">
+                                            <div class="rounded-md border border-border/60 bg-background/40 p-2.5">
+                                                <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Next action</p>
+                                                <p class="mt-0.5 text-[12px]">{{ handoff.nextAction }}</p>
+                                                <div class="mt-2 flex flex-wrap gap-1.5">
+                                                    <Button as-child size="sm" class="h-7 gap-1 rounded-md px-2.5 text-[11px] transition-all hover:shadow-sm">
                                                         <Link :href="handoff.primaryAction.href">{{ handoff.primaryAction.label }}</Link>
                                                     </Button>
-                                                    <Button as-child size="sm" variant="outline" class="h-8 rounded-full gap-1.5">
+                                                    <Button as-child size="sm" variant="outline" class="h-7 gap-1 rounded-md px-2.5 text-[11px]">
                                                         <Link :href="handoff.secondaryAction.href">{{ handoff.secondaryAction.label }}</Link>
                                                     </Button>
                                                 </div>
                                             </div>
-                                            <div class="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
-                                                <div v-for="chip in handoff.chips" :key="chip.label" class="rounded-lg border border-border/60 bg-background/30 p-2">
-                                                    <p class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ chip.label }}</p>
-                                                    <p class="mt-1 text-sm font-semibold tabular-nums">{{ chip.value === null ? 'Unavailable' : chip.value.toLocaleString() }}</p>
+                                            <div class="grid gap-1.5 grid-cols-3">
+                                                <div v-for="chip in handoff.chips" :key="chip.label" class="rounded-md border border-border/60 bg-background/30 p-1.5">
+                                                    <p class="text-[9px] uppercase tracking-wide text-muted-foreground">{{ chip.label }}</p>
+                                                    <p class="mt-0.5 text-[12px] font-semibold tabular-nums">{{ chip.value === null ? 'N/A' : chip.value.toLocaleString() }}</p>
                                                 </div>
                                             </div>
                                         </CardContent>
@@ -1705,36 +1870,138 @@ function switchPreset(key: DashboardPresetKey): void {
                                 </Card>
                             </Collapsible>
 
-                            <Card class="rounded-xl border border-border/60 shadow-sm">
-                                <CardHeader class="gap-1.5 py-4">
-                                    <CardTitle class="text-base">Operational watch</CardTitle>
-                                    <CardDescription>Keep the secondary workload visible without leaving this preset.</CardDescription>
+                            <Card class="rounded-lg border border-border/60 shadow-sm">
+                                <CardHeader :class="['gap-1', cardHeaderPaddingClass]">
+                                    <CardTitle class="text-[13px] font-semibold">Operational watch</CardTitle>
+                                    <CardDescription class="text-[11px]">Secondary workload to keep visible.</CardDescription>
                                 </CardHeader>
-                                <CardContent class="space-y-2 pt-0">
+                                <CardContent class="space-y-1.5 pt-0">
                                     <div
                                         v-for="item in watchItems"
                                         :key="item.label"
-                                        class="group rounded-lg border border-border/60 bg-background/30 p-3 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-sm"
+                                        class="group rounded-md border border-border/60 bg-background/30 p-2 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-sm"
                                     >
-                                        <div class="flex items-start justify-between gap-3">
+                                        <div class="flex items-start justify-between gap-2">
                                             <div class="min-w-0">
-                                                <div class="flex items-center gap-2">
-                                                    <span class="flex size-6 items-center justify-center rounded-md bg-muted text-muted-foreground ring-1 ring-border/60 transition-colors group-hover:bg-primary/10 group-hover:text-primary">
-                                                        <AppIcon :name="item.icon" class="size-3.5" />
+                                                <div class="flex items-center gap-1.5">
+                                                    <span class="flex size-5 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground ring-1 ring-border/60 transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+                                                        <AppIcon :name="item.icon" class="size-3" />
                                                     </span>
-                                                    <p class="text-sm font-medium">{{ item.label }}</p>
+                                                    <p class="truncate text-[12px] font-medium">{{ item.label }}</p>
                                                 </div>
-                                                <p class="mt-1 text-xs text-muted-foreground">{{ item.note }}</p>
+                                                <p class="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground">{{ item.note }}</p>
                                             </div>
-                                            <Badge variant="outline" class="rounded-full tabular-nums">{{ item.value === null ? 'Unavailable' : item.value.toLocaleString() }}</Badge>
+                                            <Badge variant="outline" class="rounded-md px-1.5 py-0 text-[10px] tabular-nums">{{ item.value === null ? 'N/A' : item.value.toLocaleString() }}</Badge>
                                         </div>
-                                        <div class="mt-2">
-                                            <Button as-child size="sm" variant="ghost" class="h-7 rounded-md px-2 text-[11px] hover:translate-x-0.5">
+                                        <div class="mt-1">
+                                            <Button as-child size="sm" variant="ghost" class="h-5 rounded-sm px-1.5 text-[10px] hover:translate-x-0.5">
                                                 <Link :href="item.href">
                                                     {{ item.actionLabel }}
-                                                    <AppIcon name="chevron-right" class="ml-1 size-3" />
+                                                    <AppIcon name="chevron-right" class="ml-0.5 size-2.5" />
                                                 </Link>
                                             </Button>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        <div class="grid gap-3 lg:col-span-2 lg:grid-cols-2 2xl:col-span-1 2xl:grid-cols-1">
+                            <Card class="rounded-lg border border-border/60 shadow-sm">
+                                <CardHeader :class="['gap-1', cardHeaderPaddingClass]">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <CardTitle class="flex items-center gap-1.5 text-[13px] font-semibold">
+                                            <span class="inline-flex size-1.5 rounded-full bg-emerald-500"></span>
+                                            System status
+                                        </CardTitle>
+                                        <Badge variant="outline" class="rounded-md px-1.5 py-0 text-[10px]">{{ multiTenantIsolationEnabled ? 'Multi-tenant' : 'Single-tenant' }}</Badge>
+                                    </div>
+                                </CardHeader>
+                                <CardContent class="space-y-1.5 pt-0">
+                                    <div class="grid grid-cols-2 gap-1.5">
+                                        <div class="rounded-md border border-border/60 bg-background/30 p-1.5">
+                                            <p class="text-[9px] uppercase tracking-wide text-muted-foreground">Resolved from</p>
+                                            <p class="mt-0.5 truncate text-[11px] font-medium">{{ scopeData?.resolvedFrom || 'Unknown' }}</p>
+                                        </div>
+                                        <div class="rounded-md border border-border/60 bg-background/30 p-1.5">
+                                            <p class="text-[9px] uppercase tracking-wide text-muted-foreground">Facilities</p>
+                                            <p class="mt-0.5 text-[11px] font-medium tabular-nums">{{ Number(scopeData?.userAccess?.accessibleFacilityCount ?? 0) }}</p>
+                                        </div>
+                                        <div class="rounded-md border border-border/60 bg-background/30 p-1.5">
+                                            <p class="text-[9px] uppercase tracking-wide text-muted-foreground">Email</p>
+                                            <p
+                                                class="mt-0.5 text-[11px] font-medium"
+                                                :class="securityStatus?.emailVerified ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'"
+                                            >
+                                                {{ securityStatus?.emailVerified ? 'Verified' : 'Unverified' }}
+                                            </p>
+                                        </div>
+                                        <div class="rounded-md border border-border/60 bg-background/30 p-1.5">
+                                            <p class="text-[9px] uppercase tracking-wide text-muted-foreground">2FA</p>
+                                            <p
+                                                class="mt-0.5 text-[11px] font-medium"
+                                                :class="securityStatus?.twoFactorEnabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'"
+                                            >
+                                                {{ securityStatus?.twoFactorEnabled ? 'Enabled' : 'Off' }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div v-if="auditExportHealth" class="rounded-md border border-border/60 bg-background/30 p-1.5">
+                                        <p class="text-[9px] uppercase tracking-wide text-muted-foreground">Audit exports</p>
+                                        <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                                            <span class="font-medium tabular-nums">{{ Number(auditExportHealth.aggregate?.currentBacklog ?? 0) }} backlog</span>
+                                            <span class="text-muted-foreground">|</span>
+                                            <span
+                                                class="font-medium tabular-nums"
+                                                :class="Number(auditExportHealth.aggregate?.recentFailed ?? 0) > 0 ? 'text-rose-600 dark:text-rose-400' : ''"
+                                            >
+                                                {{ Number(auditExportHealth.aggregate?.recentFailed ?? 0) }} failed
+                                            </span>
+                                            <span class="text-muted-foreground">|</span>
+                                            <span class="font-medium tabular-nums text-emerald-600 dark:text-emerald-400">{{ Number(auditExportHealth.aggregate?.recentCompleted ?? 0) }} done</span>
+                                        </div>
+                                    </div>
+                                    <div class="rounded-md border border-border/60 bg-background/30 p-1.5">
+                                        <p class="text-[9px] uppercase tracking-wide text-muted-foreground">Auto-refresh</p>
+                                        <p class="mt-0.5 text-[11px] font-medium" :class="autoRefreshInterval !== 'off' ? 'text-primary' : 'text-muted-foreground'">
+                                            {{ AUTO_REFRESH_LABEL[autoRefreshInterval] }}
+                                        </p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card class="rounded-lg border border-border/60 shadow-sm">
+                                <CardHeader :class="['gap-1', cardHeaderPaddingClass]">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <CardTitle class="text-[13px] font-semibold">Recent activity</CardTitle>
+                                        <Button size="sm" variant="ghost" class="h-6 rounded-md px-2 text-[10px]" @click="activeTab = 'resources'">
+                                            Details
+                                            <AppIcon name="arrow-right" class="ml-0.5 size-2.5" />
+                                        </Button>
+                                    </div>
+                                </CardHeader>
+                                <CardContent class="space-y-1.5 pt-0">
+                                    <div v-if="activityFeed.length === 0" class="rounded-md border border-dashed bg-muted/20 px-3 py-4 text-center">
+                                        <p class="text-[11px] font-medium">No recent issues</p>
+                                        <p class="text-[10px] text-muted-foreground">Operational signal is clear.</p>
+                                    </div>
+                                    <div
+                                        v-for="entry in activityFeed"
+                                        :key="entry.id"
+                                        class="rounded-md border border-border/60 bg-background/30 p-2"
+                                    >
+                                        <div class="flex items-start gap-1.5">
+                                            <span
+                                                class="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-md"
+                                                :class="entry.kind === 'failure' ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400' : 'bg-sky-500/10 text-sky-600 dark:text-sky-400'"
+                                            >
+                                                <AppIcon :name="entry.kind === 'failure' ? 'alert-triangle' : 'activity'" class="size-2.5" />
+                                            </span>
+                                            <div class="min-w-0 flex-1">
+                                                <p class="truncate text-[11px] font-medium">{{ entry.title }}</p>
+                                                <p class="line-clamp-1 text-[10px] text-muted-foreground">{{ entry.subtitle }}</p>
+                                                <p class="mt-0.5 text-[10px] text-muted-foreground">{{ entry.meta }}</p>
+                                            </div>
                                         </div>
                                     </div>
                                 </CardContent>
@@ -1743,9 +2010,9 @@ function switchPreset(key: DashboardPresetKey): void {
                     </div>
                 </TabsContent>
 
-                <TabsContent id="dashboard-resources" value="resources" class="space-y-4">
-                    <div class="grid gap-4 xl:grid-cols-2">
-                        <Card class="rounded-xl border border-border/60 shadow-sm">
+                <TabsContent id="dashboard-resources" value="resources" class="space-y-3">
+                    <div class="grid gap-3 xl:grid-cols-2">
+                        <Card class="rounded-lg border border-border/60 shadow-sm">
                             <CardHeader class="pb-2">
                                 <CardTitle class="text-base">User &amp; Security</CardTitle>
                                 <CardDescription>Session context for this workstation.</CardDescription>
@@ -1773,7 +2040,7 @@ function switchPreset(key: DashboardPresetKey): void {
                                 </div>
                             </CardContent>
                         </Card>
-                        <Card class="rounded-xl border border-border/60 shadow-sm">
+                        <Card class="rounded-lg border border-border/60 shadow-sm">
                             <CardHeader class="pb-2">
                                 <CardTitle class="text-base">Scope &amp; Routing</CardTitle>
                                 <CardDescription>Facility and isolation context driving this dashboard session.</CardDescription>
@@ -1805,8 +2072,8 @@ function switchPreset(key: DashboardPresetKey): void {
                         </Card>
                     </div>
 
-                    <div class="grid gap-4 xl:grid-cols-2">
-                        <Card class="rounded-xl border border-border/60 shadow-sm">
+                    <div class="grid gap-3 xl:grid-cols-2">
+                        <Card class="rounded-lg border border-border/60 shadow-sm">
                             <CardHeader class="pb-2">
                                 <CardTitle class="text-base">Audit export health</CardTitle>
                                 <CardDescription>Backlog and failure signals across the export modules you can access.</CardDescription>
@@ -1846,7 +2113,7 @@ function switchPreset(key: DashboardPresetKey): void {
                             </CardContent>
                         </Card>
 
-                        <Card class="rounded-xl border border-border/60 shadow-sm">
+                        <Card class="rounded-lg border border-border/60 shadow-sm">
                             <CardHeader class="pb-2">
                                 <CardTitle class="text-base">Retry-resume telemetry</CardTitle>
                                 <CardDescription>Operational signal for export retry and resume handling.</CardDescription>
@@ -1893,6 +2160,25 @@ function switchPreset(key: DashboardPresetKey): void {
     }
     100% {
         transform: translateX(100%);
+    }
+}
+</style>
+
+<style>
+@media print {
+    body * {
+        visibility: hidden !important;
+    }
+    .dashboard-handoff-card,
+    .dashboard-handoff-card * {
+        visibility: visible !important;
+    }
+    .dashboard-handoff-card {
+        position: absolute !important;
+        inset: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
     }
 }
 </style>
