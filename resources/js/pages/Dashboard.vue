@@ -303,12 +303,12 @@ function numberValue(source: any, key: string | string[]): number | null {
     return Number(source?.[key] ?? 0);
 }
 
-function metric(label: string, help: string, icon: AppIconName, value: number | null) {
+function metric(label: string, help: string, icon: AppIconName, value: number | null, suffix?: string) {
     return {
         label,
         help,
         icon,
-        value: (value ?? 0).toLocaleString(),
+        value: suffix ? `${(value ?? 0).toLocaleString()}${suffix}` : (value ?? 0).toLocaleString(),
         unavailable: false,
     };
 }
@@ -551,7 +551,7 @@ async function loadDashboard(depth = 0): Promise<void> {
                     'checkedInAppointments',
                     () =>
                         guardedRequest<ApiEnvelope<any>>('Checked-in appointments', 'appointments.read', () =>
-                            apiGet('/appointments', { status: 'checked_in', perPage: 2, sortBy: 'scheduledAt', sortDir: 'asc' }),
+                            apiGet('/appointments', { status: 'checked_in', perPage: 5, sortBy: 'checkedInAt', sortDir: 'asc' }),
                         ),
                 ],
             );
@@ -825,11 +825,21 @@ const kpis = computed(() => {
         ];
     }
     if (activePresetKey.value === 'emergency') {
+        const triageRows = lists.value.checkedInAppointments ?? [];
+        const avgWaitMins = (() => {
+            if (triageRows.length === 0) return 0;
+            const now = nowTick.value;
+            const total = triageRows.reduce((acc: number, item: any) => {
+                const t = item.checkedInAt ?? item.scheduledAt;
+                return t ? acc + Math.max(0, now - new Date(t).getTime()) : acc;
+            }, 0);
+            return Math.floor(total / triageRows.length / 60_000);
+        })();
         return [
             metric('Awaiting triage', 'Checked-in patients not yet assessed by clinical staff.', 'heart-pulse', numberValue(counts.value.appointments, 'checked_in')),
+            metric('Avg triage wait', 'Average time since check-in across all patients currently in the triage queue.', 'calendar-clock', avgWaitMins, 'm'),
             metric('Active admissions', 'Patients currently admitted from emergency intake.', 'bed-double', numberValue(counts.value.admissions, 'admitted')),
             metric('Stat lab orders', 'Laboratory orders still active and pending results.', 'flask-conical', numberValue(counts.value.laboratory, ['ordered', 'collected', 'in_progress'])),
-            metric('Pending medication orders', 'Pharmacy orders waiting preparation or dispense.', 'pill', numberValue(counts.value.pharmacy, ['pending', 'in_preparation', 'partially_dispensed'])),
         ];
     }
     if (activePresetKey.value === 'cashier') {
@@ -965,7 +975,7 @@ const queueRows = computed<QueueRow[]>(() => {
         return [...checkedInRows, ...scheduledRows];
     }
     if (activePresetKey.value === 'clinician') {
-        return (lists.value.checkedInAppointments ?? []).slice(0, 2).map((item: any) => ({
+        return (lists.value.checkedInAppointments ?? []).slice(0, 5).map((item: any) => ({
             id: String(item.id ?? item.appointmentNumber ?? Math.random()),
             title: String(item.appointmentNumber ?? 'Checked-in appointment'),
             subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Encounter is ready for consultation pickup.',
@@ -1472,6 +1482,14 @@ const watchItems = computed(() => {
                 href: '/laboratory-orders',
                 actionLabel: 'Open laboratory',
                 icon: 'flask-conical' as AppIconName,
+            },
+            {
+                label: 'Pending medication orders',
+                note: 'Pharmacy orders waiting preparation or dispense for emergency patients.',
+                value: numberValue(counts.value.pharmacy, ['pending', 'in_preparation', 'partially_dispensed']),
+                href: '/pharmacy-orders',
+                actionLabel: 'Open pharmacy',
+                icon: 'pill' as AppIconName,
             },
         ];
     }
