@@ -18,6 +18,9 @@ class ListAppointmentsUseCase
         $status = isset($filters['status']) ? trim((string) $filters['status']) : null;
         if ($status === '') {
             $status = null;
+        } elseif ($status === 'checked_in') {
+            // 'checked_in' is the legacy/frontend alias for the waiting_triage status.
+            $status = 'waiting_triage';
         } elseif ($status !== 'exceptions' && ! in_array($status, AppointmentStatus::values(), true)) {
             $status = null;
         }
@@ -25,6 +28,7 @@ class ListAppointmentsUseCase
         $sortMap = [
             'appointmentNumber' => 'appointment_number',
             'scheduledAt' => 'scheduled_at',
+            'checkedInAt' => 'checked_in_at',
             'status' => 'status',
             'createdAt' => 'created_at',
             'updatedAt' => 'updated_at',

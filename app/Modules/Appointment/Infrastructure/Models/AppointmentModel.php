@@ -36,6 +36,7 @@ class AppointmentModel extends Model
         'coverage_notes',
         'status',
         'status_reason',
+        'checked_in_at',
         'triage_vitals_summary',
         'triage_notes',
         'triaged_at',
@@ -53,6 +54,7 @@ class AppointmentModel extends Model
     {
         return [
             'scheduled_at' => 'datetime',
+            'checked_in_at' => 'datetime',
             'triaged_at' => 'datetime',
             'consultation_started_at' => 'datetime',
             'consultation_owner_assigned_at' => 'datetime',

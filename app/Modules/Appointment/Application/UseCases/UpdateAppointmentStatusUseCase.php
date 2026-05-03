@@ -34,7 +34,11 @@ class UpdateAppointmentStatusUseCase
         $updated = $this->appointmentRepository->update($id, array_merge([
             'status' => $status,
             'status_reason' => $reason,
-        ], $statusAttributes));
+        ], $statusAttributes, (
+            $status === \App\Modules\Appointment\Domain\ValueObjects\AppointmentStatus::WAITING_TRIAGE->value
+                ? ['checked_in_at' => now()]
+                : []
+        )));
 
         if (! $updated) {
             return null;

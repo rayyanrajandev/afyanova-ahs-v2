@@ -528,7 +528,7 @@ async function loadDashboard(depth = 0): Promise<void> {
                     'checkedInAppointments',
                     () =>
                         guardedRequest<ApiEnvelope<any>>('Checked-in appointments', 'appointments.read', () =>
-                            apiGet('/appointments', { status: 'checked_in', perPage: 5, sortBy: 'scheduledAt', sortDir: 'asc' }),
+                            apiGet('/appointments', { status: 'checked_in', perPage: 5, sortBy: 'checkedInAt', sortDir: 'asc' }),
                         ),
                 ],
             );
@@ -607,7 +607,7 @@ async function loadDashboard(depth = 0): Promise<void> {
                     'checkedInAppointments',
                     () =>
                         guardedRequest<ApiEnvelope<any>>('Checked-in appointments', 'appointments.read', () =>
-                            apiGet('/appointments', { status: 'checked_in', perPage: 5, sortBy: 'scheduledAt', sortDir: 'asc' }),
+                            apiGet('/appointments', { status: 'checked_in', perPage: 5, sortBy: 'checkedInAt', sortDir: 'asc' }),
                         ),
                 ],
             );
@@ -633,7 +633,7 @@ async function loadDashboard(depth = 0): Promise<void> {
                     'checkedInAppointments',
                     () =>
                         guardedRequest<ApiEnvelope<any>>('Triage queue', 'appointments.read', () =>
-                            apiGet('/appointments', { status: 'checked_in', perPage: 10, sortBy: 'scheduledAt', sortDir: 'asc' }),
+                            apiGet('/appointments', { status: 'checked_in', perPage: 10, sortBy: 'checkedInAt', sortDir: 'asc' }),
                         ),
                 ],
             );

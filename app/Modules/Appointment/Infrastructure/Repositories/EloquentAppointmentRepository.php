@@ -89,7 +89,7 @@ class EloquentAppointmentRepository implements AppointmentRepositoryInterface
         ?string $sortBy,
         string $sortDirection
     ): array {
-        $sortBy = in_array($sortBy, ['appointment_number', 'scheduled_at', 'status', 'created_at', 'updated_at'], true)
+        $sortBy = in_array($sortBy, ['appointment_number', 'scheduled_at', 'checked_in_at', 'status', 'created_at', 'updated_at'], true)
             ? $sortBy
             : 'scheduled_at';
 

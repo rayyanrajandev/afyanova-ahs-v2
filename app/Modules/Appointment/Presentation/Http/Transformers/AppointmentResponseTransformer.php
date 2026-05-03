@@ -27,6 +27,7 @@ class AppointmentResponseTransformer
             'coverageNotes' => $appointment['coverage_notes'] ?? null,
             'status' => $appointment['status'] ?? null,
             'statusReason' => $appointment['status_reason'] ?? null,
+            'checkedInAt' => $appointment['checked_in_at'] ?? null,
             'triageVitalsSummary' => $appointment['triage_vitals_summary'] ?? null,
             'triageNotes' => $appointment['triage_notes'] ?? null,
             'triagedAt' => $appointment['triaged_at'] ?? null,
