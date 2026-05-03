@@ -826,20 +826,27 @@ const kpis = computed(() => {
     }
     if (activePresetKey.value === 'emergency') {
         const triageRows = lists.value.checkedInAppointments ?? [];
+        const now = nowTick.value;
         const avgWaitMins = (() => {
             if (triageRows.length === 0) return 0;
-            const now = nowTick.value;
             const total = triageRows.reduce((acc: number, item: any) => {
                 const t = item.checkedInAt ?? item.scheduledAt;
                 return t ? acc + Math.max(0, now - new Date(t).getTime()) : acc;
             }, 0);
             return Math.floor(total / triageRows.length / 60_000);
         })();
+        const longestWaitMins = (() => {
+            if (triageRows.length === 0) return 0;
+            // rows are sorted by checkedInAt asc — first row = longest wait
+            const earliest = triageRows[0];
+            const t = earliest?.checkedInAt ?? earliest?.scheduledAt;
+            return t ? Math.max(0, Math.floor((now - new Date(t).getTime()) / 60_000)) : 0;
+        })();
         return [
             metric('Awaiting triage', 'Checked-in patients not yet assessed by clinical staff.', 'heart-pulse', numberValue(counts.value.appointments, 'checked_in')),
             metric('Avg triage wait', 'Average time since check-in across all patients currently in the triage queue.', 'calendar-clock', avgWaitMins, 'm'),
+            metric('Longest wait', 'Time since the earliest unassessed patient checked in. Exceeds 30 min = critical.', 'alert-triangle', longestWaitMins, 'm'),
             metric('Active admissions', 'Patients currently admitted from emergency intake.', 'bed-double', numberValue(counts.value.admissions, 'admitted')),
-            metric('Stat lab orders', 'Laboratory orders still active and pending results.', 'flask-conical', numberValue(counts.value.laboratory, ['ordered', 'collected', 'in_progress'])),
         ];
     }
     if (activePresetKey.value === 'cashier') {
@@ -1475,11 +1482,11 @@ const watchItems = computed(() => {
             },
             {
                 label: 'Blocked discharge checklists',
-                note: 'Discharge blockers are still open on active inpatients.',
+                note: 'Patients blocked from discharge — bed occupancy is held until resolved.',
                 value: numberValue(counts.value.wardDischargeChecklists, ['blocked', 'pending']),
                 href: '/inpatient-ward',
                 actionLabel: 'Open inpatient ward',
-                icon: 'bed-double' as AppIconName,
+                icon: 'circle-x' as AppIconName,
             },
             {
                 label: 'Pending medication dispense',
@@ -1665,6 +1672,18 @@ const showShiftIntent = computed(
 const overdueQueueCount = computed(() => queueRows.value.filter((r) => r.isOverdue).length);
 
 const escalatedTaskCount = computed(() => Number(counts.value.wardTasks?.escalated ?? 0));
+
+const patientSearchQuery = ref('');
+
+function goToPatientSearch(): void {
+    const q = patientSearchQuery.value.trim();
+    if (!q) return;
+    const preset = activePresetKey.value;
+    const base = (preset === 'clinician' || preset === 'nursing' || preset === 'emergency')
+        ? `/appointments?view=queue&status=checked_in&q=${encodeURIComponent(q)}`
+        : `/patients?q=${encodeURIComponent(q)}`;
+    window.location.href = base;
+}
 
 function dismissShiftIntent(presetKey?: DashboardPresetKey): void {
     if (presetKey) switchPreset(presetKey);
@@ -2049,6 +2068,34 @@ function switchPreset(key: DashboardPresetKey): void {
                             Open the inpatient ward to review and acknowledge outstanding escalations before the next shift.
                         </AlertDescription>
                     </Alert>
+
+                    <!-- Patient quick-search — front desk, clinician, nursing, emergency -->
+                    <div
+                        v-if="['front_desk', 'clinician', 'nursing', 'emergency'].includes(activePresetKey)"
+                        class="relative"
+                    >
+                        <AppIcon
+                            name="search"
+                            class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+                            aria-hidden="true"
+                        />
+                        <input
+                            v-model="patientSearchQuery"
+                            type="search"
+                            placeholder="Search patients or appointments…"
+                            class="h-9 w-full rounded-lg border border-border bg-background pl-8 pr-10 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                            @keydown.enter="goToPatientSearch"
+                        />
+                        <button
+                            v-if="patientSearchQuery.trim()"
+                            type="button"
+                            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground"
+                            aria-label="Clear search"
+                            @click="patientSearchQuery = ''"
+                        >
+                            <AppIcon name="x" class="size-3.5" />
+                        </button>
+                    </div>
 
                     <!-- Queue card — full width, shrinks to content -->
                     <Card
