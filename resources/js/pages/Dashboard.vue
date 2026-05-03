@@ -1623,12 +1623,11 @@ const retryModuleRows = computed(() =>
         })),
 );
 
-const shiftIntentDismissedKey = computed(() => `dashboard.shift-intent.${today}`);
 const shiftIntentDismissed = ref(false);
 
 onMounted(async () => {
     loadPinnedMetrics();
-    shiftIntentDismissed.value = window.localStorage.getItem(shiftIntentDismissedKey.value) === '1';
+    shiftIntentDismissed.value = window.sessionStorage.getItem('dashboard.shift-intent') === '1';
     nowTickerHandle = setInterval(() => {
         nowTick.value = Date.now();
     }, 15_000);
@@ -1670,7 +1669,7 @@ const escalatedTaskCount = computed(() => Number(counts.value.wardTasks?.escalat
 function dismissShiftIntent(presetKey?: DashboardPresetKey): void {
     if (presetKey) switchPreset(presetKey);
     shiftIntentDismissed.value = true;
-    window.localStorage.setItem(shiftIntentDismissedKey.value, '1');
+    window.sessionStorage.setItem('dashboard.shift-intent', '1');
 }
 
 const queueViewAllHref = computed(() => {
