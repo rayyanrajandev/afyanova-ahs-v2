@@ -360,30 +360,6 @@ const currentTenantLabel = computed(() => {
     return 'Platform scope';
 });
 
-const hasResolvedFacility = computed(() => Boolean(platformScope.value?.facility?.code));
-
-type KpiTone = 'sky' | 'emerald' | 'amber' | 'rose' | 'violet' | 'slate';
-
-function kpiToneFor(label: string, unavailable: boolean): KpiTone {
-    if (unavailable) return 'slate';
-    const normalized = label.toLowerCase();
-    if (normalized.includes('escalat') || normalized.includes('overdue') || normalized.includes('failure')) return 'rose';
-    if (normalized.includes('blocker') || normalized.includes('open claim') || normalized.includes('exception') || normalized.includes('backlog') || normalized.includes('partial')) return 'amber';
-    if (normalized.includes('checked') || normalized.includes('triage')) return 'emerald';
-    if (normalized.includes('admit') || normalized.includes('inpatient') || normalized.includes('follow-up')) return 'violet';
-    return 'sky';
-}
-
-const KPI_TONE_STYLES: Record<KpiTone, { ring: string; iconBg: string; iconText: string; accent: string }> = {
-    sky: { ring: 'ring-sky-500/15', iconBg: 'bg-sky-500/10', iconText: 'text-sky-600 dark:text-sky-400', accent: 'from-sky-500/8 via-transparent to-transparent' },
-    emerald: { ring: 'ring-emerald-500/15', iconBg: 'bg-emerald-500/10', iconText: 'text-emerald-600 dark:text-emerald-400', accent: 'from-emerald-500/8 via-transparent to-transparent' },
-    amber: { ring: 'ring-amber-500/20', iconBg: 'bg-amber-500/10', iconText: 'text-amber-600 dark:text-amber-400', accent: 'from-amber-500/10 via-transparent to-transparent' },
-    rose: { ring: 'ring-rose-500/20', iconBg: 'bg-rose-500/10', iconText: 'text-rose-600 dark:text-rose-400', accent: 'from-rose-500/10 via-transparent to-transparent' },
-    violet: { ring: 'ring-violet-500/15', iconBg: 'bg-violet-500/10', iconText: 'text-violet-600 dark:text-violet-400', accent: 'from-violet-500/8 via-transparent to-transparent' },
-    slate: { ring: 'ring-border/60', iconBg: 'bg-muted', iconText: 'text-muted-foreground', accent: 'from-muted/40 via-transparent to-transparent' },
-};
-
-const cardHeaderPaddingClass = computed(() => (density.value === 'compact' ? 'py-2.5' : 'py-3.5'));
 const kpiPaddingClass = computed(() => (density.value === 'compact' ? 'p-2.5' : 'p-3.5'));
 const kpiValueClass = computed(() => (density.value === 'compact' ? 'text-lg' : 'text-2xl'));
 const gridGapClass = computed(() => (density.value === 'compact' ? 'gap-2' : 'gap-3'));
@@ -422,12 +398,6 @@ function applyAutoRefresh(): void {
         autoRefreshHandle = setInterval(() => {
             void refreshDashboard();
         }, ms);
-    }
-}
-
-function printHandoff(): void {
-    if (typeof window !== 'undefined') {
-        window.print();
     }
 }
 
@@ -1488,175 +1458,111 @@ function switchPreset(key: DashboardPresetKey): void {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="dashboard-root flex h-full flex-1 flex-col gap-3 overflow-x-auto p-3 md:p-4 lg:p-5">
-            <section
-                class="overflow-hidden rounded-lg border border-border/60 bg-card/50"
-                :aria-busy="refreshing"
-            >
-                <div class="grid gap-3 p-3 md:p-3.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start xl:grid-cols-[minmax(0,1fr)_minmax(16.5rem,28rem)] xl:items-center">
-                    <!-- Left: page identity + scope context (preset lives with controls to avoid duplication) -->
-                    <div class="flex min-w-0 gap-3">
-                        <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
-                            <AppIcon name="layout-grid" class="size-4" />
+            <section class="rounded-lg border border-border bg-card shadow-sm" :aria-busy="refreshing">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-start md:justify-between md:gap-6">
+                    <div class="min-w-0 space-y-2">
+                        <div>
+                            <h1 class="text-lg font-semibold tracking-tight md:text-xl">Dashboard</h1>
+                            <p class="mt-1 max-w-2xl text-sm leading-snug text-muted-foreground">
+                                {{ activePreset.description }}
+                            </p>
                         </div>
-                        <div class="min-w-0 flex-1 space-y-2">
-                            <div class="space-y-1">
-                                <h1 class="text-base font-semibold leading-none tracking-tight">Dashboard</h1>
-                                <p class="line-clamp-2 text-[11px] leading-snug text-muted-foreground sm:line-clamp-1">
-                                    {{ activePreset.description }}
-                                </p>
-                            </div>
-                            <Transition
-                                enter-active-class="transition-all duration-200 ease-out"
-                                enter-from-class="-translate-y-0.5 opacity-0"
-                                enter-to-class="translate-y-0 opacity-100"
-                                mode="out-in"
-                            >
-                                <div
-                                    :key="`${currentTenantLabel}|${currentFacilityLabel}`"
-                                    class="rounded-lg border border-border/70 bg-muted/25 px-2.5 py-2"
-                                >
-                                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                        <div class="flex min-w-0 items-center gap-1.5 text-[12px] font-medium leading-tight">
-                                            <span class="relative inline-flex size-1.5 shrink-0 items-center justify-center" aria-hidden="true">
-                                                <span
-                                                    v-if="hasResolvedFacility"
-                                                    class="absolute inline-flex size-full rounded-full"
-                                                    :class="refreshing ? 'animate-ping bg-emerald-500/70' : 'bg-emerald-500/0'"
-                                                ></span>
-                                                <span class="relative inline-flex size-1.5 rounded-full" :class="hasResolvedFacility ? 'bg-emerald-500' : 'bg-amber-500'"></span>
-                                            </span>
-                                            <AppIcon name="building-2" class="size-3.5 shrink-0" :class="hasResolvedFacility ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'" />
-                                            <span class="truncate">{{ currentFacilityLabel }}</span>
-                                        </div>
-                                        <span class="hidden h-3 w-px shrink-0 bg-border sm:block" aria-hidden="true"></span>
-                                        <p class="w-full min-w-0 truncate text-[11px] text-muted-foreground sm:w-auto sm:max-w-[55%]">
-                                            {{ currentTenantLabel }}
-                                        </p>
-                                    </div>
-                                    <div v-if="activePreset.modules?.length" class="mt-2 flex flex-wrap gap-1 border-t border-border/50 pt-2">
-                                        <Badge
-                                            v-for="module in activePreset.modules"
-                                            :key="module"
-                                            variant="outline"
-                                            class="rounded-md px-1.5 py-0 text-[9px] font-normal text-muted-foreground"
-                                        >
-                                            {{ module }}
-                                        </Badge>
-                                    </div>
-                                </div>
-                            </Transition>
-                        </div>
+                        <p class="text-xs leading-relaxed text-muted-foreground">
+                            <span class="font-medium text-foreground">{{ activePreset.label }}</span>
+                            <span class="mx-1.5 select-none text-border">·</span>
+                            <AppIcon name="building-2" class="inline size-3.5 align-text-bottom opacity-80" />
+                            <span class="ml-1 font-medium text-foreground">{{ currentFacilityLabel }}</span>
+                            <span class="mx-1.5 select-none text-border">·</span>
+                            <span>{{ currentTenantLabel }}</span>
+                        </p>
                     </div>
 
-                    <!-- Right: status signals + control cluster (aligned heights, grouped) -->
-                    <div class="flex min-w-0 flex-col gap-2 lg:items-end">
-                        <div class="flex flex-wrap items-center gap-1.5 lg:justify-end">
-                            <span class="hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground lg:inline">Status</span>
+                    <div class="flex w-full shrink-0 flex-col gap-2 md:w-auto md:items-end">
+                        <div class="flex flex-wrap items-center gap-2 md:justify-end">
                             <Badge
                                 v-if="lastLoadedAt"
                                 variant="outline"
-                                class="h-8 shrink-0 rounded-md px-2.5 py-0 text-[10px] tabular-nums leading-none"
-                                :class="isFresh ? 'border-emerald-500/30 text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground'"
+                                class="rounded-md text-xs tabular-nums"
+                                :class="isFresh ? 'border-emerald-500/40 text-emerald-800 dark:text-emerald-200' : ''"
                                 :title="`Last refreshed at ${lastLoadedAt}`"
                             >
-                                <span class="mr-1.5 inline-block size-1 rounded-full" :class="isFresh ? 'bg-emerald-500' : 'bg-muted-foreground/50'"></span>
                                 {{ lastLoadedRelative }}
                             </Badge>
                             <Badge
                                 v-if="partialData"
                                 variant="outline"
-                                class="h-8 shrink-0 rounded-md border-amber-500/30 px-2.5 py-0 text-[10px] leading-none text-amber-700 dark:text-amber-300"
+                                class="rounded-md border-amber-500/40 text-xs text-amber-900 dark:text-amber-200"
                                 :title="failureLabels.join(', ')"
                             >
-                                <AppIcon name="alert-triangle" class="mr-1 size-3" />
-                                {{ failures.length }} unavailable
+                                {{ failures.length }} source{{ failures.length === 1 ? '' : 's' }} unavailable
                             </Badge>
                         </div>
-
-                        <div
-                            class="flex w-full min-w-0 flex-col gap-2 rounded-lg border border-border/60 bg-muted/20 p-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between lg:w-auto lg:max-w-full lg:flex-nowrap xl:justify-end"
-                            role="toolbar"
-                            aria-label="Dashboard controls"
-                        >
-                            <div class="min-w-0 flex flex-wrap items-center gap-1.5 sm:flex-1 lg:flex-initial lg:justify-end">
-                                <span class="mr-1 hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground lg:inline">View</span>
-                                <div v-if="canSwitchPreset" class="min-w-0">
-                                    <template v-if="visiblePresetOptions.length <= 3">
-                                        <div class="flex h-8 shrink-0 items-center gap-0.5 rounded-md border border-border/60 bg-background p-0.5">
-                                            <Button
-                                                v-for="preset in visiblePresetOptions"
-                                                :key="preset.key"
-                                                size="sm"
-                                                :variant="activePresetKey === preset.key ? 'default' : 'ghost'"
-                                                class="h-7 rounded-md px-2.5 text-[11px] font-medium"
-                                                @click="switchPreset(preset.key)"
-                                            >
-                                                {{ preset.label }}
-                                            </Button>
-                                        </div>
-                                    </template>
-                                    <template v-else>
-                                        <Select v-model="presetSelectValue">
-                                            <SelectTrigger class="h-8 min-h-8 w-[min(100%,13rem)] rounded-md px-2.5 text-[11px] data-[size=default]:h-8">
-                                                <SelectValue placeholder="View as" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="auto">Auto ({{ DASHBOARD_PRESETS.find((preset) => preset.key === inferredPreset)?.label ?? 'Default' }})</SelectItem>
-                                                <SelectItem v-for="preset in visiblePresetOptions" :key="preset.key" :value="preset.key">{{ preset.label }}</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </template>
-                                </div>
-                            </div>
-
-                            <div
-                                class="flex min-w-0 flex-wrap items-center gap-1.5 border-t border-border/50 pt-2 sm:border-t-0 sm:pt-0 sm:pl-1 lg:border-l lg:pl-2"
-                            >
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    class="h-8 min-h-8 gap-1 rounded-md px-2.5 text-[11px]"
-                                    :title="`Switch to ${density === 'compact' ? 'comfortable' : 'compact'} layout`"
-                                    @click="density = density === 'compact' ? 'comfortable' : 'compact'"
-                                >
-                                    <AppIcon :name="density === 'compact' ? 'layout-list' : 'layout-grid'" class="size-3.5" />
-                                    <span class="hidden xl:inline">{{ density === 'compact' ? 'Compact' : 'Comfort' }}</span>
-                                </Button>
-
-                                <Select v-model="autoRefreshInterval">
-                                    <SelectTrigger
-                                        class="h-8 min-h-8 w-[8.25rem] gap-1 rounded-md px-2.5 text-[11px] data-[size=default]:h-8"
-                                        :title="autoRefreshInterval !== 'off' ? `Auto-refreshing every ${autoRefreshInterval}` : 'Auto-refresh disabled'"
-                                    >
-                                        <AppIcon name="activity" class="size-3 shrink-0" :class="autoRefreshInterval !== 'off' ? 'text-primary' : 'text-muted-foreground'" />
-                                        <SelectValue placeholder="Auto" />
+                        <div class="flex flex-wrap items-center gap-2 md:justify-end">
+                            <template v-if="canSwitchPreset">
+                                <template v-if="visiblePresetOptions.length <= 3">
+                                    <div class="inline-flex rounded-md border bg-background p-0.5">
+                                        <Button
+                                            v-for="preset in visiblePresetOptions"
+                                            :key="preset.key"
+                                            size="sm"
+                                            :variant="activePresetKey === preset.key ? 'default' : 'ghost'"
+                                            class="h-8 rounded-md px-2.5 text-xs"
+                                            @click="switchPreset(preset.key)"
+                                        >
+                                            {{ preset.label }}
+                                        </Button>
+                                    </div>
+                                </template>
+                                <Select v-else v-model="presetSelectValue">
+                                    <SelectTrigger class="h-8 w-full min-w-[12rem] rounded-md text-xs sm:w-48 data-[size=default]:h-8">
+                                        <SelectValue placeholder="Workflow view" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem v-for="key in (['off', '30s', '1m', '5m'] as const)" :key="key" :value="key">{{ AUTO_REFRESH_LABEL[key] }}</SelectItem>
+                                        <SelectItem value="auto">Auto ({{ DASHBOARD_PRESETS.find((p) => p.key === inferredPreset)?.label ?? 'Default' }})</SelectItem>
+                                        <SelectItem v-for="preset in visiblePresetOptions" :key="preset.key" :value="preset.key">{{ preset.label }}</SelectItem>
                                     </SelectContent>
                                 </Select>
-
-                                <Button
-                                    size="sm"
-                                    variant="default"
-                                    class="h-8 min-h-8 gap-1 rounded-md px-2.5 text-[11px]"
-                                    :disabled="refreshing"
-                                    @click="refreshDashboard"
+                            </template>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                class="h-8 rounded-md px-2.5 text-xs"
+                                :title="density === 'compact' ? 'Comfortable density' : 'Compact density'"
+                                @click="density = density === 'compact' ? 'comfortable' : 'compact'"
+                            >
+                                <AppIcon :name="density === 'compact' ? 'layout-list' : 'layout-grid'" class="size-3.5" />
+                                <span class="ml-1 hidden sm:inline">{{ density === 'compact' ? 'Compact' : 'Comfort' }}</span>
+                            </Button>
+                            <Select v-model="autoRefreshInterval">
+                                <SelectTrigger
+                                    class="h-8 w-[7.75rem] rounded-md text-xs data-[size=default]:h-8"
+                                    :title="autoRefreshInterval !== 'off' ? `Refresh every ${autoRefreshInterval}` : 'Auto-refresh off'"
                                 >
-                                    <AppIcon name="refresh-cw" class="size-3.5" :class="refreshing ? 'animate-spin' : ''" />
-                                    <span class="hidden sm:inline">{{ refreshing ? 'Refreshing' : 'Refresh' }}</span>
-                                </Button>
-                            </div>
+                                    <SelectValue placeholder="Auto" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem v-for="key in (['off', '30s', '1m', '5m'] as const)" :key="key" :value="key">{{ AUTO_REFRESH_LABEL[key] }}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                class="h-8 rounded-md px-3 text-xs"
+                                :disabled="refreshing"
+                                @click="refreshDashboard"
+                            >
+                                <AppIcon name="refresh-cw" class="size-3.5" :class="refreshing ? 'animate-spin' : ''" />
+                                <span class="ml-1.5">{{ refreshing ? 'Refreshing' : 'Refresh' }}</span>
+                            </Button>
                         </div>
                     </div>
                 </div>
-
-                <div class="h-0.5 overflow-hidden bg-muted/30" aria-hidden="true">
-                    <div
-                        class="h-full bg-gradient-to-r from-transparent via-primary to-transparent transition-opacity duration-300"
-                        :class="refreshing ? 'opacity-100 animate-[shimmer_1.4s_ease-in-out_infinite]' : 'opacity-0'"
-                    ></div>
-                </div>
+                <div
+                    v-if="refreshing"
+                    class="h-0.5 bg-primary motion-safe:animate-pulse"
+                    aria-hidden="true"
+                ></div>
             </section>
 
             <Alert
@@ -1687,163 +1593,149 @@ function switchPreset(key: DashboardPresetKey): void {
                         <Card
                             v-for="item in orderedKpis"
                             :key="item.label"
-                            class="group relative overflow-hidden rounded-lg border border-border/60 bg-card transition-all duration-150 hover:-translate-y-0.5 hover:shadow-sm"
-                            :class="[KPI_TONE_STYLES[kpiToneFor(item.label, item.unavailable)].ring, item.pinned ? 'ring-2' : 'ring-1']"
+                            class="rounded-lg border border-border shadow-sm transition-shadow hover:shadow-md"
                         >
-                            <div
-                                class="pointer-events-none absolute inset-0 bg-gradient-to-br opacity-80"
-                                :class="KPI_TONE_STYLES[kpiToneFor(item.label, item.unavailable)].accent"
-                                aria-hidden="true"
-                            ></div>
-                            <div :class="['relative flex items-start justify-between gap-2', kpiPaddingClass]">
-                                <div class="min-w-0 flex-1">
-                                    <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{{ item.label }}</p>
-                                    <template v-if="loading">
-                                        <Skeleton :class="['mt-1.5', isCompact ? 'h-5' : 'h-7', 'w-20']" />
-                                        <Skeleton class="mt-1 h-2.5 w-full" />
-                                    </template>
-                                    <template v-else>
-                                        <p
+                            <CardContent :class="['relative pt-5', kpiPaddingClass]">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0 flex-1 space-y-1">
+                                        <p class="text-[11px] font-medium text-muted-foreground">{{ item.label }}</p>
+                                        <template v-if="loading">
+                                            <Skeleton :class="['mt-0.5', isCompact ? 'h-5' : 'h-7', 'w-20']" />
+                                            <Skeleton class="mt-1 h-2.5 w-full" />
+                                        </template>
+                                        <template v-else>
+                                            <p
+                                                :class="[
+                                                    kpiValueClass,
+                                                    item.unavailable ? 'font-medium text-muted-foreground' : 'font-semibold text-foreground',
+                                                    'leading-tight tabular-nums',
+                                                ]"
+                                            >
+                                                {{ item.value }}
+                                            </p>
+                                            <p class="line-clamp-2 text-[11px] leading-snug text-muted-foreground">{{ item.help }}</p>
+                                        </template>
+                                    </div>
+                                    <div class="flex shrink-0 flex-col items-end gap-1">
+                                        <span
                                             :class="[
-                                                kpiValueClass,
-                                                item.unavailable ? 'font-medium text-muted-foreground' : 'font-semibold tracking-tight',
-                                                'mt-0.5 leading-tight tabular-nums',
+                                                'flex items-center justify-center rounded-md bg-muted text-muted-foreground',
+                                                isCompact ? 'size-8' : 'size-9',
                                             ]"
                                         >
-                                            {{ item.value }}
-                                        </p>
-                                        <p class="mt-0.5 line-clamp-2 text-[10px] leading-snug text-muted-foreground">{{ item.help }}</p>
-                                    </template>
+                                            <AppIcon :name="item.icon" class="size-4" />
+                                        </span>
+                                        <button
+                                            type="button"
+                                            class="rounded-md text-xs leading-none text-muted-foreground transition-colors hover:text-amber-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                            :title="item.pinned ? 'Unpin' : 'Pin metric'"
+                                            :aria-pressed="item.pinned"
+                                            @click="togglePin(item.label)"
+                                        >
+                                            {{ item.pinned ? '★' : '☆' }}
+                                            <span class="sr-only">{{ item.pinned ? 'Unpin' : 'Pin' }} {{ item.label }}</span>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div class="flex shrink-0 flex-col items-end gap-1">
-                                    <span
-                                        :class="[
-                                            'flex items-center justify-center rounded-md ring-1 transition-transform group-hover:scale-105',
-                                            isCompact ? 'size-6' : 'size-7',
-                                            KPI_TONE_STYLES[kpiToneFor(item.label, item.unavailable)].iconBg,
-                                            KPI_TONE_STYLES[kpiToneFor(item.label, item.unavailable)].ring,
-                                        ]"
-                                    >
-                                        <AppIcon :name="item.icon" class="size-3.5" :class="KPI_TONE_STYLES[kpiToneFor(item.label, item.unavailable)].iconText" />
-                                    </span>
-                                    <button
-                                        type="button"
-                                        class="rounded-md text-[13px] leading-none transition-colors hover:text-amber-500 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                        :class="item.pinned ? 'text-amber-500' : 'text-muted-foreground/40 opacity-0 group-hover:opacity-100'"
-                                        :title="item.pinned ? 'Unpin metric' : 'Pin to top'"
-                                        :aria-pressed="item.pinned"
-                                        @click="togglePin(item.label)"
-                                    >
-                                        <span aria-hidden="true">{{ item.pinned ? '★' : '☆' }}</span>
-                                        <span class="sr-only">{{ item.pinned ? 'Unpin' : 'Pin' }} {{ item.label }}</span>
-                                    </button>
-                                </div>
-                            </div>
+                            </CardContent>
                         </Card>
                     </div>
 
-                    <div class="rounded-lg border border-border/60 bg-muted/30 p-1.5">
-                        <div class="flex flex-wrap items-center gap-1.5">
-                            <span class="px-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Quick:</span>
-                            <template v-for="action in actions" :key="action.label">
-                                <Button
-                                    v-if="action.href"
-                                    as-child
-                                    size="sm"
-                                    :variant="action.variant"
-                                    class="h-7 gap-1.5 rounded-md px-2.5 text-[11px] transition-all hover:-translate-y-0.5 hover:shadow-sm"
-                                >
-                                    <Link :href="action.href">
-                                        <AppIcon :name="action.icon" class="size-3.5" />
-                                        {{ action.label }}
-                                    </Link>
-                                </Button>
-                                <Button
-                                    v-else
-                                    size="sm"
-                                    :variant="action.variant"
-                                    class="h-7 gap-1.5 rounded-md px-2.5 text-[11px] transition-all hover:-translate-y-0.5 hover:shadow-sm"
-                                    @click="action.onClick?.()"
-                                >
+                    <div class="flex flex-wrap gap-2">
+                        <template v-for="action in actions" :key="action.label">
+                            <Button
+                                v-if="action.href"
+                                as-child
+                                size="sm"
+                                :variant="action.variant"
+                                class="h-9 rounded-lg px-3 text-xs"
+                            >
+                                <Link :href="action.href">
                                     <AppIcon :name="action.icon" class="size-3.5" />
                                     {{ action.label }}
-                                </Button>
-                            </template>
-                        </div>
+                                </Link>
+                            </Button>
+                            <Button
+                                v-else
+                                size="sm"
+                                :variant="action.variant"
+                                class="h-9 rounded-lg px-3 text-xs"
+                                @click="action.onClick?.()"
+                            >
+                                <AppIcon :name="action.icon" class="size-3.5" />
+                                {{ action.label }}
+                            </Button>
+                        </template>
                     </div>
 
                     <div
-                        class="grid min-h-0 gap-3 items-stretch lg:grid-cols-[minmax(0,1fr)_minmax(0,21rem)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,21rem)_minmax(0,17rem)] transition-opacity duration-300"
-                        :class="refreshing ? 'opacity-85' : 'opacity-100'"
+                        class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)] 2xl:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)_minmax(15rem,20rem)]"
+                        :class="refreshing ? 'opacity-90' : ''"
                     >
-                        <Card class="flex h-full min-h-0 flex-col gap-0 py-0 rounded-lg border border-border/60 shadow-sm">
-                            <CardHeader :class="['shrink-0 gap-1.5 border-b border-border/60 bg-muted/10 px-4', cardHeaderPaddingClass]">
-                                <div class="flex items-center justify-between gap-2">
-                                    <div class="flex min-w-0 items-center gap-2">
-                                        <span class="flex size-7 shrink-0 items-center justify-center rounded-md bg-background text-primary ring-1 ring-border/60">
-                                            <AppIcon name="clipboard-list" class="size-3.5" />
-                                        </span>
-                                        <div class="min-w-0">
-                                            <div class="flex flex-wrap items-center gap-1.5">
-                                                <CardTitle class="text-[13px] font-semibold leading-tight">{{ queueTitle }}</CardTitle>
-                                                <Badge v-if="!loading" variant="secondary" class="rounded-md px-1.5 py-0 text-[10px] tabular-nums">{{ queueRows.length }}</Badge>
-                                            </div>
-                                            <CardDescription class="line-clamp-2 text-[11px] sm:line-clamp-1">{{ queueDescription }}</CardDescription>
-                                        </div>
-                                    </div>
-                                    <Button v-if="queueRows.length > 0 && !loading" as-child size="sm" variant="outline" class="h-8 shrink-0 rounded-md px-2.5 text-[11px]">
+                        <Card class="rounded-lg border border-border shadow-sm">
+                            <CardHeader class="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between">
+                                <div class="min-w-0 space-y-1">
+                                    <CardTitle class="text-base">{{ queueTitle }}</CardTitle>
+                                    <CardDescription class="text-sm">{{ queueDescription }}</CardDescription>
+                                </div>
+                                <div class="flex shrink-0 items-center gap-2 sm:pt-0.5">
+                                    <Badge v-if="!loading" variant="secondary" class="rounded-lg tabular-nums">{{ queueRows.length }}</Badge>
+                                    <Button
+                                        v-if="queueRows.length > 0 && !loading"
+                                        as-child
+                                        size="sm"
+                                        variant="outline"
+                                        class="rounded-lg"
+                                    >
                                         <Link :href="queueViewAllHref">
                                             View all
-                                            <AppIcon name="arrow-right" class="ml-1 size-3" />
+                                            <AppIcon name="arrow-right" class="ml-1 size-3.5" />
                                         </Link>
                                     </Button>
                                 </div>
                             </CardHeader>
-                            <CardContent class="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-3">
-                                <div v-if="loading" class="space-y-1.5">
-                                    <div v-for="index in 4" :key="index" class="rounded-md border px-3 py-2">
-                                        <Skeleton class="h-3 w-32" />
-                                        <Skeleton class="mt-1.5 h-2.5 w-full" />
-                                        <Skeleton class="mt-1 h-2.5 w-32" />
+                            <CardContent>
+                                <div v-if="loading" class="space-y-2">
+                                    <div v-for="index in 3" :key="index" class="space-y-2 rounded-lg border p-3">
+                                        <Skeleton class="h-4 w-36" />
+                                        <Skeleton class="h-3 w-full" />
                                     </div>
-                                </div>
-                                <div v-else-if="queueRows.length === 0" class="flex flex-1 flex-col justify-center rounded-lg border border-dashed bg-muted/15 px-4 py-8 text-center">
-                                    <div class="mx-auto flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                                        <AppIcon name="check-circle" class="size-4" />
-                                    </div>
-                                    <p class="mt-2 text-xs font-medium">All clear</p>
-                                    <p class="mx-auto mt-0.5 max-w-[18rem] text-[11px] text-muted-foreground">No queue items for this preset. Use quick actions above to open related worklists.</p>
                                 </div>
                                 <div
-                                    v-else
-                                    class="min-h-0 max-h-[min(28rem,calc(100vh-15rem))] flex-1 space-y-1.5 overflow-y-auto overscroll-y-contain pr-0.5 [-webkit-overflow-scrolling:touch]"
+                                    v-else-if="queueRows.length === 0"
+                                    class="rounded-lg border border-dashed bg-muted/30 px-4 py-10 text-center"
                                 >
+                                    <AppIcon name="check-circle" class="mx-auto size-8 text-emerald-600 opacity-80 dark:text-emerald-400" />
+                                    <p class="mt-2 text-sm font-medium">No items in this queue</p>
+                                    <p class="mt-1 text-xs text-muted-foreground">Switch preset or use the actions above to open worklists.</p>
+                                </div>
+                                <div v-else class="max-h-[26rem] space-y-2 overflow-y-auto pr-1">
                                     <Link
                                         v-for="row in queueRows"
                                         :key="row.id"
                                         :href="row.href"
-                                        class="group relative block rounded-md border border-border/60 bg-background/50 px-3 py-2.5 pl-3.5 transition-colors hover:border-primary/35 hover:bg-muted/35"
+                                        class="group relative block rounded-lg border border-border bg-card py-2.5 pr-3 pl-3 transition-colors hover:bg-accent/50"
                                     >
                                         <span
-                                            class="absolute inset-y-2 left-1 w-0.5 rounded-sm transition-colors"
-                                            :class="row.isOverdue ? 'bg-rose-500' : statusVariant(row.status) === 'destructive' ? 'bg-rose-400' : statusVariant(row.status) === 'default' ? 'bg-sky-500' : statusVariant(row.status) === 'secondary' ? 'bg-emerald-500' : 'bg-muted-foreground/30'"
+                                            class="absolute inset-y-2 left-0 w-0.5 rounded-full"
+                                            :class="row.isOverdue ? 'bg-rose-500' : statusVariant(row.status) === 'destructive' ? 'bg-rose-500/70' : statusVariant(row.status) === 'default' ? 'bg-sky-500' : statusVariant(row.status) === 'secondary' ? 'bg-emerald-500' : 'bg-muted-foreground/40'"
                                             aria-hidden="true"
                                         ></span>
-                                        <div class="flex items-start justify-between gap-1.5">
+                                        <div class="flex items-start justify-between gap-2 pl-2">
                                             <div class="min-w-0">
-                                                <p class="truncate text-[12px] font-medium leading-snug">{{ row.title }}</p>
-                                                <p class="truncate text-[11px] text-muted-foreground">{{ row.subtitle }}</p>
+                                                <p class="truncate text-sm font-medium">{{ row.title }}</p>
+                                                <p class="truncate text-xs text-muted-foreground">{{ row.subtitle }}</p>
                                             </div>
-                                            <div class="flex shrink-0 flex-col items-end gap-0.5 sm:flex-row sm:items-center">
-                                                <Badge v-if="row.isOverdue" variant="destructive" class="rounded-md px-1.5 py-0 text-[10px]">Overdue</Badge>
-                                                <Badge :variant="statusVariant(row.status)" class="max-w-[8rem] truncate rounded-md px-1.5 py-0 text-[10px]">{{ row.status }}</Badge>
+                                            <div class="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center">
+                                                <Badge v-if="row.isOverdue" variant="destructive" class="rounded-lg text-[10px]">Overdue</Badge>
+                                                <Badge :variant="statusVariant(row.status)" class="max-w-[7rem] shrink-0 truncate rounded-lg text-[10px]">{{ row.status }}</Badge>
                                             </div>
                                         </div>
-                                        <div class="mt-1 flex items-center justify-between gap-1.5 text-[10px]">
-                                            <span class="min-w-0 truncate text-muted-foreground">{{ row.meta }}</span>
-                                            <span class="inline-flex shrink-0 items-center gap-0.5 font-medium text-primary opacity-70 transition-opacity group-hover:opacity-100">
+                                        <div class="relative mt-1.5 flex items-center justify-between gap-2 pl-2 text-xs text-muted-foreground">
+                                            <span class="min-w-0 truncate">{{ row.meta }}</span>
+                                            <span class="inline-flex shrink-0 items-center font-medium text-primary">
                                                 {{ row.actionLabel }}
-                                                <AppIcon name="chevron-right" class="size-3" />
+                                                <AppIcon name="chevron-right" class="ml-0.5 size-3.5 opacity-70 group-hover:opacity-100" />
                                             </span>
                                         </div>
                                     </Link>
@@ -1851,60 +1743,44 @@ function switchPreset(key: DashboardPresetKey): void {
                             </CardContent>
                         </Card>
 
-                        <div class="flex h-full min-h-0 flex-col gap-3">
-                            <Collapsible v-if="shouldShowHandoff" v-model:open="handoffOpen" class="shrink-0">
-                                <Card class="dashboard-handoff-card flex flex-col gap-0 py-0 rounded-lg border border-border/60 shadow-sm">
-                                    <CardHeader :class="['shrink-0 gap-1 border-b border-border/60 bg-muted/10 px-4', cardHeaderPaddingClass]">
-                                        <div class="flex items-start justify-between gap-2">
-                                            <div class="min-w-0">
-                                                <div class="flex items-center gap-1.5">
-                                                    <span class="flex size-5 items-center justify-center rounded-md bg-primary/10 text-primary">
-                                                        <AppIcon name="alert-triangle" class="size-3" />
-                                                    </span>
-                                                    <CardTitle class="text-[13px] font-semibold">Shift handoff</CardTitle>
-                                                </div>
-                                                <CardDescription class="mt-0.5 line-clamp-1 text-[11px]">{{ handoff.title }} | {{ handoff.note }}</CardDescription>
-                                            </div>
-                                            <div class="flex shrink-0 items-center gap-1">
-                                                <Button size="sm" variant="ghost" class="h-6 rounded-md px-1.5" title="Print handoff" @click="printHandoff">
-                                                    <AppIcon name="file-text" class="size-3" />
-                                                    <span class="sr-only">Print handoff</span>
-                                                </Button>
-                                                <CollapsibleTrigger as-child>
-                                                    <Button size="sm" variant="outline" class="h-6 rounded-md px-1.5">
-                                                        <AppIcon :name="handoffOpen ? 'chevron-up' : 'chevron-down'" class="size-3" />
-                                                        <span class="sr-only">{{ handoffOpen ? 'Hide handoff' : 'Show handoff' }}</span>
-                                                    </Button>
-                                                </CollapsibleTrigger>
-                                            </div>
+                        <div class="flex flex-col gap-4">
+                            <Collapsible v-if="shouldShowHandoff" v-model:open="handoffOpen">
+                                <Card class="rounded-lg border border-border shadow-sm">
+                                    <CardHeader class="flex flex-row items-start justify-between gap-2 space-y-0 pb-2">
+                                        <div class="min-w-0 space-y-1">
+                                            <CardTitle class="text-base">Shift handoff</CardTitle>
+                                            <CardDescription class="leading-snug">{{ handoff.title }} · {{ handoff.note }}</CardDescription>
                                         </div>
+                                        <CollapsibleTrigger as-child>
+                                            <Button size="sm" variant="outline" class="shrink-0 rounded-lg" :aria-expanded="handoffOpen">
+                                                <AppIcon :name="handoffOpen ? 'chevron-up' : 'chevron-down'" class="size-4" />
+                                                <span class="sr-only">{{ handoffOpen ? 'Collapse' : 'Expand' }}</span>
+                                            </Button>
+                                        </CollapsibleTrigger>
                                     </CardHeader>
                                     <CollapsibleContent>
-                                        <CardContent class="space-y-2 px-4 pb-4 pt-0">
-                                            <div class="rounded-md border border-amber-500/30 bg-amber-500/5 p-2.5">
-                                                <p class="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-amber-700 dark:text-amber-300">
-                                                    <span class="inline-block size-1 rounded-full bg-amber-500"></span>
-                                                    Current blocker
-                                                </p>
-                                                <p class="mt-0.5 text-[12px] font-semibold">{{ handoff.blockerTitle }}</p>
-                                                <p class="mt-0.5 text-[11px] text-muted-foreground">{{ handoff.blockerNote }}</p>
+                                        <CardContent class="space-y-3 border-t pt-4">
+                                            <div class="rounded-lg border border-amber-500/35 bg-amber-500/5 p-3">
+                                                <p class="text-xs font-medium uppercase tracking-wide text-amber-800 dark:text-amber-200">Current blocker</p>
+                                                <p class="mt-1 text-sm font-semibold">{{ handoff.blockerTitle }}</p>
+                                                <p class="mt-1 text-xs text-muted-foreground">{{ handoff.blockerNote }}</p>
                                             </div>
-                                            <div class="rounded-md border border-border/60 bg-background/40 p-2.5">
-                                                <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Next action</p>
-                                                <p class="mt-0.5 text-[12px]">{{ handoff.nextAction }}</p>
-                                                <div class="mt-2 flex flex-wrap gap-1.5">
-                                                    <Button as-child size="sm" class="h-7 gap-1 rounded-md px-2.5 text-[11px] transition-all hover:shadow-sm">
+                                            <div class="rounded-lg border bg-muted/30 p-3">
+                                                <p class="text-xs font-medium text-muted-foreground">Next action</p>
+                                                <p class="mt-1 text-sm">{{ handoff.nextAction }}</p>
+                                                <div class="mt-3 flex flex-wrap gap-2">
+                                                    <Button as-child size="sm" class="rounded-lg">
                                                         <Link :href="handoff.primaryAction.href">{{ handoff.primaryAction.label }}</Link>
                                                     </Button>
-                                                    <Button as-child size="sm" variant="outline" class="h-7 gap-1 rounded-md px-2.5 text-[11px]">
+                                                    <Button as-child size="sm" variant="outline" class="rounded-lg">
                                                         <Link :href="handoff.secondaryAction.href">{{ handoff.secondaryAction.label }}</Link>
                                                     </Button>
                                                 </div>
                                             </div>
-                                            <div class="grid gap-1.5 grid-cols-3">
-                                                <div v-for="chip in handoff.chips" :key="chip.label" class="rounded-md border border-border/60 bg-background/30 p-1.5">
-                                                    <p class="text-[9px] uppercase tracking-wide text-muted-foreground">{{ chip.label }}</p>
-                                                    <p class="mt-0.5 text-[12px] font-semibold tabular-nums">{{ chip.value === null ? 'N/A' : chip.value.toLocaleString() }}</p>
+                                            <div class="grid grid-cols-3 gap-2">
+                                                <div v-for="chip in handoff.chips" :key="chip.label" class="rounded-lg border bg-background p-2">
+                                                    <p class="text-[10px] uppercase text-muted-foreground">{{ chip.label }}</p>
+                                                    <p class="mt-1 text-sm font-semibold tabular-nums">{{ chip.value === null ? '—' : chip.value.toLocaleString() }}</p>
                                                 </div>
                                             </div>
                                         </CardContent>
@@ -1912,147 +1788,100 @@ function switchPreset(key: DashboardPresetKey): void {
                                 </Card>
                             </Collapsible>
 
-                            <Card class="flex min-h-0 flex-1 flex-col gap-0 py-0 rounded-lg border border-border/60 shadow-sm">
-                                <CardHeader :class="['shrink-0 gap-1 border-b border-border/60 bg-muted/10 px-4', cardHeaderPaddingClass]">
-                                    <CardTitle class="text-[13px] font-semibold">Operational watch</CardTitle>
-                                    <CardDescription class="text-[11px]">Secondary workload to keep visible.</CardDescription>
+                            <Card class="rounded-lg border border-border shadow-sm">
+                                <CardHeader class="pb-2">
+                                    <CardTitle class="text-base">Operational watch</CardTitle>
+                                    <CardDescription class="text-sm">Cross-checks for this workspace.</CardDescription>
                                 </CardHeader>
-                                <CardContent class="flex min-h-0 flex-1 flex-col space-y-1.5 px-4 pb-4 pt-3">
+                                <CardContent class="space-y-2 pt-0">
                                     <div
                                         v-for="item in watchItems"
                                         :key="item.label"
-                                        class="group rounded-md border border-border/60 bg-background/30 p-2 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-sm"
+                                        class="rounded-lg border bg-muted/20 p-3 transition-colors hover:bg-muted/40"
                                     >
                                         <div class="flex items-start justify-between gap-2">
                                             <div class="min-w-0">
-                                                <div class="flex items-center gap-1.5">
-                                                    <span class="flex size-5 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground ring-1 ring-border/60 transition-colors group-hover:bg-primary/10 group-hover:text-primary">
-                                                        <AppIcon :name="item.icon" class="size-3" />
-                                                    </span>
-                                                    <p class="truncate text-[12px] font-medium">{{ item.label }}</p>
-                                                </div>
-                                                <p class="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground">{{ item.note }}</p>
+                                                <p class="text-sm font-medium">{{ item.label }}</p>
+                                                <p class="mt-0.5 text-xs text-muted-foreground">{{ item.note }}</p>
                                             </div>
-                                            <Badge variant="outline" class="rounded-md px-1.5 py-0 text-[10px] tabular-nums">{{ item.value === null ? 'N/A' : item.value.toLocaleString() }}</Badge>
+                                            <Badge variant="outline" class="shrink-0 rounded-lg tabular-nums">{{ item.value === null ? '—' : item.value.toLocaleString() }}</Badge>
                                         </div>
-                                        <div class="mt-1">
-                                            <Button as-child size="sm" variant="ghost" class="h-5 rounded-sm px-1.5 text-[10px] hover:translate-x-0.5">
-                                                <Link :href="item.href">
-                                                    {{ item.actionLabel }}
-                                                    <AppIcon name="chevron-right" class="ml-0.5 size-2.5" />
-                                                </Link>
-                                            </Button>
-                                        </div>
+                                        <Button as-child size="sm" variant="link" class="mt-2 h-auto rounded-lg p-0 text-xs">
+                                            <Link :href="item.href">
+                                                {{ item.actionLabel }}
+                                                <AppIcon name="chevron-right" class="ml-0.5 size-3" />
+                                            </Link>
+                                        </Button>
                                     </div>
                                 </CardContent>
                             </Card>
                         </div>
 
-                        <div
-                            class="flex min-h-0 flex-col gap-3 lg:col-span-2 lg:grid lg:h-full lg:auto-rows-fr lg:grid-cols-2 lg:items-stretch lg:gap-3 2xl:col-span-1 2xl:flex 2xl:flex-1 2xl:flex-col"
-                        >
-                            <Card class="flex h-full min-h-0 flex-col gap-0 py-0 rounded-lg border border-border/60 shadow-sm 2xl:flex-1">
-                                <CardHeader :class="['shrink-0 gap-1 border-b border-border/60 bg-muted/10 px-4', cardHeaderPaddingClass]">
+                        <div class="flex flex-col gap-4 lg:col-span-2 2xl:col-span-1">
+                            <Card class="rounded-lg border border-border shadow-sm">
+                                <CardHeader class="pb-2">
                                     <div class="flex items-center justify-between gap-2">
-                                        <CardTitle class="flex items-center gap-1.5 text-[13px] font-semibold">
-                                            <span class="inline-flex size-1.5 rounded-full bg-emerald-500"></span>
-                                            System status
-                                        </CardTitle>
-                                        <Badge variant="outline" class="rounded-md px-1.5 py-0 text-[10px]">{{ multiTenantIsolationEnabled ? 'Multi-tenant' : 'Single-tenant' }}</Badge>
+                                        <CardTitle class="text-base">System status</CardTitle>
+                                        <Badge variant="outline" class="rounded-lg text-xs">{{ multiTenantIsolationEnabled ? 'Multi-tenant' : 'Single-tenant' }}</Badge>
                                     </div>
                                 </CardHeader>
-                                <CardContent class="flex min-h-0 flex-1 flex-col justify-between gap-2 px-4 pb-4 pt-3">
-                                    <div class="grid grid-cols-2 gap-1.5">
-                                        <div class="rounded-md border border-border/60 bg-background/30 p-1.5">
-                                            <p class="text-[9px] uppercase tracking-wide text-muted-foreground">Resolved from</p>
-                                            <p class="mt-0.5 truncate text-[11px] font-medium">{{ scopeData?.resolvedFrom || 'Unknown' }}</p>
+                                <CardContent class="space-y-3 pt-0 text-sm">
+                                    <div class="grid gap-2 sm:grid-cols-2">
+                                        <div class="rounded-lg border p-2.5">
+                                            <p class="text-xs text-muted-foreground">Resolved from</p>
+                                            <p class="mt-0.5 font-medium">{{ scopeData?.resolvedFrom || 'Unknown' }}</p>
                                         </div>
-                                        <div class="rounded-md border border-border/60 bg-background/30 p-1.5">
-                                            <p class="text-[9px] uppercase tracking-wide text-muted-foreground">Facilities</p>
-                                            <p class="mt-0.5 text-[11px] font-medium tabular-nums">{{ Number(scopeData?.userAccess?.accessibleFacilityCount ?? 0) }}</p>
+                                        <div class="rounded-lg border p-2.5">
+                                            <p class="text-xs text-muted-foreground">Accessible facilities</p>
+                                            <p class="mt-0.5 font-medium tabular-nums">{{ Number(scopeData?.userAccess?.accessibleFacilityCount ?? 0) }}</p>
                                         </div>
-                                        <div class="rounded-md border border-border/60 bg-background/30 p-1.5">
-                                            <p class="text-[9px] uppercase tracking-wide text-muted-foreground">Email</p>
-                                            <p
-                                                class="mt-0.5 text-[11px] font-medium"
-                                                :class="securityStatus?.emailVerified ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'"
-                                            >
-                                                {{ securityStatus?.emailVerified ? 'Verified' : 'Unverified' }}
-                                            </p>
+                                        <div class="rounded-lg border p-2.5">
+                                            <p class="text-xs text-muted-foreground">Email</p>
+                                            <p class="mt-0.5 font-medium">{{ securityStatus?.emailVerified ? 'Verified' : 'Not verified' }}</p>
                                         </div>
-                                        <div class="rounded-md border border-border/60 bg-background/30 p-1.5">
-                                            <p class="text-[9px] uppercase tracking-wide text-muted-foreground">2FA</p>
-                                            <p
-                                                class="mt-0.5 text-[11px] font-medium"
-                                                :class="securityStatus?.twoFactorEnabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'"
-                                            >
-                                                {{ securityStatus?.twoFactorEnabled ? 'Enabled' : 'Off' }}
-                                            </p>
+                                        <div class="rounded-lg border p-2.5">
+                                            <p class="text-xs text-muted-foreground">2FA</p>
+                                            <p class="mt-0.5 font-medium">{{ securityStatus?.twoFactorEnabled ? 'On' : 'Off' }}</p>
                                         </div>
                                     </div>
-                                    <div v-if="auditExportHealth" class="rounded-md border border-border/60 bg-background/30 p-1.5">
-                                        <p class="text-[9px] uppercase tracking-wide text-muted-foreground">Audit exports</p>
-                                        <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]">
-                                            <span class="font-medium tabular-nums">{{ Number(auditExportHealth.aggregate?.currentBacklog ?? 0) }} backlog</span>
-                                            <span class="text-muted-foreground">|</span>
-                                            <span
-                                                class="font-medium tabular-nums"
-                                                :class="Number(auditExportHealth.aggregate?.recentFailed ?? 0) > 0 ? 'text-rose-600 dark:text-rose-400' : ''"
-                                            >
-                                                {{ Number(auditExportHealth.aggregate?.recentFailed ?? 0) }} failed
-                                            </span>
-                                            <span class="text-muted-foreground">|</span>
-                                            <span class="font-medium tabular-nums text-emerald-600 dark:text-emerald-400">{{ Number(auditExportHealth.aggregate?.recentCompleted ?? 0) }} done</span>
-                                        </div>
-                                    </div>
-                                    <div class="rounded-md border border-border/60 bg-background/30 p-1.5">
-                                        <p class="text-[9px] uppercase tracking-wide text-muted-foreground">Auto-refresh</p>
-                                        <p class="mt-0.5 text-[11px] font-medium" :class="autoRefreshInterval !== 'off' ? 'text-primary' : 'text-muted-foreground'">
-                                            {{ AUTO_REFRESH_LABEL[autoRefreshInterval] }}
+                                    <div v-if="auditExportHealth" class="rounded-lg border p-2.5 text-sm">
+                                        <p class="text-xs text-muted-foreground">Audit exports (7d)</p>
+                                        <p class="mt-1">
+                                            <span class="tabular-nums">{{ Number(auditExportHealth.aggregate?.currentBacklog ?? 0) }}</span> backlog,
+                                            <span class="tabular-nums text-destructive">{{ Number(auditExportHealth.aggregate?.recentFailed ?? 0) }}</span> failed,
+                                            <span class="tabular-nums text-emerald-600 dark:text-emerald-400">{{ Number(auditExportHealth.aggregate?.recentCompleted ?? 0) }}</span> completed
                                         </p>
+                                    </div>
+                                    <div class="rounded-lg border p-2.5 text-sm">
+                                        <p class="text-xs text-muted-foreground">Auto-refresh</p>
+                                        <p class="mt-0.5 font-medium">{{ AUTO_REFRESH_LABEL[autoRefreshInterval] }}</p>
                                     </div>
                                 </CardContent>
                             </Card>
 
-                            <Card class="flex h-full min-h-0 flex-col gap-0 py-0 rounded-lg border border-border/60 shadow-sm 2xl:flex-1">
-                                <CardHeader :class="['shrink-0 gap-1 border-b border-border/60 bg-muted/10 px-4', cardHeaderPaddingClass]">
-                                    <div class="flex items-center justify-between gap-2">
-                                        <CardTitle class="text-[13px] font-semibold">Recent activity</CardTitle>
-                                        <Button size="sm" variant="outline" class="h-8 rounded-md px-2.5 text-[10px]" @click="activeTab = 'resources'">
-                                            Details
-                                            <AppIcon name="arrow-right" class="ml-0.5 size-2.5" />
-                                        </Button>
-                                    </div>
+                            <Card class="rounded-lg border border-border shadow-sm">
+                                <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle class="text-base">Recent activity</CardTitle>
+                                    <Button size="sm" variant="outline" class="rounded-lg text-xs" @click="activeTab = 'resources'">
+                                        Resources
+                                        <AppIcon name="arrow-right" class="ml-1 size-3" />
+                                    </Button>
                                 </CardHeader>
-                                <CardContent class="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-3">
-                                    <div v-if="activityFeed.length === 0" class="flex flex-1 flex-col justify-center rounded-md border border-dashed bg-muted/15 px-3 py-6 text-center">
-                                        <p class="text-[11px] font-medium">No recent issues</p>
-                                        <p class="text-[10px] text-muted-foreground">Operational signal is clear.</p>
+                                <CardContent class="pt-0">
+                                    <div v-if="activityFeed.length === 0" class="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
+                                        No export failures in the recent window.
                                     </div>
-                                    <div
-                                        v-else
-                                        class="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-y-contain pr-0.5"
-                                    >
-                                        <div
+                                    <ul v-else class="space-y-2">
+                                        <li
                                             v-for="entry in activityFeed"
                                             :key="entry.id"
-                                            class="rounded-md border border-border/60 bg-background/30 p-2"
+                                            class="rounded-lg border bg-muted/15 p-2.5 text-sm"
                                         >
-                                            <div class="flex items-start gap-1.5">
-                                            <span
-                                                class="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-md"
-                                                :class="entry.kind === 'failure' ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400' : 'bg-sky-500/10 text-sky-600 dark:text-sky-400'"
-                                            >
-                                                <AppIcon :name="entry.kind === 'failure' ? 'alert-triangle' : 'activity'" class="size-2.5" />
-                                            </span>
-                                            <div class="min-w-0 flex-1">
-                                                <p class="truncate text-[11px] font-medium">{{ entry.title }}</p>
-                                                <p class="line-clamp-1 text-[10px] text-muted-foreground">{{ entry.subtitle }}</p>
-                                                <p class="mt-0.5 text-[10px] text-muted-foreground">{{ entry.meta }}</p>
-                                            </div>
-                                        </div>
-                                        </div>
-                                    </div>
+                                            <p class="font-medium leading-snug">{{ entry.title }}</p>
+                                            <p class="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{{ entry.subtitle }}</p>
+                                            <p class="mt-1 text-xs text-muted-foreground">{{ entry.meta }}</p>
+                                        </li>
+                                    </ul>
                                 </CardContent>
                             </Card>
                         </div>
@@ -2201,33 +2030,3 @@ function switchPreset(key: DashboardPresetKey): void {
         </div>
     </AppLayout>
 </template>
-
-<style scoped>
-@keyframes shimmer {
-    0% {
-        transform: translateX(-100%);
-    }
-    100% {
-        transform: translateX(100%);
-    }
-}
-</style>
-
-<style>
-@media print {
-    body * {
-        visibility: hidden !important;
-    }
-    .dashboard-handoff-card,
-    .dashboard-handoff-card * {
-        visibility: visible !important;
-    }
-    .dashboard-handoff-card {
-        position: absolute !important;
-        inset: 0 !important;
-        margin: 0 !important;
-        border: none !important;
-        box-shadow: none !important;
-    }
-}
-</style>
