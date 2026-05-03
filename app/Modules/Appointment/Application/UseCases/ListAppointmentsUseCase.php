@@ -60,11 +60,17 @@ class ListAppointmentsUseCase
         $toDateTime = isset($filters['to']) ? trim((string) $filters['to']) : null;
         $toDateTime = $toDateTime === '' ? null : $toDateTime;
 
+        $triageCategory = isset($filters['triageCategory']) ? trim((string) $filters['triageCategory']) : null;
+        $triageCategory = ($triageCategory === '' || ! in_array(strtoupper($triageCategory), ['P1', 'P2', 'P3', 'P4', 'P5'], true))
+            ? null
+            : strtoupper($triageCategory);
+
         return $this->appointmentRepository->search(
             query: $query,
             patientId: $patientId,
             clinicianUserId: $clinicianUserId,
             status: $status,
+            triageCategory: $triageCategory,
             fromDateTime: $fromDateTime,
             toDateTime: $toDateTime,
             page: $page,

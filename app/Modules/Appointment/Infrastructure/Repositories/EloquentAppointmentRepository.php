@@ -82,6 +82,7 @@ class EloquentAppointmentRepository implements AppointmentRepositoryInterface
         ?string $patientId,
         ?int $clinicianUserId,
         ?string $status,
+        ?string $triageCategory,
         ?string $fromDateTime,
         ?string $toDateTime,
         int $page,
@@ -120,6 +121,7 @@ class EloquentAppointmentRepository implements AppointmentRepositoryInterface
             })
             ->when($fromDateTime, fn (Builder $builder, string $startDateTime) => $builder->where('scheduled_at', '>=', $startDateTime))
             ->when($toDateTime, fn (Builder $builder, string $endDateTime) => $builder->where('scheduled_at', '<=', $endDateTime))
+            ->when($triageCategory, fn (Builder $builder, string $cat) => $builder->where('triage_category', strtoupper($cat)))
             ->orderBy($sortBy, $sortDirection);
 
         $paginator = $queryBuilder->paginate(

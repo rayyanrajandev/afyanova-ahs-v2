@@ -366,6 +366,10 @@ const initialClinicianUserId = queryParam('clinicianUserId').trim();
 const initialFrom = queryDateFilterParam('from');
 const initialTo = queryDateFilterParam('to');
 const initialStatusQuery = queryParam('status').trim();
+const initialTriageCategoryQuery = (() => {
+    const raw = queryParam('triageCategory').trim().toUpperCase();
+    return (['P1', 'P2', 'P3', 'P4', 'P5'] as const).includes(raw as 'P1') ? raw as 'P1' | 'P2' | 'P3' | 'P4' | 'P5' : null;
+})();
 const initialViewQuery = queryParam('view').trim();
 const initialTabQuery = queryParam('tab').trim();
 const initialOpenQuery = queryParam('open').trim();
@@ -388,6 +392,7 @@ const hasExplicitQueueIntent = Boolean(
 );
 
 const statusPreset = ref<WorkspacePreset>(queryPresetParam());
+const triageCategoryFilter = ref<'P1' | 'P2' | 'P3' | 'P4' | 'P5' | null>(initialTriageCategoryQuery);
 const queueMode = ref<QueueMode>(queryQueueModeParam());
 const searchForm = reactive({
     q: initialQueryText,
@@ -921,12 +926,13 @@ const statusSelectValue = computed({
     },
 });
 const hasActiveFilters = computed(() => Boolean(
-    searchForm.q.trim() || searchForm.patientId || searchForm.from || searchForm.to || statusPreset.value !== 'all',
+    searchForm.q.trim() || searchForm.patientId || searchForm.from || searchForm.to || statusPreset.value !== 'all' || triageCategoryFilter.value,
 ));
 const activeFilterBadgeLabels = computed(() => {
     const labels: string[] = [];
     if (searchForm.q.trim()) labels.push(`Search: ${searchForm.q.trim()}`);
     if (statusPreset.value !== 'all') labels.push(`Status: ${quickPresetLabel(statusPreset.value)}`);
+    if (triageCategoryFilter.value) labels.push(`Triage: ${triageCategoryFilter.value}`);
     if (searchForm.patientId) labels.push(`Patient: ${patientDisplayName(searchForm.patientId)}`);
     if (searchForm.from) labels.push(`From: ${formatDateOnly(searchForm.from)}`);
     if (searchForm.to) labels.push(`To: ${formatDateOnly(searchForm.to)}`);
@@ -1111,8 +1117,9 @@ function queryDateFilterParam(name: string): string {
 
 function queryPresetParam(): WorkspacePreset {
     const raw = queryParam('status');
-    if (raw === 'scheduled' || raw === 'waiting_triage' || raw === 'waiting_provider' || raw === 'in_consultation' || raw === 'completed' || raw === 'exceptions') {
-        return raw;
+    if (raw === 'scheduled' || raw === 'waiting_triage' || raw === 'checked_in' || raw === 'waiting_provider' || raw === 'in_consultation' || raw === 'completed' || raw === 'exceptions') {
+        // 'checked_in' is the dashboard alias for waiting_triage
+        return raw === 'checked_in' ? 'waiting_triage' : raw;
     }
     return 'all';
 }
@@ -2251,6 +2258,7 @@ function updateUrl(): void {
     const params = new URLSearchParams();
     if (queueMode.value !== 'all') params.set('view', queueMode.value);
     if (statusPreset.value !== 'all') params.set('status', statusPreset.value);
+    if (triageCategoryFilter.value) params.set('triageCategory', triageCategoryFilter.value);
     if (searchForm.q.trim()) params.set('q', searchForm.q.trim());
     if (searchForm.patientId) params.set('patientId', searchForm.patientId);
     if (searchForm.clinicianUserId) params.set('clinicianUserId', searchForm.clinicianUserId);
@@ -2322,6 +2330,7 @@ async function loadQueue(): Promise<void> {
                 patientId: searchForm.patientId || null,
                 clinicianUserId: searchForm.clinicianUserId || null,
                 status: statusPreset.value === 'all' ? null : statusPreset.value,
+                triageCategory: triageCategoryFilter.value || null,
                 from: searchForm.from || null,
                 to: searchForm.to || null,
                 page: searchForm.page,
@@ -4030,6 +4039,7 @@ function resetFilters(): void {
     searchForm.page = 1;
     queueMode.value = 'all';
     statusPreset.value = 'all';
+    triageCategoryFilter.value = null;
     syncAdvancedFiltersDraftFromSearch();
     void loadQueue();
 }

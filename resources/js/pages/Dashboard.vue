@@ -630,6 +630,12 @@ async function loadDashboard(depth = 0): Promise<void> {
                 ['pharmacyCounts', () =>
                     guardedRequest<ApiEnvelope<any>>('Pharmacy counts', 'pharmacy.orders.read', () => apiGet('/pharmacy-orders/status-counts')),
                 ],
+                ['emergencyTriageCaseCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Emergency triage case counts', 'emergency.triage.read', () => apiGet('/emergency-triage-cases/status-counts')),
+                ],
+                ['wardBedCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Ward bed counts', 'platform.resources.view-ward-beds', () => apiGet('/platform/admin/ward-beds/status-counts')),
+                ],
                 [
                     'checkedInAppointments',
                     () =>
@@ -710,6 +716,8 @@ async function loadDashboard(depth = 0): Promise<void> {
         billing: bag.billingCounts?.data ?? null,
         claimOpen: bag.claimOpenCounts?.data ?? null,
         claimResolved: bag.claimResolvedCounts?.data ?? null,
+        emergencyTriageCases: bag.emergencyTriageCaseCounts?.data ?? null,
+        wardBeds: bag.wardBedCounts?.data ?? null,
     };
 
     lists.value = {
@@ -847,7 +855,7 @@ const kpis = computed(() => {
             metric('Awaiting triage', 'Checked-in patients not yet assessed by clinical staff.', 'heart-pulse', numberValue(counts.value.appointments, 'checked_in')),
             metric('Avg triage wait', 'Average time since check-in across all patients currently in the triage queue.', 'calendar-clock', avgWaitMins, 'm'),
             metric('Longest wait', 'Time since the earliest unassessed patient checked in. Exceeds 30 min = critical.', 'alert-triangle', longestWaitMins, 'm'),
-            metric('Active admissions', 'Patients currently admitted from emergency intake.', 'bed-double', numberValue(counts.value.admissions, 'admitted')),
+            metric('In treatment', 'Emergency triage cases currently in active treatment.', 'stethoscope', numberValue(counts.value.emergencyTriageCases, 'in_treatment')),
         ];
     }
     if (activePresetKey.value === 'cashier') {
@@ -1299,7 +1307,9 @@ const handoff = computed(() => {
     if (activePresetKey.value === 'emergency') {
         const waitingTriage = numberValue(counts.value.appointments, 'checked_in');
         const activeAdmissions = numberValue(counts.value.admissions, 'admitted');
+        const inTreatment = numberValue(counts.value.emergencyTriageCases, 'in_treatment');
         const statLab = numberValue(counts.value.laboratory, ['ordered', 'collected', 'in_progress']);
+        const registeredBeds = numberValue(counts.value.wardBeds, 'active');
         const hasWaiting = Number(waitingTriage ?? 0) > 0;
         const hasLab = Number(statLab ?? 0) > 0;
 
@@ -1326,8 +1336,9 @@ const handoff = computed(() => {
             secondaryAction: { label: 'Register walk-in', href: `/appointments?type=walkin&view=queue&from=${today}` },
             chips: [
                 { label: 'Awaiting triage', value: waitingTriage },
-                { label: 'Active admissions', value: activeAdmissions },
-                { label: 'Stat lab orders', value: statLab },
+                { label: 'In treatment', value: inTreatment },
+                { label: 'Admitted', value: activeAdmissions },
+                ...(registeredBeds !== null ? [{ label: 'Reg. beds', value: registeredBeds }] : []),
             ],
         };
     }
@@ -1548,6 +1559,14 @@ const watchItems = computed(() => {
                 icon: 'bed-double' as AppIconName,
             },
             {
+                label: 'In treatment',
+                note: 'Emergency triage cases currently under active clinical treatment.',
+                value: numberValue(counts.value.emergencyTriageCases, 'in_treatment'),
+                href: '/emergency-triage-cases',
+                actionLabel: 'Open emergency cases',
+                icon: 'stethoscope' as AppIconName,
+            },
+            {
                 label: 'Stat lab orders',
                 note: 'Laboratory orders still pending collection, processing, or results.',
                 value: numberValue(counts.value.laboratory, ['ordered', 'collected', 'in_progress']),
@@ -1562,6 +1581,14 @@ const watchItems = computed(() => {
                 href: '/pharmacy-orders',
                 actionLabel: 'Open pharmacy',
                 icon: 'pill' as AppIconName,
+            },
+            {
+                label: 'Registered beds',
+                note: 'Active ward beds registered in scope. Compared against admitted census to gauge capacity pressure.',
+                value: numberValue(counts.value.wardBeds, 'active'),
+                href: '/platform/admin/ward-beds',
+                actionLabel: 'Open bed registry',
+                icon: 'bed-double' as AppIconName,
             },
         ];
     }

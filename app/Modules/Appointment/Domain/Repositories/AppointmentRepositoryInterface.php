@@ -23,6 +23,7 @@ interface AppointmentRepositoryInterface
         ?string $patientId,
         ?int $clinicianUserId,
         ?string $status,
+        ?string $triageCategory,
         ?string $fromDateTime,
         ?string $toDateTime,
         int $page,
