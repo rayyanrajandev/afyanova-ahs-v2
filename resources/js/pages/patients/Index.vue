@@ -4246,221 +4246,173 @@ onMounted(initialPageLoad);
     <Head title="Patients" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto p-4 md:p-6">
+        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto p-3 md:p-5 lg:p-6">
 
             <!-- ================================================================== -->
             <!-- PAGE HEADER                                                        -->
             <!-- ================================================================== -->
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div class="min-w-0">
-                    <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <AppIcon name="users" class="size-7 text-primary" />
-                        Patients
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Look up existing patients or register new ones with duplicate checks.
-                    </p>
-                </div>
-                <div class="flex flex-shrink-0 items-center gap-2">
-                    <Badge variant="outline" class="hidden sm:inline-flex">Patient Registry</Badge>
-
-                    <Popover>
-                        <PopoverTrigger as-child>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                class="h-8 px-2.5"
-                            >
-                                <Badge :variant="scopeWarning ? 'destructive' : 'secondary'">
-                                    {{ scopeStatusLabel }}
-                                </Badge>
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent align="end" class="w-72 space-y-1 text-xs">
-                            <p v-if="scope?.tenant">Tenant: {{ scope.tenant.name }} ({{ scope.tenant.code }})</p>
-                            <p v-if="scope?.facility">Facility: {{ scope.facility.name }} ({{ scope.facility.code }})</p>
-                            <p>Accessible facilities: {{ scope?.userAccess?.accessibleFacilityCount ?? 'N/A' }}</p>
-                            <p v-if="!scope" class="text-destructive">Scope could not be loaded.</p>
-                        </PopoverContent>
-                    </Popover>
-
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        :disabled="listLoading"
-                        class="gap-1.5"
-                        @click="refreshPage"
-                    >
-                        <AppIcon name="activity" class="size-3.5" />
-                        {{ listLoading ? 'Refreshing...' : 'Refresh' }}
-                    </Button>
-
-                    <Button v-if="canCreatePatients" size="sm" class="h-8 gap-1.5" @click="openRegistrationDialog()">
-                        <AppIcon name="plus" class="size-3.5" />
-                        Register Patient
-                    </Button>
-                </div>
-            </div>
-
-            <!-- ================================================================== -->
-            <!-- SCOPE & ERROR ALERTS                                               -->
-            <!-- ================================================================== -->
-            <Alert v-if="scopeWarning" variant="destructive">
-                <AlertTitle class="flex items-center gap-2">
-                    <AppIcon name="alert-triangle" class="size-4" />
-                    Scope warning
-                </AlertTitle>
-                <AlertDescription>{{ scopeWarning }}</AlertDescription>
-            </Alert>
-
-            <Alert v-if="listErrors.length" variant="destructive">
-                <AlertTitle class="flex items-center gap-2">
-                    <AppIcon name="circle-x" class="size-4" />
-                    Request error
-                </AlertTitle>
-                <AlertDescription>
-                    <div class="space-y-1">
-                        <p v-for="errorMessage in listErrors" :key="errorMessage" class="text-xs">
-                            {{ errorMessage }}
-                        </p>
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <!-- Left: identity -->
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20" aria-hidden="true">
+                            <AppIcon name="users" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <h1 class="text-base font-semibold tracking-tight md:text-lg">Patients</h1>
+                            <p class="truncate text-xs text-muted-foreground">
+                                Look up existing patients or register new ones with duplicate checks.
+                            </p>
+                            <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
+                                <span class="inline-flex items-center gap-1">
+                                    <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
+                                    <span class="font-medium text-foreground">{{ scope?.facility?.name || 'No facility' }}</span>
+                                </span>
+                                <span class="select-none text-border" aria-hidden="true">·</span>
+                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
+                            </div>
+                        </div>
                     </div>
-                </AlertDescription>
-            </Alert>
 
-            <div
-                v-if="canReadPatients"
-                class="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-4 py-3"
-            >
-                <button
-                    class="group flex items-center gap-2 rounded-md border bg-background px-3 py-1.5 text-sm transition-colors hover:bg-accent"
-                    :class="{ 'border-primary bg-primary/5': searchForm.status === 'active' }"
-                    @click="searchForm.status = 'active'; submitSearch()"
-                >
-                    <span class="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-                    <span class="font-medium">{{ summaryPatientStatusCounts.active }}</span>
-                    <span class="text-muted-foreground">Active</span>
-                </button>
-                <button
-                    class="group flex items-center gap-2 rounded-md border bg-background px-3 py-1.5 text-sm transition-colors hover:bg-accent"
-                    :class="{ 'border-primary bg-primary/5': searchForm.status === 'inactive' }"
-                    @click="searchForm.status = 'inactive'; submitSearch()"
-                >
-                    <span class="inline-block h-2 w-2 rounded-full bg-rose-500" />
-                    <span class="font-medium">{{ summaryPatientStatusCounts.inactive }}</span>
-                    <span class="text-muted-foreground">Inactive</span>
-                </button>
-                <button
-                    class="group flex items-center gap-2 rounded-md border bg-background px-3 py-1.5 text-sm transition-colors hover:bg-accent"
-                    :class="{ 'border-primary bg-primary/5': searchForm.status === '' }"
-                    @click="searchForm.status = ''; submitSearch()"
-                >
-                    <span class="inline-block h-2 w-2 rounded-full bg-slate-400" />
-                    <span class="font-medium">{{ summaryPatientStatusCounts.total }}</span>
-                    <span class="text-muted-foreground">All</span>
-                </button>
-
-                <div class="ml-auto flex items-center gap-2">
-                    <Badge v-if="patientFilterStateLabel" variant="secondary" class="hidden sm:inline-flex">
-                        {{ patientFilterStateLabel }}
-                    </Badge>
-                    <Button
-                        v-if="hasActivePatientFilters"
-                        variant="ghost"
-                        size="sm"
-                        class="h-7 gap-1.5 text-xs"
-                        @click="resetPatientFilters"
-                    >
-                        <AppIcon name="sliders-horizontal" class="size-3" />
-                        Reset
-                    </Button>
+                    <!-- Right: actions -->
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Popover>
+                            <PopoverTrigger as-child>
+                                <Button variant="outline" size="sm" class="h-8 px-2.5">
+                                    <Badge :variant="scopeWarning ? 'destructive' : 'secondary'">
+                                        {{ scopeStatusLabel }}
+                                    </Badge>
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent align="end" class="w-72 space-y-1 text-xs">
+                                <p v-if="scope?.tenant">Tenant: {{ scope.tenant.name }} ({{ scope.tenant.code }})</p>
+                                <p v-if="scope?.facility">Facility: {{ scope.facility.name }} ({{ scope.facility.code }})</p>
+                                <p>Accessible facilities: {{ scope?.userAccess?.accessibleFacilityCount ?? 'N/A' }}</p>
+                                <p v-if="!scope" class="text-destructive">Scope could not be loaded.</p>
+                            </PopoverContent>
+                        </Popover>
+                        <Button variant="outline" size="sm" :disabled="listLoading" class="h-8 gap-1.5" @click="refreshPage">
+                            <AppIcon name="activity" class="size-3.5" />
+                            {{ listLoading ? 'Refreshing...' : 'Refresh' }}
+                        </Button>
+                        <Button v-if="canCreatePatients" size="sm" class="h-8 gap-1.5" @click="openRegistrationDialog()">
+                            <AppIcon name="plus" class="size-3.5" />
+                            Register Patient
+                        </Button>
+                    </div>
                 </div>
-            </div>
+            </section>
 
             <!-- ================================================================== -->
             <!-- PATIENT LIST (FULL WIDTH)                                          -->
             <!-- ================================================================== -->
             <Card v-if="canReadPatients" class="border-sidebar-border/70 flex min-h-0 flex-1 flex-col rounded-lg">
-                <CardHeader class="shrink-0 gap-4 pb-3">
-                    <div class="flex flex-col gap-4">
-                        <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                            <div class="min-w-0 space-y-3">
-                                <div class="min-w-0">
-                                    <CardTitle class="flex items-center gap-2">
-                                        <AppIcon name="users" class="size-5 text-muted-foreground" />
-                                        Patient Registry
-                                    </CardTitle>
-                                    <CardDescription>
-                                        Search, review, and open patient records.
-                                    </CardDescription>
-                                </div>
+                <!-- Compact toolbar row: status pills + search + filters -->
+                <div class="flex flex-col gap-3 border-b px-4 py-3">
+                    <!-- Row 1: status toggles + count badge + right controls -->
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button
+                            class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                            :class="{ 'border-primary bg-primary/5': searchForm.status === 'active' }"
+                            @click="searchForm.status = 'active'; submitSearch()"
+                        >
+                            <span class="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                            <span class="font-medium">{{ summaryPatientStatusCounts.active }}</span>
+                            <span class="text-muted-foreground">Active</span>
+                        </button>
+                        <button
+                            class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                            :class="{ 'border-primary bg-primary/5': searchForm.status === 'inactive' }"
+                            @click="searchForm.status = 'inactive'; submitSearch()"
+                        >
+                            <span class="inline-block h-2 w-2 rounded-full bg-rose-500" />
+                            <span class="font-medium">{{ summaryPatientStatusCounts.inactive }}</span>
+                            <span class="text-muted-foreground">Inactive</span>
+                        </button>
+                        <button
+                            class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                            :class="{ 'border-primary bg-primary/5': searchForm.status === '' }"
+                            @click="searchForm.status = ''; submitSearch()"
+                        >
+                            <span class="inline-block h-2 w-2 rounded-full bg-slate-400" />
+                            <span class="font-medium">{{ summaryPatientStatusCounts.total }}</span>
+                            <span class="text-muted-foreground">All</span>
+                        </button>
 
-                                <div class="flex flex-wrap items-center gap-1.5">
-                                    <Badge variant="secondary">
-                                        {{ pagination?.total ?? 0 }} patients
-                                    </Badge>
-                                    <Badge v-if="activePatientPresetLabel" variant="outline">
-                                        {{ activePatientPresetLabel }}
-                                    </Badge>
-                                    <Badge v-if="patientFilterStateLabel" variant="secondary">
-                                        {{ patientFilterStateLabel }}
-                                    </Badge>
-                                </div>
-                            </div>
-
-                            <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center xl:max-w-2xl">
-                                <div class="relative min-w-0 flex-1 min-w-[12rem]">
-                                    <AppIcon
-                                        name="search"
-                                        class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                                    />
-                                    <Input
-                                        id="patient-search-q"
-                                        v-model="searchForm.q"
-                                        placeholder="Search name, patient number, phone, email, or ID"
-                                        class="h-9 pl-9"
-                                        @keyup.enter="submitSearch"
-                                    />
-                                </div>
-
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    class="h-9 gap-1.5 rounded-lg"
-                                    @click="patientFiltersSheetOpen = true"
-                                >
-                                    <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                    Filters
-                                    <Badge
-                                        v-if="patientFilterChips.length > 0"
-                                        variant="secondary"
-                                        class="ml-1 h-5 px-1.5 text-xs"
-                                    >
-                                        {{ patientFilterChips.length }}
-                                    </Badge>
-                                </Button>
-                            </div>
-                        </div>
-
-                        <div v-if="patientFilterChips.length > 0" class="flex flex-wrap gap-1.5">
-                            <button
-                                v-for="chip in patientFilterChips"
-                                :key="chip.key"
-                                type="button"
-                                class="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-                                @click="removeFilterChip(chip.key)"
+                        <div class="ml-auto flex items-center gap-2">
+                            <Badge variant="secondary" class="hidden sm:inline-flex">
+                                {{ pagination?.total ?? 0 }} patients
+                            </Badge>
+                            <Badge v-if="activePatientPresetLabel" variant="outline" class="hidden md:inline-flex">{{ activePatientPresetLabel }}</Badge>
+                            <Button
+                                v-if="hasActivePatientFilters"
+                                variant="ghost"
+                                size="sm"
+                                class="h-7 gap-1.5 text-xs"
+                                @click="resetPatientFilters"
                             >
-                                {{ chip.label }}
-                                <AppIcon name="x" class="size-3 text-muted-foreground" />
-                            </button>
+                                <AppIcon name="sliders-horizontal" class="size-3" />
+                                Reset
+                            </Button>
                         </div>
-
                     </div>
-                </CardHeader>
+
+                    <!-- Row 2: search + filter button -->
+                    <div class="flex flex-wrap items-center gap-2">
+                        <div class="relative min-w-0 flex-1">
+                            <AppIcon name="search" class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                id="patient-search-q"
+                                v-model="searchForm.q"
+                                placeholder="Search name, MRN, phone, email, or ID…"
+                                class="h-8 pl-9 text-sm"
+                                @keyup.enter="submitSearch"
+                            />
+                        </div>
+                        <Button variant="outline" size="sm" class="h-8 gap-1.5" @click="patientFiltersSheetOpen = true">
+                            <AppIcon name="sliders-horizontal" class="size-3.5" />
+                            Filters
+                            <Badge v-if="patientFilterChips.length > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">
+                                {{ patientFilterChips.length }}
+                            </Badge>
+                        </Button>
+                    </div>
+
+                    <!-- Row 3: active filter chips (if any) -->
+                    <div v-if="patientFilterChips.length > 0" class="flex flex-wrap gap-1.5">
+                        <button
+                            v-for="chip in patientFilterChips"
+                            :key="chip.key"
+                            type="button"
+                            class="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                            @click="removeFilterChip(chip.key)"
+                        >
+                            {{ chip.label }}
+                            <AppIcon name="x" class="size-3 text-muted-foreground" />
+                        </button>
+                    </div>
+                </div>
 
                 <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden px-0 pb-0">
+                    <!-- Inline scope/error alerts (inside card, close to data) -->
+                    <div v-if="scopeWarning || listErrors.length" class="space-y-2 px-4 pt-3">
+                        <Alert v-if="scopeWarning" variant="destructive" class="py-2">
+                            <AppIcon name="alert-triangle" class="size-4" />
+                            <AlertTitle class="text-xs font-medium">Scope warning</AlertTitle>
+                            <AlertDescription class="text-xs">{{ scopeWarning }}</AlertDescription>
+                        </Alert>
+                        <Alert v-if="listErrors.length" variant="destructive" class="py-2">
+                            <AppIcon name="circle-x" class="size-4" />
+                            <AlertTitle class="text-xs font-medium">Request error</AlertTitle>
+                            <AlertDescription class="text-xs">
+                                <p v-for="errorMessage in listErrors" :key="errorMessage">{{ errorMessage }}</p>
+                            </AlertDescription>
+                        </Alert>
+                    </div>
+
                     <!-- TABLE HEADER -->
                     <div
-                        class="shrink-0 hidden border-b bg-muted/30 px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground md:grid md:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,auto)]"
+                        class="shrink-0 hidden border-b bg-muted/30 px-4 py-2 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,auto)]"
                     >
                         <button
                             type="button"
@@ -4479,7 +4431,7 @@ onMounted(initialPageLoad);
                             class="inline-flex items-center gap-1 hover:text-foreground transition-colors"
                             @click="toggleColumnSort('createdAt')"
                         >
-                            Date of Birth
+                            Date of birth
                             <AppIcon
                                 :name="searchForm.sortBy === 'createdAt' ? (searchForm.sortDir === 'asc' ? 'chevron-up' : 'chevron-down') : 'chevrons-up-down'"
                                 class="size-3.5"
