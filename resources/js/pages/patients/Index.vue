@@ -4527,32 +4527,37 @@ onMounted(initialPageLoad);
                                             <AppIcon name="ellipsis-vertical" class="size-4" />
                                         </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" class="w-60">
+                                    <DropdownMenuContent align="end" class="w-64">
                                         <DropdownMenuLabel class="text-xs">Patient Actions</DropdownMenuLabel>
                                         <DropdownMenuSeparator />
+
+                                        <!-- Core record actions -->
                                         <DropdownMenuItem class="flex items-center gap-2" @click="openPatientDetailsSheet(patient)">
                                             <AppIcon name="eye" class="size-3.5" />
                                             View Details
                                         </DropdownMenuItem>
                                         <DropdownMenuItem v-if="canUpdatePatients" class="flex items-center gap-2" @click="openEditSheet(patient)">
                                             <AppIcon name="pencil" class="size-3.5" />
-                                            Update Patient
+                                            Edit Patient
                                         </DropdownMenuItem>
                                         <DropdownMenuItem v-if="canUpdatePatientStatus" class="flex items-center gap-2" @click="openStatusDialog(patient)">
                                             <AppIcon :name="patientStatusActionIcon(patient)" class="size-3.5" />
                                             {{ patientStatusActionLabel(patient) }}
                                         </DropdownMenuItem>
+
                                         <DropdownMenuSeparator />
-                                        <DropdownMenuLabel class="text-xs text-muted-foreground">Recommended next step</DropdownMenuLabel>
+                                        <!-- Clinical workflow -->
+                                        <DropdownMenuLabel class="text-xs text-muted-foreground">Clinical workflow</DropdownMenuLabel>
                                         <DropdownMenuItem class="flex items-center gap-2" @click="openPatientVisitHandoff(patient, 'list')">
                                             <AppIcon name="clipboard-list" class="size-3.5" />
                                             Start Visit Handoff
                                         </DropdownMenuItem>
-                                        <DropdownMenuLabel class="px-2 pt-1 text-xs font-normal text-muted-foreground">
-                                            Checks for an active visit before routing
-                                        </DropdownMenuLabel>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuLabel class="text-xs text-muted-foreground">Urgent or direct entry</DropdownMenuLabel>
+                                        <DropdownMenuItem as-child>
+                                            <Link :href="patientContextHref('/appointments', patient)" class="flex items-center gap-2">
+                                                <AppIcon name="calendar-clock" class="size-3.5" />
+                                                Schedule Appointment
+                                            </Link>
+                                        </DropdownMenuItem>
                                         <DropdownMenuItem as-child>
                                             <Link :href="patientContextHref('/emergency-triage', patient, { includeTabNew: true })" class="flex items-center gap-2">
                                                 <AppIcon name="activity" class="size-3.5" />
@@ -4565,8 +4570,10 @@ onMounted(initialPageLoad);
                                                 Open Patient Chart
                                             </Link>
                                         </DropdownMenuItem>
+
                                         <DropdownMenuSeparator />
-                                        <DropdownMenuLabel class="text-xs text-muted-foreground">Usually after consultation</DropdownMenuLabel>
+                                        <!-- Orders & billing -->
+                                        <DropdownMenuLabel class="text-xs text-muted-foreground">Orders &amp; billing</DropdownMenuLabel>
                                         <DropdownMenuItem v-if="canCreateLaboratoryOrders" as-child>
                                             <Link :href="patientContextHref('/laboratory-orders', patient, { includeTabNew: true })" class="flex items-center gap-2">
                                                 <AppIcon name="flask-conical" class="size-3.5" />
@@ -4663,33 +4670,6 @@ onMounted(initialPageLoad);
                 </CardContent>
             </Card>
 
-            <!-- ================================================================== -->
-            <!-- WORKFLOW SHORTCUTS (COMPACT FOOTER BAR)                            -->
-            <!-- ================================================================== -->
-            <div class="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-4 py-2.5">
-                <span class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                    <AppIcon name="activity" class="size-3.5" />
-                    Quick actions:
-                </span>
-                <Button size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link href="/appointments">
-                        <AppIcon name="calendar-clock" class="size-3.5" />
-                        Schedule Appointment
-                    </Link>
-                </Button>
-                <Button size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link href="/appointments">
-                        <AppIcon name="stethoscope" class="size-3.5" />
-                        Start Consultation
-                    </Link>
-                </Button>
-                <Button size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link href="/billing-invoices">
-                        <AppIcon name="receipt" class="size-3.5" />
-                        Create Invoice
-                    </Link>
-                </Button>
-            </div>
         </div>
 
         <!-- Register Patient Sheet -->
