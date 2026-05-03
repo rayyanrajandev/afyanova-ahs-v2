@@ -40,6 +40,7 @@ type QueueRow = {
     href: string;
     actionLabel: string;
     isOverdue?: boolean;
+    group?: string;
 };
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/dashboard' }];
@@ -110,6 +111,7 @@ let autoRefreshHandle: ReturnType<typeof setInterval> | null = null;
 const frontDeskHandoffOpen = useLocalStorageBoolean('dashboard.front-desk-handoff.open', true);
 const clinicianHandoffOpen = useLocalStorageBoolean('dashboard.clinician-handoff.open', false);
 const nursingHandoffOpen = useLocalStorageBoolean('dashboard.nursing-handoff.open', true);
+const emergencyHandoffOpen = useLocalStorageBoolean('dashboard.emergency-handoff.open', true);
 const cashierHandoffOpen = useLocalStorageBoolean('dashboard.cashier-handoff.open', false);
 const adminHandoffOpen = useLocalStorageBoolean('dashboard.admin-handoff.open', false);
 
@@ -282,6 +284,7 @@ const handoffOpen = computed({
         if (activePresetKey.value === 'clinician') return clinicianHandoffOpen.value;
         if (activePresetKey.value === 'nursing' || activePresetKey.value === 'direct_service') return nursingHandoffOpen.value;
         if (activePresetKey.value === 'cashier') return cashierHandoffOpen.value;
+        if (activePresetKey.value === 'emergency') return emergencyHandoffOpen.value;
         return adminHandoffOpen.value;
     },
     set: (value: boolean) => {
@@ -289,6 +292,7 @@ const handoffOpen = computed({
         else if (activePresetKey.value === 'clinician') clinicianHandoffOpen.value = value;
         else if (activePresetKey.value === 'nursing' || activePresetKey.value === 'direct_service') nursingHandoffOpen.value = value;
         else if (activePresetKey.value === 'cashier') cashierHandoffOpen.value = value;
+        else if (activePresetKey.value === 'emergency') emergencyHandoffOpen.value = value;
         else adminHandoffOpen.value = value;
     },
 });
@@ -524,7 +528,7 @@ async function loadDashboard(depth = 0): Promise<void> {
                     'checkedInAppointments',
                     () =>
                         guardedRequest<ApiEnvelope<any>>('Checked-in appointments', 'appointments.read', () =>
-                            apiGet('/appointments', { status: 'checked_in', perPage: 2, sortBy: 'scheduledAt', sortDir: 'asc' }),
+                            apiGet('/appointments', { status: 'checked_in', perPage: 5, sortBy: 'scheduledAt', sortDir: 'asc' }),
                         ),
                 ],
             );
@@ -604,6 +608,32 @@ async function loadDashboard(depth = 0): Promise<void> {
                     () =>
                         guardedRequest<ApiEnvelope<any>>('Checked-in appointments', 'appointments.read', () =>
                             apiGet('/appointments', { status: 'checked_in', perPage: 5, sortBy: 'scheduledAt', sortDir: 'asc' }),
+                        ),
+                ],
+            );
+            break;
+        case 'emergency':
+            batch.push(
+                ['patientCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Patient counts', 'patients.read', () => apiGet('/patients/status-counts')),
+                ],
+                ['appointmentCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Appointment counts', 'appointments.read', () => apiGet('/appointments/status-counts')),
+                ],
+                ['admissionCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Admission counts', 'admissions.read', () => apiGet('/admissions/status-counts')),
+                ],
+                ['laboratoryCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Laboratory counts', 'laboratory.orders.read', () => apiGet('/laboratory-orders/status-counts')),
+                ],
+                ['pharmacyCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Pharmacy counts', 'pharmacy.orders.read', () => apiGet('/pharmacy-orders/status-counts')),
+                ],
+                [
+                    'checkedInAppointments',
+                    () =>
+                        guardedRequest<ApiEnvelope<any>>('Triage queue', 'appointments.read', () =>
+                            apiGet('/appointments', { status: 'checked_in', perPage: 10, sortBy: 'scheduledAt', sortDir: 'asc' }),
                         ),
                 ],
             );
@@ -794,6 +824,14 @@ const kpis = computed(() => {
             metric('Pending pharmacy orders', 'Pharmacy work that still needs completion.', 'pill', numberValue(counts.value.pharmacy, ['pending', 'in_preparation', 'partially_dispensed'])),
         ];
     }
+    if (activePresetKey.value === 'emergency') {
+        return [
+            metric('Awaiting triage', 'Checked-in patients not yet assessed by clinical staff.', 'heart-pulse', numberValue(counts.value.appointments, 'checked_in')),
+            metric('Active admissions', 'Patients currently admitted from emergency intake.', 'bed-double', numberValue(counts.value.admissions, 'admitted')),
+            metric('Stat lab orders', 'Laboratory orders still active and pending results.', 'flask-conical', numberValue(counts.value.laboratory, ['ordered', 'collected', 'in_progress'])),
+            metric('Pending medication orders', 'Pharmacy orders waiting preparation or dispense.', 'pill', numberValue(counts.value.pharmacy, ['pending', 'in_preparation', 'partially_dispensed'])),
+        ];
+    }
     if (activePresetKey.value === 'cashier') {
         return [
             metric('Draft invoices', 'Invoices still waiting for billing action.', 'receipt', numberValue(counts.value.billing, 'draft')),
@@ -875,6 +913,13 @@ const actions = computed(() => {
             { label: 'Inpatient ward', icon: 'bed-double', variant: 'outline', href: '/inpatient-ward' },
         ];
     }
+    if (activePresetKey.value === 'emergency') {
+        return [
+            { label: 'Register walk-in', icon: 'calendar-plus-2', variant: 'default', href: `/appointments?type=walkin&view=queue&from=${today}` },
+            { label: 'Triage queue', icon: 'heart-pulse', variant: 'outline', href: `/appointments?view=queue&status=checked_in&from=${today}` },
+            { label: 'Admit patient', icon: 'bed-double', variant: 'outline', href: '/admissions' },
+        ];
+    }
     if (activePresetKey.value === 'cashier') {
         return [
             { label: 'Billing drafts', icon: 'receipt', variant: 'default', href: '/billing-invoices?status=draft' },
@@ -891,7 +936,18 @@ const actions = computed(() => {
 const queueRows = computed<QueueRow[]>(() => {
     if (activePresetKey.value === 'front_desk') {
         const now = Date.now();
-        return (lists.value.scheduledAppointments ?? []).slice(0, 8).map((item: any) => {
+        const checkedInRows = (lists.value.checkedInAppointments ?? []).slice(0, 5).map((item: any) => ({
+            id: `checkedin-${String(item.id ?? item.appointmentNumber ?? Math.random())}`,
+            title: String(item.appointmentNumber ?? 'Checked-in patient'),
+            subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Checked-in and waiting for clinical handoff.',
+            meta: `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)}`,
+            status: formatEnumLabel(String(item.status ?? 'checked_in')),
+            href: `/appointments?view=queue&status=checked_in&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${today}`,
+            actionLabel: 'Open checked-in queue',
+            isOverdue: false,
+            group: 'Checked-in',
+        }));
+        const scheduledRows = (lists.value.scheduledAppointments ?? []).slice(0, 8).map((item: any) => {
             const scheduledAt = item.scheduledAt ? new Date(item.scheduledAt).getTime() : null;
             const isOverdue = scheduledAt !== null && scheduledAt < now && String(item.status ?? '').toLowerCase() === 'scheduled';
             return {
@@ -903,8 +959,10 @@ const queueRows = computed<QueueRow[]>(() => {
                 href: `/appointments?view=queue&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${today}`,
                 actionLabel: 'Open queue',
                 isOverdue,
+                group: 'Scheduled',
             };
         });
+        return [...checkedInRows, ...scheduledRows];
     }
     if (activePresetKey.value === 'clinician') {
         return (lists.value.checkedInAppointments ?? []).slice(0, 2).map((item: any) => ({
@@ -938,6 +996,7 @@ const queueRows = computed<QueueRow[]>(() => {
             href: `/appointments?view=queue&status=checked_in&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${today}`,
             actionLabel: 'Open triage queue',
             isOverdue: false,
+            group: 'Triage',
         }));
         const admissionItems = (lists.value.admissions ?? []).slice(0, 2).map((item: any) => ({
             id: String(item.id ?? item.admissionNumber ?? Math.random()),
@@ -948,8 +1007,28 @@ const queueRows = computed<QueueRow[]>(() => {
             href: '/admissions?view=queue',
             actionLabel: 'Open admissions',
             isOverdue: false,
+            group: 'Admissions',
         }));
         return [...triageItems, ...admissionItems];
+    }
+    if (activePresetKey.value === 'emergency') {
+        const now = Date.now();
+        return (lists.value.checkedInAppointments ?? []).slice(0, 10).map((item: any) => {
+            const arrivalTime = item.checkedInAt ?? item.scheduledAt;
+            const waitMs = arrivalTime ? now - new Date(arrivalTime).getTime() : 0;
+            const waitMins = Math.max(0, Math.floor(waitMs / 60_000));
+            const isOverdue = waitMins >= 30;
+            return {
+                id: String(item.id ?? item.appointmentNumber ?? Math.random()),
+                title: String(item.appointmentNumber ?? 'Walk-in / arrival'),
+                subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Awaiting triage assessment.',
+                meta: arrivalTime ? `Waiting ${waitMins}m` : 'Wait time unknown',
+                status: formatEnumLabel(String(item.status ?? 'checked_in')),
+                href: `/appointments?view=queue&status=checked_in&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${today}`,
+                actionLabel: 'Open triage',
+                isOverdue,
+            };
+        });
     }
     if (activePresetKey.value === 'cashier') {
         return (lists.value.draftInvoices ?? []).slice(0, 3).map((item: any) => ({
@@ -974,19 +1053,21 @@ const queueRows = computed<QueueRow[]>(() => {
 });
 
 const queueTitle = computed(() => {
-    if (activePresetKey.value === 'front_desk') return 'Upcoming arrivals';
+    if (activePresetKey.value === 'front_desk') return 'Front desk queue';
     if (activePresetKey.value === 'clinician') return 'Consultation-ready queue';
     if (activePresetKey.value === 'direct_service') return 'Direct-service queues';
     if (activePresetKey.value === 'nursing') return 'Triage & admissions queue';
+    if (activePresetKey.value === 'emergency') return 'Emergency triage queue';
     if (activePresetKey.value === 'cashier') return 'Live billing preview';
     return 'Recent export failures';
 });
 
 const queueDescription = computed(() => {
-    if (activePresetKey.value === 'front_desk') return 'Scheduled arrivals that still need registration or queue attention.';
+    if (activePresetKey.value === 'front_desk') return 'Checked-in patients awaiting clinical handoff, followed by upcoming scheduled arrivals.';
     if (activePresetKey.value === 'clinician') return 'Checked-in encounters ready for consultation pickup.';
     if (activePresetKey.value === 'direct_service') return 'Accessible laboratory, pharmacy, and radiology worklists for this session.';
     if (activePresetKey.value === 'nursing') return 'Checked-in patients waiting for triage and active inpatient admissions.';
+    if (activePresetKey.value === 'emergency') return 'All checked-in patients sorted by arrival time — longest wait shown first. Rows overdue at 30 min.';
     if (activePresetKey.value === 'cashier') return 'Draft billing work that still needs invoice follow-up.';
     return 'Failures and backlog signals from audit export health.';
 });
@@ -1146,6 +1227,41 @@ const handoff = computed(() => {
                 { label: 'Waiting triage', value: waitingTriage },
                 { label: 'Admitted now', value: numberValue(counts.value.admissions, 'admitted') },
                 { label: 'Escalated tasks', value: escalatedTasks },
+            ],
+        };
+    }
+    if (activePresetKey.value === 'emergency') {
+        const waitingTriage = numberValue(counts.value.appointments, 'checked_in');
+        const activeAdmissions = numberValue(counts.value.admissions, 'admitted');
+        const statLab = numberValue(counts.value.laboratory, ['ordered', 'collected', 'in_progress']);
+        const hasWaiting = Number(waitingTriage ?? 0) > 0;
+        const hasLab = Number(statLab ?? 0) > 0;
+
+        return {
+            title: 'Emergency handoff',
+            note: 'Triage and emergency care flow',
+            blockerTitle: hasWaiting
+                ? `${(waitingTriage ?? 0).toLocaleString()} patient${Number(waitingTriage) === 1 ? '' : 's'} awaiting triage`
+                : hasLab
+                    ? 'Pending stat lab orders need follow-up'
+                    : 'No critical emergency blockers',
+            blockerNote: hasWaiting
+                ? 'Patients have checked in and are waiting for initial clinical assessment. Prioritise longest-wait patients.'
+                : hasLab
+                    ? 'Stat laboratory orders are pending results — treatment decisions may be blocked.'
+                    : 'Triage queue is clear and admission load looks stable.',
+            nextAction: hasWaiting
+                ? 'Open the triage queue sorted by wait time and begin assessments from the top.'
+                : 'Review current admissions for discharge or escalation decisions.',
+            primaryAction: {
+                label: hasWaiting ? 'Open triage queue' : 'Open admissions',
+                href: hasWaiting ? `/appointments?view=queue&status=checked_in&from=${today}` : '/admissions?view=queue',
+            },
+            secondaryAction: { label: 'Register walk-in', href: `/appointments?type=walkin&view=queue&from=${today}` },
+            chips: [
+                { label: 'Awaiting triage', value: waitingTriage },
+                { label: 'Active admissions', value: activeAdmissions },
+                { label: 'Stat lab orders', value: statLab },
             ],
         };
     }
@@ -1320,6 +1436,43 @@ const watchItems = computed(() => {
                 actionLabel: 'Open pharmacy',
                 icon: 'pill' as AppIconName,
             },
+            {
+                label: 'Pending care plans',
+                note: 'Care plans not yet finalised or awaiting nurse sign-off.',
+                value: numberValue(counts.value.wardCarePlans, ['draft', 'pending']),
+                href: '/inpatient-ward',
+                actionLabel: 'Open inpatient ward',
+                icon: 'clipboard-list' as AppIconName,
+            },
+        ];
+    }
+
+    if (activePresetKey.value === 'emergency') {
+        return [
+            {
+                label: 'Triage queue',
+                note: 'Patients checked in and waiting for initial clinical assessment.',
+                value: numberValue(counts.value.appointments, 'checked_in'),
+                href: `/appointments?view=queue&status=checked_in&from=${today}`,
+                actionLabel: 'Open triage queue',
+                icon: 'heart-pulse' as AppIconName,
+            },
+            {
+                label: 'Active admissions',
+                note: 'Current inpatient census from emergency and ward intake.',
+                value: numberValue(counts.value.admissions, 'admitted'),
+                href: '/admissions?view=queue',
+                actionLabel: 'Open admissions',
+                icon: 'bed-double' as AppIconName,
+            },
+            {
+                label: 'Stat lab orders',
+                note: 'Laboratory orders still pending collection, processing, or results.',
+                value: numberValue(counts.value.laboratory, ['ordered', 'collected', 'in_progress']),
+                href: '/laboratory-orders',
+                actionLabel: 'Open laboratory',
+                icon: 'flask-conical' as AppIconName,
+            },
         ];
     }
 
@@ -1409,8 +1562,12 @@ const retryModuleRows = computed(() =>
         })),
 );
 
+const shiftIntentDismissedKey = computed(() => `dashboard.shift-intent.${today}`);
+const shiftIntentDismissed = ref(false);
+
 onMounted(async () => {
     loadPinnedMetrics();
+    shiftIntentDismissed.value = window.localStorage.getItem(shiftIntentDismissedKey.value) === '1';
     nowTickerHandle = setInterval(() => {
         nowTick.value = Date.now();
     }, 15_000);
@@ -1441,10 +1598,25 @@ onBeforeUnmount(() => {
     }
 });
 
+const showShiftIntent = computed(
+    () => !shiftIntentDismissed.value && !loading.value && eligiblePresets.value.length > 1,
+);
+
+const overdueQueueCount = computed(() => queueRows.value.filter((r) => r.isOverdue).length);
+
+const escalatedTaskCount = computed(() => Number(counts.value.wardTasks?.escalated ?? 0));
+
+function dismissShiftIntent(presetKey?: DashboardPresetKey): void {
+    if (presetKey) switchPreset(presetKey);
+    shiftIntentDismissed.value = true;
+    window.localStorage.setItem(shiftIntentDismissedKey.value, '1');
+}
+
 const queueViewAllHref = computed(() => {
     if (activePresetKey.value === 'front_desk') return `/appointments?view=queue&from=${today}`;
     if (activePresetKey.value === 'clinician') return `/appointments?view=queue&status=checked_in&from=${today}`;
     if (activePresetKey.value === 'nursing') return `/appointments?view=queue&status=checked_in&from=${today}`;
+    if (activePresetKey.value === 'emergency') return `/appointments?view=queue&status=checked_in&from=${today}`;
     if (activePresetKey.value === 'cashier') return '/billing-invoices?status=draft';
     return '#';
 });
@@ -1634,6 +1806,42 @@ function switchPreset(key: DashboardPresetKey): void {
                 </AlertDescription>
             </Alert>
 
+            <!-- ─── Shift-intent prompt (multi-preset, once per day) ────────── -->
+            <div
+                v-if="showShiftIntent"
+                class="flex flex-col gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                role="status"
+                aria-live="polite"
+            >
+                <div class="min-w-0">
+                    <p class="text-sm font-medium text-foreground">What are you working on today?</p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        You have access to multiple workflows. Select one to set the context for this session.
+                    </p>
+                </div>
+                <div class="flex flex-shrink-0 flex-wrap items-center gap-1.5">
+                    <Button
+                        v-for="preset in visiblePresetOptions"
+                        :key="preset.key"
+                        size="sm"
+                        :variant="activePresetKey === preset.key ? 'default' : 'outline'"
+                        class="h-8 rounded-lg px-3 text-xs"
+                        @click="dismissShiftIntent(preset.key)"
+                    >
+                        {{ preset.label }}
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        class="h-8 rounded-lg px-2.5 text-xs text-muted-foreground"
+                        @click="dismissShiftIntent()"
+                    >
+                        <AppIcon name="x" class="size-3.5" />
+                        <span class="ml-1">Dismiss</span>
+                    </Button>
+                </div>
+            </div>
+
             <!-- ─── Tabs ───────────────────────────────────────────────────── -->
             <Tabs v-model="activeTab" class="space-y-4">
                 <TabsList class="h-9 rounded-lg border bg-muted/40 p-1">
@@ -1755,6 +1963,33 @@ function switchPreset(key: DashboardPresetKey): void {
                         </template>
                     </div>
 
+                    <!-- P0 critical alerts for current preset -->
+                    <Alert
+                        v-if="activePresetKey === 'front_desk' && !loading && !refreshing && overdueQueueCount > 0"
+                        class="rounded-lg border border-rose-500/40 bg-rose-500/5 py-2.5 text-rose-900 dark:text-rose-200"
+                    >
+                        <AppIcon name="alert-triangle" class="size-4 text-rose-600" />
+                        <AlertTitle class="text-sm font-medium">
+                            {{ overdueQueueCount }} overdue arrival{{ overdueQueueCount === 1 ? '' : 's' }} in queue
+                        </AlertTitle>
+                        <AlertDescription class="mt-1 text-xs">
+                            Scheduled appointments have passed their expected check-in time. Review the queue below and prioritise them.
+                        </AlertDescription>
+                    </Alert>
+
+                    <Alert
+                        v-if="activePresetKey === 'nursing' && !loading && !refreshing && escalatedTaskCount > 0"
+                        class="rounded-lg border border-rose-500/40 bg-rose-500/5 py-2.5 text-rose-900 dark:text-rose-200"
+                    >
+                        <AppIcon name="alert-triangle" class="size-4 text-rose-600" />
+                        <AlertTitle class="text-sm font-medium">
+                            {{ escalatedTaskCount }} escalated ward task{{ escalatedTaskCount === 1 ? '' : 's' }} require attention
+                        </AlertTitle>
+                        <AlertDescription class="mt-1 text-xs">
+                            Open the inpatient ward to review and acknowledge outstanding escalations before the next shift.
+                        </AlertDescription>
+                    </Alert>
+
                     <!-- Queue card — full width, shrinks to content -->
                     <Card
                         class="self-start rounded-lg border border-border shadow-sm"
@@ -1815,48 +2050,58 @@ function switchPreset(key: DashboardPresetKey): void {
                             </div>
 
                             <!-- Queue rows -->
-                            <div v-else class="max-h-[28rem] divide-y overflow-y-auto">
-                                <Link
-                                    v-for="row in queueRows"
-                                    :key="row.id"
-                                    :href="row.href"
-                                    class="group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none"
-                                >
-                                    <span
-                                        class="mt-1.5 size-2 shrink-0 rounded-full"
-                                        :class="
-                                            row.isOverdue
-                                                ? 'bg-rose-500'
-                                                : statusVariant(row.status) === 'destructive'
-                                                  ? 'bg-rose-500/80'
-                                                  : statusVariant(row.status) === 'default'
-                                                    ? 'bg-sky-500'
-                                                    : statusVariant(row.status) === 'secondary'
-                                                      ? 'bg-emerald-500'
-                                                      : 'bg-muted-foreground/40'
-                                        "
-                                        aria-hidden="true"
-                                    />
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex items-start justify-between gap-2">
-                                            <p class="truncate text-sm font-medium leading-snug">{{ row.title }}</p>
-                                            <div class="flex shrink-0 items-center gap-1">
-                                                <Badge v-if="row.isOverdue" variant="destructive" class="rounded-lg text-[10px]">Overdue</Badge>
-                                                <Badge :variant="statusVariant(row.status)" class="max-w-[7rem] truncate rounded-lg text-[10px]">
-                                                    {{ row.status }}
-                                                </Badge>
+                            <div v-else class="max-h-[28rem] overflow-y-auto">
+                                <template v-for="(row, index) in queueRows" :key="row.id">
+                                    <!-- Group header: show when this row starts a new group -->
+                                    <div
+                                        v-if="row.group && (index === 0 || queueRows[index - 1]?.group !== row.group)"
+                                        class="sticky top-0 z-10 flex items-center gap-2 border-b bg-muted/60 px-4 py-1.5 backdrop-blur-sm"
+                                    >
+                                        <span class="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{{ row.group }}</span>
+                                        <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
+                                            {{ queueRows.filter((r) => r.group === row.group).length }}
+                                        </span>
+                                    </div>
+                                    <Link
+                                        :href="row.href"
+                                        class="group flex items-start gap-3 border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none"
+                                    >
+                                        <span
+                                            class="mt-1.5 size-2 shrink-0 rounded-full"
+                                            :class="
+                                                row.isOverdue
+                                                    ? 'bg-rose-500'
+                                                    : statusVariant(row.status) === 'destructive'
+                                                      ? 'bg-rose-500/80'
+                                                      : statusVariant(row.status) === 'default'
+                                                        ? 'bg-sky-500'
+                                                        : statusVariant(row.status) === 'secondary'
+                                                          ? 'bg-emerald-500'
+                                                          : 'bg-muted-foreground/40'
+                                            "
+                                            aria-hidden="true"
+                                        />
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-start justify-between gap-2">
+                                                <p class="truncate text-sm font-medium leading-snug">{{ row.title }}</p>
+                                                <div class="flex shrink-0 items-center gap-1">
+                                                    <Badge v-if="row.isOverdue" variant="destructive" class="rounded-lg text-[10px]">Overdue</Badge>
+                                                    <Badge :variant="statusVariant(row.status)" class="max-w-[7rem] truncate rounded-lg text-[10px]">
+                                                        {{ row.status }}
+                                                    </Badge>
+                                                </div>
+                                            </div>
+                                            <p class="mt-0.5 truncate text-xs text-muted-foreground">{{ row.subtitle }}</p>
+                                            <div class="mt-1 flex items-center justify-between gap-2">
+                                                <span class="text-[11px] text-muted-foreground">{{ row.meta }}</span>
+                                                <span class="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
+                                                    {{ row.actionLabel }}
+                                                    <AppIcon name="chevron-right" class="size-3" />
+                                                </span>
                                             </div>
                                         </div>
-                                        <p class="mt-0.5 truncate text-xs text-muted-foreground">{{ row.subtitle }}</p>
-                                        <div class="mt-1 flex items-center justify-between gap-2">
-                                            <span class="text-[11px] text-muted-foreground">{{ row.meta }}</span>
-                                            <span class="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
-                                                {{ row.actionLabel }}
-                                                <AppIcon name="chevron-right" class="size-3" />
-                                            </span>
-                                        </div>
-                                    </div>
-                                </Link>
+                                    </Link>
+                                </template>
                             </div>
                         </CardContent>
                     </Card>

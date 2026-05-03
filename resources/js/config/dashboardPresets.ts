@@ -7,6 +7,7 @@ export type DashboardPresetKey =
     | 'front_desk'
     | 'clinician'
     | 'nursing'
+    | 'emergency'
     | 'direct_service'
     | 'cashier'
     | 'admin';
@@ -44,6 +45,12 @@ export const DASHBOARD_DIRECT_SERVICE_ROLE_CODES: readonly string[] = [
     'HOSPITAL.RADIOLOGY.USER',
 ];
 
+export const DASHBOARD_EMERGENCY_ROLE_CODES: readonly string[] = [
+    'HOSPITAL.EMERGENCY.USER',
+    'HOSPITAL.EMERGENCY.NURSE',
+    'HOSPITAL.TRIAGE.USER',
+];
+
 export const DASHBOARD_FRONT_DESK_ROLE_CODES: readonly string[] = ['HOSPITAL.REGISTRATION.CLERK'];
 
 export const DASHBOARD_PRESETS = [
@@ -69,6 +76,13 @@ export const DASHBOARD_PRESETS = [
         modules: ['Triage', 'Admissions', 'Inpatient Ward'],
     },
     {
+        key: 'emergency',
+        label: 'Emergency',
+        description:
+            'Triage queue sorted by arrival time, stat orders, and real-time admission load for emergency and acute-care staff.',
+        modules: ['Triage', 'Admissions', 'Laboratory', 'Pharmacy'],
+    },
+    {
         key: 'direct_service',
         label: 'Direct Service',
         description:
@@ -92,6 +106,7 @@ export const DASHBOARD_PRESETS = [
 /** First match wins for Auto landing when multiple roles qualify. */
 export const DASHBOARD_PRESET_PRIORITY: readonly DashboardPresetKey[] = [
     'admin',
+    'emergency',
     'cashier',
     'clinician',
     'nursing',
@@ -143,10 +158,20 @@ export function eligibleDashboardPresets(input: InferDashboardPresetInput): Dash
         allow.add('nursing');
     }
     /*
+     * Emergency/triage users take the Emergency preset. They share inpatient.ward.read with nursing but
+     * must land on Emergency by default — the priority list handles auto-landing; the guard below prevents
+     * inpatient.ward.read alone from silently adding 'nursing' for emergency staff in the switcher.
+     */
+    const holdsEmergencyRole = presetMatchesRole(roleCodesUpper, DASHBOARD_EMERGENCY_ROLE_CODES);
+    if (holdsEmergencyRole) {
+        allow.add('emergency');
+    }
+    /*
      * Omit admissions.read alone: clerks/registrars need it for workflows but must not inherit the Nursing
      * dashboard (preset priority would also put nursing ahead of front_desk). Ward context is required.
+     * Also exclude emergency-role holders — they use the Emergency preset, not Nursing, as their home.
      */
-    if (hasPermission('inpatient.ward.read')) {
+    if (hasPermission('inpatient.ward.read') && !holdsEmergencyRole) {
         allow.add('nursing');
     }
     if (presetMatchesRole(roleCodesUpper, DASHBOARD_DIRECT_SERVICE_ROLE_CODES)) {
