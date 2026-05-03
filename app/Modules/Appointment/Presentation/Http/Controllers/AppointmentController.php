@@ -192,6 +192,7 @@ class AppointmentController extends Controller
                 id: $id,
                 triageVitalsSummary: trim($request->string('triageVitalsSummary')->value()),
                 triageNotes: $notes !== '' ? $notes : null,
+                triageCategory: $request->filled('triageCategory') ? strtoupper(trim((string) $request->input('triageCategory'))) : null,
                 actorId: $request->user()?->id,
             );
         } catch (TenantScopeRequiredForIsolationException $exception) {
@@ -681,6 +682,7 @@ class AppointmentController extends Controller
             'coverageNotes' => 'coverage_notes',
             'triageVitalsSummary' => 'triage_vitals_summary',
             'triageNotes' => 'triage_notes',
+            'appointmentType' => 'appointment_type',
         ];
 
         $payload = [];

@@ -21,6 +21,7 @@ class RecordAppointmentTriageRequest extends FormRequest
         return [
             'triageVitalsSummary' => ['required', 'string', 'max:4000'],
             'triageNotes' => ['nullable', 'string', 'max:4000'],
+            'triageCategory' => ['nullable', \Illuminate\Validation\Rule::in(['P1', 'P2', 'P3', 'P4', 'P5'])],
         ];
     }
 }

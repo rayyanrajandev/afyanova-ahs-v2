@@ -41,6 +41,7 @@ type QueueRow = {
     actionLabel: string;
     isOverdue?: boolean;
     group?: string;
+    triageCategory?: string | null;
 };
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/dashboard' }];
@@ -1068,15 +1069,20 @@ const queueRows = computed<QueueRow[]>(() => {
             const waitMs = arrivalTime ? now - new Date(arrivalTime).getTime() : 0;
             const waitMins = Math.max(0, Math.floor(waitMs / 60_000));
             const isOverdue = waitMins >= 30;
+            const cat = item.triageCategory ? String(item.triageCategory).toUpperCase() : null;
+            const typeLabel = item.appointmentType === 'walk_in' ? 'Walk-in' : null;
+            const subtitleParts = [item.department, item.reason].filter(Boolean);
+            if (typeLabel) subtitleParts.unshift(typeLabel);
             return {
                 id: String(item.id ?? item.appointmentNumber ?? Math.random()),
                 title: String(item.appointmentNumber ?? 'Walk-in / arrival'),
-                subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Awaiting triage assessment.',
-                meta: arrivalTime ? `Waiting ${waitMins}m` : 'Wait time unknown',
+                subtitle: subtitleParts.join(' | ') || 'Awaiting triage assessment.',
+                meta: arrivalTime ? `Waiting ${waitMins}m${cat ? ` · ${cat}` : ''}` : (cat ? cat : 'Wait time unknown'),
                 status: formatEnumLabel(String(item.status ?? 'checked_in')),
                 href: `/appointments?view=queue&status=checked_in&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${today}`,
                 actionLabel: 'Open triage',
                 isOverdue,
+                triageCategory: cat,
             };
         });
     }
@@ -2208,6 +2214,17 @@ function switchPreset(key: DashboardPresetKey): void {
                                             <div class="flex items-start justify-between gap-2">
                                                 <p class="truncate text-sm font-medium leading-snug">{{ row.title }}</p>
                                                 <div class="flex shrink-0 items-center gap-1">
+                                                    <Badge
+                                                        v-if="row.triageCategory"
+                                                        class="rounded-lg text-[10px]"
+                                                        :class="{
+                                                            'bg-red-600 text-white hover:bg-red-600': row.triageCategory === 'P1',
+                                                            'bg-orange-500 text-white hover:bg-orange-500': row.triageCategory === 'P2',
+                                                            'bg-amber-400 text-amber-950 hover:bg-amber-400': row.triageCategory === 'P3',
+                                                            'bg-sky-400 text-sky-950 hover:bg-sky-400': row.triageCategory === 'P4',
+                                                            'bg-emerald-400 text-emerald-950 hover:bg-emerald-400': row.triageCategory === 'P5',
+                                                        }"
+                                                    >{{ row.triageCategory }}</Badge>
                                                     <Badge v-if="row.isOverdue" variant="destructive" class="rounded-lg text-[10px]">Overdue</Badge>
                                                     <Badge :variant="statusVariant(row.status)" class="max-w-[7rem] truncate rounded-lg text-[10px]">
                                                         {{ row.status }}

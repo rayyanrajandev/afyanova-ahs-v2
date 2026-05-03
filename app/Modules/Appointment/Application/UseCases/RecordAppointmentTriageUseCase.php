@@ -16,7 +16,7 @@ class RecordAppointmentTriageUseCase
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
     ) {}
 
-    public function execute(string $id, string $triageVitalsSummary, ?string $triageNotes, ?int $actorId = null): ?array
+    public function execute(string $id, string $triageVitalsSummary, ?string $triageNotes, ?string $triageCategory = null, ?int $actorId = null): ?array
     {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
 
@@ -35,9 +35,16 @@ class RecordAppointmentTriageUseCase
             ]);
         }
 
+        $validCategories = ['P1', 'P2', 'P3', 'P4', 'P5'];
+        $normalizedCategory = $triageCategory !== null ? strtoupper(trim($triageCategory)) : null;
+        if ($normalizedCategory !== null && ! in_array($normalizedCategory, $validCategories, true)) {
+            $normalizedCategory = null;
+        }
+
         $updated = $this->appointmentRepository->update($id, [
             'triage_vitals_summary' => $triageVitalsSummary,
             'triage_notes' => $triageNotes,
+            'triage_category' => $normalizedCategory,
             'triaged_at' => now(),
             'triaged_by_user_id' => $actorId,
             'status' => AppointmentStatus::WAITING_PROVIDER->value,
@@ -74,6 +81,7 @@ class RecordAppointmentTriageUseCase
         $trackedFields = [
             'triage_vitals_summary',
             'triage_notes',
+            'triage_category',
             'triaged_at',
             'triaged_by_user_id',
             'status',

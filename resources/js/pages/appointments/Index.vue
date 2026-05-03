@@ -70,12 +70,14 @@ type Appointment = {
     durationMinutes: number | null;
     reason: string | null;
     notes: string | null;
+    appointmentType: string | null;
     financialClass: string | null;
     billingPayerContractId: string | null;
     coverageReference: string | null;
     coverageNotes: string | null;
     triageVitalsSummary: string | null;
     triageNotes: string | null;
+    triageCategory: string | null;
     triagedAt: string | null;
     triagedByUserId: number | null;
     consultationStartedAt: string | null;
@@ -441,6 +443,7 @@ const createForm = reactive({
     durationMinutes: initialCreatePrefill.durationMinutes || '30',
     reason: initialCreatePrefill.reason || '',
     notes: initialCreatePrefill.notes || '',
+    appointmentType: 'scheduled' as 'scheduled' | 'walk_in' | 'referral',
     financialClass: normalizeFinancialClass(initialCreatePrefill.financialClass),
     billingPayerContractId: initialCreatePrefill.billingPayerContractId || '',
     coverageReference: initialCreatePrefill.coverageReference || '',
@@ -512,6 +515,7 @@ const triageTargetAppointment = ref<Appointment | null>(null);
 const triageForm = reactive({
     triageVitalsSummary: '',
     triageNotes: '',
+    triageCategory: '' as '' | 'P1' | 'P2' | 'P3' | 'P4' | 'P5',
 });
 const rescheduleDialogOpen = ref(false);
 const rescheduleSubmitting = ref(false);
@@ -2556,6 +2560,7 @@ async function submitCreate(): Promise<void> {
                 durationMinutes: createForm.durationMinutes ? Number(createForm.durationMinutes) : null,
                 reason: createForm.reason || null,
                 notes: createForm.notes || null,
+                appointmentType: createForm.appointmentType || 'scheduled',
                 financialClass: createForm.financialClass || 'self_pay',
                 billingPayerContractId: createForm.billingPayerContractId || null,
                 coverageReference: createForm.coverageReference || null,
@@ -2662,6 +2667,7 @@ function openTriageSheet(appointment: Appointment): void {
     triageTargetAppointment.value = appointment;
     triageForm.triageVitalsSummary = appointment.triageVitalsSummary || '';
     triageForm.triageNotes = appointment.triageNotes || '';
+    triageForm.triageCategory = (appointment.triageCategory as '' | 'P1' | 'P2' | 'P3' | 'P4' | 'P5') || '';
     triageErrors.value = {};
     triageSheetOpen.value = true;
 }
@@ -2673,6 +2679,7 @@ function closeTriageSheet(): void {
     triageTargetAppointment.value = null;
     triageForm.triageVitalsSummary = '';
     triageForm.triageNotes = '';
+    triageForm.triageCategory = '';
 }
 
 async function submitTriage(): Promise<void> {
@@ -2696,6 +2703,7 @@ async function submitTriage(): Promise<void> {
                 body: {
                     triageVitalsSummary: triageForm.triageVitalsSummary.trim(),
                     triageNotes: triageForm.triageNotes.trim() || null,
+                    triageCategory: triageForm.triageCategory || null,
                 },
             },
         );
@@ -5103,6 +5111,34 @@ function submitSearch(): void {
                                     </div>
                                 </section>
 
+                                <!-- Visit type toggle: scheduled vs walk-in -->
+                                <section v-if="!createForm.sourceAdmissionId.trim()" class="space-y-3 border-t pt-5">
+                                    <p class="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Arrival type</p>
+                                    <div class="flex gap-2">
+                                        <button
+                                            type="button"
+                                            class="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border text-sm font-medium transition-colors"
+                                            :class="createForm.appointmentType === 'scheduled' ? 'border-primary bg-primary/5 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted/40'"
+                                            @click="createForm.appointmentType = 'scheduled'"
+                                        >
+                                            <AppIcon name="calendar" class="size-3.5" />
+                                            Scheduled
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border text-sm font-medium transition-colors"
+                                            :class="createForm.appointmentType === 'walk_in' ? 'border-primary bg-primary/5 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted/40'"
+                                            @click="createForm.appointmentType = 'walk_in'"
+                                        >
+                                            <AppIcon name="log-in" class="size-3.5" />
+                                            Walk-in
+                                        </button>
+                                    </div>
+                                    <p v-if="createForm.appointmentType === 'walk_in'" class="text-xs text-muted-foreground">
+                                        Walk-in arrivals are unscheduled. The scheduled time will be set to now and the visit will be counted separately in front-desk metrics.
+                                    </p>
+                                </section>
+
                                 <!-- Patient -->
                                 <section v-if="!createPatientLocked" class="space-y-3">
                                     <p class="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Patient</p>
@@ -6902,6 +6938,22 @@ function submitSearch(): void {
                                         This step should capture a brief vitals summary and any nursing intake note before the visit moves to provider review.
                                     </AlertDescription>
                                 </Alert>
+                                <div class="grid gap-2">
+                                    <Label for="appointment-triage-category">Triage category (MTS)</Label>
+                                    <select
+                                        id="appointment-triage-category"
+                                        v-model="triageForm.triageCategory"
+                                        class="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+                                    >
+                                        <option value="">Not assigned</option>
+                                        <option value="P1">P1 — Resuscitation (immediate)</option>
+                                        <option value="P2">P2 — Emergent (&le; 10 min)</option>
+                                        <option value="P3">P3 — Urgent (&le; 30 min)</option>
+                                        <option value="P4">P4 — Semi-urgent (&le; 60 min)</option>
+                                        <option value="P5">P5 — Non-urgent (&le; 120 min)</option>
+                                    </select>
+                                    <p v-if="triageFieldError('triageCategory')" class="text-sm text-destructive">{{ triageFieldError('triageCategory') }}</p>
+                                </div>
                                 <div class="grid gap-2">
                                     <Label for="appointment-triage-vitals">Vitals / intake summary</Label>
                                     <Textarea id="appointment-triage-vitals" v-model="triageForm.triageVitalsSummary" rows="4" placeholder="Example: BP 118/74, Pulse 82, Temp 37.1 C, complaint reviewed and stable for provider." />

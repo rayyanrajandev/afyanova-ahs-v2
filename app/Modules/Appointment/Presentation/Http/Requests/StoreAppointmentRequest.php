@@ -27,6 +27,7 @@ class StoreAppointmentRequest extends FormRequest
             'durationMinutes' => ['nullable', 'integer', 'min:5', 'max:480'],
             'reason' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:2000'],
+            'appointmentType' => ['nullable', \Illuminate\Validation\Rule::in(['scheduled', 'walk_in', 'referral'])],
             'financialClass' => ['nullable', Rule::in(FinancialCoverage::values())],
             'billingPayerContractId' => ['nullable', 'uuid', 'exists:billing_payer_contracts,id'],
             'coverageReference' => ['nullable', 'string', 'max:160'],
