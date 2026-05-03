@@ -35,6 +35,8 @@ use App\Modules\Platform\Presentation\Http\Controllers\PlatformClinicalCatalogCo
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformConfigurationController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformRbacController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformSubscriptionPlanController;
+use App\Modules\PatientVitals\Presentation\Http\Controllers\PatientVitalSetController;
+use App\Modules\Platform\Presentation\Http\Controllers\PlatformOperationalFlagController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformUserAdminController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformUserApprovalCaseController;
 use App\Modules\Pos\Presentation\Http\Controllers\PosController;
@@ -277,6 +279,15 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('platform/admin/ward-beds/{id}/audit-logs', [FacilityResourceRegistryController::class, 'wardBedAuditLogs'])
         ->middleware('can:platform.resources.view-audit-logs')
         ->name('platform.admin.ward-beds.audit-logs');
+
+    Route::get('platform/operational-flags', [PlatformOperationalFlagController::class, 'status'])
+        ->name('platform.operational-flags.status');
+    Route::post('platform/operational-flags/{flagType}/activate', [PlatformOperationalFlagController::class, 'activate'])
+        ->middleware('can:emergency.triage.update-status')
+        ->name('platform.operational-flags.activate');
+    Route::post('platform/operational-flags/{flagType}/deactivate', [PlatformOperationalFlagController::class, 'deactivate'])
+        ->middleware('can:emergency.triage.update-status')
+        ->name('platform.operational-flags.deactivate');
 
     Route::get('platform/admin/clinical-catalogs/lab-tests', [PlatformClinicalCatalogController::class, 'labTests'])
         ->middleware('can:platform.clinical-catalog.read')
@@ -1498,6 +1509,13 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('theatre-procedures/{id}/audit-logs', [TheatreProcedureController::class, 'auditLogs'])
         ->middleware('can:theatre.procedures.view-audit-logs')
         ->name('theatre-procedures.audit-logs');
+
+    Route::get('patient-vitals/overdue-summary', [PatientVitalSetController::class, 'overdueSummary'])
+        ->middleware('can:inpatient.ward.read')
+        ->name('patient-vitals.overdue-summary');
+    Route::post('patient-vitals', [PatientVitalSetController::class, 'store'])
+        ->middleware('can:inpatient.ward.create')
+        ->name('patient-vitals.store');
 
     Route::get('inpatient-ward/census', [InpatientWardController::class, 'census'])
         ->middleware('can:inpatient.ward.read')

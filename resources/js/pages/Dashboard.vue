@@ -487,6 +487,8 @@ async function loadDashboard(depth = 0): Promise<void> {
         billing: null,
         claimOpen: null,
         claimResolved: null,
+        operationalFlags: null,
+        vitalsOverdue: null,
     };
     lists.value = {
         scheduledAppointments: [],
@@ -594,6 +596,9 @@ async function loadDashboard(depth = 0): Promise<void> {
                         () => apiGet('/inpatient-ward/discharge-checklist-status-counts'),
                     ),
                 ],
+                ['vitalsOverdueCounts', () =>
+                    guardedRequest<ApiEnvelope<any>>('Vitals overdue summary', 'inpatient.ward.read', () => apiGet('/patient-vitals/overdue-summary')),
+                ],
                 [
                     'admissions',
                     () =>
@@ -635,6 +640,9 @@ async function loadDashboard(depth = 0): Promise<void> {
                 ],
                 ['wardBedCounts', () =>
                     guardedRequest<ApiEnvelope<any>>('Ward bed counts', 'platform.resources.view-ward-beds', () => apiGet('/platform/admin/ward-beds/status-counts')),
+                ],
+                ['operationalFlagsCounts', () =>
+                    safeRequest<ApiEnvelope<any>>('Operational flags', () => apiGet('/platform/operational-flags')),
                 ],
                 [
                     'checkedInAppointments',
@@ -718,6 +726,8 @@ async function loadDashboard(depth = 0): Promise<void> {
         claimResolved: bag.claimResolvedCounts?.data ?? null,
         emergencyTriageCases: bag.emergencyTriageCaseCounts?.data ?? null,
         wardBeds: bag.wardBedCounts?.data ?? null,
+        operationalFlags: bag.operationalFlagsCounts?.data ?? null,
+        vitalsOverdue: bag.vitalsOverdueCounts?.data ?? null,
     };
 
     lists.value = {
@@ -829,8 +839,8 @@ const kpis = computed(() => {
         return [
             metric('Waiting for triage', 'Checked-in patients pending nurse assessment.', 'users', numberValue(counts.value.appointments, 'checked_in')),
             metric('Admitted now', 'Current admitted census in scope.', 'bed-double', numberValue(counts.value.admissions, 'admitted')),
+            metric('Vitals overdue', 'Admitted patients with no vitals recorded in the last 4 hours.', 'activity', vitalsOverdueCount.value),
             metric('Escalated ward tasks', 'Ward follow-up items marked escalated.', 'alert-triangle', numberValue(counts.value.wardTasks, 'escalated')),
-            metric('Pending pharmacy orders', 'Pharmacy work that still needs completion.', 'pill', numberValue(counts.value.pharmacy, ['pending', 'in_preparation', 'partially_dispensed'])),
         ];
     }
     if (activePresetKey.value === 'emergency') {
@@ -1498,6 +1508,14 @@ const watchItems = computed(() => {
                 icon: 'users' as AppIconName,
             },
             {
+                label: 'Vitals overdue',
+                note: 'Admitted patients with no vitals recorded in the last 4 hours. Record vitals to clear.',
+                value: vitalsOverdueCount.value,
+                href: '/inpatient-ward',
+                actionLabel: 'Open inpatient ward',
+                icon: 'activity' as AppIconName,
+            },
+            {
                 label: 'Blocked discharge checklists',
                 note: 'Patients blocked from discharge — bed occupancy is held until resolved.',
                 value: numberValue(counts.value.wardDischargeChecklists, ['blocked', 'pending']),
@@ -1590,6 +1608,14 @@ const watchItems = computed(() => {
                 actionLabel: 'Open bed registry',
                 icon: 'bed-double' as AppIconName,
             },
+            ...(mciModeActive.value ? [{
+                label: 'MCI mode active',
+                note: 'Mass Casualty Incident protocols are active. Surge triage workflows apply — coordinate with the incident commander.',
+                value: null,
+                href: '#',
+                actionLabel: 'Incident active',
+                icon: 'alert-triangle' as AppIconName,
+            }] : []),
         ];
     }
 
@@ -1721,6 +1747,10 @@ const showShiftIntent = computed(
 const overdueQueueCount = computed(() => queueRows.value.filter((r) => r.isOverdue).length);
 
 const escalatedTaskCount = computed(() => Number(counts.value.wardTasks?.escalated ?? 0));
+
+const mciModeActive = computed(() => Boolean((counts.value.operationalFlags as any)?.mci_mode?.is_active));
+
+const vitalsOverdueCount = computed(() => Number((counts.value.vitalsOverdue as any)?.overdue_count ?? 0));
 
 const patientSearchQuery = ref('');
 
@@ -2115,6 +2145,19 @@ function switchPreset(key: DashboardPresetKey): void {
                         </AlertTitle>
                         <AlertDescription class="mt-1 text-xs">
                             Open the inpatient ward to review and acknowledge outstanding escalations before the next shift.
+                        </AlertDescription>
+                    </Alert>
+
+                    <Alert
+                        v-if="activePresetKey === 'emergency' && !loading && !refreshing && mciModeActive"
+                        class="rounded-lg border border-red-600/50 bg-red-600/10 py-2.5 text-red-900 dark:text-red-200"
+                    >
+                        <AppIcon name="alert-triangle" class="size-4 text-red-600" />
+                        <AlertTitle class="text-sm font-medium">
+                            MCI Mode Active — Mass Casualty Incident
+                        </AlertTitle>
+                        <AlertDescription class="mt-1 text-xs">
+                            Mass Casualty Incident protocols are active. Surge triage workflows apply. Coordinate with the incident commander before making individual disposition decisions.
                         </AlertDescription>
                     </Alert>
 
