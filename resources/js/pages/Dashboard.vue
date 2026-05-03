@@ -1460,21 +1460,26 @@ function switchPreset(key: DashboardPresetKey): void {
         <div class="dashboard-root flex h-full flex-1 flex-col gap-3 overflow-x-auto p-3 md:p-4 lg:p-5">
             <section class="rounded-lg border border-border bg-card shadow-sm" :aria-busy="refreshing">
                 <div class="flex flex-col gap-4 p-4 md:flex-row md:items-start md:justify-between md:gap-6">
-                    <div class="min-w-0 space-y-2">
-                        <div>
-                            <h1 class="text-lg font-semibold tracking-tight md:text-xl">Dashboard</h1>
-                            <p class="mt-1 max-w-2xl text-sm leading-snug text-muted-foreground">
-                                {{ activePreset.description }}
+                    <div class="flex min-w-0 gap-3">
+                        <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
+                            <AppIcon name="layout-grid" class="size-4" aria-hidden="true" />
+                        </div>
+                        <div class="min-w-0 space-y-2">
+                            <div>
+                                <h1 class="text-lg font-semibold tracking-tight md:text-xl">Dashboard</h1>
+                                <p class="mt-1 max-w-2xl text-sm leading-snug text-muted-foreground">
+                                    {{ activePreset.description }}
+                                </p>
+                            </div>
+                            <p class="text-xs leading-relaxed text-muted-foreground">
+                                <span class="font-medium text-foreground">{{ activePreset.label }}</span>
+                                <span class="mx-1.5 select-none text-border">·</span>
+                                <AppIcon name="building-2" class="inline size-3.5 align-text-bottom opacity-80" />
+                                <span class="ml-1 font-medium text-foreground">{{ currentFacilityLabel }}</span>
+                                <span class="mx-1.5 select-none text-border">·</span>
+                                <span>{{ currentTenantLabel }}</span>
                             </p>
                         </div>
-                        <p class="text-xs leading-relaxed text-muted-foreground">
-                            <span class="font-medium text-foreground">{{ activePreset.label }}</span>
-                            <span class="mx-1.5 select-none text-border">·</span>
-                            <AppIcon name="building-2" class="inline size-3.5 align-text-bottom opacity-80" />
-                            <span class="ml-1 font-medium text-foreground">{{ currentFacilityLabel }}</span>
-                            <span class="mx-1.5 select-none text-border">·</span>
-                            <span>{{ currentTenantLabel }}</span>
-                        </p>
                     </div>
 
                     <div class="flex w-full shrink-0 flex-col gap-2 md:w-auto md:items-end">
