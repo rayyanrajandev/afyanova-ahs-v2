@@ -168,6 +168,10 @@ class EloquentAppointmentRepository implements AppointmentRepositoryInterface
             ->when($fromDateTime, fn (Builder $builder, string $startDateTime) => $builder->where('scheduled_at', '>=', $startDateTime))
             ->when($toDateTime, fn (Builder $builder, string $endDateTime) => $builder->where('scheduled_at', '<=', $endDateTime));
 
+        // Clone the scoped+filtered builder before applying groupBy so we can
+        // run separate aggregations without reapplying all the filter logic.
+        $baseQuery = clone $queryBuilder;
+
         $rows = $queryBuilder
             ->selectRaw('status, COUNT(*) as aggregate')
             ->groupBy('status')
@@ -197,6 +201,30 @@ class EloquentAppointmentRepository implements AppointmentRepositoryInterface
 
             $counts['total'] += $aggregate;
         }
+
+        // checked_in is the frontend-facing alias for waiting_triage.
+        $counts['checked_in'] = $counts['waiting_triage'];
+
+        // Walk-in count: appointments that arrived without a prior booking.
+        $counts['walk_in'] = (int) (clone $baseQuery)
+            ->where('appointment_type', 'walk_in')
+            ->count();
+
+        // Triage category breakdown for emergency/triage dashboards.
+        $triageCategoryRows = (clone $baseQuery)
+            ->whereNotNull('triage_category')
+            ->selectRaw('triage_category, COUNT(*) as aggregate')
+            ->groupBy('triage_category')
+            ->get();
+
+        $triageCounts = ['P1' => 0, 'P2' => 0, 'P3' => 0, 'P4' => 0, 'P5' => 0];
+        foreach ($triageCategoryRows as $triageRow) {
+            $cat = strtoupper((string) $triageRow->triage_category);
+            if (array_key_exists($cat, $triageCounts)) {
+                $triageCounts[$cat] = (int) $triageRow->aggregate;
+            }
+        }
+        $counts['triage_categories'] = $triageCounts;
 
         return $counts;
     }

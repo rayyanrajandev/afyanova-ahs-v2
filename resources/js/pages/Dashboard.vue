@@ -792,7 +792,7 @@ const kpis = computed(() => {
             metric('Active patients', 'Patients currently active in the shared queue scope.', 'users', numberValue(counts.value.patients, 'active')),
             metric('Scheduled appointments', 'Appointments still scheduled for arrival.', 'calendar', numberValue(counts.value.appointments, 'scheduled')),
             metric('Checked-in handoff', 'Patients ready for upstream handoff.', 'calendar-clock', numberValue(counts.value.appointments, 'checked_in')),
-            metric('Active admissions', 'Patients currently admitted.', 'bed-double', numberValue(counts.value.admissions, 'admitted')),
+            metric('Walk-ins today', 'Unscheduled same-day arrivals registered at the front desk.', 'log-in', numberValue(counts.value.appointments, 'walk_in')),
         ];
     }
     if (activePresetKey.value === 'clinician') {
@@ -1516,6 +1516,22 @@ const watchItems = computed(() => {
                 href: `/appointments?view=queue&status=checked_in&from=${today}`,
                 actionLabel: 'Open triage queue',
                 icon: 'heart-pulse' as AppIconName,
+            },
+            {
+                label: 'P1 — Resuscitation',
+                note: 'Immediately life-threatening patients in triage. Requires instantaneous response.',
+                value: (counts.value.appointments?.triage_categories as any)?.P1 ?? 0,
+                href: `/appointments?view=queue&status=checked_in&triageCategory=P1&from=${today}`,
+                actionLabel: 'View P1 patients',
+                icon: 'alert-triangle' as AppIconName,
+            },
+            {
+                label: 'P2 — Emergent',
+                note: 'Very urgent patients. Clinical assessment target: within 10 minutes of check-in.',
+                value: (counts.value.appointments?.triage_categories as any)?.P2 ?? 0,
+                href: `/appointments?view=queue&status=checked_in&triageCategory=P2&from=${today}`,
+                actionLabel: 'View P2 patients',
+                icon: 'activity' as AppIconName,
             },
             {
                 label: 'Active admissions',
