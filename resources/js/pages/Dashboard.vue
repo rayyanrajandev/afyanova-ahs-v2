@@ -607,7 +607,7 @@ async function loadDashboard(depth = 0): Promise<void> {
                     'checkedInAppointments',
                     () =>
                         guardedRequest<ApiEnvelope<any>>('Checked-in appointments', 'appointments.read', () =>
-                            apiGet('/appointments', { status: 'checked_in', perPage: 5, sortBy: 'scheduledAt', sortDir: 'asc' }),
+                            apiGet('/appointments', { status: 'checked_in', perPage: 5, sortBy: 'checkedInAt', sortDir: 'asc' }),
                         ),
                 ],
             );
@@ -633,7 +633,7 @@ async function loadDashboard(depth = 0): Promise<void> {
                     'checkedInAppointments',
                     () =>
                         guardedRequest<ApiEnvelope<any>>('Triage queue', 'appointments.read', () =>
-                            apiGet('/appointments', { status: 'checked_in', perPage: 10, sortBy: 'scheduledAt', sortDir: 'asc' }),
+                            apiGet('/appointments', { status: 'checked_in', perPage: 10, sortBy: 'checkedInAt', sortDir: 'asc' }),
                         ),
                 ],
             );
@@ -886,9 +886,9 @@ const activityFeed = computed<ActivityEntry[]>(() => {
 const actions = computed(() => {
     if (activePresetKey.value === 'front_desk') {
         return [
-            { label: 'Register Patient', icon: 'user-plus', variant: 'default', href: '/patients' },
+            { label: 'Register Patient', icon: 'user', variant: 'default', href: '/patients' },
             { label: 'Today queue', icon: 'calendar-clock', variant: 'outline', href: `/appointments?view=queue&from=${today}` },
-            { label: 'Walk-in', icon: 'door-open', variant: 'outline', href: `/appointments?type=walkin&view=queue&from=${today}` },
+            { label: 'Walk-in', icon: 'log-in', variant: 'outline', href: `/appointments?type=walkin&view=queue&from=${today}` },
         ];
     }
     if (activePresetKey.value === 'clinician') {
@@ -991,7 +991,7 @@ const queueRows = computed<QueueRow[]>(() => {
             id: `triage-${String(item.id ?? item.appointmentNumber ?? Math.random())}`,
             title: String(item.appointmentNumber ?? 'Triage patient'),
             subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Checked-in and waiting for nurse assessment.',
-            meta: `Checked in ${formatDateTime(item.scheduledAt)}`,
+            meta: `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)}`,
             status: formatEnumLabel(String(item.status ?? 'checked_in')),
             href: `/appointments?view=queue&status=checked_in&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${today}`,
             actionLabel: 'Open triage queue',
@@ -1012,7 +1012,7 @@ const queueRows = computed<QueueRow[]>(() => {
         return [...triageItems, ...admissionItems];
     }
     if (activePresetKey.value === 'emergency') {
-        const now = Date.now();
+        const now = nowTick.value;
         return (lists.value.checkedInAppointments ?? []).slice(0, 10).map((item: any) => {
             const arrivalTime = item.checkedInAt ?? item.scheduledAt;
             const waitMs = arrivalTime ? now - new Date(arrivalTime).getTime() : 0;
