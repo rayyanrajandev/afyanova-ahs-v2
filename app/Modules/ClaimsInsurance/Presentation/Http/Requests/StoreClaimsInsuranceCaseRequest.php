@@ -21,7 +21,13 @@ class StoreClaimsInsuranceCaseRequest extends FormRequest
             'invoiceId' => ['required', 'uuid'],
             'payerType' => ['required', Rule::in($this->payerTypeValues())],
             'payerName' => ['nullable', 'string', 'max:120'],
+            'payerPlanName' => ['nullable', 'string', 'max:160'],
             'payerReference' => ['nullable', 'string', 'max:120'],
+            'patientInsuranceRecordId' => ['nullable', 'uuid'],
+            'memberId' => ['nullable', 'string', 'max:120'],
+            'policyNumber' => ['nullable', 'string', 'max:120'],
+            'cardNumber' => ['nullable', 'string', 'max:120'],
+            'verificationReference' => ['nullable', 'string', 'max:160'],
             'submittedAt' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:5000'],
         ];

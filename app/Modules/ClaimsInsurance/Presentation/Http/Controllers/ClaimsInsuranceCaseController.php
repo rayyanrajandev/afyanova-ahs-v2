@@ -249,7 +249,13 @@ class ClaimsInsuranceCaseController extends Controller
             'invoiceId' => 'invoice_id',
             'payerType' => 'payer_type',
             'payerName' => 'payer_name',
+            'payerPlanName' => 'payer_plan_name',
             'payerReference' => 'payer_reference',
+            'patientInsuranceRecordId' => 'patient_insurance_record_id',
+            'memberId' => 'member_id',
+            'policyNumber' => 'policy_number',
+            'cardNumber' => 'card_number',
+            'verificationReference' => 'verification_reference',
             'submittedAt' => 'submitted_at',
             'notes' => 'notes',
         ];

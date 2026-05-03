@@ -77,6 +77,8 @@ class UpdateClaimsInsuranceCaseUseCase
             if (! isset($payload['payer_reference']) || trim((string) $payload['payer_reference']) === '') {
                 $payload['payer_reference'] = $this->resolvePayerReference($invoice);
             }
+            $payload['payer_plan_name'] ??= $this->payerSummary($invoice)['payerPlanName'] ?? null;
+            $payload['claim_readiness'] = $this->invoiceClaimReadiness($invoice);
         } elseif (array_key_exists('submitted_at', $payload) && $payload['submitted_at'] !== null) {
             $existingInvoiceId = is_string($existing['invoice_id'] ?? null)
                 ? trim((string) $existing['invoice_id'])
@@ -284,11 +286,18 @@ class UpdateClaimsInsuranceCaseUseCase
         $trackedFields = [
             'invoice_id',
             'patient_id',
+            'patient_insurance_record_id',
             'admission_id',
             'appointment_id',
             'payer_type',
             'payer_name',
+            'payer_plan_name',
             'payer_reference',
+            'member_id',
+            'policy_number',
+            'card_number',
+            'verification_reference',
+            'claim_readiness',
             'claim_amount',
             'currency_code',
             'submitted_at',

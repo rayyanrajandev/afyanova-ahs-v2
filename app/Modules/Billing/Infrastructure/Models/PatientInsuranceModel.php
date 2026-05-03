@@ -20,18 +20,33 @@ class PatientInsuranceModel extends Model
      * @var array<int, string>
      */
     protected $fillable = [
+        'tenant_id',
+        'facility_id',
         'patient_id',
+        'billing_payer_contract_id',
         'insurance_type',
         'insurance_provider',
+        'provider_code',
+        'plan_name',
         'policy_number',
         'member_id',
+        'principal_member_name',
+        'relationship_to_principal',
+        'card_number',
         'effective_date',
         'expiry_date',
         'coverage_level',
+        'copay_percent',
+        'coverage_limit_amount',
         'status',
+        'verification_status',
         'verification_date',
+        'verification_source',
+        'verification_reference',
+        'last_verified_at',
         'verified_by_user_id',
         'notes',
+        'metadata',
     ];
 
     /**
@@ -42,7 +57,11 @@ class PatientInsuranceModel extends Model
         return [
             'effective_date' => 'datetime',
             'expiry_date' => 'datetime',
+            'copay_percent' => 'decimal:2',
+            'coverage_limit_amount' => 'decimal:2',
             'verification_date' => 'datetime',
+            'last_verified_at' => 'datetime',
+            'metadata' => 'array',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];

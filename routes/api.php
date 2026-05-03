@@ -11,6 +11,7 @@ use App\Modules\Billing\Presentation\Http\Controllers\BillingInvoiceController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingPayerContractController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingPaymentPlanController;
 use App\Modules\Billing\Presentation\Http\Controllers\BillingServiceCatalogController;
+use App\Modules\Billing\Presentation\Http\Controllers\PatientInsuranceController;
 use App\Modules\ClaimsInsurance\Presentation\Http\Controllers\ClaimsInsuranceCaseController;
 use App\Modules\Department\Presentation\Http\Controllers\DepartmentController;
 use App\Modules\EmergencyTriage\Presentation\Http\Controllers\EmergencyTriageCaseController;
@@ -498,6 +499,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::post('patients', [PatientController::class, 'store'])
         ->middleware(['can:patients.create', 'facility.entitlement:patients.registration'])
         ->name('patients.store');
+    Route::get('patients/insurance-options', [PatientInsuranceController::class, 'options'])
+        ->middleware(['can:patients.insurance.read', 'facility.entitlement:patients.search'])
+        ->name('patients.insurance.options');
     Route::get('patients/{id}', [PatientController::class, 'show'])
         ->middleware(['can:patients.read', 'facility.entitlement:patients.search'])
         ->name('patients.show');
@@ -513,6 +517,24 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('patients/{id}/audit-logs', [PatientController::class, 'auditLogs'])
         ->middleware(['can:patients.view-audit-logs', 'facility.entitlement:patients.search'])
         ->name('patients.audit-logs');
+    Route::get('patients/{id}/insurance', [PatientInsuranceController::class, 'index'])
+        ->middleware(['can:patients.insurance.read', 'facility.entitlement:patients.search'])
+        ->name('patients.insurance.index');
+    Route::post('patients/{id}/insurance', [PatientInsuranceController::class, 'store'])
+        ->middleware(['can:patients.insurance.manage', 'facility.entitlement:patients.demographics'])
+        ->name('patients.insurance.store');
+    Route::patch('patients/{id}/insurance/{recordId}', [PatientInsuranceController::class, 'update'])
+        ->middleware(['can:patients.insurance.manage', 'facility.entitlement:patients.demographics'])
+        ->name('patients.insurance.update');
+    Route::patch('patients/{id}/insurance/{recordId}/verify', [PatientInsuranceController::class, 'verify'])
+        ->middleware(['can:patients.insurance.verify', 'facility.entitlement:patients.demographics'])
+        ->name('patients.insurance.verify');
+    Route::delete('patients/{id}/insurance/{recordId}', [PatientInsuranceController::class, 'destroy'])
+        ->middleware(['can:patients.insurance.manage', 'facility.entitlement:patients.demographics'])
+        ->name('patients.insurance.destroy');
+    Route::get('patients/{id}/insurance/audit-events', [PatientInsuranceController::class, 'auditEvents'])
+        ->middleware(['can:patients.insurance.view-audit-logs', 'facility.entitlement:patients.search'])
+        ->name('patients.insurance.audit-events');
     Route::get('patients/{id}/allergies', [PatientMedicationSafetyController::class, 'allergies'])
         ->middleware(['can:patients.read', 'facility.entitlement:patients.search'])
         ->name('patients.allergies.index');

@@ -10,6 +10,11 @@ interface PatientInsuranceRepositoryInterface
     public function findActiveInsurance(string $patientId, string $tenantId): ?array;
 
     /**
+     * Find insurance record by id
+     */
+    public function findById(string $id): ?array;
+
+    /**
      * Create patient insurance record
      */
     public function create(array $data): array;
@@ -18,6 +23,11 @@ interface PatientInsuranceRepositoryInterface
      * Update patient insurance record
      */
     public function update(string $id, array $data): array;
+
+    /**
+     * Delete patient insurance record
+     */
+    public function delete(string $id): bool;
 
     /**
      * Find all insurance records for a patient

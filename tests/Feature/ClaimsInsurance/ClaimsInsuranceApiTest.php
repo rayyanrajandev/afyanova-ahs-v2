@@ -1,13 +1,19 @@
 <?php
 
 use App\Models\User;
+use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
 use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
+use App\Modules\Billing\Infrastructure\Models\PatientInsuranceModel;
 use App\Modules\ClaimsInsurance\Infrastructure\Models\ClaimsInsuranceCaseAuditLogModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+});
 
 function makeClaimsInsuranceUser(array $permissions = []): User
 {
@@ -109,6 +115,55 @@ it('creates claim case with invoice financial snapshot and pending reconciliatio
         ->assertJsonPath('data.claimAmount', '95000.00')
         ->assertJsonPath('data.currencyCode', 'TZS')
         ->assertJsonPath('data.reconciliationStatus', 'pending');
+});
+
+it('enriches claim case from patient insurance record', function (): void {
+    $user = makeClaimsInsuranceUser(['claims.insurance.create']);
+    $context = createPatientAndInvoiceForClaim(95000, 'TZS', [
+        'pricing_context' => [
+            'payerSummary' => [
+                'payerType' => 'insurance',
+                'payerName' => 'NHIF',
+                'payerPlanName' => 'Standard',
+                'expectedPayerAmount' => 95000,
+                'requiresPreAuthorization' => false,
+            ],
+            'claimReadiness' => [
+                'claimEligible' => true,
+                'ready' => true,
+                'blockingReasons' => [],
+            ],
+        ],
+    ]);
+    $record = PatientInsuranceModel::query()->create([
+        'patient_id' => $context['id'],
+        'insurance_type' => 'insurance',
+        'insurance_provider' => 'NHIF',
+        'plan_name' => 'Standard',
+        'member_id' => 'NHIF-12345',
+        'policy_number' => 'POL-2026-1',
+        'card_number' => 'CARD-12345',
+        'verification_reference' => 'VRF-001',
+        'effective_date' => now()->subDay(),
+        'status' => 'active',
+        'verification_status' => 'verified',
+    ]);
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/claims-insurance', [
+            'invoiceId' => $context['invoiceId'],
+            'payerType' => 'insurance',
+            'payerName' => 'NHIF',
+            'patientInsuranceRecordId' => $record->id,
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.patientInsuranceRecordId', $record->id)
+        ->assertJsonPath('data.payerPlanName', 'Standard')
+        ->assertJsonPath('data.memberId', 'NHIF-12345')
+        ->assertJsonPath('data.policyNumber', 'POL-2026-1')
+        ->assertJsonPath('data.cardNumber', 'CARD-12345')
+        ->assertJsonPath('data.verificationReference', 'VRF-001')
+        ->assertJsonPath('data.claimReadiness.verificationStatus', 'verified');
 });
 
 it('defaults claim currency from active country profile when invoice currency is missing', function (): void {

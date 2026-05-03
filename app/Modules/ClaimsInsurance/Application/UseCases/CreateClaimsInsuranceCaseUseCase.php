@@ -2,6 +2,7 @@
 
 namespace App\Modules\ClaimsInsurance\Application\UseCases;
 
+use App\Modules\Billing\Domain\Repositories\PatientInsuranceRepositoryInterface;
 use App\Modules\ClaimsInsurance\Application\Exceptions\InvoiceNotEligibleForClaimsInsuranceCaseException;
 use App\Modules\ClaimsInsurance\Domain\Repositories\ClaimsInsuranceCaseAuditLogRepositoryInterface;
 use App\Modules\ClaimsInsurance\Domain\Repositories\ClaimsInsuranceCaseRepositoryInterface;
@@ -18,6 +19,7 @@ class CreateClaimsInsuranceCaseUseCase
     public function __construct(
         private readonly ClaimsInsuranceCaseAuditLogRepositoryInterface $auditLogRepository,
         private readonly ClaimsInsuranceCaseRepositoryInterface $claimsInsuranceCaseRepository,
+        private readonly PatientInsuranceRepositoryInterface $patientInsuranceRepository,
         private readonly BillingInvoiceLookupServiceInterface $billingInvoiceLookupService,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly DefaultCurrencyResolverInterface $defaultCurrencyResolver,
@@ -67,6 +69,14 @@ class CreateClaimsInsuranceCaseUseCase
         if (! isset($payload['payer_reference']) || trim((string) $payload['payer_reference']) === '') {
             $payload['payer_reference'] = $this->resolvePayerReference($invoice);
         }
+        $patientInsurance = $this->resolvePatientInsurance($patientId, $payload);
+        $claimReadiness = $this->invoiceClaimReadiness($invoice);
+        $payload = $this->enrichInsuranceClaimPayload(
+            payload: $payload,
+            invoice: $invoice,
+            patientInsurance: $patientInsurance,
+            claimReadiness: $claimReadiness,
+        );
         $payload['status'] = array_key_exists('submitted_at', $payload) && $payload['submitted_at'] !== null
             ? ClaimsInsuranceCaseStatus::SUBMITTED->value
             : ClaimsInsuranceCaseStatus::DRAFT->value;
@@ -112,11 +122,18 @@ class CreateClaimsInsuranceCaseUseCase
             'facility_id',
             'invoice_id',
             'patient_id',
+            'patient_insurance_record_id',
             'admission_id',
             'appointment_id',
             'payer_type',
             'payer_name',
+            'payer_plan_name',
             'payer_reference',
+            'member_id',
+            'policy_number',
+            'card_number',
+            'verification_reference',
+            'claim_readiness',
             'claim_amount',
             'currency_code',
             'submitted_at',
@@ -270,6 +287,58 @@ class CreateClaimsInsuranceCaseUseCase
         $coverageReference = $this->normalizeNullableText($visitCoverage['coverageReference'] ?? null);
 
         return $coverageReference;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function resolvePatientInsurance(string $patientId, array $payload): ?array
+    {
+        $requestedInsuranceId = $this->normalizeNullableText($payload['patient_insurance_record_id'] ?? null);
+        if ($requestedInsuranceId !== null) {
+            $record = $this->patientInsuranceRepository->findById($requestedInsuranceId);
+
+            return ($record['patient_id'] ?? null) === $patientId ? $record : null;
+        }
+
+        $tenantId = (string) ($this->platformScopeContext->tenantId() ?? '');
+
+        return $this->patientInsuranceRepository->findActiveInsurance($patientId, $tenantId);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, mixed>  $invoice
+     * @param  array<string, mixed>|null  $patientInsurance
+     * @param  array<string, mixed>  $claimReadiness
+     * @return array<string, mixed>
+     */
+    private function enrichInsuranceClaimPayload(
+        array $payload,
+        array $invoice,
+        ?array $patientInsurance,
+        array $claimReadiness,
+    ): array {
+        $pricingContext = $this->pricingContext($invoice);
+        $payerSummary = $this->payerSummary($invoice);
+
+        $payload['patient_insurance_record_id'] ??= $patientInsurance['id'] ?? null;
+        $payload['payer_plan_name'] ??= $payerSummary['payerPlanName'] ?? $patientInsurance['plan_name'] ?? null;
+        $payload['member_id'] ??= $patientInsurance['member_id'] ?? null;
+        $payload['policy_number'] ??= $patientInsurance['policy_number'] ?? null;
+        $payload['card_number'] ??= $patientInsurance['card_number'] ?? null;
+        $payload['verification_reference'] ??= $patientInsurance['verification_reference'] ?? null;
+        $payload['claim_readiness'] = [
+            ...$claimReadiness,
+            'patientInsuranceRecordId' => $payload['patient_insurance_record_id'] ?? null,
+            'verificationStatus' => $patientInsurance['verification_status'] ?? null,
+            'payerSummary' => $payerSummary,
+            'visitCoverage' => is_array($pricingContext['visitCoverage'] ?? null)
+                ? $pricingContext['visitCoverage']
+                : null,
+        ];
+
+        return $payload;
     }
 
     /**

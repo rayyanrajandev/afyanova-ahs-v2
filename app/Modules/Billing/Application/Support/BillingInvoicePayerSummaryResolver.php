@@ -193,6 +193,7 @@ class BillingInvoicePayerSummaryResolver
             'settlementPath' => 'payer_contract',
             'payerType' => $this->normalizeNullableString($payerContract['payer_type'] ?? null) ?? 'other',
             'payerName' => $this->normalizeNullableString($payerContract['payer_name'] ?? null),
+            'payerPlanName' => $this->normalizeNullableString($payerContract['payer_plan_name'] ?? null),
             'contractId' => $payerContract['id'] ?? null,
             'contractCode' => $this->normalizeNullableString($payerContract['contract_code'] ?? null),
             'contractName' => $this->normalizeNullableString($payerContract['contract_name'] ?? null),

@@ -270,6 +270,64 @@ type PatientAuditLogListResponse = {
     };
 };
 
+type PatientInsuranceRecord = {
+    id: string;
+    billingPayerContractId: string | null;
+    insuranceType: string | null;
+    insuranceProvider: string | null;
+    providerCode: string | null;
+    planName: string | null;
+    policyNumber: string | null;
+    memberId: string | null;
+    principalMemberName: string | null;
+    relationshipToPrincipal: string | null;
+    cardNumber: string | null;
+    effectiveDate: string | null;
+    expiryDate: string | null;
+    coverageLevel: string | null;
+    copayPercent: string | number | null;
+    coverageLimitAmount: string | number | null;
+    status: string | null;
+    verificationStatus: string | null;
+    verificationReference: string | null;
+    lastVerifiedAt: string | null;
+};
+
+type PatientInsuranceListResponse = {
+    data: PatientInsuranceRecord[];
+};
+
+type PatientInsuranceOptionResponse = {
+    data: {
+        providerPresets: Array<{ code: string; name: string; category: string }>;
+        payerContracts: Array<{
+            id: string;
+            contractCode: string | null;
+            contractName: string | null;
+            payerName: string | null;
+            payerPlanName: string | null;
+        }>;
+    };
+};
+
+type PatientInsuranceForm = {
+    billingPayerContractId: string;
+    insuranceType: string;
+    insuranceProvider: string;
+    providerCode: string;
+    planName: string;
+    policyNumber: string;
+    memberId: string;
+    cardNumber: string;
+    effectiveDate: string;
+    expiryDate: string;
+    coverageLevel: string;
+    copayPercent: string;
+    verificationStatus: string;
+    verificationReference: string;
+    notes: string;
+};
+
 type ValidationErrorResponse = {
     message?: string;
     errors?: Record<string, string[]>;
@@ -576,6 +634,9 @@ const canCreateBillingInvoices = ref(hasPermission('billing.invoices.create'));
 const canCreatePatients = ref(hasPermission('patients.create'));
 const canUpdatePatients = ref(hasPermission('patients.update'));
 const canUpdatePatientStatus = ref(hasPermission('patients.update-status'));
+const canReadPatientInsurance = ref(hasPermission('patients.insurance.read'));
+const canManagePatientInsurance = ref(hasPermission('patients.insurance.manage'));
+const canVerifyPatientInsurance = ref(hasPermission('patients.insurance.verify'));
 const canRecordOpdTriage = ref(
     hasPermission('emergency.triage.create') || hasPermission('emergency.triage.update-status'),
 );
@@ -648,6 +709,31 @@ const detailsAuditFilters = reactive({
     to: '',
     page: 1,
     perPage: 20,
+});
+const detailsInsuranceLoading = ref(false);
+const detailsInsuranceSaving = ref(false);
+const detailsInsuranceOptionsLoading = ref(false);
+const detailsInsuranceError = ref<string | null>(null);
+const detailsInsuranceRecords = ref<PatientInsuranceRecord[]>([]);
+const patientInsuranceProviderPresets = ref<PatientInsuranceOptionResponse['data']['providerPresets']>([]);
+const patientInsurancePayerContracts = ref<PatientInsuranceOptionResponse['data']['payerContracts']>([]);
+const insuranceFormOpen = ref(false);
+const insuranceForm = reactive<PatientInsuranceForm>({
+    billingPayerContractId: '',
+    insuranceType: 'insurance',
+    insuranceProvider: '',
+    providerCode: '',
+    planName: '',
+    policyNumber: '',
+    memberId: '',
+    cardNumber: '',
+    effectiveDate: '',
+    expiryDate: '',
+    coverageLevel: '',
+    copayPercent: '',
+    verificationStatus: 'unverified',
+    verificationReference: '',
+    notes: '',
 });
 
 function normalizeCountryCode(value: string | null | undefined): string {
@@ -2360,6 +2446,8 @@ function openPatientDetailsSheet(patient: Patient) {
     detailsSheetOpen.value = true;
     detailsSheetTab.value = 'overview';
     void loadPatientTimeline(patient);
+    void loadPatientInsurance(patient.id);
+    void loadPatientInsuranceOptions();
     detailsAuditLogs.value = [];
     detailsAuditMeta.value = null;
     detailsAuditError.value = null;
@@ -2372,6 +2460,9 @@ function openPatientDetailsSheet(patient: Patient) {
     detailsAuditFilters.to = '';
     detailsAuditFilters.page = 1;
     detailsAuditFilters.perPage = 20;
+    resetInsuranceForm();
+    detailsInsuranceRecords.value = [];
+    detailsInsuranceError.value = null;
 }
 
 function closePatientDetailsSheet() {
@@ -2383,6 +2474,149 @@ function closePatientDetailsSheet() {
     detailsAuditLogs.value = [];
     detailsAuditMeta.value = null;
     detailsAuditError.value = null;
+    detailsInsuranceRecords.value = [];
+    detailsInsuranceError.value = null;
+    insuranceFormOpen.value = false;
+}
+
+const activePatientInsuranceRecord = computed(() =>
+    detailsInsuranceRecords.value.find((record) => (record.status ?? '').toLowerCase() === 'active') ?? null,
+);
+
+function resetInsuranceForm() {
+    insuranceForm.billingPayerContractId = '';
+    insuranceForm.insuranceType = 'insurance';
+    insuranceForm.insuranceProvider = '';
+    insuranceForm.providerCode = '';
+    insuranceForm.planName = '';
+    insuranceForm.policyNumber = '';
+    insuranceForm.memberId = '';
+    insuranceForm.cardNumber = '';
+    insuranceForm.effectiveDate = '';
+    insuranceForm.expiryDate = '';
+    insuranceForm.coverageLevel = '';
+    insuranceForm.copayPercent = '';
+    insuranceForm.verificationStatus = 'unverified';
+    insuranceForm.verificationReference = '';
+    insuranceForm.notes = '';
+}
+
+async function loadPatientInsurance(patientId: string) {
+    if (!canReadPatientInsurance.value) {
+        detailsInsuranceRecords.value = [];
+        return;
+    }
+
+    detailsInsuranceLoading.value = true;
+    detailsInsuranceError.value = null;
+    try {
+        const response = await apiRequest<PatientInsuranceListResponse>('GET', `/patients/${patientId}/insurance`);
+        detailsInsuranceRecords.value = response.data ?? [];
+    } catch (error) {
+        detailsInsuranceRecords.value = [];
+        detailsInsuranceError.value = messageFromUnknown(error, 'Unable to load patient insurance.');
+    } finally {
+        detailsInsuranceLoading.value = false;
+    }
+}
+
+async function loadPatientInsuranceOptions() {
+    if (!canReadPatientInsurance.value || patientInsuranceProviderPresets.value.length > 0) return;
+
+    detailsInsuranceOptionsLoading.value = true;
+    try {
+        const response = await apiRequest<PatientInsuranceOptionResponse>('GET', '/patients/insurance-options');
+        patientInsuranceProviderPresets.value = response.data?.providerPresets ?? [];
+        patientInsurancePayerContracts.value = response.data?.payerContracts ?? [];
+    } catch {
+        patientInsuranceProviderPresets.value = [];
+        patientInsurancePayerContracts.value = [];
+    } finally {
+        detailsInsuranceOptionsLoading.value = false;
+    }
+}
+
+function applyInsuranceProviderPreset(code: string | undefined) {
+    const normalized = code ?? '';
+    insuranceForm.providerCode = normalized;
+    const preset = patientInsuranceProviderPresets.value.find((option) => option.code === normalized);
+    if (preset) {
+        insuranceForm.insuranceProvider = preset.name;
+    }
+}
+
+function applyInsurancePayerContract(id: string | undefined) {
+    const normalized = id ?? '';
+    insuranceForm.billingPayerContractId = normalized;
+    const contract = patientInsurancePayerContracts.value.find((option) => option.id === normalized);
+    if (!contract) return;
+
+    insuranceForm.insuranceProvider = contract.payerName ?? insuranceForm.insuranceProvider;
+    insuranceForm.planName = contract.payerPlanName ?? insuranceForm.planName;
+}
+
+async function submitPatientInsurance() {
+    if (!detailsSheetPatient.value || detailsInsuranceSaving.value) return;
+
+    detailsInsuranceSaving.value = true;
+    detailsInsuranceError.value = null;
+    try {
+        await apiRequest<{ data: PatientInsuranceRecord }>('POST', `/patients/${detailsSheetPatient.value.id}/insurance`, {
+            body: {
+                billingPayerContractId: insuranceForm.billingPayerContractId || null,
+                insuranceType: insuranceForm.insuranceType,
+                insuranceProvider: insuranceForm.insuranceProvider,
+                providerCode: insuranceForm.providerCode || null,
+                planName: insuranceForm.planName || null,
+                policyNumber: insuranceForm.policyNumber || null,
+                memberId: insuranceForm.memberId,
+                cardNumber: insuranceForm.cardNumber || null,
+                effectiveDate: insuranceForm.effectiveDate || null,
+                expiryDate: insuranceForm.expiryDate || null,
+                coverageLevel: insuranceForm.coverageLevel || null,
+                copayPercent: insuranceForm.copayPercent || null,
+                verificationStatus: insuranceForm.verificationStatus,
+                verificationReference: insuranceForm.verificationReference || null,
+                notes: insuranceForm.notes || null,
+            },
+        });
+        notifySuccess('Patient insurance saved.');
+        resetInsuranceForm();
+        insuranceFormOpen.value = false;
+        await loadPatientInsurance(detailsSheetPatient.value.id);
+    } catch (error) {
+        detailsInsuranceError.value = messageFromUnknown(error, 'Unable to save patient insurance.');
+        notifyError(detailsInsuranceError.value);
+    } finally {
+        detailsInsuranceSaving.value = false;
+    }
+}
+
+async function verifyPatientInsurance(record: PatientInsuranceRecord) {
+    if (!detailsSheetPatient.value || detailsInsuranceSaving.value) return;
+
+    detailsInsuranceSaving.value = true;
+    detailsInsuranceError.value = null;
+    try {
+        await apiRequest<{ data: PatientInsuranceRecord }>(
+            'PATCH',
+            `/patients/${detailsSheetPatient.value.id}/insurance/${record.id}/verify`,
+            {
+                body: {
+                    verificationStatus: 'verified',
+                    verificationSource: 'manual',
+                    verificationReference: record.verificationReference || null,
+                },
+            },
+        );
+        notifySuccess('Insurance verification updated.');
+        await loadPatientInsurance(detailsSheetPatient.value.id);
+    } catch (error) {
+        detailsInsuranceError.value = messageFromUnknown(error, 'Unable to verify insurance.');
+        notifyError(detailsInsuranceError.value);
+    } finally {
+        detailsInsuranceSaving.value = false;
+    }
 }
 
 function formatDate(value: string | null): string {
@@ -2680,6 +2914,9 @@ async function loadPatientPermissions() {
         canCreatePatients.value = names.has('patients.create');
         canUpdatePatients.value = names.has('patients.update');
         canUpdatePatientStatus.value = names.has('patients.update-status');
+        canReadPatientInsurance.value = names.has('patients.insurance.read');
+        canManagePatientInsurance.value = names.has('patients.insurance.manage');
+        canVerifyPatientInsurance.value = names.has('patients.insurance.verify');
         canRecordOpdTriage.value =
             names.has('emergency.triage.create') || names.has('emergency.triage.update-status');
         canCreateLaboratoryOrders.value = names.has('laboratory.orders.create');
@@ -2699,6 +2936,9 @@ async function loadPatientPermissions() {
         canCreatePatients.value = false;
         canUpdatePatients.value = false;
         canUpdatePatientStatus.value = false;
+        canReadPatientInsurance.value = false;
+        canManagePatientInsurance.value = false;
+        canVerifyPatientInsurance.value = false;
         canRecordOpdTriage.value = false;
         canCreateLaboratoryOrders.value = false;
         canCreatePharmacyOrders.value = false;
@@ -5790,6 +6030,204 @@ onMounted(initialPageLoad);
                                                 <div class="flex items-center justify-between gap-4 py-2 sm:pl-4">
                                                     <span class="shrink-0 text-muted-foreground">Phone</span>
                                                     <span class="font-medium">{{ detailsSheetPatient.nextOfKinPhone || 'Not recorded' }}</span>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+
+                                        <Card v-if="canReadPatientInsurance" class="rounded-lg !gap-0 overflow-hidden">
+                                            <CardHeader class="bg-muted/40 px-4 py-2.5">
+                                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                                    <div>
+                                                        <CardTitle class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                                            <AppIcon name="shield-check" class="size-3.5" />
+                                                            Insurance Coverage
+                                                        </CardTitle>
+                                                        <CardDescription class="mt-1 text-xs">
+                                                            Patient policy, member, verification, and payer contract mapping.
+                                                        </CardDescription>
+                                                    </div>
+                                                    <Button
+                                                        v-if="canManagePatientInsurance"
+                                                        size="sm"
+                                                        variant="outline"
+                                                        class="h-8 gap-1.5 text-xs"
+                                                        @click="insuranceFormOpen = !insuranceFormOpen"
+                                                    >
+                                                        <AppIcon :name="insuranceFormOpen ? 'x' : 'plus'" class="size-3.5" />
+                                                        {{ insuranceFormOpen ? 'Close' : 'Add Insurance' }}
+                                                    </Button>
+                                                </div>
+                                            </CardHeader>
+                                            <CardContent class="space-y-3 px-4 py-3">
+                                                <Alert v-if="detailsInsuranceError" variant="destructive">
+                                                    <AlertTitle>Insurance unavailable</AlertTitle>
+                                                    <AlertDescription>{{ detailsInsuranceError }}</AlertDescription>
+                                                </Alert>
+
+                                                <div v-if="detailsInsuranceLoading" class="space-y-2">
+                                                    <Skeleton class="h-16 w-full" />
+                                                    <Skeleton class="h-16 w-full" />
+                                                </div>
+
+                                                <div
+                                                    v-else-if="detailsInsuranceRecords.length === 0"
+                                                    class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground"
+                                                >
+                                                    No insurance record is linked to this patient yet.
+                                                </div>
+
+                                                <div v-else class="space-y-2">
+                                                    <div
+                                                        v-for="record in detailsInsuranceRecords"
+                                                        :key="record.id"
+                                                        class="rounded-lg border bg-background p-3"
+                                                    >
+                                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                                            <div class="min-w-0">
+                                                                <div class="flex flex-wrap items-center gap-2">
+                                                                    <p class="font-medium text-sm">
+                                                                        {{ record.insuranceProvider || 'Insurance provider' }}
+                                                                    </p>
+                                                                    <Badge :variant="record.status === 'active' ? 'secondary' : 'outline'" class="capitalize">
+                                                                        {{ record.status || 'unknown' }}
+                                                                    </Badge>
+                                                                    <Badge
+                                                                        :variant="record.verificationStatus === 'verified' ? 'secondary' : 'outline'"
+                                                                        class="capitalize"
+                                                                    >
+                                                                        {{ record.verificationStatus || 'unverified' }}
+                                                                    </Badge>
+                                                                </div>
+                                                                <p class="mt-1 text-xs text-muted-foreground">
+                                                                    {{ record.planName || 'Plan not recorded' }}
+                                                                    <span v-if="record.memberId"> · Member {{ record.memberId }}</span>
+                                                                    <span v-if="record.cardNumber"> · Card {{ record.cardNumber }}</span>
+                                                                </p>
+                                                                <p class="mt-1 text-xs text-muted-foreground">
+                                                                    Policy {{ record.policyNumber || 'not recorded' }}
+                                                                    <span v-if="record.expiryDate"> · Expires {{ formatDate(record.expiryDate) }}</span>
+                                                                </p>
+                                                            </div>
+                                                            <Button
+                                                                v-if="canVerifyPatientInsurance && record.verificationStatus !== 'verified'"
+                                                                size="sm"
+                                                                variant="outline"
+                                                                class="h-8 gap-1.5 text-xs"
+                                                                :disabled="detailsInsuranceSaving"
+                                                                @click="verifyPatientInsurance(record)"
+                                                            >
+                                                                <AppIcon name="badge-check" class="size-3.5" />
+                                                                Mark verified
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div v-if="activePatientInsuranceRecord" class="rounded-lg border bg-primary/5 p-3 text-xs text-muted-foreground">
+                                                    Active coverage routes billing to
+                                                    <span class="font-medium text-foreground">
+                                                        {{ activePatientInsuranceRecord.insuranceProvider || 'the mapped payer' }}
+                                                    </span>
+                                                    when a valid payer contract is configured.
+                                                </div>
+
+                                                <div v-if="insuranceFormOpen && canManagePatientInsurance" class="rounded-lg border bg-muted/20 p-3">
+                                                    <div class="grid gap-3 md:grid-cols-2">
+                                                        <div class="space-y-1.5">
+                                                            <Label>Provider preset</Label>
+                                                            <Select
+                                                                :model-value="insuranceForm.providerCode || undefined"
+                                                                :disabled="detailsInsuranceOptionsLoading"
+                                                                @update:model-value="applyInsuranceProviderPreset(String($event || ''))"
+                                                            >
+                                                                <SelectTrigger class="w-full">
+                                                                    <SelectValue placeholder="Select provider" />
+                                                                </SelectTrigger>
+                                                                <SelectContent class="z-[80]">
+                                                                    <SelectItem
+                                                                        v-for="preset in patientInsuranceProviderPresets"
+                                                                        :key="preset.code"
+                                                                        :value="preset.code"
+                                                                    >
+                                                                        {{ preset.name }}
+                                                                    </SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                        <div class="space-y-1.5">
+                                                            <Label>Payer contract</Label>
+                                                            <Select
+                                                                :model-value="insuranceForm.billingPayerContractId || SELECT_NONE_VALUE"
+                                                                :disabled="detailsInsuranceOptionsLoading"
+                                                                @update:model-value="applyInsurancePayerContract(String($event) === SELECT_NONE_VALUE ? '' : String($event || ''))"
+                                                            >
+                                                                <SelectTrigger class="w-full">
+                                                                    <SelectValue placeholder="Link payer contract" />
+                                                                </SelectTrigger>
+                                                                <SelectContent class="z-[80]">
+                                                                    <SelectItem :value="SELECT_NONE_VALUE">No contract selected</SelectItem>
+                                                                    <SelectItem
+                                                                        v-for="contract in patientInsurancePayerContracts"
+                                                                        :key="contract.id"
+                                                                        :value="contract.id"
+                                                                    >
+                                                                        {{ contract.payerName || contract.contractName || contract.contractCode }}
+                                                                    </SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                        <div class="space-y-1.5">
+                                                            <Label>Provider name</Label>
+                                                            <Input v-model="insuranceForm.insuranceProvider" placeholder="NHIF, UHI, private insurer" />
+                                                        </div>
+                                                        <div class="space-y-1.5">
+                                                            <Label>Plan name</Label>
+                                                            <Input v-model="insuranceForm.planName" placeholder="Optional plan name" />
+                                                        </div>
+                                                        <div class="space-y-1.5">
+                                                            <Label>Member ID</Label>
+                                                            <Input v-model="insuranceForm.memberId" placeholder="Member or beneficiary ID" />
+                                                        </div>
+                                                        <div class="space-y-1.5">
+                                                            <Label>Card number</Label>
+                                                            <Input v-model="insuranceForm.cardNumber" placeholder="Insurance card number" />
+                                                        </div>
+                                                        <div class="space-y-1.5">
+                                                            <Label>Policy number</Label>
+                                                            <Input v-model="insuranceForm.policyNumber" placeholder="Policy number" />
+                                                        </div>
+                                                        <div class="space-y-1.5">
+                                                            <Label>Verification reference</Label>
+                                                            <Input v-model="insuranceForm.verificationReference" placeholder="Verification or approval reference" />
+                                                        </div>
+                                                        <div class="space-y-1.5">
+                                                            <Label>Effective date</Label>
+                                                            <Input v-model="insuranceForm.effectiveDate" type="date" />
+                                                        </div>
+                                                        <div class="space-y-1.5">
+                                                            <Label>Expiry date</Label>
+                                                            <Input v-model="insuranceForm.expiryDate" type="date" />
+                                                        </div>
+                                                    </div>
+                                                    <div class="mt-3 flex justify-end gap-2">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            :disabled="detailsInsuranceSaving"
+                                                            @click="resetInsuranceForm"
+                                                        >
+                                                            Reset
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            class="gap-1.5"
+                                                            :disabled="detailsInsuranceSaving || !insuranceForm.insuranceProvider.trim() || !insuranceForm.memberId.trim()"
+                                                            @click="submitPatientInsurance"
+                                                        >
+                                                            <AppIcon name="save" class="size-3.5" />
+                                                            Save insurance
+                                                        </Button>
+                                                    </div>
                                                 </div>
                                             </CardContent>
                                         </Card>
