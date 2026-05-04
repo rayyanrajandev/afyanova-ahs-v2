@@ -5878,7 +5878,7 @@ onMounted(initialPageLoad);
                                 </template>
 
                                 <div
-                                    v-else
+                                    v-else-if="!visitHandoffEmergencyNeedsTriageStaff"
                                     class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
                                 >
                                     <div class="space-y-1">
