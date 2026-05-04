@@ -2266,17 +2266,20 @@ function switchPreset(key: DashboardPresetKey): void {
                         </CardHeader>
                         <CardContent class="p-0">
                             <!-- Loading skeleton -->
-                            <div v-if="loading" class="space-y-px p-3">
+                            <div v-if="loading" class="divide-y">
                                 <div
-                                    v-for="index in 3"
-                                    :key="index"
-                                    class="flex items-start gap-3 rounded-lg p-2.5"
+                                    v-for="n in 5"
+                                    :key="`sk-q-${n}`"
+                                    class="flex items-start gap-3 px-4 py-3.5"
                                 >
-                                    <Skeleton class="mt-0.5 size-8 shrink-0 rounded-lg" />
-                                    <div class="flex-1 space-y-1.5">
-                                        <Skeleton class="h-3.5 w-36 rounded" />
-                                        <Skeleton class="h-3 w-full rounded" />
-                                        <Skeleton class="h-3 w-1/2 rounded" />
+                                    <div class="mt-0.5 size-2 shrink-0 animate-pulse rounded-full bg-muted" />
+                                    <div class="min-w-0 flex-1 space-y-2">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <div class="h-3.5 w-32 animate-pulse rounded bg-muted" />
+                                            <div class="h-5 w-16 animate-pulse rounded-full bg-muted" />
+                                        </div>
+                                        <div class="h-3 w-3/4 animate-pulse rounded bg-muted" />
+                                        <div class="h-3 w-1/2 animate-pulse rounded bg-muted" />
                                     </div>
                                 </div>
                             </div>
@@ -2284,15 +2287,15 @@ function switchPreset(key: DashboardPresetKey): void {
                             <!-- Empty state -->
                             <div
                                 v-else-if="queueRows.length === 0"
-                                class="flex flex-col items-center justify-center gap-2 px-6 py-6 text-center"
+                                class="flex flex-col items-center justify-center gap-3 px-4 py-12 text-center"
                             >
-                                <span class="flex size-12 items-center justify-center rounded-full bg-emerald-500/10">
-                                    <AppIcon name="check-circle" class="size-6 text-emerald-600 dark:text-emerald-400" />
-                                </span>
-                                <p class="mt-1 text-sm font-medium text-foreground">Queue is clear</p>
-                                <p class="max-w-xs text-xs text-muted-foreground">
-                                    No items in this queue. Switch workflow preset or use the quick actions above to open a worklist.
-                                </p>
+                                <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                    <AppIcon name="check-circle" class="size-5 text-muted-foreground/40" />
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-muted-foreground">Queue is clear</p>
+                                    <p class="mt-0.5 text-xs text-muted-foreground/70">No items to action right now. Switch workflow preset or use the quick actions above to open a worklist.</p>
+                                </div>
                             </div>
 
                             <!-- Queue rows -->
@@ -2370,6 +2373,18 @@ function switchPreset(key: DashboardPresetKey): void {
 
                     <!-- Shift stat chips — top-level numbers at a glance -->
                     <div class="grid grid-cols-3 gap-3">
+                        <!-- Skeleton -->
+                        <template v-if="loading">
+                            <div
+                                v-for="n in 3"
+                                :key="`sk-chip-${n}`"
+                                class="rounded-lg border border-border bg-card p-3 text-center shadow-sm"
+                            >
+                                <div class="mx-auto h-2.5 w-16 animate-pulse rounded bg-muted" />
+                                <div class="mx-auto mt-2 h-7 w-12 animate-pulse rounded-lg bg-muted" />
+                            </div>
+                        </template>
+                        <template v-else>
                         <div
                             v-for="chip in handoff.chips"
                             :key="chip.label"
@@ -2380,6 +2395,7 @@ function switchPreset(key: DashboardPresetKey): void {
                                 {{ chip.value === null ? '—' : chip.value.toLocaleString() }}
                             </p>
                         </div>
+                        </template>
                     </div>
 
                     <!-- Two-column: handoff card | operational watch -->
@@ -2394,6 +2410,24 @@ function switchPreset(key: DashboardPresetKey): void {
                                 </CardDescription>
                             </CardHeader>
                             <CardContent class="space-y-3 pt-3">
+                                <!-- Skeleton -->
+                                <template v-if="loading">
+                                    <div class="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                                        <div class="h-2 w-24 animate-pulse rounded bg-amber-500/30" />
+                                        <div class="h-4 w-3/4 animate-pulse rounded bg-muted" />
+                                        <div class="h-3 w-full animate-pulse rounded bg-muted" />
+                                    </div>
+                                    <div class="space-y-2 rounded-lg border bg-muted/25 p-3">
+                                        <div class="h-2 w-32 animate-pulse rounded bg-muted" />
+                                        <div class="h-3 w-full animate-pulse rounded bg-muted" />
+                                        <div class="h-3 w-2/3 animate-pulse rounded bg-muted" />
+                                        <div class="mt-1 flex gap-2">
+                                            <div class="h-8 w-24 animate-pulse rounded-lg bg-muted" />
+                                            <div class="h-8 w-24 animate-pulse rounded-lg bg-muted" />
+                                        </div>
+                                    </div>
+                                </template>
+                                <template v-else>
                                 <!-- Current blocker -->
                                 <div class="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
                                     <p class="text-[10px] font-semibold uppercase tracking-widest text-amber-700 dark:text-amber-400">
@@ -2418,6 +2452,7 @@ function switchPreset(key: DashboardPresetKey): void {
                                         </Button>
                                     </div>
                                 </div>
+                                </template>
                             </CardContent>
                         </Card>
 
@@ -2428,6 +2463,25 @@ function switchPreset(key: DashboardPresetKey): void {
                                 <CardDescription class="mt-0.5 text-xs">Cross-checks for this workspace.</CardDescription>
                             </CardHeader>
                             <CardContent class="divide-y p-0">
+                                <!-- Skeleton -->
+                                <template v-if="loading">
+                                    <div
+                                        v-for="n in 3"
+                                        :key="`sk-watch-${n}`"
+                                        class="flex items-start gap-3 px-4 py-3"
+                                    >
+                                        <div class="mt-0.5 size-8 shrink-0 animate-pulse rounded-lg bg-muted" />
+                                        <div class="min-w-0 flex-1 space-y-2">
+                                            <div class="flex items-center justify-between gap-2">
+                                                <div class="h-3.5 w-32 animate-pulse rounded bg-muted" />
+                                                <div class="h-5 w-8 animate-pulse rounded-lg bg-muted" />
+                                            </div>
+                                            <div class="h-3 w-4/5 animate-pulse rounded bg-muted" />
+                                            <div class="h-3 w-20 animate-pulse rounded bg-muted" />
+                                        </div>
+                                    </div>
+                                </template>
+                                <template v-else>
                                 <div
                                     v-for="item in watchItems"
                                     :key="item.label"
@@ -2456,6 +2510,7 @@ function switchPreset(key: DashboardPresetKey): void {
                                         </Link>
                                     </div>
                                 </div>
+                                </template>
                             </CardContent>
                         </Card>
                     </div>
@@ -2477,6 +2532,16 @@ function switchPreset(key: DashboardPresetKey): void {
                             </Badge>
                         </CardHeader>
                         <CardContent class="pt-3">
+                            <!-- Skeleton -->
+                            <template v-if="loading">
+                                <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                                    <div v-for="n in 4" :key="`sk-sys-${n}`" class="rounded-lg border bg-muted/20 p-2.5">
+                                        <div class="h-2 w-20 animate-pulse rounded bg-muted" />
+                                        <div class="mt-1.5 h-4 w-16 animate-pulse rounded bg-muted" />
+                                    </div>
+                                </div>
+                            </template>
+                            <template v-else>
                             <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                                 <div class="rounded-lg border bg-muted/20 p-2.5">
                                     <p class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Resolved from</p>
@@ -2536,6 +2601,7 @@ function switchPreset(key: DashboardPresetKey): void {
                                     <p class="mt-0.5 text-xs font-medium text-foreground">{{ AUTO_REFRESH_LABEL[autoRefreshInterval] }}</p>
                                 </div>
                             </div>
+                            </template>
                         </CardContent>
                     </Card>
 
@@ -2557,15 +2623,36 @@ function switchPreset(key: DashboardPresetKey): void {
                             </Button>
                         </CardHeader>
                         <CardContent class="p-0">
-                            <div
-                                v-if="activityFeed.length === 0"
-                                class="flex flex-col items-center justify-center gap-2 px-6 py-8 text-center"
-                            >
-                                <span class="flex size-10 items-center justify-center rounded-full bg-emerald-500/10">
-                                    <AppIcon name="check-circle" class="size-5 text-emerald-600 dark:text-emerald-400" />
-                                </span>
-                                <p class="text-xs text-muted-foreground">No export failures in the recent window.</p>
+                            <!-- Skeleton -->
+                            <div v-if="loading" class="divide-y">
+                                <div
+                                    v-for="n in 3"
+                                    :key="`sk-act-${n}`"
+                                    class="flex items-start gap-3 px-4 py-3"
+                                >
+                                    <div class="mt-0.5 size-7 shrink-0 animate-pulse rounded-lg bg-muted" />
+                                    <div class="min-w-0 flex-1 space-y-2">
+                                        <div class="h-3.5 w-1/2 animate-pulse rounded bg-muted" />
+                                        <div class="h-3 w-3/4 animate-pulse rounded bg-muted" />
+                                        <div class="h-3 w-1/3 animate-pulse rounded bg-muted" />
+                                    </div>
+                                </div>
                             </div>
+
+                            <!-- Empty state -->
+                            <div
+                                v-else-if="activityFeed.length === 0"
+                                class="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center"
+                            >
+                                <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                    <AppIcon name="check-circle" class="size-5 text-muted-foreground/40" />
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-muted-foreground">No export failures</p>
+                                    <p class="mt-0.5 text-xs text-muted-foreground/70">No audit export failures recorded in the recent window.</p>
+                                </div>
+                            </div>
+
                             <ul v-else class="divide-y">
                                 <li
                                     v-for="entry in activityFeed"
