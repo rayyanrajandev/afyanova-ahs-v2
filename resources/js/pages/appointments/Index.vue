@@ -1446,6 +1446,41 @@ function presetDotClass(preset: WorkspacePreset): string {
     }
 }
 
+// Emergency priority helpers
+function rowBorderClass(appointment: Appointment): string {
+    if (appointment.triageCategory === 'P1') return 'border-l-destructive';
+    if (appointment.triageCategory === 'P2') return 'border-l-orange-500';
+    return statusRowBorderClass(appointment.status);
+}
+
+function emergencyRowBgClass(appointment: Appointment): string {
+    if (appointment.triageCategory === 'P1') return 'bg-destructive/5 dark:bg-destructive/10';
+    if (appointment.triageCategory === 'P2') return 'bg-orange-500/5 dark:bg-orange-500/10';
+    return '';
+}
+
+function triageCategoryBadgeClass(cat: string | null | undefined): string {
+    switch (cat) {
+        case 'P1': return 'bg-destructive text-destructive-foreground';
+        case 'P2': return 'bg-orange-500 text-white dark:bg-orange-600';
+        case 'P3': return 'bg-amber-500 text-white dark:bg-amber-600';
+        case 'P4': return 'bg-sky-500 text-white dark:bg-sky-600';
+        case 'P5': return 'bg-muted text-muted-foreground';
+        default: return 'bg-muted text-muted-foreground';
+    }
+}
+
+function triageCategoryLabel(cat: string | null | undefined): string {
+    switch (cat) {
+        case 'P1': return 'P1 · Immediate';
+        case 'P2': return 'P2 · Emergent';
+        case 'P3': return 'P3 · Urgent';
+        case 'P4': return 'P4 · Less urgent';
+        case 'P5': return 'P5 · Non-urgent';
+        default: return '';
+    }
+}
+
 function statusVariant(status: string | null | undefined) {
     switch (status) {
         case 'waiting_provider':
@@ -4671,7 +4706,7 @@ function submitSearch(): void {
                                     v-for="appointment in appointments"
                                     :key="appointment.id"
                                     class="rounded-lg border border-l-[3px] transition-colors"
-                                    :class="[compactQueueRows ? 'p-2.5' : 'p-3', statusRowBorderClass(appointment.status)]"
+                                    :class="[compactQueueRows ? 'p-2.5' : 'p-3', rowBorderClass(appointment), emergencyRowBgClass(appointment)]"
                                 >
                                     <div
                                         :class="compactQueueRows
@@ -4685,6 +4720,22 @@ function submitSearch(): void {
                                                 </p>
                                                 <Badge :variant="statusVariant(appointment.status)">
                                                     {{ formatEnumLabel(appointment.status || 'scheduled') }}
+                                                </Badge>
+                                                <!-- Triage category badge: visible for all triaged patients, red/orange for P1/P2 -->
+                                                <span
+                                                    v-if="appointment.triageCategory"
+                                                    class="inline-flex h-5 items-center rounded-full px-2 text-[10px] font-semibold leading-none"
+                                                    :class="triageCategoryBadgeClass(appointment.triageCategory)"
+                                                >
+                                                    {{ triageCategoryLabel(appointment.triageCategory) }}
+                                                </span>
+                                                <!-- Walk-in badge: shown before triage when no category yet assigned -->
+                                                <Badge
+                                                    v-else-if="appointment.appointmentType === 'walk_in'"
+                                                    variant="outline"
+                                                    class="h-5 border-amber-500/50 px-1.5 text-[10px] text-amber-600 dark:border-amber-700/50 dark:text-amber-400"
+                                                >
+                                                    Walk-in
                                                 </Badge>
                                             </div>
                                             <p class="text-sm font-medium text-foreground">
