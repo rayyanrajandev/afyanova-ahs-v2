@@ -668,6 +668,114 @@ const preSubmitDuplicateCheckLoading = ref(false);
 const preSubmitDuplicateCheckError = ref<string | null>(null);
 const preSubmitDuplicateMatches = ref<Patient[]>([]);
 const preSubmitDuplicateConfirmed = ref(false);
+
+// ── Draft auto-save ────────────────────────────────────────────────────────
+const DRAFT_STORAGE_KEY = 'ptReg_draft_v1';
+const DRAFT_TTL_MS = 24 * 60 * 60 * 1000; // 24 h
+type DraftSaveStatus = 'idle' | 'saving' | 'saved';
+const draftSaveStatus = ref<DraftSaveStatus>('idle');
+const draftSavedAt = ref<Date | null>(null);
+const draftResumeVisible = ref(false);
+let draftSaveTimer: number | null = null;
+
+function draftSavedRelative(): string {
+    if (!draftSavedAt.value) return '';
+    const diffMs = Date.now() - draftSavedAt.value.getTime();
+    const mins = Math.floor(diffMs / 60_000);
+    if (mins < 1) return 'just now';
+    if (mins === 1) return '1 min ago';
+    return `${mins} min ago`;
+}
+
+function saveDraftToStorage(): void {
+    // nationalId excluded — most sensitive unique identifier
+    const draft = {
+        savedAt: Date.now(),
+        birthInputMode: registrationBirthInputMode.value,
+        form: {
+            firstName: registrationForm.firstName,
+            middleName: registrationForm.middleName,
+            lastName: registrationForm.lastName,
+            gender: registrationForm.gender,
+            dateOfBirth: registrationForm.dateOfBirth,
+            ageYears: registrationForm.ageYears,
+            ageMonths: registrationForm.ageMonths,
+            phone: registrationForm.phone,
+            email: registrationForm.email,
+            countryCode: registrationForm.countryCode,
+            region: registrationForm.region,
+            district: registrationForm.district,
+            addressLine: registrationForm.addressLine,
+            nextOfKinName: registrationForm.nextOfKinName,
+            nextOfKinPhone: registrationForm.nextOfKinPhone,
+        },
+    };
+    try {
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+        draftSavedAt.value = new Date();
+        draftSaveStatus.value = 'saved';
+    } catch {
+        // localStorage unavailable (private browsing quota, etc.) — silent fail
+        draftSaveStatus.value = 'idle';
+    }
+}
+
+function loadDraftFromStorage(): { form: Partial<PatientRegistrationForm>; birthInputMode: RegistrationBirthInputMode } | null {
+    try {
+        const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as { savedAt?: number; birthInputMode?: string; form?: Partial<PatientRegistrationForm> };
+        if (!parsed.savedAt || Date.now() - parsed.savedAt > DRAFT_TTL_MS) {
+            localStorage.removeItem(DRAFT_STORAGE_KEY);
+            return null;
+        }
+        return {
+            form: parsed.form ?? {},
+            birthInputMode: (parsed.birthInputMode === 'exact' || parsed.birthInputMode === 'estimated')
+                ? parsed.birthInputMode
+                : 'estimated',
+        };
+    } catch {
+        return null;
+    }
+}
+
+function clearDraftFromStorage(): void {
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+    draftSaveStatus.value = 'idle';
+    draftSavedAt.value = null;
+    draftResumeVisible.value = false;
+}
+
+function scheduleDraftSave(): void {
+    draftSaveStatus.value = 'saving';
+    if (draftSaveTimer !== null) window.clearTimeout(draftSaveTimer);
+    draftSaveTimer = window.setTimeout(() => {
+        saveDraftToStorage();
+        draftSaveTimer = null;
+    }, 1500);
+}
+
+function applyDraftToForm(draft: { form: Partial<PatientRegistrationForm>; birthInputMode: RegistrationBirthInputMode }): void {
+    const f = draft.form;
+    registrationBirthInputMode.value = draft.birthInputMode;
+    if (f.firstName !== undefined) registrationForm.firstName = f.firstName;
+    if (f.middleName !== undefined) registrationForm.middleName = f.middleName;
+    if (f.lastName !== undefined) registrationForm.lastName = f.lastName;
+    if (f.gender !== undefined) registrationForm.gender = f.gender;
+    if (f.dateOfBirth !== undefined) registrationForm.dateOfBirth = f.dateOfBirth;
+    if (f.ageYears !== undefined) registrationForm.ageYears = f.ageYears;
+    if (f.ageMonths !== undefined) registrationForm.ageMonths = f.ageMonths;
+    if (f.phone !== undefined) registrationForm.phone = f.phone;
+    if (f.email !== undefined) registrationForm.email = f.email;
+    if (f.countryCode !== undefined) registrationForm.countryCode = f.countryCode;
+    if (f.region !== undefined) registrationForm.region = f.region;
+    if (f.district !== undefined) registrationForm.district = f.district;
+    if (f.addressLine !== undefined) registrationForm.addressLine = f.addressLine;
+    if (f.nextOfKinName !== undefined) registrationForm.nextOfKinName = f.nextOfKinName;
+    if (f.nextOfKinPhone !== undefined) registrationForm.nextOfKinPhone = f.nextOfKinPhone;
+}
+// ── End draft auto-save ────────────────────────────────────────────────────
 const postRegistrationDialogOpen = ref(false);
 const postRegistrationPatient = ref<Patient | null>(null);
 const visitHandoffSheetOpen = ref(false);
@@ -3246,8 +3354,28 @@ function openRegistrationDialog() {
 
     resetCreateMessages();
     clearPreSubmitDuplicateState();
-    resetRegistrationForm();
+
+    const draft = loadDraftFromStorage();
+    if (draft) {
+        // Open with blank form first, then show the resume prompt inside the sheet
+        resetRegistrationForm();
+        draftResumeVisible.value = true;
+    } else {
+        resetRegistrationForm();
+    }
+
     registerDialogOpen.value = true;
+}
+
+function resumeDraft(): void {
+    const draft = loadDraftFromStorage();
+    if (draft) applyDraftToForm(draft);
+    draftResumeVisible.value = false;
+}
+
+function discardDraft(): void {
+    clearDraftFromStorage();
+    draftResumeVisible.value = false;
 }
 
 function closePostRegistrationDialog() {
@@ -3751,12 +3879,12 @@ async function createPatient() {
         postRegistrationDialogOpen.value = true;
 
         resetRegistrationForm();
+        clearDraftFromStorage();
         clearPreSubmitDuplicateState();
 
         registerDialogOpen.value = false;
         searchForm.page = 1;
         await Promise.all([loadPatients(), loadPatientStatusCounts()]);
-    } catch (error) {
         const apiError = error as Error & { status?: number; payload?: unknown };
 
         // Backend duplicate guard — extract matches and show the same confirmation UI
@@ -4186,6 +4314,22 @@ watch(
     },
 );
 
+// Draft auto-save: trigger on any registration form change while the sheet is open
+watch(
+    () => ({ ...registrationForm, _mode: registrationBirthInputMode.value }),
+    () => {
+        if (!registerDialogOpen.value) return;
+        // Only save if at least one meaningful field has content
+        const hasContent =
+            registrationForm.firstName.trim() !== '' ||
+            registrationForm.lastName.trim() !== '' ||
+            registrationForm.phone.trim() !== '';
+        if (!hasContent) return;
+        scheduleDraftSave();
+    },
+    { deep: true },
+);
+
 watch(
     () => normalizeCountryCode(editForm.countryCode),
     (value, previousValue) => {
@@ -4252,6 +4396,9 @@ watch(
 );
 
 onBeforeUnmount(clearSearchDebounce);
+onBeforeUnmount(() => {
+    if (draftSaveTimer !== null) window.clearTimeout(draftSaveTimer);
+});
 
 onMounted(initialPageLoad);
 </script>
@@ -4706,6 +4853,24 @@ onMounted(initialPageLoad);
                         {{ tW2('dialog.registerDescription') }}
                     </SheetDescription>
                 </SheetHeader>
+
+                <!-- Draft resume prompt ────────────────────────────────── -->
+                <div
+                    v-if="draftResumeVisible"
+                    class="-mt-px shrink-0 border-b bg-amber-500/5 px-6 py-3"
+                >
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium text-amber-700 dark:text-amber-400">Resume previous draft?</p>
+                            <p class="mt-0.5 text-xs text-muted-foreground">You have an unsaved registration from earlier. Resume it or start fresh.</p>
+                        </div>
+                        <div class="flex shrink-0 gap-2">
+                            <Button size="sm" variant="outline" class="h-7 px-2.5 text-xs" @click="discardDraft">Discard</Button>
+                            <Button size="sm" class="h-7 px-2.5 text-xs" @click="resumeDraft">Resume</Button>
+                        </div>
+                    </div>
+                </div>
+                <!-- End draft resume prompt ─────────────────────────────── -->
 
                 <ScrollArea class="min-h-0 flex-1">
                     <div class="grid gap-4 px-6 py-4 pb-8">
@@ -5182,9 +5347,17 @@ onMounted(initialPageLoad);
 
                 <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
                     <div class="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <p class="text-xs text-muted-foreground">
-                            {{ registrationPatientNamePreview }} | {{ registrationRequiredReadiness.complete }}/{{ registrationRequiredReadiness.total }} required fields ready
-                        </p>
+                        <div class="flex flex-col gap-0.5">
+                            <p class="text-xs text-muted-foreground">
+                                {{ registrationPatientNamePreview }} | {{ registrationRequiredReadiness.complete }}/{{ registrationRequiredReadiness.total }} required fields ready
+                            </p>
+                            <p v-if="draftSaveStatus === 'saving'" class="text-xs text-muted-foreground/70">
+                                Saving draft…
+                            </p>
+                            <p v-else-if="draftSaveStatus === 'saved'" class="text-xs text-muted-foreground/70">
+                                Draft saved {{ draftSavedRelative() }}
+                            </p>
+                        </div>
                         <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
                             <Button
                                 size="sm"
