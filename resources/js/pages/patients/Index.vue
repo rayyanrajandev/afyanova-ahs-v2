@@ -6380,15 +6380,15 @@ onMounted(initialPageLoad);
                                                     <div>
                                                         <CardTitle class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                                                             <AppIcon name="clipboard-list" class="size-3.5" />
-                                                            Continue care workflow
+                                                            Workflow handoff
                                                         </CardTitle>
                                                         <CardDescription class="mt-1 text-xs">
-                                                            Recommended action is calculated from the patient record and current clinical activity.
+                                                            Routes to outpatient, emergency triage, direct services (lab, imaging, pharmacy), billing, or chart review.
                                                         </CardDescription>
                                                     </div>
                                                     <Button size="sm" class="shrink-0 gap-1.5" @click="openPatientVisitHandoff(detailsSheetPatient, 'details')">
                                                         <AppIcon name="clipboard-list" class="size-3.5" />
-                                                        Continue handoff
+                                                        Start handoff
                                                     </Button>
                                                 </div>
                                             </CardHeader>
@@ -6413,72 +6413,6 @@ onMounted(initialPageLoad);
                                                                 ?? 'Review the current visit state before continuing care.'
                                                         }}
                                                     </p>
-                                                </div>
-
-                                                <div class="grid gap-3 lg:grid-cols-2">
-                                                    <Card class="rounded-lg !gap-0 overflow-hidden">
-                                                        <CardHeader class="bg-muted/40 px-4 py-2.5">
-                                                            <CardTitle class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Front desk and urgent care</CardTitle>
-                                                            <CardDescription class="text-xs">Use triage for unstable walk-ins. Use the chart for context before opening a new visit workflow.</CardDescription>
-                                                        </CardHeader>
-                                                        <CardContent class="px-4 py-3">
-                                                            <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                                                                <Button size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                                    <Link :href="patientContextHref('/emergency-triage', detailsSheetPatient, { includeTabNew: true })">
-                                                                        <AppIcon name="activity" class="size-3.5" />
-                                                                        Start Triage
-                                                                    </Link>
-                                                                </Button>
-                                                                <Button size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                                    <Link :href="patientChartContextHref(detailsSheetPatient, { from: 'patients' })">
-                                                                        <AppIcon name="book-open" class="size-3.5" />
-                                                                        Open Chart
-                                                                    </Link>
-                                                                </Button>
-                                                            </div>
-                                                        </CardContent>
-                                                    </Card>
-
-                                                    <Card class="rounded-lg !gap-0 overflow-hidden">
-                                                        <CardHeader class="bg-muted/40 px-4 py-2.5">
-                                                            <CardTitle class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Orders and billing</CardTitle>
-                                                            <CardDescription class="text-xs">Lab, imaging, pharmacy, procedures, or billing with this patient—including walk-ins without a consult when your site allows.</CardDescription>
-                                                        </CardHeader>
-                                                        <CardContent class="px-4 py-3">
-                                                            <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                                                                <Button v-if="canCreateLaboratoryOrders" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                                    <Link :href="patientContextHref('/laboratory-orders', detailsSheetPatient, { includeTabNew: true })">
-                                                                        <AppIcon name="flask-conical" class="size-3.5" />
-                                                                        Lab Order
-                                                                    </Link>
-                                                                </Button>
-                                                                <Button v-if="canCreateRadiologyOrders" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                                    <Link :href="patientContextHref('/radiology-orders', detailsSheetPatient, { includeTabNew: true })">
-                                                                        <AppIcon name="activity" class="size-3.5" />
-                                                                        Imaging Order
-                                                                    </Link>
-                                                                </Button>
-                                                                <Button v-if="canCreatePharmacyOrders" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                                    <Link :href="patientContextHref('/pharmacy-orders', detailsSheetPatient, { includeTabNew: true })">
-                                                                        <AppIcon name="pill" class="size-3.5" />
-                                                                        Pharmacy Order
-                                                                    </Link>
-                                                                </Button>
-                                                                <Button v-if="canCreateTheatreProcedures" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                                    <Link :href="patientContextHref('/theatre-procedures', detailsSheetPatient, { includeTabNew: true })">
-                                                                        <AppIcon name="scissors" class="size-3.5" />
-                                                                        Procedure
-                                                                    </Link>
-                                                                </Button>
-                                                                <Button size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                                    <Link :href="patientContextHref('/billing-invoices', detailsSheetPatient)">
-                                                                        <AppIcon name="receipt" class="size-3.5" />
-                                                                        Invoice
-                                                                    </Link>
-                                                                </Button>
-                                                            </div>
-                                                        </CardContent>
-                                                    </Card>
                                                 </div>
                                             </CardContent>
                                         </Card>
