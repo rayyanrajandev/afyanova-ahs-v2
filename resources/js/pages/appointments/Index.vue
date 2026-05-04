@@ -1421,6 +1421,31 @@ async function loadBillingPayerContracts(): Promise<void> {
     }
 }
 
+function statusRowBorderClass(status: string | null | undefined): string {
+    switch (status) {
+        case 'scheduled': return 'border-l-sky-400';
+        case 'waiting_triage': return 'border-l-amber-500';
+        case 'waiting_provider': return 'border-l-primary';
+        case 'in_consultation': return 'border-l-primary';
+        case 'completed': return 'border-l-emerald-500/60';
+        case 'cancelled':
+        case 'no_show': return 'border-l-destructive';
+        default: return 'border-l-border';
+    }
+}
+
+function presetDotClass(preset: WorkspacePreset): string {
+    switch (preset) {
+        case 'scheduled': return 'bg-sky-400';
+        case 'waiting_triage': return 'bg-amber-500';
+        case 'waiting_provider': return 'bg-primary';
+        case 'in_consultation': return 'bg-primary';
+        case 'completed': return 'bg-emerald-500';
+        case 'exceptions': return 'bg-destructive';
+        default: return 'bg-muted-foreground/40';
+    }
+}
+
 function statusVariant(status: string | null | undefined) {
     switch (status) {
         case 'waiting_provider':
@@ -4295,25 +4320,7 @@ function submitSearch(): void {
                     </p>
                 </div>
                 <div class="flex flex-shrink-0 items-center gap-2">
-                    <Button
-                        v-if="canUseTriageQueue"
-                        :variant="isTriageQueue ? 'default' : 'outline'"
-                        class="gap-1.5"
-                        @click="isTriageQueue ? openAllAppointmentsQueue() : openTriageQueue()"
-                    >
-                        <AppIcon :name="isTriageQueue ? 'list-restart' : 'heart-pulse'" class="size-3.5" />
-                        {{ isTriageQueue ? 'Back to all appointments' : 'Triage queue' }}
-                    </Button>
-                    <Button
-                        v-if="canUseMyClinicalQueue"
-                        :variant="isMyClinicalQueue ? 'default' : 'outline'"
-                        class="gap-1.5"
-                        @click="isMyClinicalQueue ? leaveMyClinicalQueue() : openMyClinicalQueue()"
-                    >
-                        <AppIcon :name="isMyClinicalQueue ? 'list-restart' : 'stethoscope'" class="size-3.5" />
-                        {{ isMyClinicalQueue ? 'Back to all appointments' : 'My patients' }}
-                    </Button>
-                    <Button variant="outline" class="gap-1.5" @click="loadQueue">
+                    <Button variant="outline" size="sm" class="gap-1.5" @click="loadQueue">
                         <AppIcon name="refresh-cw" class="size-3.5" />
                         Refresh
                     </Button>
@@ -4338,94 +4345,101 @@ function submitSearch(): void {
                 </AlertDescription>
             </Alert>
 
-            <div class="rounded-lg border bg-muted/30 px-3 py-2">
+            <div class="rounded-lg border bg-muted/30 px-3 py-2.5">
                 <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                    <div class="flex flex-col gap-2">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <Button
-                                size="sm"
-                                :variant="!isMyClinicalQueue && !isTriageQueue ? 'default' : 'outline'"
-                                class="h-8 gap-1.5"
-                                @click="leaveMyClinicalQueue()"
-                            >
-                                <AppIcon name="layout-list" class="size-3.5" />
-                                All appointments
-                            </Button>
-                            <Button
-                                v-if="canUseTriageQueue"
-                                size="sm"
-                                :variant="isTriageQueue ? 'default' : 'outline'"
-                                class="h-8 gap-1.5"
-                                @click="openTriageQueue()"
-                            >
-                                <AppIcon name="heart-pulse" class="size-3.5" />
-                                Triage queue
-                            </Button>
-                            <Button
-                                v-if="canUseMyClinicalQueue"
-                                size="sm"
-                                :variant="isMyClinicalQueue ? 'default' : 'outline'"
-                                class="h-8 gap-1.5"
-                                @click="openMyClinicalQueue()"
-                            >
-                                <AppIcon name="stethoscope" class="size-3.5" />
-                                My patients
-                            </Button>
-                        </div>
-                        <p class="text-xs text-muted-foreground">Current view: {{ currentViewSummary }}</p>
-                    </div>
+                    <!-- Queue mode switcher -->
                     <div class="flex flex-wrap items-center gap-2">
                         <Button
-                            v-for="preset in ['all', 'scheduled', 'waiting_triage', 'waiting_provider', 'in_consultation', 'completed'] as WorkspacePreset[]"
-                            :key="preset"
                             size="sm"
-                            :variant="matchesAppointmentPreset(preset) ? 'default' : 'outline'"
+                            :variant="!isMyClinicalQueue && !isTriageQueue ? 'default' : 'outline'"
                             class="h-8 gap-1.5"
-                            @click="setPreset(preset)"
+                            @click="leaveMyClinicalQueue()"
                         >
-                            <span class="font-medium">{{ appointmentQuickCount(preset) }}</span>
-                            <span>{{ quickPresetLabel(preset) }}</span>
+                            <AppIcon name="layout-list" class="size-3.5" />
+                            All appointments
                         </Button>
                         <Button
+                            v-if="canUseTriageQueue"
                             size="sm"
-                            :variant="matchesAppointmentPreset('exceptions') ? 'default' : 'outline'"
+                            :variant="isTriageQueue ? 'default' : 'outline'"
                             class="h-8 gap-1.5"
-                            @click="setPreset('exceptions')"
+                            @click="openTriageQueue()"
                         >
-                            <span class="font-medium">{{ appointmentQuickCount('exceptions') }}</span>
-                            <span>{{ quickPresetLabel('exceptions') }}</span>
+                            <AppIcon name="heart-pulse" class="size-3.5" />
+                            Triage queue
                         </Button>
+                        <Button
+                            v-if="canUseMyClinicalQueue"
+                            size="sm"
+                            :variant="isMyClinicalQueue ? 'default' : 'outline'"
+                            class="h-8 gap-1.5"
+                            @click="openMyClinicalQueue()"
+                        >
+                            <AppIcon name="stethoscope" class="size-3.5" />
+                            My patients
+                        </Button>
+                    </div>
+                    <!-- Status preset filter chips -->
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <button
+                            v-for="preset in ['all', 'scheduled', 'waiting_triage', 'waiting_provider', 'in_consultation', 'completed', 'exceptions'] as WorkspacePreset[]"
+                            :key="preset"
+                            type="button"
+                            class="inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors"
+                            :class="matchesAppointmentPreset(preset)
+                                ? 'border-foreground/20 bg-foreground text-background'
+                                : 'border-border bg-background text-muted-foreground hover:text-foreground hover:border-foreground/30'"
+                            @click="setPreset(preset)"
+                        >
+                            <span
+                                v-if="preset !== 'all'"
+                                class="size-1.5 rounded-full"
+                                :class="matchesAppointmentPreset(preset) ? 'bg-background/70' : presetDotClass(preset)"
+                            />
+                            <span class="font-semibold tabular-nums">{{ appointmentQuickCount(preset) }}</span>
+                            <span>{{ quickPresetLabel(preset) }}</span>
+                        </button>
                     </div>
                 </div>
             </div>
 
-            <Alert v-if="showClinicalQueueSuggestion" class="border-primary/20 bg-primary/5 px-3 py-2 rounded-md">
-                <AppIcon name="stethoscope" class="size-3.5 text-primary" />
-                <AlertTitle class="text-sm">Clinician shortcut available</AlertTitle>
-                <AlertDescription class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div
+                v-if="showClinicalQueueSuggestion"
+                class="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3"
+            >
+                <div class="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
+                    <AppIcon name="stethoscope" class="size-4" />
+                </div>
+                <div class="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div class="min-w-0">
-                        <p class="text-xs text-foreground">Use <span class="font-medium">My patients</span> for visits that are already triaged and waiting for provider review. Keep <span class="font-medium">All appointments</span> for front-desk arrival and triage handoff work.</p>
+                        <p class="text-sm font-semibold text-foreground">Clinician queue available</p>
+                        <p class="mt-0.5 text-xs text-muted-foreground">Switch to <span class="font-medium text-foreground">My patients</span> to see triaged visits waiting for your review. Use All appointments for front-desk and scheduling work.</p>
                     </div>
-                    <Button size="sm" variant="outline" class="h-8 gap-1.5 self-start sm:self-center" @click="openMyClinicalQueue()">
+                    <Button size="sm" variant="outline" class="h-8 shrink-0 gap-1.5" @click="openMyClinicalQueue()">
                         <AppIcon name="arrow-up-right" class="size-3.5" />
-                        Go to my patients
+                        My patients
                     </Button>
-                </AlertDescription>
-            </Alert>
+                </div>
+            </div>
 
-            <Alert v-if="showTriageQueueSuggestion" class="border-emerald-500/20 bg-emerald-500/5 px-3 py-2 rounded-md">
-                <AppIcon name="heart-pulse" class="size-3.5 text-emerald-600" />
-                <AlertTitle class="text-sm">Nurse triage shortcut available</AlertTitle>
-                <AlertDescription class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div
+                v-if="showTriageQueueSuggestion"
+                class="flex items-start gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 dark:border-emerald-700/30 dark:bg-emerald-500/10"
+            >
+                <div class="flex size-7 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
+                    <AppIcon name="heart-pulse" class="size-4" />
+                </div>
+                <div class="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div class="min-w-0">
-                        <p class="text-xs text-foreground">Use <span class="font-medium">Triage queue</span> for vitals, intake review, and provider handoff. Keep <span class="font-medium">All appointments</span> for front-desk arrival and scheduling work.</p>
+                        <p class="text-sm font-semibold text-foreground">Triage queue available</p>
+                        <p class="mt-0.5 text-xs text-muted-foreground">Switch to <span class="font-medium text-foreground">Triage queue</span> for vitals, intake review, and provider handoff. Use All appointments for front-desk scheduling work.</p>
                     </div>
-                    <Button size="sm" variant="outline" class="h-8 gap-1.5 self-start sm:self-center" @click="openTriageQueue()">
+                    <Button size="sm" variant="outline" class="h-8 shrink-0 gap-1.5" @click="openTriageQueue()">
                         <AppIcon name="arrow-up-right" class="size-3.5" />
-                        Go to triage queue
+                        Triage queue
                     </Button>
-                </AlertDescription>
-            </Alert>
+                </div>
+            </div>
 
             <section v-if="isTriageQueue" class="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-3">
                 <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
@@ -4656,8 +4670,8 @@ function submitSearch(): void {
                                 <div
                                     v-for="appointment in appointments"
                                     :key="appointment.id"
-                                    class="rounded-lg border transition-colors"
-                                    :class="compactQueueRows ? 'p-2.5' : 'p-3'"
+                                    class="rounded-lg border border-l-[3px] transition-colors"
+                                    :class="[compactQueueRows ? 'p-2.5' : 'p-3', statusRowBorderClass(appointment.status)]"
                                 >
                                     <div
                                         :class="compactQueueRows
@@ -4711,116 +4725,106 @@ function submitSearch(): void {
                                                 <p class="mt-1 text-muted-foreground">{{ triageSummaryPreview(appointment) }}</p>
                                             </div>
                                         </div>
-                                        <div
-                                            :class="compactQueueRows
-                                                ? 'flex flex-col items-stretch gap-1.5 md:flex-row md:flex-wrap md:items-start md:max-w-[360px] md:justify-end'
-                                                : 'flex flex-col items-stretch gap-2 md:flex-row md:flex-wrap md:items-start md:max-w-[360px] md:justify-end'"
-                                        >
+                                        <div class="flex shrink-0 flex-wrap items-start justify-end gap-1.5">
+                                            <!-- Primary action: role + status dependent -->
                                             <Button
                                                 v-if="!isTriageQueue && canAccessConsultationWorkflow(appointment)"
                                                 size="sm"
                                                 :variant="['waiting_provider', 'in_consultation'].includes(appointment.status || '') ? 'default' : 'outline'"
-                                                class="w-full gap-1.5 sm:w-auto"
+                                                class="gap-1.5"
                                                 :disabled="isLaunchingConsultation(appointment)"
                                                 @click="void launchConsultationWorkflow(appointment)"
                                             >
                                                 <AppIcon name="stethoscope" class="size-3.5" />
                                                 {{ isLaunchingConsultation(appointment) ? 'Opening...' : consultationWorkflowLabel(appointment) }}
                                             </Button>
-                                            <Button size="sm" variant="outline" class="w-full gap-1.5 sm:w-auto" @click="void openDetails(appointment)">
+                                            <Button
+                                                v-else-if="!isMyClinicalQueue && !isTriageQueue && canUpdateStatus && appointment.status === 'scheduled'"
+                                                size="sm"
+                                                class="gap-1.5"
+                                                @click="openStatusDialog(appointment, 'waiting_triage')"
+                                            >
+                                                <AppIcon name="calendar-clock" class="size-3.5" />
+                                                {{ statusActionLabel('waiting_triage') }}
+                                            </Button>
+                                            <Button
+                                                v-else-if="canRecordOpdTriage && appointment.status === 'waiting_triage'"
+                                                size="sm"
+                                                class="gap-1.5"
+                                                @click="openTriageSheet(appointment)"
+                                            >
+                                                <AppIcon name="heart-pulse" class="size-3.5" />
+                                                Record triage
+                                            </Button>
+
+                                            <!-- Open appointment -->
+                                            <Button size="sm" variant="outline" class="gap-1.5" @click="void openDetails(appointment)">
                                                 <AppIcon name="panel-right-open" class="size-3.5" />
-                                                Open appointment
+                                                <span class="hidden sm:inline">Open</span>
                                             </Button>
-                                            <Button
-                                                v-if="appointment.patientId"
-                                                size="sm"
-                                                variant="outline"
-                                                class="w-full gap-1.5 sm:w-auto"
-                                                as-child
-                                            >
-                                                <Link :href="patientChartHref(appointment.patientId, { appointmentId: appointment.id, from: 'appointments' })">
-                                                    <AppIcon name="book-open" class="size-3.5" />
-                                                    Open chart
-                                                </Link>
-                                            </Button>
-                                            <Button
-                                                v-if="!isTriageQueue && canManageProviderSession && appointment.status === 'waiting_provider'"
-                                                size="sm"
-                                                variant="outline"
-                                                class="w-full gap-1.5 sm:w-auto"
-                                                @click="openProviderStatusDialog(appointment, 'waiting_triage')"
-                                            >
-                                                <AppIcon name="rotate-ccw" class="size-3.5" />
-                                                Send back to triage
-                                            </Button>
-                                            <Button
-                                                v-if="!isTriageQueue && canManageProviderSession && appointment.status === 'in_consultation'"
-                                                size="sm"
-                                                variant="outline"
-                                                class="w-full gap-1.5 sm:w-auto"
-                                                @click="openProviderStatusDialog(appointment, 'waiting_provider')"
-                                            >
-                                                <AppIcon name="undo-2" class="size-3.5" />
-                                                Return to queue
-                                            </Button>
-                                            <Button
-                                                v-if="!isTriageQueue && canManageProviderSession && appointment.status === 'in_consultation'"
-                                                size="sm"
-                                                variant="outline"
-                                                class="w-full gap-1.5 sm:w-auto"
-                                                @click="openProviderStatusDialog(appointment, 'completed')"
-                                            >
-                                                <AppIcon name="circle-check-big" class="size-3.5" />
-                                                Complete visit
-                                            </Button>
-                                            <template v-if="!isMyClinicalQueue && !isTriageQueue">
-                                                <Button
-                                                    v-if="canUpdateStatus && appointment.status === 'scheduled'"
-                                                    size="sm"
-                                                    class="w-full gap-1.5 sm:w-auto"
-                                                    @click="openStatusDialog(appointment, 'waiting_triage')"
-                                                >
-                                                    {{ statusActionLabel('waiting_triage') }}
-                                                </Button>
-                                                <Button
-                                                    v-if="canRecordOpdTriage && appointment.status === 'waiting_triage'"
-                                                    size="sm"
-                                                    class="w-full gap-1.5 sm:w-auto"
-                                                    @click="openTriageSheet(appointment)"
-                                                >
-                                                    <AppIcon name="heart-pulse" class="size-3.5" />
-                                                    Record triage
-                                                </Button>
-                                                <Button
-                                                    v-if="canUpdateStatus && appointment.status === 'scheduled'"
-                                                    size="sm"
-                                                    variant="outline"
-                                                    class="w-full gap-1.5 sm:w-auto"
-                                                    @click="openStatusDialog(appointment, 'no_show')"
-                                                >
-                                                    {{ statusActionLabel('no_show') }}
-                                                </Button>
-                                                <Button
-                                                    v-if="canUpdateStatus && ['scheduled', 'waiting_triage'].includes(appointment.status || '')"
-                                                    size="sm"
-                                                    variant="outline"
-                                                    class="w-full gap-1.5 sm:w-auto"
-                                                    @click="openStatusDialog(appointment, 'cancelled')"
-                                                >
-                                                    {{ statusActionLabel('cancelled') }}
-                                                </Button>
-                                            </template>
-                                            <template v-if="isTriageQueue">
-                                                <Button
-                                                    v-if="canRecordOpdTriage && appointment.status === 'waiting_triage'"
-                                                    size="sm"
-                                                    class="w-full gap-1.5 sm:w-auto"
-                                                    @click="openTriageSheet(appointment)"
-                                                >
-                                                    <AppIcon name="heart-pulse" class="size-3.5" />
-                                                    Record triage
-                                                </Button>
-                                            </template>
+
+                                            <!-- Secondary actions dropdown -->
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger as-child>
+                                                    <Button size="sm" variant="outline" class="gap-0 px-1.5">
+                                                        <AppIcon name="ellipsis-vertical" class="size-3.5" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" class="min-w-44">
+                                                    <DropdownMenuItem
+                                                        v-if="appointment.patientId"
+                                                        as-child
+                                                    >
+                                                        <Link :href="patientChartHref(appointment.patientId, { appointmentId: appointment.id, from: 'appointments' })" class="flex items-center gap-2">
+                                                            <AppIcon name="book-open" class="size-3.5 text-muted-foreground" />
+                                                            Open patient chart
+                                                        </Link>
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        v-if="!isTriageQueue && canManageProviderSession && appointment.status === 'waiting_provider'"
+                                                        @click="openProviderStatusDialog(appointment, 'waiting_triage')"
+                                                        class="gap-2"
+                                                    >
+                                                        <AppIcon name="rotate-ccw" class="size-3.5 text-muted-foreground" />
+                                                        Send back to triage
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        v-if="!isTriageQueue && canManageProviderSession && appointment.status === 'in_consultation'"
+                                                        @click="openProviderStatusDialog(appointment, 'waiting_provider')"
+                                                        class="gap-2"
+                                                    >
+                                                        <AppIcon name="undo-2" class="size-3.5 text-muted-foreground" />
+                                                        Return to provider queue
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        v-if="!isTriageQueue && canManageProviderSession && appointment.status === 'in_consultation'"
+                                                        @click="openProviderStatusDialog(appointment, 'completed')"
+                                                        class="gap-2"
+                                                    >
+                                                        <AppIcon name="circle-check-big" class="size-3.5 text-muted-foreground" />
+                                                        Complete visit
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuSeparator
+                                                        v-if="!isMyClinicalQueue && !isTriageQueue && canUpdateStatus && ['scheduled', 'waiting_triage'].includes(appointment.status || '')"
+                                                    />
+                                                    <DropdownMenuItem
+                                                        v-if="!isMyClinicalQueue && !isTriageQueue && canUpdateStatus && appointment.status === 'scheduled'"
+                                                        @click="openStatusDialog(appointment, 'no_show')"
+                                                        class="gap-2"
+                                                    >
+                                                        <AppIcon name="user-x" class="size-3.5 text-muted-foreground" />
+                                                        {{ statusActionLabel('no_show') }}
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        v-if="!isMyClinicalQueue && !isTriageQueue && canUpdateStatus && ['scheduled', 'waiting_triage'].includes(appointment.status || '')"
+                                                        @click="openStatusDialog(appointment, 'cancelled')"
+                                                        class="gap-2 text-destructive focus:text-destructive"
+                                                    >
+                                                        <AppIcon name="circle-x" class="size-3.5" />
+                                                        {{ statusActionLabel('cancelled') }}
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </div>
                                     </div>
                                 </div>
