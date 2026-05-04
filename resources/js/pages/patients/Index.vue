@@ -4593,7 +4593,7 @@ onMounted(initialPageLoad);
 
                     <!-- TABLE HEADER -->
                     <div
-                        class="shrink-0 hidden border-b bg-muted/30 px-4 py-2 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,auto)]"
+                        class="shrink-0 hidden border-b bg-muted/30 px-4 py-2 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1.8fr)_minmax(0,1.5fr)_minmax(0,auto)]"
                     >
                         <button
                             type="button"
@@ -4618,6 +4618,8 @@ onMounted(initialPageLoad);
                                 class="size-3.5"
                             />
                         </button>
+                        <span>Gender</span>
+                        <span>Address</span>
                         <span>Contact</span>
                         <span class="text-right">Actions</span>
                     </div>
@@ -4664,7 +4666,7 @@ onMounted(initialPageLoad);
                         <div
                             v-for="patient in patients"
                             :key="patient.id"
-                            class="group grid items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/30 md:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,auto)]"
+                            class="group grid items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/30 md:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1.8fr)_minmax(0,1.5fr)_minmax(0,auto)]"
                         >
                             <!-- Patient name + number -->
                             <div class="flex min-w-0 items-center gap-3">
@@ -4697,6 +4699,18 @@ onMounted(initialPageLoad);
                                 <span class="font-medium text-foreground md:hidden">DOB: </span>
                                 <span>{{ formatDate(patient.dateOfBirth) }}</span>
                                 <p class="mt-0.5 hidden md:block">Registered: {{ formatDate(patient.createdAt) }}</p>
+                            </div>
+
+                            <!-- Gender -->
+                            <div class="text-xs text-muted-foreground">
+                                <span class="font-medium text-foreground md:hidden">Gender: </span>
+                                <span class="capitalize">{{ patient.gender || '—' }}</span>
+                            </div>
+
+                            <!-- Address -->
+                            <div class="min-w-0 text-xs text-muted-foreground">
+                                <span class="font-medium text-foreground md:hidden">Address: </span>
+                                <span class="line-clamp-2">{{ patient.addressLine || '—' }}</span>
                             </div>
 
                             <!-- Contact -->
