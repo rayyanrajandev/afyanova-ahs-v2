@@ -425,6 +425,27 @@ function statusVariant(status: string | null | undefined) {
     return 'outline';
 }
 
+const TRIAGE_P_ORDER: Record<string, number> = { P1: 0, P2: 1, P3: 2, P4: 3, P5: 4 };
+
+function dashboardRowBorderClass(row: QueueRow): string {
+    if (activePresetKey.value !== 'emergency') return 'px-4';
+    switch (row.triageCategory) {
+        case 'P1': return 'border-l-[3px] border-l-destructive pl-3 pr-4';
+        case 'P2': return 'border-l-[3px] border-l-orange-500 pl-3 pr-4';
+        case 'P3': return 'border-l-[3px] border-l-amber-500 pl-3 pr-4';
+        case 'P4': return 'border-l-[3px] border-l-sky-400 pl-3 pr-4';
+        case 'P5': return 'border-l-[3px] border-l-muted-foreground/30 pl-3 pr-4';
+        default: return row.isOverdue ? 'border-l-[3px] border-l-destructive/50 pl-3 pr-4' : 'px-4';
+    }
+}
+
+function dashboardRowBgClass(row: QueueRow): string {
+    if (activePresetKey.value !== 'emergency') return '';
+    if (row.triageCategory === 'P1') return 'bg-destructive/5 dark:bg-destructive/10';
+    if (row.triageCategory === 'P2') return 'bg-orange-500/5 dark:bg-orange-500/10';
+    return '';
+}
+
 function firstArray<T = any>(source: any, keys: string[]): T[] {
     for (const key of keys) {
         const value = source?.[key];
@@ -1102,6 +1123,14 @@ const queueRows = computed<QueueRow[]>(() => {
                 isOverdue,
                 triageCategory: cat,
             };
+        })
+        .sort((a, b) => {
+            const pa = TRIAGE_P_ORDER[a.triageCategory ?? ''] ?? 5;
+            const pb = TRIAGE_P_ORDER[b.triageCategory ?? ''] ?? 5;
+            if (pa !== pb) return pa - pb;
+            // same category: overdue patients first
+            if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
+            return 0;
         });
     }
     if (activePresetKey.value === 'cashier') {
@@ -2189,6 +2218,24 @@ function switchPreset(key: DashboardPresetKey): void {
                         </button>
                     </div>
 
+                    <!-- P1 critical alert above queue when in emergency preset -->
+                    <div
+                        v-if="activePresetKey === 'emergency' && queueRows.some(r => r.triageCategory === 'P1')"
+                        class="flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-2.5 dark:border-destructive/50 dark:bg-destructive/10"
+                    >
+                        <div class="flex size-6 shrink-0 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
+                            <AppIcon name="alert-triangle" class="size-3.5" />
+                        </div>
+                        <div class="flex min-w-0 flex-1 items-center justify-between gap-2">
+                            <p class="text-xs font-semibold text-destructive">
+                                P1 · IMMEDIATE — {{ queueRows.filter(r => r.triageCategory === 'P1').length }} critical patient{{ queueRows.filter(r => r.triageCategory === 'P1').length === 1 ? '' : 's' }} require immediate attention
+                            </p>
+                            <Link :href="queueViewAllHref" class="shrink-0 text-[11px] font-semibold text-destructive underline underline-offset-2">
+                                Open queue
+                            </Link>
+                        </div>
+                    </div>
+
                     <!-- Queue card — full width, shrinks to content -->
                     <Card
                         class="self-start rounded-lg border border-border shadow-sm"
@@ -2263,7 +2310,8 @@ function switchPreset(key: DashboardPresetKey): void {
                                     </div>
                                     <Link
                                         :href="row.href"
-                                        class="group flex items-start gap-3 border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none"
+                                        class="group flex items-start gap-3 border-b py-3 transition-colors last:border-b-0 hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none"
+                                        :class="[dashboardRowBorderClass(row), dashboardRowBgClass(row)]"
                                     >
                                         <span
                                             class="mt-1.5 size-2 shrink-0 rounded-full"

@@ -355,7 +355,7 @@ const THIRD_PARTY_FINANCIAL_CLASS_OPTIONS = FINANCIAL_CLASS_OPTIONS.filter((opti
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Appointments', href: '/appointments' }];
 const compactQueueRows = useLocalStorageBoolean('appointments.queueRows.compact', false);
-const { hasPermission, isFacilitySuperAdmin } = usePlatformAccess();
+const { hasPermission, isFacilitySuperAdmin, scope } = usePlatformAccess();
 const page = usePage<{ auth?: { user?: PageAuthUser } }>();
 
 const initialQueryText = queryParam('q').trim();
@@ -413,6 +413,19 @@ const listLoading = ref(false);
 const pageLoading = ref(true);
 const queueError = ref<string | null>(null);
 const appointments = ref<Appointment[]>([]);
+
+// Sort P1 → P2 → P3+ to the top; within same category keep API order
+const P_PRIORITY: Record<string, number> = { P1: 0, P2: 1, P3: 2, P4: 3, P5: 4 };
+const displayedAppointments = computed(() => {
+    const list = [...appointments.value];
+    if (!list.some((a) => a.triageCategory)) return list;
+    return list.sort((a, b) => {
+        const pa = P_PRIORITY[a.triageCategory ?? ''] ?? 5;
+        const pb = P_PRIORITY[b.triageCategory ?? ''] ?? 5;
+        return pa - pb;
+    });
+});
+
 const counts = ref<Record<string, number>>({
     scheduled: 0,
     waiting_triage: 0,
@@ -4344,25 +4357,37 @@ function submitSearch(): void {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
-            <section class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div class="min-w-0">
-                    <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <AppIcon name="calendar-clock" class="size-7 text-primary" />
-                        Appointments
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        {{ workspaceIntroText }}
-                    </p>
-                </div>
-                <div class="flex flex-shrink-0 items-center gap-2">
-                    <Button variant="outline" size="sm" class="gap-1.5" @click="loadQueue">
-                        <AppIcon name="refresh-cw" class="size-3.5" />
-                        Refresh
-                    </Button>
-                    <Button v-if="canCreate" class="gap-1.5" @click="canResumeCreateSheet ? resumeCreateSheet() : openCreateSheet()">
-                        <AppIcon :name="canResumeCreateSheet ? 'clipboard-list' : 'calendar-plus-2'" class="size-3.5" />
-                        {{ canResumeCreateSheet ? 'Resume scheduling' : 'Schedule appointment' }}
-                    </Button>
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <!-- Left: identity -->
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20" aria-hidden="true">
+                            <AppIcon name="calendar-clock" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <h1 class="text-base font-semibold tracking-tight md:text-lg">Appointments</h1>
+                            <p class="truncate text-xs text-muted-foreground">{{ workspaceIntroText }}</p>
+                            <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
+                                <span class="inline-flex items-center gap-1">
+                                    <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
+                                    <span class="font-medium text-foreground">{{ scope?.facility?.name || 'No facility' }}</span>
+                                </span>
+                                <span class="select-none text-border" aria-hidden="true">·</span>
+                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Right: actions -->
+                    <div class="flex flex-shrink-0 items-center gap-2">
+                        <Button variant="outline" size="sm" class="h-8 gap-1.5" @click="loadQueue">
+                            <AppIcon name="refresh-cw" class="size-3.5" />
+                            Refresh
+                        </Button>
+                        <Button v-if="canCreate" class="h-8 gap-1.5" @click="canResumeCreateSheet ? resumeCreateSheet() : openCreateSheet()">
+                            <AppIcon :name="canResumeCreateSheet ? 'clipboard-list' : 'calendar-plus-2'" class="size-3.5" />
+                            {{ canResumeCreateSheet ? 'Resume scheduling' : 'Schedule appointment' }}
+                        </Button>
+                    </div>
                 </div>
             </section>
             <Alert v-if="canResumeCreateSheet" class="border-primary/20 bg-primary/5 px-3 py-2 rounded-md">
@@ -4696,14 +4721,27 @@ function submitSearch(): void {
                                 <AlertDescription>{{ queueError }}</AlertDescription>
                             </Alert>
                             <div
-                                v-else-if="!appointments.length"
+                                v-else-if="!displayedAppointments.length"
                                 class="rounded-lg border border-dashed p-6 text-sm text-muted-foreground"
                             >
                                 No appointments found for the current filters.
                             </div>
-                            <div v-else :class="compactQueueRows ? 'space-y-2' : 'space-y-3'">
+                            <template v-else>
+                                <!-- P1 critical alert -->
                                 <div
-                                    v-for="appointment in appointments"
+                                    v-if="displayedAppointments.some(a => a.triageCategory === 'P1')"
+                                    class="flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2.5 dark:border-destructive/50 dark:bg-destructive/10"
+                                >
+                                    <div class="flex size-6 shrink-0 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
+                                        <AppIcon name="alert-triangle" class="size-3.5" />
+                                    </div>
+                                    <p class="text-xs font-semibold text-destructive">
+                                        P1 · IMMEDIATE — {{ displayedAppointments.filter(a => a.triageCategory === 'P1').length }} critical patient{{ displayedAppointments.filter(a => a.triageCategory === 'P1').length === 1 ? '' : 's' }} require immediate attention
+                                    </p>
+                                </div>
+                                <div :class="compactQueueRows ? 'space-y-2' : 'space-y-3'">
+                                <div
+                                    v-for="appointment in displayedAppointments"
                                     :key="appointment.id"
                                     class="rounded-lg border border-l-[3px] transition-colors"
                                     :class="[compactQueueRows ? 'p-2.5' : 'p-3', rowBorderClass(appointment), emergencyRowBgClass(appointment)]"
@@ -4880,11 +4918,12 @@ function submitSearch(): void {
                                     </div>
                                 </div>
                             </div>
+                            </template>
                         </div>
                     </ScrollArea>
                     <footer class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-4 py-2">
                         <p class="text-xs text-muted-foreground">
-                            Showing {{ appointments.length }} of {{ pagination.total ?? appointments.length }} results &middot; Page {{ pagination.currentPage }} of {{ pagination.lastPage }}
+                            Showing {{ displayedAppointments.length }} of {{ pagination.total ?? displayedAppointments.length }} results &middot; Page {{ pagination.currentPage }} of {{ pagination.lastPage }}
                         </p>
                         <div class="flex items-center gap-2">
                             <Button
