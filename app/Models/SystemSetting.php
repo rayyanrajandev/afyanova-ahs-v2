@@ -19,6 +19,7 @@ class SystemSetting extends Model
      * @var array<int, string>
      */
     protected $fillable = [
+        'facility_id',
         'group',
         'key',
         'value',

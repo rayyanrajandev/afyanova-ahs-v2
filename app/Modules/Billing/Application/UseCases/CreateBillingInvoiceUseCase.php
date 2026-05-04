@@ -7,6 +7,7 @@ use App\Modules\Billing\Application\Exceptions\AppointmentNotEligibleForBillingI
 use App\Modules\Billing\Application\Exceptions\PatientNotEligibleForBillingInvoiceException;
 use App\Modules\Billing\Application\Support\BillingInvoiceLineItemAutoPricingResolver;
 use App\Modules\Billing\Application\Support\BillingInvoicePayerSummaryResolver;
+use App\Modules\Billing\Application\Support\ConsultationReviewDiscountApplier;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceAuditLogRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceRepositoryInterface;
 use App\Modules\Billing\Domain\Services\AdmissionLookupServiceInterface;
@@ -29,6 +30,7 @@ class CreateBillingInvoiceUseCase
         private readonly AdmissionLookupServiceInterface $admissionLookupService,
         private readonly BillingInvoiceLineItemAutoPricingResolver $lineItemAutoPricingResolver,
         private readonly BillingInvoicePayerSummaryResolver $payerSummaryResolver,
+        private readonly ConsultationReviewDiscountApplier $consultationReviewDiscountApplier,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly DefaultCurrencyResolverInterface $defaultCurrencyResolver,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
@@ -78,6 +80,7 @@ class CreateBillingInvoiceUseCase
 
         $payload = $this->inheritVisitCoverage($payload, $linkedAppointment, $linkedAdmission);
         $payload = $this->applyLineItemPricing($payload);
+        $payload = $this->consultationReviewDiscountApplier->apply($payload);
 
         $normalizedAmounts = $this->normalizeAmounts($payload);
         $payload = array_merge($payload, $normalizedAmounts);

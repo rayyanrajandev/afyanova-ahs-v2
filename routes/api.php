@@ -607,6 +607,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::patch('appointments/{id}/status', [AppointmentController::class, 'updateStatus'])
         ->middleware('can:appointments.update-status')
         ->name('appointments.update-status');
+    Route::patch('appointments/{id}/consultation-type', [AppointmentController::class, 'overrideConsultationType'])
+        ->middleware('can:appointments.update')
+        ->name('appointments.override-consultation-type');
     Route::get('appointments/{id}/referrals', [AppointmentController::class, 'referrals'])
         ->middleware('can:appointments.read')
         ->name('appointments.referrals.index');

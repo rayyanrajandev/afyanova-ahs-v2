@@ -246,6 +246,30 @@ class EloquentAppointmentRepository implements AppointmentRepositoryInterface
             || $this->featureFlagResolver->isEnabled('platform.multi_tenant_isolation');
     }
 
+    public function findLastCompletedForPatientWithinDays(
+        string $patientId,
+        string $facilityId,
+        string $scheduledAt,
+        int $withinDays,
+    ): ?array {
+        if ($withinDays <= 0) {
+            return null;
+        }
+
+        $referenceDate = \Illuminate\Support\Carbon::parse($scheduledAt);
+        $windowStart = $referenceDate->copy()->subDays($withinDays)->startOfDay();
+
+        $appointment = AppointmentModel::query()
+            ->where('patient_id', $patientId)
+            ->where('facility_id', $facilityId)
+            ->where('status', 'completed')
+            ->whereBetween('scheduled_at', [$windowStart->toDateTimeString(), $referenceDate->toDateTimeString()])
+            ->orderByDesc('scheduled_at')
+            ->first();
+
+        return $appointment?->toArray();
+    }
+
     private function toSearchResult(LengthAwarePaginator $paginator): array
     {
         return [

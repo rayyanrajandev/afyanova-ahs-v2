@@ -7,6 +7,7 @@ use App\Modules\Appointment\Application\Exceptions\PatientNotEligibleForAppointm
 use App\Modules\Appointment\Application\Exceptions\SourceAdmissionNotEligibleForAppointmentException;
 use App\Modules\Appointment\Domain\Repositories\AppointmentAuditLogRepositoryInterface;
 use App\Modules\Appointment\Domain\Repositories\AppointmentRepositoryInterface;
+use App\Modules\Appointment\Domain\Services\ConsultationClassificationServiceInterface;
 use App\Modules\Appointment\Domain\Services\PatientLookupServiceInterface;
 use App\Modules\Appointment\Domain\ValueObjects\AppointmentStatus;
 use App\Modules\Admission\Domain\Repositories\AdmissionRepositoryInterface;
@@ -24,6 +25,7 @@ class CreateAppointmentUseCase
         private readonly AppointmentAuditLogRepositoryInterface $auditLogRepository,
         private readonly PatientLookupServiceInterface $patientLookupService,
         private readonly AdmissionRepositoryInterface $admissionRepository,
+        private readonly ConsultationClassificationServiceInterface $consultationClassificationService,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
     ) {}
@@ -53,6 +55,7 @@ class CreateAppointmentUseCase
         $payload['tenant_id'] = $this->platformScopeContext->tenantId();
         $payload['facility_id'] = $this->platformScopeContext->facilityId();
         $payload = $this->normalizeFinancialCoverage($payload);
+        $payload = $this->applyConsultationClassification($payload);
 
         $createdAppointment = $this->appointmentRepository->create($payload);
 
@@ -134,6 +137,9 @@ class CreateAppointmentUseCase
             'coverage_notes',
             'status',
             'status_reason',
+            'consultation_type',
+            'consultation_type_source',
+            'prior_completed_appointment_id',
         ];
 
         $result = [];
@@ -142,6 +148,41 @@ class CreateAppointmentUseCase
         }
 
         return $result;
+    }
+
+    /**
+     * Auto-classify the appointment as NEW or REVIEW and merge results into payload.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function applyConsultationClassification(array $payload): array
+    {
+        $facilityId = (string) ($payload['facility_id'] ?? '');
+        $patientId  = (string) ($payload['patient_id'] ?? '');
+        $scheduledAt = (string) ($payload['scheduled_at'] ?? now()->toDateTimeString());
+        $reason = isset($payload['reason']) ? (string) $payload['reason'] : null;
+
+        if ($facilityId === '' || $patientId === '') {
+            $payload['consultation_type'] = 'new';
+            $payload['consultation_type_source'] = 'auto';
+            $payload['prior_completed_appointment_id'] = null;
+
+            return $payload;
+        }
+
+        $result = $this->consultationClassificationService->classify(
+            patientId: $patientId,
+            facilityId: $facilityId,
+            scheduledAt: $scheduledAt,
+            reason: $reason,
+        );
+
+        $payload['consultation_type'] = $result['classification'];
+        $payload['consultation_type_source'] = $result['source'];
+        $payload['prior_completed_appointment_id'] = $result['prior_completed_appointment_id'];
+
+        return $payload;
     }
 
     /**

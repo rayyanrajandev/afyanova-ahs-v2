@@ -53,6 +53,9 @@ class BillingInvoiceResponseTransformer
             'claimReadiness' => is_array($pricingContext['claimReadiness'] ?? null)
                 ? $pricingContext['claimReadiness']
                 : null,
+            'consultationReviewDiscount' => is_array($pricingContext['consultationReviewDiscount'] ?? null)
+                ? $pricingContext['consultationReviewDiscount']
+                : null,
             'status' => $invoice['status'] ?? null,
             'statusReason' => $invoice['status_reason'] ?? null,
             'createdAt' => $invoice['created_at'] ?? null,

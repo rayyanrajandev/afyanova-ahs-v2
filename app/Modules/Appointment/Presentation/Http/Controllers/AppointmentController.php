@@ -26,6 +26,7 @@ use App\Modules\Appointment\Application\UseCases\UpdateAppointmentReferralStatus
 use App\Modules\Appointment\Application\UseCases\UpdateAppointmentReferralUseCase;
 use App\Modules\Appointment\Application\UseCases\UpdateAppointmentStatusUseCase;
 use App\Modules\Appointment\Application\UseCases\UpdateAppointmentUseCase;
+use App\Modules\Appointment\Application\UseCases\OverrideConsultationTypeUseCase;
 use App\Modules\Appointment\Domain\Repositories\AppointmentAuditLogRepositoryInterface;
 use App\Modules\Appointment\Presentation\Http\Transformers\AppointmentAuditLogResponseTransformer;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
@@ -38,6 +39,8 @@ use App\Modules\Appointment\Presentation\Http\Requests\UpdateAppointmentRequest;
 use App\Modules\Appointment\Presentation\Http\Requests\UpdateAppointmentReferralRequest;
 use App\Modules\Appointment\Presentation\Http\Requests\UpdateAppointmentReferralStatusRequest;
 use App\Modules\Appointment\Presentation\Http\Requests\UpdateAppointmentStatusRequest;
+use App\Modules\Appointment\Presentation\Http\Requests\OverrideConsultationTypeRequest;
+use App\Modules\Appointment\Application\Exceptions\AppointmentNotFoundException;
 use App\Modules\Appointment\Presentation\Http\Transformers\AppointmentReferralAuditLogResponseTransformer;
 use App\Modules\Appointment\Presentation\Http\Transformers\AppointmentReferralResponseTransformer;
 use App\Modules\Appointment\Presentation\Http\Transformers\AppointmentResponseTransformer;
@@ -224,6 +227,36 @@ class AppointmentController extends Controller
         }
 
         abort_if($appointment === null, 404, 'Appointment not found.');
+
+        return response()->json([
+            'data' => AppointmentResponseTransformer::transform($appointment),
+        ]);
+    }
+
+    public function overrideConsultationType(
+        string $id,
+        OverrideConsultationTypeRequest $request,
+        OverrideConsultationTypeUseCase $useCase,
+    ): JsonResponse {
+        try {
+            $appointment = $useCase->execute(
+                appointmentId: $id,
+                payload: [
+                    'consultation_type'                 => $request->input('consultationType'),
+                    'consultation_type_override_reason' => $request->input('consultationTypeOverrideReason'),
+                ],
+                actorId: $request->user()?->id,
+            );
+        } catch (AppointmentNotFoundException) {
+            return response()->json(['message' => 'Appointment not found.'], 404);
+        } catch (\InvalidArgumentException $e) {
+            return $this->validationErrorResponse(
+                message: $e->getMessage(),
+                errors: ['consultationType' => [$e->getMessage()]],
+            );
+        } catch (TenantScopeRequiredForIsolationException $exception) {
+            return $this->tenantScopeRequiredResponse($exception->getMessage());
+        }
 
         return response()->json([
             'data' => AppointmentResponseTransformer::transform($appointment),

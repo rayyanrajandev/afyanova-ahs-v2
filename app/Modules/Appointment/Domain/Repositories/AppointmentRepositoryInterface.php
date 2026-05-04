@@ -40,4 +40,18 @@ interface AppointmentRepositoryInterface
         ?string $fromDateTime,
         ?string $toDateTime
     ): array;
+
+    /**
+     * Find the most recent completed appointment for the patient at the given
+     * facility whose scheduled_at date falls within the $withinDays window
+     * before $scheduledAt. Used for consultation classification.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function findLastCompletedForPatientWithinDays(
+        string $patientId,
+        string $facilityId,
+        string $scheduledAt,
+        int $withinDays,
+    ): ?array;
 }
