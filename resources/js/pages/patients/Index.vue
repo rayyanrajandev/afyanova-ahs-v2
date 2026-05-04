@@ -5964,12 +5964,21 @@ onMounted(initialPageLoad);
                                 {{ detailsSheetPatient.status || 'unknown' }}
                             </Badge>
                         </SheetTitle>
-                        <SheetDescription>
-                            {{ detailsSheetPatient.gender ? detailsSheetPatient.gender : 'Gender not recorded' }}
-                            |
-                            {{ detailsSheetPatient.dateOfBirth ? `Age ${formatAge(detailsSheetPatient.dateOfBirth)}` : 'Age not recorded' }}
-                            |
-                            {{ patientLocationLabel(detailsSheetPatient) }}
+                        <SheetDescription class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                            <span class="flex items-center gap-1">
+                                <AppIcon name="user" class="size-3 opacity-50" />
+                                <span class="capitalize">{{ detailsSheetPatient.gender || 'Gender not recorded' }}</span>
+                            </span>
+                            <span class="text-muted-foreground/40">·</span>
+                            <span class="flex items-center gap-1">
+                                <AppIcon name="calendar" class="size-3 opacity-50" />
+                                <span>{{ detailsSheetPatient.dateOfBirth ? `Age ${formatAge(detailsSheetPatient.dateOfBirth)}` : 'Age not recorded' }}</span>
+                            </span>
+                            <span class="text-muted-foreground/40">·</span>
+                            <span class="flex items-center gap-1">
+                                <AppIcon name="map-pin" class="size-3 opacity-50" />
+                                <span>{{ patientLocationLabel(detailsSheetPatient) }}</span>
+                            </span>
                         </SheetDescription>
                     </SheetHeader>
 
@@ -6073,10 +6082,10 @@ onMounted(initialPageLoad);
                                         <!-- Status reason banner (shown when inactive/deactivated) -->
                                         <div
                                             v-if="detailsSheetPatient.status && detailsSheetPatient.status !== 'active' && detailsSheetPatient.statusReason"
-                                            class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs dark:border-amber-800 dark:bg-amber-950"
+                                            class="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2.5 text-xs"
                                         >
                                             <AppIcon name="alert-triangle" class="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                                            <span class="text-amber-800 dark:text-amber-200">
+                                            <span class="text-amber-700 dark:text-amber-300">
                                                 <span class="font-semibold capitalize">{{ detailsSheetPatient.status }}</span>:
                                                 {{ detailsSheetPatient.statusReason }}
                                             </span>
@@ -6365,109 +6374,114 @@ onMounted(initialPageLoad);
 
                                     <!-- ACTIVITY TAB -->
                                     <TabsContent value="activity" class="m-0 space-y-4 px-6 py-4">
-                                        <section class="grid gap-3 rounded-lg border p-3">
-                                            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                                <div class="space-y-1">
-                                                    <p class="flex items-center gap-2 text-sm font-medium">
-                                                        <AppIcon name="clipboard-list" class="size-4 text-muted-foreground" />
-                                                        Continue care workflow
-                                                    </p>
-                                                    <p class="max-w-2xl text-xs text-muted-foreground">
-                                                        Recommended action is calculated from the patient record and current clinical activity.
-                                                    </p>
-                                                </div>
-                                                <div class="flex shrink-0">
-                                                    <Button size="sm" class="gap-1.5" @click="openPatientVisitHandoff(detailsSheetPatient, 'details')">
+                                        <Card class="rounded-lg !gap-0 overflow-hidden">
+                                            <CardHeader class="bg-muted/40 px-4 py-2.5">
+                                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                                    <div>
+                                                        <CardTitle class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                                            <AppIcon name="clipboard-list" class="size-3.5" />
+                                                            Continue care workflow
+                                                        </CardTitle>
+                                                        <CardDescription class="mt-1 text-xs">
+                                                            Recommended action is calculated from the patient record and current clinical activity.
+                                                        </CardDescription>
+                                                    </div>
+                                                    <Button size="sm" class="shrink-0 gap-1.5" @click="openPatientVisitHandoff(detailsSheetPatient, 'details')">
                                                         <AppIcon name="clipboard-list" class="size-3.5" />
                                                         Continue handoff
                                                     </Button>
                                                 </div>
-                                            </div>
+                                            </CardHeader>
+                                            <CardContent class="space-y-3 px-4 py-3">
+                                                <Alert v-if="detailsSheetPatient.status && detailsSheetPatient.status !== 'active'" variant="destructive">
+                                                    <AlertTitle>Patient is not active</AlertTitle>
+                                                    <AlertDescription>
+                                                        Reactivate or review status before starting a new appointment, triage, or consultation.
+                                                    </AlertDescription>
+                                                </Alert>
 
-                                            <Alert v-if="detailsSheetPatient.status && detailsSheetPatient.status !== 'active'" variant="destructive">
-                                                <AlertTitle>Patient is not active</AlertTitle>
-                                                <AlertDescription>
-                                                    Reactivate or review status before starting a new appointment, triage, or consultation.
-                                                </AlertDescription>
-                                            </Alert>
-
-                                            <div class="rounded-lg border bg-muted/20 p-3">
-                                                <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                                    Recommended next step
-                                                </p>
-                                                <p class="mt-1 text-sm font-medium text-foreground">
-                                                    {{ detailsWorkflowRecommendation?.title ?? 'Review patient workflow' }}
-                                                </p>
-                                                <p class="mt-1 text-xs text-muted-foreground">
-                                                    {{
-                                                        detailsWorkflowRecommendation?.description
-                                                            ?? 'Review the current visit state before continuing care.'
-                                                    }}
-                                                </p>
-                                            </div>
-
-                                            <div class="grid gap-3 lg:grid-cols-2">
-                                                <div class="rounded-lg border p-3">
-                                                    <p class="text-sm font-medium text-foreground">Front desk and urgent care</p>
-                                                    <p class="mt-1 text-xs text-muted-foreground">
-                                                        Use triage for unstable walk-ins. Use the chart for context before opening a new visit workflow.
+                                                <div class="rounded-lg border bg-muted/20 p-3">
+                                                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                                        Recommended next step
                                                     </p>
-                                                    <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                                                        <Button size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                            <Link :href="patientContextHref('/emergency-triage', detailsSheetPatient, { includeTabNew: true })">
-                                                                <AppIcon name="activity" class="size-3.5" />
-                                                                Start Triage
-                                                            </Link>
-                                                        </Button>
-                                                        <Button size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                            <Link :href="patientChartContextHref(detailsSheetPatient, { from: 'patients' })">
-                                                                <AppIcon name="book-open" class="size-3.5" />
-                                                                Open Chart
-                                                            </Link>
-                                                        </Button>
-                                                    </div>
+                                                    <p class="mt-1 text-sm font-medium text-foreground">
+                                                        {{ detailsWorkflowRecommendation?.title ?? 'Review patient workflow' }}
+                                                    </p>
+                                                    <p class="mt-1 text-xs text-muted-foreground">
+                                                        {{
+                                                            detailsWorkflowRecommendation?.description
+                                                                ?? 'Review the current visit state before continuing care.'
+                                                        }}
+                                                    </p>
                                                 </div>
 
-                                                <div class="rounded-lg border p-3">
-                                                    <p class="text-sm font-medium text-foreground">Orders and billing</p>
-                                                    <p class="mt-1 text-xs text-muted-foreground">
-                                                        Lab, imaging, pharmacy, procedures, or billing with this patient—including walk-ins without a consult when your site allows.
-                                                    </p>
-                                                    <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                                                        <Button v-if="canCreateLaboratoryOrders" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                            <Link :href="patientContextHref('/laboratory-orders', detailsSheetPatient, { includeTabNew: true })">
-                                                                <AppIcon name="flask-conical" class="size-3.5" />
-                                                                Lab Order
-                                                            </Link>
-                                                        </Button>
-                                                        <Button v-if="canCreateRadiologyOrders" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                            <Link :href="patientContextHref('/radiology-orders', detailsSheetPatient, { includeTabNew: true })">
-                                                                <AppIcon name="activity" class="size-3.5" />
-                                                                Imaging Order
-                                                            </Link>
-                                                        </Button>
-                                                        <Button v-if="canCreatePharmacyOrders" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                            <Link :href="patientContextHref('/pharmacy-orders', detailsSheetPatient, { includeTabNew: true })">
-                                                                <AppIcon name="pill" class="size-3.5" />
-                                                                Pharmacy Order
-                                                            </Link>
-                                                        </Button>
-                                                        <Button v-if="canCreateTheatreProcedures" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                            <Link :href="patientContextHref('/theatre-procedures', detailsSheetPatient, { includeTabNew: true })">
-                                                                <AppIcon name="scissors" class="size-3.5" />
-                                                                Procedure
-                                                            </Link>
-                                                        </Button>
-                                                        <Button size="sm" variant="secondary" as-child class="justify-start gap-1.5">
-                                                            <Link :href="patientContextHref('/billing-invoices', detailsSheetPatient)">
-                                                                <AppIcon name="receipt" class="size-3.5" />
-                                                                Invoice
-                                                            </Link>
-                                                        </Button>
-                                                    </div>
+                                                <div class="grid gap-3 lg:grid-cols-2">
+                                                    <Card class="rounded-lg !gap-0 overflow-hidden">
+                                                        <CardHeader class="bg-muted/40 px-4 py-2.5">
+                                                            <CardTitle class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Front desk and urgent care</CardTitle>
+                                                            <CardDescription class="text-xs">Use triage for unstable walk-ins. Use the chart for context before opening a new visit workflow.</CardDescription>
+                                                        </CardHeader>
+                                                        <CardContent class="px-4 py-3">
+                                                            <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                                                                <Button size="sm" variant="secondary" as-child class="justify-start gap-1.5">
+                                                                    <Link :href="patientContextHref('/emergency-triage', detailsSheetPatient, { includeTabNew: true })">
+                                                                        <AppIcon name="activity" class="size-3.5" />
+                                                                        Start Triage
+                                                                    </Link>
+                                                                </Button>
+                                                                <Button size="sm" variant="secondary" as-child class="justify-start gap-1.5">
+                                                                    <Link :href="patientChartContextHref(detailsSheetPatient, { from: 'patients' })">
+                                                                        <AppIcon name="book-open" class="size-3.5" />
+                                                                        Open Chart
+                                                                    </Link>
+                                                                </Button>
+                                                            </div>
+                                                        </CardContent>
+                                                    </Card>
+
+                                                    <Card class="rounded-lg !gap-0 overflow-hidden">
+                                                        <CardHeader class="bg-muted/40 px-4 py-2.5">
+                                                            <CardTitle class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Orders and billing</CardTitle>
+                                                            <CardDescription class="text-xs">Lab, imaging, pharmacy, procedures, or billing with this patient—including walk-ins without a consult when your site allows.</CardDescription>
+                                                        </CardHeader>
+                                                        <CardContent class="px-4 py-3">
+                                                            <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                                                                <Button v-if="canCreateLaboratoryOrders" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
+                                                                    <Link :href="patientContextHref('/laboratory-orders', detailsSheetPatient, { includeTabNew: true })">
+                                                                        <AppIcon name="flask-conical" class="size-3.5" />
+                                                                        Lab Order
+                                                                    </Link>
+                                                                </Button>
+                                                                <Button v-if="canCreateRadiologyOrders" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
+                                                                    <Link :href="patientContextHref('/radiology-orders', detailsSheetPatient, { includeTabNew: true })">
+                                                                        <AppIcon name="activity" class="size-3.5" />
+                                                                        Imaging Order
+                                                                    </Link>
+                                                                </Button>
+                                                                <Button v-if="canCreatePharmacyOrders" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
+                                                                    <Link :href="patientContextHref('/pharmacy-orders', detailsSheetPatient, { includeTabNew: true })">
+                                                                        <AppIcon name="pill" class="size-3.5" />
+                                                                        Pharmacy Order
+                                                                    </Link>
+                                                                </Button>
+                                                                <Button v-if="canCreateTheatreProcedures" size="sm" variant="secondary" as-child class="justify-start gap-1.5">
+                                                                    <Link :href="patientContextHref('/theatre-procedures', detailsSheetPatient, { includeTabNew: true })">
+                                                                        <AppIcon name="scissors" class="size-3.5" />
+                                                                        Procedure
+                                                                    </Link>
+                                                                </Button>
+                                                                <Button size="sm" variant="secondary" as-child class="justify-start gap-1.5">
+                                                                    <Link :href="patientContextHref('/billing-invoices', detailsSheetPatient)">
+                                                                        <AppIcon name="receipt" class="size-3.5" />
+                                                                        Invoice
+                                                                    </Link>
+                                                                </Button>
+                                                            </div>
+                                                        </CardContent>
+                                                    </Card>
                                                 </div>
-                                            </div>
-                                        </section>
+                                            </CardContent>
+                                        </Card>
                                         <Alert v-if="detailsTimelineError" variant="destructive">
                                             <AlertTitle>{{ tW2('timeline.loadIssue') }}</AlertTitle>
                                             <AlertDescription>{{ detailsTimelineError }}</AlertDescription>
@@ -6571,32 +6585,36 @@ onMounted(initialPageLoad);
                                         </Alert>
 
                                         <template v-else>
-                                            <fieldset class="grid gap-3 rounded-lg border p-3">
-                                                <legend class="px-2 text-sm font-medium text-muted-foreground">Audit trail</legend>
-                                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                            <Card class="rounded-lg !gap-0 overflow-hidden">
+                                                <CardHeader class="bg-muted/40 px-4 py-2.5">
+                                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                                         <div>
-                                                            <p class="text-sm font-medium">Audit activity</p>
-                                                            <p class="mt-0.5 text-xs text-muted-foreground">
-                                                                {{ detailsAuditSummary.total }} entries | Search by action, user, or date range
-                                                            </p>
+                                                            <CardTitle class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                                                <AppIcon name="file-text" class="size-3.5" />
+                                                                Audit trail
+                                                            </CardTitle>
+                                                            <CardDescription class="mt-1 text-xs">
+                                                                {{ detailsAuditSummary.total }} entries — search by action, user, or date range
+                                                            </CardDescription>
                                                         </div>
                                                         <div class="flex flex-wrap items-center gap-2">
                                                             <Button
                                                                 size="sm"
                                                                 variant="outline"
+                                                                class="h-8 text-xs"
                                                                 :disabled="detailsAuditLoading || detailsAuditExporting"
                                                                 @click="exportDetailsAuditLogsCsv"
                                                             >
-                                                                {{ detailsAuditExporting ? 'Preparing...' : 'Export CSV' }}
+                                                                {{ detailsAuditExporting ? 'Preparing…' : 'Export CSV' }}
                                                             </Button>
-                                                            <Button variant="secondary" size="sm" class="gap-1.5" @click="detailsAuditFiltersOpen = !detailsAuditFiltersOpen">
+                                                            <Button variant="secondary" size="sm" class="h-8 gap-1.5 text-xs" @click="detailsAuditFiltersOpen = !detailsAuditFiltersOpen">
                                                                 <AppIcon name="sliders-horizontal" class="size-3.5" />
                                                                 {{ detailsAuditFiltersOpen ? 'Hide filters' : 'More filters' }}
                                                             </Button>
                                                         </div>
                                                     </div>
-
-                                                <div class="space-y-3">
+                                                </CardHeader>
+                                                <CardContent class="space-y-3 px-4 py-3">
                                                     <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
                                                         <div class="space-y-1.5">
                                                             <Label for="patient-audit-q" class="text-xs">Search logs</Label>
@@ -6648,19 +6666,20 @@ onMounted(initialPageLoad);
                                                             {{ filter.label }}
                                                         </Badge>
                                                     </div>
-                                                </div>
-                                            </fieldset>
+                                                </CardContent>
+                                            </Card>
 
                                             <Collapsible v-model:open="detailsAuditFiltersOpen">
                                                 <CollapsibleContent>
-                                                    <fieldset class="grid gap-3 rounded-lg border p-3">
-                                                        <legend class="px-2 text-sm font-medium text-muted-foreground">Advanced filters</legend>
-                                                            <div>
-                                                            <p class="text-sm font-medium">Narrow audit activity</p>
-                                                            <p class="text-xs text-muted-foreground">
-                                                                Narrow by action, user, actor type, date range, or page size.
-                                                            </p>
-                                                            </div>
+                                                    <Card class="rounded-lg !gap-0 overflow-hidden">
+                                                        <CardHeader class="bg-muted/40 px-4 py-2.5">
+                                                            <CardTitle class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                                                <AppIcon name="sliders-horizontal" class="size-3.5" />
+                                                                Advanced filters
+                                                            </CardTitle>
+                                                            <CardDescription class="text-xs">Narrow by action, user, actor type, date range, or page size.</CardDescription>
+                                                        </CardHeader>
+                                                        <CardContent class="px-4 py-3">
                                                             <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                                                 <div class="space-y-1.5">
                                                                     <Label for="patient-audit-action" class="text-xs">Exact action key</Label>
@@ -6722,7 +6741,8 @@ onMounted(initialPageLoad);
                                                                     </Select>
                                                                 </div>
                                                             </div>
-                                                    </fieldset>
+                                                        </CardContent>
+                                                    </Card>
                                                 </CollapsibleContent>
                                             </Collapsible>
 
