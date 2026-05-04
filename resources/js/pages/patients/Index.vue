@@ -2282,7 +2282,7 @@ async function sendToEmergencyQueue(): Promise<void> {
             body: {
                 patientId: patient.id,
                 appointmentType: 'walk_in',
-                scheduledAt: new Date().toISOString(),
+                scheduledAt: new Date(Date.now() + 60_000).toISOString(),
                 reason: 'Emergency — directed to triage by registration',
             },
         });
