@@ -4698,6 +4698,7 @@ onMounted(initialPageLoad);
                             <div class="text-xs text-muted-foreground">
                                 <span class="font-medium text-foreground md:hidden">DOB: </span>
                                 <span>{{ formatDate(patient.dateOfBirth) }}</span>
+                                <span v-if="patient.dateOfBirth" class="ml-1 text-muted-foreground/70">({{ formatAge(patient.dateOfBirth) }})</span>
                                 <p class="mt-0.5 hidden md:block">Registered: {{ formatDate(patient.createdAt) }}</p>
                             </div>
 
