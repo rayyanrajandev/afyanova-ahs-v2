@@ -86,6 +86,10 @@ type Appointment = {
     consultationTakeoverCount: number | null;
     status: AppointmentStatus | null;
     statusReason: string | null;
+    consultationType: 'new' | 'review' | null;
+    consultationTypeSource: 'auto' | 'manual' | null;
+    consultationTypeOverrideReason: string | null;
+    priorCompletedAppointmentId: string | null;
     createdAt: string | null;
     updatedAt: string | null;
 };
@@ -508,6 +512,14 @@ const detailsLifecycleAction = ref<EncounterLifecycleAction | null>(null);
 const detailsLifecycleTargetKind = ref<EncounterLifecycleTargetKind | null>(null);
 const detailsLifecycleTargetId = ref('');
 const detailsLifecycleReason = ref('');
+
+// Consultation type override dialog
+const consultTypeOverrideOpen = ref(false);
+const consultTypeOverrideSubmitting = ref(false);
+const consultTypeOverrideError = ref<string | null>(null);
+const consultTypeOverrideType = ref<'new' | 'review'>('review');
+const consultTypeOverrideReason = ref('');
+
 let detailsLaboratoryOrdersRequestId = 0;
 let detailsPharmacyOrdersRequestId = 0;
 let detailsRadiologyOrdersRequestId = 0;
@@ -626,6 +638,7 @@ const canCreateRadiology = computed(() => isFacilitySuperAdmin.value || hasPermi
 const canCreateTheatre = computed(() => isFacilitySuperAdmin.value || hasPermission('theatre.procedures.create'));
 const canReadBilling = computed(() => isFacilitySuperAdmin.value || hasPermission('billing.invoices.read'));
 const canReadBillingPayerContracts = computed(() => isFacilitySuperAdmin.value || hasPermission('billing.payer-contracts.read'));
+const canOverrideConsultationType = computed(() => isFacilitySuperAdmin.value || hasPermission('appointments.update'));
 const currentUserId = computed<number | null>(() => {
     const raw = page.props.auth?.user?.id;
     const normalized = Number(raw ?? 0);
@@ -728,6 +741,21 @@ const workspaceIntroText = computed(() => isMyClinicalQueue.value
 const showClinicalQueueSuggestion = computed(() => canUseMyClinicalQueue.value && !isMyClinicalQueue.value && !isTriageQueue.value && !hasExplicitQueueIntent);
 const showTriageQueueSuggestion = computed(() => canUseTriageQueue.value && !isTriageQueue.value && !isMyClinicalQueue.value && !hasExplicitQueueIntent);
 const currentViewSummary = computed(() => `${queueModeLabel.value} -> ${quickPresetLabel(statusPreset.value)}`);
+
+// Consultation type analytics (30-day summary strip)
+type ConsultationTypeAnalytics = {
+    totals: { new: number; review: number; total: number; reviewRatePct: number };
+} | null;
+const consultTypeAnalytics = ref<ConsultationTypeAnalytics>(null);
+async function loadConsultTypeAnalytics(): Promise<void> {
+    try {
+        const res = await window.axios.get('/api/appointments/analytics/consultation-type-summary');
+        consultTypeAnalytics.value = res.data.data;
+    } catch {
+        // non-critical — fail silently
+    }
+}
+
 const activeAdvancedFilterCount = computed(() =>
     Number(Boolean(searchForm.patientId))
     + Number(Boolean(searchForm.from))
@@ -2745,6 +2773,45 @@ async function submitStatusUpdate(): Promise<void> {
     }
 }
 
+function openConsultTypeOverrideDialog(appointment: Appointment): void {
+    consultTypeOverrideType.value = appointment.consultationType === 'review' ? 'new' : 'review';
+    consultTypeOverrideReason.value = '';
+    consultTypeOverrideError.value = null;
+    consultTypeOverrideOpen.value = true;
+}
+
+async function submitConsultTypeOverride(): Promise<void> {
+    if (!detailsAppointment.value) return;
+    consultTypeOverrideError.value = null;
+    consultTypeOverrideSubmitting.value = true;
+
+    try {
+        const res = await window.axios.patch(
+            `/api/appointments/${detailsAppointment.value.id}/consultation-type`,
+            {
+                consultationType: consultTypeOverrideType.value,
+                consultationTypeOverrideReason: consultTypeOverrideReason.value,
+            },
+        );
+        const updated: Appointment = res.data.data;
+        detailsAppointment.value = { ...detailsAppointment.value, ...updated };
+        // Sync back into the list
+        const idx = appointments.value.findIndex((a) => a.id === updated.id);
+        if (idx !== -1) appointments.value[idx] = { ...appointments.value[idx], ...updated };
+        consultTypeOverrideOpen.value = false;
+        notifySuccess('Consultation type updated.');
+    } catch (error: unknown) {
+        const apiError = error as { response?: { data?: { errors?: Record<string, string[]>; message?: string } } };
+        const firstError = apiError.response?.data?.errors?.consultationTypeOverrideReason?.[0]
+            ?? apiError.response?.data?.errors?.consultationType?.[0]
+            ?? apiError.response?.data?.message
+            ?? messageFromUnknown(error, 'Could not update consultation type.');
+        consultTypeOverrideError.value = firstError;
+    } finally {
+        consultTypeOverrideSubmitting.value = false;
+    }
+}
+
 function openTriageSheet(appointment: Appointment): void {
     triageTargetAppointment.value = appointment;
     triageForm.triageVitalsSummary = appointment.triageVitalsSummary || '';
@@ -4323,6 +4390,7 @@ onMounted(async () => {
         loadDepartmentOptions(),
         loadClinicianDirectory(),
         initialPatientId ? hydratePatientSummary(initialPatientId) : Promise.resolve(),
+        loadConsultTypeAnalytics(),
     ]);
     if (initialCreateIntent && canCreate.value && !createPrefillApplied.value) {
         createPrefillApplied.value = true;
@@ -4562,6 +4630,26 @@ function submitSearch(): void {
                         <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Closed</p>
                         <p class="mt-1 text-lg font-semibold text-foreground">{{ counts.completed }}</p>
                     </div>
+                </div>
+            </section>
+
+            <!-- 30-day consultation type analytics strip -->
+            <section v-if="consultTypeAnalytics && consultTypeAnalytics.totals.total > 0" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div class="rounded-lg border bg-background px-4 py-3">
+                    <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">New (30 d)</p>
+                    <p class="mt-1 text-lg font-semibold text-foreground">{{ consultTypeAnalytics.totals.new }}</p>
+                </div>
+                <div class="rounded-lg border bg-background px-4 py-3">
+                    <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Review (30 d)</p>
+                    <p class="mt-1 text-lg font-semibold text-foreground">{{ consultTypeAnalytics.totals.review }}</p>
+                </div>
+                <div class="rounded-lg border bg-background px-4 py-3">
+                    <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Total visits</p>
+                    <p class="mt-1 text-lg font-semibold text-foreground">{{ consultTypeAnalytics.totals.total }}</p>
+                </div>
+                <div class="rounded-lg border bg-background px-4 py-3">
+                    <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Review rate</p>
+                    <p class="mt-1 text-lg font-semibold text-foreground">{{ consultTypeAnalytics.totals.reviewRatePct }}%</p>
                 </div>
             </section>
 
@@ -5629,6 +5717,43 @@ function submitSearch(): void {
                                                                         <dd class="text-sm leading-relaxed text-foreground">
                                                                             {{ detailsAppointment.notes || 'No front-desk notes were recorded.' }}
                                                                         </dd>
+                                                                    </div>
+                                                                </dl>
+                                                            </section>
+
+                                                            <section class="space-y-4 border-t border-border/50 pt-6">
+                                                                <div class="flex items-start justify-between gap-3">
+                                                                    <div>
+                                                                        <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Consultation classification</p>
+                                                                        <p class="mt-1 text-sm text-muted-foreground">First visit (New) or return within the follow-up window (Review). Determines consultation fee.</p>
+                                                                    </div>
+                                                                    <Button
+                                                                        v-if="canOverrideConsultationType && !['completed', 'cancelled', 'no_show'].includes(detailsAppointment.status || '')"
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        class="shrink-0 gap-1.5"
+                                                                        @click="openConsultTypeOverrideDialog(detailsAppointment)"
+                                                                    >
+                                                                        <AppIcon name="pencil" class="size-3.5" />
+                                                                        Override
+                                                                    </Button>
+                                                                </div>
+                                                                <dl class="space-y-4">
+                                                                    <div class="grid gap-1 sm:grid-cols-[11rem_minmax(0,1fr)] sm:gap-4">
+                                                                        <dt class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Type</dt>
+                                                                        <dd class="flex items-center gap-2">
+                                                                            <Badge
+                                                                                :variant="detailsAppointment.consultationType === 'review' ? 'secondary' : 'default'"
+                                                                                class="text-xs"
+                                                                            >
+                                                                                {{ detailsAppointment.consultationType === 'review' ? 'Review' : 'New' }}
+                                                                            </Badge>
+                                                                            <span v-if="detailsAppointment.consultationTypeSource === 'manual'" class="text-xs text-muted-foreground">(manually set)</span>
+                                                                        </dd>
+                                                                    </div>
+                                                                    <div v-if="detailsAppointment.consultationTypeOverrideReason" class="grid gap-1 border-t border-border/40 pt-4 sm:grid-cols-[11rem_minmax(0,1fr)] sm:gap-4">
+                                                                        <dt class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Override reason</dt>
+                                                                        <dd class="text-sm leading-relaxed text-foreground">{{ detailsAppointment.consultationTypeOverrideReason }}</dd>
                                                                     </div>
                                                                 </dl>
                                                             </section>
@@ -7174,8 +7299,47 @@ function submitSearch(): void {
                 </DialogContent>
             </Dialog>
 
+            <!-- Consultation type override dialog -->
+            <Dialog :open="consultTypeOverrideOpen" @update:open="(open) => { if (!open) { consultTypeOverrideOpen = false; consultTypeOverrideError = null; } }">
+                <DialogContent variant="form" size="md">
+                    <DialogHeader class="px-6 pt-5">
+                        <DialogTitle>Override consultation type</DialogTitle>
+                        <DialogDescription>Manually set whether this is a New or Review consultation. A reason is required for the audit trail.</DialogDescription>
+                    </DialogHeader>
+                    <div class="space-y-4 px-6 py-4">
+                        <div class="space-y-2">
+                            <Label>Consultation type</Label>
+                            <div class="flex gap-3">
+                                <button
+                                    type="button"
+                                    :class="['flex-1 rounded-lg border p-3 text-sm font-medium transition-colors', consultTypeOverrideType === 'new' ? 'border-primary bg-primary/5 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted/40']"
+                                    @click="consultTypeOverrideType = 'new'"
+                                >New consultation</button>
+                                <button
+                                    type="button"
+                                    :class="['flex-1 rounded-lg border p-3 text-sm font-medium transition-colors', consultTypeOverrideType === 'review' ? 'border-primary bg-primary/5 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted/40']"
+                                    @click="consultTypeOverrideType = 'review'"
+                                >Review visit</button>
+                            </div>
+                        </div>
+                        <div class="space-y-2">
+                            <Label for="consultTypeOverrideReasonInput">Reason for override <span class="text-destructive">*</span></Label>
+                            <Textarea id="consultTypeOverrideReasonInput" v-model="consultTypeOverrideReason" placeholder="Explain why the consultation type is being changed..." :rows="3" />
+                        </div>
+                        <Alert v-if="consultTypeOverrideError" variant="destructive">
+                            <AlertDescription>{{ consultTypeOverrideError }}</AlertDescription>
+                        </Alert>
+                    </div>
+                    <DialogFooter class="px-6 pb-5">
+                        <Button variant="outline" :disabled="consultTypeOverrideSubmitting" @click="consultTypeOverrideOpen = false">Cancel</Button>
+                        <Button :disabled="consultTypeOverrideSubmitting || !consultTypeOverrideReason.trim()" @click="submitConsultTypeOverride">
+                            {{ consultTypeOverrideSubmitting ? 'Saving...' : 'Save override' }}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             <Dialog :open="statusDialogOpen" @update:open="(open) => (open ? (statusDialogOpen = true) : closeStatusDialog())">
-                <DialogContent variant="form" size="2xl">
                     <div class="flex h-full max-h-[90vh] flex-col">
                         <DialogHeader class="sticky top-0 z-10 shrink-0 border-b bg-background px-6 py-4">
                             <DialogTitle>{{ statusDialogTitle }}</DialogTitle>

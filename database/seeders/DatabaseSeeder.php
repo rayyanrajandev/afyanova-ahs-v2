@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $this->call([
+            ConsultationPolicySystemSettingSeeder::class,
             BaselineDepartmentRegistrySeeder::class,
             BaselineStaffDirectorySeeder::class,
             TanzaniaStaffCredentialingPrivilegeDemoSeeder::class,

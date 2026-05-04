@@ -610,6 +610,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::patch('appointments/{id}/consultation-type', [AppointmentController::class, 'overrideConsultationType'])
         ->middleware('can:appointments.update')
         ->name('appointments.override-consultation-type');
+    Route::get('appointments/analytics/consultation-type-summary', [AppointmentController::class, 'consultationTypeSummary'])
+        ->middleware('can:appointments.read')
+        ->name('appointments.analytics.consultation-type-summary');
     Route::get('appointments/{id}/referrals', [AppointmentController::class, 'referrals'])
         ->middleware('can:appointments.read')
         ->name('appointments.referrals.index');

@@ -44,8 +44,12 @@ use App\Modules\Appointment\Application\Exceptions\AppointmentNotFoundException;
 use App\Modules\Appointment\Presentation\Http\Transformers\AppointmentReferralAuditLogResponseTransformer;
 use App\Modules\Appointment\Presentation\Http\Transformers\AppointmentReferralResponseTransformer;
 use App\Modules\Appointment\Presentation\Http\Transformers\AppointmentResponseTransformer;
+use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
+use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AppointmentController extends Controller
@@ -260,6 +264,78 @@ class AppointmentController extends Controller
 
         return response()->json([
             'data' => AppointmentResponseTransformer::transform($appointment),
+        ]);
+    }
+
+    /**
+     * Consultation type volume analytics — NEW vs REVIEW counts over a date window.
+     * Supports granularity: daily | weekly | monthly.
+     * Optional filters: department, from, to (ISO date strings).
+     */
+    public function consultationTypeSummary(Request $request, PlatformScopeQueryApplier $scopeApplier): JsonResponse
+    {
+        $from        = $request->query('from') ? Carbon::parse((string) $request->query('from'))->startOfDay() : Carbon::now()->subDays(30)->startOfDay();
+        $to          = $request->query('to')   ? Carbon::parse((string) $request->query('to'))->endOfDay()   : Carbon::now()->endOfDay();
+        $granularity = (string) $request->query('granularity', 'daily');
+        $department  = $request->query('department');
+
+        $dateFormat = match ($granularity) {
+            'weekly'  => "TO_CHAR(scheduled_at, 'IYYY-\"W\"IW')",
+            'monthly' => "TO_CHAR(scheduled_at, 'YYYY-MM')",
+            default   => "TO_CHAR(scheduled_at, 'YYYY-MM-DD')",
+        };
+
+        $query = AppointmentModel::query()
+            ->whereBetween('scheduled_at', [$from, $to])
+            ->whereNotIn('status', ['cancelled', 'no_show']);
+
+        $scopeApplier->apply($query);
+
+        if ($department) {
+            $query->where('department', $department);
+        }
+
+        $trends = (clone $query)
+            ->select(
+                DB::raw("{$dateFormat} as period"),
+                DB::raw("COALESCE(consultation_type, 'new') as consultation_type"),
+                DB::raw('COUNT(*) as visit_count'),
+            )
+            ->groupBy('period', 'consultation_type')
+            ->orderBy('period')
+            ->get()
+            ->groupBy('period')
+            ->map(fn ($rows) => [
+                'period'      => $rows->first()->period,
+                'newCount'    => (int) ($rows->firstWhere('consultation_type', 'new')?->visit_count ?? 0),
+                'reviewCount' => (int) ($rows->firstWhere('consultation_type', 'review')?->visit_count ?? 0),
+            ])
+            ->values()
+            ->all();
+
+        $totals = (clone $query)
+            ->select(
+                DB::raw("COALESCE(consultation_type, 'new') as consultation_type"),
+                DB::raw('COUNT(*) as visit_count'),
+            )
+            ->groupBy('consultation_type')
+            ->get();
+
+        $newTotal    = (int) ($totals->firstWhere('consultation_type', 'new')?->visit_count ?? 0);
+        $reviewTotal = (int) ($totals->firstWhere('consultation_type', 'review')?->visit_count ?? 0);
+        $grandTotal  = $newTotal + $reviewTotal;
+
+        return response()->json([
+            'data' => [
+                'window'  => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'granularity' => $granularity],
+                'totals'  => [
+                    'new'           => $newTotal,
+                    'review'        => $reviewTotal,
+                    'total'         => $grandTotal,
+                    'reviewRatePct' => $grandTotal > 0 ? round($reviewTotal / $grandTotal * 100, 1) : 0.0,
+                ],
+                'trends'  => $trends,
+            ],
         ]);
     }
 
