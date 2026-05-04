@@ -6576,18 +6576,7 @@ onMounted(initialPageLoad);
 
                                     <!-- AUDIT TAB -->
                                     <TabsContent v-if="canViewPatientAudit" value="audit" class="m-0 space-y-3 px-6 py-4">
-                                        <Alert v-if="!canViewPatientAudit" variant="destructive">
-                                            <AlertTitle class="flex items-center gap-2">
-                                                <AppIcon name="shield-check" class="size-4" />
-                                                Audit Access Restricted
-                                            </AlertTitle>
-                                            <AlertDescription>
-                                                Request <code>patients.view-audit-logs</code> permission.
-                                            </AlertDescription>
-                                        </Alert>
-
-                                        <template v-else>
-                                            <Card class="rounded-lg !gap-0 overflow-hidden">
+                                        <Card class="rounded-lg !gap-0 overflow-hidden">
                                                 <CardHeader class="bg-muted/40 px-4 py-2.5">
                                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                                         <div>
@@ -6764,56 +6753,61 @@ onMounted(initialPageLoad);
                                                 <AppIcon name="file-text" class="size-6 text-muted-foreground/50" />
                                                 <p class="text-sm text-muted-foreground">No audit logs found for current filters.</p>
                                             </div>
-                                            <div v-else class="space-y-1.5">
+                                            <div v-else class="space-y-2">
                                                 <div
                                                     v-for="log in detailsAuditLogs"
                                                     :key="log.id"
-                                                    class="rounded-lg border bg-background px-3 py-3 text-sm"
+                                                    class="flex gap-3 rounded-lg border bg-background px-3 py-3 text-sm"
                                                 >
-                                                    <div class="flex flex-wrap items-start justify-between gap-3">
-                                                        <div class="min-w-0 flex-1">
-                                                            <div class="flex flex-wrap items-center gap-2">
-                                                                <Badge variant="outline">{{ log.actionLabel || log.action || 'event' }}</Badge>
-                                                                <Badge variant="secondary">{{ auditLogActorTypeLabel(log) }}</Badge>
-                                                                <Badge v-if="auditLogChangeKeys(log).length > 0" variant="secondary">
-                                                                    {{ auditLogChangeKeys(log).length }} fields changed
-                                                                </Badge>
-                                                                <Badge v-if="auditLogMetadataPreview(log).length > 0" variant="secondary">
-                                                                    {{ auditLogMetadataPreview(log).length }} metadata items
-                                                                </Badge>
-                                                                <span class="text-xs text-muted-foreground">
-                                                                    {{ formatDateTime(log.createdAt) }}
-                                                                </span>
-                                                            </div>
-                                                            <p class="mt-2 font-medium text-foreground">{{ auditActorLabel(log) }}</p>
-                                                            <p v-if="auditChangeSummary(log)" class="mt-1 text-xs text-muted-foreground">
-                                                                {{ auditChangeSummary(log) }}
-                                                            </p>
-                                                            <div v-if="auditLogChangeKeys(log).length > 0" class="mt-3 flex flex-wrap gap-1.5">
-                                                                <Badge
-                                                                    v-for="field in auditLogChangeKeys(log)"
-                                                                    :key="`${log.id}-field-${field}`"
-                                                                    variant="outline"
-                                                                    class="text-xs"
-                                                                >
-                                                                    {{ field }}
-                                                                </Badge>
-                                                            </div>
-                                                            <div
-                                                                v-if="auditLogMetadataPreview(log).length > 0"
-                                                                class="mt-3 grid gap-1 text-xs text-muted-foreground"
-                                                            >
-                                                                <p
-                                                                    v-for="item in auditLogMetadataPreview(log)"
-                                                                    :key="`${log.id}-meta-${item.key}`"
-                                                                >
-                                                                    <span class="font-medium text-foreground">{{ item.key }}:</span>
-                                                                    {{ item.value }}
-                                                                </p>
-                                                            </div>
+                                                    <!-- Actor icon: amber for system, muted for user -->
+                                                    <div
+                                                        class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full"
+                                                        :class="auditLogActorTypeLabel(log) === 'System' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-muted/60 text-muted-foreground'"
+                                                    >
+                                                        <AppIcon
+                                                            :name="auditLogActorTypeLabel(log) === 'System' ? 'activity' : 'user'"
+                                                            class="size-4"
+                                                        />
+                                                    </div>
+                                                    <!-- Content -->
+                                                    <div class="min-w-0 flex-1">
+                                                        <!-- Action headline + timestamp -->
+                                                        <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                                                            <span class="font-semibold text-foreground">
+                                                                {{ log.actionLabel || auditFieldLabel(log.action || 'Event') }}
+                                                            </span>
+                                                            <span class="shrink-0 text-xs text-muted-foreground">{{ formatDateTime(log.createdAt) }}</span>
                                                         </div>
-                                                        <div class="flex h-8 w-8 items-center justify-center rounded-full bg-muted/70">
-                                                            <AppIcon name="activity" class="size-4 text-muted-foreground" />
+                                                        <!-- Who performed it -->
+                                                        <p class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                                                            Performed by
+                                                            <span class="font-medium text-foreground">{{ auditActorLabel(log) }}</span>
+                                                            <Badge variant="secondary" class="px-1.5 py-0 text-[10px]">{{ auditLogActorTypeLabel(log) }}</Badge>
+                                                        </p>
+                                                        <!-- Changed fields -->
+                                                        <div v-if="auditLogChangeKeys(log).length > 0" class="mt-2 flex flex-wrap items-center gap-1.5">
+                                                            <span class="text-xs text-muted-foreground">Fields changed:</span>
+                                                            <Badge
+                                                                v-for="field in auditLogChangeKeys(log)"
+                                                                :key="`${log.id}-field-${field}`"
+                                                                variant="outline"
+                                                                class="px-1.5 py-0 text-[11px]"
+                                                            >
+                                                                {{ field }}
+                                                            </Badge>
+                                                        </div>
+                                                        <!-- Metadata -->
+                                                        <div
+                                                            v-if="auditLogMetadataPreview(log).length > 0"
+                                                            class="mt-2 grid gap-1 text-xs text-muted-foreground"
+                                                        >
+                                                            <p
+                                                                v-for="item in auditLogMetadataPreview(log)"
+                                                                :key="`${log.id}-meta-${item.key}`"
+                                                            >
+                                                                <span class="font-medium text-foreground">{{ item.key }}:</span>
+                                                                {{ item.value }}
+                                                            </p>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -6830,7 +6824,6 @@ onMounted(initialPageLoad);
                                                     Next
                                                 </Button>
                                             </div>
-                                        </template>
                                     </TabsContent>
                             </ScrollArea>
                         </Tabs>
