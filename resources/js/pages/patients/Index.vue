@@ -2134,19 +2134,6 @@ async function createDirectServiceRequest(serviceType: DirectServiceRequestType)
     }
 }
 
-async function copyVisitHandoffEmergencyTriageLink(): Promise<void> {
-    const patient = visitHandoffPatient.value;
-    if (!patient) return;
-    const path = patientContextHref('/emergency-triage', patient, { includeTabNew: true });
-    const absolute = typeof window !== 'undefined' ? new URL(path, window.location.origin).href : path;
-    try {
-        await navigator.clipboard.writeText(absolute);
-        notifySuccess('Link copied. Share it with triage or emergency staff so they can start intake.');
-    } catch {
-        notifyError('Could not copy automatically. Open Emergency Triage from the sidebar and search for this patient.');
-    }
-}
-
 function directServiceQueueHref(serviceType: DirectServiceRequestType): string {
     const params = new URLSearchParams({ serviceType, status: 'pending' });
     return `/walk-in-service-requests?${params.toString()}`;
@@ -5683,35 +5670,28 @@ onMounted(initialPageLoad);
                             </section>
 
                             <section class="rounded-lg border bg-muted/20 p-4">
-                                <Alert
+                                <div
                                     v-if="visitHandoffEmergencyNeedsTriageStaff"
-                                    class="mb-4 border-sky-200 bg-sky-50/90 text-sky-950 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-50"
+                                    class="mb-4 flex items-start gap-3 rounded-lg border border-sky-200 bg-sky-50/90 px-4 py-3 dark:border-sky-800 dark:bg-sky-950/40"
                                 >
-                                    <AlertTitle class="flex items-center gap-2 text-base text-sky-950 dark:text-sky-50">
-                                        <AppIcon name="heart-pulse" class="size-4 shrink-0 text-sky-700 dark:text-sky-300" />
-                                        Hand off to emergency triage
-                                    </AlertTitle>
-                                    <AlertDescription class="space-y-3 text-sm text-sky-900/95 dark:text-sky-100/90">
-                                        <p>
-                                            Front desk staff register and direct patients.
-                                            <span class="font-medium">Starting urgent intake in the system</span>
-                                            is usually done by triage or emergency staff. That split of duties is normal for registration roles.
+                                    <div class="flex size-8 shrink-0 items-center justify-center rounded-md bg-sky-500/15 text-sky-700 dark:text-sky-300">
+                                        <AppIcon name="heart-pulse" class="size-4" />
+                                    </div>
+                                    <div class="min-w-0 space-y-2">
+                                        <p class="text-sm font-semibold text-sky-950 dark:text-sky-50">Direct patient to emergency triage</p>
+                                        <p class="text-xs leading-relaxed text-sky-900/80 dark:text-sky-100/75">
+                                            Your role covers registration and routing. Triage staff will open the patient
+                                            record at their station when the patient arrives. Direct the patient to the
+                                            emergency triage area now.
                                         </p>
-                                        <p class="text-xs leading-relaxed">
-                                            Direct the patient to the emergency or triage area, then send the link below to a colleague who can open Emergency Triage.
-                                        </p>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            class="border-sky-300 bg-white/90 text-sky-950 hover:bg-white dark:border-sky-700 dark:bg-sky-900/60 dark:text-sky-50 dark:hover:bg-sky-900"
-                                            @click="copyVisitHandoffEmergencyTriageLink"
-                                        >
-                                            <AppIcon name="arrow-up-right" class="size-3.5" />
-                                            Copy link for triage desk
-                                        </Button>
-                                    </AlertDescription>
-                                </Alert>
+                                        <div class="flex items-center gap-2 pt-0.5">
+                                            <span class="text-xs text-sky-800/70 dark:text-sky-300/70">Patient number</span>
+                                            <span class="rounded-md border border-sky-300/60 bg-white/80 px-2 py-0.5 font-mono text-sm font-semibold tracking-wide text-sky-950 dark:border-sky-700/60 dark:bg-sky-900/50 dark:text-sky-50">
+                                                {{ visitHandoffPatient?.patientNumber || visitHandoffPatient?.id?.slice(0, 8) || '—' }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
 
                                 <template v-if="visitHandoffMode === 'direct-services'">
                                     <div class="space-y-4">
