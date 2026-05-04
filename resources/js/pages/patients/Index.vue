@@ -5954,43 +5954,16 @@ onMounted(initialPageLoad);
                     class="flex h-full min-h-0 flex-col"
                 >
                     <SheetHeader v-if="detailsSheetPatient" class="shrink-0 border-b bg-background px-4 py-3 text-left pr-12">
-                        <div class="flex min-w-0 items-start justify-between gap-3">
-                            <SheetTitle class="flex min-w-0 flex-wrap items-center gap-2">
-                                <AppIcon name="user" class="size-5 text-muted-foreground" />
-                                <span class="min-w-0 truncate">{{ patientName(detailsSheetPatient) }}</span>
-                                <Badge v-if="detailsSheetPatient.patientNumber" variant="outline" class="shrink-0 font-normal">
-                                    {{ detailsSheetPatient.patientNumber }}
-                                </Badge>
-                                <Badge :variant="statusVariant(detailsSheetPatient.status)" class="shrink-0 capitalize">
-                                    {{ detailsSheetPatient.status || 'unknown' }}
-                                </Badge>
-                            </SheetTitle>
-                            <div class="flex shrink-0 flex-wrap gap-2">
-                                <Button
-                                    v-if="canUpdatePatients"
-                                    size="sm"
-                                    variant="outline"
-                                    class="h-8 gap-1.5 text-xs"
-                                    @click="openEditSheet(detailsSheetPatient)"
-                                >
-                                    <AppIcon name="pencil" class="size-3.5" />
-                                    Edit
-                                </Button>
-                                <Button
-                                    v-if="canUpdatePatientStatus"
-                                    size="sm"
-                                    :variant="detailsSheetPatient.status === 'active' ? 'ghost' : 'secondary'"
-                                    class="h-8 gap-1.5 text-xs"
-                                    @click="openStatusDialog(detailsSheetPatient)"
-                                >
-                                    <AppIcon
-                                        :name="detailsSheetPatient.status === 'active' ? 'user-x' : 'user-check'"
-                                        class="size-3.5"
-                                    />
-                                    {{ detailsSheetPatient.status === 'active' ? 'Deactivate' : 'Activate' }}
-                                </Button>
-                            </div>
-                        </div>
+                        <SheetTitle class="flex min-w-0 flex-wrap items-center gap-2">
+                            <AppIcon name="user" class="size-5 text-muted-foreground" />
+                            <span class="min-w-0 truncate">{{ patientName(detailsSheetPatient) }}</span>
+                            <Badge v-if="detailsSheetPatient.patientNumber" variant="outline" class="shrink-0 font-normal">
+                                {{ detailsSheetPatient.patientNumber }}
+                            </Badge>
+                            <Badge :variant="statusVariant(detailsSheetPatient.status)" class="shrink-0 capitalize">
+                                {{ detailsSheetPatient.status || 'unknown' }}
+                            </Badge>
+                        </SheetTitle>
                         <SheetDescription class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                             <span class="flex items-center gap-1">
                                 <AppIcon name="user" class="size-3 opacity-50" />
@@ -6789,16 +6762,41 @@ onMounted(initialPageLoad);
                         </Tabs>
                     </div>
                     <SheetFooter class="shrink-0 flex-col-reverse gap-2 border-t bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                            <Button variant="outline" class="gap-1.5 sm:shrink-0" @click="closePatientDetailsSheet">
-                                <AppIcon name="circle-x" class="size-3.5" />
-                                Close
+                        <Button variant="outline" size="sm" class="gap-1.5 sm:shrink-0" @click="closePatientDetailsSheet">
+                            <AppIcon name="circle-x" class="size-3.5" />
+                            Close
+                        </Button>
+                        <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+                            <Button
+                                v-if="canUpdatePatientStatus && detailsSheetPatient"
+                                size="sm"
+                                :variant="detailsSheetPatient.status === 'active' ? 'outline' : 'secondary'"
+                                class="gap-1.5"
+                                @click="openStatusDialog(detailsSheetPatient)"
+                            >
+                                <AppIcon
+                                    :name="detailsSheetPatient.status === 'active' ? 'user-x' : 'user-check'"
+                                    class="size-3.5"
+                                />
+                                {{ detailsSheetPatient.status === 'active' ? 'Deactivate' : 'Activate' }}
                             </Button>
-                            <Button v-if="detailsSheetPatient" as-child class="w-full justify-center gap-1.5 sm:w-auto sm:min-w-[16rem]">
+                            <Button
+                                v-if="canUpdatePatients && detailsSheetPatient"
+                                size="sm"
+                                variant="outline"
+                                class="gap-1.5"
+                                @click="openEditSheet(detailsSheetPatient)"
+                            >
+                                <AppIcon name="pencil" class="size-3.5" />
+                                Edit Demographics
+                            </Button>
+                            <Button v-if="detailsSheetPatient" size="sm" as-child class="gap-1.5">
                                 <Link :href="patientChartContextHref(detailsSheetPatient, { from: 'patients' })">
                                     <AppIcon name="book-open" class="size-3.5" />
                                     Open Patient Chart
                                 </Link>
                             </Button>
+                        </div>
                     </SheetFooter>
                 </SheetContent>
             </Sheet>
