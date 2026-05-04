@@ -266,6 +266,8 @@ const payerTypeOptions: PayerType[] = ['insurance', 'employer', 'government', 'd
 
 type PayerPreset = {
     label: string;
+    contractCode: string;
+    contractName: string;
     payerName: string;
     payerType: PayerType;
     payerPlanCode?: string;
@@ -281,6 +283,8 @@ type PayerPreset = {
 const PAYER_PRESETS: PayerPreset[] = [
     {
         label: 'NHIF',
+        contractCode: 'NHIF-TZ-001',
+        contractName: 'NHIF General Scheme',
         payerName: 'National Health Insurance Fund (NHIF)',
         payerType: 'government',
         payerPlanCode: 'NHIF-GEN',
@@ -293,7 +297,24 @@ const PAYER_PRESETS: PayerPreset[] = [
         settlementCycleDays: '90',
     },
     {
+        label: 'NHIF (Inpatient)',
+        contractCode: 'NHIF-TZ-002',
+        contractName: 'NHIF Inpatient Scheme',
+        payerName: 'National Health Insurance Fund (NHIF)',
+        payerType: 'government',
+        payerPlanCode: 'NHIF-IPD',
+        payerPlanName: 'NHIF Inpatient Benefit Package',
+        defaultCoveragePercent: '100',
+        defaultCopayType: 'none',
+        defaultCopayValue: '',
+        requiresPreAuthorization: 'true',
+        claimSubmissionDeadlineDays: '30',
+        settlementCycleDays: '90',
+    },
+    {
         label: 'iCHF',
+        contractCode: 'ICHF-TZ-001',
+        contractName: 'iCHF Community Scheme',
         payerName: 'Community Health Fund (iCHF)',
         payerType: 'government',
         payerPlanCode: 'ICHF-GEN',
@@ -306,62 +327,9 @@ const PAYER_PRESETS: PayerPreset[] = [
         settlementCycleDays: '90',
     },
     {
-        label: 'Jubilee',
-        payerName: 'Jubilee Insurance Tanzania',
-        payerType: 'insurance',
-        defaultCoveragePercent: '80',
-        defaultCopayType: 'percentage',
-        defaultCopayValue: '20',
-        requiresPreAuthorization: 'true',
-        claimSubmissionDeadlineDays: '30',
-        settlementCycleDays: '30',
-    },
-    {
-        label: 'AAR',
-        payerName: 'AAR Insurance Tanzania',
-        payerType: 'insurance',
-        defaultCoveragePercent: '80',
-        defaultCopayType: 'percentage',
-        defaultCopayValue: '20',
-        requiresPreAuthorization: 'true',
-        claimSubmissionDeadlineDays: '30',
-        settlementCycleDays: '30',
-    },
-    {
-        label: 'ICEA Lion',
-        payerName: 'ICEA Lion General Insurance',
-        payerType: 'insurance',
-        defaultCoveragePercent: '80',
-        defaultCopayType: 'percentage',
-        defaultCopayValue: '20',
-        requiresPreAuthorization: 'true',
-        claimSubmissionDeadlineDays: '30',
-        settlementCycleDays: '45',
-    },
-    {
-        label: 'Strategis',
-        payerName: 'Strategis Insurance Tanzania',
-        payerType: 'insurance',
-        defaultCoveragePercent: '80',
-        defaultCopayType: 'percentage',
-        defaultCopayValue: '20',
-        requiresPreAuthorization: 'true',
-        claimSubmissionDeadlineDays: '30',
-        settlementCycleDays: '45',
-    },
-    {
-        label: 'Resolution',
-        payerName: 'Resolution Insurance Tanzania',
-        payerType: 'insurance',
-        defaultCoveragePercent: '80',
-        defaultCopayType: 'percentage',
-        defaultCopayValue: '20',
-        requiresPreAuthorization: 'true',
-        claimSubmissionDeadlineDays: '30',
-        settlementCycleDays: '45',
-    },
-    {
         label: 'NSSF',
+        contractCode: 'NSSF-TZ-001',
+        contractName: 'NSSF Health Benefit Scheme',
         payerName: 'National Social Security Fund (NSSF)',
         payerType: 'government',
         payerPlanCode: 'NSSF-GEN',
@@ -374,7 +342,84 @@ const PAYER_PRESETS: PayerPreset[] = [
         settlementCycleDays: '60',
     },
     {
+        label: 'Jubilee',
+        contractCode: 'JUB-TZ-001',
+        contractName: 'Jubilee Insurance — Standard',
+        payerName: 'Jubilee Insurance Tanzania',
+        payerType: 'insurance',
+        payerPlanCode: 'JUB-STD',
+        payerPlanName: 'Jubilee Standard Medical Plan',
+        defaultCoveragePercent: '80',
+        defaultCopayType: 'percentage',
+        defaultCopayValue: '20',
+        requiresPreAuthorization: 'true',
+        claimSubmissionDeadlineDays: '30',
+        settlementCycleDays: '30',
+    },
+    {
+        label: 'AAR',
+        contractCode: 'AAR-TZ-001',
+        contractName: 'AAR Insurance — Standard',
+        payerName: 'AAR Insurance Tanzania',
+        payerType: 'insurance',
+        payerPlanCode: 'AAR-STD',
+        payerPlanName: 'AAR Standard Medical Plan',
+        defaultCoveragePercent: '80',
+        defaultCopayType: 'percentage',
+        defaultCopayValue: '20',
+        requiresPreAuthorization: 'true',
+        claimSubmissionDeadlineDays: '30',
+        settlementCycleDays: '30',
+    },
+    {
+        label: 'ICEA Lion',
+        contractCode: 'ICEA-TZ-001',
+        contractName: 'ICEA Lion — Standard',
+        payerName: 'ICEA Lion General Insurance',
+        payerType: 'insurance',
+        payerPlanCode: 'ICEA-STD',
+        payerPlanName: 'ICEA Lion Standard Medical Plan',
+        defaultCoveragePercent: '80',
+        defaultCopayType: 'percentage',
+        defaultCopayValue: '20',
+        requiresPreAuthorization: 'true',
+        claimSubmissionDeadlineDays: '30',
+        settlementCycleDays: '45',
+    },
+    {
+        label: 'Strategis',
+        contractCode: 'STRAT-TZ-001',
+        contractName: 'Strategis Insurance — Standard',
+        payerName: 'Strategis Insurance Tanzania',
+        payerType: 'insurance',
+        payerPlanCode: 'STRAT-STD',
+        payerPlanName: 'Strategis Standard Medical Plan',
+        defaultCoveragePercent: '80',
+        defaultCopayType: 'percentage',
+        defaultCopayValue: '20',
+        requiresPreAuthorization: 'true',
+        claimSubmissionDeadlineDays: '30',
+        settlementCycleDays: '45',
+    },
+    {
+        label: 'Resolution',
+        contractCode: 'RES-TZ-001',
+        contractName: 'Resolution Insurance — Standard',
+        payerName: 'Resolution Insurance Tanzania',
+        payerType: 'insurance',
+        payerPlanCode: 'RES-STD',
+        payerPlanName: 'Resolution Standard Medical Plan',
+        defaultCoveragePercent: '80',
+        defaultCopayType: 'percentage',
+        defaultCopayValue: '20',
+        requiresPreAuthorization: 'true',
+        claimSubmissionDeadlineDays: '30',
+        settlementCycleDays: '45',
+    },
+    {
         label: 'Employer Direct',
+        contractCode: 'EMP-001',
+        contractName: 'Employer Direct Scheme',
         payerName: '',
         payerType: 'employer',
         defaultCoveragePercent: '100',
@@ -385,6 +430,8 @@ const PAYER_PRESETS: PayerPreset[] = [
     },
     {
         label: 'Donor / NGO',
+        contractCode: 'DONOR-001',
+        contractName: 'Donor / NGO Scheme',
         payerName: '',
         payerType: 'donor',
         defaultCoveragePercent: '100',
@@ -396,6 +443,8 @@ const PAYER_PRESETS: PayerPreset[] = [
 ];
 
 type PayerPresetTarget = {
+    contractCode: string;
+    contractName: string;
     payerName: string;
     payerType: string;
     payerPlanCode: string;
@@ -409,6 +458,8 @@ type PayerPresetTarget = {
 };
 
 function applyPayerPreset(form: PayerPresetTarget, preset: PayerPreset): void {
+    form.contractCode = preset.contractCode;
+    form.contractName = preset.contractName;
     form.payerName = preset.payerName;
     form.payerType = preset.payerType;
     form.payerPlanCode = preset.payerPlanCode ?? '';
@@ -2916,6 +2967,23 @@ onMounted(refreshPage);
                     <template v-else>
                             <div class="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.8fr)]">
                                 <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                    <!-- Preset chips — fills the whole form in one click -->
+                                    <div class="md:col-span-2 xl:col-span-3 rounded-lg border border-dashed bg-muted/20 px-3 py-3">
+                                        <p class="text-xs font-semibold text-foreground">Start from a known payer</p>
+                                        <p class="mt-0.5 text-[11px] text-muted-foreground">Click a chip — all fields below will be filled automatically. Just verify and save.</p>
+                                        <div class="mt-2 flex flex-wrap gap-1.5">
+                                            <button
+                                                v-for="preset in PAYER_PRESETS"
+                                                :key="preset.label"
+                                                type="button"
+                                                class="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground"
+                                                :class="createForm.contractCode === preset.contractCode ? 'border-primary/50 bg-primary/5 text-primary' : 'bg-muted/40 text-muted-foreground'"
+                                                @click="applyPayerPreset(createForm, preset)"
+                                            >
+                                                {{ preset.label }}
+                                            </button>
+                                        </div>
+                                    </div>
                                     <FormFieldShell input-id="create-contract-code" label="Contract code"><Input id="create-contract-code" v-model="createForm.contractCode" /></FormFieldShell>
                                     <FormFieldShell input-id="create-contract-name" label="Contract name"><Input id="create-contract-name" v-model="createForm.contractName" /></FormFieldShell>
                                     <FormFieldShell input-id="create-payer-type" label="Payer type">
@@ -2924,22 +2992,6 @@ onMounted(refreshPage);
                                             <SelectContent><SelectItem v-for="option in payerTypeOptions" :key="option" :value="option">{{ formatEnumLabel(option) }}</SelectItem></SelectContent>
                                         </Select>
                                     </FormFieldShell>
-                                    <div class="md:col-span-2 xl:col-span-3">
-                                        <p class="mb-1.5 text-xs font-medium text-muted-foreground">Quick-fill from common payers</p>
-                                        <div class="flex flex-wrap gap-1.5">
-                                            <button
-                                                v-for="preset in PAYER_PRESETS"
-                                                :key="preset.label"
-                                                type="button"
-                                                class="inline-flex items-center rounded-md border bg-muted/40 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground"
-                                                :class="createForm.payerName === preset.payerName && preset.payerName ? 'border-primary/50 bg-primary/5 text-primary' : 'text-muted-foreground'"
-                                                @click="applyPayerPreset(createForm, preset)"
-                                            >
-                                                {{ preset.label }}
-                                            </button>
-                                        </div>
-                                        <p class="mt-1.5 text-[11px] text-muted-foreground/60">Selecting a preset pre-fills payer details. You can edit any field after.</p>
-                                    </div>
                                     <FormFieldShell input-id="create-payer-name" label="Payer name"><Input id="create-payer-name" v-model="createForm.payerName" placeholder="e.g. National Health Insurance Fund (NHIF)" /></FormFieldShell>
                                     <FormFieldShell input-id="create-payer-plan-code" label="Plan code"><Input id="create-payer-plan-code" v-model="createForm.payerPlanCode" /></FormFieldShell>
                                     <FormFieldShell input-id="create-payer-plan-name" label="Plan name"><Input id="create-payer-plan-name" v-model="createForm.payerPlanName" /></FormFieldShell>
@@ -3555,21 +3607,21 @@ onMounted(refreshPage);
                                 <SelectContent><SelectItem v-for="option in payerTypeOptions" :key="option" :value="option">{{ formatEnumLabel(option) }}</SelectItem></SelectContent>
                             </Select>
                         </FormFieldShell>
-                        <div class="col-span-full">
-                            <p class="mb-1.5 text-xs font-medium text-muted-foreground">Quick-fill from common payers</p>
-                            <div class="flex flex-wrap gap-1.5">
+                        <div class="col-span-full rounded-lg border border-dashed bg-muted/20 px-3 py-3">
+                            <p class="text-xs font-semibold text-foreground">Re-fill from a known payer</p>
+                            <p class="mt-0.5 text-[11px] text-muted-foreground">Click a chip to overwrite all payer fields below. You can edit any field after.</p>
+                            <div class="mt-2 flex flex-wrap gap-1.5">
                                 <button
                                     v-for="preset in PAYER_PRESETS"
                                     :key="preset.label"
                                     type="button"
-                                    class="inline-flex items-center rounded-md border bg-muted/40 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground"
-                                    :class="editContractForm.payerName === preset.payerName && preset.payerName ? 'border-primary/50 bg-primary/5 text-primary' : 'text-muted-foreground'"
+                                    class="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground"
+                                    :class="editContractForm.contractCode === preset.contractCode ? 'border-primary/50 bg-primary/5 text-primary' : 'bg-muted/40 text-muted-foreground'"
                                     @click="applyPayerPreset(editContractForm, preset)"
                                 >
                                     {{ preset.label }}
                                 </button>
                             </div>
-                            <p class="mt-1.5 text-[11px] text-muted-foreground/60">Selecting a preset pre-fills payer details. You can edit any field after.</p>
                         </div>
                         <FormFieldShell input-id="edit-contract-payer-name" label="Payer name"><Input id="edit-contract-payer-name" v-model="editContractForm.payerName" placeholder="e.g. National Health Insurance Fund (NHIF)" /></FormFieldShell>
                         <FormFieldShell input-id="edit-payer-plan-code" label="Plan code"><Input id="edit-payer-plan-code" v-model="editContractForm.payerPlanCode" /></FormFieldShell>
