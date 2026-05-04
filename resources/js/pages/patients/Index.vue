@@ -2269,6 +2269,48 @@ async function checkInVisitFromHandoff() {
     }
 }
 
+async function sendToEmergencyQueue(): Promise<void> {
+    const patient = visitHandoffPatient.value;
+    if (!patient) return;
+
+    visitHandoffSubmitting.value = true;
+    visitHandoffActionError.value = null;
+
+    try {
+        // Create a walk-in appointment at the current time.
+        const created = await apiRequest<{ data: PatientTimelineAppointment }>('POST', '/appointments', {
+            body: {
+                patientId: patient.id,
+                appointmentType: 'walk_in',
+                scheduledAt: new Date().toISOString(),
+                reason: 'Emergency — directed to triage by registration',
+            },
+        });
+
+        // Immediately advance status to waiting_triage so it appears in the triage queue.
+        const updated = await apiRequest<{ data: PatientTimelineAppointment }>(
+            'PATCH',
+            `/appointments/${created.data.id}/status`,
+            {
+                body: {
+                    status: 'waiting_triage',
+                    reason: 'Patient directed to emergency triage queue by registration',
+                },
+            },
+        );
+
+        replaceVisitHandoffAppointment(updated.data);
+        notifySuccess('Patient is now in the emergency triage queue. Triage staff will take over from there.');
+    } catch (error) {
+        const apiError = error as Error & { payload?: ValidationErrorResponse };
+        visitHandoffActionError.value =
+            apiError.payload?.message ?? messageFromUnknown(error, 'Unable to queue patient for emergency triage.');
+        notifyError(visitHandoffActionError.value);
+    } finally {
+        visitHandoffSubmitting.value = false;
+    }
+}
+
 function visitHandoffModeAvailable(mode: PatientVisitHandoffMode): boolean {
     if (mode === 'outpatient') {
         return canCreateAppointments.value || canReadAppointments.value;
@@ -5876,6 +5918,26 @@ onMounted(initialPageLoad);
                                         </div>
                                     </div>
                                 </template>
+
+                                <div
+                                    v-if="visitHandoffEmergencyNeedsTriageStaff"
+                                    class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+                                >
+                                    <div class="space-y-1">
+                                        <p class="text-sm font-semibold text-foreground">Send to emergency triage queue</p>
+                                        <p class="max-w-xl text-xs leading-5 text-muted-foreground">
+                                            Creates a walk-in visit and places the patient in the nurse triage queue. Triage staff will see the patient at their station and complete urgent intake.
+                                        </p>
+                                    </div>
+                                    <Button
+                                        class="shrink-0 gap-1.5"
+                                        :disabled="visitHandoffSubmitting || !canCreateAppointments || !canUpdateAppointmentsStatus"
+                                        @click="sendToEmergencyQueue"
+                                    >
+                                        <AppIcon name="heart-pulse" class="size-3.5" />
+                                        {{ visitHandoffSubmitting ? 'Queueing...' : 'Send to emergency queue' }}
+                                    </Button>
+                                </div>
 
                                 <div
                                     v-else-if="!visitHandoffEmergencyNeedsTriageStaff"
