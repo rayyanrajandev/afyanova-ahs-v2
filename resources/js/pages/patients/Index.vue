@@ -6413,6 +6413,26 @@ onMounted(initialPageLoad);
                                                                 ?? 'Review the current visit state before continuing care.'
                                                         }}
                                                     </p>
+                                                    <div v-if="detailsCurrentAppointment" class="mt-2.5 flex flex-wrap items-center gap-2">
+                                                        <Badge variant="outline" class="gap-1 font-mono text-xs font-normal">
+                                                            <AppIcon name="calendar-clock" class="size-3 opacity-60" />
+                                                            {{ detailsCurrentAppointment.appointmentNumber ?? 'No number' }}
+                                                        </Badge>
+                                                        <Badge variant="secondary" class="capitalize text-xs">
+                                                            {{ formatEnumLabel(detailsCurrentAppointment.status ?? 'unknown') }}
+                                                        </Badge>
+                                                        <span v-if="detailsCurrentAppointment.scheduledAt" class="flex items-center gap-1 text-xs text-muted-foreground">
+                                                            <AppIcon name="calendar" class="size-3 opacity-50" />
+                                                            {{ formatDateTime(detailsCurrentAppointment.scheduledAt) }}
+                                                        </span>
+                                                        <span v-if="detailsCurrentAppointment.department" class="flex items-center gap-1 text-xs text-muted-foreground">
+                                                            <AppIcon name="map-pin" class="size-3 opacity-50" />
+                                                            {{ detailsCurrentAppointment.department }}
+                                                        </span>
+                                                        <span v-if="detailsCurrentAppointment.reason" class="text-xs text-muted-foreground italic">
+                                                            "{{ detailsCurrentAppointment.reason }}"
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </CardContent>
                                         </Card>
