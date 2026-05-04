@@ -2,6 +2,7 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import DatePickerField from '@/components/DatePickerField.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -6382,11 +6383,19 @@ onMounted(initialPageLoad);
                                                         </div>
                                                         <div class="space-y-1.5">
                                                             <Label>Effective date</Label>
-                                                            <Input v-model="insuranceForm.effectiveDate" type="date" />
+                                                            <DatePickerField
+                                                                :model-value="insuranceForm.effectiveDate"
+                                                                placeholder="Pick effective date"
+                                                                @update:model-value="insuranceForm.effectiveDate = $event"
+                                                            />
                                                         </div>
                                                         <div class="space-y-1.5">
                                                             <Label>Expiry date</Label>
-                                                            <Input v-model="insuranceForm.expiryDate" type="date" />
+                                                            <DatePickerField
+                                                                :model-value="insuranceForm.expiryDate"
+                                                                placeholder="Pick expiry date"
+                                                                @update:model-value="insuranceForm.expiryDate = $event"
+                                                            />
                                                         </div>
                                                     </div>
                                                     <div class="mt-3 flex justify-end gap-2">
