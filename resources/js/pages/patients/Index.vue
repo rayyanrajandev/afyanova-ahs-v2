@@ -2,8 +2,8 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import DatePickerField from '@/components/DatePickerField.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
+import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -6381,22 +6381,20 @@ onMounted(initialPageLoad);
                                                             <Label>Verification reference</Label>
                                                             <Input v-model="insuranceForm.verificationReference" placeholder="Verification or approval reference" />
                                                         </div>
-                                                        <div class="space-y-1.5">
-                                                            <Label>Effective date</Label>
-                                                            <DatePickerField
-                                                                :model-value="insuranceForm.effectiveDate"
-                                                                placeholder="Pick effective date"
-                                                                @update:model-value="insuranceForm.effectiveDate = $event"
-                                                            />
-                                                        </div>
-                                                        <div class="space-y-1.5">
-                                                            <Label>Expiry date</Label>
-                                                            <DatePickerField
-                                                                :model-value="insuranceForm.expiryDate"
-                                                                placeholder="Pick expiry date"
-                                                                @update:model-value="insuranceForm.expiryDate = $event"
-                                                            />
-                                                        </div>
+                                                        <SingleDatePopoverField
+                                                            input-id="insurance-effective-date"
+                                                            label="Effective date"
+                                                            :model-value="insuranceForm.effectiveDate"
+                                                            placeholder="Select effective date"
+                                                            @update:model-value="insuranceForm.effectiveDate = $event"
+                                                        />
+                                                        <SingleDatePopoverField
+                                                            input-id="insurance-expiry-date"
+                                                            label="Expiry date"
+                                                            :model-value="insuranceForm.expiryDate"
+                                                            placeholder="Select expiry date"
+                                                            @update:model-value="insuranceForm.expiryDate = $event"
+                                                        />
                                                     </div>
                                                     <div class="mt-3 flex justify-end gap-2">
                                                         <Button
