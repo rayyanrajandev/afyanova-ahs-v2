@@ -5576,55 +5576,59 @@ onMounted(initialPageLoad);
                                     <Skeleton class="h-16 w-full" />
                                 </div>
 
-                                <Alert v-else-if="visitHandoffActiveAppointment" class="border-amber-300 bg-amber-50">
-                                    <AlertTitle class="text-amber-900">Active visit already exists</AlertTitle>
-                                    <AlertDescription class="space-y-3 text-amber-900">
-                                        <div class="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-start">
-                                            <div>
-                                                <p>
-                                                    Use
-                                                    {{ visitHandoffActiveAppointment.appointmentNumber || 'the current visit' }}
-                                                    instead of opening a duplicate workflow.
-                                                </p>
-                                                <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                                                    <Badge variant="outline" class="border-amber-300 bg-white/70 text-amber-950">
-                                                        {{ formatEnumLabel(visitHandoffActiveAppointment.status || 'active visit') }}
-                                                    </Badge>
-                                                    <span v-if="visitHandoffActiveAppointment.scheduledAt">
-                                                        {{ formatDateTime(visitHandoffActiveAppointment.scheduledAt) }}
-                                                    </span>
-                                                    <span v-if="visitHandoffActiveAppointment.department">
-                                                        {{ visitHandoffActiveAppointment.department }}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            <div class="flex flex-wrap gap-2 sm:justify-end">
-                                                <Button
-                                                    v-if="visitHandoffCanCheckIn"
-                                                    size="sm"
-                                                    class="gap-1.5"
-                                                    :disabled="visitHandoffSubmitting"
-                                                    @click="checkInVisitFromHandoff"
-                                                >
-                                                    <AppIcon name="calendar-clock" class="size-3.5" />
-                                                    {{ visitHandoffSubmitting ? 'Checking in...' : 'Check in now' }}
-                                                </Button>
-                                                <Button
-                                                    v-if="visitHandoffExistingVisitHref"
-                                                    size="sm"
-                                                    variant="outline"
-                                                    as-child
-                                                    class="gap-1.5 border-amber-300 bg-white/70 text-amber-950 hover:bg-white"
-                                                >
-                                                    <Link :href="visitHandoffExistingVisitHref">
-                                                        <AppIcon name="arrow-up-right" class="size-3.5" />
-                                                        Open visit
-                                                    </Link>
-                                                </Button>
+                                <div
+                                    v-else-if="visitHandoffActiveAppointment"
+                                    class="flex flex-col gap-3 rounded-lg border border-amber-300/60 bg-amber-500/5 px-4 py-3 dark:border-amber-700/50 dark:bg-amber-500/10"
+                                >
+                                    <div class="flex items-start gap-3">
+                                        <div class="flex size-7 shrink-0 items-center justify-center rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-400">
+                                            <AppIcon name="alert-triangle" class="size-4" />
+                                        </div>
+                                        <div class="min-w-0">
+                                            <p class="text-sm font-semibold text-amber-900 dark:text-amber-200">Active visit already exists</p>
+                                            <p class="mt-0.5 text-xs text-amber-800/80 dark:text-amber-300/80">
+                                                Use
+                                                <span class="font-mono font-semibold">{{ visitHandoffActiveAppointment.appointmentNumber || 'the current visit' }}</span>
+                                                instead of opening a duplicate workflow.
+                                            </p>
+                                            <div class="mt-2 flex flex-wrap items-center gap-2">
+                                                <Badge variant="outline" class="border-amber-400/60 bg-amber-500/10 text-amber-900 dark:border-amber-600/60 dark:bg-amber-500/20 dark:text-amber-200">
+                                                    {{ formatEnumLabel(visitHandoffActiveAppointment.status || 'active visit') }}
+                                                </Badge>
+                                                <span v-if="visitHandoffActiveAppointment.scheduledAt" class="text-xs text-amber-800/70 dark:text-amber-300/70">
+                                                    {{ formatDateTime(visitHandoffActiveAppointment.scheduledAt) }}
+                                                </span>
+                                                <span v-if="visitHandoffActiveAppointment.department" class="text-xs text-amber-800/70 dark:text-amber-300/70">
+                                                    {{ visitHandoffActiveAppointment.department }}
+                                                </span>
                                             </div>
                                         </div>
-                                    </AlertDescription>
-                                </Alert>
+                                    </div>
+                                    <div class="flex flex-wrap gap-2 border-t border-amber-300/40 pt-3 dark:border-amber-700/40">
+                                        <Button
+                                            v-if="visitHandoffCanCheckIn"
+                                            size="sm"
+                                            class="gap-1.5"
+                                            :disabled="visitHandoffSubmitting"
+                                            @click="checkInVisitFromHandoff"
+                                        >
+                                            <AppIcon name="calendar-clock" class="size-3.5" />
+                                            {{ visitHandoffSubmitting ? 'Checking in...' : 'Check in now' }}
+                                        </Button>
+                                        <Button
+                                            v-if="visitHandoffExistingVisitHref"
+                                            size="sm"
+                                            variant="outline"
+                                            as-child
+                                            class="gap-1.5"
+                                        >
+                                            <Link :href="visitHandoffExistingVisitHref">
+                                                <AppIcon name="arrow-up-right" class="size-3.5" />
+                                                Open visit
+                                            </Link>
+                                        </Button>
+                                    </div>
+                                </div>
 
                                 <div v-else class="rounded-lg border border-dashed bg-background px-3 py-3 text-sm text-muted-foreground">
                                     No active outpatient visit was found from the patient context available to this user.
