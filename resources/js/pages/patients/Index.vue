@@ -1164,7 +1164,11 @@ const visitHandoffPrimaryHref = computed(() => {
     }
 
     if (visitHandoffMode.value === 'emergency') {
-        return patientContextHref('/emergency-triage', patient, { includeTabNew: true });
+        if (canRecordOpdTriage.value) {
+            return patientContextHref('/emergency-triage', patient, { includeTabNew: true });
+        }
+        // Clerk: navigate to the emergency triage queue (view only, not the entry form).
+        return patientContextHref('/emergency-triage', patient);
     }
 
     if (visitHandoffMode.value === 'billing') {
@@ -1202,7 +1206,9 @@ const visitHandoffPrimaryLabel = computed(() => {
         }
     }
 
-    if (visitHandoffMode.value === 'emergency') return 'Start emergency triage';
+    if (visitHandoffMode.value === 'emergency') {
+        return canRecordOpdTriage.value ? 'Start emergency triage' : 'Send to emergency queue';
+    }
     if (visitHandoffMode.value === 'billing') return 'Create invoice';
     if (visitHandoffMode.value === 'direct-services') return 'Direct services';
     return 'Open patient chart';
