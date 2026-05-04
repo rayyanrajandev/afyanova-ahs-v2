@@ -4722,9 +4722,15 @@ function submitSearch(): void {
                             </Alert>
                             <div
                                 v-else-if="!displayedAppointments.length"
-                                class="rounded-lg border border-dashed p-6 text-sm text-muted-foreground"
+                                class="flex flex-col items-center justify-center gap-3 px-4 py-12 text-center"
                             >
-                                No appointments found for the current filters.
+                                <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                    <AppIcon name="layout-list" class="size-5 text-muted-foreground/40" />
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-muted-foreground">No appointments found</p>
+                                    <p class="mt-0.5 text-xs text-muted-foreground/70">No appointments match the current filters. Try a different preset or date range.</p>
+                                </div>
                             </div>
                             <template v-else>
                                 <!-- P1 critical alert -->
@@ -6135,12 +6141,18 @@ function submitSearch(): void {
                                                             >
                                                                 {{ detailsLaboratoryOrdersError }}
                                                             </p>
-                                                            <p
+                                                            <div
                                                                 v-else-if="detailsLaboratoryOrders.length === 0"
-                                                                class="text-sm text-muted-foreground"
+                                                                class="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center"
                                                             >
-                                                                No laboratory orders have been linked to this visit yet.
-                                                            </p>
+                                                                <div class="flex size-10 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                                                    <AppIcon name="stethoscope" class="size-4 text-muted-foreground/40" />
+                                                                </div>
+                                                                <div>
+                                                                    <p class="text-sm font-medium text-muted-foreground">No lab orders</p>
+                                                                    <p class="mt-0.5 text-xs text-muted-foreground/70">No laboratory orders have been linked to this visit yet.</p>
+                                                                </div>
+                                                            </div>
                                                             <div
                                                                 v-else
                                                                 class="max-h-80 divide-y divide-border/50 overflow-y-auto pr-1"
@@ -6282,12 +6294,18 @@ function submitSearch(): void {
                                                             >
                                                                 {{ detailsPharmacyOrdersError }}
                                                             </p>
-                                                            <p
+                                                            <div
                                                                 v-else-if="detailsPharmacyOrders.length === 0"
-                                                                class="text-sm text-muted-foreground"
+                                                                class="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center"
                                                             >
-                                                                No pharmacy orders have been linked to this visit yet.
-                                                            </p>
+                                                                <div class="flex size-10 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                                                    <AppIcon name="book-open" class="size-4 text-muted-foreground/40" />
+                                                                </div>
+                                                                <div>
+                                                                    <p class="text-sm font-medium text-muted-foreground">No pharmacy orders</p>
+                                                                    <p class="mt-0.5 text-xs text-muted-foreground/70">No pharmacy orders have been linked to this visit yet.</p>
+                                                                </div>
+                                                            </div>
                                                             <div
                                                                 v-else
                                                                 class="max-h-80 divide-y divide-border/50 overflow-y-auto pr-1"
@@ -6438,12 +6456,18 @@ function submitSearch(): void {
                                                             >
                                                                 {{ detailsRadiologyOrdersError }}
                                                             </p>
-                                                            <p
+                                                            <div
                                                                 v-else-if="detailsRadiologyOrders.length === 0"
-                                                                class="text-sm text-muted-foreground"
+                                                                class="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center"
                                                             >
-                                                                No imaging orders have been linked to this visit yet.
-                                                            </p>
+                                                                <div class="flex size-10 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                                                    <AppIcon name="stethoscope" class="size-4 text-muted-foreground/40" />
+                                                                </div>
+                                                                <div>
+                                                                    <p class="text-sm font-medium text-muted-foreground">No imaging orders</p>
+                                                                    <p class="mt-0.5 text-xs text-muted-foreground/70">No imaging orders have been linked to this visit yet.</p>
+                                                                </div>
+                                                            </div>
                                                             <div
                                                                 v-else
                                                                 class="max-h-80 divide-y divide-border/50 overflow-y-auto pr-1"
@@ -6579,12 +6603,18 @@ function submitSearch(): void {
                                                             >
                                                                 {{ detailsTheatreProceduresError }}
                                                             </p>
-                                                            <p
+                                                            <div
                                                                 v-else-if="detailsTheatreProcedures.length === 0"
-                                                                class="text-sm text-muted-foreground"
+                                                                class="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center"
                                                             >
-                                                                No theatre procedures have been linked to this visit yet.
-                                                            </p>
+                                                                <div class="flex size-10 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                                                    <AppIcon name="heart-pulse" class="size-4 text-muted-foreground/40" />
+                                                                </div>
+                                                                <div>
+                                                                    <p class="text-sm font-medium text-muted-foreground">No theatre procedures</p>
+                                                                    <p class="mt-0.5 text-xs text-muted-foreground/70">No theatre procedures have been linked to this visit yet.</p>
+                                                                </div>
+                                                            </div>
                                                             <div
                                                                 v-else
                                                                 class="max-h-80 divide-y divide-border/50 overflow-y-auto pr-1"
