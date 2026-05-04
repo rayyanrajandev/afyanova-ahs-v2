@@ -4726,80 +4726,107 @@ onMounted(initialPageLoad);
                                 </Badge>
                             </div>
                         </div>
-                        <Alert
+                        <!-- ── Duplicate warning ─────────────────────────────────── -->
+                        <div
                             v-if="preSubmitDuplicateMatches.length > 0"
-                            class="border-amber-300 bg-amber-50"
+                            class="-mx-6 overflow-hidden border-y border-amber-500/30 bg-amber-500/5"
                         >
-                            <AlertTitle class="flex items-center gap-2 text-amber-900">
-                                <AppIcon name="alert-triangle" class="size-4" />
-                                {{ tW2('duplicate.title') }}
-                            </AlertTitle>
-                            <AlertDescription class="space-y-3 text-xs text-amber-900">
-                                <p>{{ tW2('duplicate.description') }}</p>
-                                <div class="grid gap-3">
-                                    <div
-                                        v-for="match in preSubmitDuplicateMatches"
-                                        :key="`duplicate-${match.id}`"
-                                        class="rounded-lg border border-amber-300 bg-white/80 p-3 shadow-sm"
-                                    >
-                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                            <div class="min-w-0">
-                                                <div class="flex flex-wrap items-center gap-2">
-                                                    <p class="font-semibold text-amber-950">{{ patientName(match) }}</p>
-                                                    <Badge variant="outline" class="border-amber-300 bg-amber-100 text-amber-900">
-                                                        {{ match.patientNumber || match.id.slice(0, 8) }}
-                                                    </Badge>
-                                                    <Badge :variant="statusVariant(match.status)" class="capitalize">
-                                                        {{ match.status || 'unknown' }}
-                                                    </Badge>
-                                                </div>
-                                                <p class="mt-1 text-xs text-amber-800">
-                                                    Registered {{ formatDate(match.createdAt) || 'date not recorded' }}
-                                                </p>
-                                            </div>
-                                            <Button size="sm" variant="outline" as-child class="h-8 shrink-0 gap-1.5 border-amber-300 bg-white">
-                                                <Link
-                                                    :href="`/patients?q=${encodeURIComponent(match.patientNumber || match.id)}`"
-                                                    target="_blank"
-                                                >
-                                                    <AppIcon name="eye" class="size-3.5" />
-                                                    {{ tW2('duplicate.viewExistingPatient') }}
-                                                </Link>
-                                            </Button>
-                                        </div>
+                            <!-- Header -->
+                            <div class="flex items-start gap-3 border-b border-amber-500/20 px-6 py-3">
+                                <div class="flex size-8 shrink-0 items-center justify-center rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                                    <AppIcon name="alert-triangle" class="size-4" />
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-semibold text-amber-700 dark:text-amber-300">
+                                        {{ tW2('duplicate.title') }}
+                                    </p>
+                                    <p class="mt-0.5 text-xs text-amber-600/80 dark:text-amber-400/80">
+                                        {{ tW2('duplicate.description') }}
+                                    </p>
+                                </div>
+                            </div>
 
-                                        <div class="mt-3 overflow-hidden rounded-md border border-amber-200 bg-white">
-                                            <div class="grid grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)_4rem] border-b border-amber-200 bg-amber-100/70 px-2 py-1.5 text-xs font-medium uppercase tracking-wide text-amber-900">
-                                                <span>Field</span>
-                                                <span>New entry</span>
-                                                <span>Existing</span>
-                                                <span class="text-right">Match</span>
+                            <!-- Match cards -->
+                            <div class="space-y-3 px-6 py-4">
+                                <div
+                                    v-for="match in preSubmitDuplicateMatches"
+                                    :key="`duplicate-${match.id}`"
+                                    class="overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+                                >
+                                    <!-- Card header: name + badges + view link -->
+                                    <div class="flex flex-col gap-2 border-b border-border bg-muted/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div class="min-w-0">
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <span class="font-semibold text-foreground">{{ patientName(match) }}</span>
+                                                <Badge variant="secondary">{{ match.patientNumber || match.id.slice(0, 8) }}</Badge>
+                                                <Badge :variant="statusVariant(match.status)" class="capitalize">
+                                                    {{ match.status || 'unknown' }}
+                                                </Badge>
                                             </div>
-                                            <div
-                                                v-for="row in duplicateComparisonRows(match)"
-                                                :key="`duplicate-${match.id}-${row.key}`"
-                                                class="grid grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)_4rem] gap-2 border-b border-amber-100 px-2 py-1.5 last:border-b-0"
+                                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                                Registered {{ formatDate(match.createdAt) || 'date not recorded' }}
+                                            </p>
+                                        </div>
+                                        <Button size="sm" variant="outline" as-child class="h-7 shrink-0 gap-1.5 text-xs">
+                                            <Link
+                                                :href="`/patients?q=${encodeURIComponent(match.patientNumber || match.id)}`"
+                                                target="_blank"
                                             >
-                                                <span class="font-medium text-amber-950">{{ row.label }}</span>
-                                                <span class="min-w-0 truncate">{{ row.incoming }}</span>
-                                                <span class="min-w-0 truncate">{{ row.existing }}</span>
-                                                <span class="text-right">
-                                                    <Badge
-                                                        :variant="row.matched ? 'secondary' : 'outline'"
-                                                        class="text-xs"
-                                                    >
-                                                        {{ row.matched ? 'Same' : 'Check' }}
-                                                    </Badge>
-                                                </span>
-                                            </div>
+                                                <AppIcon name="eye" class="size-3" />
+                                                {{ tW2('duplicate.viewExistingPatient') }}
+                                            </Link>
+                                        </Button>
+                                    </div>
+
+                                    <!-- Field-by-field comparison table -->
+                                    <div class="w-full overflow-x-auto">
+                                        <div class="grid min-w-[28rem] grid-cols-[6rem_minmax(0,1fr)_minmax(0,1fr)_4.5rem] bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground">
+                                            <span>Field</span>
+                                            <span>New entry</span>
+                                            <span>Existing</span>
+                                            <span class="text-right">Match</span>
+                                        </div>
+                                        <div
+                                            v-for="row in duplicateComparisonRows(match)"
+                                            :key="`duplicate-${match.id}-${row.key}`"
+                                            class="grid min-w-[28rem] grid-cols-[6rem_minmax(0,1fr)_minmax(0,1fr)_4.5rem] border-t border-border px-4 py-2 text-xs"
+                                            :class="!row.matched ? 'bg-amber-500/5' : ''"
+                                        >
+                                            <span class="font-medium text-muted-foreground">{{ row.label }}</span>
+                                            <span class="min-w-0 truncate text-foreground">{{ row.incoming }}</span>
+                                            <span
+                                                class="min-w-0 truncate"
+                                                :class="row.matched
+                                                    ? 'text-foreground'
+                                                    : 'font-medium text-amber-600 dark:text-amber-400'"
+                                            >{{ row.existing }}</span>
+                                            <span class="text-right">
+                                                <Badge
+                                                    v-if="row.matched"
+                                                    variant="secondary"
+                                                    class="text-[10px]"
+                                                >
+                                                    Same
+                                                </Badge>
+                                                <Badge
+                                                    v-else
+                                                    variant="outline"
+                                                    class="border-amber-500/40 bg-amber-500/10 text-[10px] text-amber-700 dark:text-amber-300"
+                                                >
+                                                    Check
+                                                </Badge>
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <p class="text-xs text-amber-800">
-                                        Continue only when the new entry is confirmed as a separate patient.
-                                    </p>
-                                    <div class="flex flex-wrap gap-2">
+                            </div>
+
+                            <!-- Footer actions -->
+                            <div class="flex flex-col gap-3 border-t border-amber-500/20 bg-amber-500/5 px-6 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                <p class="text-xs text-amber-600 dark:text-amber-400">
+                                    Continue only if you are certain this is a different patient.
+                                </p>
+                                <div class="flex shrink-0 flex-wrap gap-2">
                                     <Button
                                         size="sm"
                                         variant="outline"
@@ -4815,10 +4842,9 @@ onMounted(initialPageLoad);
                                     >
                                         {{ tW2('duplicate.confirmNewPatient') }}
                                     </Button>
-                                    </div>
                                 </div>
-                            </AlertDescription>
-                        </Alert>
+                            </div>
+                        </div>
 
                         <Alert v-if="preSubmitDuplicateCheckError" variant="default">
                             <AlertTitle>{{ tW2('duplicate.precheckUnavailable') }}</AlertTitle>
