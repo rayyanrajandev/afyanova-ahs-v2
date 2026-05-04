@@ -6824,7 +6824,7 @@ onMounted(initialPageLoad);
                     </SheetHeader>
 
                     <ScrollArea class="min-h-0 flex-1">
-                        <div class="mx-auto w-full max-w-4xl space-y-5 p-4 pb-24">
+                        <div class="grid gap-4 px-6 py-4 pb-8">
                             <div
                                 v-if="editTargetPatient"
                                 class="flex flex-col gap-3 rounded-lg border bg-muted/20 px-3 py-3 text-xs sm:flex-row sm:items-center sm:justify-between"
