@@ -6,9 +6,11 @@ use App\Modules\Billing\Application\Exceptions\AdmissionNotEligibleForBillingInv
 use App\Modules\Billing\Application\Exceptions\AppointmentNotEligibleForBillingInvoiceException;
 use App\Modules\Billing\Application\Exceptions\BillingInvoiceDraftOnlyFieldUpdateNotAllowedException;
 use App\Modules\Billing\Application\Exceptions\BillingInvoiceLineItemsUpdateNotAllowedException;
+use App\Modules\Billing\Application\Exceptions\BillingInvoicePricingResolutionException;
 use App\Modules\Billing\Application\Exceptions\PatientNotEligibleForBillingInvoiceException;
 use App\Modules\Billing\Application\Support\BillingInvoiceLineItemAutoPricingResolver;
 use App\Modules\Billing\Application\Support\BillingInvoicePayerSummaryResolver;
+use App\Modules\Billing\Application\Support\ConsultationReviewDiscountApplier;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceAuditLogRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceRepositoryInterface;
 use App\Modules\Billing\Domain\Services\AdmissionLookupServiceInterface;
@@ -27,6 +29,7 @@ class UpdateBillingInvoiceUseCase
         private readonly AdmissionLookupServiceInterface $admissionLookupService,
         private readonly BillingInvoiceLineItemAutoPricingResolver $lineItemAutoPricingResolver,
         private readonly BillingInvoicePayerSummaryResolver $payerSummaryResolver,
+        private readonly ConsultationReviewDiscountApplier $consultationReviewDiscountApplier,
         private readonly DefaultCurrencyResolverInterface $defaultCurrencyResolver,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
     ) {}
@@ -78,8 +81,22 @@ class UpdateBillingInvoiceUseCase
             );
         }
 
+        if (array_key_exists('line_items', $payload)) {
+            $this->assertUniqueSourceLineItems(is_array($payload['line_items'] ?? null) ? $payload['line_items'] : null);
+            $this->assertNoExistingSourceCharges(
+                patientId: $patientId,
+                lineItems: is_array($payload['line_items'] ?? null) ? $payload['line_items'] : null,
+                currentInvoiceId: $id,
+            );
+        }
+
+        $refreshReviewPricing = $this->requiresReviewPricingRefresh($payload);
+
         $payload = $this->inheritVisitCoverage($payload, $existing, $linkedAppointment, $linkedAdmission);
         $payload = $this->applyLineItemPricing($payload, $existing);
+        if ($refreshReviewPricing) {
+            $payload = $this->consultationReviewDiscountApplier->apply($this->mergeForPricingAdjustment($payload, $existing));
+        }
         $payload = $this->normalizeAmountsIfNeeded($payload, $existing);
         $payload = $this->enrichPricingContext($payload, $existing, $linkedAppointment, $linkedAdmission);
 
@@ -259,7 +276,9 @@ class UpdateBillingInvoiceUseCase
         $effectiveInvoiceDate = isset($payload['invoice_date'])
             ? (string) $payload['invoice_date']
             : (isset($existing['invoice_date']) ? (string) $existing['invoice_date'] : null);
-        $effectiveDiscount = (float) ($payload['discount_amount'] ?? $existing['discount_amount'] ?? 0);
+        $effectiveDiscount = array_key_exists('discount_amount', $payload)
+            ? $this->discountExcludingConsultationReview($payload)
+            : $this->discountExcludingConsultationReview($existing);
         $effectivePaid = (float) ($payload['paid_amount'] ?? $existing['paid_amount'] ?? 0);
         $effectivePayerContractId = isset($payload['billing_payer_contract_id'])
             ? (string) $payload['billing_payer_contract_id']
@@ -285,6 +304,155 @@ class UpdateBillingInvoiceUseCase
         $currencyCode = strtoupper(trim((string) $value));
 
         return $currencyCode !== '' ? $currencyCode : $this->defaultCurrencyResolver->resolve();
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>|null  $lineItems
+     */
+    private function assertUniqueSourceLineItems(?array $lineItems): void
+    {
+        $seen = [];
+
+        foreach ($lineItems ?? [] as $index => $lineItem) {
+            $sourceWorkflowKind = $this->normalizeNullableString($lineItem['sourceWorkflowKind'] ?? null);
+            $sourceWorkflowId = $this->normalizeNullableString($lineItem['sourceWorkflowId'] ?? null);
+
+            if ($sourceWorkflowKind === null || $sourceWorkflowId === null) {
+                continue;
+            }
+
+            $sourceKey = strtolower($sourceWorkflowKind).'::'.$sourceWorkflowId;
+            if (isset($seen[$sourceKey])) {
+                throw new BillingInvoicePricingResolutionException(
+                    'lineItems',
+                    sprintf(
+                        'Line item %d duplicates a source workflow already present on this invoice.',
+                        $index + 1,
+                    ),
+                );
+            }
+
+            $seen[$sourceKey] = true;
+        }
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>|null  $lineItems
+     */
+    private function assertNoExistingSourceCharges(string $patientId, ?array $lineItems, string $currentInvoiceId): void
+    {
+        foreach ($lineItems ?? [] as $lineItem) {
+            $sourceWorkflowKind = $this->normalizeNullableString($lineItem['sourceWorkflowKind'] ?? null);
+            $sourceWorkflowId = $this->normalizeNullableString($lineItem['sourceWorkflowId'] ?? null);
+
+            if ($sourceWorkflowKind === null || $sourceWorkflowId === null) {
+                continue;
+            }
+
+            $existingInvoice = $this->billingInvoiceRepository->findByLineItemSource(
+                patientId: $patientId,
+                sourceWorkflowKind: $sourceWorkflowKind,
+                sourceWorkflowId: $sourceWorkflowId,
+                excludeInvoiceId: $currentInvoiceId,
+            );
+
+            if ($existingInvoice === null) {
+                continue;
+            }
+
+            throw new BillingInvoicePricingResolutionException(
+                'lineItems',
+                sprintf(
+                    'This source workflow has already been charged on invoice %s.',
+                    $existingInvoice['invoice_number'] ?? $existingInvoice['id'] ?? 'an existing invoice',
+                ),
+            );
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function requiresReviewPricingRefresh(array $payload): bool
+    {
+        foreach ([
+            'appointment_id',
+            'line_items',
+            'auto_price_line_items',
+            'billing_payer_contract_id',
+            'currency_code',
+            'invoice_date',
+            'discount_amount',
+            'subtotal_amount',
+            'tax_amount',
+            'paid_amount',
+        ] as $field) {
+            if (array_key_exists($field, $payload)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, mixed>  $existing
+     * @return array<string, mixed>
+     */
+    private function mergeForPricingAdjustment(array $payload, array $existing): array
+    {
+        return array_merge(
+            [
+                'patient_id' => $existing['patient_id'] ?? null,
+                'admission_id' => $existing['admission_id'] ?? null,
+                'appointment_id' => $existing['appointment_id'] ?? null,
+                'billing_payer_contract_id' => $existing['billing_payer_contract_id'] ?? null,
+                'issued_by_user_id' => $existing['issued_by_user_id'] ?? null,
+                'invoice_date' => $existing['invoice_date'] ?? null,
+                'currency_code' => $existing['currency_code'] ?? null,
+                'subtotal_amount' => $existing['subtotal_amount'] ?? 0,
+                'discount_amount' => $this->discountExcludingConsultationReview($existing),
+                'tax_amount' => $existing['tax_amount'] ?? 0,
+                'paid_amount' => $existing['paid_amount'] ?? 0,
+                'balance_amount' => $existing['balance_amount'] ?? 0,
+                'payment_due_at' => $existing['payment_due_at'] ?? null,
+                'notes' => $existing['notes'] ?? null,
+                'line_items' => $existing['line_items'] ?? null,
+                'pricing_mode' => $existing['pricing_mode'] ?? null,
+                'pricing_context' => is_array($existing['pricing_context'] ?? null)
+                    ? $existing['pricing_context']
+                    : null,
+            ],
+            $payload,
+            [
+                'discount_amount' => array_key_exists('discount_amount', $payload)
+                    ? $this->discountExcludingConsultationReview($payload)
+                    : $this->discountExcludingConsultationReview($existing),
+            ],
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $invoiceLike
+     */
+    private function discountExcludingConsultationReview(array $invoiceLike): float
+    {
+        $discountAmount = max((float) ($invoiceLike['discount_amount'] ?? 0), 0);
+        $pricingContext = is_array($invoiceLike['pricing_context'] ?? null)
+            ? $invoiceLike['pricing_context']
+            : [];
+        $reviewContext = is_array($pricingContext['consultationReviewDiscount'] ?? null)
+            ? $pricingContext['consultationReviewDiscount']
+            : [];
+
+        if (! (bool) ($reviewContext['applied'] ?? false)) {
+            return round($discountAmount, 2);
+        }
+
+        $reviewDiscountAmount = max((float) ($reviewContext['reviewDiscountAmount'] ?? 0), 0);
+
+        return round(max($discountAmount - $reviewDiscountAmount, 0), 2);
     }
 
     /**

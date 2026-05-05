@@ -28,14 +28,14 @@ return new class extends Migration
         });
 
         // Backfill: appointments linked from appointment_referrals get type 'referral'.
-        DB::statement("
-            UPDATE appointments a
-            SET appointment_type = 'referral'
-            WHERE EXISTS (
-                SELECT 1 FROM appointment_referrals ar
-                WHERE ar.appointment_id = a.id
-            )
-        ");
+        DB::table('appointments')
+            ->whereExists(function ($query): void {
+                $query
+                    ->selectRaw('1')
+                    ->from('appointment_referrals')
+                    ->whereColumn('appointment_referrals.appointment_id', 'appointments.id');
+            })
+            ->update(['appointment_type' => 'referral']);
 
         // All others remain 'scheduled' (the column default).
     }

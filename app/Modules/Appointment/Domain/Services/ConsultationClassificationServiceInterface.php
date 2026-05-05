@@ -11,6 +11,7 @@ interface ConsultationClassificationServiceInterface
      * Returns an array with the following keys:
      *   - classification: 'new' | 'review'
      *   - source: 'auto'
+     *   - policy: active policy snapshot used for the decision
      *   - prior_completed_appointment_id: string|null  – the triggering prior visit ID
      *   - reasoning: string  – human-readable explanation stored in the audit trail
      *
@@ -19,11 +20,12 @@ interface ConsultationClassificationServiceInterface
      *     source: string,
      *     prior_completed_appointment_id: string|null,
      *     reasoning: string,
+     *     policy: array<string, mixed>,
      * }
      */
     public function classify(
         string $patientId,
-        string $facilityId,
+        ?string $facilityId,
         string $scheduledAt,
         ?string $reason,
     ): array;

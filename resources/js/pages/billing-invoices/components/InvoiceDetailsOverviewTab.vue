@@ -166,6 +166,44 @@ function lineItemTotal(lineItem: BillingInvoiceLineItem): number {
             (amountToNumber(lineItem.unitPrice) ?? 0)
     );
 }
+
+function reviewFeeLabel(): string | null {
+    const review = props.invoice.consultationReviewDiscount;
+    if (!review || review.consultationType !== 'review') return null;
+
+    const feePercent = amountToNumber(review.reviewFeePercentage ?? null);
+    if (feePercent === null) {
+        return review.applied ? 'Review fee adjusted' : 'Review full fee';
+    }
+
+    return review.applied
+        ? `Review consultation charged at ${feePercent}%`
+        : `Review consultation charged at ${feePercent}%`;
+}
+
+function reviewDiscountDescription(): string | null {
+    const review = props.invoice.consultationReviewDiscount;
+    if (!review || review.consultationType !== 'review') return null;
+
+    if (!review.applied) {
+        return review.reason || 'No review fee adjustment was applied.';
+    }
+
+    const discount = amountToNumber(review.reviewDiscountAmount ?? null);
+    const affected = review.affectedLineCount ?? 0;
+    const saved = discount !== null
+        ? props.formatMoney(discount, props.invoice.currencyCode)
+        : 'the configured review amount';
+
+    return `${saved} waived across ${affected} consultation ${affected === 1 ? 'line' : 'lines'}.`;
+}
+
+function lineItemReviewLabel(lineItem: BillingInvoiceLineItem): string | null {
+    if (lineItem.consultationType !== 'review') return null;
+
+    const feePercent = amountToNumber(lineItem.reviewFeePercentage ?? null);
+    return feePercent !== null ? `Review ${feePercent}% fee` : 'Review pricing';
+}
 </script>
 
 <template>
@@ -383,6 +421,16 @@ function lineItemTotal(lineItem: BillingInvoiceLineItem): number {
                     </AlertDescription>
                 </Alert>
             </div>
+
+            <Alert
+                v-if="reviewFeeLabel()"
+                class="py-3"
+            >
+                <AlertTitle>{{ reviewFeeLabel() }}</AlertTitle>
+                <AlertDescription>
+                    {{ reviewDiscountDescription() }}
+                </AlertDescription>
+            </Alert>
 
             <div
                 v-if="operationalPanel"
@@ -654,6 +702,12 @@ function lineItemTotal(lineItem: BillingInvoiceLineItem): number {
                                             variant="secondary"
                                         >
                                             Negotiated price
+                                        </Badge>
+                                        <Badge
+                                            v-if="lineItemReviewLabel(lineItem)"
+                                            variant="secondary"
+                                        >
+                                            {{ lineItemReviewLabel(lineItem) }}
                                         </Badge>
                                     </div>
                                     <div class="rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground">

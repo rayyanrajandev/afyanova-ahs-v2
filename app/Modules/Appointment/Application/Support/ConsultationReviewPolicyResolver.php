@@ -94,10 +94,10 @@ class ConsultationReviewPolicyResolver
     {
         $settingKey = $this->configKey($shortKey);
         if ($settingKey !== '' && isset($settingsMap[$settingKey])) {
-            return (float) $settingsMap[$settingKey];
+            return $this->normalizeFloat($shortKey, (float) $settingsMap[$settingKey]);
         }
 
-        return (float) config('consultation_policy.'.$shortKey, 0.0);
+        return $this->normalizeFloat($shortKey, (float) config('consultation_policy.'.$shortKey, 0.0));
     }
 
     private function resolveBool(string $shortKey, array $settingsMap): bool
@@ -110,5 +110,14 @@ class ConsultationReviewPolicyResolver
         }
 
         return (bool) config('consultation_policy.'.$shortKey, false);
+    }
+
+    private function normalizeFloat(string $shortKey, float $value): float
+    {
+        if ($shortKey === 'review_fee_percentage') {
+            return min(max($value, 0.0), 100.0);
+        }
+
+        return $value;
     }
 }

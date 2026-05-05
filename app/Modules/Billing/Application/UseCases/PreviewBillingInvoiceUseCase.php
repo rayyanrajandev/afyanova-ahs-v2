@@ -4,9 +4,11 @@ namespace App\Modules\Billing\Application\UseCases;
 
 use App\Modules\Billing\Application\Exceptions\AdmissionNotEligibleForBillingInvoiceException;
 use App\Modules\Billing\Application\Exceptions\AppointmentNotEligibleForBillingInvoiceException;
+use App\Modules\Billing\Application\Exceptions\BillingInvoicePricingResolutionException;
 use App\Modules\Billing\Application\Exceptions\PatientNotEligibleForBillingInvoiceException;
 use App\Modules\Billing\Application\Support\BillingInvoiceLineItemAutoPricingResolver;
 use App\Modules\Billing\Application\Support\BillingInvoicePayerSummaryResolver;
+use App\Modules\Billing\Application\Support\ConsultationReviewDiscountApplier;
 use App\Modules\Billing\Domain\Services\AdmissionLookupServiceInterface;
 use App\Modules\Billing\Domain\Services\AppointmentLookupServiceInterface;
 use App\Modules\Billing\Domain\Services\PatientLookupServiceInterface;
@@ -20,6 +22,7 @@ class PreviewBillingInvoiceUseCase
         private readonly AdmissionLookupServiceInterface $admissionLookupService,
         private readonly BillingInvoiceLineItemAutoPricingResolver $lineItemAutoPricingResolver,
         private readonly BillingInvoicePayerSummaryResolver $payerSummaryResolver,
+        private readonly ConsultationReviewDiscountApplier $consultationReviewDiscountApplier,
         private readonly DefaultCurrencyResolverInterface $defaultCurrencyResolver,
     ) {}
 
@@ -61,8 +64,10 @@ class PreviewBillingInvoiceUseCase
             );
         }
 
+        $this->assertUniqueSourceLineItems(is_array($payload['line_items'] ?? null) ? $payload['line_items'] : null);
         $payload = $this->inheritVisitCoverage($payload, $linkedAppointment, $linkedAdmission);
         $payload = $this->applyLineItemPricing($payload);
+        $payload = $this->consultationReviewDiscountApplier->apply($payload);
         $payload = array_merge($payload, $this->normalizeAmounts($payload));
         $payload['currency_code'] = $this->resolveCurrencyCode($payload['currency_code'] ?? null);
         $payload['pricing_context'] = $this->payerSummaryResolver->resolve(
@@ -155,6 +160,36 @@ class PreviewBillingInvoiceUseCase
         $currencyCode = strtoupper(trim((string) $value));
 
         return $currencyCode !== '' ? $currencyCode : $this->defaultCurrencyResolver->resolve();
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>|null  $lineItems
+     */
+    private function assertUniqueSourceLineItems(?array $lineItems): void
+    {
+        $seen = [];
+
+        foreach ($lineItems ?? [] as $index => $lineItem) {
+            $sourceWorkflowKind = $this->normalizeNullableString($lineItem['sourceWorkflowKind'] ?? null);
+            $sourceWorkflowId = $this->normalizeNullableString($lineItem['sourceWorkflowId'] ?? null);
+
+            if ($sourceWorkflowKind === null || $sourceWorkflowId === null) {
+                continue;
+            }
+
+            $sourceKey = strtolower($sourceWorkflowKind).'::'.$sourceWorkflowId;
+            if (isset($seen[$sourceKey])) {
+                throw new BillingInvoicePricingResolutionException(
+                    'lineItems',
+                    sprintf(
+                        'Line item %d duplicates a source workflow already present on this invoice.',
+                        $index + 1,
+                    ),
+                );
+            }
+
+            $seen[$sourceKey] = true;
+        }
     }
 
     /**

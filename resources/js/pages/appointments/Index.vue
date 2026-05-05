@@ -7340,6 +7340,7 @@ function submitSearch(): void {
             </Dialog>
 
             <Dialog :open="statusDialogOpen" @update:open="(open) => (open ? (statusDialogOpen = true) : closeStatusDialog())">
+                <DialogContent variant="form" size="2xl">
                     <div class="flex h-full max-h-[90vh] flex-col">
                         <DialogHeader class="sticky top-0 z-10 shrink-0 border-b bg-background px-6 py-4">
                             <DialogTitle>{{ statusDialogTitle }}</DialogTitle>

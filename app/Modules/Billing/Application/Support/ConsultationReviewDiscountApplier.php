@@ -14,7 +14,7 @@ use App\Modules\Billing\Domain\Services\AppointmentLookupServiceInterface;
  * service_type = config('consultation_policy.consultation_service_type')
  * are eligible for the discount. All other charges (labs, drugs, etc.) are unaffected.
  *
- * The discount is expressed as a reduction in subtotalAmount and recorded in
+ * The discount is expressed as an invoice discount and recorded in
  * pricing_context.consultationReviewDiscount for full auditability.
  */
 class ConsultationReviewDiscountApplier
@@ -55,16 +55,30 @@ class ConsultationReviewDiscountApplier
         $facilityId = isset($payload['facility_id']) ? (string) $payload['facility_id'] : null;
         $policy     = $this->policyResolver->resolve($facilityId);
 
-        if ((bool) ($policy['review_fee_is_free'] ?? false)) {
-            return $this->applyDiscount($payload, policy: $policy, discountPercent: 100.0, isFree: true, appointment: $appointment);
-        }
+        $reviewFeePercentage = $this->normalizedReviewFeePercentage($policy);
+        $isConfiguredFree = (bool) ($policy['review_fee_is_free'] ?? false);
+        $chargePercent = $isConfiguredFree ? 0.0 : $reviewFeePercentage;
+        $discountPercent = round(max(100.0 - $chargePercent, 0.0), 2);
 
-        $discountPercent = (float) ($policy['review_fee_percentage'] ?? 0.0);
         if ($discountPercent <= 0.0) {
-            return $this->tagNotApplicable($payload, 'Review fee percentage is 0; no discount applied.');
+            return $this->tagNotApplicable(
+                $payload,
+                'Review fee percentage is 100; full consultation fee applies.',
+                policy: $policy,
+                appointment: $appointment,
+                reviewFeePercentage: $reviewFeePercentage,
+                discountPercent: 0.0,
+            );
         }
 
-        return $this->applyDiscount($payload, policy: $policy, discountPercent: $discountPercent, isFree: false, appointment: $appointment);
+        return $this->applyDiscount(
+            payload: $payload,
+            policy: $policy,
+            reviewFeePercentage: $reviewFeePercentage,
+            discountPercent: $discountPercent,
+            isFree: $chargePercent <= 0.0,
+            appointment: $appointment,
+        );
     }
 
     /**
@@ -73,9 +87,16 @@ class ConsultationReviewDiscountApplier
      * @param  array<string, mixed>  $appointment
      * @return array<string, mixed>
      */
-    private function applyDiscount(array $payload, array $policy, float $discountPercent, bool $isFree, array $appointment): array
+    private function applyDiscount(
+        array $payload,
+        array $policy,
+        float $reviewFeePercentage,
+        float $discountPercent,
+        bool $isFree,
+        array $appointment,
+    ): array
     {
-        $consultationServiceType = (string) config('consultation_policy.consultation_service_type', 'consultation');
+        $consultationServiceType = strtolower(trim((string) config('consultation_policy.consultation_service_type', 'consultation')));
         $currencyCode = strtoupper(trim((string) ($payload['currency_code'] ?? 'TZS')));
         $lineItems = is_array($payload['line_items'] ?? null) ? $payload['line_items'] : [];
 
@@ -104,11 +125,15 @@ class ConsultationReviewDiscountApplier
                 continue;
             }
 
-            $lineTotal = (float) ($lineItem['total'] ?? ($lineItem['unit_price'] ?? 0) * ($lineItem['quantity'] ?? 1));
+            $lineTotal = $this->lineTotal($lineItem);
             $lineDiscount = round($lineTotal * ($discountPercent / 100.0), 2);
+            $lineCharge = max(0.0, round($lineTotal - $lineDiscount, 2));
 
-            $lineItem['review_discount_amount'] = $lineDiscount;
-            $lineItem['review_discount_percent'] = $discountPercent;
+            $lineItem['reviewDiscountAmount'] = $lineDiscount;
+            $lineItem['reviewDiscountPercent'] = $discountPercent;
+            $lineItem['reviewFeePercentage'] = $reviewFeePercentage;
+            $lineItem['reviewChargeAmount'] = $lineCharge;
+            $lineItem['consultationType'] = 'review';
 
             $reviewDiscountAmount += $lineDiscount;
             $affectedLineCount++;
@@ -118,12 +143,15 @@ class ConsultationReviewDiscountApplier
 
         if ($affectedLineCount === 0) {
             return $this->tagNotApplicable(
-                $payload,
-                'No consultation service line items found to discount.',
+                payload: $payload,
+                reason: 'No consultation service line items found to discount.',
+                policy: $policy,
+                appointment: $appointment,
+                reviewFeePercentage: $reviewFeePercentage,
+                discountPercent: $discountPercent,
             );
         }
 
-        // Update subtotal and recalculate totals
         $existingDiscount = (float) ($payload['discount_amount'] ?? 0);
         $newDiscount      = round($existingDiscount + $reviewDiscountAmount, 2);
         $subtotal         = (float) ($payload['subtotal_amount'] ?? 0);
@@ -143,6 +171,7 @@ class ConsultationReviewDiscountApplier
                 'applied'                   => true,
                 'consultationType'          => 'review',
                 'priorAppointmentId'        => $appointment['prior_completed_appointment_id'] ?? null,
+                'reviewFeePercentage'       => $reviewFeePercentage,
                 'discountPercent'           => $discountPercent,
                 'isFreeFollowUp'            => $isFree,
                 'reviewDiscountAmount'      => $reviewDiscountAmount,
@@ -160,16 +189,59 @@ class ConsultationReviewDiscountApplier
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
-    private function tagNotApplicable(array $payload, string $reason): array
+    private function tagNotApplicable(
+        array $payload,
+        string $reason,
+        ?array $policy = null,
+        ?array $appointment = null,
+        ?float $reviewFeePercentage = null,
+        ?float $discountPercent = null,
+    ): array
     {
         $existingContext = is_array($payload['pricing_context'] ?? null) ? $payload['pricing_context'] : [];
         $payload['pricing_context'] = array_merge($existingContext, [
-            'consultationReviewDiscount' => [
+            'consultationReviewDiscount' => array_filter([
                 'applied' => false,
                 'reason'  => $reason,
-            ],
+                'consultationType' => $appointment !== null
+                    ? strtolower(trim((string) ($appointment['consultation_type'] ?? 'new')))
+                    : null,
+                'priorAppointmentId' => $appointment['prior_completed_appointment_id'] ?? null,
+                'reviewFeePercentage' => $reviewFeePercentage,
+                'discountPercent' => $discountPercent,
+                'followUpDays' => $policy['follow_up_days'] ?? null,
+                'appliedAt' => now()->toISOString(),
+            ], static fn (mixed $value): bool => $value !== null),
         ]);
 
         return $payload;
+    }
+
+    /**
+     * @param  array<string, mixed>  $policy
+     */
+    private function normalizedReviewFeePercentage(array $policy): float
+    {
+        return round(min(max((float) ($policy['review_fee_percentage'] ?? 0.0), 0.0), 100.0), 2);
+    }
+
+    /**
+     * @param  array<string, mixed>  $lineItem
+     */
+    private function lineTotal(array $lineItem): float
+    {
+        $explicitTotal = $lineItem['lineTotal']
+            ?? $lineItem['line_total']
+            ?? $lineItem['total']
+            ?? null;
+
+        if ($explicitTotal !== null) {
+            return round(max((float) $explicitTotal, 0.0), 2);
+        }
+
+        $quantity = max((float) ($lineItem['quantity'] ?? 0), 0.0);
+        $unitPrice = max((float) ($lineItem['unitPrice'] ?? $lineItem['unit_price'] ?? 0), 0.0);
+
+        return round($quantity * $unitPrice, 2);
     }
 }

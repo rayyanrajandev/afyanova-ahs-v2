@@ -44,13 +44,14 @@ interface AppointmentRepositoryInterface
     /**
      * Find the most recent completed appointment for the patient at the given
      * facility whose scheduled_at date falls within the $withinDays window
-     * before $scheduledAt. Used for consultation classification.
+     * before $scheduledAt. Null facilityId means the single-facility/global
+     * appointment scope.
      *
      * @return array<string, mixed>|null
      */
     public function findLastCompletedForPatientWithinDays(
         string $patientId,
-        string $facilityId,
+        ?string $facilityId,
         string $scheduledAt,
         int $withinDays,
     ): ?array;

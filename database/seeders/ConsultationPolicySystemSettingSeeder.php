@@ -42,7 +42,7 @@ class ConsultationPolicySystemSettingSeeder extends Seeder
             ],
             [
                 'key'   => 'consultation.same_complaint_required',
-                'value' => 'false',
+                'value' => 'true',
                 'type'  => 'boolean',
                 'label' => 'Require same complaint for REVIEW classification',
                 'hint'  => 'When true a REVIEW classification is only applied when the new visit reason shares keywords with the prior completed visit reason.',

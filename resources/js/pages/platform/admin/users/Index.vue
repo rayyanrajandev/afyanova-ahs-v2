@@ -1372,6 +1372,11 @@ async function submitEditDialog() {
         const apiError = error as Error & { status?: number; payload?: ValidationErrorResponse };
         if (apiError.status === 422 && apiError.payload?.errors) {
             editErrors.value = apiError.payload.errors;
+            // If the backend requires an approval case reference (privileged user),
+            // reveal the field even if it wasn't shown initially (e.g. opened from list).
+            if (apiError.payload.errors['approvalCaseReference']) {
+                editDialogRequiresApprovalCase.value = true;
+            }
             return;
         }
 

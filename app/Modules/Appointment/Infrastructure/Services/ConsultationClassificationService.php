@@ -15,7 +15,7 @@ class ConsultationClassificationService implements ConsultationClassificationSer
 
     public function classify(
         string $patientId,
-        string $facilityId,
+        ?string $facilityId,
         string $scheduledAt,
         ?string $reason,
     ): array {
@@ -24,7 +24,10 @@ class ConsultationClassificationService implements ConsultationClassificationSer
         $sameComplaintRequired = (bool) ($policy['same_complaint_required'] ?? false);
 
         if ($followUpDays <= 0) {
-            return $this->newResult('Automatic review classification is disabled (follow_up_days = 0).');
+            return $this->newResult(
+                'Automatic review classification is disabled (follow_up_days = 0).',
+                $policy,
+            );
         }
 
         $priorAppointment = $this->appointmentRepository->findLastCompletedForPatientWithinDays(
@@ -37,6 +40,7 @@ class ConsultationClassificationService implements ConsultationClassificationSer
         if ($priorAppointment === null) {
             return $this->newResult(
                 sprintf('No completed appointment found within %d day(s) at this facility.', $followUpDays),
+                $policy,
             );
         }
 
@@ -49,6 +53,7 @@ class ConsultationClassificationService implements ConsultationClassificationSer
             if (! $reasonMatch) {
                 return $this->newResult(
                     'Prior appointment found but complaints do not match (same_complaint_required = true).',
+                    $policy,
                 );
             }
         }
@@ -63,6 +68,7 @@ class ConsultationClassificationService implements ConsultationClassificationSer
                 $followUpDays,
                 $sameComplaintRequired ? ' Complaint match confirmed.' : '',
             ),
+            'policy'                        => $policy,
         ];
     }
 
@@ -89,19 +95,34 @@ class ConsultationClassificationService implements ConsultationClassificationSer
     {
         preg_match_all('/[a-z]{3,}/i', strtolower($text), $matches);
 
-        return array_values(array_unique($matches[0] ?? []));
+        $stopWords = [
+            'appointment',
+            'check',
+            'clinic',
+            'consultation',
+            'follow',
+            'progress',
+            'result',
+            'results',
+            'review',
+            'routine',
+            'visit',
+        ];
+
+        return array_values(array_diff(array_unique($matches[0] ?? []), $stopWords));
     }
 
     /**
      * @return array{classification: string, source: string, prior_completed_appointment_id: null, reasoning: string}
      */
-    private function newResult(string $reasoning): array
+    private function newResult(string $reasoning, array $policy): array
     {
         return [
             'classification'                => 'new',
             'source'                        => 'auto',
             'prior_completed_appointment_id' => null,
             'reasoning'                     => $reasoning,
+            'policy'                        => $policy,
         ];
     }
 }

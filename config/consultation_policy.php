@@ -13,7 +13,7 @@
  *   CONSULTATION_FOLLOW_UP_DAYS          - integer, default 14
  *   CONSULTATION_REVIEW_FEE_PERCENTAGE   - float 0–100, default 50.0
  *   CONSULTATION_REVIEW_FEE_IS_FREE      - boolean, default false
- *   CONSULTATION_SAME_COMPLAINT_REQUIRED - boolean, default false
+ *   CONSULTATION_SAME_COMPLAINT_REQUIRED - boolean, default true
  */
 return [
 
@@ -57,7 +57,7 @@ return [
     | appointment's reason. When false, any return within the follow-up window
     | is classified as REVIEW regardless of stated complaint.
     */
-    'same_complaint_required' => (bool) env('CONSULTATION_SAME_COMPLAINT_REQUIRED', false),
+    'same_complaint_required' => (bool) env('CONSULTATION_SAME_COMPLAINT_REQUIRED', true),
 
     /*
     |--------------------------------------------------------------------------

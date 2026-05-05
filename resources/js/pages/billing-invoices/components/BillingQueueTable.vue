@@ -126,6 +126,32 @@ function claimsAction(invoice: BillingInvoice): QueueClaimsAction | null {
     return props.billingInvoiceQueueClaimsAction(invoice);
 }
 
+function consultationReviewLabel(invoice: BillingInvoice): string | null {
+    const review = invoice.consultationReviewDiscount;
+    if (!review || review.consultationType !== 'review') return null;
+
+    if (review.applied) {
+        const feePercent = amountToNumber(review.reviewFeePercentage ?? null);
+        if (feePercent !== null) {
+            return `Review ${feePercent}% fee`;
+        }
+
+        return 'Review fee adjusted';
+    }
+
+    return 'Review full fee';
+}
+
+function consultationReviewDiscountLabel(invoice: BillingInvoice): string | null {
+    const review = invoice.consultationReviewDiscount;
+    if (!review?.applied) return null;
+
+    const amount = amountToNumber(review.reviewDiscountAmount ?? null);
+    return amount !== null
+        ? `Saved ${props.formatMoney(amount, invoice.currencyCode)}`
+        : null;
+}
+
 function requestStatusAction(invoice: BillingInvoice, action: BillingInvoiceStatusAction): void {
     emit('status-action', { invoice, action });
 }
@@ -192,6 +218,18 @@ function requestStatusAction(invoice: BillingInvoice, action: BillingInvoiceStat
                                     </Badge>
                                     <Badge variant="outline">
                                         Total {{ formatMoney(invoice.totalAmount, invoice.currencyCode) }}
+                                    </Badge>
+                                    <Badge
+                                        v-if="consultationReviewLabel(invoice)"
+                                        :variant="invoice.consultationReviewDiscount?.applied ? 'secondary' : 'outline'"
+                                    >
+                                        {{ consultationReviewLabel(invoice) }}
+                                    </Badge>
+                                    <Badge
+                                        v-if="consultationReviewDiscountLabel(invoice)"
+                                        variant="outline"
+                                    >
+                                        {{ consultationReviewDiscountLabel(invoice) }}
                                     </Badge>
                                     <Badge
                                         v-if="invoiceLineItemCount(invoice) > 0"

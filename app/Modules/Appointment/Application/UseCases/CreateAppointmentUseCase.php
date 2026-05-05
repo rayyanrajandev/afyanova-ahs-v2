@@ -55,7 +55,8 @@ class CreateAppointmentUseCase
         $payload['tenant_id'] = $this->platformScopeContext->tenantId();
         $payload['facility_id'] = $this->platformScopeContext->facilityId();
         $payload = $this->normalizeFinancialCoverage($payload);
-        $payload = $this->applyConsultationClassification($payload);
+        $consultationClassificationAudit = null;
+        $payload = $this->applyConsultationClassification($payload, $consultationClassificationAudit);
 
         $createdAppointment = $this->appointmentRepository->create($payload);
 
@@ -66,6 +67,9 @@ class CreateAppointmentUseCase
             changes: [
                 'after' => $this->extractTrackedFields($createdAppointment),
             ],
+            metadata: array_filter([
+                'consultation_classification' => $consultationClassificationAudit,
+            ]),
         );
 
         return $createdAppointment;
@@ -156,17 +160,25 @@ class CreateAppointmentUseCase
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
-    private function applyConsultationClassification(array $payload): array
+    private function applyConsultationClassification(array $payload, ?array &$auditMetadata = null): array
     {
-        $facilityId = (string) ($payload['facility_id'] ?? '');
+        $facilityId = $this->normalizeNullableString($payload['facility_id'] ?? null);
         $patientId  = (string) ($payload['patient_id'] ?? '');
         $scheduledAt = (string) ($payload['scheduled_at'] ?? now()->toDateTimeString());
         $reason = isset($payload['reason']) ? (string) $payload['reason'] : null;
 
-        if ($facilityId === '' || $patientId === '') {
+        if ($patientId === '') {
             $payload['consultation_type'] = 'new';
             $payload['consultation_type_source'] = 'auto';
             $payload['prior_completed_appointment_id'] = null;
+            $auditMetadata = [
+                'classification' => 'new',
+                'source' => 'auto',
+                'reasoning' => 'Patient ID was missing during classification; defaulted to NEW.',
+                'facility_id' => $facilityId,
+                'patient_id' => $patientId,
+                'scheduled_at' => $scheduledAt,
+            ];
 
             return $payload;
         }
@@ -181,6 +193,16 @@ class CreateAppointmentUseCase
         $payload['consultation_type'] = $result['classification'];
         $payload['consultation_type_source'] = $result['source'];
         $payload['prior_completed_appointment_id'] = $result['prior_completed_appointment_id'];
+        $auditMetadata = [
+            'classification' => $result['classification'],
+            'source' => $result['source'],
+            'prior_completed_appointment_id' => $result['prior_completed_appointment_id'],
+            'reasoning' => $result['reasoning'],
+            'policy' => $result['policy'] ?? null,
+            'facility_id' => $facilityId,
+            'patient_id' => $patientId,
+            'scheduled_at' => $scheduledAt,
+        ];
 
         return $payload;
     }

@@ -42,14 +42,16 @@ function makeConsultPatient(array $overrides = []): PatientModel
 function makeConsultUser(): User
 {
     $user = User::factory()->create();
-    $user->givePermissionTo([
+    foreach ([
         'appointments.create',
         'appointments.read',
         'appointments.update',
         'appointments.update-status',
         'billing.invoices.create',
         'billing.invoices.read',
-    ]);
+    ] as $permission) {
+        $user->givePermissionTo($permission);
+    }
 
     return $user;
 }
@@ -75,7 +77,7 @@ function makeConsultTariff(string $serviceCode = 'CONSULT-OPD', float $basePrice
     ]);
 }
 
-function makeCompletedAppointment(string $patientId, string $facilityId, array $overrides = []): AppointmentModel
+function makeCompletedAppointment(string $patientId, ?string $facilityId = null, array $overrides = []): AppointmentModel
 {
     return AppointmentModel::query()->create(array_merge([
         'appointment_number' => 'APT'.now()->format('Ymd').strtoupper(Str::random(6)),
@@ -122,9 +124,9 @@ it('classifies a first-time visit as NEW', function (): void {
     $patient = makeConsultPatient();
     $facilityId = Str::uuid()->toString();
 
-    $this->withoutMiddleware(\App\Http\Middleware\EnforceTenantIsolationWhenEnabled::class)
+    $this->withoutMiddleware()
         ->actingAs($user)
-        ->postJson('/api/appointments', [
+        ->postJson('/api/v1/appointments', [
             'patientId' => $patient->id,
             'scheduledAt' => now()->addDay()->toDateTimeString(),
             'durationMinutes' => 30,
@@ -169,9 +171,9 @@ it('classifies a return visit within the follow-up window as REVIEW', function (
         'status_reason' => null,
     ]);
 
-    $response = $this->withoutMiddleware(\App\Http\Middleware\EnforceTenantIsolationWhenEnabled::class)
+    $response = $this->withoutMiddleware()
         ->actingAs($user)
-        ->postJson('/api/appointments', [
+        ->postJson('/api/v1/appointments', [
             'patientId' => $patient->id,
             'scheduledAt' => now()->addDay()->toDateTimeString(),
             'durationMinutes' => 30,
@@ -217,9 +219,9 @@ it('classifies a return visit after the follow-up window as NEW', function (): v
         'status_reason' => null,
     ]);
 
-    $this->withoutMiddleware(\App\Http\Middleware\EnforceTenantIsolationWhenEnabled::class)
+    $this->withoutMiddleware()
         ->actingAs($user)
-        ->postJson('/api/appointments', [
+        ->postJson('/api/v1/appointments', [
             'patientId' => $patient->id,
             'scheduledAt' => now()->addDay()->toDateTimeString(),
             'durationMinutes' => 30,
@@ -263,9 +265,9 @@ it('classifies as REVIEW when complaints overlap and same_complaint_required is 
         'status_reason' => null,
     ]);
 
-    $this->withoutMiddleware(\App\Http\Middleware\EnforceTenantIsolationWhenEnabled::class)
+    $this->withoutMiddleware()
         ->actingAs($user)
-        ->postJson('/api/appointments', [
+        ->postJson('/api/v1/appointments', [
             'patientId' => $patient->id,
             'scheduledAt' => now()->addDay()->toDateTimeString(),
             'durationMinutes' => 30,
@@ -309,9 +311,9 @@ it('classifies as NEW when complaints do not match and same_complaint_required i
         'status_reason' => null,
     ]);
 
-    $this->withoutMiddleware(\App\Http\Middleware\EnforceTenantIsolationWhenEnabled::class)
+    $this->withoutMiddleware()
         ->actingAs($user)
-        ->postJson('/api/appointments', [
+        ->postJson('/api/v1/appointments', [
             'patientId' => $patient->id,
             'scheduledAt' => now()->addDay()->toDateTimeString(),
             'durationMinutes' => 30,
@@ -358,9 +360,9 @@ it('applies zero consultation fee for a REVIEW visit when review_fee_is_free is 
     ]);
 
     // Create the review appointment
-    $apptResponse = $this->withoutMiddleware(\App\Http\Middleware\EnforceTenantIsolationWhenEnabled::class)
+    $apptResponse = $this->withoutMiddleware()
         ->actingAs($user)
-        ->postJson('/api/appointments', [
+        ->postJson('/api/v1/appointments', [
             'patientId' => $patient->id,
             'scheduledAt' => now()->addDay()->toDateTimeString(),
             'durationMinutes' => 30,
@@ -372,9 +374,9 @@ it('applies zero consultation fee for a REVIEW visit when review_fee_is_free is 
     $appointmentId = $apptResponse->json('data.id');
 
     // Create invoice for the review appointment
-    $invoiceResponse = $this->withoutMiddleware(\App\Http\Middleware\EnforceTenantIsolationWhenEnabled::class)
+    $invoiceResponse = $this->withoutMiddleware()
         ->actingAs($user)
-        ->postJson('/api/billing-invoices', [
+        ->postJson('/api/v1/billing-invoices', [
             'patientId' => $patient->id,
             'appointmentId' => $appointmentId,
             'invoiceDate' => now()->toDateString(),
@@ -440,9 +442,9 @@ it('applies 50% discount on consultation fee for a REVIEW visit', function (): v
         'status_reason' => null,
     ]);
 
-    $apptResponse = $this->withoutMiddleware(\App\Http\Middleware\EnforceTenantIsolationWhenEnabled::class)
+    $apptResponse = $this->withoutMiddleware()
         ->actingAs($user)
-        ->postJson('/api/appointments', [
+        ->postJson('/api/v1/appointments', [
             'patientId' => $patient->id,
             'scheduledAt' => now()->addDay()->toDateTimeString(),
             'durationMinutes' => 30,
@@ -453,9 +455,9 @@ it('applies 50% discount on consultation fee for a REVIEW visit', function (): v
     $apptResponse->assertStatus(201)->assertJsonPath('data.consultationType', 'review');
     $appointmentId = $apptResponse->json('data.id');
 
-    $invoiceResponse = $this->withoutMiddleware(\App\Http\Middleware\EnforceTenantIsolationWhenEnabled::class)
+    $invoiceResponse = $this->withoutMiddleware()
         ->actingAs($user)
-        ->postJson('/api/billing-invoices', [
+        ->postJson('/api/v1/billing-invoices', [
             'patientId' => $patient->id,
             'appointmentId' => $appointmentId,
             'invoiceDate' => now()->toDateString(),
@@ -480,9 +482,158 @@ it('applies 50% discount on consultation fee for a REVIEW visit', function (): v
 
     $pricingContext = $invoiceResponse->json('data.pricingContext');
     expect($pricingContext['consultationReviewDiscount']['applied'])->toBeTrue();
-    expect($pricingContext['consultationReviewDiscount']['discountPercent'])->toBe(50.0);
+    expect((float) $pricingContext['consultationReviewDiscount']['discountPercent'])->toBe(50.0);
     // Total should be 10000 - 5000 = 5000
     expect((float) $invoiceResponse->json('data.totalAmount'))->toBe(5000.0);
+});
+
+it('treats review_fee_percentage as the charged percentage, including 0% free reviews', function (): void {
+    $user = makeConsultUser();
+    $patient = makeConsultPatient();
+
+    config([
+        'consultation_policy.review_fee_is_free' => false,
+        'consultation_policy.review_fee_percentage' => 0.0,
+    ]);
+
+    $tariff = makeConsultTariff('CONSULT-OPD-FREE-PCT', 10000.0);
+    $prior = makeCompletedAppointment($patient->id);
+    $review = makeCompletedAppointment($patient->id, null, [
+        'appointment_number' => 'APT'.strtoupper(Str::random(8)),
+        'scheduled_at' => now()->addDay()->toDateTimeString(),
+        'reason' => 'Malaria review',
+        'consultation_type' => 'review',
+        'prior_completed_appointment_id' => $prior->id,
+        'status' => 'waiting_provider',
+    ]);
+
+    $invoiceResponse = $this->withoutMiddleware()
+        ->actingAs($user)
+        ->postJson('/api/v1/billing-invoices', [
+            'patientId' => $patient->id,
+            'appointmentId' => $review->id,
+            'invoiceDate' => now()->toDateString(),
+            'currencyCode' => 'TZS',
+            'subtotalAmount' => 10000,
+            'discountAmount' => 0,
+            'taxAmount' => 0,
+            'autoPriceLineItems' => true,
+            'lineItems' => [[
+                'description' => 'OPD Consultation',
+                'quantity' => 1,
+                'unitPrice' => 10000,
+                'serviceCode' => $tariff->service_code,
+                'sourceWorkflowKind' => 'appointment_consultation',
+                'sourceWorkflowId' => $review->id,
+            ]],
+        ]);
+
+    $invoiceResponse->assertStatus(201);
+    expect((float) $invoiceResponse->json('data.totalAmount'))->toBe(0.0);
+    expect((float) $invoiceResponse->json('data.consultationReviewDiscount.reviewFeePercentage'))->toBe(0.0);
+    expect((float) $invoiceResponse->json('data.consultationReviewDiscount.discountPercent'))->toBe(100.0);
+});
+
+it('applies consultation review pricing to invoice previews', function (): void {
+    $user = makeConsultUser();
+    $patient = makeConsultPatient();
+
+    config([
+        'consultation_policy.review_fee_is_free' => false,
+        'consultation_policy.review_fee_percentage' => 25.0,
+    ]);
+
+    $tariff = makeConsultTariff('CONSULT-OPD-PREVIEW', 10000.0);
+    $prior = makeCompletedAppointment($patient->id);
+    $review = makeCompletedAppointment($patient->id, null, [
+        'appointment_number' => 'APT'.strtoupper(Str::random(8)),
+        'scheduled_at' => now()->addDay()->toDateTimeString(),
+        'reason' => 'Malaria review',
+        'consultation_type' => 'review',
+        'prior_completed_appointment_id' => $prior->id,
+        'status' => 'waiting_provider',
+    ]);
+
+    $previewResponse = $this->withoutMiddleware()
+        ->actingAs($user)
+        ->postJson('/api/v1/billing-invoices/preview', [
+            'patientId' => $patient->id,
+            'appointmentId' => $review->id,
+            'invoiceDate' => now()->toDateString(),
+            'currencyCode' => 'TZS',
+            'subtotalAmount' => 10000,
+            'discountAmount' => 0,
+            'taxAmount' => 0,
+            'autoPriceLineItems' => true,
+            'lineItems' => [[
+                'description' => 'OPD Consultation',
+                'quantity' => 1,
+                'unitPrice' => 10000,
+                'serviceCode' => $tariff->service_code,
+                'sourceWorkflowKind' => 'appointment_consultation',
+                'sourceWorkflowId' => $review->id,
+            ]],
+        ])
+        ->assertStatus(200)
+        ->assertJsonPath('data.totalAmount', 2500);
+
+    expect((float) $previewResponse->json('data.consultationReviewDiscount.reviewFeePercentage'))->toBe(25.0);
+    expect((float) $previewResponse->json('data.consultationReviewDiscount.discountPercent'))->toBe(75.0);
+});
+
+it('reuses a draft and avoids duplicate consultation charges for the same appointment source', function (): void {
+    $user = makeConsultUser();
+    $patient = makeConsultPatient();
+
+    config([
+        'consultation_policy.review_fee_is_free' => false,
+        'consultation_policy.review_fee_percentage' => 50.0,
+    ]);
+
+    $tariff = makeConsultTariff('CONSULT-OPD-NO-DUPE', 10000.0);
+    $prior = makeCompletedAppointment($patient->id);
+    $review = makeCompletedAppointment($patient->id, null, [
+        'appointment_number' => 'APT'.strtoupper(Str::random(8)),
+        'scheduled_at' => now()->addDay()->toDateTimeString(),
+        'reason' => 'Malaria review',
+        'consultation_type' => 'review',
+        'prior_completed_appointment_id' => $prior->id,
+        'status' => 'waiting_provider',
+    ]);
+
+    $payload = [
+        'patientId' => $patient->id,
+        'appointmentId' => $review->id,
+        'invoiceDate' => now()->toDateString(),
+        'currencyCode' => 'TZS',
+        'subtotalAmount' => 10000,
+        'discountAmount' => 0,
+        'taxAmount' => 0,
+        'autoPriceLineItems' => true,
+        'lineItems' => [[
+            'description' => 'OPD Consultation',
+            'quantity' => 1,
+            'unitPrice' => 10000,
+            'serviceCode' => $tariff->service_code,
+            'sourceWorkflowKind' => 'appointment_consultation',
+            'sourceWorkflowId' => $review->id,
+        ]],
+    ];
+
+    $this->withoutMiddleware()
+        ->actingAs($user)
+        ->postJson('/api/v1/billing-invoices', $payload)
+        ->assertStatus(201);
+
+    $secondResponse = $this->withoutMiddleware()
+        ->actingAs($user)
+        ->postJson('/api/v1/billing-invoices', $payload);
+
+    $secondResponse->assertStatus(200)
+        ->assertJsonPath('meta.draftReused', true)
+        ->assertJsonCount(1, 'data.lineItems');
+
+    expect((float) $secondResponse->json('data.totalAmount'))->toBe(5000.0);
 });
 
 // ---------------------------------------------------------------------------
@@ -496,9 +647,9 @@ it('allows staff to override consultation type from NEW to REVIEW with a reason'
     config(['consultation_policy.follow_up_days' => 14]);
 
     // Create a new appointment (no prior → auto NEW)
-    $apptResponse = $this->withoutMiddleware(\App\Http\Middleware\EnforceTenantIsolationWhenEnabled::class)
+    $apptResponse = $this->withoutMiddleware()
         ->actingAs($user)
-        ->postJson('/api/appointments', [
+        ->postJson('/api/v1/appointments', [
             'patientId' => $patient->id,
             'scheduledAt' => now()->addDay()->toDateTimeString(),
             'durationMinutes' => 30,
@@ -510,9 +661,9 @@ it('allows staff to override consultation type from NEW to REVIEW with a reason'
     $appointmentId = $apptResponse->json('data.id');
 
     // Staff overrides to REVIEW with a reason
-    $overrideResponse = $this->withoutMiddleware(\App\Http\Middleware\EnforceTenantIsolationWhenEnabled::class)
+    $overrideResponse = $this->withoutMiddleware()
         ->actingAs($user)
-        ->patchJson("/api/appointments/{$appointmentId}/consultation-type", [
+        ->patchJson("/api/v1/appointments/{$appointmentId}/consultation-type", [
             'consultationType' => 'review',
             'consultationTypeOverrideReason' => 'Patient self-presented for hypertension review within window per clinician.',
         ]);
@@ -544,9 +695,9 @@ it('rejects a consultation type override without a reason', function (): void {
     $user = makeConsultUser();
     $patient = makeConsultPatient();
 
-    $apptResponse = $this->withoutMiddleware(\App\Http\Middleware\EnforceTenantIsolationWhenEnabled::class)
+    $apptResponse = $this->withoutMiddleware()
         ->actingAs($user)
-        ->postJson('/api/appointments', [
+        ->postJson('/api/v1/appointments', [
             'patientId' => $patient->id,
             'scheduledAt' => now()->addDay()->toDateTimeString(),
             'durationMinutes' => 30,
@@ -557,9 +708,9 @@ it('rejects a consultation type override without a reason', function (): void {
     $apptResponse->assertStatus(201);
     $appointmentId = $apptResponse->json('data.id');
 
-    $this->withoutMiddleware(\App\Http\Middleware\EnforceTenantIsolationWhenEnabled::class)
+    $this->withoutMiddleware()
         ->actingAs($user)
-        ->patchJson("/api/appointments/{$appointmentId}/consultation-type", [
+        ->patchJson("/api/v1/appointments/{$appointmentId}/consultation-type", [
             'consultationType' => 'review',
             // No reason provided
         ])
@@ -580,9 +731,9 @@ it('does not apply any review discount when appointment type is NEW', function (
     $tariff = makeConsultTariff('CONSULT-NEW-ONLY', 10000.0);
 
     // No prior completed appointment → will be classified NEW
-    $apptResponse = $this->withoutMiddleware(\App\Http\Middleware\EnforceTenantIsolationWhenEnabled::class)
+    $apptResponse = $this->withoutMiddleware()
         ->actingAs($user)
-        ->postJson('/api/appointments', [
+        ->postJson('/api/v1/appointments', [
             'patientId' => $patient->id,
             'scheduledAt' => now()->addDay()->toDateTimeString(),
             'durationMinutes' => 30,
@@ -593,9 +744,9 @@ it('does not apply any review discount when appointment type is NEW', function (
     $apptResponse->assertStatus(201)->assertJsonPath('data.consultationType', 'new');
     $appointmentId = $apptResponse->json('data.id');
 
-    $invoiceResponse = $this->withoutMiddleware(\App\Http\Middleware\EnforceTenantIsolationWhenEnabled::class)
+    $invoiceResponse = $this->withoutMiddleware()
         ->actingAs($user)
-        ->postJson('/api/billing-invoices', [
+        ->postJson('/api/v1/billing-invoices', [
             'patientId' => $patient->id,
             'appointmentId' => $appointmentId,
             'invoiceDate' => now()->toDateString(),
@@ -630,40 +781,16 @@ it('does not apply any review discount when appointment type is NEW', function (
 // ---------------------------------------------------------------------------
 
 it('uses facility-level SystemSetting for follow_up_days when available', function (): void {
-    $user = makeConsultUser();
-    $patient = makeConsultPatient();
     $facilityId = Str::uuid()->toString();
 
     // Global config says 14 days but facility says 1 day
     config(['consultation_policy.follow_up_days' => 14]);
     setConsultationPolicy(['follow_up_days' => 1], $facilityId);
 
-    // Prior appointment 5 days ago (within global 14-day window but outside facility 1-day window)
-    AppointmentModel::query()->create([
-        'appointment_number' => 'APT'.strtoupper(Str::random(8)),
-        'tenant_id' => null,
-        'facility_id' => $facilityId,
-        'patient_id' => $patient->id,
-        'clinician_user_id' => null,
-        'department' => 'Outpatient',
-        'scheduled_at' => now()->subDays(5)->toDateTimeString(),
-        'duration_minutes' => 30,
-        'reason' => 'Malaria',
-        'notes' => null,
-        'appointment_type' => 'scheduled',
-        'consultation_type' => 'new',
-        'consultation_type_source' => 'auto',
-        'consultation_type_override_reason' => null,
-        'prior_completed_appointment_id' => null,
-        'status' => 'completed',
-        'status_reason' => null,
-    ]);
-
-    // Classification service only checks facility-scoped prior appointments when a facilityId is present.
-    // Since the appointment being created will have facility_id = null (no multi-facility scope in test),
-    // this test validates that the SystemSetting resolver reads the correct policy value.
     $policy = app(\App\Modules\Appointment\Application\Support\ConsultationReviewPolicyResolver::class)
         ->resolve($facilityId);
 
     expect($policy['follow_up_days'])->toBe(1);
 });
+
+

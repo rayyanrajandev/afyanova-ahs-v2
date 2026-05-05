@@ -37,6 +37,7 @@ export type BillingInvoice = {
     visitCoverage: BillingInvoiceVisitCoverage | null;
     payerSummary: BillingInvoicePayerSummary | null;
     claimReadiness: BillingInvoiceClaimReadiness | null;
+    consultationReviewDiscount?: BillingInvoiceConsultationReviewDiscount | null;
     status:
         | 'draft'
         | 'issued'
@@ -152,7 +153,27 @@ export type BillingInvoiceLineItem = {
     priceOverride?: BillingInvoiceLineItemPriceOverride;
     coverage?: BillingInvoiceLineItemCoverage;
     authorization?: BillingInvoiceLineItemAuthorization;
+    consultationType?: 'new' | 'review' | string | null;
+    reviewFeePercentage?: string | number | null;
+    reviewDiscountPercent?: string | number | null;
+    reviewDiscountAmount?: string | number | null;
+    reviewChargeAmount?: string | number | null;
 };
+
+export type BillingInvoiceConsultationReviewDiscount = {
+    applied?: boolean;
+    reason?: string | null;
+    consultationType?: 'new' | 'review' | string | null;
+    priorAppointmentId?: string | null;
+    reviewFeePercentage?: string | number | null;
+    discountPercent?: string | number | null;
+    isFreeFollowUp?: boolean | null;
+    reviewDiscountAmount?: string | number | null;
+    affectedLineCount?: number | null;
+    affectedServiceCodes?: string[];
+    followUpDays?: number | null;
+    appliedAt?: string | null;
+} | null;
 
 export type BillingChargeCaptureCandidate = {
     id: string;

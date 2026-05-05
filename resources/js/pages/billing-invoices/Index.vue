@@ -9660,10 +9660,14 @@ function invoiceLineItemPreview(invoice: BillingInvoice): string[] {
             const unitPrice = amountToNumber(item.unitPrice) ?? 0;
             const lineTotal =
                 amountToNumber(item.lineTotal ?? null) ?? quantity * unitPrice;
+            const reviewFee = amountToNumber(item.reviewFeePercentage ?? null);
             const parts = [
                 item.description,
                 `(${quantity} x ${formatMoney(unitPrice, invoice.currencyCode)})`,
                 formatMoney(lineTotal, invoice.currencyCode),
+                item.consultationType === 'review' && reviewFee !== null
+                    ? `Review ${reviewFee}%`
+                    : null,
             ];
 
             return parts.filter(Boolean).join(' ');

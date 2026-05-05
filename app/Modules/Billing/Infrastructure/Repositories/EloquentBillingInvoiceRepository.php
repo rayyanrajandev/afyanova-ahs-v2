@@ -79,6 +79,50 @@ class EloquentBillingInvoiceRepository implements BillingInvoiceRepositoryInterf
         return $invoice?->toArray();
     }
 
+    public function findByLineItemSource(
+        string $patientId,
+        string $sourceWorkflowKind,
+        string $sourceWorkflowId,
+        ?string $excludeInvoiceId = null,
+    ): ?array {
+        $normalizedKind = strtolower(trim($sourceWorkflowKind));
+        $normalizedId = trim($sourceWorkflowId);
+        if ($normalizedKind === '' || $normalizedId === '') {
+            return null;
+        }
+
+        $query = BillingInvoiceModel::query()
+            ->where('patient_id', $patientId)
+            ->whereNotIn('status', ['cancelled', 'voided']);
+
+        $this->applyPlatformScopeIfEnabled($query);
+
+        if ($excludeInvoiceId !== null && trim($excludeInvoiceId) !== '') {
+            $query->where('id', '!=', trim($excludeInvoiceId));
+        }
+
+        $invoices = $query
+            ->orderByDesc('updated_at')
+            ->orderByDesc('created_at')
+            ->get(['id', 'invoice_number', 'status', 'line_items', 'updated_at', 'created_at']);
+
+        foreach ($invoices as $invoice) {
+            foreach (($invoice->line_items ?? []) as $lineItem) {
+                if (! is_array($lineItem)) {
+                    continue;
+                }
+
+                $lineSourceKind = strtolower(trim((string) ($lineItem['sourceWorkflowKind'] ?? '')));
+                $lineSourceId = trim((string) ($lineItem['sourceWorkflowId'] ?? ''));
+                if ($lineSourceKind === $normalizedKind && $lineSourceId === $normalizedId) {
+                    return $invoice->toArray();
+                }
+            }
+        }
+
+        return null;
+    }
+
     public function update(string $id, array $attributes): ?array
     {
         $query = BillingInvoiceModel::query();

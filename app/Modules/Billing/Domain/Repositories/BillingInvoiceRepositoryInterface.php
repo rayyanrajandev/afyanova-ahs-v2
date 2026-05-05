@@ -18,6 +18,13 @@ interface BillingInvoiceRepositoryInterface
         string $currencyCode
     ): ?array;
 
+    public function findByLineItemSource(
+        string $patientId,
+        string $sourceWorkflowKind,
+        string $sourceWorkflowId,
+        ?string $excludeInvoiceId = null,
+    ): ?array;
+
     public function update(string $id, array $attributes): ?array;
 
     public function existsByInvoiceNumber(string $invoiceNumber): bool;

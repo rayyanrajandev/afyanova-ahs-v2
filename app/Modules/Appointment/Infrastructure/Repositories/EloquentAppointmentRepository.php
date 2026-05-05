@@ -248,7 +248,7 @@ class EloquentAppointmentRepository implements AppointmentRepositoryInterface
 
     public function findLastCompletedForPatientWithinDays(
         string $patientId,
-        string $facilityId,
+        ?string $facilityId,
         string $scheduledAt,
         int $withinDays,
     ): ?array {
@@ -261,8 +261,12 @@ class EloquentAppointmentRepository implements AppointmentRepositoryInterface
 
         $appointment = AppointmentModel::query()
             ->where('patient_id', $patientId)
-            ->where('facility_id', $facilityId)
             ->where('status', 'completed')
+            ->when(
+                $facilityId !== null && trim($facilityId) !== '',
+                fn (Builder $builder): Builder => $builder->where('facility_id', $facilityId),
+                fn (Builder $builder): Builder => $builder->whereNull('facility_id'),
+            )
             ->whereBetween('scheduled_at', [$windowStart->toDateTimeString(), $referenceDate->toDateTimeString()])
             ->orderByDesc('scheduled_at')
             ->first();
