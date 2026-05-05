@@ -307,6 +307,7 @@ const statusDialogError = ref<string | null>(null);
 
 const editDialogOpen = ref(false);
 const editDialogLoading = ref(false);
+const editDialogFetching = ref(false);
 const editDialogUserId = ref<number | null>(null);
 const editDialogRequiresApprovalCase = ref(false);
 const editDialogApprovalCaseReference = ref('');
@@ -1313,11 +1314,12 @@ function openCreateStaffProfile(user: PlatformUser): void {
     window.location.assign(`${url.pathname}${url.search}`);
 }
 
-function openEditDialog(user: PlatformUser) {
+async function openEditDialog(user: PlatformUser) {
     const userId = Number(user.id);
     if (!Number.isFinite(userId) || !canUpdate.value) return;
 
     editDialogUserId.value = userId;
+    // Seed from whatever data we have now (may be incomplete from list endpoint)
     editDialogRequiresApprovalCase.value = Boolean(user.requiresApprovalCaseForSensitiveChanges);
     editDialogApprovalCaseReference.value = '';
     editForm.name = (user.name ?? '').trim();
@@ -1325,11 +1327,34 @@ function openEditDialog(user: PlatformUser) {
     editErrors.value = {};
     editDialogError.value = null;
     editDialogOpen.value = true;
+
+    // If requiresApprovalCaseForSensitiveChanges is missing (list endpoint omits it),
+    // fetch the full user record so the approval-case field shows correctly upfront.
+    if (!user.requiresApprovalCaseForSensitiveChanges) {
+        editDialogFetching.value = true;
+        try {
+            const response = await apiRequest<PlatformUserResponse>('GET', `/platform/admin/users/${userId}`);
+            // Only apply if the dialog is still open for the same user
+            if (editDialogUserId.value === userId) {
+                editDialogRequiresApprovalCase.value = Boolean(response.data.requiresApprovalCaseForSensitiveChanges);
+                // Keep name/email in sync with authoritative data
+                editForm.name = (response.data.name ?? editForm.name).trim();
+                editForm.email = (response.data.email ?? editForm.email).trim();
+            }
+        } catch {
+            // Non-fatal: dialog remains usable; approval case will reveal on 422 if needed
+        } finally {
+            if (editDialogUserId.value === userId) {
+                editDialogFetching.value = false;
+            }
+        }
+    }
 }
 
 function closeEditDialog() {
     editDialogOpen.value = false;
     editDialogLoading.value = false;
+    editDialogFetching.value = false;
     editDialogUserId.value = null;
     editDialogRequiresApprovalCase.value = false;
     editDialogApprovalCaseReference.value = '';
@@ -2596,12 +2621,12 @@ onMounted(async () => {
                         </Alert>
                         <div class="grid gap-2">
                             <Label for="edit-user-name">Name</Label>
-                            <Input id="edit-user-name" v-model="editForm.name" placeholder="Full name" />
+                            <Input id="edit-user-name" v-model="editForm.name" :disabled="editDialogFetching" placeholder="Full name" />
                             <p v-if="editErrors.name?.length" class="text-xs text-destructive">{{ editErrors.name[0] }}</p>
                         </div>
                         <div class="grid gap-2">
                             <Label for="edit-user-email">Email</Label>
-                            <Input id="edit-user-email" v-model="editForm.email" type="email" placeholder="user@facility.org" />
+                            <Input id="edit-user-email" v-model="editForm.email" :disabled="editDialogFetching" type="email" placeholder="user@facility.org" />
                             <p v-if="editErrors.email?.length" class="text-xs text-destructive">{{ editErrors.email[0] }}</p>
                         </div>
                         <div v-if="editDialogRequiresApprovalCase" class="grid gap-2">
@@ -2609,20 +2634,22 @@ onMounted(async () => {
                             <Input
                                 id="edit-user-approval-case-reference"
                                 v-model="editDialogApprovalCaseReference"
+                                :disabled="editDialogFetching"
                                 placeholder="CASE-PLT-2026-0001"
                             />
                             <p v-if="editErrors.approvalCaseReference?.length" class="text-xs text-destructive">
                                 {{ editErrors.approvalCaseReference[0] }}
                             </p>
                         </div>
+                        <p v-if="editDialogFetching" class="text-xs text-muted-foreground">Checking account privileges...</p>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" :disabled="editDialogLoading" @click="closeEditDialog">Cancel</Button>
+                        <Button variant="outline" :disabled="editDialogLoading || editDialogFetching" @click="closeEditDialog">Cancel</Button>
                         <Button
-                            :disabled="editDialogLoading || (editDialogRequiresApprovalCase && !editDialogApprovalCaseReference.trim())"
+                            :disabled="editDialogLoading || editDialogFetching || (editDialogRequiresApprovalCase && !editDialogApprovalCaseReference.trim())"
                             @click="submitEditDialog"
                         >
-                            {{ editDialogLoading ? 'Saving...' : 'Save Changes' }}
+                            {{ editDialogLoading ? 'Saving...' : editDialogFetching ? 'Loading...' : 'Save Changes' }}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
