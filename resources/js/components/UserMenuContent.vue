@@ -14,6 +14,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import UserInfo from '@/components/UserInfo.vue';
 import type { AppIconName } from '@/lib/icons';
 import { logout } from '@/routes';
+import { edit as editProfile } from '@/routes/profile';
+import { show as showTwoFactor } from '@/routes/two-factor';
+import { edit as editPassword } from '@/routes/user-password';
 import type { User } from '@/types';
 
 type Props = {
@@ -98,7 +101,30 @@ const emit = defineEmits<{
     <DropdownMenuGroup>
         <DropdownMenuItem @select="emit('open-settings')">
             <AppIcon name="layout-grid" class="size-4" />
-            Settings
+            Preferences
+        </DropdownMenuItem>
+    </DropdownMenuGroup>
+
+    <DropdownMenuSeparator />
+
+    <DropdownMenuGroup>
+        <DropdownMenuItem :as-child="true">
+            <Link :href="editProfile()" class="flex w-full items-center gap-2">
+                <AppIcon name="users" class="size-4" />
+                Profile
+            </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem :as-child="true">
+            <Link :href="editPassword()" class="flex w-full items-center gap-2">
+                <AppIcon name="shield-check" class="size-4" />
+                Password
+            </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem :as-child="true">
+            <Link :href="showTwoFactor()" class="flex w-full items-center gap-2">
+                <AppIcon name="alert-triangle" class="size-4" />
+                Two-Factor Auth
+            </Link>
         </DropdownMenuItem>
 
         <DropdownMenuSub>

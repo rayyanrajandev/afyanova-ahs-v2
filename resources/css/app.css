@@ -162,7 +162,7 @@
     --chart-6: hsl(180 58% 44%);
 
     /* Radius */
-    --radius: 0rem;
+    --radius: 0.5rem;
 
     /* Sidebar */
     --sidebar-background: hsl(210 20% 98%);
@@ -280,6 +280,196 @@
 }
 
 /* ================================================================
+   4. THEME SETTINGS - Tabler-style browser preferences
+   ================================================================ */
+
+/* Font family */
+:root[data-font-family='sans'] {
+    --font-sans:
+        'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui,
+        Roboto, 'Helvetica Neue', Arial, sans-serif,
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+}
+:root[data-font-family='serif'] {
+    --font-sans:
+        Georgia, Cambria, 'Times New Roman', Times, serif,
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+}
+:root[data-font-family='mono'] {
+    --font-sans:
+        'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code',
+        Consolas, Monaco, 'Courier New', monospace;
+}
+
+/* Neutral base */
+:root[data-theme-base='gray'] {
+    --background: hsl(210 16% 97%);
+    --foreground: hsl(224 12% 16%);
+    --card: hsl(0 0% 100%);
+    --card-foreground: hsl(224 12% 16%);
+    --popover: hsl(0 0% 100%);
+    --popover-foreground: hsl(224 12% 16%);
+    --secondary: hsl(210 12% 93%);
+    --secondary-foreground: hsl(224 10% 24%);
+    --muted: hsl(210 12% 93%);
+    --muted-foreground: hsl(220 8% 42%);
+    --border: hsl(214 12% 84%);
+    --input: hsl(214 12% 88%);
+    --sidebar-background: hsl(210 16% 98%);
+    --sidebar-foreground: hsl(224 10% 24%);
+    --sidebar-accent: hsl(210 12% 93%);
+    --sidebar-accent-foreground: hsl(224 10% 24%);
+    --sidebar-border: hsl(214 12% 88%);
+}
+
+:root[data-theme-base='zinc'] {
+    --background: hsl(240 14% 97%);
+    --foreground: hsl(240 12% 14%);
+    --card: hsl(0 0% 100%);
+    --card-foreground: hsl(240 12% 14%);
+    --popover: hsl(0 0% 100%);
+    --popover-foreground: hsl(240 12% 14%);
+    --secondary: hsl(240 10% 93%);
+    --secondary-foreground: hsl(240 10% 22%);
+    --muted: hsl(240 10% 93%);
+    --muted-foreground: hsl(240 6% 40%);
+    --border: hsl(240 8% 84%);
+    --input: hsl(240 8% 88%);
+    --sidebar-background: hsl(240 14% 98%);
+    --sidebar-foreground: hsl(240 10% 22%);
+    --sidebar-accent: hsl(240 10% 93%);
+    --sidebar-accent-foreground: hsl(240 10% 22%);
+    --sidebar-border: hsl(240 8% 88%);
+}
+
+:root[data-theme-base='neutral'] {
+    --background: hsl(0 0% 97%);
+    --foreground: hsl(0 0% 14%);
+    --card: hsl(0 0% 100%);
+    --card-foreground: hsl(0 0% 14%);
+    --popover: hsl(0 0% 100%);
+    --popover-foreground: hsl(0 0% 14%);
+    --secondary: hsl(0 0% 93%);
+    --secondary-foreground: hsl(0 0% 22%);
+    --muted: hsl(0 0% 93%);
+    --muted-foreground: hsl(0 0% 40%);
+    --border: hsl(0 0% 84%);
+    --input: hsl(0 0% 88%);
+    --sidebar-background: hsl(0 0% 98%);
+    --sidebar-foreground: hsl(0 0% 22%);
+    --sidebar-accent: hsl(0 0% 93%);
+    --sidebar-accent-foreground: hsl(0 0% 22%);
+    --sidebar-border: hsl(0 0% 88%);
+}
+
+:root[data-theme-base='stone'] {
+    --background: hsl(42 18% 96%);
+    --foreground: hsl(28 12% 15%);
+    --card: hsl(40 22% 99%);
+    --card-foreground: hsl(28 12% 15%);
+    --popover: hsl(40 22% 99%);
+    --popover-foreground: hsl(28 12% 15%);
+    --secondary: hsl(34 14% 91%);
+    --secondary-foreground: hsl(28 12% 22%);
+    --muted: hsl(34 14% 91%);
+    --muted-foreground: hsl(28 9% 40%);
+    --border: hsl(34 12% 82%);
+    --input: hsl(34 12% 86%);
+    --sidebar-background: hsl(42 20% 97%);
+    --sidebar-foreground: hsl(28 12% 22%);
+    --sidebar-accent: hsl(34 14% 91%);
+    --sidebar-accent-foreground: hsl(28 12% 22%);
+    --sidebar-border: hsl(34 12% 86%);
+}
+
+.dark[data-theme-base='gray'] {
+    --background: hsl(224 10% 11%);
+    --foreground: hsl(210 14% 94%);
+    --card: hsl(224 10% 15%);
+    --card-foreground: hsl(210 14% 92%);
+    --popover: hsl(224 11% 14%);
+    --popover-foreground: hsl(210 14% 92%);
+    --secondary: hsl(224 9% 20%);
+    --secondary-foreground: hsl(210 10% 82%);
+    --muted: hsl(224 9% 19%);
+    --muted-foreground: hsl(216 8% 60%);
+    --border: hsl(224 8% 25%);
+    --input: hsl(224 8% 21%);
+    --sidebar-background: hsl(224 10% 12%);
+    --sidebar-foreground: hsl(210 10% 84%);
+    --sidebar-accent: hsl(224 9% 19%);
+    --sidebar-accent-foreground: hsl(210 10% 84%);
+    --sidebar-border: hsl(224 8% 25%);
+}
+
+.dark[data-theme-base='zinc'] {
+    --background: hsl(240 12% 10%);
+    --foreground: hsl(240 8% 94%);
+    --card: hsl(240 11% 14%);
+    --card-foreground: hsl(240 8% 92%);
+    --popover: hsl(240 12% 13%);
+    --popover-foreground: hsl(240 8% 92%);
+    --secondary: hsl(240 8% 20%);
+    --secondary-foreground: hsl(240 6% 82%);
+    --muted: hsl(240 8% 18%);
+    --muted-foreground: hsl(240 5% 60%);
+    --border: hsl(240 7% 25%);
+    --input: hsl(240 7% 21%);
+    --sidebar-background: hsl(240 12% 11%);
+    --sidebar-foreground: hsl(240 6% 84%);
+    --sidebar-accent: hsl(240 8% 18%);
+    --sidebar-accent-foreground: hsl(240 6% 84%);
+    --sidebar-border: hsl(240 7% 25%);
+}
+
+.dark[data-theme-base='neutral'] {
+    --background: hsl(0 0% 10%);
+    --foreground: hsl(0 0% 94%);
+    --card: hsl(0 0% 14%);
+    --card-foreground: hsl(0 0% 92%);
+    --popover: hsl(0 0% 13%);
+    --popover-foreground: hsl(0 0% 92%);
+    --secondary: hsl(0 0% 20%);
+    --secondary-foreground: hsl(0 0% 82%);
+    --muted: hsl(0 0% 18%);
+    --muted-foreground: hsl(0 0% 60%);
+    --border: hsl(0 0% 25%);
+    --input: hsl(0 0% 21%);
+    --sidebar-background: hsl(0 0% 11%);
+    --sidebar-foreground: hsl(0 0% 84%);
+    --sidebar-accent: hsl(0 0% 18%);
+    --sidebar-accent-foreground: hsl(0 0% 84%);
+    --sidebar-border: hsl(0 0% 25%);
+}
+
+.dark[data-theme-base='stone'] {
+    --background: hsl(32 12% 10%);
+    --foreground: hsl(36 16% 92%);
+    --card: hsl(32 11% 14%);
+    --card-foreground: hsl(36 16% 90%);
+    --popover: hsl(32 12% 13%);
+    --popover-foreground: hsl(36 16% 90%);
+    --secondary: hsl(30 10% 20%);
+    --secondary-foreground: hsl(36 12% 80%);
+    --muted: hsl(30 10% 18%);
+    --muted-foreground: hsl(36 8% 58%);
+    --border: hsl(30 8% 24%);
+    --input: hsl(30 8% 20%);
+    --sidebar-background: hsl(32 12% 11%);
+    --sidebar-foreground: hsl(36 12% 82%);
+    --sidebar-accent: hsl(30 10% 18%);
+    --sidebar-accent-foreground: hsl(36 12% 82%);
+    --sidebar-border: hsl(30 8% 24%);
+}
+
+/* Corner radius factor */
+:root[data-border-radius='0'] { --radius: 0rem; }
+:root[data-border-radius='0.5'] { --radius: 0.25rem; }
+:root[data-border-radius='1'] { --radius: 0.5rem; }
+:root[data-border-radius='1.5'] { --radius: 0.75rem; }
+:root[data-border-radius='2'] { --radius: 1rem; }
+
+/* ================================================================
    4. THEME PRESETS — switchable accent palettes
    ================================================================
    Values must match UiThemePreset type: 'yaru' | 'clinic' | 'emerald'
@@ -326,6 +516,46 @@
     --accent-foreground: hsl(0 0% 5%);
     --sidebar-primary: hsl(155 70% 50%);
     --sidebar-ring: hsl(155 70% 50%);
+}
+
+/* violet - Specialist workflows */
+:root[data-theme-preset='violet'] {
+    --primary: hsl(258 74% 56%);
+    --primary-foreground: hsl(0 0% 100%);
+    --ring: hsl(258 74% 56%);
+    --accent: hsl(226 70% 58%);
+    --accent-foreground: hsl(0 0% 100%);
+    --sidebar-primary: hsl(258 74% 56%);
+    --sidebar-ring: hsl(258 74% 56%);
+}
+.dark[data-theme-preset='violet'] {
+    --primary: hsl(258 82% 68%);
+    --primary-foreground: hsl(0 0% 5%);
+    --ring: hsl(258 82% 68%);
+    --accent: hsl(226 78% 66%);
+    --accent-foreground: hsl(0 0% 5%);
+    --sidebar-primary: hsl(258 82% 68%);
+    --sidebar-ring: hsl(258 82% 68%);
+}
+
+/* amber - Cashier and operations accent */
+:root[data-theme-preset='amber'] {
+    --primary: hsl(34 92% 48%);
+    --primary-foreground: hsl(30 80% 12%);
+    --ring: hsl(34 92% 48%);
+    --accent: hsl(20 86% 52%);
+    --accent-foreground: hsl(0 0% 100%);
+    --sidebar-primary: hsl(34 92% 48%);
+    --sidebar-ring: hsl(34 92% 48%);
+}
+.dark[data-theme-preset='amber'] {
+    --primary: hsl(40 96% 58%);
+    --primary-foreground: hsl(30 80% 8%);
+    --ring: hsl(40 96% 58%);
+    --accent: hsl(24 90% 60%);
+    --accent-foreground: hsl(30 80% 8%);
+    --sidebar-primary: hsl(40 96% 58%);
+    --sidebar-ring: hsl(40 96% 58%);
 }
 
 /* ================================================================

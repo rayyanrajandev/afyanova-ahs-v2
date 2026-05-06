@@ -1,16 +1,22 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { ref, Transition } from 'vue';
 import AppearanceTabs from '@/components/AppearanceTabs.vue';
 import AppIcon from '@/components/AppIcon.vue';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetFooter,
+    SheetHeader,
+    SheetTitle,
+} from '@/components/ui/sheet';
 import UiPreferencesPanel from '@/components/UiPreferencesPanel.vue';
+import { useAppearance } from '@/composables/useAppearance';
+import { useUiPreferences } from '@/composables/useUiPreferences';
 import { edit as editAppearance } from '@/routes/appearance';
-import { edit as editProfile } from '@/routes/profile';
-import { show as showTwoFactor } from '@/routes/two-factor';
-import { edit as editPassword } from '@/routes/user-password';
 
 type Props = {
     open: boolean;
@@ -22,127 +28,76 @@ const emit = defineEmits<{
     (e: 'update:open', value: boolean): void;
 }>();
 
-const activeSection = ref<'general' | 'account'>('general');
+const { updateAppearance } = useAppearance();
+const { resetUiPreferences } = useUiPreferences();
 
-const accountLinks = [
-    {
-        href: editProfile,
-        icon: 'users' as const,
-        title: 'Profile',
-        description: 'Update your name and account identity details.',
-        badge: null as string | null,
-    },
-    {
-        href: editPassword,
-        icon: 'shield-check' as const,
-        title: 'Password',
-        description: 'Rotate your password and enforce secure access.',
-        badge: null as string | null,
-    },
-    {
-        href: showTwoFactor,
-        icon: 'alert-triangle' as const,
-        title: 'Two-Factor Auth',
-        description: 'Enable MFA with authenticator app verification.',
-        badge: 'Recommended',
-    },
-] as const;
+function resetSettings(): void {
+    updateAppearance('system');
+    resetUiPreferences();
+}
 
-const navItems = [
-    { key: 'general' as const, icon: 'layout-grid' as const, label: 'General', description: 'Appearance, density & icons' },
-    { key: 'account' as const, icon: 'users' as const, label: 'Account', description: 'Profile, password & security' },
-];
+function closeSettings(): void {
+    emit('update:open', false);
+}
 </script>
 
 <template>
-    <Dialog :open="open" @update:open="emit('update:open', $event)">
-        <DialogContent variant="workspace" size="2xl" class="max-h-[88vh]" showCloseButton>
-            <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
-                <!-- Header -->
-                <div class="border-b border-border/60 px-4 py-3">
-                    <div class="flex items-center justify-between gap-3">
-                        <div>
-                            <DialogTitle class="text-sm font-semibold tracking-tight">Settings</DialogTitle>
-                            <DialogDescription class="text-xs text-muted-foreground">
-                                Preferences &amp; account
-                            </DialogDescription>
-                        </div>
-                        <Link
-                            v-if="activeSection === 'general'"
-                            :href="editAppearance()"
-                            class="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-primary"
-                        >
-                            <AppIcon name="arrow-up-right" class="size-3" />
-                            All settings
-                        </Link>
+    <Sheet :open="open" @update:open="emit('update:open', $event)">
+        <SheetContent
+            variant="workspace"
+            size="xl"
+            side="right"
+            showCloseButton
+            class="border-l"
+        >
+            <SheetHeader class="shrink-0 border-b bg-card px-6 py-4 pr-12 text-left">
+                <div class="flex items-start gap-3">
+                    <div class="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
+                        <AppIcon name="sliders-horizontal" class="size-4 text-primary" />
                     </div>
-
-                    <!-- Section tabs -->
-                    <div class="mt-3 inline-flex items-center gap-1 rounded-lg bg-muted/40 p-1">
-                        <button
-                            v-for="item in navItems"
-                            :key="item.key"
-                            :class="[
-                                'inline-flex items-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-medium transition-all duration-150',
-                                activeSection === item.key
-                                    ? 'bg-background text-foreground shadow-sm'
-                                    : 'text-muted-foreground hover:text-foreground',
-                            ]"
-                            @click="activeSection = item.key"
-                        >
-                            <AppIcon
-                                :name="item.icon"
-                                class="size-4"
-                            />
-                            {{ item.label }}
-                        </button>
+                    <div class="min-w-0">
+                        <SheetTitle class="text-base font-semibold leading-snug">Theme Settings</SheetTitle>
+                        <SheetDescription class="text-xs">
+                            Customize the workspace look for this browser.
+                        </SheetDescription>
                     </div>
                 </div>
+            </SheetHeader>
 
-                <!-- Section sub-header removed for compactness -->
-
-                <!-- Content area -->
-                <ScrollArea class="flex-1">
-                    <div class="px-4 py-4">
-                        <!-- GENERAL SECTION -->
-                        <div v-if="activeSection === 'general'" class="space-y-5">
-                            <div class="space-y-2">
-                                <div>
-                                    <p class="text-sm font-semibold text-foreground">Appearance mode</p>
-                                    <p class="text-xs text-muted-foreground">Switch between light, dark, or system.</p>
-                                </div>
-                                <AppearanceTabs />
-                            </div>
-
-                            <UiPreferencesPanel />
+            <ScrollArea class="min-h-0 flex-1">
+                <div class="space-y-6 px-6 py-5">
+                    <section class="space-y-2.5">
+                        <div>
+                            <p class="text-sm font-semibold text-foreground">Appearance mode</p>
+                            <p class="text-xs text-muted-foreground">Switch between light, dark, or system.</p>
                         </div>
+                        <AppearanceTabs />
+                    </section>
 
-                        <!-- ACCOUNT SECTION -->
-                        <div v-else-if="activeSection === 'account'" class="space-y-1.5">
-                            <Link
-                                v-for="link in accountLinks"
-                                :key="link.title"
-                                :href="link.href()"
-                                class="group flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 transition-all duration-150 hover:border-border/60 hover:bg-muted/40"
-                            >
-                                <div class="flex size-8 flex-shrink-0 items-center justify-center rounded-md bg-muted/50 transition-colors duration-150 group-hover:bg-primary/8">
-                                    <AppIcon :name="link.icon" class="size-4 text-muted-foreground transition-colors duration-150 group-hover:text-primary" />
-                                </div>
-                                <div class="min-w-0 flex-1">
-                                    <div class="flex items-center gap-2">
-                                        <p class="text-sm font-medium text-foreground">{{ link.title }}</p>
-                                        <Badge v-if="link.badge" variant="secondary" class="text-[10px] leading-none">
-                                            {{ link.badge }}
-                                        </Badge>
-                                    </div>
-                                    <p class="text-xs text-muted-foreground">{{ link.description }}</p>
-                                </div>
-                                <AppIcon name="chevron-right" class="size-3.5 shrink-0 text-muted-foreground/30 transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-muted-foreground" />
-                            </Link>
-                        </div>
-                    </div>
-                </ScrollArea>
-            </div>
-        </DialogContent>
-    </Dialog>
+                    <Separator />
+
+                    <UiPreferencesPanel />
+                </div>
+            </ScrollArea>
+
+            <SheetFooter class="shrink-0 border-t bg-card px-6 py-3 sm:flex-row sm:items-center">
+                <Link
+                    :href="editAppearance()"
+                    class="inline-flex items-center gap-1.5 self-start text-xs text-muted-foreground transition-colors hover:text-primary sm:self-center"
+                >
+                    <AppIcon name="arrow-up-right" class="size-3" />
+                    Full settings
+                </Link>
+                <div class="flex flex-col gap-2 sm:ml-auto sm:flex-row">
+                    <Button variant="outline" size="sm" class="gap-1.5" @click="resetSettings">
+                        <AppIcon name="rotate-ccw" class="size-3.5" />
+                        Reset changes
+                    </Button>
+                    <Button size="sm" @click="closeSettings">
+                        Save
+                    </Button>
+                </div>
+            </SheetFooter>
+        </SheetContent>
+    </Sheet>
 </template>

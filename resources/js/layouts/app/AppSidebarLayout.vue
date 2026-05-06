@@ -6,6 +6,7 @@ import AppSidebar from '@/components/AppSidebar.vue';
 import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
 import CareQuickLauncher from '@/components/workspace/CareQuickLauncher.vue';
 import FacilitySubscriptionBanner from '@/components/facility/FacilitySubscriptionBanner.vue';
+import ThemeSettingsFloatingButton from '@/components/ThemeSettingsFloatingButton.vue';
 import type { BreadcrumbItem } from '@/types';
 
 type Props = {
@@ -34,6 +35,7 @@ withDefaults(defineProps<Props>(), {
             <AppFacilityScopeNotice />
             <slot />
         </AppContent>
+        <ThemeSettingsFloatingButton />
         <CareQuickLauncher />
     </AppShell>
 </template>

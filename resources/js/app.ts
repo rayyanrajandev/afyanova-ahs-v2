@@ -12,6 +12,9 @@ syncClientBranding(
     typeof window !== 'undefined' ? window.__AFYANOVA_BRANDING__ : undefined,
 );
 
+initializeTheme();
+initializeUiPreferences();
+
 createInertiaApp({
     title: (title) => buildDocumentTitle(title),
     resolve: (name) =>
@@ -31,7 +34,3 @@ createInertiaApp({
         color: '#4B5563',
     },
 });
-
-// This will set light / dark mode on page load...
-initializeTheme();
-initializeUiPreferences();

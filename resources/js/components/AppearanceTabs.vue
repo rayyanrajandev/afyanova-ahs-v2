@@ -12,13 +12,13 @@ const tabs = [
 </script>
 
 <template>
-    <div class="inline-flex items-center gap-1 rounded-lg bg-muted/40 p-1">
+    <div class="flex w-full items-center gap-1 rounded-lg bg-muted/40 p-1">
         <button
             v-for="{ value, Icon, label } in tabs"
             :key="value"
             @click="updateAppearance(value)"
             :class="[
-                'inline-flex items-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-medium transition-all duration-150',
+                'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-medium transition-all duration-150',
                 appearance === value
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground',

@@ -1,14 +1,27 @@
 import type { Ref } from 'vue';
 import { onMounted, ref } from 'vue';
-import type { IconPack, UiScalePreset, UiThemePreset } from '@/types';
+import type {
+    IconPack,
+    UiFontFamily,
+    UiRadiusPreset,
+    UiScalePreset,
+    UiThemeBase,
+    UiThemePreset,
+} from '@/types';
 
 const ICON_PACK_STORAGE_KEY = 'ui.icon-pack';
 const THEME_PRESET_STORAGE_KEY = 'ui.theme-preset';
+const THEME_BASE_STORAGE_KEY = 'ui.theme-base';
+const FONT_FAMILY_STORAGE_KEY = 'ui.font-family';
 const UI_SCALE_STORAGE_KEY = 'ui.scale-preset';
+const BORDER_RADIUS_STORAGE_KEY = 'ui.border-radius';
 
 const ICON_PACK_VALUES: IconPack[] = ['lucide', 'huge'];
-const THEME_PRESET_VALUES: UiThemePreset[] = ['yaru', 'clinic', 'emerald'];
+const THEME_PRESET_VALUES: UiThemePreset[] = ['yaru', 'clinic', 'emerald', 'violet', 'amber'];
+const THEME_BASE_VALUES: UiThemeBase[] = ['slate', 'gray', 'zinc', 'neutral', 'stone'];
+const FONT_FAMILY_VALUES: UiFontFamily[] = ['sans', 'serif', 'mono'];
 const UI_SCALE_VALUES: UiScalePreset[] = ['ultra-compact', 'extra-compact', 'compact', 'comfortable', 'spacious'];
+const BORDER_RADIUS_VALUES: UiRadiusPreset[] = ['0', '0.5', '1', '1.5', '2'];
 const UI_SCALE_FONT_SIZE_MAP: Record<UiScalePreset, string> = {
     'ultra-compact': '12px',
     'extra-compact': '12.8px',
@@ -19,7 +32,10 @@ const UI_SCALE_FONT_SIZE_MAP: Record<UiScalePreset, string> = {
 
 const iconPack = ref<IconPack>('lucide');
 const themePreset = ref<UiThemePreset>('yaru');
+const themeBase = ref<UiThemeBase>('slate');
+const fontFamily = ref<UiFontFamily>('sans');
 const uiScale = ref<UiScalePreset>('comfortable');
+const borderRadius = ref<UiRadiusPreset>('1');
 let initialized = false;
 
 const setCookie = (name: string, value: string, days = 365) => {
@@ -72,6 +88,28 @@ function applyThemePreset(value: UiThemePreset): void {
     }
 }
 
+function applyThemeBase(value: UiThemeBase): void {
+    if (typeof document === 'undefined') {
+        return;
+    }
+
+    document.documentElement.dataset.themeBase = value;
+    if (document.body) {
+        document.body.dataset.themeBase = value;
+    }
+}
+
+function applyFontFamily(value: UiFontFamily): void {
+    if (typeof document === 'undefined') {
+        return;
+    }
+
+    document.documentElement.dataset.fontFamily = value;
+    if (document.body) {
+        document.body.dataset.fontFamily = value;
+    }
+}
+
 function applyUiScale(value: UiScalePreset): void {
     if (typeof document === 'undefined') {
         return;
@@ -81,6 +119,17 @@ function applyUiScale(value: UiScalePreset): void {
     document.documentElement.style.fontSize = UI_SCALE_FONT_SIZE_MAP[value];
     if (document.body) {
         document.body.dataset.uiScale = value;
+    }
+}
+
+function applyBorderRadius(value: UiRadiusPreset): void {
+    if (typeof document === 'undefined') {
+        return;
+    }
+
+    document.documentElement.dataset.borderRadius = value;
+    if (document.body) {
+        document.body.dataset.borderRadius = value;
     }
 }
 
@@ -99,25 +148,50 @@ export function initializeUiPreferences(): void {
         THEME_PRESET_VALUES,
         'yaru',
     );
+    themeBase.value = readStoredPreference(
+        THEME_BASE_STORAGE_KEY,
+        THEME_BASE_VALUES,
+        'slate',
+    );
+    fontFamily.value = readStoredPreference(
+        FONT_FAMILY_STORAGE_KEY,
+        FONT_FAMILY_VALUES,
+        'sans',
+    );
     uiScale.value = readStoredPreference(
         UI_SCALE_STORAGE_KEY,
         UI_SCALE_VALUES,
         'comfortable',
     );
+    borderRadius.value = readStoredPreference(
+        BORDER_RADIUS_STORAGE_KEY,
+        BORDER_RADIUS_VALUES,
+        '1',
+    );
 
     applyIconPack(iconPack.value);
     applyThemePreset(themePreset.value);
+    applyThemeBase(themeBase.value);
+    applyFontFamily(fontFamily.value);
     applyUiScale(uiScale.value);
+    applyBorderRadius(borderRadius.value);
     initialized = true;
 }
 
 export type UseUiPreferencesReturn = {
     iconPack: Ref<IconPack>;
     themePreset: Ref<UiThemePreset>;
+    themeBase: Ref<UiThemeBase>;
+    fontFamily: Ref<UiFontFamily>;
     uiScale: Ref<UiScalePreset>;
+    borderRadius: Ref<UiRadiusPreset>;
     updateIconPack: (value: IconPack) => void;
     updateThemePreset: (value: UiThemePreset) => void;
+    updateThemeBase: (value: UiThemeBase) => void;
+    updateFontFamily: (value: UiFontFamily) => void;
     updateUiScale: (value: UiScalePreset) => void;
+    updateBorderRadius: (value: UiRadiusPreset) => void;
+    resetUiPreferences: () => void;
 };
 
 export function useUiPreferences(): UseUiPreferencesReturn {
@@ -143,6 +217,24 @@ export function useUiPreferences(): UseUiPreferencesReturn {
         applyThemePreset(value);
     }
 
+    function updateThemeBase(value: UiThemeBase): void {
+        themeBase.value = value;
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem(THEME_BASE_STORAGE_KEY, value);
+        }
+        setCookie(THEME_BASE_STORAGE_KEY, value);
+        applyThemeBase(value);
+    }
+
+    function updateFontFamily(value: UiFontFamily): void {
+        fontFamily.value = value;
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem(FONT_FAMILY_STORAGE_KEY, value);
+        }
+        setCookie(FONT_FAMILY_STORAGE_KEY, value);
+        applyFontFamily(value);
+    }
+
     function updateUiScale(value: UiScalePreset): void {
         uiScale.value = value;
         if (typeof window !== 'undefined') {
@@ -152,12 +244,42 @@ export function useUiPreferences(): UseUiPreferencesReturn {
         applyUiScale(value);
     }
 
+    function updateBorderRadius(value: UiRadiusPreset): void {
+        borderRadius.value = value;
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem(BORDER_RADIUS_STORAGE_KEY, value);
+        }
+        setCookie(BORDER_RADIUS_STORAGE_KEY, value);
+        applyBorderRadius(value);
+    }
+
+    function resetUiPreferences(): void {
+        updateIconPack('lucide');
+        updateThemePreset('yaru');
+        updateThemeBase('slate');
+        updateFontFamily('sans');
+        updateUiScale('comfortable');
+        updateBorderRadius('1');
+
+        if (typeof window !== 'undefined') {
+            window.localStorage.removeItem('ui.accent-color');
+        }
+        setCookie('ui.accent-color', '', -1);
+    }
+
     return {
         iconPack,
         themePreset,
+        themeBase,
+        fontFamily,
         uiScale,
+        borderRadius,
         updateIconPack,
         updateThemePreset,
+        updateThemeBase,
+        updateFontFamily,
         updateUiScale,
+        updateBorderRadius,
+        resetUiPreferences,
     };
 }

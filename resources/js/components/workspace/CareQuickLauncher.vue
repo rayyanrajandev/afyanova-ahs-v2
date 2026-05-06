@@ -6,12 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useCareQuickStrip } from '@/composables/useCareQuickStrip';
 const open = ref(false);
-const { showStrip, quickLinks, hasLinks } = useCareQuickStrip();
+const { showStrip, quickLinks } = useCareQuickStrip();
 </script>
 
 <template>
     <div
-        v-if="showStrip && hasLinks"
+        v-if="showStrip"
         class="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2 pb-[env(safe-area-inset-bottom)] pr-[env(safe-area-inset-right)] sm:bottom-6 sm:right-6"
     >
         <Popover v-model:open="open">
