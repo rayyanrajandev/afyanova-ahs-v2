@@ -19,10 +19,10 @@ const BORDER_RADIUS_STORAGE_KEY = 'ui.border-radius';
 const ICON_PACK_VALUES: IconPack[] = ['lucide', 'huge'];
 const THEME_PRESET_VALUES: UiThemePreset[] = ['yaru', 'clinic', 'emerald', 'violet', 'amber'];
 const THEME_BASE_VALUES: UiThemeBase[] = ['slate', 'gray', 'zinc', 'neutral', 'stone'];
-const FONT_FAMILY_VALUES: UiFontFamily[] = ['clinical', 'humanist', 'compact'];
+const FONT_FAMILY_VALUES: UiFontFamily[] = ['sans', 'serif', 'compact'];
 const LEGACY_FONT_FAMILY_VALUES: Record<string, UiFontFamily> = {
-    sans: 'clinical',
-    serif: 'humanist',
+    clinical: 'sans',
+    humanist: 'serif',
     mono: 'compact',
 };
 const UI_SCALE_VALUES: UiScalePreset[] = ['ultra-compact', 'extra-compact', 'compact', 'comfortable', 'spacious'];
@@ -38,7 +38,7 @@ const UI_SCALE_FONT_SIZE_MAP: Record<UiScalePreset, string> = {
 const iconPack = ref<IconPack>('lucide');
 const themePreset = ref<UiThemePreset>('yaru');
 const themeBase = ref<UiThemeBase>('slate');
-const fontFamily = ref<UiFontFamily>('clinical');
+const fontFamily = ref<UiFontFamily>('sans');
 const uiScale = ref<UiScalePreset>('comfortable');
 const borderRadius = ref<UiRadiusPreset>('1');
 let initialized = false;
@@ -73,19 +73,19 @@ function readStoredPreference<T extends string>(
 
 function readStoredFontFamily(): UiFontFamily {
     if (typeof window === 'undefined') {
-        return 'clinical';
+        return 'sans';
     }
 
     const raw = window.localStorage.getItem(FONT_FAMILY_STORAGE_KEY)?.trim();
     if (!raw) {
-        return 'clinical';
+        return 'sans';
     }
 
     if (FONT_FAMILY_VALUES.includes(raw as UiFontFamily)) {
         return raw as UiFontFamily;
     }
 
-    return LEGACY_FONT_FAMILY_VALUES[raw] ?? 'clinical';
+    return LEGACY_FONT_FAMILY_VALUES[raw] ?? 'sans';
 }
 
 function applyIconPack(value: IconPack): void {
@@ -275,7 +275,7 @@ export function useUiPreferences(): UseUiPreferencesReturn {
         updateIconPack('lucide');
         updateThemePreset('yaru');
         updateThemeBase('slate');
-        updateFontFamily('clinical');
+        updateFontFamily('sans');
         updateUiScale('comfortable');
         updateBorderRadius('1');
 

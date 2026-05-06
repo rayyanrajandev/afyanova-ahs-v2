@@ -39,14 +39,14 @@
                 document.documentElement.style.fontSize = UI_SCALE_FONT_SIZE_MAP[scale];
 
                 var fontAliases = {
-                    sans: 'clinical',
-                    serif: 'humanist',
+                    clinical: 'sans',
+                    humanist: 'serif',
                     mono: 'compact'
                 };
-                var validFonts = ['clinical', 'humanist', 'compact'];
+                var validFonts = ['sans', 'serif', 'compact'];
                 var storedFont = localStorage.getItem('ui.font-family');
                 var normalizedFont = fontAliases[storedFont] || storedFont;
-                var fontFamily = validFonts.indexOf(normalizedFont) !== -1 ? normalizedFont : 'clinical';
+                var fontFamily = validFonts.indexOf(normalizedFont) !== -1 ? normalizedFont : 'sans';
                 document.documentElement.dataset.fontFamily = fontFamily;
             })();
         </script>

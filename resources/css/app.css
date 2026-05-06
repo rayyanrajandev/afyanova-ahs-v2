@@ -284,16 +284,15 @@
    ================================================================ */
 
 /* Font family */
-:root[data-font-family='clinical'] {
+:root[data-font-family='sans'] {
     --font-sans:
         'Aptos', 'Segoe UI Variable', 'Segoe UI', system-ui,
         -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif,
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 }
-:root[data-font-family='humanist'] {
+:root[data-font-family='serif'] {
     --font-sans:
-        'Atkinson Hyperlegible', Verdana, Tahoma, 'Trebuchet MS',
-        'Segoe UI', system-ui, sans-serif,
+        Georgia, Cambria, 'Times New Roman', Times, serif,
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 }
 :root[data-font-family='compact'] {
