@@ -21,6 +21,7 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
         $model = new ServiceRequestModel();
         $model->fill($attributes);
         $model->save();
+        $model->load($this->departmentRelation());
 
         return $model->toArray();
     }
@@ -30,7 +31,10 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
         $query = ServiceRequestModel::query();
         $this->applyPlatformScopeIfEnabled($query);
 
-        return $query->find($id)?->toArray();
+        return $query
+            ->with($this->departmentRelation())
+            ->find($id)
+            ?->toArray();
     }
 
     public function update(string $id, array $attributes): ?array
@@ -44,6 +48,7 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
 
         $model->fill($attributes);
         $model->save();
+        $model->load($this->departmentRelation());
 
         return $model->toArray();
     }
@@ -61,6 +66,7 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
         $this->applyPlatformScopeIfEnabled($queryBuilder);
 
         return $queryBuilder
+            ->with($this->departmentRelation())
             ->where('patient_id', $patientId)
             ->where('service_type', $serviceType)
             ->whereIn('status', ['pending', 'in_progress'])
@@ -85,6 +91,7 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
         $this->applyPlatformScopeIfEnabled($queryBuilder);
 
         $queryBuilder
+            ->with($this->departmentRelation())
             ->when($patientId, fn (Builder $b, string $v) => $b->where('patient_id', $v))
             ->when($serviceType, fn (Builder $b, string $v) => $b->where('service_type', $v))
             ->when($status, fn (Builder $b, string $v) => $b->where('status', $v))
@@ -160,6 +167,7 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
         $this->applyPlatformScopeIfEnabled($queryBuilder);
 
         $models = $queryBuilder
+            ->with($this->departmentRelation())
             ->whereIn('patient_id', $patientIds)
             ->whereIn('status', ['pending', 'in_progress'])
             ->orderByRaw("CASE WHEN priority = 'urgent' THEN 0 ELSE 1 END")
@@ -191,6 +199,14 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
     {
         return $this->featureFlagResolver->isEnabled('platform.multi_facility_scoping')
             || $this->featureFlagResolver->isEnabled('platform.multi_tenant_isolation');
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function departmentRelation(): array
+    {
+        return ['department:id,code,name,service_type'];
     }
 
     private function toSearchResult(LengthAwarePaginator $paginator): array

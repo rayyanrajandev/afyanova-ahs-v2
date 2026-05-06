@@ -40,7 +40,7 @@ const navCatalog: NavCatalogItem[] = [
         permissionPrefixes: ['patients.'],
     },
     {
-        title: 'Walk-in queue',
+        title: 'Direct service queue',
         href: '/walk-in-service-requests',
         iconName: 'layout-list',
         section: 'care_delivery',

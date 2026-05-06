@@ -10,12 +10,18 @@ class ServiceRequestResponseTransformer
      */
     public static function transform(array $serviceRequest): array
     {
+        $department = self::departmentSummary(
+            is_array($serviceRequest['department'] ?? null) ? $serviceRequest['department'] : null,
+        );
+
         return [
             'id' => $serviceRequest['id'] ?? null,
             'requestNumber' => $serviceRequest['request_number'] ?? null,
             'patientId' => $serviceRequest['patient_id'] ?? null,
             'appointmentId' => $serviceRequest['appointment_id'] ?? null,
             'departmentId' => $serviceRequest['department_id'] ?? null,
+            'department' => $department,
+            'departmentLabel' => $department['label'] ?? null,
             'requestedByUserId' => $serviceRequest['requested_by_user_id'] ?? null,
             'serviceType' => $serviceRequest['service_type'] ?? null,
             'priority' => $serviceRequest['priority'] ?? null,
@@ -52,5 +58,44 @@ class ServiceRequestResponseTransformer
                     : optional($serviceRequest['updated_at'])->toISOString())
                 : null,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $department
+     * @return array{id: string|null, name: string|null, code: string|null, serviceType: string|null, label: string}|null
+     */
+    private static function departmentSummary(?array $department): ?array
+    {
+        if ($department === null) {
+            return null;
+        }
+
+        $id = self::nullableTrimmed($department['id'] ?? null);
+        $name = self::nullableTrimmed($department['name'] ?? null);
+        $code = self::nullableTrimmed($department['code'] ?? null);
+        $serviceType = self::nullableTrimmed($department['service_type'] ?? null);
+
+        if ($id === null && $name === null) {
+            return null;
+        }
+
+        return [
+            'id' => $id,
+            'name' => $name,
+            'code' => $code,
+            'serviceType' => $serviceType,
+            'label' => $code !== null && $name !== null ? sprintf('%s - %s', $code, $name) : ($name ?? $id ?? 'Department'),
+        ];
+    }
+
+    private static function nullableTrimmed(mixed $value): ?string
+    {
+        if (! is_scalar($value)) {
+            return null;
+        }
+
+        $trimmed = trim((string) $value);
+
+        return $trimmed !== '' ? $trimmed : null;
     }
 }

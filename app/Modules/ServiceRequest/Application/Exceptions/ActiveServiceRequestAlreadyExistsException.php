@@ -8,7 +8,7 @@ class ActiveServiceRequestAlreadyExistsException extends RuntimeException
 {
     public function __construct(private readonly array $existingRequest)
     {
-        parent::__construct('An active walk-in ticket already exists for this patient and service desk.');
+        parent::__construct('An active direct service ticket already exists for this patient and service desk.');
     }
 
     /**

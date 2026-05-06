@@ -10128,7 +10128,7 @@ onMounted(async () => {
                 ref="pharmacyWalkInPanelRef"
                 service-type="pharmacy"
                 :enabled="canUpdateServiceRequestStatus"
-                panel-title="Walk-in patients awaiting pharmacy"
+                panel-title="Direct-service patients awaiting pharmacy"
                 @acknowledged="onPharmacyWalkInAcknowledged"
             />
 

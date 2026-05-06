@@ -113,7 +113,14 @@ it('stores optional department id when creating a walk-in ticket', function (): 
         'serviceType' => 'laboratory',
         'departmentId' => $dept->id,
     ])->assertCreated()
-        ->assertJsonPath('data.departmentId', $dept->id);
+        ->assertJsonPath('data.departmentId', $dept->id)
+        ->assertJsonPath('data.department.id', $dept->id)
+        ->assertJsonPath('data.department.label', 'WID2 - Destination Dept');
+
+    $this->assertDatabaseHas('service_requests', [
+        'patient_id' => $patient->id,
+        'department_id' => $dept->id,
+    ]);
 });
 
 it('records audit events when creating and updating walk-in ticket status', function (): void {

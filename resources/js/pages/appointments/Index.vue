@@ -465,7 +465,7 @@ const createForm = reactive({
     durationMinutes: initialCreatePrefill.durationMinutes || '30',
     reason: initialCreatePrefill.reason || '',
     notes: initialCreatePrefill.notes || '',
-    appointmentType: 'scheduled' as 'scheduled' | 'walk_in' | 'referral',
+    appointmentType: (initialCreatePrefill.appointmentType || 'scheduled') as 'scheduled' | 'walk_in' | 'referral',
     financialClass: normalizeFinancialClass(initialCreatePrefill.financialClass),
     billingPayerContractId: initialCreatePrefill.billingPayerContractId || '',
     coverageReference: initialCreatePrefill.coverageReference || '',
@@ -1169,8 +1169,19 @@ function queryQueueModeParam(): QueueMode {
     if (raw === 'triage' || raw === 'clinical') return raw;
     return 'all';
 }
+function queryAppointmentTypeParam(): 'scheduled' | 'walk_in' | 'referral' | '' {
+    const raw = (
+        queryParam('createAppointmentType')
+        || queryParam('appointmentType')
+        || queryParam('type')
+    ).trim().toLowerCase();
+
+    if (raw === 'walkin' || raw === 'walk-in' || raw === 'walk_in') return 'walk_in';
+    if (raw === 'scheduled' || raw === 'referral') return raw;
+    return '';
+}
 function shouldOpenCreateFromQuery(): boolean {
-    return queryParam('tab') === 'new' || queryParam('open') === 'schedule';
+    return queryParam('tab') === 'new' || queryParam('open') === 'schedule' || queryAppointmentTypeParam() === 'walk_in';
 }
 
 function createPrefillQueryValues() {
@@ -1183,6 +1194,7 @@ function createPrefillQueryValues() {
         durationMinutes: queryParam('createDurationMinutes').trim(),
         reason: queryParam('createReason').trim(),
         notes: queryParam('createNotes').trim(),
+        appointmentType: queryAppointmentTypeParam(),
         financialClass: queryParam('createFinancialClass').trim(),
         billingPayerContractId: queryParam('createBillingPayerContractId').trim(),
         coverageReference: queryParam('createCoverageReference').trim(),
@@ -1195,6 +1207,9 @@ function clearCreateQueryIntent(): void {
     const url = new URL(window.location.href);
     url.searchParams.delete('tab');
     url.searchParams.delete('open');
+    url.searchParams.delete('type');
+    url.searchParams.delete('appointmentType');
+    url.searchParams.delete('createAppointmentType');
     url.searchParams.delete('patientName');
     url.searchParams.delete('patientNumber');
     url.searchParams.delete('sourceAdmissionId');
@@ -2558,6 +2573,7 @@ function clearCreateDraft(): void {
     createForm.scheduledAt = defaultScheduledAtInput();
     createForm.durationMinutes = '30';
     createForm.reason = '';
+    createForm.appointmentType = 'scheduled';
     createCustomVisitReason.value = '';
     createClinicianAutoDepartment.value = '';
     createForm.notes = '';
@@ -2592,6 +2608,7 @@ function applyCreatePrefillFromQuery(): void {
         }
     }
     if (prefill.notes) createForm.notes = prefill.notes;
+    if (prefill.appointmentType) createForm.appointmentType = prefill.appointmentType;
     if (prefill.financialClass) createForm.financialClass = normalizeFinancialClass(prefill.financialClass);
     if (prefill.billingPayerContractId) createForm.billingPayerContractId = prefill.billingPayerContractId;
     if (prefill.coverageReference) createForm.coverageReference = prefill.coverageReference;
@@ -2678,7 +2695,7 @@ async function submitCreate(): Promise<void> {
             },
         });
 
-        notifySuccess('Appointment scheduled.');
+        notifySuccess(createForm.appointmentType === 'walk_in' ? 'OPD walk-in registered.' : 'Appointment scheduled.');
         clearCreateDraft();
         createSheetOpen.value = false;
         appointments.value = [response.data, ...appointments.value];
@@ -5333,7 +5350,7 @@ function submitSearch(): void {
                                         </button>
                                     </div>
                                     <p v-if="createForm.appointmentType === 'walk_in'" class="text-xs text-muted-foreground">
-                                        Walk-in arrivals are unscheduled. The scheduled time will be set to now and the visit will be counted separately in front-desk metrics.
+                                        OPD walk-ins are unscheduled arrivals. Use this for patients who need triage or consultation without a prior booking.
                                     </p>
                                 </section>
 

@@ -18,12 +18,19 @@ use App\Modules\ServiceRequest\Application\UseCases\UpdateServiceRequestStatusUs
 use App\Modules\ServiceRequest\Presentation\Http\Requests\StoreServiceRequestRequest;
 use App\Modules\ServiceRequest\Presentation\Http\Requests\UpdateServiceRequestStatusRequest;
 use App\Modules\ServiceRequest\Presentation\Http\Transformers\ServiceRequestResponseTransformer;
+use App\Support\Audit\AuditLogPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ServiceRequestController extends Controller
 {
+    private const AUDIT_ACTION_LABELS = [
+        'service_request.created' => 'Request created',
+        'service_request.status_updated' => 'Status updated',
+        'service_request.linked_order_created' => 'Clinical order linked',
+    ];
+
     public function index(Request $request, ListServiceRequestsUseCase $useCase): JsonResponse
     {
         $result = $useCase->execute($request->all());
@@ -50,9 +57,10 @@ class ServiceRequestController extends Controller
 
         return response()->json([
             'data' => array_map(static function (array $row): array {
-                return [
+                return AuditLogPresenter::enrich([
                     'id' => $row['id'] ?? null,
                     'action' => $row['action'] ?? null,
+                    'actorId' => $row['actor_user_id'] ?? null,
                     'actorUserId' => $row['actor_user_id'] ?? null,
                     'fromStatus' => $row['from_status'] ?? null,
                     'toStatus' => $row['to_status'] ?? null,
@@ -62,7 +70,7 @@ class ServiceRequestController extends Controller
                             ? $row['created_at']
                             : optional($row['created_at'])->toISOString())
                         : null,
-                ];
+                ], ['actor_id' => $row['actor_user_id'] ?? null], self::AUDIT_ACTION_LABELS);
             }, $events),
         ]);
     }
@@ -106,7 +114,7 @@ class ServiceRequestController extends Controller
 
             return $this->validationError(
                 'serviceType',
-                sprintf('This patient already has an active %s walk-in ticket.', $requestNumber),
+                sprintf('This patient already has an active %s direct service ticket.', $requestNumber),
             );
         }
 
@@ -130,11 +138,14 @@ class ServiceRequestController extends Controller
         UpdateServiceRequestStatusRequest $request,
         UpdateServiceRequestStatusUseCase $useCase
     ): JsonResponse {
+        $validated = $request->validated();
+
         try {
             $serviceRequest = $useCase->execute(
                 id: $id,
-                newStatus: $request->string('status')->value(),
+                newStatus: (string) $validated['status'],
                 actorId: $request->user()?->id,
+                statusReason: isset($validated['statusReason']) ? (string) $validated['statusReason'] : null,
             );
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return $this->tenantScopeRequiredError($exception->getMessage());

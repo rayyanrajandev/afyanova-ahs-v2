@@ -1303,13 +1303,13 @@ const visitHandoffPrimaryDescription = computed(() => {
 
     if (visitHandoffMode.value === 'direct-services') {
         if (!visitHandoffCanUseDirectServicesRoute.value) {
-            return 'You need walk-in queue permission (service.requests.create) or departmental order access to use this lane. Choose another route or ask a supervisor.';
+            return 'You need direct service queue permission (service.requests.create) or departmental order access to use this lane. Choose another route or ask a supervisor.';
         }
         if (visitHandoffHasAnyDirectServiceRight.value) {
             return 'Open the department workspace below; the patient is attached so you can enter the order there.';
         }
         if (canCreateServiceRequests.value) {
-            return 'Tap a counter to add one walk-in ticket to that department queue.';
+            return 'Tap a counter to add one direct service ticket to that department queue.';
         }
         return 'Choose an action below.';
     }
@@ -2115,7 +2115,7 @@ async function createDirectServiceRequest(serviceType: DirectServiceRequestType)
             },
         };
         notifySuccess(
-            `Done — ${labelMap[serviceType]} walk-in ticket ${requestNumber} created for ${patient.firstName} ${patient.lastName}. This patient is listed on that department's queue.`,
+            `Done - ${labelMap[serviceType]} direct service ticket ${requestNumber} created for ${patient.firstName} ${patient.lastName}. This patient is listed on that department's queue.`,
         );
     } catch (error: unknown) {
         if (isFacilityPlan403Error(error)) {
@@ -2152,7 +2152,7 @@ function directServiceQueueHref(serviceType: DirectServiceRequestType): string {
 
 async function copyDirectServiceTicket(ticket: { label: string; requestNumber: string }): Promise<void> {
     try {
-        await navigator.clipboard.writeText(`${ticket.label} walk-in ticket ${ticket.requestNumber}`);
+        await navigator.clipboard.writeText(`${ticket.label} direct service ticket ${ticket.requestNumber}`);
         notifySuccess('Ticket number copied.');
     } catch {
         notifyError('Could not copy the ticket number automatically.');
@@ -2354,7 +2354,7 @@ function visitHandoffModeBadge(mode: PatientVisitHandoffMode): string {
 
     if (mode === 'outpatient') return 'Standard';
     if (mode === 'emergency') return 'Urgent';
-    if (mode === 'direct-services') return 'Walk-in';
+    if (mode === 'direct-services') return 'Direct';
     if (mode === 'billing') return 'Cashier';
     return 'Chart';
 }
@@ -3297,9 +3297,68 @@ function auditObjectEntries(
     });
 }
 
+function isAuditRecordObject(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function createdPatientSnapshot(log: PatientAuditLog): Record<string, unknown> | null {
+    if (log.action !== 'patient.created' || !log.changes) return null;
+
+    const snapshot = log.changes.after;
+    return isAuditRecordObject(snapshot) ? snapshot : null;
+}
+
 function auditLogChangeKeys(log: PatientAuditLog): string[] {
+    if (createdPatientSnapshot(log)) {
+        return [];
+    }
+
     return auditObjectEntries(log.changes)
         .map(([key]) => auditFieldLabel(key))
+        .slice(0, 4);
+}
+
+function auditLogChangeSummaryLabel(log: PatientAuditLog): string {
+    return createdPatientSnapshot(log) ? 'Audit detail:' : 'Fields changed:';
+}
+
+function auditLogChangeSummaryBadges(log: PatientAuditLog): string[] {
+    if (createdPatientSnapshot(log)) {
+        return ['Record created'];
+    }
+
+    return auditLogChangeKeys(log);
+}
+
+function auditSnapshotString(value: unknown): string | null {
+    const preview = auditValuePreview(value);
+    return preview === null ? null : preview;
+}
+
+function auditCreatedSnapshotPreview(log: PatientAuditLog): Array<{
+    key: string;
+    value: string;
+}> {
+    const snapshot = createdPatientSnapshot(log);
+    if (!snapshot) return [];
+
+    const name = [
+        snapshot.first_name,
+        snapshot.middle_name,
+        snapshot.last_name,
+    ]
+        .filter((value): value is string => typeof value === 'string' && value.trim() !== '')
+        .join(' ')
+        .trim();
+
+    return [
+        { key: 'Patient number', value: auditSnapshotString(snapshot.patient_number) },
+        { key: 'Name', value: name || null },
+        { key: 'Date of birth', value: auditSnapshotString(snapshot.date_of_birth) },
+        { key: 'Phone', value: auditSnapshotString(snapshot.phone) },
+        { key: 'Status', value: auditSnapshotString(snapshot.status) },
+    ]
+        .filter((entry): entry is { key: string; value: string } => entry.value !== null)
         .slice(0, 4);
 }
 
@@ -5785,7 +5844,7 @@ onMounted(initialPageLoad);
                                                 <Badge variant="outline" class="text-xs">{{ visitHandoffModeBadge('direct-services') }}</Badge>
                                             </span>
                                             <span class="mt-1 block text-xs leading-5 text-muted-foreground">
-                                                Walk-in lab, imaging, or pharmacy without booking OPD—queue a ticket or open the department workspace when your login allows it.
+                                                Lab, imaging, or pharmacy without booking OPD. Queue a direct service ticket or open the department workspace when your login allows it.
                                             </span>
                                         </span>
                                     </button>
@@ -6864,16 +6923,28 @@ onMounted(initialPageLoad);
                                                             <Badge variant="secondary" class="px-1.5 py-0 text-[10px]">{{ auditLogActorTypeLabel(log) }}</Badge>
                                                         </p>
                                                         <!-- Changed fields -->
-                                                        <div v-if="auditLogChangeKeys(log).length > 0" class="mt-2 flex flex-wrap items-center gap-1.5">
-                                                            <span class="text-xs text-muted-foreground">Fields changed:</span>
+                                                        <div v-if="auditLogChangeSummaryBadges(log).length > 0" class="mt-2 flex flex-wrap items-center gap-1.5">
+                                                            <span class="text-xs text-muted-foreground">{{ auditLogChangeSummaryLabel(log) }}</span>
                                                             <Badge
-                                                                v-for="field in auditLogChangeKeys(log)"
+                                                                v-for="field in auditLogChangeSummaryBadges(log)"
                                                                 :key="`${log.id}-field-${field}`"
                                                                 variant="outline"
                                                                 class="px-1.5 py-0 text-[11px]"
                                                             >
                                                                 {{ field }}
                                                             </Badge>
+                                                        </div>
+                                                        <div
+                                                            v-if="auditCreatedSnapshotPreview(log).length > 0"
+                                                            class="mt-2 grid gap-1 text-xs text-muted-foreground"
+                                                        >
+                                                            <p
+                                                                v-for="item in auditCreatedSnapshotPreview(log)"
+                                                                :key="`${log.id}-created-${item.key}`"
+                                                            >
+                                                                <span class="font-medium text-foreground">{{ item.key }}:</span>
+                                                                {{ item.value }}
+                                                            </p>
                                                         </div>
                                                         <!-- Metadata -->
                                                         <div

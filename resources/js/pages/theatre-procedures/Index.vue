@@ -4305,9 +4305,9 @@ onMounted(async () => {
                 ref="theatreWalkInPanelRef"
                 service-type="theatre_procedure"
                 :enabled="canUpdateServiceRequestStatus"
-                panel-title="Walk-in patients awaiting procedures"
-                acknowledge-button-label="Acknowledge & schedule procedure"
-                success-message="Walk-in acknowledged. Patient is ready for procedure scheduling."
+                panel-title="Direct-service patients awaiting procedures"
+                acknowledge-button-label="Accept handoff"
+                success-message="Direct service handoff accepted. Patient is ready for procedure scheduling."
                 @acknowledged="onTheatreWalkInAcknowledged"
             />
 

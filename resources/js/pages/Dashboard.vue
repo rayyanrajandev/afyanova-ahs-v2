@@ -832,7 +832,7 @@ const kpis = computed(() => {
             metric('Active patients', 'Patients currently active in the shared queue scope.', 'users', numberValue(counts.value.patients, 'active')),
             metric('Scheduled appointments', 'Appointments still scheduled for arrival.', 'calendar', numberValue(counts.value.appointments, 'scheduled')),
             metric('Checked-in handoff', 'Patients ready for upstream handoff.', 'calendar-clock', numberValue(counts.value.appointments, 'checked_in')),
-            metric('Walk-ins today', 'Unscheduled same-day arrivals registered at the front desk.', 'log-in', numberValue(counts.value.appointments, 'walk_in')),
+            metric('OPD walk-ins today', 'Unscheduled OPD arrivals registered through appointments.', 'log-in', numberValue(counts.value.appointments, 'walk_in')),
         ];
     }
     if (activePresetKey.value === 'clinician') {
@@ -944,8 +944,8 @@ const actions = computed(() => {
     if (activePresetKey.value === 'front_desk') {
         return [
             { label: 'Register Patient', icon: 'user', variant: 'default', href: '/patients' },
-            { label: 'Today queue', icon: 'calendar-clock', variant: 'outline', href: `/appointments?view=queue&from=${today}` },
-            { label: 'Walk-in', icon: 'log-in', variant: 'outline', href: `/appointments?type=walkin&view=queue&from=${today}` },
+            { label: 'Appointment queue', icon: 'calendar-clock', variant: 'outline', href: `/appointments?view=queue&from=${today}` },
+            { label: 'Register OPD walk-in', icon: 'log-in', variant: 'outline', href: `/appointments?open=schedule&type=walkin&view=queue&from=${today}` },
         ];
     }
     if (activePresetKey.value === 'clinician') {
@@ -972,7 +972,7 @@ const actions = computed(() => {
     }
     if (activePresetKey.value === 'emergency') {
         return [
-            { label: 'Register walk-in', icon: 'calendar-plus-2', variant: 'default', href: `/appointments?type=walkin&view=queue&from=${today}` },
+            { label: 'Register emergency walk-in', icon: 'calendar-plus-2', variant: 'default', href: `/appointments?open=schedule&type=walkin&view=queue&from=${today}` },
             { label: 'Triage queue', icon: 'heart-pulse', variant: 'outline', href: `/appointments?view=queue&status=checked_in&from=${today}` },
             { label: 'Admit patient', icon: 'bed-double', variant: 'outline', href: '/admissions' },
         ];
@@ -1372,7 +1372,7 @@ const handoff = computed(() => {
                 label: hasWaiting ? 'Open triage queue' : 'Open admissions',
                 href: hasWaiting ? `/appointments?view=queue&status=checked_in&from=${today}` : '/admissions?view=queue',
             },
-            secondaryAction: { label: 'Register walk-in', href: `/appointments?type=walkin&view=queue&from=${today}` },
+            secondaryAction: { label: 'Register emergency walk-in', href: `/appointments?open=schedule&type=walkin&view=queue&from=${today}` },
             chips: [
                 { label: 'Awaiting triage', value: waitingTriage },
                 { label: 'In treatment', value: inTreatment },

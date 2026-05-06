@@ -24,7 +24,7 @@ return new class extends Migration
         $planIds = DB::table('platform_subscription_plans')->pluck('id')->map(static fn (mixed $id): string => (string) $id)->all();
 
         $metadata = [
-            'catalog_profile' => 'WALK_IN_SERVICE_REQUEST_QUEUE',
+                'catalog_profile' => 'DIRECT_SERVICE_REQUEST_QUEUE',
             'seeded_by' => self::MIGRATION_TAG,
             'route_permissions' => [
                 'service.requests.read',
@@ -42,7 +42,7 @@ return new class extends Migration
                 ->first(['id']);
 
             $payload = [
-                'entitlement_label' => 'Walk-in service request queue',
+                'entitlement_label' => 'Direct service request queue',
                 'entitlement_group' => 'Front Office',
                 'entitlement_type' => 'feature',
                 'limit_value' => null,

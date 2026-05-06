@@ -15,7 +15,7 @@ class UpdateServiceRequestStatusUseCase
         private readonly AppendServiceRequestAuditEventUseCase $appendServiceRequestAuditEvent,
     ) {}
 
-    public function execute(string $id, string $newStatus, ?int $actorId = null): ?array
+    public function execute(string $id, string $newStatus, ?int $actorId = null, ?string $statusReason = null): ?array
     {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
 
@@ -36,6 +36,18 @@ class UpdateServiceRequestStatusUseCase
         }
 
         $previousStatus = (string) ($existing['status'] ?? 'unknown');
+        $normalizedStatusReason = is_string($statusReason) ? trim($statusReason) : null;
+        $normalizedStatusReason = $normalizedStatusReason === '' ? null : $normalizedStatusReason;
+
+        if (
+            $newStatus === ServiceRequestStatus::COMPLETED->value
+            && empty($existing['linked_order_id'])
+            && empty($existing['linked_order_number'])
+        ) {
+            throw new ServiceRequestStatusTransitionException(
+                'Create or link the destination work record before closing this direct service ticket.',
+            );
+        }
 
         $payload = ['status' => $newStatus];
 
@@ -46,17 +58,25 @@ class UpdateServiceRequestStatusUseCase
 
         if (in_array($newStatus, [ServiceRequestStatus::COMPLETED->value, ServiceRequestStatus::CANCELLED->value], true)) {
             $payload['completed_at'] = now();
+            $payload['status_reason'] = $normalizedStatusReason;
         }
 
         $updated = $this->serviceRequestRepository->update($id, $payload);
         if ($updated !== null) {
+            $metadata = array_filter([
+                'statusReason' => $normalizedStatusReason,
+                'linkedOrderType' => $existing['linked_order_type'] ?? null,
+                'linkedOrderId' => $existing['linked_order_id'] ?? null,
+                'linkedOrderNumber' => $existing['linked_order_number'] ?? null,
+            ], static fn (mixed $value): bool => $value !== null && $value !== '');
+
             $this->appendServiceRequestAuditEvent->execute(
                 $id,
                 'service_request.status_updated',
                 $actorId,
                 $previousStatus,
                 $newStatus,
-                null,
+                $metadata === [] ? null : $metadata,
             );
         }
 

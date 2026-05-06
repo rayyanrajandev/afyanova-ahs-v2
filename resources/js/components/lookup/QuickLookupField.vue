@@ -10,6 +10,7 @@ const props = withDefaults(
     defineProps<{
         inputId: string;
         label: string;
+        required?: boolean;
         placeholder?: string;
         helperText?: string;
         errorMessage?: string | null;
@@ -26,6 +27,7 @@ const props = withDefaults(
     }>(),
     {
         placeholder: 'Search',
+        required: false,
         helperText: '',
         errorMessage: null,
         disabled: false,
@@ -87,6 +89,7 @@ function handleEscape() {
     <FormFieldShell
         :input-id="inputId"
         :label="label"
+        :required="required"
         :helper-text="helperText"
         :error-message="errorMessage"
     >

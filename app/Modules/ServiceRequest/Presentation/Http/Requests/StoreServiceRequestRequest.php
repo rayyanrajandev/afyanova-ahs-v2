@@ -15,6 +15,10 @@ class StoreServiceRequestRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        if (! $this->has('departmentId') && $this->has('department_id')) {
+            $this->merge(['departmentId' => $this->input('department_id')]);
+        }
+
         $departmentId = $this->input('departmentId');
         if ($departmentId === '') {
             $this->merge(['departmentId' => null]);

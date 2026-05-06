@@ -2,8 +2,10 @@
 
 namespace App\Modules\ServiceRequest\Infrastructure\Models;
 
+use App\Modules\Department\Infrastructure\Models\DepartmentModel;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ServiceRequestModel extends Model
 {
@@ -52,5 +54,10 @@ class ServiceRequestModel extends Model
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
+    }
+
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(DepartmentModel::class, 'department_id');
     }
 }

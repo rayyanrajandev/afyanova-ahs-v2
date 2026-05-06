@@ -60,6 +60,7 @@ const props = withDefaults(
         modelValue: string;
         inputId: string;
         label: string;
+        required?: boolean;
         placeholder?: string;
         helperText?: string;
         errorMessage?: string | null;
@@ -71,6 +72,7 @@ const props = withDefaults(
     }>(),
     {
         placeholder: 'Search patient by number, name, phone, email, or national ID',
+        required: false,
         helperText: 'Search by patient number, name, phone, email, or national ID.',
         errorMessage: null,
         disabled: false,
@@ -789,6 +791,7 @@ onBeforeUnmount(clearDebounce);
         <QuickLookupField
             :input-id="inputId"
             :label="label"
+            :required="required"
             :placeholder="placeholder"
             :helper-text="helperText"
             :error-message="errorMessage"

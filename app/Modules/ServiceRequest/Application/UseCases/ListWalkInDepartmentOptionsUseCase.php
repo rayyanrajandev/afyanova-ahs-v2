@@ -11,7 +11,7 @@ class ListWalkInDepartmentOptionsUseCase
     ) {}
 
     /**
-     * Active departments in scope, for directing walk-in patients (option {@see value} is department UUID).
+     * Active departments in scope, for directing direct-service patients (option {@see value} is department UUID).
      *
      * @return array<int, array{value: string, label: string, code: string|null, serviceType: string|null}>
      */
@@ -55,7 +55,7 @@ class ListWalkInDepartmentOptionsUseCase
     }
 
     /**
-     * Department service categories are intentionally broader than the four walk-in desks,
+     * Department service categories are intentionally broader than the direct-service desks,
      * so match against code, name, and category text.
      *
      * @param  array<string, mixed>  $department

@@ -6728,7 +6728,7 @@ onMounted(async () => {
                 ref="laboratoryWalkInPanelRef"
                 service-type="laboratory"
                 :enabled="canUpdateServiceRequestStatus"
-                panel-title="Walk-in patients awaiting lab"
+                panel-title="Direct-service patients awaiting lab"
                 @acknowledged="onLaboratoryWalkInAcknowledged"
             />
 

@@ -17,12 +17,9 @@ class LinkServiceRequestToClinicalOrderUseCase
     {
         $serviceRequest = $this->loadLinkableRequest($serviceRequestId, $patientId, $serviceType);
 
-        if (! in_array((string) ($serviceRequest['status'] ?? ''), [
-            ServiceRequestStatus::PENDING->value,
-            ServiceRequestStatus::IN_PROGRESS->value,
-        ], true)) {
+        if ((string) ($serviceRequest['status'] ?? '') !== ServiceRequestStatus::IN_PROGRESS->value) {
             throw ValidationException::withMessages([
-                'serviceRequestId' => ['Only pending or in-progress walk-in tickets can be linked to a clinical order.'],
+                'serviceRequestId' => ['Accept the direct service handoff before creating the linked clinical order.'],
             ]);
         }
     }
@@ -39,17 +36,14 @@ class LinkServiceRequestToClinicalOrderUseCase
         $serviceRequest = $this->loadLinkableRequest($serviceRequestId, $patientId, $serviceType);
         $fromStatus = (string) ($serviceRequest['status'] ?? '');
 
-        if (! in_array($fromStatus, [
-            ServiceRequestStatus::PENDING->value,
-            ServiceRequestStatus::IN_PROGRESS->value,
-        ], true)) {
+        if ($fromStatus !== ServiceRequestStatus::IN_PROGRESS->value) {
             return;
         }
 
         $this->serviceRequestRepository->update($serviceRequestId, [
             'status' => ServiceRequestStatus::COMPLETED->value,
             'completed_at' => now(),
-            'status_reason' => 'Clinical order created from walk-in ticket.',
+            'status_reason' => 'Clinical order created from direct service ticket.',
             'linked_order_type' => $linkedOrderType,
             'linked_order_id' => $linkedOrderId,
             'linked_order_number' => $linkedOrderNumber,
@@ -79,26 +73,26 @@ class LinkServiceRequestToClinicalOrderUseCase
         $serviceRequestId = trim($serviceRequestId);
         if ($serviceRequestId === '') {
             throw ValidationException::withMessages([
-                'serviceRequestId' => ['Walk-in ticket is required.'],
+                'serviceRequestId' => ['Direct service ticket is required.'],
             ]);
         }
 
         $serviceRequest = $this->serviceRequestRepository->findById($serviceRequestId);
         if ($serviceRequest === null) {
             throw ValidationException::withMessages([
-                'serviceRequestId' => ['Walk-in ticket was not found.'],
+                'serviceRequestId' => ['Direct service ticket was not found.'],
             ]);
         }
 
         if ((string) ($serviceRequest['patient_id'] ?? '') !== $patientId) {
             throw ValidationException::withMessages([
-                'serviceRequestId' => ['Walk-in ticket belongs to a different patient.'],
+                'serviceRequestId' => ['Direct service ticket belongs to a different patient.'],
             ]);
         }
 
         if ((string) ($serviceRequest['service_type'] ?? '') !== $serviceType) {
             throw ValidationException::withMessages([
-                'serviceRequestId' => ['Walk-in ticket belongs to a different service desk.'],
+                'serviceRequestId' => ['Direct service ticket belongs to a different service desk.'],
             ]);
         }
 

@@ -4294,7 +4294,7 @@ onMounted(async () => {
                 ref="radiologyWalkInPanelRef"
                 service-type="radiology"
                 :enabled="canUpdateServiceRequestStatus"
-                panel-title="Walk-in patients awaiting imaging"
+                panel-title="Direct-service patients awaiting imaging"
                 @acknowledged="onRadiologyWalkInAcknowledged"
             />
 
@@ -7396,7 +7396,6 @@ onMounted(async () => {
             />
     </AppLayout>
 </template>
-
 
 
 
