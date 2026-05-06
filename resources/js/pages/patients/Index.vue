@@ -6235,17 +6235,20 @@ onMounted(initialPageLoad);
                                         </div>
                                     </div>
 
-                                    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                        <TabsList class="flex h-auto w-full flex-wrap justify-start gap-2 rounded-lg bg-transparent p-0 lg:w-auto">
-                                            <TabsTrigger value="overview" class="gap-1.5 rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">
+                                    <div class="w-full">
+                                        <TabsList
+                                            class="grid h-auto w-full gap-1 rounded-lg bg-muted p-1"
+                                            :class="canViewPatientAudit ? 'grid-cols-3' : 'grid-cols-2'"
+                                        >
+                                            <TabsTrigger value="overview" class="h-9 min-w-0 gap-1.5 rounded-md px-2 text-xs sm:px-3 sm:text-sm">
                                                 <AppIcon name="layout-grid" class="size-3.5" />
                                                 Overview
                                             </TabsTrigger>
-                                            <TabsTrigger value="activity" class="gap-1.5 rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">
+                                            <TabsTrigger value="activity" class="h-9 min-w-0 gap-1.5 rounded-md px-2 text-xs sm:px-3 sm:text-sm">
                                                 <AppIcon name="activity" class="size-3.5" />
                                                 Activity
                                             </TabsTrigger>
-                                            <TabsTrigger v-if="canViewPatientAudit" value="audit" class="gap-1.5 rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">
+                                            <TabsTrigger v-if="canViewPatientAudit" value="audit" class="h-9 min-w-0 gap-1.5 rounded-md px-2 text-xs sm:px-3 sm:text-sm">
                                                 <AppIcon name="file-text" class="size-3.5" />
                                                 Audit
                                                 <Badge
