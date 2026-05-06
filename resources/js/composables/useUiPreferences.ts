@@ -19,7 +19,12 @@ const BORDER_RADIUS_STORAGE_KEY = 'ui.border-radius';
 const ICON_PACK_VALUES: IconPack[] = ['lucide', 'huge'];
 const THEME_PRESET_VALUES: UiThemePreset[] = ['yaru', 'clinic', 'emerald', 'violet', 'amber'];
 const THEME_BASE_VALUES: UiThemeBase[] = ['slate', 'gray', 'zinc', 'neutral', 'stone'];
-const FONT_FAMILY_VALUES: UiFontFamily[] = ['sans', 'serif', 'mono'];
+const FONT_FAMILY_VALUES: UiFontFamily[] = ['clinical', 'humanist', 'compact'];
+const LEGACY_FONT_FAMILY_VALUES: Record<string, UiFontFamily> = {
+    sans: 'clinical',
+    serif: 'humanist',
+    mono: 'compact',
+};
 const UI_SCALE_VALUES: UiScalePreset[] = ['ultra-compact', 'extra-compact', 'compact', 'comfortable', 'spacious'];
 const BORDER_RADIUS_VALUES: UiRadiusPreset[] = ['0', '0.5', '1', '1.5', '2'];
 const UI_SCALE_FONT_SIZE_MAP: Record<UiScalePreset, string> = {
@@ -33,7 +38,7 @@ const UI_SCALE_FONT_SIZE_MAP: Record<UiScalePreset, string> = {
 const iconPack = ref<IconPack>('lucide');
 const themePreset = ref<UiThemePreset>('yaru');
 const themeBase = ref<UiThemeBase>('slate');
-const fontFamily = ref<UiFontFamily>('sans');
+const fontFamily = ref<UiFontFamily>('clinical');
 const uiScale = ref<UiScalePreset>('comfortable');
 const borderRadius = ref<UiRadiusPreset>('1');
 let initialized = false;
@@ -64,6 +69,23 @@ function readStoredPreference<T extends string>(
 
     const normalized = raw.trim() as T;
     return allowedValues.includes(normalized) ? normalized : fallback;
+}
+
+function readStoredFontFamily(): UiFontFamily {
+    if (typeof window === 'undefined') {
+        return 'clinical';
+    }
+
+    const raw = window.localStorage.getItem(FONT_FAMILY_STORAGE_KEY)?.trim();
+    if (!raw) {
+        return 'clinical';
+    }
+
+    if (FONT_FAMILY_VALUES.includes(raw as UiFontFamily)) {
+        return raw as UiFontFamily;
+    }
+
+    return LEGACY_FONT_FAMILY_VALUES[raw] ?? 'clinical';
 }
 
 function applyIconPack(value: IconPack): void {
@@ -153,11 +175,7 @@ export function initializeUiPreferences(): void {
         THEME_BASE_VALUES,
         'slate',
     );
-    fontFamily.value = readStoredPreference(
-        FONT_FAMILY_STORAGE_KEY,
-        FONT_FAMILY_VALUES,
-        'sans',
-    );
+    fontFamily.value = readStoredFontFamily();
     uiScale.value = readStoredPreference(
         UI_SCALE_STORAGE_KEY,
         UI_SCALE_VALUES,
@@ -257,7 +275,7 @@ export function useUiPreferences(): UseUiPreferencesReturn {
         updateIconPack('lucide');
         updateThemePreset('yaru');
         updateThemeBase('slate');
-        updateFontFamily('sans');
+        updateFontFamily('clinical');
         updateUiScale('comfortable');
         updateBorderRadius('1');
 

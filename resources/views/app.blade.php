@@ -22,7 +22,7 @@
             })();
         </script>
 
-        {{-- Inline script to apply UI scale before first paint to prevent FOUC --}}
+        {{-- Inline script to apply UI preferences before first paint to prevent FOUC --}}
         <script>
             (function() {
                 var UI_SCALE_FONT_SIZE_MAP = {
@@ -37,6 +37,17 @@
                 var scale = (stored && validScales.indexOf(stored) !== -1) ? stored : 'comfortable';
                 document.documentElement.dataset.uiScale = scale;
                 document.documentElement.style.fontSize = UI_SCALE_FONT_SIZE_MAP[scale];
+
+                var fontAliases = {
+                    sans: 'clinical',
+                    serif: 'humanist',
+                    mono: 'compact'
+                };
+                var validFonts = ['clinical', 'humanist', 'compact'];
+                var storedFont = localStorage.getItem('ui.font-family');
+                var normalizedFont = fontAliases[storedFont] || storedFont;
+                var fontFamily = validFonts.indexOf(normalizedFont) !== -1 ? normalizedFont : 'clinical';
+                document.documentElement.dataset.fontFamily = fontFamily;
             })();
         </script>
 
@@ -68,9 +79,6 @@
 
         <link id="app-favicon" rel="icon" href="{{ $branding['appIconUrl'] }}" type="image/png">
         <link id="app-apple-touch-icon" rel="apple-touch-icon" href="{{ $branding['appIconUrl'] }}">
-
-        <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" />
 
         @vite(['resources/js/app.ts', "resources/js/pages/{$page['component']}.vue"])
         @inertiaHead

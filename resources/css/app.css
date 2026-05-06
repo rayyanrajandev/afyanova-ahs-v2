@@ -33,8 +33,8 @@
    ================================================================ */
 @theme inline {
     --font-sans:
-        'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui,
-        Roboto, 'Helvetica Neue', Arial, sans-serif,
+        'Aptos', 'Segoe UI Variable', 'Segoe UI', system-ui,
+        -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif,
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
     --font-mono:
@@ -284,21 +284,27 @@
    ================================================================ */
 
 /* Font family */
-:root[data-font-family='sans'] {
+:root[data-font-family='clinical'] {
     --font-sans:
-        'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui,
-        Roboto, 'Helvetica Neue', Arial, sans-serif,
+        'Aptos', 'Segoe UI Variable', 'Segoe UI', system-ui,
+        -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif,
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 }
-:root[data-font-family='serif'] {
+:root[data-font-family='humanist'] {
     --font-sans:
-        Georgia, Cambria, 'Times New Roman', Times, serif,
+        'Atkinson Hyperlegible', Verdana, Tahoma, 'Trebuchet MS',
+        'Segoe UI', system-ui, sans-serif,
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 }
-:root[data-font-family='mono'] {
+:root[data-font-family='compact'] {
     --font-sans:
-        'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code',
-        Consolas, Monaco, 'Courier New', monospace;
+        Inter, Roboto, Arial, 'Helvetica Neue', system-ui,
+        -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif,
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+.font-sans {
+    font-family: var(--font-sans);
 }
 
 /* Neutral base */

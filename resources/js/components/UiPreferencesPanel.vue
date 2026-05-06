@@ -42,10 +42,30 @@ const fontOptions: {
     value: UiFontFamily;
     label: string;
     sample: string;
+    tone: string;
+    previewStyle: string;
 }[] = [
-    { value: 'sans', label: 'Sans-serif', sample: 'Aa' },
-    { value: 'serif', label: 'Serif', sample: 'Aa' },
-    { value: 'mono', label: 'Monospace', sample: '01' },
+    {
+        value: 'clinical',
+        label: 'Clinical',
+        sample: 'Aa',
+        tone: 'Default',
+        previewStyle: "'Aptos', 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif",
+    },
+    {
+        value: 'humanist',
+        label: 'Humanist',
+        sample: 'Aa',
+        tone: 'Legible',
+        previewStyle: "'Atkinson Hyperlegible', Verdana, Tahoma, 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif",
+    },
+    {
+        value: 'compact',
+        label: 'Compact',
+        sample: 'Aa',
+        tone: 'Dense',
+        previewStyle: "Inter, Roboto, Arial, 'Helvetica Neue', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    },
 ];
 
 const baseOptions: {
@@ -136,7 +156,7 @@ const iconPackOptions: { value: IconPack; label: string; previewIcon: string }[]
                     v-for="option in fontOptions"
                     :key="option.value"
                     :class="[
-                        'flex min-h-16 flex-col items-center justify-center gap-1 rounded-md border px-2 py-2 text-sm font-medium transition-all',
+                        'flex min-h-20 flex-col items-center justify-center gap-1 rounded-md border px-2 py-2 text-center text-sm font-medium transition-all',
                         fontFamily === option.value
                             ? 'border-primary bg-primary/10 text-foreground shadow-sm'
                             : 'border-border/60 bg-card text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground',
@@ -144,14 +164,15 @@ const iconPackOptions: { value: IconPack; label: string; previewIcon: string }[]
                     @click="updateFontFamily(option.value)"
                 >
                     <span
-                        :class="[
-                            'text-xl leading-none',
-                            option.value === 'serif' ? 'font-serif' : option.value === 'mono' ? 'font-mono tabular-nums' : 'font-sans',
-                        ]"
+                        class="text-2xl leading-none"
+                        :style="{ fontFamily: option.previewStyle }"
                     >
                         {{ option.sample }}
                     </span>
-                    <span class="text-xs">{{ option.label }}</span>
+                    <span class="max-w-full truncate text-xs">{{ option.label }}</span>
+                    <span class="max-w-full truncate text-[0.6875rem] leading-none text-muted-foreground">
+                        {{ option.tone }}
+                    </span>
                 </button>
             </div>
         </section>
