@@ -3074,13 +3074,26 @@ async function loadQueue() {
     }
 }
 
-function onTheatreWalkInAcknowledged(payload: { patientId: string; requestId: string }): void {
-    if (payload.patientId) {
-        createForm.patientId = payload.patientId;
+function onTheatreWalkInAcknowledged(payload: { patientId: string; requestId: string; appointmentId: string | null }): void {
+    const patientId = payload.patientId.trim();
+    const appointmentId = payload.appointmentId?.trim() ?? '';
+
+    if (patientId) {
+        createForm.patientId = patientId;
         createForm.serviceRequestId = payload.requestId;
+        if (createForm.appointmentId.trim() === appointmentId) {
+            createAppointmentLinkSource.value = appointmentId ? 'route' : 'none';
+        } else {
+            setCreateAppointmentLink(appointmentId, appointmentId ? 'route' : 'none');
+        }
+        if (createForm.admissionId.trim() === '') {
+            createAdmissionLinkSource.value = 'none';
+        } else {
+            setCreateAdmissionLink('', 'none');
+        }
         createPatientContextLocked.value = false;
-        void hydratePatientSummary(payload.patientId);
-        void loadCreateContextSuggestions(payload.patientId);
+        void hydratePatientSummary(patientId);
+        void loadCreateContextSuggestions(patientId);
     }
 
     theatreWorkspaceView.value = 'create';

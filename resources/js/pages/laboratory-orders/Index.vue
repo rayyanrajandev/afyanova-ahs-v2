@@ -2520,12 +2520,25 @@ async function loadDetailsTrendOrders(order: LaboratoryOrder) {
     }
 }
 
-function onLaboratoryWalkInAcknowledged(payload: { patientId: string; requestId: string }): void {
-    if (payload.patientId) {
-        createForm.patientId = payload.patientId;
+function onLaboratoryWalkInAcknowledged(payload: { patientId: string; requestId: string; appointmentId: string | null }): void {
+    const patientId = payload.patientId.trim();
+    const appointmentId = payload.appointmentId?.trim() ?? '';
+
+    if (patientId) {
+        createForm.patientId = patientId;
         createForm.serviceRequestId = payload.requestId;
+        if (createForm.appointmentId.trim() === appointmentId) {
+            createAppointmentLinkSource.value = appointmentId ? 'route' : 'none';
+        } else {
+            setCreateAppointmentLink(appointmentId, appointmentId ? 'route' : 'none');
+        }
+        if (createForm.admissionId.trim() === '') {
+            createAdmissionLinkSource.value = 'none';
+        } else {
+            setCreateAdmissionLink('', 'none');
+        }
         createPatientContextLocked.value = false;
-        void hydratePatientSummary(payload.patientId);
+        void hydratePatientSummary(patientId);
     }
     setLaboratoryWorkspaceView('new', { focusCreate: true });
 }

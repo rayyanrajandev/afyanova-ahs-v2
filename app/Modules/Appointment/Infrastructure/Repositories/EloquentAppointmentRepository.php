@@ -8,6 +8,8 @@ use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Schema;
+use Throwable;
 
 class EloquentAppointmentRepository implements AppointmentRepositoryInterface
 {
@@ -19,7 +21,7 @@ class EloquentAppointmentRepository implements AppointmentRepositoryInterface
     public function create(array $attributes): array
     {
         $appointment = new AppointmentModel();
-        $appointment->fill($attributes);
+        $appointment->fill($this->persistableAttributes($attributes));
         $appointment->save();
 
         return $appointment->toArray();
@@ -43,7 +45,7 @@ class EloquentAppointmentRepository implements AppointmentRepositoryInterface
             return null;
         }
 
-        $appointment->fill($attributes);
+        $appointment->fill($this->persistableAttributes($attributes));
         $appointment->save();
 
         return $appointment->toArray();
@@ -244,6 +246,28 @@ class EloquentAppointmentRepository implements AppointmentRepositoryInterface
     {
         return $this->featureFlagResolver->isEnabled('platform.multi_facility_scoping')
             || $this->featureFlagResolver->isEnabled('platform.multi_tenant_isolation');
+    }
+
+    /**
+     * Keep appointment writes tolerant of facility databases that are one
+     * migration behind the application during staged deployments.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    private function persistableAttributes(array $attributes): array
+    {
+        try {
+            $columns = Schema::getColumnListing((new AppointmentModel())->getTable());
+        } catch (Throwable) {
+            return $attributes;
+        }
+
+        if ($columns === []) {
+            return $attributes;
+        }
+
+        return array_intersect_key($attributes, array_flip($columns));
     }
 
     public function findLastCompletedForPatientWithinDays(

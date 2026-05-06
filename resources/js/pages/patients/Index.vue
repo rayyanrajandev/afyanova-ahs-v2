@@ -1153,6 +1153,14 @@ const visitHandoffExistingVisitHref = computed(() => {
 
     return patientAppointmentWorkflowHref(patient, appointment);
 });
+const visitHandoffScheduleAppointmentHref = computed(() => {
+    const patient = visitHandoffPatient.value;
+    if (!patient || !canCreateAppointments.value) return null;
+
+    return patientContextHref('/appointments', patient, {
+        openSchedule: true,
+    });
+});
 const visitHandoffCanCheckIn = computed(() =>
     visitHandoffMode.value === 'outpatient'
     && visitHandoffPatient.value?.status === 'active'
@@ -1165,7 +1173,7 @@ const visitHandoffPrimaryHref = computed(() => {
 
     if (visitHandoffMode.value === 'outpatient') {
         return visitHandoffExistingVisitHref.value
-            ?? (canCreateAppointments.value ? patientContextHref('/appointments', patient, { openSchedule: true }) : null);
+            ?? visitHandoffScheduleAppointmentHref.value;
     }
 
     if (visitHandoffMode.value === 'emergency') {
@@ -1196,7 +1204,7 @@ const visitHandoffPrimaryLabel = computed(() => {
     const appointment = visitHandoffActiveAppointment.value;
 
     if (visitHandoffMode.value === 'outpatient') {
-        if (!appointment) return 'Schedule outpatient visit';
+        if (!appointment) return 'Choose OPD arrival type';
         switch (appointment.status) {
             case 'scheduled':
                 return canUpdateAppointmentsStatus.value ? 'Check in patient' : 'Open check-in';
@@ -1279,7 +1287,7 @@ const visitHandoffPrimaryDescription = computed(() => {
 
     if (visitHandoffMode.value === 'outpatient') {
         if (!appointment) {
-            return 'Create the visit shell first so check-in, triage, consultation, orders, and billing share one encounter context.';
+            return 'Decide whether the patient is here now as a walk-in or booking a future OPD visit before creating the visit shell.';
         }
 
         if (appointment.status === 'scheduled' && canUpdateAppointmentsStatus.value) {
@@ -1947,7 +1955,10 @@ function patientStatusActionIcon(patient: Patient): string {
 function patientContextHref(
     path: string,
     patient: Patient,
-    options?: { includeTabNew?: boolean; openSchedule?: boolean },
+    options?: {
+        includeTabNew?: boolean;
+        openSchedule?: boolean;
+    },
 ) {
     const params = new URLSearchParams();
     if (options?.includeTabNew) params.set('tab', 'new');
@@ -2268,6 +2279,54 @@ async function checkInVisitFromHandoff() {
         const apiError = error as Error & { payload?: ValidationErrorResponse };
         visitHandoffActionError.value =
             apiError.payload?.message ?? messageFromUnknown(error, 'Unable to check in patient.');
+        notifyError(visitHandoffActionError.value);
+    } finally {
+        visitHandoffSubmitting.value = false;
+    }
+}
+
+async function startOutpatientWalkInFromHandoff(): Promise<void> {
+    const patient = visitHandoffPatient.value;
+    if (
+        !patient
+        || patient.status !== 'active'
+        || !canCreateAppointments.value
+        || !canUpdateAppointmentsStatus.value
+    ) {
+        return;
+    }
+
+    visitHandoffSubmitting.value = true;
+    visitHandoffActionError.value = null;
+
+    try {
+        const created = await apiRequest<{ data: PatientTimelineAppointment }>('POST', '/appointments', {
+            body: {
+                patientId: patient.id,
+                appointmentType: 'walk_in',
+                scheduledAt: new Date(Date.now() + 60_000).toISOString(),
+                reason: 'OPD walk-in - created from patient handoff',
+            },
+        });
+
+        const updated = await apiRequest<{ data: PatientTimelineAppointment }>(
+            'PATCH',
+            `/appointments/${created.data.id}/status`,
+            {
+                body: {
+                    status: 'waiting_triage',
+                    reason: 'OPD walk-in checked in from patient handoff',
+                },
+            },
+        );
+
+        replaceVisitHandoffAppointment(updated.data);
+        visitHandoffMode.value = 'outpatient';
+        notifySuccess('OPD walk-in started. Patient is now waiting for nurse triage.');
+    } catch (error) {
+        const apiError = error as Error & { payload?: ValidationErrorResponse };
+        visitHandoffActionError.value =
+            apiError.payload?.message ?? messageFromUnknown(error, 'Unable to start OPD walk-in.');
         notifyError(visitHandoffActionError.value);
     } finally {
         visitHandoffSubmitting.value = false;
@@ -5687,19 +5746,27 @@ onMounted(initialPageLoad);
                     <div v-if="visitHandoffPatient" class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
                         <div class="space-y-5">
                             <section class="rounded-lg border bg-muted/20 p-3">
-                                <div class="grid gap-3 sm:grid-cols-3">
-                                    <div>
-                                        <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Patient</p>
-                                        <p class="mt-1 truncate text-sm font-semibold text-foreground">{{ patientName(visitHandoffPatient) }}</p>
+                                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                    <div class="grid min-w-0 flex-1 gap-3 sm:grid-cols-3">
+                                        <div>
+                                            <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Patient</p>
+                                            <p class="mt-1 truncate text-sm font-semibold text-foreground">{{ patientName(visitHandoffPatient) }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Contact</p>
+                                            <p class="mt-1 truncate text-sm font-semibold text-foreground">{{ visitHandoffPatient.phone || 'Not recorded' }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Location</p>
+                                            <p class="mt-1 truncate text-sm font-semibold text-foreground">{{ patientLocationLabel(visitHandoffPatient) }}</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Contact</p>
-                                        <p class="mt-1 truncate text-sm font-semibold text-foreground">{{ visitHandoffPatient.phone || 'Not recorded' }}</p>
-                                    </div>
-                                    <div>
-                                        <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Location</p>
-                                        <p class="mt-1 truncate text-sm font-semibold text-foreground">{{ patientLocationLabel(visitHandoffPatient) }}</p>
-                                    </div>
+                                    <Button v-if="canReadPatients" size="sm" variant="outline" as-child class="h-8 shrink-0 gap-1.5">
+                                        <Link :href="patientChartContextHref(visitHandoffPatient, { from: 'patients' })">
+                                            <AppIcon name="book-open" class="size-3.5" />
+                                            Open patient chart
+                                        </Link>
+                                    </Button>
                                 </div>
                             </section>
 
@@ -5905,9 +5972,52 @@ onMounted(initialPageLoad);
                                     </div>
                                 </div>
 
-                                <template v-if="visitHandoffMode === 'direct-services'">
+                                <template v-if="visitHandoffMode === 'outpatient' && !visitHandoffActiveAppointment">
+                                    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                                        <div class="space-y-1">
+                                            <p class="text-sm font-semibold text-foreground">Choose OPD arrival type</p>
+                                            <p class="max-w-xl text-xs leading-5 text-muted-foreground">
+                                                Start a same-day walk-in now, or book a future scheduled OPD visit.
+                                            </p>
+                                            <p
+                                                v-if="!canCreateAppointments || !canUpdateAppointmentsStatus"
+                                                class="text-xs font-medium leading-relaxed text-muted-foreground"
+                                            >
+                                                Starting a walk-in requires appointment creation and check-in permission.
+                                            </p>
+                                        </div>
+                                        <div class="flex flex-col gap-2 sm:flex-row sm:shrink-0">
+                                            <Button
+                                                class="gap-1.5"
+                                                :disabled="
+                                                    visitHandoffSubmitting
+                                                    || !canCreateAppointments
+                                                    || !canUpdateAppointmentsStatus
+                                                    || visitHandoffPatient?.status !== 'active'
+                                                "
+                                                @click="startOutpatientWalkInFromHandoff"
+                                            >
+                                                <AppIcon name="log-in" class="size-3.5" />
+                                                {{ visitHandoffSubmitting ? 'Starting...' : 'Start OPD walk-in now' }}
+                                            </Button>
+                                            <Button
+                                                v-if="visitHandoffScheduleAppointmentHref"
+                                                variant="outline"
+                                                as-child
+                                                class="gap-1.5"
+                                            >
+                                                <Link :href="visitHandoffScheduleAppointmentHref">
+                                                    <AppIcon name="calendar-plus-2" class="size-3.5" />
+                                                    Schedule future visit
+                                                </Link>
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <template v-else-if="visitHandoffMode === 'direct-services'">
                                     <div class="space-y-4">
-                                        <p class="max-w-xl text-sm leading-relaxed text-muted-foreground">
+                                        <p class="text-sm text-muted-foreground">
                                             {{ visitHandoffPrimaryDescription }}
                                         </p>
 
@@ -6072,14 +6182,6 @@ onMounted(initialPageLoad);
                                             </Button>
                                         </div>
 
-                                        <div v-if="canReadPatients" class="flex flex-wrap gap-2 border-t border-border/60 pt-3">
-                                            <Button size="sm" variant="outline" as-child class="gap-1.5">
-                                                <Link :href="patientChartContextHref(visitHandoffPatient, { from: 'patients' })">
-                                                    <AppIcon name="book-open" class="size-3.5" />
-                                                    Open patient chart
-                                                </Link>
-                                            </Button>
-                                        </div>
                                     </div>
                                 </template>
 
@@ -6104,7 +6206,11 @@ onMounted(initialPageLoad);
                                 </div>
 
                                 <div
-                                    v-else-if="!visitHandoffEmergencyNeedsTriageStaff"
+                                    v-else-if="
+                                        !visitHandoffEmergencyNeedsTriageStaff
+                                        && visitHandoffMode !== 'direct-services'
+                                        && !(visitHandoffMode === 'outpatient' && !visitHandoffActiveAppointment)
+                                    "
                                     class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
                                 >
                                     <div class="space-y-1">

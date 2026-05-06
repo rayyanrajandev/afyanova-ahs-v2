@@ -10,6 +10,7 @@ use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Platform\Infrastructure\Models\FacilityModel;
 use App\Modules\Platform\Infrastructure\Models\TenantModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
@@ -814,6 +815,31 @@ it('uses facility-level SystemSetting for follow_up_days when available', functi
     expect($policy['follow_up_days'])->toBe(1);
 });
 
+it('falls back to global SystemSetting policy when facility scoped settings are not available in the schema', function (): void {
+    $settingKey = config('consultation_policy.system_settings_keys.follow_up_days');
+
+    SystemSetting::query()->create([
+        'group' => 'consultation',
+        'key' => $settingKey,
+        'value' => '3',
+        'type' => 'string',
+    ]);
+
+    Schema::shouldReceive('hasTable')
+        ->once()
+        ->with('system_settings')
+        ->andReturn(true);
+    Schema::shouldReceive('hasColumn')
+        ->once()
+        ->with('system_settings', 'facility_id')
+        ->andReturn(false);
+
+    $policy = app(\App\Modules\Appointment\Application\Support\ConsultationReviewPolicyResolver::class)
+        ->resolve(Str::uuid()->toString());
+
+    expect($policy['follow_up_days'])->toBe(3);
+});
+
 it('uses the linked appointment facility policy when pricing REVIEW consultations', function (): void {
     $user = makeConsultUser();
     $patient = makeConsultPatient();
@@ -868,4 +894,3 @@ it('uses the linked appointment facility policy when pricing REVIEW consultation
     expect((float) $invoiceResponse->json('data.consultationReviewDiscount.reviewFeePercentage'))->toBe(25.0);
     expect((float) $invoiceResponse->json('data.consultationReviewDiscount.discountPercent'))->toBe(75.0);
 });
-

@@ -139,16 +139,6 @@ const canViewAudit = () => hasPermission('service.requests.audit-logs.read');
 const canCreate = () => hasPermission('service.requests.create');
 const canUpdateStatus = () => hasPermission('service.requests.update-status');
 
-const activeFacilityLabel = computed(() => {
-    const facility = scope.value?.facility;
-    return facility?.name || facility?.code || 'Facility scope';
-});
-
-const activeTenantLabel = computed(() => {
-    const tenant = scope.value?.tenant;
-    return tenant?.name || tenant?.code || null;
-});
-
 const compactRows = useLocalStorageBoolean('walk-in-compact-rows', false);
 const filtersSheetOpen = ref(false);
 
@@ -1108,38 +1098,38 @@ onMounted(() => {
     <Head title="Direct service queue" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
-            <section class="rounded-lg border border-border bg-card p-4 shadow-sm md:p-5">
-                <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div class="flex min-w-0 items-start gap-3">
-                        <div class="flex size-11 shrink-0 items-center justify-center rounded-lg border bg-background text-primary">
+        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto p-3 md:p-5 lg:p-6">
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20" aria-hidden="true">
                             <AppIcon name="clipboard-list" class="size-5" />
                         </div>
-                        <div class="min-w-0">
+                        <div class="min-w-0 space-y-0.5">
                             <div class="flex flex-wrap items-center gap-2">
-                                <h1 class="text-2xl font-semibold tracking-tight">Direct Service Queue</h1>
-                                <Badge variant="secondary">{{ statusCounts.total }} total</Badge>
+                                <h1 class="text-base font-semibold tracking-tight md:text-lg">Direct Service Queue</h1>
+                                <Badge variant="secondary" class="h-5 px-1.5 text-[11px]">{{ statusCounts.total }} total</Badge>
                             </div>
-                            <p class="mt-1 max-w-2xl text-sm text-muted-foreground">
+                            <p class="truncate text-xs text-muted-foreground">
                                 Manage patients sent straight to laboratory, pharmacy, imaging, and procedure desks.
                             </p>
-                            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                <span class="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1">
-                                    <AppIcon name="building-2" class="size-3.5" />
-                                    {{ activeFacilityLabel }}
+                            <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
+                                <span class="inline-flex items-center gap-1">
+                                    <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
+                                    <span class="font-medium text-foreground">{{ scope?.facility?.name || 'No facility' }}</span>
                                 </span>
-                                <span v-if="activeTenantLabel" class="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1">
-                                    <AppIcon name="layout-grid" class="size-3.5" />
-                                    {{ activeTenantLabel }}
+                                <span class="select-none text-border" aria-hidden="true">·</span>
+                                <span>
+                                    {{ scope?.tenant?.name || 'No tenant' }}
                                 </span>
                             </div>
                         </div>
                     </div>
-                    <div class="flex shrink-0 flex-wrap items-center gap-2">
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
                         <Button
                             variant="outline"
                             size="sm"
-                            class="h-9 gap-1.5"
+                            class="h-8 gap-1.5"
                             :disabled="loading"
                             @click="void loadList(); void loadStatusCounts()"
                         >
@@ -1150,7 +1140,7 @@ onMounted(() => {
                             v-if="canExport()"
                             variant="outline"
                             size="sm"
-                            class="h-9 gap-1.5"
+                            class="h-8 gap-1.5"
                             :disabled="exportLoading"
                             @click="downloadExport()"
                         >
@@ -1158,7 +1148,7 @@ onMounted(() => {
                             <AppIcon v-else name="file-text" class="size-3.5" />
                             Export CSV
                         </Button>
-                        <Button v-if="canCreate()" size="sm" class="h-9 gap-1.5" @click="createOpen = true">
+                        <Button v-if="canCreate()" size="sm" class="h-8 gap-1.5" @click="createOpen = true">
                             <AppIcon name="plus" class="size-3.5" />
                             New request
                         </Button>

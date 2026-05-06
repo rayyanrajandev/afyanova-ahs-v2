@@ -4,6 +4,7 @@ namespace App\Modules\Appointment\Application\Support;
 
 use App\Models\SystemSetting;
 use Illuminate\Support\Facades\Schema;
+use Throwable;
 
 /**
  * Resolves the active consultation review policy for a given facility.
@@ -35,7 +36,7 @@ class ConsultationReviewPolicyResolver
      */
     private function loadSystemSettings(?string $facilityId): array
     {
-        if (! Schema::hasTable('system_settings')) {
+        if (! $this->systemSettingsTableExists()) {
             return [];
         }
 
@@ -44,33 +45,58 @@ class ConsultationReviewPolicyResolver
             return [];
         }
 
-        $query = SystemSetting::query()
-            ->whereIn('key', $keys)
-            ->orderByRaw("CASE WHEN facility_id IS NULL THEN 1 ELSE 0 END DESC");
+        $hasFacilityColumn = $this->systemSettingsHasFacilityColumn();
 
-        if ($facilityId !== null) {
-            $query->where(function ($q) use ($facilityId): void {
-                $q->where('facility_id', $facilityId)
-                  ->orWhereNull('facility_id');
-            });
-        } else {
-            $query->whereNull('facility_id');
+        $query = SystemSetting::query()
+            ->whereIn('key', $keys);
+
+        if ($hasFacilityColumn) {
+            $query->orderByRaw('CASE WHEN facility_id IS NULL THEN 1 ELSE 0 END DESC');
+
+            if ($facilityId !== null) {
+                $query->where(function ($q) use ($facilityId): void {
+                    $q->where('facility_id', $facilityId)
+                      ->orWhereNull('facility_id');
+                });
+            } else {
+                $query->whereNull('facility_id');
+            }
         }
 
         $map = [];
-        foreach ($query->get(['key', 'value', 'facility_id']) as $setting) {
+        $columns = $hasFacilityColumn ? ['key', 'value', 'facility_id'] : ['key', 'value'];
+
+        foreach ($query->get($columns) as $setting) {
             $settingKey = (string) $setting->key;
             // Facility-specific wins: only overwrite if not already set by a facility row
             $alreadyHasFacilityRow = isset($map[$settingKey]) && $map[$settingKey]['is_facility_specific'];
             if (! $alreadyHasFacilityRow) {
                 $map[$settingKey] = [
                     'value'               => $setting->value,
-                    'is_facility_specific' => $setting->facility_id !== null,
+                    'is_facility_specific' => $hasFacilityColumn && $setting->facility_id !== null,
                 ];
             }
         }
 
         return array_map(static fn (array $entry): string => (string) $entry['value'], $map);
+    }
+
+    private function systemSettingsTableExists(): bool
+    {
+        try {
+            return Schema::hasTable('system_settings');
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    private function systemSettingsHasFacilityColumn(): bool
+    {
+        try {
+            return Schema::hasColumn('system_settings', 'facility_id');
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     private function configKey(string $shortKey): string

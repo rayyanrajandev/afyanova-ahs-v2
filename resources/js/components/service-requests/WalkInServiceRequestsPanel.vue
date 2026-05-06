@@ -9,6 +9,7 @@ export type WalkInServiceRequestRow = {
     id: string;
     requestNumber: string;
     patientId: string;
+    appointmentId?: string | null;
     priority: string;
     status: string;
     notes: string | null;
@@ -41,7 +42,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-    acknowledged: [{ patientId: string; requestId: string }];
+    acknowledged: [{ patientId: string; requestId: string; appointmentId: string | null }];
 }>();
 
 const loading = ref(false);
@@ -117,9 +118,10 @@ async function reload(): Promise<void> {
     }
 }
 
-async function acknowledge(requestId: string, patientId: string): Promise<void> {
+async function acknowledge(request: WalkInServiceRequestRow): Promise<void> {
     if (acknowledgingId.value !== null) return;
 
+    const requestId = request.id;
     acknowledgingId.value = requestId;
     try {
         await apiPatch(`/service-requests/${encodeURIComponent(requestId)}/status`, {
@@ -127,7 +129,11 @@ async function acknowledge(requestId: string, patientId: string): Promise<void> 
         });
         requests.value = requests.value.filter((r) => r.id !== requestId);
         notifySuccess(props.successMessage);
-        emit('acknowledged', { patientId, requestId });
+        emit('acknowledged', {
+            patientId: request.patientId,
+            requestId,
+            appointmentId: request.appointmentId?.trim() || null,
+        });
     } catch {
         notifyError('Could not acknowledge direct service request. Please try again.');
     } finally {
@@ -200,6 +206,12 @@ defineExpose({ reload });
                     <span class="text-xs text-muted-foreground">
                         {{ req.requestNumber }}
                         <span
+                            v-if="req.appointmentId"
+                            class="ml-1 inline-flex items-center rounded bg-sky-100 px-1.5 py-0.5 text-xs font-semibold text-sky-700 dark:bg-sky-900/40 dark:text-sky-300"
+                        >
+                            Visit linked
+                        </span>
+                        <span
                             v-if="req.priority === 'urgent'"
                             class="ml-1 inline-flex items-center rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-900/40 dark:text-red-300"
                         >
@@ -213,7 +225,7 @@ defineExpose({ reload });
                     size="sm"
                     class="shrink-0 bg-amber-600 text-white hover:bg-amber-700"
                     :disabled="acknowledgingId === req.id"
-                    @click="acknowledge(req.id, req.patientId)"
+                    @click="acknowledge(req)"
                 >
                     <AppIcon
                         v-if="acknowledgingId === req.id"

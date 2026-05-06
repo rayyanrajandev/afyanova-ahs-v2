@@ -169,12 +169,22 @@ it('stores optional appointment linkage when ids match patient', function (): vo
         'status_reason' => null,
     ]);
 
-    $this->actingAs($user)->postJson('/api/v1/service-requests', [
+    $created = $this->actingAs($user)->postJson('/api/v1/service-requests', [
         'patientId' => $patient->id,
         'appointmentId' => $appointment->id,
         'serviceType' => 'laboratory',
     ])->assertCreated()
-        ->assertJsonPath('data.appointmentId', $appointment->id);
+        ->assertJsonPath('data.appointmentId', $appointment->id)
+        ->json('data');
+
+    $listed = $this->actingAs($user)->getJson('/api/v1/service-requests?serviceType=laboratory&status=pending')
+        ->assertOk()
+        ->json('data');
+
+    $row = collect($listed)->firstWhere('id', $created['id']);
+
+    expect($row)->toBeArray()
+        ->and($row['appointmentId'] ?? null)->toBe($appointment->id);
 });
 
 it('can create a procedure walk-in ticket', function (): void {

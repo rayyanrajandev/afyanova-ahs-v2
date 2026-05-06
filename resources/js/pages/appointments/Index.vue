@@ -465,7 +465,6 @@ const createForm = reactive({
     durationMinutes: initialCreatePrefill.durationMinutes || '30',
     reason: initialCreatePrefill.reason || '',
     notes: initialCreatePrefill.notes || '',
-    appointmentType: (initialCreatePrefill.appointmentType || 'scheduled') as 'scheduled' | 'walk_in' | 'referral',
     financialClass: normalizeFinancialClass(initialCreatePrefill.financialClass),
     billingPayerContractId: initialCreatePrefill.billingPayerContractId || '',
     coverageReference: initialCreatePrefill.coverageReference || '',
@@ -1169,19 +1168,8 @@ function queryQueueModeParam(): QueueMode {
     if (raw === 'triage' || raw === 'clinical') return raw;
     return 'all';
 }
-function queryAppointmentTypeParam(): 'scheduled' | 'walk_in' | 'referral' | '' {
-    const raw = (
-        queryParam('createAppointmentType')
-        || queryParam('appointmentType')
-        || queryParam('type')
-    ).trim().toLowerCase();
-
-    if (raw === 'walkin' || raw === 'walk-in' || raw === 'walk_in') return 'walk_in';
-    if (raw === 'scheduled' || raw === 'referral') return raw;
-    return '';
-}
 function shouldOpenCreateFromQuery(): boolean {
-    return queryParam('tab') === 'new' || queryParam('open') === 'schedule' || queryAppointmentTypeParam() === 'walk_in';
+    return queryParam('tab') === 'new' || queryParam('open') === 'schedule';
 }
 
 function createPrefillQueryValues() {
@@ -1194,7 +1182,6 @@ function createPrefillQueryValues() {
         durationMinutes: queryParam('createDurationMinutes').trim(),
         reason: queryParam('createReason').trim(),
         notes: queryParam('createNotes').trim(),
-        appointmentType: queryAppointmentTypeParam(),
         financialClass: queryParam('createFinancialClass').trim(),
         billingPayerContractId: queryParam('createBillingPayerContractId').trim(),
         coverageReference: queryParam('createCoverageReference').trim(),
@@ -1210,6 +1197,8 @@ function clearCreateQueryIntent(): void {
     url.searchParams.delete('type');
     url.searchParams.delete('appointmentType');
     url.searchParams.delete('createAppointmentType');
+    url.searchParams.delete('lockAppointmentType');
+    url.searchParams.delete('createLockAppointmentType');
     url.searchParams.delete('patientName');
     url.searchParams.delete('patientNumber');
     url.searchParams.delete('sourceAdmissionId');
@@ -2573,7 +2562,6 @@ function clearCreateDraft(): void {
     createForm.scheduledAt = defaultScheduledAtInput();
     createForm.durationMinutes = '30';
     createForm.reason = '';
-    createForm.appointmentType = 'scheduled';
     createCustomVisitReason.value = '';
     createClinicianAutoDepartment.value = '';
     createForm.notes = '';
@@ -2591,8 +2579,7 @@ function resetCreateForm(): void {
     createForm.patientId = searchForm.patientId || queryParam('patientId');
 }
 
-function applyCreatePrefillFromQuery(): void {
-    const prefill = createPrefillQueryValues();
+function applyCreatePrefillFromQuery(prefill = createPrefillQueryValues()): void {
     if (prefill.patientId) createForm.patientId = prefill.patientId;
     if (prefill.sourceAdmissionId) createForm.sourceAdmissionId = prefill.sourceAdmissionId;
     if (prefill.clinicianUserId) createClinicianUserIdValue.value = prefill.clinicianUserId;
@@ -2608,7 +2595,6 @@ function applyCreatePrefillFromQuery(): void {
         }
     }
     if (prefill.notes) createForm.notes = prefill.notes;
-    if (prefill.appointmentType) createForm.appointmentType = prefill.appointmentType;
     if (prefill.financialClass) createForm.financialClass = normalizeFinancialClass(prefill.financialClass);
     if (prefill.billingPayerContractId) createForm.billingPayerContractId = prefill.billingPayerContractId;
     if (prefill.coverageReference) createForm.coverageReference = prefill.coverageReference;
@@ -2632,9 +2618,10 @@ function handleCreateSheetOpenChange(open: boolean): void {
 
 function openCreateSheet(options?: { prefillFromQuery?: boolean }): void {
     if (!canCreate.value) return;
+    const prefill = options?.prefillFromQuery ? createPrefillQueryValues() : null;
     resetCreateForm();
-    if (options?.prefillFromQuery) {
-        applyCreatePrefillFromQuery();
+    if (prefill) {
+        applyCreatePrefillFromQuery(prefill);
         createPatientLocked.value = Boolean(createForm.patientId.trim());
     }
     if (createForm.patientId.trim()) {
@@ -2687,7 +2674,7 @@ async function submitCreate(): Promise<void> {
                 durationMinutes: createForm.durationMinutes ? Number(createForm.durationMinutes) : null,
                 reason: createForm.reason || null,
                 notes: createForm.notes || null,
-                appointmentType: createForm.appointmentType || 'scheduled',
+                appointmentType: 'scheduled',
                 financialClass: createForm.financialClass || 'self_pay',
                 billingPayerContractId: createForm.billingPayerContractId || null,
                 coverageReference: createForm.coverageReference || null,
@@ -2695,7 +2682,7 @@ async function submitCreate(): Promise<void> {
             },
         });
 
-        notifySuccess(createForm.appointmentType === 'walk_in' ? 'OPD walk-in registered.' : 'Appointment scheduled.');
+        notifySuccess('Appointment scheduled.');
         clearCreateDraft();
         createSheetOpen.value = false;
         appointments.value = [response.data, ...appointments.value];
@@ -5324,34 +5311,6 @@ function submitSearch(): void {
                                             </Link>
                                         </Button>
                                     </div>
-                                </section>
-
-                                <!-- Visit type toggle: scheduled vs walk-in -->
-                                <section v-if="!createForm.sourceAdmissionId.trim()" class="space-y-3 border-t pt-5">
-                                    <p class="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Arrival type</p>
-                                    <div class="flex gap-2">
-                                        <button
-                                            type="button"
-                                            class="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border text-sm font-medium transition-colors"
-                                            :class="createForm.appointmentType === 'scheduled' ? 'border-primary bg-primary/5 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted/40'"
-                                            @click="createForm.appointmentType = 'scheduled'"
-                                        >
-                                            <AppIcon name="calendar" class="size-3.5" />
-                                            Scheduled
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border text-sm font-medium transition-colors"
-                                            :class="createForm.appointmentType === 'walk_in' ? 'border-primary bg-primary/5 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted/40'"
-                                            @click="createForm.appointmentType = 'walk_in'"
-                                        >
-                                            <AppIcon name="log-in" class="size-3.5" />
-                                            Walk-in
-                                        </button>
-                                    </div>
-                                    <p v-if="createForm.appointmentType === 'walk_in'" class="text-xs text-muted-foreground">
-                                        OPD walk-ins are unscheduled arrivals. Use this for patients who need triage or consultation without a prior booking.
-                                    </p>
                                 </section>
 
                                 <!-- Patient -->
