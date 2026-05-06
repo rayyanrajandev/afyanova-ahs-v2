@@ -14,7 +14,10 @@ class PatientInsuranceRepository implements PatientInsuranceRepositoryInterface
                 $nestedQuery->whereNull('tenant_id')->orWhere('tenant_id', $tenantId);
             }))
             ->where('status', 'active')
-            ->where('effective_date', '<=', now())
+            ->where(function ($query) {
+                $query->whereNull('effective_date')
+                    ->orWhere('effective_date', '<=', now());
+            })
             ->where(function ($query) {
                 $query->whereNull('expiry_date')
                     ->orWhere('expiry_date', '>=', now());

@@ -7,6 +7,8 @@ use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
 use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
 use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
+use App\Modules\Platform\Infrastructure\Models\FacilityModel;
+use App\Modules\Platform\Infrastructure\Models\TenantModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 
@@ -74,6 +76,25 @@ function makeConsultTariff(string $serviceCode = 'CONSULT-OPD', float $basePrice
         'metadata' => null,
         'status' => 'active',
         'status_reason' => null,
+    ]);
+}
+
+function makeConsultFacility(): FacilityModel
+{
+    $tenant = TenantModel::query()->create([
+        'code' => 'T'.strtoupper(Str::random(6)),
+        'name' => 'Consultation Test Tenant',
+        'country_code' => 'TZ',
+        'status' => 'active',
+    ]);
+
+    return FacilityModel::query()->create([
+        'tenant_id' => $tenant->id,
+        'code' => 'F'.strtoupper(Str::random(6)),
+        'name' => 'Consultation Test Facility',
+        'facility_type' => 'hospital',
+        'timezone' => 'Africa/Dar_es_Salaam',
+        'status' => 'active',
     ]);
 }
 
@@ -793,4 +814,58 @@ it('uses facility-level SystemSetting for follow_up_days when available', functi
     expect($policy['follow_up_days'])->toBe(1);
 });
 
+it('uses the linked appointment facility policy when pricing REVIEW consultations', function (): void {
+    $user = makeConsultUser();
+    $patient = makeConsultPatient();
+    $facility = makeConsultFacility();
+
+    config([
+        'consultation_policy.review_fee_is_free' => false,
+        'consultation_policy.review_fee_percentage' => 50.0,
+    ]);
+    setConsultationPolicy([
+        'review_fee_is_free' => false,
+        'review_fee_percentage' => 25.0,
+    ], $facility->id);
+
+    $tariff = makeConsultTariff('CONSULT-OPD-FACILITY-POLICY', 10000.0);
+    $prior = makeCompletedAppointment($patient->id, $facility->id, [
+        'tenant_id' => $facility->tenant_id,
+    ]);
+    $review = makeCompletedAppointment($patient->id, $facility->id, [
+        'tenant_id' => $facility->tenant_id,
+        'appointment_number' => 'APT'.strtoupper(Str::random(8)),
+        'scheduled_at' => now()->addDay()->toDateTimeString(),
+        'reason' => 'Malaria review',
+        'consultation_type' => 'review',
+        'prior_completed_appointment_id' => $prior->id,
+        'status' => 'waiting_provider',
+    ]);
+
+    $invoiceResponse = $this->withoutMiddleware()
+        ->actingAs($user)
+        ->postJson('/api/v1/billing-invoices', [
+            'patientId' => $patient->id,
+            'appointmentId' => $review->id,
+            'invoiceDate' => now()->toDateString(),
+            'currencyCode' => 'TZS',
+            'subtotalAmount' => 10000,
+            'discountAmount' => 0,
+            'taxAmount' => 0,
+            'autoPriceLineItems' => true,
+            'lineItems' => [[
+                'description' => 'OPD Consultation',
+                'quantity' => 1,
+                'unitPrice' => 10000,
+                'serviceCode' => $tariff->service_code,
+                'sourceWorkflowKind' => 'appointment_consultation',
+                'sourceWorkflowId' => $review->id,
+            ]],
+        ]);
+
+    $invoiceResponse->assertStatus(201);
+    expect((float) $invoiceResponse->json('data.totalAmount'))->toBe(2500.0);
+    expect((float) $invoiceResponse->json('data.consultationReviewDiscount.reviewFeePercentage'))->toBe(25.0);
+    expect((float) $invoiceResponse->json('data.consultationReviewDiscount.discountPercent'))->toBe(75.0);
+});
 

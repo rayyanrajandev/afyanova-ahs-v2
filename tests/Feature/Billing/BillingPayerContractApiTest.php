@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\User;
+use App\Http\Middleware\EnsureFacilitySubscriptionEntitlement;
+use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
 use App\Modules\Billing\Infrastructure\Models\BillingPayerAuthorizationRuleAuditLogModel;
 use App\Modules\Billing\Infrastructure\Models\BillingPayerContractAuditLogModel;
 use App\Modules\Billing\Infrastructure\Models\BillingPayerContractPriceOverrideAuditLogModel;
@@ -8,6 +10,11 @@ use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    $this->withoutMiddleware(EnsureFacilitySubscriptionEntitlement::class);
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+});
 
 function billingPayerContractPayload(array $overrides = []): array
 {

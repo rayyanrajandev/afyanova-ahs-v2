@@ -3,7 +3,6 @@ import { Head, Link } from '@inertiajs/vue3';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
-import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -228,6 +227,25 @@ type PatientTimelineEvent = {
     href: string | null;
     badge: string;
     category: PatientTimelineCategory;
+    actorLabel?: string | null;
+    actorType?: string | null;
+};
+
+type PatientActivityFeedEvent = {
+    id: string;
+    patientId: string | null;
+    action: string | null;
+    actionLabel: string | null;
+    actorId: number | null;
+    actorType: 'user' | 'system' | string | null;
+    actor: {
+        id: number | null;
+        name: string | null;
+        email: string | null;
+        displayName: string;
+    } | null;
+    metadata: Record<string, unknown> | null;
+    occurredAt: string | null;
 };
 
 type PatientWorkflowRecommendation = {
@@ -299,12 +317,14 @@ type PatientInsuranceListResponse = {
 
 type PatientInsuranceOptionResponse = {
     data: {
-        providerPresets: Array<{ code: string; name: string; category: string }>;
+        providerPresets: Array<{ code: string; name: string; category: string; insuranceType?: string | null }>;
         payerContracts: Array<{
             id: string;
             contractCode: string | null;
             contractName: string | null;
+            payerType: string | null;
             payerName: string | null;
+            payerPlanCode?: string | null;
             payerPlanName: string | null;
         }>;
     };
@@ -315,17 +335,9 @@ type PatientInsuranceForm = {
     insuranceType: string;
     insuranceProvider: string;
     providerCode: string;
-    planName: string;
-    policyNumber: string;
     memberId: string;
     cardNumber: string;
-    effectiveDate: string;
-    expiryDate: string;
-    coverageLevel: string;
-    copayPercent: string;
     verificationStatus: string;
-    verificationReference: string;
-    notes: string;
 };
 
 type ValidationErrorResponse = {
@@ -831,17 +843,9 @@ const insuranceForm = reactive<PatientInsuranceForm>({
     insuranceType: 'insurance',
     insuranceProvider: '',
     providerCode: '',
-    planName: '',
-    policyNumber: '',
     memberId: '',
     cardNumber: '',
-    effectiveDate: '',
-    expiryDate: '',
-    coverageLevel: '',
-    copayPercent: '',
     verificationStatus: 'unverified',
-    verificationReference: '',
-    notes: '',
 });
 
 function normalizeCountryCode(value: string | null | undefined): string {
@@ -2404,6 +2408,78 @@ function patientTimelineTimestamp(value: string | null | undefined): number {
     return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
 }
 
+function activityFeedActorLabel(event: PatientActivityFeedEvent): string | null {
+    const displayName = event.actor?.displayName?.trim();
+    if (displayName) return displayName;
+    if (event.actorType === 'system' || event.actorId === null || event.actorId === undefined) return 'System';
+    return `User #${event.actorId}`;
+}
+
+function activityFeedActorTypeLabel(event: PatientActivityFeedEvent): string | null {
+    if (event.actorType === 'system') return 'System';
+    if (event.actorType === 'user') return 'User';
+    return event.actorId === null || event.actorId === undefined ? 'System' : 'User';
+}
+
+function activityFeedEventTitle(event: PatientActivityFeedEvent): string {
+    const label = event.actionLabel?.trim();
+    if (label) return label;
+
+    const action = event.action?.trim();
+    return action ? auditFieldLabel(action) : 'Patient Activity';
+}
+
+function activityFeedEventDescription(event: PatientActivityFeedEvent, patient: Patient): string {
+    const action = event.action?.trim() ?? '';
+
+    if (action === 'patient.created') {
+        return patient.patientNumber
+            ? tW2('timeline.profileRegisteredDescriptionWithNumber', {
+                  patientNumber: patient.patientNumber,
+              })
+            : tW2('timeline.profileRegisteredDescriptionDefault');
+    }
+
+    if (action === 'patient.updated') {
+        return tW2('timeline.demographicsUpdatedDescription');
+    }
+
+    if (action === 'patient.status.updated') {
+        return patient.statusReason || tW2('timeline.statusChangedDescription');
+    }
+
+    if (action.includes('allergy')) {
+        return 'Medication safety information was updated for this patient.';
+    }
+
+    if (action.includes('medication-profile')) {
+        return 'Medication profile information was updated for this patient.';
+    }
+
+    return 'Patient record activity was captured in the audit trail.';
+}
+
+function activityFeedEventBadge(event: PatientActivityFeedEvent): string {
+    const action = event.action?.trim() ?? '';
+    if (action.includes('status')) return tW2('timeline.badgeStatus');
+    if (action.includes('allergy') || action.includes('medication-profile')) return 'Safety';
+    return tW2('timeline.badgeProfile');
+}
+
+function activityFeedEventToTimelineEvent(event: PatientActivityFeedEvent, patient: Patient): PatientTimelineEvent {
+    return {
+        id: `patient-activity-${event.id}`,
+        occurredAt: event.occurredAt,
+        title: activityFeedEventTitle(event),
+        description: activityFeedEventDescription(event, patient),
+        href: null,
+        badge: activityFeedEventBadge(event),
+        category: 'profile',
+        actorLabel: activityFeedActorLabel(event),
+        actorType: activityFeedActorTypeLabel(event),
+    };
+}
+
 function setTimelineProfileEvents(patient: Patient) {
     const events: PatientTimelineEvent[] = [];
 
@@ -2457,7 +2533,13 @@ async function loadPatientTimeline(patient: Patient) {
     clearTimelineState();
     setTimelineProfileEvents(patient);
 
-    const [appointmentsResult, admissionsResult, medicalRecordsResult] = await Promise.allSettled([
+    const [activityFeedResult, appointmentsResult, admissionsResult, medicalRecordsResult] = await Promise.allSettled([
+        apiRequest<PatientTimelineListResponse<PatientActivityFeedEvent>>('GET', `/patients/${patient.id}/activity-feed`, {
+            query: {
+                page: 1,
+                perPage: 12,
+            },
+        }),
         canReadAppointments.value
             ? apiRequest<PatientTimelineListResponse<PatientTimelineAppointment>>('GET', '/appointments', {
                   query: {
@@ -2498,6 +2580,12 @@ async function loadPatientTimeline(patient: Patient) {
     }
 
     const loadFailures: string[] = [];
+
+    if (activityFeedResult.status === 'fulfilled' && (activityFeedResult.value.data ?? []).length > 0) {
+        detailsTimelineProfileEvents.value = sortTimelineEvents(
+            (activityFeedResult.value.data ?? []).map((event) => activityFeedEventToTimelineEvent(event, patient)),
+        );
+    }
 
     if (appointmentsResult.status === 'fulfilled') {
         detailsTimelineAppointments.value = appointmentsResult.value.data ?? [];
@@ -2631,17 +2719,9 @@ function resetInsuranceForm() {
     insuranceForm.insuranceType = 'insurance';
     insuranceForm.insuranceProvider = '';
     insuranceForm.providerCode = '';
-    insuranceForm.planName = '';
-    insuranceForm.policyNumber = '';
     insuranceForm.memberId = '';
     insuranceForm.cardNumber = '';
-    insuranceForm.effectiveDate = '';
-    insuranceForm.expiryDate = '';
-    insuranceForm.coverageLevel = '';
-    insuranceForm.copayPercent = '';
     insuranceForm.verificationStatus = 'unverified';
-    insuranceForm.verificationReference = '';
-    insuranceForm.notes = '';
 }
 
 async function loadPatientInsurance(patientId: string) {
@@ -2682,9 +2762,15 @@ async function loadPatientInsuranceOptions() {
 function applyInsuranceProviderPreset(code: string | undefined) {
     const normalized = code ?? '';
     insuranceForm.providerCode = normalized;
+    if (!normalized) {
+        insuranceForm.insuranceProvider = '';
+        return;
+    }
+
     const preset = patientInsuranceProviderPresets.value.find((option) => option.code === normalized);
     if (preset) {
         insuranceForm.insuranceProvider = preset.name;
+        insuranceForm.insuranceType = preset.insuranceType || insuranceForm.insuranceType;
     }
 }
 
@@ -2694,8 +2780,15 @@ function applyInsurancePayerContract(id: string | undefined) {
     const contract = patientInsurancePayerContracts.value.find((option) => option.id === normalized);
     if (!contract) return;
 
+    insuranceForm.insuranceType = contract.payerType || insuranceForm.insuranceType;
     insuranceForm.insuranceProvider = contract.payerName ?? insuranceForm.insuranceProvider;
-    insuranceForm.planName = contract.payerPlanName ?? insuranceForm.planName;
+}
+
+function fillInsuranceIdentifierFromNationalId() {
+    const nationalId = detailsSheetPatient.value?.nationalId?.trim();
+    if (nationalId) {
+        insuranceForm.cardNumber = nationalId;
+    }
 }
 
 async function submitPatientInsurance() {
@@ -2707,20 +2800,12 @@ async function submitPatientInsurance() {
         await apiRequest<{ data: PatientInsuranceRecord }>('POST', `/patients/${detailsSheetPatient.value.id}/insurance`, {
             body: {
                 billingPayerContractId: insuranceForm.billingPayerContractId || null,
-                insuranceType: insuranceForm.insuranceType,
-                insuranceProvider: insuranceForm.insuranceProvider,
+                insuranceType: insuranceForm.insuranceType || null,
+                insuranceProvider: insuranceForm.insuranceProvider || null,
                 providerCode: insuranceForm.providerCode || null,
-                planName: insuranceForm.planName || null,
-                policyNumber: insuranceForm.policyNumber || null,
-                memberId: insuranceForm.memberId,
-                cardNumber: insuranceForm.cardNumber || null,
-                effectiveDate: insuranceForm.effectiveDate || null,
-                expiryDate: insuranceForm.expiryDate || null,
-                coverageLevel: insuranceForm.coverageLevel || null,
-                copayPercent: insuranceForm.copayPercent || null,
+                memberId: insuranceForm.memberId.trim() || null,
+                cardNumber: insuranceForm.cardNumber.trim() || null,
                 verificationStatus: insuranceForm.verificationStatus,
-                verificationReference: insuranceForm.verificationReference || null,
-                notes: insuranceForm.notes || null,
             },
         });
         notifySuccess('Patient insurance saved.');
@@ -6224,7 +6309,7 @@ onMounted(initialPageLoad);
                                                             Insurance Coverage
                                                         </CardTitle>
                                                         <CardDescription class="mt-1 text-xs">
-                                                            Patient policy, member, verification, and payer contract mapping.
+                                                            Coverage identifier, verification, and payer contract mapping.
                                                         </CardDescription>
                                                     </div>
                                                     <Button
@@ -6235,7 +6320,7 @@ onMounted(initialPageLoad);
                                                         @click="insuranceFormOpen = !insuranceFormOpen"
                                                     >
                                                         <AppIcon :name="insuranceFormOpen ? 'x' : 'plus'" class="size-3.5" />
-                                                        {{ insuranceFormOpen ? 'Close' : 'Add Insurance' }}
+                                                        {{ insuranceFormOpen ? 'Close' : 'Add Coverage ID' }}
                                                     </Button>
                                                 </div>
                                             </CardHeader>
@@ -6254,7 +6339,7 @@ onMounted(initialPageLoad);
                                                     v-else-if="detailsInsuranceRecords.length === 0"
                                                     class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground"
                                                 >
-                                                    No insurance record is linked to this patient yet.
+                                                    No insurance identifier is linked to this patient yet.
                                                 </div>
 
                                                 <div v-else class="space-y-2">
@@ -6269,6 +6354,9 @@ onMounted(initialPageLoad);
                                                                     <p class="font-medium text-sm">
                                                                         {{ record.insuranceProvider || 'Insurance provider' }}
                                                                     </p>
+                                                                    <Badge variant="outline" class="capitalize">
+                                                                        {{ formatEnumLabel(record.insuranceType || 'coverage') }}
+                                                                    </Badge>
                                                                     <Badge :variant="record.status === 'active' ? 'secondary' : 'outline'" class="capitalize">
                                                                         {{ record.status || 'unknown' }}
                                                                     </Badge>
@@ -6279,15 +6367,11 @@ onMounted(initialPageLoad);
                                                                         {{ record.verificationStatus || 'unverified' }}
                                                                     </Badge>
                                                                 </div>
-                                                                <p class="mt-1 text-xs text-muted-foreground">
-                                                                    {{ record.planName || 'Plan not recorded' }}
-                                                                    <span v-if="record.memberId"> · Member {{ record.memberId }}</span>
-                                                                    <span v-if="record.cardNumber"> · Card {{ record.cardNumber }}</span>
-                                                                </p>
-                                                                <p class="mt-1 text-xs text-muted-foreground">
-                                                                    Policy {{ record.policyNumber || 'not recorded' }}
-                                                                    <span v-if="record.expiryDate"> · Expires {{ formatDate(record.expiryDate) }}</span>
-                                                                </p>
+                                                                <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                                                    <span v-if="record.memberId">Insurance no {{ record.memberId }}</span>
+                                                                    <span v-if="record.cardNumber">NIDA {{ record.cardNumber }}</span>
+                                                                    <span v-if="!record.memberId && !record.cardNumber">No identifier recorded</span>
+                                                                </div>
                                                             </div>
                                                             <Button
                                                                 v-if="canVerifyPatientInsurance && record.verificationStatus !== 'verified'"
@@ -6298,16 +6382,16 @@ onMounted(initialPageLoad);
                                                                 @click="verifyPatientInsurance(record)"
                                                             >
                                                                 <AppIcon name="badge-check" class="size-3.5" />
-                                                                Mark verified
+                                                                Mark Verified
                                                             </Button>
                                                         </div>
                                                     </div>
                                                 </div>
 
                                                 <div v-if="activePatientInsuranceRecord" class="rounded-lg border bg-primary/5 p-3 text-xs text-muted-foreground">
-                                                    Active coverage routes billing to
+                                                    Active identifiers are available for eligibility checks. Billing routes to
                                                     <span class="font-medium text-foreground">
-                                                        {{ activePatientInsuranceRecord.insuranceProvider || 'the mapped payer' }}
+                                                        {{ activePatientInsuranceRecord.insuranceProvider || 'linked coverage' }}
                                                     </span>
                                                     when a valid payer contract is configured.
                                                 </div>
@@ -6315,16 +6399,44 @@ onMounted(initialPageLoad);
                                                 <div v-if="insuranceFormOpen && canManagePatientInsurance" class="rounded-lg border bg-muted/20 p-3">
                                                     <div class="grid gap-3 md:grid-cols-2">
                                                         <div class="space-y-1.5">
-                                                            <Label>Provider preset</Label>
+                                                            <Label>Insurance number</Label>
+                                                            <Input
+                                                                v-model="insuranceForm.memberId"
+                                                                placeholder="Member, card, or policy ID"
+                                                            />
+                                                        </div>
+                                                        <div class="space-y-1.5">
+                                                            <Label>NIDA number</Label>
+                                                            <div class="flex flex-col gap-2 sm:flex-row">
+                                                                <Input
+                                                                    v-model="insuranceForm.cardNumber"
+                                                                    class="min-w-0 flex-1"
+                                                                    placeholder="National ID used for verification"
+                                                                />
+                                                                <Button
+                                                                    v-if="detailsSheetPatient?.nationalId"
+                                                                    type="button"
+                                                                    variant="outline"
+                                                                    class="shrink-0"
+                                                                    :disabled="detailsInsuranceSaving"
+                                                                    @click="fillInsuranceIdentifierFromNationalId"
+                                                                >
+                                                                    Use NIDA
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                        <div class="space-y-1.5">
+                                                            <Label>Coverage source</Label>
                                                             <Select
-                                                                :model-value="insuranceForm.providerCode || undefined"
+                                                                :model-value="insuranceForm.providerCode || SELECT_NONE_VALUE"
                                                                 :disabled="detailsInsuranceOptionsLoading"
-                                                                @update:model-value="applyInsuranceProviderPreset(String($event || ''))"
+                                                                @update:model-value="applyInsuranceProviderPreset(String($event) === SELECT_NONE_VALUE ? '' : String($event || ''))"
                                                             >
                                                                 <SelectTrigger class="w-full">
-                                                                    <SelectValue placeholder="Select provider" />
+                                                                    <SelectValue placeholder="Select source" />
                                                                 </SelectTrigger>
                                                                 <SelectContent class="z-[80]">
+                                                                    <SelectItem :value="SELECT_NONE_VALUE">Not selected</SelectItem>
                                                                     <SelectItem
                                                                         v-for="preset in patientInsuranceProviderPresets"
                                                                         :key="preset.code"
@@ -6357,44 +6469,6 @@ onMounted(initialPageLoad);
                                                                 </SelectContent>
                                                             </Select>
                                                         </div>
-                                                        <div class="space-y-1.5">
-                                                            <Label>Provider name</Label>
-                                                            <Input v-model="insuranceForm.insuranceProvider" placeholder="NHIF, UHI, private insurer" />
-                                                        </div>
-                                                        <div class="space-y-1.5">
-                                                            <Label>Plan name</Label>
-                                                            <Input v-model="insuranceForm.planName" placeholder="Optional plan name" />
-                                                        </div>
-                                                        <div class="space-y-1.5">
-                                                            <Label>Member ID</Label>
-                                                            <Input v-model="insuranceForm.memberId" placeholder="Member or beneficiary ID" />
-                                                        </div>
-                                                        <div class="space-y-1.5">
-                                                            <Label>Card number</Label>
-                                                            <Input v-model="insuranceForm.cardNumber" placeholder="Insurance card number" />
-                                                        </div>
-                                                        <div class="space-y-1.5">
-                                                            <Label>Policy number</Label>
-                                                            <Input v-model="insuranceForm.policyNumber" placeholder="Policy number" />
-                                                        </div>
-                                                        <div class="space-y-1.5">
-                                                            <Label>Verification reference</Label>
-                                                            <Input v-model="insuranceForm.verificationReference" placeholder="Verification or approval reference" />
-                                                        </div>
-                                                        <SingleDatePopoverField
-                                                            input-id="insurance-effective-date"
-                                                            label="Effective date"
-                                                            :model-value="insuranceForm.effectiveDate"
-                                                            placeholder="Select effective date"
-                                                            @update:model-value="insuranceForm.effectiveDate = $event"
-                                                        />
-                                                        <SingleDatePopoverField
-                                                            input-id="insurance-expiry-date"
-                                                            label="Expiry date"
-                                                            :model-value="insuranceForm.expiryDate"
-                                                            placeholder="Select expiry date"
-                                                            @update:model-value="insuranceForm.expiryDate = $event"
-                                                        />
                                                     </div>
                                                     <div class="mt-3 flex justify-end gap-2">
                                                         <Button
@@ -6408,11 +6482,11 @@ onMounted(initialPageLoad);
                                                         <Button
                                                             size="sm"
                                                             class="gap-1.5"
-                                                            :disabled="detailsInsuranceSaving || !insuranceForm.insuranceProvider.trim() || !insuranceForm.memberId.trim()"
+                                                            :disabled="detailsInsuranceSaving || (!insuranceForm.memberId.trim() && !insuranceForm.cardNumber.trim())"
                                                             @click="submitPatientInsurance"
                                                         >
                                                             <AppIcon name="save" class="size-3.5" />
-                                                            Save insurance
+                                                            Save IDs
                                                         </Button>
                                                     </div>
                                                 </div>
@@ -6557,6 +6631,11 @@ onMounted(initialPageLoad);
                                                                         </div>
                                                                         <p class="mt-2 font-medium text-foreground">{{ event.title }}</p>
                                                                         <p class="mt-1 text-sm text-muted-foreground">{{ event.description }}</p>
+                                                                        <div v-if="event.actorLabel" class="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                                                                            <AppIcon :name="event.actorType === 'System' ? 'activity' : 'user'" class="size-3.5 opacity-60" />
+                                                                            <span>By <span class="font-medium text-foreground">{{ event.actorLabel }}</span></span>
+                                                                            <Badge v-if="event.actorType" variant="secondary" class="px-1.5 py-0 text-[10px]">{{ event.actorType }}</Badge>
+                                                                        </div>
                                                                     </div>
                                                                     <Link
                                                                         v-if="event.href"
@@ -7525,9 +7604,3 @@ onMounted(initialPageLoad);
             </Sheet>
     </AppLayout>
 </template>
-
-
-
-
-
-

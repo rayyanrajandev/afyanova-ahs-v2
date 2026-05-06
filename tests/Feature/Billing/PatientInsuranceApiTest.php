@@ -59,6 +59,24 @@ function createInsurancePayerContract(): BillingPayerContractModel
     ]);
 }
 
+function createGovernmentPayerContract(): BillingPayerContractModel
+{
+    return BillingPayerContractModel::query()->create([
+        'contract_code' => 'NHIF-GOV-'.strtoupper(Str::random(4)),
+        'contract_name' => 'NHIF Government Scheme',
+        'payer_type' => 'government',
+        'payer_name' => 'National Health Insurance Fund (NHIF)',
+        'payer_plan_code' => 'NHIF-GOV',
+        'payer_plan_name' => 'NHIF Benefit Package',
+        'currency_code' => 'TZS',
+        'default_coverage_percent' => 100,
+        'default_copay_type' => 'none',
+        'requires_pre_authorization' => true,
+        'effective_from' => now()->subDay(),
+        'status' => 'active',
+    ]);
+}
+
 it('stores patient insurance records with payer contract mapping and audit event', function (): void {
     $user = makePatientInsuranceUser(['patients.insurance.manage', 'patients.insurance.read']);
     $patient = createPatientForInsurance();
@@ -73,7 +91,7 @@ it('stores patient insurance records with payer contract mapping and audit event
             'planName' => 'Standard',
             'memberId' => 'NHIF-12345',
             'policyNumber' => 'POL-2026-1',
-            'cardNumber' => 'CARD-12345',
+            'cardNumber' => 'NIDA-19900510-12345',
             'effectiveDate' => now()->subDay()->toDateString(),
             'verificationStatus' => 'unverified',
         ])
@@ -81,10 +99,68 @@ it('stores patient insurance records with payer contract mapping and audit event
         ->assertJsonPath('data.patientId', $patient->id)
         ->assertJsonPath('data.billingPayerContractId', $contract->id)
         ->assertJsonPath('data.memberId', 'NHIF-12345')
+        ->assertJsonPath('data.cardNumber', 'NIDA-19900510-12345')
         ->assertJsonPath('data.verificationStatus', 'unverified');
 
     expect(PatientInsuranceModel::query()->where('patient_id', $patient->id)->count())->toBe(1)
         ->and(PatientInsuranceAuditEventModel::query()->where('patient_id', $patient->id)->count())->toBe(1);
+});
+
+it('stores identifier-only coverage without manual benefit fields', function (): void {
+    $user = makePatientInsuranceUser(['patients.insurance.manage', 'patients.insurance.read']);
+    $patient = createPatientForInsurance();
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/patients/'.$patient->id.'/insurance', [
+            'cardNumber' => 'NIDA-19900510-12345',
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.patientId', $patient->id)
+        ->assertJsonPath('data.insuranceType', 'insurance')
+        ->assertJsonPath('data.insuranceProvider', null)
+        ->assertJsonPath('data.memberId', null)
+        ->assertJsonPath('data.cardNumber', 'NIDA-19900510-12345')
+        ->assertJsonPath('data.verificationStatus', 'unverified');
+
+    $record = PatientInsuranceModel::query()->where('patient_id', $patient->id)->firstOrFail();
+
+    expect($record->insurance_provider)->toBeNull()
+        ->and($record->coverage_level)->toBeNull()
+        ->and($record->copay_percent)->toBeNull();
+});
+
+it('stores insurance member number without requiring NIDA', function (): void {
+    $user = makePatientInsuranceUser(['patients.insurance.manage', 'patients.insurance.read']);
+    $patient = createPatientForInsurance();
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/patients/'.$patient->id.'/insurance', [
+            'insuranceProvider' => 'NHIF',
+            'memberId' => 'NHIF-ONLY-12345',
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.patientId', $patient->id)
+        ->assertJsonPath('data.insuranceProvider', 'NHIF')
+        ->assertJsonPath('data.memberId', 'NHIF-ONLY-12345')
+        ->assertJsonPath('data.cardNumber', null);
+});
+
+it('lists lean Tanzania-ready coverage options including government payer contracts', function (): void {
+    $user = makePatientInsuranceUser(['patients.insurance.read']);
+    createGovernmentPayerContract();
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/patients/insurance-options')
+        ->assertOk();
+
+    $response->assertJsonFragment([
+        'code' => 'nhif',
+        'insuranceType' => 'government',
+    ]);
+    $response->assertJsonFragment([
+        'payerType' => 'government',
+        'payerPlanName' => 'NHIF Benefit Package',
+    ]);
 });
 
 it('verifies a patient insurance record', function (): void {
@@ -112,4 +188,3 @@ it('verifies a patient insurance record', function (): void {
 
     expect($record->fresh()->verification_status)->toBe('verified');
 });
-

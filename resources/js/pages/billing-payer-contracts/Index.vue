@@ -264,214 +264,6 @@ const canRuleAudit = computed(() => permissionState('billing.payer-contracts.vie
 const defaultCurrencyCode = computed(() => activeCurrencyCode.value || 'TZS');
 const payerTypeOptions: PayerType[] = ['insurance', 'employer', 'government', 'donor', 'self_pay', 'other'];
 
-type PayerPreset = {
-    label: string;
-    contractCode: string;
-    contractName: string;
-    payerName: string;
-    payerType: PayerType;
-    payerPlanCode?: string;
-    payerPlanName?: string;
-    defaultCoveragePercent?: string;
-    defaultCopayType?: string;
-    defaultCopayValue?: string;
-    requiresPreAuthorization?: string;
-    claimSubmissionDeadlineDays?: string;
-    settlementCycleDays?: string;
-};
-
-const PAYER_PRESETS: PayerPreset[] = [
-    {
-        label: 'NHIF',
-        contractCode: 'NHIF-TZ-001',
-        contractName: 'NHIF General Scheme',
-        payerName: 'National Health Insurance Fund (NHIF)',
-        payerType: 'government',
-        payerPlanCode: 'NHIF-GEN',
-        payerPlanName: 'NHIF Standard Benefit Package',
-        defaultCoveragePercent: '80',
-        defaultCopayType: 'percentage',
-        defaultCopayValue: '20',
-        requiresPreAuthorization: 'true',
-        claimSubmissionDeadlineDays: '30',
-        settlementCycleDays: '90',
-    },
-    {
-        label: 'NHIF (Inpatient)',
-        contractCode: 'NHIF-TZ-002',
-        contractName: 'NHIF Inpatient Scheme',
-        payerName: 'National Health Insurance Fund (NHIF)',
-        payerType: 'government',
-        payerPlanCode: 'NHIF-IPD',
-        payerPlanName: 'NHIF Inpatient Benefit Package',
-        defaultCoveragePercent: '100',
-        defaultCopayType: 'none',
-        defaultCopayValue: '',
-        requiresPreAuthorization: 'true',
-        claimSubmissionDeadlineDays: '30',
-        settlementCycleDays: '90',
-    },
-    {
-        label: 'iCHF',
-        contractCode: 'ICHF-TZ-001',
-        contractName: 'iCHF Community Scheme',
-        payerName: 'Community Health Fund (iCHF)',
-        payerType: 'government',
-        payerPlanCode: 'ICHF-GEN',
-        payerPlanName: 'iCHF Community Package',
-        defaultCoveragePercent: '70',
-        defaultCopayType: 'percentage',
-        defaultCopayValue: '30',
-        requiresPreAuthorization: 'false',
-        claimSubmissionDeadlineDays: '30',
-        settlementCycleDays: '90',
-    },
-    {
-        label: 'NSSF',
-        contractCode: 'NSSF-TZ-001',
-        contractName: 'NSSF Health Benefit Scheme',
-        payerName: 'National Social Security Fund (NSSF)',
-        payerType: 'government',
-        payerPlanCode: 'NSSF-GEN',
-        payerPlanName: 'NSSF Health Benefit',
-        defaultCoveragePercent: '75',
-        defaultCopayType: 'percentage',
-        defaultCopayValue: '25',
-        requiresPreAuthorization: 'true',
-        claimSubmissionDeadlineDays: '30',
-        settlementCycleDays: '60',
-    },
-    {
-        label: 'Jubilee',
-        contractCode: 'JUB-TZ-001',
-        contractName: 'Jubilee Insurance — Standard',
-        payerName: 'Jubilee Insurance Tanzania',
-        payerType: 'insurance',
-        payerPlanCode: 'JUB-STD',
-        payerPlanName: 'Jubilee Standard Medical Plan',
-        defaultCoveragePercent: '80',
-        defaultCopayType: 'percentage',
-        defaultCopayValue: '20',
-        requiresPreAuthorization: 'true',
-        claimSubmissionDeadlineDays: '30',
-        settlementCycleDays: '30',
-    },
-    {
-        label: 'AAR',
-        contractCode: 'AAR-TZ-001',
-        contractName: 'AAR Insurance — Standard',
-        payerName: 'AAR Insurance Tanzania',
-        payerType: 'insurance',
-        payerPlanCode: 'AAR-STD',
-        payerPlanName: 'AAR Standard Medical Plan',
-        defaultCoveragePercent: '80',
-        defaultCopayType: 'percentage',
-        defaultCopayValue: '20',
-        requiresPreAuthorization: 'true',
-        claimSubmissionDeadlineDays: '30',
-        settlementCycleDays: '30',
-    },
-    {
-        label: 'ICEA Lion',
-        contractCode: 'ICEA-TZ-001',
-        contractName: 'ICEA Lion — Standard',
-        payerName: 'ICEA Lion General Insurance',
-        payerType: 'insurance',
-        payerPlanCode: 'ICEA-STD',
-        payerPlanName: 'ICEA Lion Standard Medical Plan',
-        defaultCoveragePercent: '80',
-        defaultCopayType: 'percentage',
-        defaultCopayValue: '20',
-        requiresPreAuthorization: 'true',
-        claimSubmissionDeadlineDays: '30',
-        settlementCycleDays: '45',
-    },
-    {
-        label: 'Strategis',
-        contractCode: 'STRAT-TZ-001',
-        contractName: 'Strategis Insurance — Standard',
-        payerName: 'Strategis Insurance Tanzania',
-        payerType: 'insurance',
-        payerPlanCode: 'STRAT-STD',
-        payerPlanName: 'Strategis Standard Medical Plan',
-        defaultCoveragePercent: '80',
-        defaultCopayType: 'percentage',
-        defaultCopayValue: '20',
-        requiresPreAuthorization: 'true',
-        claimSubmissionDeadlineDays: '30',
-        settlementCycleDays: '45',
-    },
-    {
-        label: 'Resolution',
-        contractCode: 'RES-TZ-001',
-        contractName: 'Resolution Insurance — Standard',
-        payerName: 'Resolution Insurance Tanzania',
-        payerType: 'insurance',
-        payerPlanCode: 'RES-STD',
-        payerPlanName: 'Resolution Standard Medical Plan',
-        defaultCoveragePercent: '80',
-        defaultCopayType: 'percentage',
-        defaultCopayValue: '20',
-        requiresPreAuthorization: 'true',
-        claimSubmissionDeadlineDays: '30',
-        settlementCycleDays: '45',
-    },
-    {
-        label: 'Employer Direct',
-        contractCode: 'EMP-001',
-        contractName: 'Employer Direct Scheme',
-        payerName: '',
-        payerType: 'employer',
-        defaultCoveragePercent: '100',
-        defaultCopayType: 'none',
-        requiresPreAuthorization: 'false',
-        claimSubmissionDeadlineDays: '30',
-        settlementCycleDays: '30',
-    },
-    {
-        label: 'Donor / NGO',
-        contractCode: 'DONOR-001',
-        contractName: 'Donor / NGO Scheme',
-        payerName: '',
-        payerType: 'donor',
-        defaultCoveragePercent: '100',
-        defaultCopayType: 'none',
-        requiresPreAuthorization: 'false',
-        claimSubmissionDeadlineDays: '30',
-        settlementCycleDays: '60',
-    },
-];
-
-type PayerPresetTarget = {
-    contractCode: string;
-    contractName: string;
-    payerName: string;
-    payerType: string;
-    payerPlanCode: string;
-    payerPlanName: string;
-    defaultCoveragePercent: string;
-    defaultCopayType: string;
-    defaultCopayValue: string;
-    requiresPreAuthorization: string;
-    claimSubmissionDeadlineDays: string;
-    settlementCycleDays: string;
-};
-
-function applyPayerPreset(form: PayerPresetTarget, preset: PayerPreset): void {
-    form.contractCode = preset.contractCode;
-    form.contractName = preset.contractName;
-    form.payerName = preset.payerName;
-    form.payerType = preset.payerType;
-    form.payerPlanCode = preset.payerPlanCode ?? '';
-    form.payerPlanName = preset.payerPlanName ?? '';
-    form.defaultCoveragePercent = preset.defaultCoveragePercent ?? '';
-    form.defaultCopayType = preset.defaultCopayType ?? 'none';
-    form.defaultCopayValue = preset.defaultCopayValue ?? '';
-    form.requiresPreAuthorization = preset.requiresPreAuthorization ?? 'false';
-    form.claimSubmissionDeadlineDays = preset.claimSubmissionDeadlineDays ?? '';
-    form.settlementCycleDays = preset.settlementCycleDays ?? '';
-}
-
 const serviceTypeOptions = ['consultation', 'laboratory', 'radiology', 'pharmacy', 'procedure', 'admission', 'theatre', 'imaging', 'consumable', 'other'];
 const priorityOptions = ['routine', 'urgent', 'stat', 'emergency'] as const;
 const genderOptions = ['any', 'male', 'female', 'other', 'unknown'] as const;
@@ -493,18 +285,8 @@ const createForm = reactive({
     contractName: '',
     payerType: 'insurance',
     payerName: '',
-    payerPlanCode: '',
-    payerPlanName: '',
     currencyCode: defaultCurrencyCode.value,
-    defaultCoveragePercent: '',
-    defaultCopayType: 'none',
-    defaultCopayValue: '',
     requiresPreAuthorization: 'true',
-    claimSubmissionDeadlineDays: '',
-    settlementCycleDays: '',
-    effectiveFrom: '',
-    effectiveTo: '',
-    termsAndNotes: '',
 });
 
 const editContractOpen = ref(false);
@@ -515,18 +297,8 @@ const editContractForm = reactive({
     contractName: '',
     payerType: 'insurance',
     payerName: '',
-    payerPlanCode: '',
-    payerPlanName: '',
     currencyCode: defaultCurrencyCode.value,
-    defaultCoveragePercent: '',
-    defaultCopayType: 'none',
-    defaultCopayValue: '',
     requiresPreAuthorization: 'true',
-    claimSubmissionDeadlineDays: '',
-    settlementCycleDays: '',
-    effectiveFrom: '',
-    effectiveTo: '',
-    termsAndNotes: '',
 });
 
 const contractStatusOpen = ref(false);
@@ -714,7 +486,7 @@ const contractCreateSummary = computed(() => ({
     payer: createForm.payerName.trim()
         ? `${createForm.payerName.trim()} | ${formatEnumLabel(createForm.payerType)}`
         : `${formatEnumLabel(createForm.payerType)} payer pending`,
-    billing: `${(createForm.currencyCode.trim() || defaultCurrencyCode.value).toUpperCase()} | ${createForm.defaultCoveragePercent.trim() ? `${createForm.defaultCoveragePercent.trim()}% cover` : 'Coverage pending'}`,
+    billing: `${(createForm.currencyCode.trim() || defaultCurrencyCode.value).toUpperCase()} | ${createForm.requiresPreAuthorization === 'true' ? 'Pre-auth default on' : 'Pre-auth default off'}`,
 }));
 const activeRuleCount = computed(() => rules.value.filter((item) => (item.status ?? '').toLowerCase() === 'active').length);
 const activeAuthorizationRequiredRuleCount = computed(() => rules.value.filter((item) => (item.status ?? '').toLowerCase() === 'active' && item.requiresAuthorization === true).length);
@@ -923,12 +695,6 @@ const selectedContractSummaryCards = computed(() => {
             helper: selectedContractClaimsReadiness.value.helper,
         },
         {
-            key: 'coverage',
-            label: 'Coverage posture',
-            value: formatCoverageLabel(item.defaultCoveragePercent, item.defaultCopayType, item.defaultCopayValue, item.currencyCode),
-            helper: `${item.payerPlanName || item.payerPlanCode ? `${item.payerPlanName || item.payerPlanCode}` : 'Plan not set'} | ${formatContractWindowLabel(item.effectiveFrom, item.effectiveTo)}`,
-        },
-        {
             key: 'rules',
             label: 'Contract policy setup',
             value: `${policySummaryOverview.value.activePolicies} active polic${policySummaryOverview.value.activePolicies === 1 ? 'y' : 'ies'}`,
@@ -939,12 +705,6 @@ const selectedContractSummaryCards = computed(() => {
             label: 'Negotiated pricing',
             value: `${activePriceOverrideCount.value} active override${activePriceOverrideCount.value === 1 ? '' : 's'}`,
             helper: `${activeFixedPriceOverrideCount.value} fixed | ${activeDiscountPriceOverrideCount.value} discount`,
-        },
-        {
-            key: 'cycles',
-            label: 'Operational cycle',
-            value: formatOperationalCycleLabel(item.claimSubmissionDeadlineDays, item.settlementCycleDays),
-            helper: item.termsAndNotes?.trim() ? 'Contract notes are captured for billing and claims staff.' : 'Add contract notes to document commercial and operational guidance.',
         },
     ];
 });
@@ -969,24 +729,10 @@ const createRequiresPreAuthorizationSelectValue = computed({
         createForm.requiresPreAuthorization = value;
     },
 });
-const createDefaultCopayTypeSelectValue = computed({
-    get: () => createForm.defaultCopayType || 'none',
-    set: (value: string) => {
-        createForm.defaultCopayType = value;
-        if (value === 'none') createForm.defaultCopayValue = '';
-    },
-});
 const editPayerTypeSelectValue = computed({
     get: () => editContractForm.payerType || 'insurance',
     set: (value: string) => {
         editContractForm.payerType = value;
-    },
-});
-const editDefaultCopayTypeSelectValue = computed({
-    get: () => editContractForm.defaultCopayType || 'none',
-    set: (value: string) => {
-        editContractForm.defaultCopayType = value;
-        if (value === 'none') editContractForm.defaultCopayValue = '';
     },
 });
 const editRequiresPreAuthorizationSelectValue = computed({
@@ -1222,32 +968,6 @@ function boolLabel(value: boolean | null): string {
     return 'N/A';
 }
 
-function formatCoverageLabel(
-    coveragePercent: string | null | undefined,
-    copayType: string | null | undefined,
-    copayValue: string | null | undefined,
-    currencyCode: string | null | undefined,
-): string {
-    const parts: string[] = [];
-    const normalizedCoverage = String(coveragePercent ?? '').trim();
-    const normalizedCopayType = String(copayType ?? '').trim().toLowerCase();
-    const normalizedCopayValue = String(copayValue ?? '').trim();
-    const normalizedCurrency = String(currencyCode ?? '').trim().toUpperCase();
-
-    if (normalizedCoverage) parts.push(`${normalizedCoverage}% cover`);
-    else parts.push('Coverage not set');
-
-    if (normalizedCopayType === 'fixed' && normalizedCopayValue) {
-        parts.push(`Co-pay ${normalizedCurrency || defaultCurrencyCode.value} ${normalizedCopayValue}`);
-    } else if (normalizedCopayType === 'percentage' && normalizedCopayValue) {
-        parts.push(`Co-pay ${normalizedCopayValue}%`);
-    } else {
-        parts.push('No co-pay');
-    }
-
-    return parts.join(' | ');
-}
-
 function formatContractWindowLabel(effectiveFrom: string | null | undefined, effectiveTo: string | null | undefined): string {
     const from = String(effectiveFrom ?? '').trim();
     const to = String(effectiveTo ?? '').trim();
@@ -1255,15 +975,6 @@ function formatContractWindowLabel(effectiveFrom: string | null | undefined, eff
     if (from) return `From ${from}`;
     if (to) return `Until ${to}`;
     return 'No active window';
-}
-
-function formatOperationalCycleLabel(claimSubmissionDeadlineDays: number | null | string | undefined, settlementCycleDays: number | null | string | undefined): string {
-    const claimDays = String(claimSubmissionDeadlineDays ?? '').trim();
-    const settlementDays = String(settlementCycleDays ?? '').trim();
-    const parts: string[] = [];
-    parts.push(claimDays ? `Claims in ${claimDays} day${claimDays === '1' ? '' : 's'}` : 'Claim deadline not set');
-    parts.push(settlementDays ? `Settle in ${settlementDays} day${settlementDays === '1' ? '' : 's'}` : 'Settlement cycle not set');
-    return parts.join(' | ');
 }
 
 function formatPricingStrategyLabel(value: string | null | undefined): string {
@@ -1903,18 +1614,8 @@ function resetCreateContractForm() {
         contractName: '',
         payerType: 'insurance',
         payerName: '',
-        payerPlanCode: '',
-        payerPlanName: '',
         currencyCode: defaultCurrencyCode.value,
-        defaultCoveragePercent: '',
-        defaultCopayType: 'none',
-        defaultCopayValue: '',
         requiresPreAuthorization: 'true',
-        claimSubmissionDeadlineDays: '',
-        settlementCycleDays: '',
-        effectiveFrom: '',
-        effectiveTo: '',
-        termsAndNotes: '',
     });
 }
 
@@ -1977,18 +1678,8 @@ function openContractEdit(item: Contract) {
         contractName: item.contractName || '',
         payerType: item.payerType || 'insurance',
         payerName: item.payerName || '',
-        payerPlanCode: item.payerPlanCode || '',
-        payerPlanName: item.payerPlanName || '',
         currencyCode: item.currencyCode || defaultCurrencyCode.value,
-        defaultCoveragePercent: item.defaultCoveragePercent || '',
-        defaultCopayType: item.defaultCopayType || 'none',
-        defaultCopayValue: item.defaultCopayValue || '',
         requiresPreAuthorization: item.requiresPreAuthorization === false ? 'false' : 'true',
-        claimSubmissionDeadlineDays: item.claimSubmissionDeadlineDays === null || item.claimSubmissionDeadlineDays === undefined ? '' : String(item.claimSubmissionDeadlineDays),
-        settlementCycleDays: item.settlementCycleDays === null || item.settlementCycleDays === undefined ? '' : String(item.settlementCycleDays),
-        effectiveFrom: item.effectiveFrom || '',
-        effectiveTo: item.effectiveTo || '',
-        termsAndNotes: item.termsAndNotes || '',
     });
     editContractOpen.value = true;
 }
@@ -2144,18 +1835,8 @@ async function createContract() {
                 contractName,
                 payerType: createForm.payerType,
                 payerName,
-                payerPlanCode: nullableTrimmedValue(createForm.payerPlanCode),
-                payerPlanName: nullableTrimmedValue(createForm.payerPlanName),
                 currencyCode,
-                defaultCoveragePercent: nullableTrimmedValue(createForm.defaultCoveragePercent),
-                defaultCopayType: createForm.defaultCopayType === 'none' ? null : createForm.defaultCopayType,
-                defaultCopayValue: createForm.defaultCopayType === 'none' ? null : nullableTrimmedValue(createForm.defaultCopayValue),
                 requiresPreAuthorization: createForm.requiresPreAuthorization === 'true',
-                claimSubmissionDeadlineDays: nullableTrimmedValue(createForm.claimSubmissionDeadlineDays),
-                settlementCycleDays: nullableTrimmedValue(createForm.settlementCycleDays),
-                effectiveFrom: nullableTrimmedValue(createForm.effectiveFrom),
-                effectiveTo: nullableTrimmedValue(createForm.effectiveTo),
-                termsAndNotes: nullableTrimmedValue(createForm.termsAndNotes),
             },
         });
         notifySuccess(`Created ${contractLabel(response.data)}.`);
@@ -2191,18 +1872,8 @@ async function saveContractEdit() {
                 contractName,
                 payerType: editContractForm.payerType,
                 payerName,
-                payerPlanCode: nullableTrimmedValue(editContractForm.payerPlanCode),
-                payerPlanName: nullableTrimmedValue(editContractForm.payerPlanName),
                 currencyCode,
-                defaultCoveragePercent: nullableTrimmedValue(editContractForm.defaultCoveragePercent),
-                defaultCopayType: editContractForm.defaultCopayType === 'none' ? null : editContractForm.defaultCopayType,
-                defaultCopayValue: editContractForm.defaultCopayType === 'none' ? null : nullableTrimmedValue(editContractForm.defaultCopayValue),
                 requiresPreAuthorization: editContractForm.requiresPreAuthorization === 'true',
-                claimSubmissionDeadlineDays: nullableTrimmedValue(editContractForm.claimSubmissionDeadlineDays),
-                settlementCycleDays: nullableTrimmedValue(editContractForm.settlementCycleDays),
-                effectiveFrom: nullableTrimmedValue(editContractForm.effectiveFrom),
-                effectiveTo: nullableTrimmedValue(editContractForm.effectiveTo),
-                termsAndNotes: nullableTrimmedValue(editContractForm.termsAndNotes),
             },
         });
         if (selectedContract.value?.id === id) selectedContract.value = response.data;
@@ -2906,16 +2577,7 @@ onMounted(refreshPage);
                                                     <Badge :variant="item.requiresPreAuthorization ? 'destructive' : 'secondary'">{{ item.requiresPreAuthorization ? 'Pre-auth required' : 'No pre-auth' }}</Badge>
                                                 </div>
                                                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                                                    <span>{{ formatCoverageLabel(item.defaultCoveragePercent, item.defaultCopayType, item.defaultCopayValue, item.currencyCode) }}</span>
-                                                    <span>|</span>
-                                                    <span>{{ formatOperationalCycleLabel(item.claimSubmissionDeadlineDays, item.settlementCycleDays) }}</span>
-                                                </div>
-                                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                                                     <span>Updated {{ formatDateTime(item.updatedAt) }}</span>
-                                                    <span>|</span>
-                                                    <span>{{ item.payerPlanName || item.payerPlanCode ? `Plan ${item.payerPlanName || item.payerPlanCode}` : 'Plan not set' }}</span>
-                                                    <span>|</span>
-                                                    <span>{{ formatContractWindowLabel(item.effectiveFrom, item.effectiveTo) }}</span>
                                                 </div>
                                                 <div v-if="item.statusReason" class="rounded-md border border-dashed bg-muted/10 px-2.5 py-2 text-xs text-muted-foreground">Status note: {{ item.statusReason }}</div>
                                             </div>
@@ -2967,23 +2629,6 @@ onMounted(refreshPage);
                     <template v-else>
                             <div class="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.8fr)]">
                                 <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                                    <!-- Preset chips — fills the whole form in one click -->
-                                    <div class="md:col-span-2 xl:col-span-3 rounded-lg border border-dashed bg-muted/20 px-3 py-3">
-                                        <p class="text-xs font-semibold text-foreground">Start from a known payer</p>
-                                        <p class="mt-0.5 text-[11px] text-muted-foreground">Click a chip — all fields below will be filled automatically. Just verify and save.</p>
-                                        <div class="mt-2 flex flex-wrap gap-1.5">
-                                            <button
-                                                v-for="preset in PAYER_PRESETS"
-                                                :key="preset.label"
-                                                type="button"
-                                                class="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground"
-                                                :class="createForm.contractCode === preset.contractCode ? 'border-primary/50 bg-primary/5 text-primary' : 'bg-muted/40 text-muted-foreground'"
-                                                @click="applyPayerPreset(createForm, preset)"
-                                            >
-                                                {{ preset.label }}
-                                            </button>
-                                        </div>
-                                    </div>
                                     <FormFieldShell input-id="create-contract-code" label="Contract code"><Input id="create-contract-code" v-model="createForm.contractCode" /></FormFieldShell>
                                     <FormFieldShell input-id="create-contract-name" label="Contract name"><Input id="create-contract-name" v-model="createForm.contractName" /></FormFieldShell>
                                     <FormFieldShell input-id="create-payer-type" label="Payer type">
@@ -2993,31 +2638,12 @@ onMounted(refreshPage);
                                         </Select>
                                     </FormFieldShell>
                                     <FormFieldShell input-id="create-payer-name" label="Payer name"><Input id="create-payer-name" v-model="createForm.payerName" placeholder="e.g. National Health Insurance Fund (NHIF)" /></FormFieldShell>
-                                    <FormFieldShell input-id="create-payer-plan-code" label="Plan code"><Input id="create-payer-plan-code" v-model="createForm.payerPlanCode" /></FormFieldShell>
-                                    <FormFieldShell input-id="create-payer-plan-name" label="Plan name"><Input id="create-payer-plan-name" v-model="createForm.payerPlanName" /></FormFieldShell>
                                     <FormFieldShell input-id="create-currency" label="Currency"><Input id="create-currency" v-model="createForm.currencyCode" maxlength="3" /></FormFieldShell>
-                                    <FormFieldShell input-id="create-coverage-percent" label="Default coverage %"><Input id="create-coverage-percent" v-model="createForm.defaultCoveragePercent" inputmode="decimal" placeholder="80" /></FormFieldShell>
-                                    <FormFieldShell input-id="create-copay-type" label="Co-pay type">
-                                        <Select v-model="createDefaultCopayTypeSelectValue">
-                                            <SelectTrigger id="create-copay-type" class="w-full"><SelectValue /></SelectTrigger>
-                                            <SelectContent><SelectItem v-for="option in copayTypeOptions" :key="option" :value="option">{{ formatEnumLabel(option) }}</SelectItem></SelectContent>
-                                        </Select>
-                                    </FormFieldShell>
-                                    <FormFieldShell input-id="create-copay-value" label="Co-pay value" :helper-text="createForm.defaultCopayType === 'fixed' ? 'Fixed amount in contract currency.' : createForm.defaultCopayType === 'percentage' ? 'Percentage applied as member co-pay.' : 'No co-pay when type is none.'">
-                                        <Input id="create-copay-value" v-model="createForm.defaultCopayValue" inputmode="decimal" :disabled="createForm.defaultCopayType === 'none'" />
-                                    </FormFieldShell>
                                     <FormFieldShell input-id="create-preauth" label="Requires pre-authorization">
                                         <Select v-model="createRequiresPreAuthorizationSelectValue">
                                             <SelectTrigger id="create-preauth" class="w-full"><SelectValue /></SelectTrigger>
                                             <SelectContent><SelectItem value="true">Yes</SelectItem><SelectItem value="false">No</SelectItem></SelectContent>
                                         </Select>
-                                    </FormFieldShell>
-                                    <FormFieldShell input-id="create-claim-submission-deadline" label="Claim deadline days"><Input id="create-claim-submission-deadline" v-model="createForm.claimSubmissionDeadlineDays" inputmode="numeric" placeholder="30" /></FormFieldShell>
-                                    <FormFieldShell input-id="create-settlement-cycle" label="Settlement cycle days"><Input id="create-settlement-cycle" v-model="createForm.settlementCycleDays" inputmode="numeric" placeholder="45" /></FormFieldShell>
-                                    <SingleDatePopoverField input-id="create-effective-from" label="Effective from" v-model="createForm.effectiveFrom" />
-                                    <SingleDatePopoverField input-id="create-effective-to" label="Effective to" v-model="createForm.effectiveTo" />
-                                    <FormFieldShell input-id="create-contract-notes" label="Terms and notes" container-class="md:col-span-2 xl:col-span-3">
-                                        <Textarea id="create-contract-notes" v-model="createForm.termsAndNotes" class="min-h-24" />
                                     </FormFieldShell>
                                 </div>
                             <div class="rounded-lg border bg-muted/10 p-4">
@@ -3607,48 +3233,13 @@ onMounted(refreshPage);
                                 <SelectContent><SelectItem v-for="option in payerTypeOptions" :key="option" :value="option">{{ formatEnumLabel(option) }}</SelectItem></SelectContent>
                             </Select>
                         </FormFieldShell>
-                        <div class="col-span-full rounded-lg border border-dashed bg-muted/20 px-3 py-3">
-                            <p class="text-xs font-semibold text-foreground">Re-fill from a known payer</p>
-                            <p class="mt-0.5 text-[11px] text-muted-foreground">Click a chip to overwrite all payer fields below. You can edit any field after.</p>
-                            <div class="mt-2 flex flex-wrap gap-1.5">
-                                <button
-                                    v-for="preset in PAYER_PRESETS"
-                                    :key="preset.label"
-                                    type="button"
-                                    class="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground"
-                                    :class="editContractForm.contractCode === preset.contractCode ? 'border-primary/50 bg-primary/5 text-primary' : 'bg-muted/40 text-muted-foreground'"
-                                    @click="applyPayerPreset(editContractForm, preset)"
-                                >
-                                    {{ preset.label }}
-                                </button>
-                            </div>
-                        </div>
                         <FormFieldShell input-id="edit-contract-payer-name" label="Payer name"><Input id="edit-contract-payer-name" v-model="editContractForm.payerName" placeholder="e.g. National Health Insurance Fund (NHIF)" /></FormFieldShell>
-                        <FormFieldShell input-id="edit-payer-plan-code" label="Plan code"><Input id="edit-payer-plan-code" v-model="editContractForm.payerPlanCode" /></FormFieldShell>
-                        <FormFieldShell input-id="edit-payer-plan-name" label="Plan name"><Input id="edit-payer-plan-name" v-model="editContractForm.payerPlanName" /></FormFieldShell>
                         <FormFieldShell input-id="edit-contract-currency" label="Currency"><Input id="edit-contract-currency" v-model="editContractForm.currencyCode" maxlength="3" /></FormFieldShell>
-                        <FormFieldShell input-id="edit-coverage-percent" label="Default coverage %"><Input id="edit-coverage-percent" v-model="editContractForm.defaultCoveragePercent" inputmode="decimal" /></FormFieldShell>
-                        <FormFieldShell input-id="edit-copay-type" label="Co-pay type">
-                            <Select v-model="editDefaultCopayTypeSelectValue">
-                                <SelectTrigger id="edit-copay-type" class="w-full"><SelectValue /></SelectTrigger>
-                                <SelectContent><SelectItem v-for="option in copayTypeOptions" :key="option" :value="option">{{ formatEnumLabel(option) }}</SelectItem></SelectContent>
-                            </Select>
-                        </FormFieldShell>
-                        <FormFieldShell input-id="edit-copay-value" label="Co-pay value" :helper-text="editContractForm.defaultCopayType === 'fixed' ? 'Fixed amount in contract currency.' : editContractForm.defaultCopayType === 'percentage' ? 'Percentage applied as member co-pay.' : 'No co-pay when type is none.'">
-                            <Input id="edit-copay-value" v-model="editContractForm.defaultCopayValue" inputmode="decimal" :disabled="editContractForm.defaultCopayType === 'none'" />
-                        </FormFieldShell>
                         <FormFieldShell input-id="edit-contract-preauth" label="Requires pre-authorization">
                             <Select v-model="editRequiresPreAuthorizationSelectValue">
                                 <SelectTrigger id="edit-contract-preauth" class="w-full"><SelectValue /></SelectTrigger>
                                 <SelectContent><SelectItem value="true">Yes</SelectItem><SelectItem value="false">No</SelectItem></SelectContent>
                             </Select>
-                        </FormFieldShell>
-                        <FormFieldShell input-id="edit-claim-submission-deadline" label="Claim deadline days"><Input id="edit-claim-submission-deadline" v-model="editContractForm.claimSubmissionDeadlineDays" inputmode="numeric" /></FormFieldShell>
-                        <FormFieldShell input-id="edit-settlement-cycle" label="Settlement cycle days"><Input id="edit-settlement-cycle" v-model="editContractForm.settlementCycleDays" inputmode="numeric" /></FormFieldShell>
-                        <SingleDatePopoverField input-id="edit-effective-from" label="Effective from" v-model="editContractForm.effectiveFrom" />
-                        <SingleDatePopoverField input-id="edit-effective-to" label="Effective to" v-model="editContractForm.effectiveTo" />
-                        <FormFieldShell input-id="edit-contract-notes" label="Terms and notes" container-class="md:col-span-2 xl:col-span-3">
-                            <Textarea id="edit-contract-notes" v-model="editContractForm.termsAndNotes" class="min-h-20" />
                         </FormFieldShell>
                     </div>
                     <DialogFooter class="gap-2"><Button variant="outline" :disabled="editContractLoading" @click="editContractOpen = false">Cancel</Button><Button class="gap-1.5" :disabled="editContractLoading" @click="saveContractEdit"><AppIcon name="save" class="size-3.5" />{{ editContractLoading ? 'Saving...' : 'Save Changes' }}</Button></DialogFooter>

@@ -52,8 +52,9 @@ class ConsultationReviewDiscountApplier
             return $this->tagNotApplicable($payload, 'Consultation type is NEW; no review discount applies.');
         }
 
-        $facilityId = isset($payload['facility_id']) ? (string) $payload['facility_id'] : null;
-        $policy     = $this->policyResolver->resolve($facilityId);
+        $facilityId = $this->normalizeNullableString($payload['facility_id'] ?? null)
+            ?? $this->normalizeNullableString($appointment['facility_id'] ?? null);
+        $policy = $this->policyResolver->resolve($facilityId);
 
         $reviewFeePercentage = $this->normalizedReviewFeePercentage($policy);
         $isConfiguredFree = (bool) ($policy['review_fee_is_free'] ?? false);
@@ -243,5 +244,12 @@ class ConsultationReviewDiscountApplier
         $unitPrice = max((float) ($lineItem['unitPrice'] ?? $lineItem['unit_price'] ?? 0), 0.0);
 
         return round($quantity * $unitPrice, 2);
+    }
+
+    private function normalizeNullableString(mixed $value): ?string
+    {
+        $normalized = trim((string) $value);
+
+        return $normalized !== '' ? $normalized : null;
     }
 }

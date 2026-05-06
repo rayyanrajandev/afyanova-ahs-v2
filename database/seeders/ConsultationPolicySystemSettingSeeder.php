@@ -12,8 +12,8 @@ class ConsultationPolicySystemSettingSeeder extends Seeder
      * consultation classification policy.  Ops staff can edit these values
      * from the system settings admin UI without touching .env or code.
      *
-     * Each row uses updateOrCreate so running this seeder multiple times is
-     * safe — it will not overwrite values that have already been changed in
+     * Each row is only created when missing so running this seeder multiple
+     * times will not overwrite values that have already been changed in
      * production.
      */
     public function run(): void
@@ -50,7 +50,7 @@ class ConsultationPolicySystemSettingSeeder extends Seeder
         ];
 
         foreach ($defaults as $setting) {
-            SystemSetting::query()->updateOrCreate(
+            SystemSetting::query()->firstOrCreate(
                 [
                     'facility_id' => null,
                     'key'         => $setting['key'],

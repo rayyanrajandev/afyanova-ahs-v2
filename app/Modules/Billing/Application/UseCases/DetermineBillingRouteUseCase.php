@@ -57,7 +57,7 @@ class DetermineBillingRouteUseCase
             ];
         }
 
-        $insuranceProvider = $activeInsurance['insurance_provider'];
+        $insuranceProvider = trim((string) ($activeInsurance['insurance_provider'] ?? ''));
         $policyNumber = $activeInsurance['policy_number'];
         $verificationStatus = strtolower((string) ($activeInsurance['verification_status'] ?? 'unverified'));
 
@@ -79,7 +79,7 @@ class DetermineBillingRouteUseCase
             $contract = $this->payerContractRepository->findById((string) $activeInsurance['billing_payer_contract_id']);
         }
 
-        if ($contract === null) {
+        if ($contract === null && $insuranceProvider !== '') {
             $contract = $this->payerContractRepository->findActiveContractByProvider(
                 $insuranceProvider,
                 $tenantId,

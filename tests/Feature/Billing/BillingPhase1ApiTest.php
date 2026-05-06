@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\User;
+use App\Http\Middleware\EnsureFacilitySubscriptionEntitlement;
+use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
 use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
 use App\Modules\Billing\Infrastructure\Models\BillingInvoicePaymentModel;
 use App\Modules\Billing\Infrastructure\Models\BillingPayerContractModel;
@@ -14,6 +16,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    $this->withoutMiddleware(EnsureFacilitySubscriptionEntitlement::class);
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+});
 
 function makeBillingPhaseUser(array $permissions = []): User
 {

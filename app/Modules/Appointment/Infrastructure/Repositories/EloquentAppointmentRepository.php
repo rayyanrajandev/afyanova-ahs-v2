@@ -259,7 +259,10 @@ class EloquentAppointmentRepository implements AppointmentRepositoryInterface
         $referenceDate = \Illuminate\Support\Carbon::parse($scheduledAt);
         $windowStart = $referenceDate->copy()->subDays($withinDays)->startOfDay();
 
-        $appointment = AppointmentModel::query()
+        $query = AppointmentModel::query();
+        $this->applyPlatformScopeIfEnabled($query);
+
+        $appointment = $query
             ->where('patient_id', $patientId)
             ->where('status', 'completed')
             ->when(

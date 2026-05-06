@@ -113,7 +113,7 @@ it('forbids patient registration without create permission', function (): void {
         ->assertForbidden();
 });
 
-it('returns duplicate warning when active patient has same name dob and phone', function (): void {
+it('blocks duplicate registration until the duplicate check is confirmed', function (): void {
     $user = makePatientReadUser();
 
     $first = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
@@ -123,9 +123,17 @@ it('returns duplicate warning when active patient has same name dob and phone', 
             'email' => 'second@example.test',
             'nationalId' => 'TZ-222222222',
         ]))
+        ->assertConflict()
+        ->assertJsonPath('duplicates.0.id', $first['id']);
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/patients', patientPayload([
+            'email' => 'second@example.test',
+            'nationalId' => 'TZ-222222222',
+            'bypassDuplicateCheck' => true,
+        ]))
         ->assertCreated()
-        ->assertJsonPath('warnings.0.code', 'POTENTIAL_DUPLICATE_PATIENT')
-        ->assertJsonPath('warnings.0.matches.0.id', $first['id']);
+        ->assertJsonPath('warnings', []);
 });
 
 it('rejects future date of birth', function (): void {
@@ -1741,6 +1749,22 @@ it('lists patient audit logs when authorized', function (): void {
         ->assertJsonPath('data.0.actorType', 'user')
         ->assertJsonPath('data.0.actor.displayName', $user->name)
         ->assertJsonPath('data.1.action', 'patient.updated');
+});
+
+it('lists patient activity feed with actor identity for the visible timeline', function (): void {
+    $user = makePatientReadUser();
+    $created = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/patients/'.$created['id'].'/activity-feed?perPage=5')
+        ->assertOk()
+        ->assertJsonPath('meta.total', 1)
+        ->assertJsonPath('data.0.action', 'patient.created')
+        ->assertJsonPath('data.0.actionLabel', 'Patient Registered')
+        ->assertJsonPath('data.0.actorType', 'user')
+        ->assertJsonPath('data.0.actor.displayName', $user->name);
+
+    expect(array_key_exists('changes', $response->json('data.0')))->toBeFalse();
 });
 
 it('forbids patient audit log access without permission', function (): void {

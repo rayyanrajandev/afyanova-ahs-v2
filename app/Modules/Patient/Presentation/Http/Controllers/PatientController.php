@@ -13,6 +13,7 @@ use App\Modules\Patient\Application\UseCases\UpdatePatientUseCase;
 use App\Modules\Patient\Presentation\Http\Requests\StorePatientRequest;
 use App\Modules\Patient\Presentation\Http\Requests\UpdatePatientRequest;
 use App\Modules\Patient\Presentation\Http\Requests\UpdatePatientStatusRequest;
+use App\Modules\Patient\Presentation\Http\Transformers\PatientActivityFeedEventResponseTransformer;
 use App\Modules\Patient\Presentation\Http\Transformers\PatientAuditLogResponseTransformer;
 use App\Modules\Patient\Presentation\Http\Transformers\PatientResponseTransformer;
 use App\Modules\Patient\Application\Exceptions\DuplicatePatientException;
@@ -203,6 +204,21 @@ class PatientController extends Controller
 
         return response()->json([
             'data' => PatientResponseTransformer::transform($patient),
+        ]);
+    }
+
+    public function activityFeed(string $id, Request $request, ListPatientAuditLogsUseCase $useCase): JsonResponse
+    {
+        $result = $useCase->execute(patientId: $id, filters: [
+            'page' => $request->integer('page', 1),
+            'perPage' => min(max($request->integer('perPage', 12), 1), 25),
+        ]);
+
+        abort_if($result === null, 404, 'Patient not found.');
+
+        return response()->json([
+            'data' => array_map([PatientActivityFeedEventResponseTransformer::class, 'transform'], $result['data']),
+            'meta' => $result['meta'],
         ]);
     }
 
