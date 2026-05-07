@@ -29,12 +29,22 @@ interface PatientRepositoryInterface
     /**
      * @return array<int, array<string, mixed>>
      */
-    public function findActiveDuplicates(
+    public function findActiveHardDuplicateIdentifiers(
+        ?string $nationalId,
+        ?string $patientNumber = null,
+        ?string $excludePatientId = null
+    ): array;
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function findActiveDuplicateCandidates(
         ?string $firstName,
         ?string $lastName,
         ?string $dateOfBirth,
         ?string $phone,
-        ?string $nationalId = null,
+        ?string $gender,
+        ?string $addressLine,
         ?string $excludePatientId = null
     ): array;
 }

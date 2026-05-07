@@ -113,7 +113,7 @@ it('forbids patient registration without create permission', function (): void {
         ->assertForbidden();
 });
 
-it('blocks exact duplicate registration even when a client sends the old bypass flag', function (): void {
+it('allows exact demographic duplicate registration with a warning when hard identifiers differ', function (): void {
     $user = makePatientReadUser();
 
     $first = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
@@ -123,34 +123,60 @@ it('blocks exact duplicate registration even when a client sends the old bypass 
             'email' => 'second@example.test',
             'nationalId' => 'TZ-222222222',
         ]))
-        ->assertConflict()
-        ->assertJsonPath('duplicates.0.id', $first['id']);
+        ->assertCreated()
+        ->assertJsonPath('warnings.0.id', $first['id'])
+        ->assertJsonPath('warnings.0.duplicateConfidenceLabel', 'strong');
 
     $this->actingAs($user)
         ->postJson('/api/v1/patients', patientPayload([
             'email' => 'second@example.test',
-            'nationalId' => 'TZ-222222222',
             'bypassDuplicateCheck' => true,
         ]))
         ->assertConflict()
         ->assertJsonPath('duplicates.0.id', $first['id']);
 
-    expect(PatientModel::query()->count())->toBe(1);
+    expect(PatientModel::query()->count())->toBe(2);
 });
 
-it('blocks duplicate registration when the same phone is entered in a local Tanzania format', function (): void {
+it('allows duplicate registration when only a shared Tanzania phone matches', function (): void {
     $user = makePatientReadUser();
 
-    $first = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
+    $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->assertCreated();
 
     $this->actingAs($user)
         ->postJson('/api/v1/patients', patientPayload([
+            'firstName' => 'Halima',
+            'lastName' => 'Kweka',
+            'dateOfBirth' => '1981-09-12',
+            'gender' => 'female',
             'phone' => '0700000001',
             'email' => 'local-phone@example.test',
             'nationalId' => 'TZ-LOCAL-PHONE',
         ]))
-        ->assertConflict()
-        ->assertJsonPath('duplicates.0.id', $first['id']);
+        ->assertCreated()
+        ->assertJsonPath('warnings', []);
+
+    expect(PatientModel::query()->count())->toBe(2);
+});
+
+it('warns instead of blocking when a patient without NIDA matches demographics strongly', function (): void {
+    $user = makePatientReadUser();
+
+    $first = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload([
+        'nationalId' => null,
+    ]))->json('data');
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/patients', patientPayload([
+            'phone' => '+255755100200',
+            'email' => 'no-nida-second@example.test',
+            'nationalId' => null,
+        ]))
+        ->assertCreated()
+        ->assertJsonPath('warnings.0.id', $first['id'])
+        ->assertJsonPath('warnings.0.duplicateConfidenceLabel', 'strong');
+
+    expect(PatientModel::query()->count())->toBe(2);
 });
 
 it('blocks duplicate registration by national id even when demographic fields differ', function (): void {
@@ -169,6 +195,22 @@ it('blocks duplicate registration by national id even when demographic fields di
         ]))
         ->assertConflict()
         ->assertJsonPath('duplicates.0.id', $first['id']);
+});
+
+it('allows registration with matching demographics when phone and national id are different', function (): void {
+    $user = makePatientReadUser();
+
+    $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->assertCreated();
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/patients', patientPayload([
+            'phone' => '+255755111222',
+            'email' => 'same-demographics-new-phone@example.test',
+            'nationalId' => 'TZ-222222222',
+        ]))
+        ->assertCreated();
+
+    expect(PatientModel::query()->count())->toBe(2);
 });
 
 it('rejects future date of birth', function (): void {
@@ -309,7 +351,7 @@ it('rejects status lifecycle fields on patient detail update endpoint', function
     expect($patient->status)->toBe('active');
 });
 
-it('returns duplicate warning when update causes active duplicate identity', function (): void {
+it('allows patient update when phone belongs to another active patient but warns on possible duplicate demographics', function (): void {
     $user = makePatientManageUser();
 
     $first = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
@@ -323,17 +365,16 @@ it('returns duplicate warning when update causes active duplicate identity', fun
 
     $this->actingAs($user)
         ->patchJson('/api/v1/patients/'.$second['id'], [
-            'firstName' => 'Amina',
-            'lastName' => 'Moshi',
-            'dateOfBirth' => '1996-04-21',
-            'phone' => '+255700000001',
+            'phone' => '0700000001',
         ])
         ->assertOk()
-        ->assertJsonPath('warnings.0.code', 'POTENTIAL_DUPLICATE_PATIENT')
-        ->assertJsonPath('warnings.0.matches.0.id', $first['id']);
+        ->assertJsonPath('warnings.0.id', $first['id'])
+        ->assertJsonPath('warnings.0.duplicateConfidenceLabel', 'possible');
+
+    expect(PatientModel::query()->findOrFail($second['id'])->phone)->toBe('0700000001');
 });
 
-it('returns duplicate warning when update reuses an existing national id', function (): void {
+it('blocks patient update when national id belongs to another active patient', function (): void {
     $user = makePatientManageUser();
 
     $first = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
@@ -350,9 +391,10 @@ it('returns duplicate warning when update reuses an existing national id', funct
         ->patchJson('/api/v1/patients/'.$second['id'], [
             'nationalId' => 'TZ123456789',
         ])
-        ->assertOk()
-        ->assertJsonPath('warnings.0.code', 'POTENTIAL_DUPLICATE_PATIENT')
-        ->assertJsonPath('warnings.0.matches.0.id', $first['id']);
+        ->assertConflict()
+        ->assertJsonPath('duplicates.0.id', $first['id']);
+
+    expect(PatientModel::query()->findOrFail($second['id'])->national_id)->toBe('TZ-99887766');
 });
 
 it('rejects clearing mandatory patient phone during update', function (): void {
@@ -380,6 +422,40 @@ it('updates patient status', function (): void {
         ->assertOk()
         ->assertJsonPath('data.status', 'inactive')
         ->assertJsonPath('data.statusReason', 'Duplicate profile review');
+});
+
+it('allows reactivating an inactive patient when only a shared phone belongs to another active patient', function (): void {
+    $user = makePatientManageUser();
+
+    $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->assertCreated();
+    $inactive = PatientModel::query()->create([
+        'patient_number' => 'PT20260507DUP001',
+        'first_name' => 'Inactive',
+        'middle_name' => null,
+        'last_name' => 'Duplicate',
+        'gender' => 'female',
+        'date_of_birth' => '1990-05-07',
+        'phone' => '0700000001',
+        'email' => null,
+        'national_id' => null,
+        'country_code' => 'TZ',
+        'region' => 'Dar es Salaam',
+        'district' => 'Ilala',
+        'address_line' => 'Kariakoo',
+        'next_of_kin_name' => null,
+        'next_of_kin_phone' => null,
+        'status' => 'inactive',
+        'status_reason' => 'Duplicate profile review',
+    ]);
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/patients/'.$inactive->id.'/status', [
+            'status' => 'active',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'active');
+
+    expect($inactive->refresh()->status)->toBe('active');
 });
 
 it('forbids patient status update without status permission', function (): void {

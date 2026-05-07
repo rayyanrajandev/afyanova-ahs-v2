@@ -3,6 +3,7 @@
 namespace App\Modules\Billing\Presentation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Billing\Application\Exceptions\DuplicatePatientInsuranceMemberException;
 use App\Modules\Billing\Application\UseCases\CreatePatientInsuranceRecordUseCase;
 use App\Modules\Billing\Application\UseCases\DeletePatientInsuranceRecordUseCase;
 use App\Modules\Billing\Application\UseCases\ListPatientInsuranceAuditEventsUseCase;
@@ -51,6 +52,8 @@ class PatientInsuranceController extends Controller
             );
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
+        } catch (DuplicatePatientInsuranceMemberException $exception) {
+            return $this->duplicateMemberIdResponse($exception);
         }
 
         return response()->json([
@@ -73,6 +76,8 @@ class PatientInsuranceController extends Controller
             );
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
+        } catch (DuplicatePatientInsuranceMemberException $exception) {
+            return $this->duplicateMemberIdResponse($exception);
         }
 
         abort_if($record === null, 404, 'Patient insurance record not found.');
@@ -175,5 +180,23 @@ class PatientInsuranceController extends Controller
         }
 
         return $validated;
+    }
+
+    private function duplicateMemberIdResponse(DuplicatePatientInsuranceMemberException $exception): JsonResponse
+    {
+        return response()->json([
+            'message' => 'Another active patient insurance record already uses this member ID.',
+            'duplicates' => array_map(
+                static fn (array $record): array => [
+                    'id' => $record['id'] ?? null,
+                    'patientId' => $record['patient_id'] ?? null,
+                    'memberId' => $record['member_id'] ?? null,
+                    'insuranceProvider' => $record['insurance_provider'] ?? null,
+                    'providerCode' => $record['provider_code'] ?? null,
+                    'status' => $record['status'] ?? null,
+                ],
+                $exception->getDuplicates(),
+            ),
+        ], 409);
     }
 }

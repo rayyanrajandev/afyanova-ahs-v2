@@ -3,6 +3,7 @@
 namespace App\Modules\Patient\Presentation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Patient\Application\Exceptions\DuplicatePatientException;
 use App\Modules\Patient\Application\UseCases\CreatePatientUseCase;
 use App\Modules\Patient\Application\UseCases\GetPatientUseCase;
 use App\Modules\Patient\Application\UseCases\ListPatientAuditLogsUseCase;
@@ -16,7 +17,6 @@ use App\Modules\Patient\Presentation\Http\Requests\UpdatePatientStatusRequest;
 use App\Modules\Patient\Presentation\Http\Transformers\PatientActivityFeedEventResponseTransformer;
 use App\Modules\Patient\Presentation\Http\Transformers\PatientAuditLogResponseTransformer;
 use App\Modules\Patient\Presentation\Http\Transformers\PatientResponseTransformer;
-use App\Modules\Patient\Application\Exceptions\DuplicatePatientException;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\ServiceRequest\Application\UseCases\ListActiveWalkInsForPatientIdsUseCase;
@@ -120,7 +120,7 @@ class PatientController extends Controller
             );
         } catch (DuplicatePatientException $exception) {
             return response()->json([
-                'message' => 'Duplicate active patient record(s) found. Confirm to register anyway.',
+                'message' => 'Another active patient already uses this National ID or patient number.',
                 'duplicates' => $exception->getDuplicates(),
             ], 409);
         } catch (TenantScopeRequiredForIsolationException $exception) {
@@ -171,6 +171,11 @@ class PatientController extends Controller
                 payload: $this->toPersistencePayload($request->validated()),
                 actorId: $request->user()?->id,
             );
+        } catch (DuplicatePatientException $exception) {
+            return response()->json([
+                'message' => 'Another active patient already uses this National ID or patient number.',
+                'duplicates' => $exception->getDuplicates(),
+            ], 409);
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return $this->tenantScopeRequiredError($exception->getMessage());
         }
@@ -194,6 +199,11 @@ class PatientController extends Controller
                 reason: $request->input('reason'),
                 actorId: $request->user()?->id,
             );
+        } catch (DuplicatePatientException $exception) {
+            return response()->json([
+                'message' => 'Another active patient already uses this National ID or patient number.',
+                'duplicates' => $exception->getDuplicates(),
+            ], 409);
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return $this->tenantScopeRequiredError($exception->getMessage());
         }

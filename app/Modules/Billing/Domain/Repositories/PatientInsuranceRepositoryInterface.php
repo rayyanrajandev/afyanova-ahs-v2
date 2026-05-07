@@ -33,4 +33,13 @@ interface PatientInsuranceRepositoryInterface
      * Find all insurance records for a patient
      */
     public function findByPatientId(string $patientId): array;
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function findActiveByMemberId(
+        string $memberId,
+        ?string $tenantId = null,
+        ?string $excludeRecordId = null
+    ): array;
 }

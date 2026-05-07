@@ -131,6 +131,10 @@ type Patient = {
     /** Active direct-service walk-in handoff. */
     routingHandoffSummary?: string | null;
     activeRoutingTickets?: ActiveRoutingTicket[];
+    duplicateConfidence?: number;
+    duplicateConfidenceLabel?: 'strong' | 'possible';
+    duplicateMatchType?: 'hard_block' | 'strong_warning' | 'possible_warning';
+    matchedFields?: string[];
 };
 
 type ActiveRoutingTicket = {
@@ -344,6 +348,7 @@ type ValidationErrorResponse = {
     message?: string;
     errors?: Record<string, string[]>;
     code?: string;
+    duplicates?: Patient[];
 };
 
 type AuthPermissionsResponse = {
@@ -464,7 +469,9 @@ const patientW2En = {
         'Quick registration captures required details first. Add optional demographics only when needed.',
     'duplicate.title': 'Possible duplicate patient',
     'duplicate.description':
-        'A similar active patient record exists. Review before final submit.',
+        'Review possible matches. Shared family phone numbers are allowed; only National ID or patient number conflicts are blocked.',
+    'duplicate.confidence': '{score}% confidence',
+    'duplicate.continueRegistration': 'Continue registration',
     'duplicate.viewExistingPatient': 'View existing patient',
     'duplicate.reviewForm': 'Review form',
     'duplicate.precheckUnavailable': 'Duplicate pre-check unavailable',
@@ -562,7 +569,9 @@ const tW2 = createLocaleTranslator<PatientW2Key>({
             'Usajili wa haraka hukusanya taarifa muhimu kwanza. Ongeza taarifa za ziada pale inapohitajika.',
         'duplicate.title': 'Inawezekana ni mgonjwa aliyepo tayari',
         'duplicate.description':
-            'Kuna rekodi inayofanana ya mgonjwa hai. Kagua kabla ya kuwasilisha mwisho.',
+            'Kagua wagonjwa wanaoweza kufanana. Namba ya simu ya familia inaruhusiwa; NIDA au namba ya mgonjwa pekee ndizo zinazozuia.',
+        'duplicate.confidence': 'Uhakika {score}%',
+        'duplicate.continueRegistration': 'Endelea kusajili',
         'duplicate.viewExistingPatient': 'Tazama mgonjwa aliyepo',
         'duplicate.reviewForm': 'Kagua fomu',
         'duplicate.precheckUnavailable': 'Ukaguzi wa marudio haupatikani',
@@ -678,6 +687,7 @@ const registrationBirthInputMode = ref<RegistrationBirthInputMode>('estimated');
 const preSubmitDuplicateCheckLoading = ref(false);
 const preSubmitDuplicateCheckError = ref<string | null>(null);
 const preSubmitDuplicateMatches = ref<Patient[]>([]);
+const preSubmitDuplicateWarningAcknowledged = ref(false);
 
 // ── Draft auto-save ────────────────────────────────────────────────────────
 const DRAFT_STORAGE_KEY = 'ptReg_draft_v1';
@@ -3627,6 +3637,12 @@ function clearPreSubmitDuplicateState() {
     preSubmitDuplicateCheckLoading.value = false;
     preSubmitDuplicateCheckError.value = null;
     preSubmitDuplicateMatches.value = [];
+    preSubmitDuplicateWarningAcknowledged.value = false;
+}
+
+function continueRegistrationAfterDuplicateReview() {
+    preSubmitDuplicateWarningAcknowledged.value = true;
+    void createPatient();
 }
 
 async function focusRegistrationErrorSummary() {
@@ -3645,10 +3661,6 @@ async function focusEditErrorSummary() {
         behavior: 'smooth',
         block: 'nearest',
     });
-}
-
-function normalizeNameForDuplicate(value: string | null | undefined): string {
-    return (value ?? '').trim().toLowerCase();
 }
 
 function normalizePhoneForDuplicate(value: string | null | undefined): string {
@@ -3699,6 +3711,23 @@ function duplicateDateMatches(left: string | null | undefined, right: string | n
     const leftDate = (left ?? '').slice(0, 10);
     const rightDate = (right ?? '').slice(0, 10);
     return Boolean(leftDate && rightDate && leftDate === rightDate);
+}
+
+function duplicateConfidenceScore(payload: ReturnType<typeof payloadFromForm>, candidate: Patient): number {
+    let score = 0;
+
+    if (duplicateValueMatches(payload.firstName, candidate.firstName)) score += 20;
+    if (duplicateValueMatches(payload.lastName, candidate.lastName)) score += 20;
+    if (duplicateDateMatches(payload.dateOfBirth, candidate.dateOfBirth)) score += 30;
+    if (duplicatePhoneMatches(payload.phone, candidate.phone)) score += 15;
+    if (duplicateValueMatches(payload.gender, candidate.gender)) score += 10;
+    if (duplicateValueMatches(payload.addressLine, candidate.addressLine)) score += 10;
+
+    return score;
+}
+
+function duplicateConfidenceLabel(score: number): 'strong' | 'possible' {
+    return score >= 80 ? 'strong' : 'possible';
 }
 
 function duplicateComparisonRows(candidate: Patient) {
@@ -4035,9 +4064,8 @@ async function findPreSubmitDuplicateMatches(payload: ReturnType<typeof payloadF
     const queryTerms = [
         payload.nationalId,
         payload.phone,
-        [payload.firstName, payload.lastName]
-            .filter((part): part is string => Boolean(part && part.trim() !== ''))
-            .join(' '),
+        [payload.firstName, payload.lastName].filter(Boolean).join(' '),
+        payload.lastName,
     ]
         .filter((part): part is string => Boolean(part && part.trim() !== ''))
         .map((part) => part.trim());
@@ -4058,10 +4086,6 @@ async function findPreSubmitDuplicateMatches(payload: ReturnType<typeof payloadF
         }),
     ));
 
-    const expectedFirstName = normalizeNameForDuplicate(payload.firstName);
-    const expectedLastName = normalizeNameForDuplicate(payload.lastName);
-    const expectedDateOfBirth = payload.dateOfBirth;
-    const expectedPhone = normalizePhoneForDuplicate(payload.phone);
     const expectedNationalId = normalizeIdentifierForDuplicate(payload.nationalId);
 
     const candidates = new Map<string, Patient>();
@@ -4072,21 +4096,29 @@ async function findPreSubmitDuplicateMatches(payload: ReturnType<typeof payloadF
     }
 
     return Array.from(candidates.values())
+        .map((candidate) => {
+            const nationalIdMatches = Boolean(
+                expectedNationalId
+                && normalizeIdentifierForDuplicate(candidate.nationalId) === expectedNationalId,
+            );
+            const score = duplicateConfidenceScore(payload, candidate);
+
+            return {
+                ...candidate,
+                duplicateConfidence: nationalIdMatches ? 100 : score,
+                duplicateConfidenceLabel: duplicateConfidenceLabel(nationalIdMatches ? 100 : score),
+                duplicateMatchType: nationalIdMatches ? 'hard_block' : score >= 80 ? 'strong_warning' : 'possible_warning',
+            } satisfies Patient;
+        })
         .filter((candidate) => {
             const nationalIdMatches = Boolean(
                 expectedNationalId
                 && normalizeIdentifierForDuplicate(candidate.nationalId) === expectedNationalId,
             );
-            const firstMatches =
-                normalizeNameForDuplicate(candidate.firstName) === expectedFirstName;
-            const lastMatches =
-                normalizeNameForDuplicate(candidate.lastName) === expectedLastName;
-            const dobMatches = (candidate.dateOfBirth ?? '').slice(0, 10) === expectedDateOfBirth;
-            const candidatePhone = normalizePhoneForDuplicate(candidate.phone);
-            const phoneMatches = Boolean(expectedPhone && candidatePhone && candidatePhone === expectedPhone);
 
-            return nationalIdMatches || (firstMatches && lastMatches && dobMatches && phoneMatches);
+            return nationalIdMatches || (candidate.duplicateConfidence ?? 0) >= 50;
         })
+        .sort((left, right) => (right.duplicateConfidence ?? 0) - (left.duplicateConfidence ?? 0))
         .slice(0, 5);
 }
 
@@ -4108,7 +4140,7 @@ async function createPatient() {
 
     // Fast client-side pre-check (avoids round-trip for obvious duplicates).
     // The backend is the authoritative gate — a 409 will catch anything missed here.
-    {
+    if (!preSubmitDuplicateWarningAcknowledged.value) {
         preSubmitDuplicateCheckLoading.value = true;
         try {
             const matches = await findPreSubmitDuplicateMatches(payload);
@@ -4159,6 +4191,7 @@ async function createPatient() {
             const backendDuplicates = body?.duplicates ?? [];
             if (backendDuplicates.length > 0) {
                 preSubmitDuplicateMatches.value = backendDuplicates;
+                preSubmitDuplicateWarningAcknowledged.value = false;
                 createLoading.value = false;
                 return;
             }
@@ -4354,7 +4387,35 @@ async function updatePatient() {
         closeEditSheet();
     } catch (error) {
         const apiError = error as Error & { status?: number; payload?: ValidationErrorResponse };
-        if (apiError.status === 422 && apiError.payload?.errors) {
+        if (apiError.status === 409) {
+            const message =
+                apiError.payload?.message ||
+                'Another active patient already uses this National ID or patient number.';
+            const duplicateMatches = apiError.payload?.duplicates ?? [];
+            const incomingPhone = normalizePhoneForDuplicate(editPhone);
+            const incomingNationalId = normalizeIdentifierForDuplicate(editForm.nationalId);
+            const phoneConflict = duplicateMatches.some(
+                (patient) => normalizePhoneForDuplicate(patient.phone) === incomingPhone,
+            );
+            const nationalIdConflict = duplicateMatches.some(
+                (patient) =>
+                    Boolean(incomingNationalId)
+                    && normalizeIdentifierForDuplicate(patient.nationalId) === incomingNationalId,
+            );
+            const nextErrors: Record<string, string[]> = {};
+
+            if (phoneConflict || (!phoneConflict && !nationalIdConflict)) {
+                nextErrors.phone = [message];
+            }
+
+            if (nationalIdConflict) {
+                nextErrors.nationalId = [message];
+            }
+
+            editErrors.value = nextErrors;
+            notifyError(message);
+            await focusEditErrorSummary();
+        } else if (apiError.status === 422 && apiError.payload?.errors) {
             editErrors.value = apiError.payload.errors;
             await focusEditErrorSummary();
         } else {
@@ -5220,6 +5281,12 @@ onMounted(initialPageLoad);
                                                 <Badge :variant="statusVariant(match.status)" class="capitalize">
                                                     {{ match.status || 'unknown' }}
                                                 </Badge>
+                                                <Badge
+                                                    variant="outline"
+                                                    class="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                                                >
+                                                    {{ tW2('duplicate.confidence', { score: match.duplicateConfidence ?? duplicateConfidenceScore(payloadFromForm(), match) }) }}
+                                                </Badge>
                                             </div>
                                             <p class="mt-0.5 text-xs text-muted-foreground">
                                                 Registered {{ formatDate(match.createdAt) || 'date not recorded' }}
@@ -5292,6 +5359,13 @@ onMounted(initialPageLoad);
                                         @click="clearPreSubmitDuplicateState"
                                     >
                                         {{ tW2('duplicate.reviewForm') }}
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        :disabled="createLoading || preSubmitDuplicateCheckLoading"
+                                        @click="continueRegistrationAfterDuplicateReview"
+                                    >
+                                        {{ tW2('duplicate.continueRegistration') }}
                                     </Button>
                                 </div>
                             </div>

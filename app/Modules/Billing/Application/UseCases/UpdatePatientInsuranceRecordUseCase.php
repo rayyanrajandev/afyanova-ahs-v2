@@ -2,7 +2,9 @@
 
 namespace App\Modules\Billing\Application\UseCases;
 
+use App\Modules\Billing\Application\Exceptions\DuplicatePatientInsuranceMemberException;
 use App\Modules\Billing\Domain\Repositories\PatientInsuranceRepositoryInterface;
+use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Billing\Infrastructure\Repositories\PatientInsuranceAuditEventRepository;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 
@@ -11,6 +13,7 @@ class UpdatePatientInsuranceRecordUseCase
     public function __construct(
         private readonly PatientInsuranceRepositoryInterface $repository,
         private readonly PatientInsuranceAuditEventRepository $auditEventRepository,
+        private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
     ) {}
 
@@ -23,7 +26,10 @@ class UpdatePatientInsuranceRecordUseCase
             return null;
         }
 
-        $updated = $this->repository->update($recordId, $this->normalizedPayload($payload));
+        $attributes = $this->normalizedPayload($payload);
+        $this->assertUniqueMemberIdIfConfigured($attributes, $recordId);
+
+        $updated = $this->repository->update($recordId, $attributes);
 
         $this->auditEventRepository->write(
             patientInsuranceRecordId: $recordId,
@@ -37,6 +43,30 @@ class UpdatePatientInsuranceRecordUseCase
         );
 
         return $updated;
+    }
+
+    private function assertUniqueMemberIdIfConfigured(array $payload, ?string $excludeRecordId = null): void
+    {
+        if (! (bool) config('patient_insurance.unique_member_id', false) || ! array_key_exists('member_id', $payload)) {
+            return;
+        }
+
+        $memberId = $this->normalizeField('member_id', $payload['member_id'] ?? null);
+        if ($memberId === null) {
+            return;
+        }
+
+        $duplicates = $this->repository->findActiveByMemberId(
+            memberId: $memberId,
+            tenantId: $this->platformScopeContext->tenantId(),
+            excludeRecordId: $excludeRecordId,
+        );
+
+        if ($duplicates === []) {
+            return;
+        }
+
+        throw new DuplicatePatientInsuranceMemberException($duplicates);
     }
 
     private function normalizedPayload(array $payload): array

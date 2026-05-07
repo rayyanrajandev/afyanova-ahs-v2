@@ -2,6 +2,7 @@
 
 namespace App\Modules\Patient\Application\UseCases;
 
+use App\Modules\Patient\Application\Services\PatientDuplicateDetectionService;
 use App\Modules\Patient\Domain\Repositories\PatientAuditLogRepositoryInterface;
 use App\Modules\Patient\Domain\Repositories\PatientRepositoryInterface;
 use App\Modules\Patient\Domain\ValueObjects\PatientStatus;
@@ -13,6 +14,7 @@ class UpdatePatientStatusUseCase
         private readonly PatientRepositoryInterface $patientRepository,
         private readonly PatientAuditLogRepositoryInterface $auditLogRepository,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
+        private readonly PatientDuplicateDetectionService $duplicateDetectionService,
     ) {}
 
     public function execute(string $id, string $status, ?string $reason, ?int $actorId = null): ?array
@@ -22,6 +24,10 @@ class UpdatePatientStatusUseCase
         $before = $this->patientRepository->findById($id);
         if (! $before) {
             return null;
+        }
+
+        if ($status === PatientStatus::ACTIVE->value) {
+            $this->duplicateDetectionService->evaluate($before, $id);
         }
 
         $updated = $this->patientRepository->update($id, [

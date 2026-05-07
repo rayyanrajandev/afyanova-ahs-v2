@@ -69,4 +69,39 @@ class PatientInsuranceRepository implements PatientInsuranceRepositoryInterface
             ->get()
             ->toArray();
     }
+
+    public function findActiveByMemberId(
+        string $memberId,
+        ?string $tenantId = null,
+        ?string $excludeRecordId = null
+    ): array {
+        $normalizedMemberId = $this->normalizeIdentifier($memberId);
+        if ($normalizedMemberId === '') {
+            return [];
+        }
+
+        return PatientInsuranceModel::query()
+            ->where('status', 'active')
+            ->when($tenantId !== null && trim($tenantId) !== '', fn ($query) => $query->where(function ($nestedQuery) use ($tenantId): void {
+                $nestedQuery->whereNull('tenant_id')->orWhere('tenant_id', $tenantId);
+            }))
+            ->when($excludeRecordId !== null && trim($excludeRecordId) !== '', fn ($query) => $query->where('id', '!=', $excludeRecordId))
+            ->whereRaw($this->normalizedIdentifierSql('member_id').' = ?', [$normalizedMemberId])
+            ->limit(5)
+            ->get()
+            ->filter(fn (PatientInsuranceModel $record): bool => $this->normalizeIdentifier($record->member_id) === $normalizedMemberId)
+            ->values()
+            ->map(fn (PatientInsuranceModel $record): array => $record->toArray())
+            ->all();
+    }
+
+    private function normalizedIdentifierSql(string $column): string
+    {
+        return "LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(COALESCE({$column}, '')), '-', ''), ' ', ''), '/', ''), '.', ''), '_', ''), ':', ''))";
+    }
+
+    private function normalizeIdentifier(mixed $value): string
+    {
+        return preg_replace('/[^a-z0-9]+/i', '', mb_strtolower(trim((string) $value))) ?? '';
+    }
 }

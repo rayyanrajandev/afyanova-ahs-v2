@@ -2,6 +2,7 @@
 
 namespace App\Modules\Billing\Application\UseCases;
 
+use App\Modules\Billing\Application\Exceptions\DuplicatePatientInsuranceMemberException;
 use App\Modules\Billing\Domain\Repositories\PatientInsuranceRepositoryInterface;
 use App\Modules\Billing\Infrastructure\Repositories\PatientInsuranceAuditEventRepository;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
@@ -19,6 +20,8 @@ class CreatePatientInsuranceRecordUseCase
     public function execute(string $patientId, array $payload, ?int $actorId = null): array
     {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
+
+        $this->assertUniqueMemberIdIfConfigured($payload);
 
         $created = $this->repository->create([
             ...$this->normalizedPayload($payload),
@@ -38,6 +41,30 @@ class CreatePatientInsuranceRecordUseCase
         );
 
         return $created;
+    }
+
+    private function assertUniqueMemberIdIfConfigured(array $payload, ?string $excludeRecordId = null): void
+    {
+        if (! (bool) config('patient_insurance.unique_member_id', false)) {
+            return;
+        }
+
+        $memberId = $this->nullableText($payload['member_id'] ?? null);
+        if ($memberId === null) {
+            return;
+        }
+
+        $duplicates = $this->repository->findActiveByMemberId(
+            memberId: $memberId,
+            tenantId: $this->platformScopeContext->tenantId(),
+            excludeRecordId: $excludeRecordId,
+        );
+
+        if ($duplicates === []) {
+            return;
+        }
+
+        throw new DuplicatePatientInsuranceMemberException($duplicates);
     }
 
     private function normalizedPayload(array $payload): array

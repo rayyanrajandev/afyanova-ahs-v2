@@ -145,6 +145,29 @@ it('stores insurance member number without requiring NIDA', function (): void {
         ->assertJsonPath('data.cardNumber', null);
 });
 
+it('hard blocks duplicate insurance member id when configured unique', function (): void {
+    config(['patient_insurance.unique_member_id' => true]);
+
+    $user = makePatientInsuranceUser(['patients.insurance.manage', 'patients.insurance.read']);
+    $firstPatient = createPatientForInsurance();
+    $secondPatient = createPatientForInsurance();
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/patients/'.$firstPatient->id.'/insurance', [
+            'insuranceProvider' => 'NHIF',
+            'memberId' => 'NHIF-UNIQUE-12345',
+        ])
+        ->assertCreated();
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/patients/'.$secondPatient->id.'/insurance', [
+            'insuranceProvider' => 'NHIF',
+            'memberId' => 'nhif unique 12345',
+        ])
+        ->assertConflict()
+        ->assertJsonPath('duplicates.0.patientId', $firstPatient->id);
+});
+
 it('lists lean Tanzania-ready coverage options including government payer contracts', function (): void {
     $user = makePatientInsuranceUser(['patients.insurance.read']);
     createGovernmentPayerContract();

@@ -27,6 +27,13 @@ return [
         'other',
     ],
 
+    /*
+    | Set true only for payer integrations where member_id is guaranteed
+    | to identify one patient. Leave false for family or principal-member
+    | schemes where dependants can legitimately share a member number.
+    */
+    'unique_member_id' => false,
+
     'provider_presets' => [
         [
             'code' => 'nhif',

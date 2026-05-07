@@ -193,12 +193,9 @@ class EloquentPatientRepository implements PatientRepositoryInterface
         ];
     }
 
-    public function findActiveDuplicates(
-        ?string $firstName,
-        ?string $lastName,
-        ?string $dateOfBirth,
-        ?string $phone,
-        ?string $nationalId = null,
+    public function findActiveHardDuplicateIdentifiers(
+        ?string $nationalId,
+        ?string $patientNumber = null,
         ?string $excludePatientId = null
     ): array {
         $matches = [];
@@ -215,23 +212,37 @@ class EloquentPatientRepository implements PatientRepositoryInterface
             }
         }
 
-        $normalizedPhone = $this->normalizePhone($phone);
-        $normalizedFirstName = mb_strtolower(trim((string) $firstName));
-        $normalizedLastName = mb_strtolower(trim((string) $lastName));
-        $normalizedDateOfBirth = trim((string) $dateOfBirth);
+        $normalizedPatientNumber = $this->normalizeIdentifier($patientNumber);
+        if ($normalizedPatientNumber !== '') {
+            $query = $this->activeDuplicateQuery($excludePatientId)
+                ->whereRaw($this->normalizedIdentifierSql('patient_number').' = ?', [$normalizedPatientNumber]);
 
-        if (
-            $normalizedFirstName !== ''
-            && $normalizedLastName !== ''
-            && $normalizedDateOfBirth !== ''
-            && $normalizedPhone !== ''
-        ) {
+            foreach ($query->limit(5)->get() as $patient) {
+                if ($this->normalizeIdentifier($patient->patient_number) === $normalizedPatientNumber) {
+                    $matches[$patient->id] = $patient->toArray();
+                }
+            }
+        }
+
+        return array_slice(array_values($matches), 0, 5);
+    }
+
+    public function findActiveDuplicateCandidates(
+        ?string $firstName,
+        ?string $lastName,
+        ?string $dateOfBirth,
+        ?string $phone,
+        ?string $gender,
+        ?string $addressLine,
+        ?string $excludePatientId = null
+    ): array {
+        $matches = [];
+        $normalizedPhone = $this->normalizePhone($phone);
+
+        if ($normalizedPhone !== '') {
             $phoneCandidates = $this->phoneSearchCandidates($normalizedPhone);
 
             $query = $this->activeDuplicateQuery($excludePatientId)
-                ->whereRaw('LOWER(TRIM(first_name)) = ?', [$normalizedFirstName])
-                ->whereRaw('LOWER(TRIM(last_name)) = ?', [$normalizedLastName])
-                ->whereDate('date_of_birth', $normalizedDateOfBirth)
                 ->whereRaw(
                     $this->normalizedPhoneSql('phone').' in ('.implode(',', array_fill(0, count($phoneCandidates), '?')).')',
                     $phoneCandidates,
@@ -241,6 +252,64 @@ class EloquentPatientRepository implements PatientRepositoryInterface
                 if ($this->normalizePhone($patient->phone) === $normalizedPhone) {
                     $matches[$patient->id] = $patient->toArray();
                 }
+            }
+        }
+
+        $normalizedFirstName = $this->normalizeText($firstName);
+        $normalizedLastName = $this->normalizeText($lastName);
+        $normalizedDateOfBirth = trim((string) $dateOfBirth);
+        $normalizedGender = $this->normalizeText($gender);
+        $normalizedAddressLine = $this->normalizeText($addressLine);
+
+        $hasDemographicCandidateKey = ($normalizedFirstName !== '' && $normalizedLastName !== '')
+            || ($normalizedLastName !== '' && $normalizedDateOfBirth !== '')
+            || ($normalizedFirstName !== '' && $normalizedDateOfBirth !== '')
+            || ($normalizedGender !== '' && $normalizedAddressLine !== '');
+
+        if ($hasDemographicCandidateKey) {
+            $query = $this->activeDuplicateQuery($excludePatientId)
+                ->where(function (Builder $builder) use (
+                    $normalizedFirstName,
+                    $normalizedLastName,
+                    $normalizedDateOfBirth,
+                    $normalizedGender,
+                    $normalizedAddressLine
+                ): void {
+                    if ($normalizedFirstName !== '' && $normalizedLastName !== '') {
+                        $builder->orWhere(function (Builder $nested) use ($normalizedFirstName, $normalizedLastName): void {
+                            $nested
+                                ->whereRaw('LOWER(TRIM(first_name)) = ?', [$normalizedFirstName])
+                                ->whereRaw('LOWER(TRIM(last_name)) = ?', [$normalizedLastName]);
+                        });
+                    }
+
+                    if ($normalizedLastName !== '' && $normalizedDateOfBirth !== '') {
+                        $builder->orWhere(function (Builder $nested) use ($normalizedLastName, $normalizedDateOfBirth): void {
+                            $nested
+                                ->whereRaw('LOWER(TRIM(last_name)) = ?', [$normalizedLastName])
+                                ->whereDate('date_of_birth', $normalizedDateOfBirth);
+                        });
+                    }
+
+                    if ($normalizedFirstName !== '' && $normalizedDateOfBirth !== '') {
+                        $builder->orWhere(function (Builder $nested) use ($normalizedFirstName, $normalizedDateOfBirth): void {
+                            $nested
+                                ->whereRaw('LOWER(TRIM(first_name)) = ?', [$normalizedFirstName])
+                                ->whereDate('date_of_birth', $normalizedDateOfBirth);
+                        });
+                    }
+
+                    if ($normalizedGender !== '' && $normalizedAddressLine !== '') {
+                        $builder->orWhere(function (Builder $nested) use ($normalizedGender, $normalizedAddressLine): void {
+                            $nested
+                                ->whereRaw('LOWER(TRIM(gender)) = ?', [$normalizedGender])
+                                ->whereRaw('LOWER(TRIM(COALESCE(address_line, \'\'))) = ?', [$normalizedAddressLine]);
+                        });
+                    }
+                });
+
+            foreach ($query->limit(25)->get() as $patient) {
+                $matches[$patient->id] = $patient->toArray();
             }
         }
 
@@ -272,6 +341,11 @@ class EloquentPatientRepository implements PatientRepositoryInterface
     private function normalizeIdentifier(mixed $value): string
     {
         return preg_replace('/[^a-z0-9]+/i', '', mb_strtolower(trim((string) $value))) ?? '';
+    }
+
+    private function normalizeText(mixed $value): string
+    {
+        return preg_replace('/\s+/', ' ', mb_strtolower(trim((string) $value))) ?? '';
     }
 
     private function normalizePhone(mixed $value): string
