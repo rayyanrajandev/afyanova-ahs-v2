@@ -56,6 +56,7 @@ class UpdatePatientUseCase
             'last_name' => $patient['last_name'] ?? null,
             'date_of_birth' => $patient['date_of_birth'] ?? null,
             'phone' => $patient['phone'] ?? null,
+            'national_id' => $patient['national_id'] ?? null,
         ];
     }
 
@@ -109,20 +110,16 @@ class UpdatePatientUseCase
     {
         $identity = $this->extractIdentity($patient);
 
-        if (
-            empty($identity['first_name']) ||
-            empty($identity['last_name']) ||
-            empty($identity['date_of_birth']) ||
-            empty($identity['phone'])
-        ) {
+        if ($this->hasNoDuplicateSearchKey($identity)) {
             return [];
         }
 
         $duplicates = $this->patientRepository->findActiveDuplicates(
-            firstName: (string) $identity['first_name'],
-            lastName: (string) $identity['last_name'],
-            dateOfBirth: (string) $identity['date_of_birth'],
-            phone: (string) $identity['phone'],
+            firstName: $this->nullableString($identity['first_name'] ?? null),
+            lastName: $this->nullableString($identity['last_name'] ?? null),
+            dateOfBirth: $this->nullableString($identity['date_of_birth'] ?? null),
+            phone: $this->nullableString($identity['phone'] ?? null),
+            nationalId: $this->nullableString($identity['national_id'] ?? null),
             excludePatientId: $excludePatientId,
         );
 
@@ -145,5 +142,27 @@ class UpdatePatientUseCase
                 $duplicates,
             ),
         ]];
+    }
+
+    /**
+     * @param  array<string, mixed>  $identity
+     */
+    private function hasNoDuplicateSearchKey(array $identity): bool
+    {
+        if ($this->nullableString($identity['national_id'] ?? null) !== null) {
+            return false;
+        }
+
+        return $this->nullableString($identity['first_name'] ?? null) === null
+            || $this->nullableString($identity['last_name'] ?? null) === null
+            || $this->nullableString($identity['date_of_birth'] ?? null) === null
+            || $this->nullableString($identity['phone'] ?? null) === null;
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        $normalized = trim((string) $value);
+
+        return $normalized !== '' ? $normalized : null;
     }
 }

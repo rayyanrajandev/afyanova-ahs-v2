@@ -467,7 +467,6 @@ const patientW2En = {
         'A similar active patient record exists. Review before final submit.',
     'duplicate.viewExistingPatient': 'View existing patient',
     'duplicate.reviewForm': 'Review form',
-    'duplicate.confirmNewPatient': 'This is a new patient',
     'duplicate.precheckUnavailable': 'Duplicate pre-check unavailable',
     'registration.additionalDetailsOptional': 'Additional details (optional)',
     'common.hide': 'Hide',
@@ -566,7 +565,6 @@ const tW2 = createLocaleTranslator<PatientW2Key>({
             'Kuna rekodi inayofanana ya mgonjwa hai. Kagua kabla ya kuwasilisha mwisho.',
         'duplicate.viewExistingPatient': 'Tazama mgonjwa aliyepo',
         'duplicate.reviewForm': 'Kagua fomu',
-        'duplicate.confirmNewPatient': 'Huyu ni mgonjwa mpya',
         'duplicate.precheckUnavailable': 'Ukaguzi wa marudio haupatikani',
         'registration.additionalDetailsOptional': 'Taarifa za ziada (hiari)',
         'common.hide': 'Ficha',
@@ -680,7 +678,6 @@ const registrationBirthInputMode = ref<RegistrationBirthInputMode>('estimated');
 const preSubmitDuplicateCheckLoading = ref(false);
 const preSubmitDuplicateCheckError = ref<string | null>(null);
 const preSubmitDuplicateMatches = ref<Patient[]>([]);
-const preSubmitDuplicateConfirmed = ref(false);
 
 // ── Draft auto-save ────────────────────────────────────────────────────────
 const DRAFT_STORAGE_KEY = 'ptReg_draft_v1';
@@ -3630,7 +3627,6 @@ function clearPreSubmitDuplicateState() {
     preSubmitDuplicateCheckLoading.value = false;
     preSubmitDuplicateCheckError.value = null;
     preSubmitDuplicateMatches.value = [];
-    preSubmitDuplicateConfirmed.value = false;
 }
 
 async function focusRegistrationErrorSummary() {
@@ -3656,7 +3652,17 @@ function normalizeNameForDuplicate(value: string | null | undefined): string {
 }
 
 function normalizePhoneForDuplicate(value: string | null | undefined): string {
-    return (value ?? '').replace(/\s+/g, '').trim().toLowerCase();
+    const digits = (value ?? '').replace(/\D+/g, '');
+
+    if (digits.length === 12 && digits.startsWith('255')) return digits;
+    if (digits.length === 10 && digits.startsWith('0')) return `255${digits.slice(1)}`;
+    if (digits.length === 9) return `255${digits}`;
+
+    return digits;
+}
+
+function normalizeIdentifierForDuplicate(value: string | null | undefined): string {
+    return (value ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
 
 function duplicateDisplayValue(value: string | null | undefined, fallback = 'Not recorded'): string {
@@ -3675,6 +3681,12 @@ function duplicatePhoneMatches(left: string | null | undefined, right: string | 
     const leftPhone = normalizePhoneForDuplicate(left);
     const rightPhone = normalizePhoneForDuplicate(right);
     return Boolean(leftPhone && rightPhone && leftPhone === rightPhone);
+}
+
+function duplicateIdentifierMatches(left: string | null | undefined, right: string | null | undefined): boolean {
+    const leftIdentifier = normalizeIdentifierForDuplicate(left);
+    const rightIdentifier = normalizeIdentifierForDuplicate(right);
+    return Boolean(leftIdentifier && rightIdentifier && leftIdentifier === rightIdentifier);
 }
 
 function duplicateValueMatches(left: string | null | undefined, right: string | null | undefined): boolean {
@@ -3728,7 +3740,7 @@ function duplicateComparisonRows(candidate: Patient) {
             label: 'National ID',
             incoming: duplicateDisplayValue(registrationForm.nationalId),
             existing: duplicateDisplayValue(candidate.nationalId),
-            matched: duplicateValueMatches(registrationForm.nationalId, candidate.nationalId),
+            matched: duplicateIdentifierMatches(registrationForm.nationalId, candidate.nationalId),
         },
         {
             key: 'location',
@@ -4020,31 +4032,51 @@ function payloadFromForm() {
 async function findPreSubmitDuplicateMatches(payload: ReturnType<typeof payloadFromForm>): Promise<Patient[]> {
     if (!canReadPatients.value) return [];
 
-    const queryTerm = [payload.firstName, payload.lastName, payload.phone]
+    const queryTerms = [
+        payload.nationalId,
+        payload.phone,
+        [payload.firstName, payload.lastName]
+            .filter((part): part is string => Boolean(part && part.trim() !== ''))
+            .join(' '),
+    ]
         .filter((part): part is string => Boolean(part && part.trim() !== ''))
-        .join(' ')
-        .trim();
+        .map((part) => part.trim());
 
-    if (queryTerm === '') return [];
+    const uniqueQueryTerms = Array.from(new Set(queryTerms));
+    if (uniqueQueryTerms.length === 0) return [];
 
-    const listResponse = await apiRequest<PatientListResponse>('GET', '/patients', {
-        query: {
-            q: queryTerm,
-            status: 'active',
-            page: 1,
-            perPage: 15,
-            sortBy: 'createdAt',
-            sortDir: 'desc',
-        },
-    });
+    const responses = await Promise.all(uniqueQueryTerms.map((queryTerm) =>
+        apiRequest<PatientListResponse>('GET', '/patients', {
+            query: {
+                q: queryTerm,
+                status: 'active',
+                page: 1,
+                perPage: 15,
+                sortBy: 'createdAt',
+                sortDir: 'desc',
+            },
+        }),
+    ));
 
     const expectedFirstName = normalizeNameForDuplicate(payload.firstName);
     const expectedLastName = normalizeNameForDuplicate(payload.lastName);
     const expectedDateOfBirth = payload.dateOfBirth;
     const expectedPhone = normalizePhoneForDuplicate(payload.phone);
+    const expectedNationalId = normalizeIdentifierForDuplicate(payload.nationalId);
 
-    return (listResponse.data ?? [])
+    const candidates = new Map<string, Patient>();
+    for (const response of responses) {
+        for (const candidate of response.data ?? []) {
+            candidates.set(candidate.id, candidate);
+        }
+    }
+
+    return Array.from(candidates.values())
         .filter((candidate) => {
+            const nationalIdMatches = Boolean(
+                expectedNationalId
+                && normalizeIdentifierForDuplicate(candidate.nationalId) === expectedNationalId,
+            );
             const firstMatches =
                 normalizeNameForDuplicate(candidate.firstName) === expectedFirstName;
             const lastMatches =
@@ -4053,14 +4085,9 @@ async function findPreSubmitDuplicateMatches(payload: ReturnType<typeof payloadF
             const phoneMatches =
                 normalizePhoneForDuplicate(candidate.phone) === expectedPhone;
 
-            return firstMatches && lastMatches && dobMatches && phoneMatches;
+            return nationalIdMatches || (firstMatches && lastMatches && dobMatches && phoneMatches);
         })
         .slice(0, 5);
-}
-
-async function confirmCreateDespiteDuplicate() {
-    preSubmitDuplicateConfirmed.value = true;
-    await createPatient();
 }
 
 async function createPatient() {
@@ -4081,7 +4108,7 @@ async function createPatient() {
 
     // Fast client-side pre-check (avoids round-trip for obvious duplicates).
     // The backend is the authoritative gate — a 409 will catch anything missed here.
-    if (!preSubmitDuplicateConfirmed.value) {
+    {
         preSubmitDuplicateCheckLoading.value = true;
         try {
             const matches = await findPreSubmitDuplicateMatches(payload);
@@ -4103,7 +4130,6 @@ async function createPatient() {
         const response = await apiRequest<PatientStoreResponse>('POST', '/patients', {
             body: {
                 ...payload,
-                bypassDuplicateCheck: preSubmitDuplicateConfirmed.value ? true : undefined,
             },
         });
 
@@ -4124,6 +4150,7 @@ async function createPatient() {
         registerDialogOpen.value = false;
         searchForm.page = 1;
         await Promise.all([loadPatients(), loadPatientStatusCounts()]);
+    } catch (error) {
         const apiError = error as Error & { status?: number; payload?: unknown };
 
         // Backend duplicate guard — extract matches and show the same confirmation UI
@@ -5243,7 +5270,7 @@ onMounted(initialPageLoad);
                             <!-- Footer actions -->
                             <div class="flex flex-col gap-3 border-t border-amber-500/20 bg-amber-500/5 px-6 py-3 sm:flex-row sm:items-center sm:justify-between">
                                 <p class="text-xs text-amber-600 dark:text-amber-400">
-                                    Continue only if you are certain this is a different patient.
+                                    Review the existing record before continuing registration.
                                 </p>
                                 <div class="flex shrink-0 flex-wrap gap-2">
                                     <Button
@@ -5253,13 +5280,6 @@ onMounted(initialPageLoad);
                                         @click="clearPreSubmitDuplicateState"
                                     >
                                         {{ tW2('duplicate.reviewForm') }}
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        :disabled="createLoading"
-                                        @click="confirmCreateDespiteDuplicate"
-                                    >
-                                        {{ tW2('duplicate.confirmNewPatient') }}
                                     </Button>
                                 </div>
                             </div>
@@ -6271,8 +6291,8 @@ onMounted(initialPageLoad);
                     size="5xl"
                     class="flex h-full min-h-0 flex-col"
                 >
-                    <SheetHeader v-if="detailsSheetPatient" class="shrink-0 border-b bg-background px-4 py-3 text-left pr-12">
-                        <SheetTitle class="flex min-w-0 flex-wrap items-center gap-2">
+                    <SheetHeader v-if="detailsSheetPatient" class="shrink-0 border-b bg-background/95 px-4 py-3 text-left pr-12 sm:px-5">
+                        <SheetTitle class="flex min-w-0 flex-wrap items-center gap-2 text-base">
                             <AppIcon name="user" class="size-5 text-muted-foreground" />
                             <span class="min-w-0 truncate">{{ patientName(detailsSheetPatient) }}</span>
                             <Badge v-if="detailsSheetPatient.patientNumber" variant="outline" class="shrink-0 font-normal">
@@ -6287,12 +6307,12 @@ onMounted(initialPageLoad);
                                 <AppIcon name="user" class="size-3 opacity-50" />
                                 <span class="capitalize">{{ detailsSheetPatient.gender || 'Gender not recorded' }}</span>
                             </span>
-                            <span class="text-muted-foreground/40">·</span>
+                            <span class="text-muted-foreground/40">&middot;</span>
                             <span class="flex items-center gap-1">
                                 <AppIcon name="calendar" class="size-3 opacity-50" />
                                 <span>{{ detailsSheetPatient.dateOfBirth ? `Age ${formatAge(detailsSheetPatient.dateOfBirth)}` : 'Age not recorded' }}</span>
                             </span>
-                            <span class="text-muted-foreground/40">·</span>
+                            <span class="text-muted-foreground/40">&middot;</span>
                             <span class="flex items-center gap-1">
                                 <AppIcon name="map-pin" class="size-3 opacity-50" />
                                 <span>{{ patientLocationLabel(detailsSheetPatient) }}</span>
@@ -6302,48 +6322,35 @@ onMounted(initialPageLoad);
 
                     <div v-if="detailsSheetPatient" class="min-h-0 flex flex-1 flex-col overflow-hidden">
                         <Tabs v-model="detailsSheetTab" class="flex h-full min-h-0 flex-col">
-                            <div class="shrink-0 border-b bg-muted/5 px-4 py-2.5">
-                                <div class="space-y-4">
-                                    <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                                        <div class="min-w-0 rounded-lg border bg-background/70 px-3 py-2">
-                                            <div class="flex items-start gap-3">
-                                                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary ring-1 ring-primary/20">
-                                                    {{ patientInitials(detailsSheetPatient) }}
-                                                </div>
-                                                <div class="min-w-0">
-                                                    <p class="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Patient</p>
-                                                    <p class="mt-0.5 truncate text-sm font-semibold leading-4">{{ patientName(detailsSheetPatient) }}</p>
-                                                    <p class="truncate text-xs leading-4 text-muted-foreground">
-                                                        {{ detailsSheetPatient.patientNumber || `ID: ${detailsSheetPatient.id.slice(0, 8)}` }}
-                                                    </p>
-                                                </div>
-                                            </div>
+                            <div class="shrink-0 border-b bg-background px-4 py-2 sm:px-5">
+                                <div class="space-y-2.5">
+                                    <div class="grid gap-y-2 rounded-md bg-muted/20 px-3 py-2 text-xs sm:grid-cols-3 sm:divide-x sm:divide-border/50">
+                                        <div class="min-w-0 sm:pr-3">
+                                            <p class="font-medium uppercase tracking-[0.14em] text-muted-foreground">Contact</p>
+                                            <p class="mt-1 truncate text-sm font-medium text-foreground">{{ detailsSheetPatient.phone || 'Phone not recorded' }}</p>
+                                            <p class="truncate text-muted-foreground">{{ patientLocationLabel(detailsSheetPatient) }}</p>
                                         </div>
-                                        <div class="min-w-0 rounded-lg border bg-background/70 px-3 py-2">
-                                            <div class="flex items-center justify-between gap-2">
-                                                <p class="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Contact</p>
-                                                <Badge variant="outline" class="capitalize">{{ detailsSheetPatient.gender || 'Unknown' }}</Badge>
-                                            </div>
-                                            <p class="mt-0.5 truncate text-sm font-semibold leading-4">{{ detailsSheetPatient.phone || 'Phone not recorded' }}</p>
-                                            <p class="truncate text-xs leading-4 text-muted-foreground">{{ patientLocationLabel(detailsSheetPatient) }}</p>
-                                        </div>
-                                        <div class="min-w-0 rounded-lg border bg-background/70 px-3 py-2">
-                                            <div class="flex items-center justify-between gap-2">
-                                                <p class="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Care activity</p>
-                                                <Badge variant="secondary">{{ detailsTimelineEvents.length }} events</Badge>
-                                            </div>
-                                            <p class="mt-0.5 truncate text-sm font-semibold leading-4">
-                                                {{ detailsWorkflowRecommendation?.title ?? 'Review patient workflow' }}
+                                        <div class="min-w-0 sm:px-3">
+                                            <p class="font-medium uppercase tracking-[0.14em] text-muted-foreground">Identity</p>
+                                            <p class="mt-1 truncate text-sm font-medium text-foreground">
+                                                {{ detailsSheetPatient.patientNumber || `ID: ${detailsSheetPatient.id.slice(0, 8)}` }}
                                             </p>
-                                            <p class="truncate text-xs leading-4 text-muted-foreground">
+                                            <p class="truncate text-muted-foreground">
                                                 {{ detailsSheetPatient.dateOfBirth ? `Age ${formatAge(detailsSheetPatient.dateOfBirth)}` : 'Age not recorded' }}
                                             </p>
+                                        </div>
+                                        <div class="min-w-0 sm:pl-3">
+                                            <p class="font-medium uppercase tracking-[0.14em] text-muted-foreground">Care activity</p>
+                                            <p class="mt-1 truncate text-sm font-medium text-foreground">
+                                                {{ detailsWorkflowRecommendation?.title ?? 'Review patient workflow' }}
+                                            </p>
+                                            <p class="truncate text-muted-foreground">{{ detailsTimelineEvents.length }} recorded events</p>
                                         </div>
                                     </div>
 
                                     <div class="w-full">
                                         <TabsList
-                                            class="grid h-auto w-full gap-1 rounded-lg bg-muted p-1"
+                                            class="grid h-auto w-full gap-1 rounded-md bg-muted p-1"
                                             :class="canViewPatientAudit ? 'grid-cols-3' : 'grid-cols-2'"
                                         >
                                             <TabsTrigger value="overview" class="h-9 min-w-0 gap-1.5 rounded-md px-2 text-xs sm:px-3 sm:text-sm">
@@ -6373,7 +6380,7 @@ onMounted(initialPageLoad);
                             <ScrollArea class="min-h-0 flex-1" viewport-class="pb-6">
 
                                     <!-- OVERVIEW TAB -->
-                                    <TabsContent value="overview" class="m-0 space-y-3 px-6 py-4">
+                                    <TabsContent value="overview" class="m-0 space-y-3 px-4 py-3 sm:px-5">
                                         <!-- Status reason banner (shown when inactive/deactivated) -->
                                         <div
                                             v-if="detailsSheetPatient.status && detailsSheetPatient.status !== 'active' && detailsSheetPatient.statusReason"
@@ -6388,14 +6395,14 @@ onMounted(initialPageLoad);
 
                                         <!-- Identity & Contact -->
                                         <div class="grid gap-3 sm:grid-cols-2">
-                                            <Card class="rounded-lg !gap-0 overflow-hidden">
-                                                <CardHeader class="bg-muted/40 px-4 py-2.5">
+                                            <Card class="rounded-md border-border/50 bg-card/70 !gap-0 !py-0 shadow-none overflow-hidden">
+                                                <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
                                                     <CardTitle class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                                                         <AppIcon name="user" class="size-3.5" />
                                                         Identity
                                                     </CardTitle>
                                                 </CardHeader>
-                                                <CardContent class="divide-y px-4 pb-3 pt-0 text-sm">
+                                                <CardContent class="divide-y divide-border/50 px-3 py-1.5 text-sm">
                                                     <div class="flex items-center justify-between gap-4 py-2">
                                                         <span class="text-muted-foreground">Gender</span>
                                                         <span class="font-medium capitalize">{{ detailsSheetPatient.gender || 'Not recorded' }}</span>
@@ -6420,14 +6427,14 @@ onMounted(initialPageLoad);
                                                 </CardContent>
                                             </Card>
 
-                                            <Card class="rounded-lg !gap-0 overflow-hidden">
-                                                <CardHeader class="bg-muted/40 px-4 py-2.5">
+                                            <Card class="rounded-md border-border/50 bg-card/70 !gap-0 !py-0 shadow-none overflow-hidden">
+                                                <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
                                                     <CardTitle class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                                                         <AppIcon name="phone" class="size-3.5" />
                                                         Contact
                                                     </CardTitle>
                                                 </CardHeader>
-                                                <CardContent class="divide-y px-4 pb-3 pt-0 text-sm">
+                                                <CardContent class="divide-y divide-border/50 px-3 py-1.5 text-sm">
                                                     <div class="flex items-center justify-between gap-4 py-2">
                                                         <span class="text-muted-foreground">Phone</span>
                                                         <span class="font-medium">{{ detailsSheetPatient.phone || 'Not recorded' }}</span>
@@ -6449,14 +6456,14 @@ onMounted(initialPageLoad);
                                         </div>
 
                                         <!-- Emergency Contact -->
-                                        <Card class="rounded-lg !gap-0 overflow-hidden">
-                                            <CardHeader class="bg-muted/40 px-4 py-2.5">
+                                        <Card class="rounded-md border-border/50 bg-card/70 !gap-0 !py-0 shadow-none overflow-hidden">
+                                            <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
                                                 <CardTitle class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                                                     <AppIcon name="users" class="size-3.5" />
                                                     Emergency Contact
                                                 </CardTitle>
                                             </CardHeader>
-                                            <CardContent class="grid gap-0 divide-y px-4 pb-3 pt-0 text-sm sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+                                            <CardContent class="grid gap-0 divide-y divide-border/50 px-3 py-1.5 text-sm sm:grid-cols-2 sm:divide-x sm:divide-y-0">
                                                 <div class="flex items-center justify-between gap-4 py-2 sm:pr-4">
                                                     <span class="shrink-0 text-muted-foreground">Name</span>
                                                     <span class="text-right font-medium">{{ detailsSheetPatient.nextOfKinName || 'Not recorded' }}</span>
@@ -6468,8 +6475,8 @@ onMounted(initialPageLoad);
                                             </CardContent>
                                         </Card>
 
-                                        <Card v-if="canReadPatientInsurance" class="rounded-lg !gap-0 overflow-hidden">
-                                            <CardHeader class="bg-muted/40 px-4 py-2.5">
+                                        <Card v-if="canReadPatientInsurance" class="rounded-md border-border/50 bg-card/70 !gap-0 !py-0 shadow-none overflow-hidden">
+                                            <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
                                                 <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                                     <div>
                                                         <CardTitle class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -6492,7 +6499,7 @@ onMounted(initialPageLoad);
                                                     </Button>
                                                 </div>
                                             </CardHeader>
-                                            <CardContent class="space-y-3 px-4 py-3">
+                                            <CardContent class="space-y-3 px-3 py-2.5">
                                                 <Alert v-if="detailsInsuranceError" variant="destructive">
                                                     <AlertTitle>Insurance unavailable</AlertTitle>
                                                     <AlertDescription>{{ detailsInsuranceError }}</AlertDescription>
@@ -6505,7 +6512,7 @@ onMounted(initialPageLoad);
 
                                                 <div
                                                     v-else-if="detailsInsuranceRecords.length === 0"
-                                                    class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground"
+                                                    class="rounded-md border border-dashed border-border/60 p-3 text-sm text-muted-foreground"
                                                 >
                                                     No insurance identifier is linked to this patient yet.
                                                 </div>
@@ -6514,7 +6521,7 @@ onMounted(initialPageLoad);
                                                     <div
                                                         v-for="record in detailsInsuranceRecords"
                                                         :key="record.id"
-                                                        class="rounded-lg border bg-background p-3"
+                                                        class="rounded-md border border-border/60 bg-background p-3"
                                                     >
                                                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                                             <div class="min-w-0">
@@ -6556,7 +6563,7 @@ onMounted(initialPageLoad);
                                                     </div>
                                                 </div>
 
-                                                <div v-if="activePatientInsuranceRecord" class="rounded-lg border bg-primary/5 p-3 text-xs text-muted-foreground">
+                                                <div v-if="activePatientInsuranceRecord" class="rounded-md bg-primary/5 p-3 text-xs text-muted-foreground">
                                                     Active identifiers are available for eligibility checks. Billing routes to
                                                     <span class="font-medium text-foreground">
                                                         {{ activePatientInsuranceRecord.insuranceProvider || 'linked coverage' }}
@@ -6564,7 +6571,7 @@ onMounted(initialPageLoad);
                                                     when a valid payer contract is configured.
                                                 </div>
 
-                                                <div v-if="insuranceFormOpen && canManagePatientInsurance" class="rounded-lg border bg-muted/20 p-3">
+                                                <div v-if="insuranceFormOpen && canManagePatientInsurance" class="rounded-md bg-muted/20 p-3">
                                                     <div class="grid gap-3 md:grid-cols-2">
                                                         <div class="space-y-1.5">
                                                             <Label>Insurance number</Label>
@@ -6663,9 +6670,9 @@ onMounted(initialPageLoad);
                                     </TabsContent>
 
                                     <!-- ACTIVITY TAB -->
-                                    <TabsContent value="activity" class="m-0 space-y-4 px-6 py-4">
-                                        <Card class="rounded-lg !gap-0 overflow-hidden">
-                                            <CardHeader class="bg-muted/40 px-4 py-2.5">
+                                    <TabsContent value="activity" class="m-0 space-y-3 px-4 py-3 sm:px-5">
+                                        <Card class="rounded-md border-border/50 bg-card/70 !gap-0 !py-0 shadow-none overflow-hidden">
+                                            <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
                                                 <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                                     <div>
                                                         <CardTitle class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -6682,7 +6689,7 @@ onMounted(initialPageLoad);
                                                     </Button>
                                                 </div>
                                             </CardHeader>
-                                            <CardContent class="space-y-3 px-4 py-3">
+                                            <CardContent class="space-y-3 px-3 py-2.5">
                                                 <Alert v-if="detailsSheetPatient.status && detailsSheetPatient.status !== 'active'" variant="destructive">
                                                     <AlertTitle>Patient is not active</AlertTitle>
                                                     <AlertDescription>
@@ -6690,7 +6697,7 @@ onMounted(initialPageLoad);
                                                     </AlertDescription>
                                                 </Alert>
 
-                                                <div class="rounded-lg border bg-muted/20 p-3">
+                                                <div class="rounded-md bg-muted/20 p-3">
                                                     <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                                                         Recommended next step
                                                     </p>
@@ -6749,7 +6756,7 @@ onMounted(initialPageLoad);
                                                 <div
                                                     v-for="section in detailsTimelineSummary"
                                                     :key="section.key"
-                                                    class="rounded-lg border bg-muted/20 px-3 py-3"
+                                                    class="rounded-md bg-muted/20 px-3 py-2.5"
                                                 >
                                                     <div class="flex items-center justify-between gap-3">
                                                         <div>
@@ -6767,14 +6774,14 @@ onMounted(initialPageLoad);
                                                 </div>
                                             </div>
 
-                                            <Card class="rounded-lg !gap-4 !py-4">
-                                                <CardHeader class="px-4 pb-1 pt-0">
+                                            <Card class="rounded-md border-border/50 bg-card/70 !gap-3 !py-3 shadow-none">
+                                                <CardHeader class="px-3 pb-1 pt-0">
                                                     <CardTitle class="text-sm font-medium">Patient activity feed</CardTitle>
                                                     <CardDescription class="text-xs">
                                                         Latest profile, appointment, admission, and consultation activity in one stream.
                                                     </CardDescription>
                                                 </CardHeader>
-                                                <CardContent class="px-4 pt-0">
+                                                <CardContent class="px-3 pt-0">
                                                     <div class="space-y-0">
                                                         <div
                                                             v-for="(event, index) in detailsTimelineEvents"
@@ -6788,7 +6795,7 @@ onMounted(initialPageLoad);
                                                             <div class="absolute left-0 top-0 flex h-8 w-8 items-center justify-center rounded-full border bg-background shadow-sm">
                                                                 <AppIcon :name="timelineEventIcon(event.category)" class="size-4 text-muted-foreground" />
                                                             </div>
-                                                            <div class="rounded-lg border bg-background px-3 py-3">
+                                                            <div class="rounded-md border border-border/60 bg-background px-3 py-2.5">
                                                                 <div class="flex flex-wrap items-start justify-between gap-2">
                                                                     <div class="min-w-0 flex-1">
                                                                         <div class="flex flex-wrap items-center gap-2">
@@ -6822,9 +6829,9 @@ onMounted(initialPageLoad);
                                     </TabsContent>
 
                                     <!-- AUDIT TAB -->
-                                    <TabsContent v-if="canViewPatientAudit" value="audit" class="m-0 space-y-3 px-6 py-4">
-                                        <Card class="rounded-lg !gap-0 overflow-hidden">
-                                                <CardHeader class="bg-muted/40 px-4 py-2.5">
+                                    <TabsContent v-if="canViewPatientAudit" value="audit" class="m-0 space-y-3 px-4 py-3 sm:px-5">
+                                        <Card class="rounded-md border-border/50 bg-card/70 !gap-0 !py-0 shadow-none overflow-hidden">
+                                                <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
                                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                                         <div>
                                                             <CardTitle class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -6852,7 +6859,7 @@ onMounted(initialPageLoad);
                                                         </div>
                                                     </div>
                                                 </CardHeader>
-                                                <CardContent class="space-y-3 px-4 py-3">
+                                                <CardContent class="space-y-3 px-3 py-2.5">
                                                     <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
                                                         <div class="space-y-1.5">
                                                             <Label for="patient-audit-q" class="text-xs">Search logs</Label>
@@ -6876,19 +6883,19 @@ onMounted(initialPageLoad);
                                                     </div>
 
                                                     <div class="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
-                                                        <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
+                                                        <div class="rounded-md bg-muted/20 px-3 py-2.5">
                                                             <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Entries</p>
                                                             <p class="mt-1 text-sm font-semibold text-foreground">{{ detailsAuditSummary.total }}</p>
                                                         </div>
-                                                        <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
+                                                        <div class="rounded-md bg-muted/20 px-3 py-2.5">
                                                             <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Changed events</p>
                                                             <p class="mt-1 text-sm font-semibold text-foreground">{{ detailsAuditSummary.changedEntries }}</p>
                                                         </div>
-                                                        <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
+                                                        <div class="rounded-md bg-muted/20 px-3 py-2.5">
                                                             <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">User actions</p>
                                                             <p class="mt-1 text-sm font-semibold text-foreground">{{ detailsAuditSummary.userEntries }}</p>
                                                         </div>
-                                                        <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
+                                                        <div class="rounded-md bg-muted/20 px-3 py-2.5">
                                                             <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">System events</p>
                                                             <p class="mt-1 text-sm font-semibold text-foreground">{{ detailsAuditSummary.systemEntries }}</p>
                                                         </div>
@@ -6909,15 +6916,15 @@ onMounted(initialPageLoad);
 
                                             <Collapsible v-model:open="detailsAuditFiltersOpen">
                                                 <CollapsibleContent>
-                                                    <Card class="rounded-lg !gap-0 overflow-hidden">
-                                                        <CardHeader class="bg-muted/40 px-4 py-2.5">
+                                                    <Card class="rounded-md border-border/50 bg-card/70 !gap-0 !py-0 shadow-none overflow-hidden">
+                                                        <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
                                                             <CardTitle class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                                                                 <AppIcon name="sliders-horizontal" class="size-3.5" />
                                                                 Advanced filters
                                                             </CardTitle>
                                                             <CardDescription class="text-xs">Narrow by action, user, actor type, date range, or page size.</CardDescription>
                                                         </CardHeader>
-                                                        <CardContent class="px-4 py-3">
+                                                        <CardContent class="px-3 py-2.5">
                                                             <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                                                 <div class="space-y-1.5">
                                                                     <Label for="patient-audit-action" class="text-xs">Exact action key</Label>
@@ -7004,7 +7011,7 @@ onMounted(initialPageLoad);
                                                 <div
                                                     v-for="log in detailsAuditLogs"
                                                     :key="log.id"
-                                                    class="flex gap-3 rounded-lg border bg-background px-3 py-3 text-sm"
+                                                    class="flex gap-3 rounded-md border border-border/60 bg-background px-3 py-2.5 text-sm"
                                                 >
                                                     <!-- Actor icon: amber for system, muted for user -->
                                                     <div
@@ -7087,7 +7094,7 @@ onMounted(initialPageLoad);
                             </ScrollArea>
                         </Tabs>
                     </div>
-                    <SheetFooter class="shrink-0 flex-col-reverse gap-2 border-t bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <SheetFooter class="shrink-0 flex-col-reverse gap-2 border-t bg-background px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                         <Button variant="outline" size="sm" class="gap-1.5 sm:shrink-0" @click="closePatientDetailsSheet">
                             <AppIcon name="circle-x" class="size-3.5" />
                             Close

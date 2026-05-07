@@ -194,26 +194,121 @@ class EloquentPatientRepository implements PatientRepositoryInterface
     }
 
     public function findActiveDuplicates(
-        string $firstName,
-        string $lastName,
-        string $dateOfBirth,
-        string $phone,
+        ?string $firstName,
+        ?string $lastName,
+        ?string $dateOfBirth,
+        ?string $phone,
+        ?string $nationalId = null,
         ?string $excludePatientId = null
     ): array {
-        $query = PatientModel::query();
+        $matches = [];
+
+        $normalizedNationalId = $this->normalizeIdentifier($nationalId);
+        if ($normalizedNationalId !== '') {
+            $query = $this->activeDuplicateQuery($excludePatientId)
+                ->whereRaw($this->normalizedIdentifierSql('national_id').' = ?', [$normalizedNationalId]);
+
+            foreach ($query->limit(5)->get() as $patient) {
+                if ($this->normalizeIdentifier($patient->national_id) === $normalizedNationalId) {
+                    $matches[$patient->id] = $patient->toArray();
+                }
+            }
+        }
+
+        $normalizedPhone = $this->normalizePhone($phone);
+        $normalizedFirstName = mb_strtolower(trim((string) $firstName));
+        $normalizedLastName = mb_strtolower(trim((string) $lastName));
+        $normalizedDateOfBirth = trim((string) $dateOfBirth);
+
+        if (
+            $normalizedFirstName !== ''
+            && $normalizedLastName !== ''
+            && $normalizedDateOfBirth !== ''
+            && $normalizedPhone !== ''
+        ) {
+            $phoneCandidates = $this->phoneSearchCandidates($normalizedPhone);
+
+            $query = $this->activeDuplicateQuery($excludePatientId)
+                ->whereRaw('LOWER(TRIM(first_name)) = ?', [$normalizedFirstName])
+                ->whereRaw('LOWER(TRIM(last_name)) = ?', [$normalizedLastName])
+                ->whereDate('date_of_birth', $normalizedDateOfBirth)
+                ->whereRaw(
+                    $this->normalizedPhoneSql('phone').' in ('.implode(',', array_fill(0, count($phoneCandidates), '?')).')',
+                    $phoneCandidates,
+                );
+
+            foreach ($query->limit(5)->get() as $patient) {
+                if ($this->normalizePhone($patient->phone) === $normalizedPhone) {
+                    $matches[$patient->id] = $patient->toArray();
+                }
+            }
+        }
+
+        return array_slice(array_values($matches), 0, 5);
+    }
+
+    private function activeDuplicateQuery(?string $excludePatientId = null): Builder
+    {
+        $query = PatientModel::query()->where('status', 'active');
         $this->applyTenantScopeIfEnabled($query);
 
-        return $query
-            ->where('status', 'active')
-            ->whereRaw('LOWER(first_name) = LOWER(?)', [$firstName])
-            ->whereRaw('LOWER(last_name) = LOWER(?)', [$lastName])
-            ->whereDate('date_of_birth', $dateOfBirth)
-            ->whereRaw('LOWER(REPLACE(phone, \' \', \'\')) = LOWER(REPLACE(?, \' \', \'\'))', [$phone])
-            ->when($excludePatientId, fn (Builder $builder, string $patientId) => $builder->where('id', '!=', $patientId))
-            ->limit(5)
-            ->get()
-            ->map(static fn (PatientModel $patient): array => $patient->toArray())
-            ->all();
+        if ($excludePatientId !== null && trim($excludePatientId) !== '') {
+            $query->where('id', '!=', $excludePatientId);
+        }
+
+        return $query;
+    }
+
+    private function normalizedIdentifierSql(string $column): string
+    {
+        return "LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(COALESCE({$column}, '')), '-', ''), ' ', ''), '/', ''), '.', ''), '_', ''), ':', ''))";
+    }
+
+    private function normalizedPhoneSql(string $column): string
+    {
+        return "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(COALESCE({$column}, '')), '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', '')";
+    }
+
+    private function normalizeIdentifier(mixed $value): string
+    {
+        return preg_replace('/[^a-z0-9]+/i', '', mb_strtolower(trim((string) $value))) ?? '';
+    }
+
+    private function normalizePhone(mixed $value): string
+    {
+        $digits = preg_replace('/\D+/', '', (string) $value) ?? '';
+
+        if (strlen($digits) === 12 && str_starts_with($digits, '255')) {
+            return $digits;
+        }
+
+        if (strlen($digits) === 10 && str_starts_with($digits, '0')) {
+            return '255'.substr($digits, 1);
+        }
+
+        if (strlen($digits) === 9) {
+            return '255'.$digits;
+        }
+
+        return $digits;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function phoneSearchCandidates(string $normalizedPhone): array
+    {
+        $candidates = [$normalizedPhone];
+
+        if (strlen($normalizedPhone) === 12 && str_starts_with($normalizedPhone, '255')) {
+            $local = '0'.substr($normalizedPhone, 3);
+            $withoutCountryCode = substr($normalizedPhone, 3);
+
+            $candidates[] = $local;
+            $candidates[] = $withoutCountryCode;
+        }
+
+        return array_values(array_unique(array_filter($candidates)));
     }
 
     private function applyTenantScopeIfEnabled(Builder $query): void
@@ -235,4 +330,3 @@ class EloquentPatientRepository implements PatientRepositoryInterface
             || $this->featureFlagResolver->isEnabled('platform.multi_tenant_isolation');
     }
 }
-

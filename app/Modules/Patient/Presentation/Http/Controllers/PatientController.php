@@ -112,13 +112,11 @@ class PatientController extends Controller
     public function store(StorePatientRequest $request, CreatePatientUseCase $useCase): JsonResponse
     {
         $validated = $request->validated();
-        $bypassDuplicateCheck = (bool) ($validated['bypassDuplicateCheck'] ?? false);
 
         try {
             $result = $useCase->execute(
                 payload: $this->toPersistencePayload($validated),
                 actorId: $request->user()?->id,
-                bypassDuplicateCheck: $bypassDuplicateCheck,
             );
         } catch (DuplicatePatientException $exception) {
             return response()->json([

@@ -20,14 +20,13 @@ class CreatePatientUseCase
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
     ) {}
 
-    public function execute(array $payload, ?int $actorId = null, bool $bypassDuplicateCheck = false): array
+    public function execute(array $payload, ?int $actorId = null): array
     {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
 
         // Duplicate guard — runs BEFORE any write so no phantom record is created.
-        if (! $bypassDuplicateCheck) {
-            $this->assertNoDuplicates($payload);
-        }
+        // Client-side confirmation is advisory only; exact active duplicates remain blocked.
+        $this->assertNoDuplicates($payload);
 
         $payload['status'] = PatientStatus::ACTIVE->value;
         $payload['patient_number'] = $this->generatePatientNumber();
@@ -52,7 +51,7 @@ class CreatePatientUseCase
 
     /**
      * Throw DuplicatePatientException if an active patient with the same
-     * identity (name + DOB + phone) already exists in the current tenant scope.
+     * strong identifier or exact demographic identity already exists.
      *
      * @throws DuplicatePatientException
      */
@@ -60,20 +59,16 @@ class CreatePatientUseCase
     {
         $identity = $this->extractIdentity($payload);
 
-        if (
-            empty($identity['first_name']) ||
-            empty($identity['last_name']) ||
-            empty($identity['date_of_birth']) ||
-            empty($identity['phone'])
-        ) {
+        if ($this->hasNoDuplicateSearchKey($identity)) {
             return;
         }
 
         $duplicates = $this->patientRepository->findActiveDuplicates(
-            firstName: (string) $identity['first_name'],
-            lastName: (string) $identity['last_name'],
-            dateOfBirth: (string) $identity['date_of_birth'],
-            phone: (string) $identity['phone'],
+            firstName: $this->nullableString($identity['first_name'] ?? null),
+            lastName: $this->nullableString($identity['last_name'] ?? null),
+            dateOfBirth: $this->nullableString($identity['date_of_birth'] ?? null),
+            phone: $this->nullableString($identity['phone'] ?? null),
+            nationalId: $this->nullableString($identity['national_id'] ?? null),
             excludePatientId: null,
         );
 
@@ -123,6 +118,29 @@ class CreatePatientUseCase
             'last_name' => $patient['last_name'] ?? null,
             'date_of_birth' => $patient['date_of_birth'] ?? null,
             'phone' => $patient['phone'] ?? null,
+            'national_id' => $patient['national_id'] ?? null,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $identity
+     */
+    private function hasNoDuplicateSearchKey(array $identity): bool
+    {
+        if ($this->nullableString($identity['national_id'] ?? null) !== null) {
+            return false;
+        }
+
+        return $this->nullableString($identity['first_name'] ?? null) === null
+            || $this->nullableString($identity['last_name'] ?? null) === null
+            || $this->nullableString($identity['date_of_birth'] ?? null) === null
+            || $this->nullableString($identity['phone'] ?? null) === null;
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        $normalized = trim((string) $value);
+
+        return $normalized !== '' ? $normalized : null;
     }
 }
