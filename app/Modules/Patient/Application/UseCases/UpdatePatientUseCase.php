@@ -138,6 +138,7 @@ class UpdatePatientUseCase
                     'lastName' => $duplicate['last_name'] ?? null,
                     'dateOfBirth' => $duplicate['date_of_birth'] ?? null,
                     'phone' => $duplicate['phone'] ?? null,
+                    'nationalId' => $duplicate['national_id'] ?? null,
                 ],
                 $duplicates,
             ),

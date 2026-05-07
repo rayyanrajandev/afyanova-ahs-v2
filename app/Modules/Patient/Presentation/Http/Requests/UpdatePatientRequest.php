@@ -44,7 +44,7 @@ class UpdatePatientRequest extends FormRequest
             'lastName' => ['sometimes', 'string', 'max:100'],
             'gender' => ['sometimes', Rule::in(['male', 'female', 'other', 'unknown'])],
             'dateOfBirth' => ['sometimes', 'date', 'before:today'],
-            'phone' => ['nullable', 'string', 'max:30'],
+            'phone' => ['sometimes', 'required', 'string', 'min:7', 'max:30'],
             'email' => ['nullable', 'email', 'max:255'],
             'nationalId' => ['nullable', 'string', 'max:50'],
             'countryCode' => ['sometimes', 'string', 'size:2'],

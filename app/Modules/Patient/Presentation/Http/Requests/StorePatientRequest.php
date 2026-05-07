@@ -23,7 +23,7 @@ class StorePatientRequest extends FormRequest
             'lastName' => ['required', 'string', 'max:100'],
             'gender' => ['required', Rule::in(['male', 'female', 'other', 'unknown'])],
             'dateOfBirth' => ['required', 'date', 'before:today'],
-            'phone' => ['nullable', 'string', 'max:30'],
+            'phone' => ['required', 'string', 'min:7', 'max:30'],
             'email' => ['nullable', 'email', 'max:255'],
             'nationalId' => ['nullable', 'string', 'max:50'],
             'countryCode' => ['required', 'string', 'size:2'],

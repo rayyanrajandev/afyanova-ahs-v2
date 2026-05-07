@@ -4082,8 +4082,8 @@ async function findPreSubmitDuplicateMatches(payload: ReturnType<typeof payloadF
             const lastMatches =
                 normalizeNameForDuplicate(candidate.lastName) === expectedLastName;
             const dobMatches = (candidate.dateOfBirth ?? '').slice(0, 10) === expectedDateOfBirth;
-            const phoneMatches =
-                normalizePhoneForDuplicate(candidate.phone) === expectedPhone;
+            const candidatePhone = normalizePhoneForDuplicate(candidate.phone);
+            const phoneMatches = Boolean(expectedPhone && candidatePhone && candidatePhone === expectedPhone);
 
             return nationalIdMatches || (firstMatches && lastMatches && dobMatches && phoneMatches);
         })
@@ -4302,8 +4302,20 @@ function editFieldError(key: string): string | null {
 
 async function updatePatient() {
     if (!editTargetPatient.value || editLoading.value) return;
-    editLoading.value = true;
     editErrors.value = {};
+    const editPhone = editForm.phone.trim();
+    if (editPhone === '') {
+        editErrors.value.phone = [tW2('validation.phoneRequired')];
+        await focusEditErrorSummary();
+        return;
+    }
+    if (editPhone.length < 7) {
+        editErrors.value.phone = [tW2('validation.phoneTooShort')];
+        await focusEditErrorSummary();
+        return;
+    }
+
+    editLoading.value = true;
     const dateOfBirth =
         asTrimmedString(editForm.dateOfBirth) ||
         deriveDateOfBirthFromAgeParts(
@@ -4319,7 +4331,7 @@ async function updatePatient() {
                 lastName: editForm.lastName.trim(),
                 gender: editForm.gender || null,
                 dateOfBirth: dateOfBirth || null,
-                phone: editForm.phone.trim() || null,
+                phone: editPhone,
                 email: editForm.email.trim() || null,
                 nationalId: editForm.nationalId.trim() || null,
                 countryCode: normalizeCountryCode(editForm.countryCode) || null,
@@ -7377,7 +7389,7 @@ onMounted(initialPageLoad);
                                 <legend class="px-2 text-sm font-medium text-muted-foreground">Contact and address</legend>
                                     <div class="grid gap-1.5">
                                         <Label for="patient-edit-phone" class="text-xs font-medium">
-                                            Phone
+                                            Phone <span class="text-destructive">*</span>
                                         </Label>
                                         <Input
                                             id="patient-edit-phone"

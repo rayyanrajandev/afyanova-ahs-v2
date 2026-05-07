@@ -182,6 +182,17 @@ it('rejects future date of birth', function (): void {
         ->assertJsonValidationErrors(['dateOfBirth']);
 });
 
+it('requires phone during patient registration', function (): void {
+    $user = makePatientReadUser();
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/patients', patientPayload([
+            'phone' => null,
+        ]))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['phone']);
+});
+
 it('requires patient origin fields during registration', function (): void {
     $user = makePatientManageUser();
 
@@ -342,6 +353,19 @@ it('returns duplicate warning when update reuses an existing national id', funct
         ->assertOk()
         ->assertJsonPath('warnings.0.code', 'POTENTIAL_DUPLICATE_PATIENT')
         ->assertJsonPath('warnings.0.matches.0.id', $first['id']);
+});
+
+it('rejects clearing mandatory patient phone during update', function (): void {
+    $user = makePatientManageUser();
+
+    $created = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/patients/'.$created['id'], [
+            'phone' => null,
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['phone']);
 });
 
 it('updates patient status', function (): void {
