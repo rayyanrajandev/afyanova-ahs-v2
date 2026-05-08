@@ -3540,7 +3540,7 @@ onMounted(() => {
                                                         <template v-else>{{ patientAllergies.length }} allerg{{ patientAllergies.length === 1 ? 'y' : 'ies' }} recorded</template>
                                                     </p>
                                                     <span class="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary">
-                                                        <AppIcon name="shield-alert" class="size-3.5" />{{ patientAllergies.length > 0 ? 'Review medication safety' : 'Record allergy status' }}
+                                                        <AppIcon name="alert-triangle" class="size-3.5" />{{ patientAllergies.length > 0 ? 'Review medication safety' : 'Record allergy status' }}
                                                     </span>
                                                 </button>
                                                 <button type="button" class="rounded-lg border bg-background px-4 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5" @click="activeTab = 'orders'">
@@ -3674,7 +3674,7 @@ onMounted(() => {
                                             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                                                 <div class="flex min-w-0 items-center gap-3">
                                                     <span class="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground ring-1 ring-border">
-                                                        <AppIcon name="route" class="size-4" />
+                                                        <AppIcon name="arrow-right" class="size-4" />
                                                     </span>
                                                     <div class="min-w-0">
                                                         <p class="text-sm font-semibold text-foreground">Active handoffs</p>
@@ -3950,118 +3950,98 @@ onMounted(() => {
                                             <p class="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Medications</p>
                                             <p class="text-sm text-muted-foreground">Maintain patient allergies, the current medication list, and reconciliation follow-up in one place.</p>
                                         </div>
-                                        <div class="flex flex-wrap gap-2">
-                                            <Button size="sm" variant="outline" class="gap-1.5" as-child>
-                                                <Link :href="clinicalModuleHref('/pharmacy-orders', { includeAppointment: false })"><AppIcon name="book-open" class="size-3.5" />Open pharmacy queue</Link>
-                                            </Button>
-                                        </div>
                                     </div>
 
-                                    <div class="rounded-lg border bg-muted/10 px-4 py-4">
-                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                            <div class="space-y-1">
-                                                <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Start here</p>
-                                                <p class="text-sm font-medium text-foreground">Build the patient medication picture in three steps.</p>
-                                                <p class="text-sm text-muted-foreground">Record allergies first, keep the current medication list up to date, then review reconciliation follow-up from dispensed orders.</p>
-                                            </div>
-                                            <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                class="gap-1.5 self-start"
-                                                @click="scrollToMedicationWorkspaceSection('reconciliation')"
-                                            >
-                                                <AppIcon name="check" class="size-3.5" />Review reconciliation
-                                            </Button>
-                                        </div>
-
-                                        <div class="mt-4 grid gap-3 lg:grid-cols-3">
-                                            <button
-                                                type="button"
-                                                class="rounded-lg border bg-background px-4 py-4 text-left transition hover:border-primary/30 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
-                                                :disabled="!canUpdatePatients"
-                                                @click="openAllergyDialog()"
-                                            >
-                                                <div class="flex items-start gap-3">
-                                                    <div class="rounded-lg bg-primary/10 p-2 text-primary">
-                                                        <AppIcon name="shield-alert" class="size-4" />
-                                                    </div>
-                                                    <div class="space-y-1">
-                                                        <div class="flex items-center gap-2">
-                                                            <p class="text-sm font-semibold text-foreground">1. Record allergy</p>
-                                                            <span class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-xs font-medium tabular-nums text-muted-foreground">{{ patientAllergies.length }}</span>
-                                                        </div>
-                                                        <p class="text-xs text-muted-foreground">Add medicine or substance reactions before more therapy is ordered or dispensed.</p>
-                                                    </div>
-                                                </div>
-                                            </button>
-
-                                            <button
-                                                type="button"
-                                                class="rounded-lg border bg-background px-4 py-4 text-left transition hover:border-primary/30 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
-                                                :disabled="!canUpdatePatients"
-                                                @click="openMedicationProfileDialog()"
-                                            >
-                                                <div class="flex items-start gap-3">
-                                                    <div class="rounded-lg bg-primary/10 p-2 text-primary">
-                                                        <AppIcon name="pill" class="size-4" />
-                                                    </div>
-                                                    <div class="space-y-1">
-                                                        <div class="flex items-center gap-2">
-                                                            <p class="text-sm font-semibold text-foreground">2. Add current medication</p>
-                                                            <span class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-xs font-medium tabular-nums text-muted-foreground">{{ patientMedicationProfile.length }}</span>
-                                                        </div>
-                                                        <p class="text-xs text-muted-foreground">Use this for home meds, chronic therapy, discharge medication, or external prescriptions.</p>
-                                                    </div>
-                                                </div>
-                                            </button>
-
-                                            <button
-                                                type="button"
-                                                class="rounded-lg border bg-background px-4 py-4 text-left transition hover:border-primary/30 hover:bg-primary/5"
-                                                @click="scrollToMedicationWorkspaceSection('reconciliation')"
-                                            >
-                                                <div class="flex items-start gap-3">
-                                                    <div class="rounded-lg bg-primary/10 p-2 text-primary">
-                                                        <AppIcon name="check" class="size-4" />
-                                                    </div>
-                                                    <div class="space-y-1">
-                                                        <div class="flex items-center gap-2">
-                                                            <p class="text-sm font-semibold text-foreground">3. Review reconciliation</p>
-                                                            <span v-if="(patientMedicationReconciliation?.counts.unreconciledDispensedOrders ?? 0) > 0" class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-xs font-medium tabular-nums text-primary">{{ patientMedicationReconciliation!.counts.unreconciledDispensedOrders }}</span>
-                                                        </div>
-                                                        <p class="text-xs text-muted-foreground">Compare dispensed therapy with the active profile and close follow-up that still needs review.</p>
-                                                    </div>
-                                                </div>
-                                            </button>
-                                        </div>
-
-                                        <p
-                                            v-if="!canUpdatePatients"
-                                            class="mt-3 text-xs text-muted-foreground"
+                                    <div :class="['grid gap-2', canReadPharmacyOrders ? 'md:grid-cols-4' : 'md:grid-cols-3']">
+                                        <button
+                                            type="button"
+                                            class="group flex min-h-14 items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
+                                            :disabled="!canUpdatePatients"
+                                            @click="openAllergyDialog()"
                                         >
-                                            Recording allergies and current medication entries requires
-                                            <code>patients.update</code>.
-                                        </p>
+                                            <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
+                                                <AppIcon name="alert-triangle" class="size-4" />
+                                            </span>
+                                            <span class="min-w-0">
+                                                <span class="block text-xs font-medium text-muted-foreground">Allergy safety</span>
+                                                <span class="mt-0.5 block truncate text-sm font-semibold text-foreground">
+                                                    <template v-if="(patientMedicationReconciliation?.counts.activeAllergies ?? patientAllergies.length) > 0">
+                                                        {{ patientMedicationReconciliation?.counts.activeAllergies ?? patientAllergies.length }} active
+                                                    </template>
+                                                    <template v-else>Not recorded</template>
+                                                </span>
+                                            </span>
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            class="group flex min-h-14 items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
+                                            :disabled="!canUpdatePatients"
+                                            @click="openMedicationProfileDialog()"
+                                        >
+                                            <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
+                                                <AppIcon name="pill" class="size-4" />
+                                            </span>
+                                            <span class="min-w-0">
+                                                <span class="block text-xs font-medium text-muted-foreground">Medication profile</span>
+                                                <span class="mt-0.5 block truncate text-sm font-semibold text-foreground">
+                                                    <template v-if="(patientMedicationReconciliation?.counts.activeMedicationProfile ?? patientMedicationProfile.length) > 0">
+                                                        {{ patientMedicationReconciliation?.counts.activeMedicationProfile ?? patientMedicationProfile.length }} current
+                                                    </template>
+                                                    <template v-else>No current meds</template>
+                                                </span>
+                                            </span>
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            class="group flex min-h-14 items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                                            @click="scrollToMedicationWorkspaceSection('reconciliation')"
+                                        >
+                                            <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
+                                                <AppIcon name="check-circle" class="size-4" />
+                                            </span>
+                                            <span class="min-w-0">
+                                                <span class="block text-xs font-medium text-muted-foreground">Reconciliation</span>
+                                                <span class="mt-0.5 block truncate text-sm font-semibold text-foreground">
+                                                    <template v-if="(patientMedicationReconciliation?.counts.unreconciledDispensedOrders ?? 0) > 0">
+                                                        {{ patientMedicationReconciliation?.counts.unreconciledDispensedOrders ?? 0 }} to review
+                                                    </template>
+                                                    <template v-else>Up to date</template>
+                                                </span>
+                                            </span>
+                                        </button>
+
+                                        <Button
+                                            v-if="canReadPharmacyOrders"
+                                            variant="outline"
+                                            class="group flex min-h-14 items-center justify-start gap-3 rounded-lg border-border bg-muted/30 px-3 py-2 text-left hover:border-primary/40 hover:bg-primary/5"
+                                            as-child
+                                        >
+                                            <Link :href="clinicalModuleHref('/pharmacy-orders', { includeAppointment: false })">
+                                                <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
+                                                    <AppIcon name="book-open" class="size-4" />
+                                                </span>
+                                                <span class="min-w-0">
+                                                    <span class="block text-xs font-medium text-muted-foreground">Pharmacy history</span>
+                                                    <span class="mt-0.5 block truncate text-sm font-semibold text-foreground">
+                                                        <template v-if="(patientMedicationReconciliation?.counts.activeDispensedOrders ?? 0) > 0">
+                                                            {{ patientMedicationReconciliation?.counts.activeDispensedOrders ?? 0 }} dispensed
+                                                        </template>
+                                                        <template v-else>No dispenses</template>
+                                                    </span>
+                                                </span>
+                                            </Link>
+                                        </Button>
                                     </div>
 
-                                    <div class="grid gap-4 xl:grid-cols-4">
-                                        <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Active allergies</p>
-                                            <p class="mt-1.5 text-lg font-semibold text-foreground">{{ patientMedicationReconciliation?.counts.activeAllergies ?? patientAllergies.length }}</p>
-                                        </div>
-                                        <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Current medications</p>
-                                            <p class="mt-1.5 text-lg font-semibold text-foreground">{{ patientMedicationReconciliation?.counts.activeMedicationProfile ?? patientMedicationProfile.length }}</p>
-                                        </div>
-                                        <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Dispensed orders</p>
-                                            <p class="mt-1.5 text-lg font-semibold text-foreground">{{ patientMedicationReconciliation?.counts.activeDispensedOrders ?? 0 }}</p>
-                                        </div>
-                                        <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Reconciliation attention</p>
-                                            <p class="mt-1.5 text-lg font-semibold text-foreground">{{ patientMedicationReconciliation?.counts.unreconciledDispensedOrders ?? 0 }}</p>
-                                        </div>
-                                    </div>
+                                    <p
+                                        v-if="!canUpdatePatients"
+                                        class="text-xs text-muted-foreground"
+                                    >
+                                        Recording allergies and current medication entries requires
+                                        <code>patients.update</code>.
+                                    </p>
 
                                     <div class="grid gap-6 xl:grid-cols-3">
                                         <Card
@@ -4204,8 +4184,20 @@ onMounted(() => {
                                         class="rounded-lg scroll-mt-24"
                                     >
                                         <CardHeader class="pb-3">
-                                            <CardTitle>Medication reconciliation</CardTitle>
-                                            <CardDescription>Review what is on the current medication list, what has been dispensed, and what still needs reconciliation follow-up.</CardDescription>
+                                            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                                <div>
+                                                    <CardTitle>Medication reconciliation</CardTitle>
+                                                    <CardDescription>Review what is on the current medication list, what has been dispensed, and what still needs reconciliation follow-up.</CardDescription>
+                                                </div>
+                                                <div
+                                                    v-if="patientMedicationReconciliation"
+                                                    class="flex flex-wrap gap-2 text-xs"
+                                                >
+                                                    <Badge variant="outline">{{ patientMedicationReconciliation.unreconciledDispensedOrders.length }} unreconciled</Badge>
+                                                    <Badge variant="outline">{{ patientMedicationReconciliation.continueCandidates.length }} continue</Badge>
+                                                    <Badge variant="outline">{{ patientMedicationReconciliation.profileWithoutDispensedOrders.length + patientMedicationReconciliation.newOrdersToProfile.length }} list review</Badge>
+                                                </div>
+                                            </div>
                                         </CardHeader>
                                         <CardContent class="space-y-4">
                                             <div v-if="patientMedicationReconciliationLoading" class="space-y-3">
@@ -4223,21 +4215,6 @@ onMounted(() => {
                                                         {{ patientMedicationReconciliation.suggestedActions[0] }}
                                                     </AlertDescription>
                                                 </Alert>
-
-                                                <div class="grid gap-4 xl:grid-cols-3">
-                                                    <div class="rounded-lg border bg-muted/10 px-4 py-3">
-                                                        <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Unreconciled dispensed orders</p>
-                                                        <p class="mt-1.5 text-lg font-semibold text-foreground">{{ patientMedicationReconciliation.unreconciledDispensedOrders.length }}</p>
-                                                    </div>
-                                                    <div class="rounded-lg border bg-muted/10 px-4 py-3">
-                                                        <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Continue candidates</p>
-                                                        <p class="mt-1.5 text-lg font-semibold text-foreground">{{ patientMedicationReconciliation.continueCandidates.length }}</p>
-                                                    </div>
-                                                    <div class="rounded-lg border bg-muted/10 px-4 py-3">
-                                                        <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">List review needed</p>
-                                                        <p class="mt-1.5 text-lg font-semibold text-foreground">{{ patientMedicationReconciliation.profileWithoutDispensedOrders.length + patientMedicationReconciliation.newOrdersToProfile.length }}</p>
-                                                    </div>
-                                                </div>
 
                                                 <div class="grid gap-4 xl:grid-cols-2 2xl:grid-cols-4">
                                                     <div class="space-y-3 rounded-lg border bg-background px-4 py-4">
@@ -4340,7 +4317,7 @@ onMounted(() => {
                                                                         :disabled="isMedicationWorkspaceActionLoading(`profile-review:${profile.id}`)"
                                                                         @click="quickReconcileMedicationProfile(profile)"
                                                                     >
-                                                                        <AppIcon name="check" class="size-3.5" />
+                                                                        <AppIcon name="check-circle" class="size-3.5" />
                                                                         {{
                                                                             isMedicationWorkspaceActionLoading(`profile-review:${profile.id}`)
                                                                                 ? 'Saving...'
@@ -4601,7 +4578,7 @@ onMounted(() => {
                                                                     variant="destructive"
                                                                     role="alert"
                                                                 >
-                                                                    <AppIcon name="triangle-alert" class="size-4" aria-hidden="true" />
+                                                                    <AppIcon name="alert-triangle" class="size-4" aria-hidden="true" />
                                                                     <AlertTitle>Critical laboratory result</AlertTitle>
                                                                     <AlertDescription>One or more laboratory results in this view are flagged as critical and require immediate clinical review.</AlertDescription>
                                                                 </Alert>
