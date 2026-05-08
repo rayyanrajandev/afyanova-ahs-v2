@@ -3726,27 +3726,44 @@ onMounted(() => {
                                     </div>
 
                                     <div v-else class="space-y-6">
-                                        <div class="rounded-lg border bg-background px-4 py-4">
-                                            <div class="grid gap-4 lg:grid-cols-3">
-                                            <div class="space-y-1">
-                                                <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Current handoff</p>
-                                                <p class="text-sm font-semibold text-foreground">{{ handoffSummary.title }}</p>
-                                                <p class="text-sm text-muted-foreground">{{ handoffSummary.summary }}</p>
-                                                <p class="text-xs text-muted-foreground">{{ handoffSummary.meta }}</p>
+                                        <div :class="['grid gap-2', latestClinicalSignal ? 'xl:grid-cols-3' : 'xl:grid-cols-2']">
+                                            <div class="flex min-h-20 items-start gap-3 rounded-lg border bg-muted/30 px-3 py-3">
+                                                <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border">
+                                                    <AppIcon name="calendar-clock" class="size-4" />
+                                                </span>
+                                                <div class="min-w-0 space-y-1">
+                                                    <p class="text-xs font-medium text-muted-foreground">Care status</p>
+                                                    <p class="text-sm font-semibold text-foreground">{{ handoffSummary.title }}</p>
+                                                    <p class="line-clamp-2 text-xs text-muted-foreground">{{ handoffSummary.summary }}</p>
+                                                    <p class="truncate text-xs text-muted-foreground">{{ handoffSummary.meta }}</p>
+                                                </div>
                                             </div>
-                                            <div class="space-y-1">
-                                                <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Latest clinical signal</p>
-                                                <p class="text-sm font-semibold text-foreground">{{ latestClinicalSignal ? latestClinicalSignal.title : 'No recent clinical signal' }}</p>
-                                                <p class="text-sm text-muted-foreground">{{ latestClinicalSignal ? latestClinicalSignal.summary : 'Consultation notes, lab results, and imaging reports will surface here.' }}</p>
-                                                <p class="text-xs text-muted-foreground">{{ latestClinicalSignal ? `${timelineCategoryLabel(latestClinicalSignal.category)} | ${formatDateTime(latestClinicalSignal.occurredAt)}` : 'Timeline follows the most recent patient activity.' }}</p>
+
+                                            <div v-if="latestClinicalSignal" class="flex min-h-20 items-start gap-3 rounded-lg border bg-muted/30 px-3 py-3">
+                                                <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border">
+                                                    <AppIcon :name="latestClinicalSignal.icon" class="size-4" />
+                                                </span>
+                                                <div class="min-w-0 space-y-1">
+                                                    <p class="text-xs font-medium text-muted-foreground">Latest clinical signal</p>
+                                                    <p class="truncate text-sm font-semibold text-foreground">{{ latestClinicalSignal.title }}</p>
+                                                    <p class="line-clamp-2 text-xs text-muted-foreground">{{ latestClinicalSignal.summary }}</p>
+                                                    <p class="truncate text-xs text-muted-foreground">{{ `${timelineCategoryLabel(latestClinicalSignal.category)} | ${formatDateTime(latestClinicalSignal.occurredAt)}` }}</p>
+                                                </div>
                                             </div>
-                                            <div class="space-y-1">
-                                                <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Next documented step</p>
-                                                <p class="text-sm text-foreground">{{ nextDocumentedStep }}</p>
-                                                <Button size="sm" variant="outline" class="mt-2 h-8 gap-1.5" @click="activeTab = 'records'">
-                                                    <AppIcon name="file-text" class="size-3.5" />Review notes
-                                                </Button>
-                                            </div>
+
+                                            <div class="flex min-h-20 items-start gap-3 rounded-lg border bg-muted/30 px-3 py-3">
+                                                <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border">
+                                                    <AppIcon name="arrow-right" class="size-4" />
+                                                </span>
+                                                <div class="min-w-0 space-y-2">
+                                                    <div class="space-y-1">
+                                                        <p class="text-xs font-medium text-muted-foreground">Next documented step</p>
+                                                        <p class="line-clamp-3 text-sm font-semibold text-foreground">{{ nextDocumentedStep }}</p>
+                                                    </div>
+                                                    <Button v-if="canReadAppointments" size="sm" variant="outline" class="h-8 gap-1.5" as-child>
+                                                        <Link :href="timelineAppointmentActionHref"><AppIcon :name="visitPrimaryActionIcon" class="size-3.5" />{{ timelineAppointmentActionLabel }}</Link>
+                                                    </Button>
+                                                </div>
                                             </div>
                                         </div>
 
@@ -3754,8 +3771,13 @@ onMounted(() => {
                                             <CardHeader class="pb-3">
                                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                                     <div>
-                                                        <CardTitle>Focused encounter stream</CardTitle>
-                                                        <p class="mt-1 text-sm text-muted-foreground">{{ primaryVisit.appointmentNumber || 'Current visit' }} linked activity across consultation, orders, results, and billing.</p>
+                                                        <CardTitle>Visit in focus</CardTitle>
+                                                        <div class="mt-2 flex flex-wrap gap-2">
+                                                            <Badge variant="secondary">{{ primaryVisit.appointmentNumber || 'Current visit' }}</Badge>
+                                                            <Badge variant="outline">{{ primaryVisit.department || 'Department pending' }}</Badge>
+                                                            <Badge :variant="appointmentStatusVariant(primaryVisit.status)">{{ formatEnumLabel(primaryVisit.status || 'scheduled') }}</Badge>
+                                                            <Badge variant="outline">{{ formatDateTime(primaryVisit.scheduledAt) }}</Badge>
+                                                        </div>
                                                     </div>
                                                     <div class="flex flex-wrap gap-2">
                                                         <Button size="sm" variant="outline" class="gap-1.5" as-child>
@@ -3767,35 +3789,24 @@ onMounted(() => {
                                                     </div>
                                                 </div>
                                             </CardHeader>
-                                            <CardContent class="space-y-4">
-                                                <div class="grid gap-3 md:grid-cols-4">
-                                                    <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                                        <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Linked events</p>
-                                                        <p class="mt-2 text-lg font-semibold text-foreground">{{ focusedEncounterCounts.total }}</p>
-                                                        <p class="mt-1 text-xs text-muted-foreground">All timeline items tied to this visit.</p>
-                                                    </div>
-                                                    <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                                        <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Consultation notes</p>
-                                                        <p class="mt-2 text-lg font-semibold text-foreground">{{ focusedEncounterCounts.notes }}</p>
-                                                        <p class="mt-1 text-xs text-muted-foreground">Documentation linked to this encounter.</p>
-                                                    </div>
-                                                    <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                                        <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Orders &amp; results</p>
-                                                        <p class="mt-2 text-lg font-semibold text-foreground">{{ focusedEncounterCounts.orders }}</p>
-                                                        <p class="mt-1 text-xs text-muted-foreground">Lab, imaging, and pharmacy activity for this visit.</p>
-                                                    </div>
-                                                    <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                                        <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Billing items</p>
-                                                        <p class="mt-2 text-lg font-semibold text-foreground">{{ focusedEncounterCounts.billing }}</p>
-                                                        <p class="mt-1 text-xs text-muted-foreground">Invoices and financial follow-up linked to the visit.</p>
-                                                    </div>
+                                            <CardContent class="space-y-3">
+                                                <div class="flex flex-wrap gap-2">
+                                                    <Badge variant="secondary">{{ focusedEncounterCounts.total }} linked events</Badge>
+                                                    <Badge variant="outline">{{ focusedEncounterCounts.notes }} notes</Badge>
+                                                    <Badge variant="outline">{{ focusedEncounterCounts.orders }} orders/results</Badge>
+                                                    <Badge variant="outline">{{ focusedEncounterCounts.billing }} billing</Badge>
                                                 </div>
 
-                                                <div class="rounded-lg border bg-muted/10 px-4 py-3">
-                                                    <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Latest encounter signal</p>
-                                                    <p class="mt-2 text-sm font-semibold text-foreground">{{ focusedEncounterLatestEvent ? focusedEncounterLatestEvent.title : 'No linked encounter signal' }}</p>
-                                                    <p class="mt-1 text-sm text-foreground">{{ focusedEncounterLatestEvent ? focusedEncounterLatestEvent.summary : 'This visit is in chart focus, but no consultation note, order, result, or billing item has been linked to it yet.' }}</p>
-                                                    <p class="mt-2 text-xs text-muted-foreground">{{ focusedEncounterLatestEvent ? timelineCategoryLabel(focusedEncounterLatestEvent.category) + ' | ' + formatDateTime(focusedEncounterLatestEvent.occurredAt) : 'The focused encounter stream will fill as care is recorded.' }}</p>
+                                                <div class="flex items-start gap-3 rounded-lg border bg-muted/20 px-3 py-3">
+                                                    <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border">
+                                                        <AppIcon :name="focusedEncounterLatestEvent ? focusedEncounterLatestEvent.icon : 'book-open'" class="size-4" />
+                                                    </span>
+                                                    <div class="min-w-0 space-y-1">
+                                                        <p class="text-xs font-medium text-muted-foreground">Latest encounter signal</p>
+                                                        <p class="truncate text-sm font-semibold text-foreground">{{ focusedEncounterLatestEvent ? focusedEncounterLatestEvent.title : 'No linked encounter signal' }}</p>
+                                                        <p class="line-clamp-2 text-sm text-foreground">{{ focusedEncounterLatestEvent ? focusedEncounterLatestEvent.summary : 'This visit is in chart focus, but no consultation note, order, result, or billing item has been linked to it yet.' }}</p>
+                                                        <p class="truncate text-xs text-muted-foreground">{{ focusedEncounterLatestEvent ? timelineCategoryLabel(focusedEncounterLatestEvent.category) + ' | ' + formatDateTime(focusedEncounterLatestEvent.occurredAt) : 'The focused encounter stream will fill as care is recorded.' }}</p>
+                                                    </div>
                                                 </div>
 
                                                 <p class="text-xs text-muted-foreground">
@@ -3805,6 +3816,12 @@ onMounted(() => {
                                         </Card>
 
                                         <div class="space-y-5">
+                                            <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                                                <div>
+                                                    <p class="text-sm font-semibold text-foreground">Patient timeline</p>
+                                                    <p class="text-xs text-muted-foreground">{{ timelineEvents.length }} event{{ timelineEvents.length === 1 ? '' : 's' }} across this chart.</p>
+                                                </div>
+                                            </div>
                                             <div v-for="section in timelineSections" :key="section.key" class="space-y-3">
                                                 <div class="flex items-center gap-2 text-xs text-muted-foreground">
                                                     <div class="h-px flex-1 bg-border"></div>
