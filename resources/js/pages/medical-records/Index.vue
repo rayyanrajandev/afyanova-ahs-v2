@@ -50,11 +50,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
     Select,
@@ -510,6 +505,9 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Medical Records', href: '/medical-records' },
 ];
 
+const ALL_RECORD_FILTER_VALUE = '__all_records__';
+const PREVIOUS_VERSION_DIFF_VALUE = '__previous_version__';
+
 const page = usePage<{
     auth?: {
         user?: {
@@ -748,6 +746,28 @@ const searchForm = reactive<SearchForm>({
     to: queryDateParam('to'),
     perPage: 10,
     page: 1,
+});
+
+const selectedRecordStatusFilter = computed({
+    get: () => searchForm.status || ALL_RECORD_FILTER_VALUE,
+    set: (value: string) => {
+        searchForm.status = value === ALL_RECORD_FILTER_VALUE ? '' : value;
+    },
+});
+
+const selectedRecordTypeFilter = computed({
+    get: () => searchForm.recordType || ALL_RECORD_FILTER_VALUE,
+    set: (value: string) => {
+        searchForm.recordType = value === ALL_RECORD_FILTER_VALUE ? '' : value;
+    },
+});
+
+const selectedDetailsAgainstVersionId = computed({
+    get: () => detailsAgainstVersionId.value || PREVIOUS_VERSION_DIFF_VALUE,
+    set: (value: string) => {
+        detailsAgainstVersionId.value =
+            value === PREVIOUS_VERSION_DIFF_VALUE ? '' : value;
+    },
 });
 
 let searchDebounceTimer: number | null = null;
@@ -4976,12 +4996,6 @@ const scopeWarning = computed(() => {
     return null;
 });
 
-const scopeStatusLabel = computed(() => {
-    if (!scope.value) return 'Scope Unavailable';
-    if (scope.value.resolvedFrom === 'none') return 'Scope Unresolved';
-    return 'Scope Ready';
-});
-
 const visibleQueueCounts = computed(() => ({
     draft: records.value.filter((record) => record.status === 'draft').length,
     finalized: records.value.filter((record) => record.status === 'finalized')
@@ -6527,105 +6541,104 @@ onMounted(() => {
         <div
             class="flex h-full flex-1 flex-col gap-4 overflow-x-auto p-4 md:p-6"
         >
-            <!-- PAGE HEADER -->
-            <div
-                class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
-            >
-                <div class="min-w-0">
-                    <h1
-                        class="flex items-center gap-2 text-2xl font-semibold tracking-tight"
-                    >
-                        <AppIcon
-                            name="stethoscope"
-                            class="size-7 text-primary"
-                        />
-                        Medical Records
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Create and manage clinical notes with patient-safe
-                        filters and clear status controls.
-                    </p>
-                    <Link
-                        v-if="openedFromAppointments"
-                        :href="appointmentReturnHref()"
-                        class="mt-1 inline-flex text-xs text-muted-foreground underline underline-offset-2"
-                    >
-                        {{ tW2('return.backToAppointments') }}
-                    </Link>
-                </div>
-                <div class="flex flex-shrink-0 items-center gap-2">
-                    <Popover v-if="canReadMedicalRecords">
-                        <PopoverTrigger as-child>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                class="h-8 px-2.5"
-                            >
-                                <Badge
-                                    :variant="
-                                        scopeWarning
-                                            ? 'destructive'
-                                            : 'secondary'
-                                    "
-                                >
-                                    {{ scopeStatusLabel }}
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20" aria-hidden="true">
+                            <AppIcon name="file-text" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h1 class="text-base font-semibold tracking-tight md:text-lg">Medical Records</h1>
+                                <Badge variant="secondary" class="h-5 px-1.5 text-[11px]">
+                                    {{ pagination?.total ?? summaryQueueCounts.total }} records
                                 </Badge>
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                            align="end"
-                            class="w-72 space-y-1 text-xs"
+                                <Badge v-if="summaryQueueCounts.draft > 0" variant="outline" class="h-5 px-1.5 text-[11px]">
+                                    {{ summaryQueueCounts.draft }} drafts
+                                </Badge>
+                                <Badge
+                                    v-if="openedFromAppointments && createForm.appointmentId.trim()"
+                                    variant="outline"
+                                    class="h-5 px-1.5 text-[11px]"
+                                >
+                                    Appointment handoff
+                                </Badge>
+                            </div>
+                            <p class="truncate text-xs text-muted-foreground">
+                                Create, review, and finalize clinical notes with patient-safe filters and visit context.
+                            </p>
+                            <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
+                                <span class="inline-flex items-center gap-1">
+                                    <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
+                                    <span class="font-medium text-foreground">{{ scope?.facility?.name || 'No facility' }}</span>
+                                </span>
+                                <span class="select-none text-border" aria-hidden="true">|</span>
+                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
+                                <template v-if="recordToolbarStateLabel">
+                                    <span class="select-none text-border" aria-hidden="true">|</span>
+                                    <span>{{ recordToolbarStateLabel }}</span>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            :disabled="listLoading"
+                            class="h-8 gap-1.5"
+                            @click="refreshPage"
                         >
-                            <p v-if="scope?.tenant">
-                                Tenant: {{ scope.tenant.name }} ({{
-                                    scope.tenant.code
-                                }})
-                            </p>
-                            <p v-if="scope?.facility">
-                                Facility: {{ scope.facility.name }} ({{
-                                    scope.facility.code
-                                }})
-                            </p>
-                            <p v-if="!scope" class="text-destructive">
-                                Scope could not be loaded.
-                            </p>
-                        </PopoverContent>
-                    </Popover>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        :disabled="listLoading"
-                        class="gap-1.5"
-                        @click="refreshPage"
-                    >
-                        <AppIcon name="activity" class="size-3.5" />
-                        {{ listLoading ? 'Refreshing...' : 'Refresh' }}
-                    </Button>
-                    <Button
-                        v-if="canUseMedicalRecordComposer && (canReadAppointments || hasInitialConsultationEntryContext)"
-                        :variant="medicalRecordTab === 'new' ? 'secondary' : 'default'"
-                        size="sm"
-                        class="h-8 gap-1.5"
-                        @click="
-                            medicalRecordTab === 'new'
-                                ? openMedicalRecordWorkspace('list', {
-                                      focusSearch: true,
-                                  })
-                                : beginNewConsultationWorkspace()
-                        "
-                    >
-                        <AppIcon
-                            :name="medicalRecordTab === 'new' ? 'circle-x' : 'stethoscope'"
-                            class="size-3.5"
-                        />
-                        {{
-                            medicalRecordTab === 'new'
-                                ? 'Close Composer'
-                                : hasInitialConsultationEntryContext ? 'Continue note' : 'Start note'
-                        }}
-                    </Button>
+                            <AppIcon name="refresh-cw" class="size-3.5" :class="{ 'animate-spin': listLoading }" />
+                            Refresh
+                        </Button>
+                        <Button
+                            v-if="openedFromAppointments"
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            as-child
+                        >
+                            <Link :href="appointmentReturnHref()">
+                                <AppIcon name="calendar-clock" class="size-3.5" />
+                                Appointments
+                            </Link>
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            @click="openChartFocusSelector"
+                        >
+                            <AppIcon name="user-round-search" class="size-3.5" />
+                            Open chart
+                        </Button>
+                        <Button
+                            v-if="canUseMedicalRecordComposer && (canReadAppointments || hasInitialConsultationEntryContext)"
+                            :variant="medicalRecordTab === 'new' ? 'secondary' : 'default'"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            @click="
+                                medicalRecordTab === 'new'
+                                    ? openMedicalRecordWorkspace('list', {
+                                          focusSearch: true,
+                                      })
+                                    : beginNewConsultationWorkspace()
+                            "
+                        >
+                            <AppIcon
+                                :name="medicalRecordTab === 'new' ? 'circle-x' : 'stethoscope'"
+                                class="size-3.5"
+                            />
+                            {{
+                                medicalRecordTab === 'new'
+                                    ? 'Close note'
+                                    : hasInitialConsultationEntryContext ? 'Continue note' : 'Start note'
+                            }}
+                        </Button>
+                    </div>
                 </div>
-            </div>
+            </section>
 
             <!-- SCOPE & ERROR ALERTS -->
             <Alert v-if="scopeWarning" variant="destructive">
@@ -6678,15 +6691,12 @@ onMounted(() => {
                         id="consultation-records-list"
                         class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border-sidebar-border/70 shadow-sm"
                     >
-                        <CardHeader class="shrink-0 gap-5 border-b bg-muted/10 pb-5">
+                        <CardHeader class="shrink-0 gap-4 border-b bg-muted/10 pb-5">
                             <div
                                 class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between"
                             >
-                                <div class="min-w-0 space-y-3">
+                                <div class="min-w-0 space-y-1.5">
                                     <div class="flex flex-wrap items-center gap-2">
-                                        <Badge variant="secondary">
-                                            Clinical records registry
-                                        </Badge>
                                         <Badge
                                             v-if="openedFromAppointments && createForm.appointmentId.trim()"
                                             variant="outline"
@@ -6698,28 +6708,19 @@ onMounted(() => {
                                         </Badge>
                                     </div>
                                     <div class="space-y-1.5">
-                                        <CardTitle class="flex items-center gap-2 text-xl">
+                                        <CardTitle class="flex items-center gap-2 text-base md:text-lg">
                                             <AppIcon
                                                 name="file-text"
-                                                class="size-5 text-muted-foreground"
+                                                class="size-4 text-muted-foreground"
                                             />
-                                            Clinical records
+                                            Records stream
                                         </CardTitle>
-                                        <CardDescription class="max-w-3xl text-sm leading-6">
-                                            Review clinical notes across patients, narrow the registry when you need a specific chart, and use the patient chart page for full history review or chart-led note launch.
+                                        <CardDescription class="max-w-3xl text-sm">
+                                            Review, filter, and finalize clinical notes without losing the current queue context.
                                         </CardDescription>
                                     </div>
                                 </div>
                                 <div class="flex shrink-0 items-center gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        class="gap-1.5"
-                                        @click="openChartFocusSelector"
-                                    >
-                                        <AppIcon name="user-round-search" class="size-3.5" />
-                                        Open chart
-                                    </Button>
                                     <Button
                                         variant="outline"
                                         size="sm"
@@ -6750,11 +6751,11 @@ onMounted(() => {
                                 </div>
                             </div>
 
-                            <div class="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.85fr)]">
+                            <div class="grid gap-3 xl:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.7fr)]">
                                 <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                                     <button
                                         type="button"
-                                        class="rounded-lg border bg-background/85 px-3 py-3 text-left transition-colors hover:bg-accent/40"
+                                        class="group flex min-h-14 items-center gap-3 rounded-lg border bg-background/85 px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
                                         :class="
                                             isRecordSummaryFilterActive('draft')
                                                 ? 'border-primary bg-primary/10'
@@ -6762,21 +6763,19 @@ onMounted(() => {
                                         "
                                         @click="applyRecordSummaryFilter('draft')"
                                     >
-                                        <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                                            Draft notes
-                                        </p>
-                                        <div class="mt-2 flex items-end justify-between gap-2">
-                                            <span class="text-2xl font-semibold text-foreground">
-                                                {{ queueCountLabel(summaryQueueCounts.draft) }}
+                                        <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
+                                            <AppIcon name="file-text" class="size-4" />
+                                        </span>
+                                        <span class="min-w-0">
+                                            <span class="block text-xs font-medium text-muted-foreground">Draft notes</span>
+                                            <span class="mt-0.5 block truncate text-sm font-semibold text-foreground">
+                                                {{ queueCountLabel(summaryQueueCounts.draft) }} open
                                             </span>
-                                            <span class="text-xs text-muted-foreground">
-                                                Needs review
-                                            </span>
-                                        </div>
+                                        </span>
                                     </button>
                                     <button
                                         type="button"
-                                        class="rounded-lg border bg-background/85 px-3 py-3 text-left transition-colors hover:bg-accent/40"
+                                        class="group flex min-h-14 items-center gap-3 rounded-lg border bg-background/85 px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
                                         :class="
                                             isRecordSummaryFilterActive('finalized')
                                                 ? 'border-primary bg-primary/10'
@@ -6784,21 +6783,19 @@ onMounted(() => {
                                         "
                                         @click="applyRecordSummaryFilter('finalized')"
                                     >
-                                        <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                                            Finalized
-                                        </p>
-                                        <div class="mt-2 flex items-end justify-between gap-2">
-                                            <span class="text-2xl font-semibold text-foreground">
-                                                {{ queueCountLabel(summaryQueueCounts.finalized) }}
+                                        <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
+                                            <AppIcon name="check-circle" class="size-4" />
+                                        </span>
+                                        <span class="min-w-0">
+                                            <span class="block text-xs font-medium text-muted-foreground">Finalized</span>
+                                            <span class="mt-0.5 block truncate text-sm font-semibold text-foreground">
+                                                {{ queueCountLabel(summaryQueueCounts.finalized) }} closed
                                             </span>
-                                            <span class="text-xs text-muted-foreground">
-                                                Closed notes
-                                            </span>
-                                        </div>
+                                        </span>
                                     </button>
                                     <button
                                         type="button"
-                                        class="rounded-lg border bg-background/85 px-3 py-3 text-left transition-colors hover:bg-accent/40"
+                                        class="group flex min-h-14 items-center gap-3 rounded-lg border bg-background/85 px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
                                         :class="
                                             isRecordSummaryFilterActive('amended')
                                                 ? 'border-primary bg-primary/10'
@@ -6806,21 +6803,19 @@ onMounted(() => {
                                         "
                                         @click="applyRecordSummaryFilter('amended')"
                                     >
-                                        <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                                            Amended
-                                        </p>
-                                        <div class="mt-2 flex items-end justify-between gap-2">
-                                            <span class="text-2xl font-semibold text-foreground">
-                                                {{ queueCountLabel(summaryQueueCounts.amended) }}
+                                        <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
+                                            <AppIcon name="activity" class="size-4" />
+                                        </span>
+                                        <span class="min-w-0">
+                                            <span class="block text-xs font-medium text-muted-foreground">Amended</span>
+                                            <span class="mt-0.5 block truncate text-sm font-semibold text-foreground">
+                                                {{ queueCountLabel(summaryQueueCounts.amended) }} updated
                                             </span>
-                                            <span class="text-xs text-muted-foreground">
-                                                Updated charting
-                                            </span>
-                                        </div>
+                                        </span>
                                     </button>
                                     <button
                                         type="button"
-                                        class="rounded-lg border bg-background/85 px-3 py-3 text-left transition-colors hover:bg-accent/40"
+                                        class="group flex min-h-14 items-center gap-3 rounded-lg border bg-background/85 px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
                                         :class="
                                             isRecordSummaryFilterActive('archived')
                                                 ? 'border-primary bg-primary/10'
@@ -6828,28 +6823,23 @@ onMounted(() => {
                                         "
                                         @click="applyRecordSummaryFilter('archived')"
                                     >
-                                        <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                                            Archived
-                                        </p>
-                                        <div class="mt-2 flex items-end justify-between gap-2">
-                                            <span class="text-2xl font-semibold text-foreground">
-                                                {{ queueCountLabel(summaryQueueCounts.archived) }}
+                                        <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
+                                            <AppIcon name="file-text" class="size-4" />
+                                        </span>
+                                        <span class="min-w-0">
+                                            <span class="block text-xs font-medium text-muted-foreground">Archived</span>
+                                            <span class="mt-0.5 block truncate text-sm font-semibold text-foreground">
+                                                {{ queueCountLabel(summaryQueueCounts.archived) }} historical
                                             </span>
-                                            <span class="text-xs text-muted-foreground">
-                                                Historical view
-                                            </span>
-                                        </div>
+                                        </span>
                                     </button>
                                 </div>
 
-                                <div class="rounded-lg border bg-background/80 px-4 py-3">
-                                    <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                                        Quick views
-                                    </p>
-                                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                                <div class="flex min-h-14 flex-col justify-center gap-2 rounded-lg border bg-background/80 px-3 py-2">
+                                    <div class="flex flex-wrap items-center gap-2">
                                         <Button
                                             size="sm"
-                                            class="gap-1.5"
+                                            class="h-8 gap-1.5"
                                             :variant="
                                                 medicalRecordQueuePresetState.recordsToday
                                                     ? 'default'
@@ -6864,7 +6854,7 @@ onMounted(() => {
                                         </Button>
                                         <Button
                                             size="sm"
-                                            class="gap-1.5"
+                                            class="h-8 gap-1.5"
                                             :variant="
                                                 medicalRecordQueuePresetState.draftRecords
                                                     ? 'default'
@@ -6878,7 +6868,7 @@ onMounted(() => {
                                             </Link>
                                         </Button>
                                     </div>
-                                    <div class="mt-3 flex flex-wrap items-center gap-1.5">
+                                    <div class="flex flex-wrap items-center gap-1.5">
                                         <Badge variant="secondary">
                                             {{ medicalRecordListBadgeLabel }}
                                         </Badge>
@@ -6992,13 +6982,14 @@ onMounted(() => {
                             </div>
                             <div
                                 v-else
-                                class="flex items-center justify-between gap-3 rounded-lg border border-dashed bg-background/70 px-4 py-2.5"
+                                class="flex items-center justify-between gap-3 rounded-lg border border-dashed bg-background/70 px-3 py-2"
                             >
-                                <p class="text-sm text-muted-foreground">Showing all patients &middot; <button type="button" class="text-primary hover:underline" @click="openChartFocusSelector">Open a patient chart to focus</button></p>
+                                <p class="text-xs text-muted-foreground">All patients in view. Use filters or open a chart when one patient becomes the focus.</p>
                                 <Button
                                     v-if="canLaunchConsultationFromAppointments"
                                     size="sm"
-                                    class="shrink-0 gap-1.5"
+                                    variant="outline"
+                                    class="h-8 shrink-0 gap-1.5"
                                     @click="beginNewConsultationWorkspace()"
                                 >
                                     <AppIcon name="stethoscope" class="size-3.5" />
@@ -7006,13 +6997,10 @@ onMounted(() => {
                                 </Button>
                             </div>
 
-                            <div class="border-t pt-4">
+                            <div class="border-t pt-3">
                                 <div class="space-y-1">
-                                    <p class="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                                        Encounter stream
-                                    </p>
                                     <p class="text-sm text-muted-foreground">
-                                        {{ pagination?.total ?? 0 }} records ordered as a clinical stream for review, handoff, and follow-up.
+                                        {{ pagination?.total ?? 0 }} records sorted by latest encounter.
                                     </p>
                                 </div>
                             </div>
@@ -7222,9 +7210,9 @@ onMounted(() => {
                                         class="h-6 rounded border border-input bg-transparent px-1 text-xs text-foreground outline-none focus:border-ring"
                                         @change="changePerPage(Number(($event.target as HTMLSelectElement).value))"
                                     >
-                                        <SelectItem value="10">10 / page</SelectItem>
-                                        <SelectItem value="25">25 / page</SelectItem>
-                                        <SelectItem value="50">50 / page</SelectItem>
+                                        <option value="10">10 / page</option>
+                                        <option value="25">25 / page</option>
+                                        <option value="50">50 / page</option>
                                     </select>
                                 </div>
                                 <div class="flex items-center gap-1">
@@ -8662,65 +8650,6 @@ onMounted(() => {
                 </Sheet>
             </div>
 
-            <!-- Care workflow (footer bar) -->
-            <div
-                v-if="canReadMedicalRecords"
-                class="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-4 py-2.5"
-            >
-                <span
-                    class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
-                >
-                    <AppIcon name="activity" class="size-3.5" />
-                    Care workflow:
-                </span>
-                <Button size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link href="/patients">
-                        <AppIcon name="users" class="size-3.5" />
-                        Register Patient
-                    </Link>
-                </Button>
-                <Button v-if="canLaunchConsultationFromAppointments" size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link
-                        :href="
-                            consultationEntryAppointmentsHref(searchForm.patientId)
-                        "
-                    >
-                        <AppIcon name="stethoscope" class="size-3.5" />
-                        Start from Appointments
-                    </Link>
-                </Button>
-                <Button v-if="canOpenLaboratoryWorkflow" size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="contextCreateHref('/laboratory-orders')">
-                        <AppIcon name="flask-conical" class="size-3.5" />
-                        New Lab Order
-                    </Link>
-                </Button>
-                <Button v-if="canOpenPharmacyWorkflow" size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="contextCreateHref('/pharmacy-orders', { includeTabNew: true })">
-                        <AppIcon name="pill" class="size-3.5" />
-                        New Pharmacy Order
-                    </Link>
-                </Button>
-                <Button v-if="canOpenRadiologyWorkflow" size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="contextCreateHref('/radiology-orders')">
-                        <AppIcon name="eye" class="size-3.5" />
-                        New Imaging Order
-                    </Link>
-                </Button>
-                <Button v-if="canOpenTheatreWorkflow" size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="contextCreateHref('/theatre-procedures', { includeTabNew: true })">
-                        <AppIcon name="scissors" class="size-3.5" />
-                        Schedule Procedure
-                    </Link>
-                </Button>
-                <Button v-if="canCreateBillingWorkflow" size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="contextCreateHref('/billing-invoices')">
-                        <AppIcon name="receipt" class="size-3.5" />
-                        Create Invoice
-                    </Link>
-                </Button>
-            </div>
-
             <!-- Filter Sheet (replaces Popover + mobile Drawer) -->
             <Sheet
                 v-if="canReadMedicalRecords"
@@ -8768,12 +8697,12 @@ onMounted(() => {
                                 <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Advanced</p>
                                 <div class="grid gap-2">
                                     <Label for="mr-status-sheet">Status</Label>
-                                    <Select v-model="searchForm.status">
+                                    <Select v-model="selectedRecordStatusFilter">
                                         <SelectTrigger class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                        <SelectItem value="">All statuses</SelectItem>
+                                        <SelectItem :value="ALL_RECORD_FILTER_VALUE">All statuses</SelectItem>
                                         <SelectItem value="draft">Draft</SelectItem>
                                         <SelectItem value="finalized">Finalized</SelectItem>
                                         <SelectItem value="amended">Amended</SelectItem>
@@ -8783,12 +8712,12 @@ onMounted(() => {
                                 </div>
                                 <div class="grid gap-2">
                                     <Label for="mr-record-type-sheet">Record type</Label>
-                                    <Select v-model="searchForm.recordType">
+                                    <Select v-model="selectedRecordTypeFilter">
                                         <SelectTrigger class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                        <SelectItem value="">All types</SelectItem>
+                                        <SelectItem :value="ALL_RECORD_FILTER_VALUE">All types</SelectItem>
                                         <SelectItem
                                             v-for="option in MEDICAL_RECORD_NOTE_TYPE_OPTIONS"
                                             :key="`mr-record-type-sheet-${option.value}`"
@@ -9375,7 +9304,7 @@ onMounted(() => {
                                             <div v-else class="space-y-3">
                                                 <div class="grid gap-3 sm:grid-cols-2">
                                                     <div class="grid gap-1.5"><Label for="medical-record-diff-target-version" class="text-xs">Target version</Label><Select v-model="detailsSelectedVersionId"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="version in detailsVersions" :key="'version-target-' + version.id" :value="version.id">{{ versionLabel(version) }}</SelectItem></SelectContent></Select></div>
-                                                    <div class="grid gap-1.5"><Label for="medical-record-diff-base-version" class="text-xs">Base version</Label><Select v-model="detailsAgainstVersionId"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="">Previous (default)</SelectItem><SelectItem v-for="version in detailsVersions" :key="'version-base-' + version.id" :value="version.id">{{ versionLabel(version) }}</SelectItem></SelectContent></Select></div>
+                                                    <div class="grid gap-1.5"><Label for="medical-record-diff-base-version" class="text-xs">Base version</Label><Select v-model="selectedDetailsAgainstVersionId"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem :value="PREVIOUS_VERSION_DIFF_VALUE">Previous (default)</SelectItem><SelectItem v-for="version in detailsVersions" :key="'version-base-' + version.id" :value="version.id">{{ versionLabel(version) }}</SelectItem></SelectContent></Select></div>
                                                 </div>
                                                 <div class="flex items-center gap-3">
                                                     <Button size="sm" variant="outline" :disabled="detailsVersionDiffLoading || !detailsSelectedVersionId" @click="applyDetailsVersionDiff">{{ detailsVersionDiffLoading ? 'Comparing...' : 'Compare' }}</Button>

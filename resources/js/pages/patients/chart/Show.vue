@@ -30,7 +30,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -3422,7 +3421,7 @@ onMounted(() => {
                             <Link :href="visitPrimaryActionHref"><AppIcon :name="visitPrimaryActionIcon" class="size-3.5" />{{ visitPrimaryActionLabel }}</Link>
                         </Button>
                         <Button v-if="canReadMedicalRecords" size="sm" variant="outline" class="h-8 gap-1.5" as-child>
-                            <Link :href="recordsRegistryHref"><AppIcon name="search" class="size-3.5" />Records registry</Link>
+                            <Link :href="recordsRegistryHref"><AppIcon name="search" class="size-3.5" />Clinical records</Link>
                         </Button>
                         <Button size="sm" variant="outline" class="h-8 gap-1.5" as-child>
                             <Link href="/patients"><AppIcon name="chevron-left" class="size-3.5" />Patients</Link>
@@ -5596,7 +5595,7 @@ onMounted(() => {
                                             <p class="text-sm text-muted-foreground">{{ recordsTotal }} notes in this patient chart.</p>
                                         </div>
                                         <Button v-if="canReadMedicalRecords" size="sm" variant="outline" class="gap-1.5" as-child>
-                                            <Link :href="recordsRegistryHref"><AppIcon name="search" class="size-3.5" />Open full registry</Link>
+                                            <Link :href="recordsRegistryHref"><AppIcon name="search" class="size-3.5" />Open clinical records</Link>
                                         </Button>
                                     </div>
 
@@ -5703,31 +5702,29 @@ onMounted(() => {
                                 <div class="grid gap-4 sm:grid-cols-3">
                                     <div class="grid gap-2">
                                         <Label for="patient-medication-allergy-severity">Severity</Label>
-                                        <Select v-model="allergyForm.severity">
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                            <SelectItem value="unknown">Unknown</SelectItem>
-                                            <SelectItem value="mild">Mild</SelectItem>
-                                            <SelectItem value="moderate">Moderate</SelectItem>
-                                            <SelectItem value="severe">Severe</SelectItem>
-                                            <SelectItem value="life_threatening">Life threatening</SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                                        <select
+                                            id="patient-medication-allergy-severity"
+                                            v-model="allergyForm.severity"
+                                            class="h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            <option value="unknown">Unknown</option>
+                                            <option value="mild">Mild</option>
+                                            <option value="moderate">Moderate</option>
+                                            <option value="severe">Severe</option>
+                                            <option value="life_threatening">Life threatening</option>
+                                        </select>
                                     </div>
                                     <div class="grid gap-2">
                                         <Label for="patient-medication-allergy-status">Status</Label>
-                                        <Select v-model="allergyForm.status">
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                            <SelectItem value="active">Active</SelectItem>
-                                            <SelectItem value="inactive">Inactive</SelectItem>
-                                            <SelectItem value="entered_in_error">Entered in error</SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                                        <select
+                                            id="patient-medication-allergy-status"
+                                            v-model="allergyForm.status"
+                                            class="h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            <option value="active">Active</option>
+                                            <option value="inactive">Inactive</option>
+                                            <option value="entered_in_error">Entered in error</option>
+                                        </select>
                                     </div>
                                     <div class="grid gap-2">
                                         <Label for="patient-medication-allergy-last-reaction">Last reaction</Label>
@@ -5789,34 +5786,32 @@ onMounted(() => {
                                     </div>
                                     <div class="grid gap-2">
                                         <Label for="patient-medication-profile-source">Source</Label>
-                                        <Select v-model="medicationProfileForm.source">
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                            <SelectItem value="home_medication">Home medication</SelectItem>
-                                            <SelectItem value="chronic_therapy">Chronic therapy</SelectItem>
-                                            <SelectItem value="external_prescription">External prescription</SelectItem>
-                                            <SelectItem value="discharge_medication">Discharge medication</SelectItem>
-                                            <SelectItem value="manual_entry">Manual entry</SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                                        <select
+                                            id="patient-medication-profile-source"
+                                            v-model="medicationProfileForm.source"
+                                            class="h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            <option value="home_medication">Home medication</option>
+                                            <option value="chronic_therapy">Chronic therapy</option>
+                                            <option value="external_prescription">External prescription</option>
+                                            <option value="discharge_medication">Discharge medication</option>
+                                            <option value="manual_entry">Manual entry</option>
+                                        </select>
                                     </div>
                                 </div>
                                 <div class="grid gap-4 sm:grid-cols-3">
                                     <div class="grid gap-2">
                                         <Label for="patient-medication-profile-status">Status</Label>
-                                        <Select v-model="medicationProfileForm.status">
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                            <SelectItem value="active">Active</SelectItem>
-                                            <SelectItem value="stopped">Stopped</SelectItem>
-                                            <SelectItem value="completed">Completed</SelectItem>
-                                            <SelectItem value="entered_in_error">Entered in error</SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                                        <select
+                                            id="patient-medication-profile-status"
+                                            v-model="medicationProfileForm.status"
+                                            class="h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            <option value="active">Active</option>
+                                            <option value="stopped">Stopped</option>
+                                            <option value="completed">Completed</option>
+                                            <option value="entered_in_error">Entered in error</option>
+                                        </select>
                                     </div>
                                     <div class="grid gap-2">
                                         <Label for="patient-medication-profile-started">Started</Label>
