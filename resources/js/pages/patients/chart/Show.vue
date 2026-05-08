@@ -3,6 +3,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -410,7 +411,7 @@ type ChartTimelineEvent = {
 
 const props = defineProps<{ patientId: string }>();
 
-const { hasPermission, isFacilitySuperAdmin } = usePlatformAccess();
+const { hasPermission, isFacilitySuperAdmin, scope } = usePlatformAccess();
 
 const patient = ref<Patient | null>(null);
 const patientLoading = ref(true);
@@ -904,6 +905,14 @@ const careCounts = computed(() => ({
         (billingInvoiceCounts.value?.partially_paid ?? 0),
     billingSettled: billingInvoiceCounts.value?.paid ?? 0,
 }));
+
+const activeOrderCount = computed(
+    () =>
+        careCounts.value.labActive +
+        careCounts.value.imagingActive +
+        careCounts.value.pharmacyActive +
+        careCounts.value.procedureActive,
+);
 
 const latestLaboratoryResult = computed(
     () =>
@@ -2168,6 +2177,21 @@ function patientName(target: Patient | null): string {
     return [target.firstName, target.middleName, target.lastName].filter(Boolean).join(' ').trim() || target.patientNumber || target.id;
 }
 
+function patientInitials(target: Patient | null): string {
+    const parts = [
+        target?.firstName,
+        target?.lastName,
+    ]
+        .map((part) => (part ?? '').trim())
+        .filter(Boolean);
+
+    if (parts.length > 0) {
+        return parts.map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+    }
+
+    return (target?.patientNumber ?? target?.id ?? 'PC').slice(0, 2).toUpperCase();
+}
+
 function directServiceLabel(serviceType: string | null | undefined): string {
     switch (serviceType) {
         case 'laboratory':
@@ -3316,9 +3340,139 @@ onMounted(() => {
     <AppLayout :breadcrumbs="breadcrumbs">
         <Head :title="pageTitle" />
 
-        <div class="space-y-6 px-4 py-4 md:px-6 md:py-6">
-            <Card class="rounded-lg">
-                <CardContent class="p-0">
+        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto p-3 md:p-5 lg:p-6">
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div v-if="patientLoading" class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <Skeleton class="size-10 rounded-lg" />
+                        <div class="min-w-0 space-y-2">
+                            <Skeleton class="h-5 w-44 rounded-lg" />
+                            <Skeleton class="h-3 w-72 rounded-lg" />
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <Skeleton class="h-8 w-28 rounded-lg" />
+                        <Skeleton class="h-8 w-24 rounded-lg" />
+                    </div>
+                </div>
+
+                <div v-else-if="patient" class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <Avatar class="size-10 shrink-0 rounded-lg border border-primary/20 bg-primary/10 text-primary">
+                            <AvatarFallback class="rounded-lg bg-primary/10 text-sm font-semibold text-primary">
+                                {{ patientInitials(patient) }}
+                            </AvatarFallback>
+                        </Avatar>
+                        <div class="min-w-0 space-y-0.5">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h1 class="truncate text-base font-semibold tracking-tight md:text-lg">{{ patientName(patient) }}</h1>
+                                <Badge variant="secondary" class="h-5 px-1.5 text-[11px]">{{ patient.patientNumber || 'No MRN' }}</Badge>
+                                <Badge v-if="patient.status" variant="outline" class="h-5 px-1.5 text-[11px]">{{ formatEnumLabel(patient.status) }}</Badge>
+                                <Badge v-if="primaryVisit" :variant="appointmentStatusVariant(primaryVisit.status)" class="h-5 px-1.5 text-[11px]">{{ formatEnumLabel(primaryVisit.status || 'scheduled') }}</Badge>
+                            </div>
+                            <p class="truncate text-xs text-muted-foreground">
+                                {{ patient.gender || 'Gender not recorded' }} · {{ ageLabel(patient.dateOfBirth) }} · {{ patient.phone || 'No phone recorded' }}
+                            </p>
+                            <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
+                                <span class="inline-flex items-center gap-1">
+                                    <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
+                                    <span class="font-medium text-foreground">{{ scope?.facility?.name || 'No facility' }}</span>
+                                </span>
+                                <span class="select-none text-border" aria-hidden="true">·</span>
+                                <span>{{ handoffSource === 'appointments' ? 'Appointment handoff' : 'Direct chart access' }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button v-if="canReadAppointments" size="sm" class="h-8 gap-1.5" as-child>
+                            <Link :href="visitPrimaryActionHref"><AppIcon :name="visitPrimaryActionIcon" class="size-3.5" />{{ visitPrimaryActionLabel }}</Link>
+                        </Button>
+                        <Button v-if="canReadMedicalRecords" size="sm" variant="outline" class="h-8 gap-1.5" as-child>
+                            <Link :href="recordsRegistryHref"><AppIcon name="search" class="size-3.5" />Records registry</Link>
+                        </Button>
+                        <Button size="sm" variant="outline" class="h-8 gap-1.5" as-child>
+                            <Link href="/patients"><AppIcon name="chevron-left" class="size-3.5" />Patients</Link>
+                        </Button>
+                    </div>
+                </div>
+
+                <div v-else class="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive ring-1 ring-destructive/20" aria-hidden="true">
+                            <AppIcon name="circle-x" class="size-5" />
+                        </div>
+                        <div>
+                            <h1 class="text-base font-semibold tracking-tight md:text-lg">Patient chart</h1>
+                            <p class="text-xs text-muted-foreground">The requested chart could not be loaded.</p>
+                        </div>
+                    </div>
+                    <Button size="sm" variant="outline" class="h-8 gap-1.5" as-child>
+                        <Link href="/patients"><AppIcon name="chevron-left" class="size-3.5" />Patients</Link>
+                    </Button>
+                </div>
+            </section>
+
+            <section v-if="patient" class="grid gap-2 md:grid-cols-4">
+                <button
+                    type="button"
+                    class="group flex min-h-14 items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                    :class="activeTab === 'visits' ? 'border-primary/50 bg-primary/10' : 'border-border bg-muted/30'"
+                    @click="activeTab = 'visits'"
+                >
+                    <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
+                        <AppIcon name="calendar-clock" class="size-4" />
+                    </span>
+                    <span class="min-w-0">
+                        <span class="block text-xs font-medium text-muted-foreground">Visit focus</span>
+                        <span class="mt-0.5 block truncate text-sm font-semibold text-foreground">{{ primaryVisit ? formatEnumLabel(primaryVisit.status || 'scheduled') : 'No active visit' }}</span>
+                    </span>
+                </button>
+                <button
+                    type="button"
+                    class="group flex min-h-14 items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                    :class="activeTab === 'orders' ? 'border-primary/50 bg-primary/10' : 'border-border bg-muted/30'"
+                    @click="activeTab = 'orders'"
+                >
+                    <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
+                        <AppIcon name="clipboard-list" class="size-4" />
+                    </span>
+                    <span class="min-w-0">
+                        <span class="block text-xs font-medium text-muted-foreground">Active orders</span>
+                        <span class="mt-0.5 block text-sm font-semibold text-foreground">{{ activeOrderCount }} open</span>
+                    </span>
+                </button>
+                <button
+                    type="button"
+                    class="group flex min-h-14 items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                    :class="activeTab === 'records' ? 'border-primary/50 bg-primary/10' : 'border-border bg-muted/30'"
+                    @click="activeTab = 'records'"
+                >
+                    <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
+                        <AppIcon name="file-text" class="size-4" />
+                    </span>
+                    <span class="min-w-0">
+                        <span class="block text-xs font-medium text-muted-foreground">Clinical notes</span>
+                        <span class="mt-0.5 block text-sm font-semibold text-foreground">{{ chartCounts.records }} records</span>
+                    </span>
+                </button>
+                <button
+                    type="button"
+                    class="group flex min-h-14 items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                    :class="activeTab === 'timeline' ? 'border-primary/50 bg-primary/10' : 'border-border bg-muted/30'"
+                    @click="activeTab = 'timeline'"
+                >
+                    <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
+                        <AppIcon name="activity" class="size-4" />
+                    </span>
+                    <span class="min-w-0">
+                        <span class="block text-xs font-medium text-muted-foreground">Timeline</span>
+                        <span class="mt-0.5 block text-sm font-semibold text-foreground">{{ chartCounts.timelineEvents }} events</span>
+                    </span>
+                </button>
+            </section>
+
+            <Card class="flex min-h-0 flex-1 flex-col rounded-lg">
+                <CardContent class="flex min-h-0 flex-1 flex-col p-0">
                     <div v-if="patientLoading" class="space-y-4 px-6 py-5">
                         <Skeleton class="h-6 w-40 rounded-lg" />
                         <Skeleton class="h-8 w-80 rounded-lg" />
@@ -3331,85 +3485,28 @@ onMounted(() => {
                     </Alert>
 
                     <template v-else-if="patient">
-                        <div class="flex flex-col gap-4 border-b px-6 py-5 lg:flex-row lg:items-start lg:justify-between">
-                            <div class="min-w-0 space-y-3">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <Badge variant="secondary">Patient chart</Badge>
-                                    <Badge variant="outline">{{ handoffSource === 'appointments' ? 'Appointment handoff' : 'Direct chart access' }}</Badge>
-                                    <Badge v-if="patient.status" variant="outline">{{ formatEnumLabel(patient.status) }}</Badge>
-                                    <Badge v-if="primaryVisit" :variant="appointmentStatusVariant(primaryVisit.status)">{{ formatEnumLabel(primaryVisit.status || 'scheduled') }}</Badge>
-                                </div>
-                                <div class="space-y-1">
-                                    <h1 class="text-2xl font-semibold tracking-tight text-foreground">{{ patientName(patient) }}</h1>
-                                    <p class="text-sm text-muted-foreground">
-                                        Patient No. {{ patient.patientNumber || 'Not assigned' }}
-                                        <span class="mx-1">|</span>
-                                        {{ patient.gender || 'Gender not recorded' }}
-                                        <span class="mx-1">|</span>
-                                        {{ ageLabel(patient.dateOfBirth) }}
-                                    </p>
-                                </div>
-                                <div class="flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground">
-                                    <span class="inline-flex items-center gap-1.5"><AppIcon name="phone" class="size-3.5" />{{ patient.phone || 'Not recorded' }}</span>
-                                    <span class="inline-flex items-center gap-1.5"><AppIcon name="mail" class="size-3.5" />{{ patient.email || 'Not recorded' }}</span>
-                                    <span class="inline-flex items-center gap-1.5"><AppIcon name="map-pin" class="size-3.5" />{{ patientLocationLabel }}</span>
-                                </div>
-                            </div>
-
-                            <div class="flex flex-wrap gap-2">
-                                <Button v-if="canReadAppointments" size="sm" class="gap-1.5" as-child>
-                                    <Link :href="visitPrimaryActionHref"><AppIcon :name="visitPrimaryActionIcon" class="size-3.5" />{{ visitPrimaryActionLabel }}</Link>
-                                </Button>
-                                <Button v-if="canReadMedicalRecords" size="sm" variant="outline" class="gap-1.5" as-child>
-                                    <Link :href="recordsRegistryHref"><AppIcon name="search" class="size-3.5" />Records registry</Link>
-                                </Button>
-                                <Button size="sm" variant="ghost" class="gap-1.5" as-child>
-                                    <Link href="/patients"><AppIcon name="chevron-left" class="size-3.5" />Back to patients</Link>
-                                </Button>
-                            </div>
-                        </div>
-
                         <div v-if="handoffSource === 'appointments'" class="border-b px-6 py-4">
                             <Alert>
                                 <AlertTitle>Appointment handoff is active</AlertTitle>
-                                <AlertDescription>Review chart history here, then return to the focused visit workspace when you are ready to continue the encounter.</AlertDescription>
+                                <AlertDescription class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <span>
+                                        {{ primaryVisit ? `${primaryVisit.department || 'Department pending'} - ${formatEnumLabel(primaryVisit.status || 'scheduled')} - ${formatDateTime(primaryVisit.scheduledAt)}` : 'No focused visit is currently linked to this chart.' }}
+                                    </span>
+                                    <span class="flex flex-wrap gap-2">
+                                        <Button v-if="canReadAppointments" size="sm" variant="outline" class="h-8 gap-1.5" @click="activeTab = 'visits'">
+                                            <AppIcon name="calendar-clock" class="size-3.5" />Visits
+                                        </Button>
+                                        <Button v-if="canReadAppointments" size="sm" class="h-8 gap-1.5" as-child>
+                                            <Link :href="visitPrimaryActionHref"><AppIcon :name="visitPrimaryActionIcon" class="size-3.5" />{{ visitPrimaryActionLabel }}</Link>
+                                        </Button>
+                                    </span>
+                                </AlertDescription>
                             </Alert>
-                        </div>
-
-                        <div class="border-b bg-muted/10 px-6 py-4" aria-live="polite" aria-atomic="false">
-                            <div class="grid gap-3 lg:grid-cols-3">
-                                <div class="rounded-lg border bg-background px-4 py-3">
-                                    <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Current visit</p>
-                                    <p class="mt-1.5 text-sm font-medium text-foreground">{{ primaryVisit ? `${primaryVisit.department || 'Department pending'} | ${formatEnumLabel(primaryVisit.status || 'scheduled')}` : 'No active visit in chart context' }}</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">{{ primaryVisit ? `Scheduled ${formatDateTime(primaryVisit.scheduledAt)}` : 'Use the visits tab or appointments workspace when a visit is booked.' }}</p>
-                                </div>
-                                <div class="rounded-lg border bg-background px-4 py-3">
-                                    <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Latest note</p>
-                                    <p class="mt-1.5 text-sm font-medium text-foreground">{{ latestRecord ? formatDateTime(latestRecord.encounterAt) : 'No consultation recorded yet' }}</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">{{ latestRecord ? recordProblem(latestRecord) : 'Start the first chart note from this patient workspace.' }}</p>
-                                </div>
-                                <div class="rounded-lg border bg-background px-4 py-3">
-                                    <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Chart scope</p>
-                                    <p class="mt-1.5 text-sm font-medium text-foreground">{{ chartCounts.records }} records | {{ chartCounts.visits }} visits | {{ chartCounts.timelineEvents }} events</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">{{ chartCounts.activeVisits }} active visit{{ chartCounts.activeVisits === 1 ? '' : 's' }} currently visible in this chart context.</p>
-                                </div>
-                            </div>
                         </div>
 
                         <div class="px-6 py-5">
                             <Tabs v-model="activeTab" class="space-y-6">
                                 <div class="sticky top-0 z-20 -mx-6 border-b bg-background/95 px-6 pb-3 pt-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-                                    <div class="mb-2 flex items-center justify-between gap-3">
-                                        <div class="flex min-w-0 items-center gap-2 text-sm">
-                                            <span class="truncate font-semibold text-foreground">{{ patientName(patient) }}</span>
-                                            <span class="shrink-0 text-muted-foreground">·</span>
-                                            <span class="shrink-0 text-xs text-muted-foreground">{{ patient.patientNumber || '' }}</span>
-                                            <Badge v-if="primaryVisit" :variant="appointmentStatusVariant(primaryVisit.status)" class="h-4 shrink-0 px-1 text-xs">{{ formatEnumLabel(primaryVisit.status || 'scheduled') }}</Badge>
-                                        </div>
-                                        <Button v-if="canReadAppointments" size="sm" class="h-9 shrink-0 gap-1.5 px-2.5 text-xs" as-child>
-                                            <Link :href="visitPrimaryActionHref"><AppIcon :name="visitPrimaryActionIcon" class="size-3" />{{ visitPrimaryActionLabel }}</Link>
-                                        </Button>
-                                    </div>
                                     <TabsList :class="['grid h-auto w-full grid-cols-2 sm:w-auto', patientChartTabsGridClass]">
                                         <TabsTrigger
                                             v-for="tab in patientChartTabs"
@@ -3432,38 +3529,44 @@ onMounted(() => {
                                 </div>
 
                                 <TabsContent value="overview" class="space-y-6">
-                                    <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem] 2xl:grid-cols-[minmax(0,1fr)_19rem]">
+                                    <div class="space-y-6">
                                         <div class="min-w-0 space-y-6">
-                                            <div class="grid gap-4 md:grid-cols-2">
-                                                <div class="rounded-lg border bg-muted/20 px-4 py-3">
+                                            <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                                <button type="button" class="rounded-lg border bg-background px-4 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5" @click="activeTab = 'medications'">
                                                     <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Allergy safety</p>
                                                     <p class="mt-2 text-sm font-medium text-foreground">
                                                         <template v-if="patientAllergiesLoading">Loading&hellip;</template>
                                                         <template v-else-if="patientAllergies.length === 0">No allergies on record</template>
                                                         <template v-else>{{ patientAllergies.length }} allerg{{ patientAllergies.length === 1 ? 'y' : 'ies' }} recorded</template>
                                                     </p>
-                                                    <button type="button" class="mt-2 text-xs text-primary hover:underline" @click="activeTab = 'medications'">
-                                                        {{ patientAllergies.length > 0 ? 'Review in Medications' : 'Add in Medications' }}
-                                                    </button>
-                                                </div>
-                                                <div class="rounded-lg border bg-muted/20 px-4 py-3">
+                                                    <span class="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary">
+                                                        <AppIcon name="shield-alert" class="size-3.5" />{{ patientAllergies.length > 0 ? 'Review medication safety' : 'Record allergy status' }}
+                                                    </span>
+                                                </button>
+                                                <button type="button" class="rounded-lg border bg-background px-4 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5" @click="activeTab = 'orders'">
                                                     <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Active care</p>
                                                     <p class="mt-2 text-sm font-medium text-foreground">
                                                         {{ careCounts.labActive + careCounts.imagingActive + careCounts.pharmacyActive + careCounts.procedureActive }}
                                                         active order{{ (careCounts.labActive + careCounts.imagingActive + careCounts.pharmacyActive + careCounts.procedureActive) === 1 ? '' : 's' }}
                                                     </p>
-                                                    <button type="button" class="mt-2 text-xs text-primary hover:underline" @click="activeTab = 'orders'">
-                                                        {{ (careCounts.labActive + careCounts.imagingActive + careCounts.pharmacyActive + careCounts.procedureActive) > 0 ? 'Open Orders &amp; Results' : 'Start ordering' }}
-                                                    </button>
-                                                </div>
-                                                <div class="rounded-lg border bg-muted/20 px-4 py-3">
+                                                    <span class="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary">
+                                                        <AppIcon name="clipboard-list" class="size-3.5" />{{ (careCounts.labActive + careCounts.imagingActive + careCounts.pharmacyActive + careCounts.procedureActive) > 0 ? 'Open orders and results' : 'Start ordering' }}
+                                                    </span>
+                                                </button>
+                                                <button type="button" class="rounded-lg border bg-background px-4 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5" @click="activeTab = 'records'">
                                                     <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Problem focus</p>
                                                     <p class="mt-2 text-sm text-foreground">{{ latestRecord ? recordProblem(latestRecord) : 'No problem focus recorded yet.' }}</p>
-                                                </div>
-                                                <div class="rounded-lg border bg-muted/20 px-4 py-3">
+                                                    <span class="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary">
+                                                        <AppIcon name="file-text" class="size-3.5" />Open notes
+                                                    </span>
+                                                </button>
+                                                <button type="button" class="rounded-lg border bg-background px-4 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5" @click="activeTab = 'timeline'">
                                                     <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next step</p>
                                                     <p class="mt-2 text-sm text-foreground">{{ latestRecord ? recordNextStep(latestRecord) : 'No follow-up plan recorded yet.' }}</p>
-                                                </div>
+                                                    <span class="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary">
+                                                        <AppIcon name="activity" class="size-3.5" />Open timeline
+                                                    </span>
+                                                </button>
                                             </div>
 
 
@@ -3551,83 +3654,56 @@ onMounted(() => {
                                             </Card>
                                         </div>
 
-                                        <div class="min-w-0 space-y-4">
-                                            <Card v-if="primaryVisit?.triageVitalsSummary" class="rounded-lg border-l-4 border-l-info">
-                                                <CardHeader class="px-4 pb-2 pt-4">
-                                                    <CardTitle class="flex items-center gap-2 text-base">
-                                                        <AppIcon name="activity" class="size-4 text-info" aria-hidden="true" />
-                                                        Triage vitals
-                                                    </CardTitle>
-                                                </CardHeader>
-                                                <CardContent class="px-4 pb-4">
-                                                    <p class="text-sm text-foreground">{{ primaryVisit.triageVitalsSummary }}</p>
-                                                    <p class="mt-1.5 text-xs text-muted-foreground">Recorded at triage for this visit. Open the visit or consultation note for full vitals.</p>
-                                                </CardContent>
-                                            </Card>
-                                            <Card class="rounded-lg">
-                                                <CardHeader class="px-4 pb-2 pt-4">
-                                                    <CardTitle class="text-base">Patient details</CardTitle>
-                                                </CardHeader>
-                                                <CardContent class="space-y-2.5 px-4 pb-4 text-sm">
-                                                    <div>
-                                                        <p class="text-xs uppercase tracking-wide text-muted-foreground">Date of birth</p>
-                                                        <p class="mt-1 font-medium text-foreground">{{ formatDate(patient.dateOfBirth) }}</p>
-                                                    </div>
-                                                    <Separator />
-                                                    <div>
-                                                        <p class="text-xs uppercase tracking-wide text-muted-foreground">National ID</p>
-                                                        <p class="mt-1 font-medium text-foreground">{{ patient.nationalId || 'Not recorded' }}</p>
-                                                    </div>
-                                                    <Separator />
-                                                    <div>
-                                                        <p class="text-xs uppercase tracking-wide text-muted-foreground">Address</p>
-                                                        <p class="mt-1 font-medium text-foreground">{{ patientLocationLabel }}</p>
-                                                    </div>
-                                                </CardContent>
-                                            </Card>
-                                            <Card class="rounded-lg">
-                                                <CardHeader class="px-4 pb-2 pt-4">
-                                                    <CardTitle class="text-base">Chart actions</CardTitle>
-                                                </CardHeader>
-                                                <CardContent class="flex flex-col gap-2 px-4 pb-4">
-                                                    <Button v-if="canReadAppointments" size="sm" class="justify-start gap-1.5" as-child>
-                                                        <Link :href="visitPrimaryActionHref"><AppIcon :name="visitPrimaryActionIcon" class="size-3.5" />{{ visitPrimaryActionLabel }}</Link>
-                                                    </Button>
-                                                    <Button size="sm" variant="outline" class="justify-start gap-1.5" @click="activeTab = 'timeline'">
-                                                        <AppIcon name="activity" class="size-3.5" />Open chart timeline
-                                                    </Button>
-                                                    <Button v-if="canReadMedicalRecords" size="sm" variant="ghost" class="justify-start gap-1.5" as-child>
-                                                        <Link :href="recordsRegistryHref"><AppIcon name="search" class="size-3.5" />Open records registry</Link>
-                                                    </Button>
-                                                </CardContent>
-                                            </Card>
-                                        </div>
-
-                                        <Card
-                                            v-if="patient.activeRoutingTickets?.length"
-                                            class="rounded-lg border-violet-200 bg-violet-50/60 dark:border-violet-900 dark:bg-violet-950/20"
-                                        >
+                                        <Card v-if="primaryVisit?.triageVitalsSummary" class="rounded-lg border-l-4 border-l-info">
                                             <CardHeader class="px-4 pb-2 pt-4">
                                                 <CardTitle class="flex items-center gap-2 text-base">
-                                                    <AppIcon name="route" class="size-4 text-violet-700 dark:text-violet-300" />
-                                                    Active Routing / Handoff
+                                                    <AppIcon name="activity" class="size-4 text-info" aria-hidden="true" />
+                                                    Triage vitals
                                                 </CardTitle>
-                                                <CardDescription>Read-only direct-service tickets currently moving this patient through the hospital.</CardDescription>
                                             </CardHeader>
-                                            <CardContent class="grid gap-2 px-4 pb-4 sm:grid-cols-2 xl:grid-cols-4">
+                                            <CardContent class="px-4 pb-4">
+                                                <p class="text-sm text-foreground">{{ primaryVisit.triageVitalsSummary }}</p>
+                                                <p class="mt-1.5 text-xs text-muted-foreground">Recorded at triage for this visit. Open the visit or consultation note for full vitals.</p>
+                                            </CardContent>
+                                        </Card>
+
+                                        <section
+                                            v-if="patient.activeRoutingTickets?.length"
+                                            class="rounded-lg border bg-background px-4 py-3"
+                                        >
+                                            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                                <div class="flex min-w-0 items-center gap-3">
+                                                    <span class="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground ring-1 ring-border">
+                                                        <AppIcon name="route" class="size-4" />
+                                                    </span>
+                                                    <div class="min-w-0">
+                                                        <p class="text-sm font-semibold text-foreground">Active handoffs</p>
+                                                        <p class="text-xs text-muted-foreground">
+                                                            {{ patient.activeRoutingTickets.length }} service request{{ patient.activeRoutingTickets.length === 1 ? '' : 's' }} already moving for this patient.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div class="grid gap-2 lg:min-w-[28rem] lg:grid-cols-2">
                                                 <div
                                                     v-for="ticket in patient.activeRoutingTickets"
                                                     :key="ticket.id"
-                                                    class="rounded-md border bg-background px-3 py-2"
+                                                    class="rounded-md border bg-muted/20 px-3 py-2"
                                                 >
-                                                    <p class="text-sm font-medium text-foreground">{{ routingTicketLabel(ticket) }}</p>
-                                                    <p class="mt-1 text-xs text-muted-foreground">
-                                                        {{ directServiceLabel(ticket.serviceType) }} · {{ formatEnumLabel(ticket.status || 'waiting') }}
-                                                    </p>
-                                                    <p v-if="ticket.priority" class="mt-1 text-xs text-muted-foreground">Priority: {{ formatEnumLabel(ticket.priority) }}</p>
+                                                    <div class="flex items-start justify-between gap-2">
+                                                        <div class="min-w-0">
+                                                            <p class="truncate text-sm font-medium text-foreground">{{ routingTicketLabel(ticket) }}</p>
+                                                            <p class="mt-0.5 text-xs text-muted-foreground">{{ directServiceLabel(ticket.serviceType) }}</p>
+                                                        </div>
+                                                        <Badge variant="outline">{{ formatEnumLabel(ticket.status || 'waiting') }}</Badge>
+                                                    </div>
+                                                    <div class="mt-2 flex flex-wrap gap-1.5">
+                                                        <Badge v-if="ticket.priority" variant="secondary">{{ formatEnumLabel(ticket.priority) }}</Badge>
+                                                        <Badge v-if="ticket.linkedOrderNumber" variant="outline">{{ ticket.linkedOrderNumber }}</Badge>
+                                                    </div>
                                                 </div>
-                                            </CardContent>
-                                        </Card>
+                                            </div>
+                                            </div>
+                                        </section>
                                     </div>
                                 </TabsContent>
 
@@ -3650,23 +3726,27 @@ onMounted(() => {
                                     </div>
 
                                     <div v-else class="space-y-6">
-                                        <div class="grid gap-4 xl:grid-cols-3">
-                                            <div class="rounded-lg border bg-muted/10 px-4 py-4">
+                                        <div class="rounded-lg border bg-background px-4 py-4">
+                                            <div class="grid gap-4 lg:grid-cols-3">
+                                            <div class="space-y-1">
                                                 <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Current handoff</p>
-                                                <p class="mt-2 text-sm font-semibold text-foreground">{{ handoffSummary.title }}</p>
-                                                <p class="mt-2 text-sm text-foreground">{{ handoffSummary.summary }}</p>
-                                                <p class="mt-2 text-xs text-muted-foreground">{{ handoffSummary.meta }}</p>
+                                                <p class="text-sm font-semibold text-foreground">{{ handoffSummary.title }}</p>
+                                                <p class="text-sm text-muted-foreground">{{ handoffSummary.summary }}</p>
+                                                <p class="text-xs text-muted-foreground">{{ handoffSummary.meta }}</p>
                                             </div>
-                                            <div class="rounded-lg border bg-muted/10 px-4 py-4">
+                                            <div class="space-y-1">
                                                 <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Latest clinical signal</p>
-                                                <p class="mt-2 text-sm font-semibold text-foreground">{{ latestClinicalSignal ? latestClinicalSignal.title : 'No recent clinical signal' }}</p>
-                                                <p class="mt-2 text-sm text-foreground">{{ latestClinicalSignal ? latestClinicalSignal.summary : 'Consultation notes, lab results, and imaging reports will surface here.' }}</p>
-                                                <p class="mt-2 text-xs text-muted-foreground">{{ latestClinicalSignal ? `${timelineCategoryLabel(latestClinicalSignal.category)} | ${formatDateTime(latestClinicalSignal.occurredAt)}` : 'Timeline follows the most recent patient activity.' }}</p>
+                                                <p class="text-sm font-semibold text-foreground">{{ latestClinicalSignal ? latestClinicalSignal.title : 'No recent clinical signal' }}</p>
+                                                <p class="text-sm text-muted-foreground">{{ latestClinicalSignal ? latestClinicalSignal.summary : 'Consultation notes, lab results, and imaging reports will surface here.' }}</p>
+                                                <p class="text-xs text-muted-foreground">{{ latestClinicalSignal ? `${timelineCategoryLabel(latestClinicalSignal.category)} | ${formatDateTime(latestClinicalSignal.occurredAt)}` : 'Timeline follows the most recent patient activity.' }}</p>
                                             </div>
-                                            <div class="rounded-lg border bg-muted/10 px-4 py-4">
+                                            <div class="space-y-1">
                                                 <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Next documented step</p>
-                                                <p class="mt-2 text-sm text-foreground">{{ nextDocumentedStep }}</p>
-                                                <p class="mt-2 text-xs text-muted-foreground">Use this together with the current handoff card to keep the patient moving through care.</p>
+                                                <p class="text-sm text-foreground">{{ nextDocumentedStep }}</p>
+                                                <Button size="sm" variant="outline" class="mt-2 h-8 gap-1.5" @click="activeTab = 'records'">
+                                                    <AppIcon name="file-text" class="size-3.5" />Review notes
+                                                </Button>
+                                            </div>
                                             </div>
                                         </div>
 
@@ -3735,7 +3815,6 @@ onMounted(() => {
                                                 <div class="space-y-2">
                                                     <template v-for="event in section.events" :key="event.id">
                                                         <div v-if="!event.actionLabel" :class="['flex items-center gap-3 rounded-lg border border-l-4 px-3 py-2', event.accentClass]">
-                                                            <AppIcon :name="event.icon" class="size-3.5 shrink-0 text-muted-foreground" />
                                                             <div class="min-w-0 flex-1">
                                                                 <span class="text-sm font-medium text-foreground">{{ event.title }}</span>
                                                                 <span v-if="event.subtitle" class="ml-1.5 text-xs text-muted-foreground">{{ event.subtitle }}</span>
@@ -3808,6 +3887,29 @@ onMounted(() => {
                                     </div>
 
                                     <div v-else class="space-y-4">
+                                        <div v-if="primaryVisit" class="rounded-lg border border-primary/30 bg-primary/5 px-4 py-4">
+                                            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                                <div class="min-w-0 space-y-2">
+                                                    <div class="flex flex-wrap items-center gap-2">
+                                                        <p class="text-sm font-semibold text-foreground">Focused visit</p>
+                                                        <Badge :variant="appointmentStatusVariant(primaryVisit.status)">{{ formatEnumLabel(primaryVisit.status || 'scheduled') }}</Badge>
+                                                        <Badge v-if="primaryVisit.department" variant="outline">{{ primaryVisit.department }}</Badge>
+                                                    </div>
+                                                    <p class="text-sm text-foreground">
+                                                        {{ primaryVisit.appointmentNumber || 'Visit pending number' }} scheduled {{ formatDateTime(primaryVisit.scheduledAt) }}
+                                                    </p>
+                                                    <p class="text-xs text-muted-foreground">{{ primaryVisit.reason || 'No visit reason recorded yet.' }}</p>
+                                                </div>
+                                                <div class="flex flex-wrap gap-2">
+                                                    <Button v-if="focusedAppointmentId" size="sm" variant="ghost" @click="focusedAppointmentId = ''">
+                                                        Auto-select
+                                                    </Button>
+                                                    <Button size="sm" class="gap-1.5" as-child>
+                                                        <Link :href="appointmentPrimaryActionHref(primaryVisit)"><AppIcon :name="appointmentPrimaryActionIcon(primaryVisit)" class="size-3.5" />{{ appointmentPrimaryActionLabel(primaryVisit) }}</Link>
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
                                         <div v-for="appointment in appointments" :key="appointment.id" :class="['rounded-lg border px-4 py-4', primaryVisit?.id === appointment.id ? 'border-primary bg-primary/5' : 'bg-background']">
                                             <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                                 <div class="space-y-2">
@@ -4311,23 +4413,16 @@ onMounted(() => {
                                         </div>
                                     </div>
 
-                                    <Alert>
-                                        <AlertTitle>{{ careWorkspaceContext.title }}</AlertTitle>
-                                        <AlertDescription>{{ careWorkspaceContext.summary }}</AlertDescription>
-                                    </Alert>
-
-                                    <div class="rounded-lg border bg-muted/10 px-4 py-3">
-                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div class="rounded-lg border bg-background px-4 py-3">
+                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                             <div class="space-y-1">
-                                                <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Care launch context</p>
-                                                <p class="text-sm text-foreground">{{ careWorkspaceContext.meta }}</p>
+                                                <p class="text-sm font-semibold text-foreground">{{ careWorkspaceContext.title }}</p>
+                                                <p class="text-sm text-muted-foreground">{{ careWorkspaceContext.summary }}</p>
+                                                <p class="text-xs text-muted-foreground">{{ careWorkspaceContext.meta }}</p>
                                             </div>
                                             <div v-if="canReadAppointments" class="flex flex-wrap gap-2">
                                                 <Button size="sm" variant="outline" class="gap-1.5" @click="activeTab = 'visits'">
-                                                    <AppIcon name="calendar-clock" class="size-3.5" />Review encounter focus
-                                                </Button>
-                                                <Button size="sm" variant="ghost" class="gap-1.5" as-child>
-                                                    <Link :href="appointmentsWorkspaceHref"><AppIcon name="book-open" class="size-3.5" />{{ visitWorkspaceActionLabel }}</Link>
+                                                    <AppIcon name="calendar-clock" class="size-3.5" />Visit focus
                                                 </Button>
                                             </div>
                                         </div>
@@ -5375,23 +5470,6 @@ onMounted(() => {
                                         </div>
                                     </div>
 
-                                    <div class="rounded-lg border bg-muted/10 px-4 py-3">
-                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                            <div class="space-y-1">
-                                                <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Billing context</p>
-                                                <p class="text-sm text-foreground">Invoices launched from this chart stay linked to the patient and the visit currently in chart focus when one is available.</p>
-                                            </div>
-                                            <div v-if="canReadAppointments" class="flex flex-wrap gap-2">
-                                                <Button size="sm" variant="outline" class="gap-1.5" @click="activeTab = 'visits'">
-                                                    <AppIcon name="calendar-clock" class="size-3.5" />Review encounter focus
-                                                </Button>
-                                                <Button size="sm" variant="ghost" class="gap-1.5" as-child>
-                                                    <Link :href="appointmentsWorkspaceHref"><AppIcon name="book-open" class="size-3.5" />{{ visitWorkspaceActionLabel }}</Link>
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </div>
-
                                     <Alert v-if="!hasBillingAccess" variant="default">
                                         <AlertTitle>Billing workspace permissions required</AlertTitle>
                                         <AlertDescription>This chart can still show visits and clinical activity, but billing actions require invoice read or create permission.</AlertDescription>
@@ -5515,6 +5593,23 @@ onMounted(() => {
                                     </div>
 
                                     <div v-else class="space-y-4">
+                                        <div v-if="latestRecord" class="rounded-lg border bg-background px-4 py-4">
+                                            <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                                <div class="min-w-0 space-y-2">
+                                                    <div class="flex flex-wrap items-center gap-2">
+                                                        <p class="text-sm font-semibold text-foreground">Latest consultation</p>
+                                                        <Badge :variant="recordStatusVariant(latestRecord.status)">{{ formatEnumLabel(latestRecord.status || 'draft') }}</Badge>
+                                                        <Badge variant="outline">{{ formatEnumLabel(latestRecord.recordType || 'consultation_note') }}</Badge>
+                                                    </div>
+                                                    <p class="text-xs text-muted-foreground">{{ formatDateTime(latestRecord.encounterAt) }}</p>
+                                                    <p class="text-sm text-foreground">{{ recordProblem(latestRecord) }}</p>
+                                                    <p class="text-sm text-muted-foreground">{{ recordNextStep(latestRecord) }}</p>
+                                                </div>
+                                                <Button size="sm" class="gap-1.5" as-child>
+                                                    <Link :href="recordRegistryHref(latestRecord)"><AppIcon name="file-text" class="size-3.5" />Open latest note</Link>
+                                                </Button>
+                                            </div>
+                                        </div>
                                         <div v-for="record in records" :key="record.id" :class="['rounded-lg border px-4 py-4', highlightedRecordId === record.id ? 'border-primary bg-primary/5' : 'bg-background']">
                                             <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                                                 <div class="space-y-2">
@@ -5768,17 +5863,6 @@ onMounted(() => {
         </div>
     </AppLayout>
 </template>
-
-
-
-
-
-
-
-
-
-
-
 
 
 
