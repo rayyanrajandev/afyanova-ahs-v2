@@ -531,6 +531,7 @@ const scope = ref<ScopeData | null>(null);
 const records = ref<MedicalRecord[]>([]);
 const pagination = ref<MedicalRecordListResponse['meta'] | null>(null);
 const medicalRecordStatusCounts = ref<MedicalRecordStatusCounts | null>(null);
+const recordsLoaded = ref(false);
 const listErrors = ref<string[]>([]);
 const actionMessage = ref<string | null>(null);
 const createMessage = ref<string | null>(null);
@@ -2717,7 +2718,7 @@ async function loadRecords() {
         records.value = [];
         pagination.value = null;
         listLoading.value = false;
-        pageLoading.value = false;
+        recordsLoaded.value = true;
         return;
     }
 
@@ -2762,7 +2763,7 @@ async function loadRecords() {
         );
     } finally {
         listLoading.value = false;
-        pageLoading.value = false;
+        recordsLoaded.value = true;
     }
 }
 
@@ -2827,6 +2828,16 @@ function upsertRecordIntoList(record: MedicalRecord) {
 async function refreshPage() {
     clearSearchDebounce();
     await Promise.all([loadScope(), loadMedicalRecordPermissions()]);
+    pageLoading.value = false;
+
+    if (!canReadMedicalRecords.value) {
+        records.value = [];
+        pagination.value = null;
+        medicalRecordStatusCounts.value = null;
+        recordsLoaded.value = true;
+        return;
+    }
+
     await Promise.all([loadRecords(), loadRecordStatusCounts()]);
 }
 
@@ -5042,6 +5053,35 @@ const summaryQueueCounts = computed(() => {
     };
 });
 
+const isInitialRecordsLoading = computed(
+    () => listLoading.value && !recordsLoaded.value,
+);
+
+const recordsStreamStateLabel = computed(() => {
+    if (pageLoading.value) return 'Checking access';
+    if (isInitialRecordsLoading.value) return 'Loading records';
+    if (listLoading.value) return 'Refreshing';
+    if (!recordsLoaded.value) return 'Ready';
+    if (records.value.length === 0) return '0 records';
+    return `${pagination.value?.total ?? records.value.length} records`;
+});
+
+const emptyRecordsTitle = computed(() =>
+    hasActiveRecordFilters.value ? 'No records match this view' : 'No clinical records yet',
+);
+
+const emptyRecordsDescription = computed(() => {
+    if (searchForm.patientId.trim()) {
+        return 'This patient does not have clinical notes for the current filters.';
+    }
+
+    if (hasActiveRecordFilters.value) {
+        return 'Try adjusting the search, status, record type, patient, or encounter date filters.';
+    }
+
+    return 'Clinical notes created from consultations will appear here as the records stream.';
+});
+
 const hasActiveRecordFilters = computed(() => {
     return Boolean(
         searchForm.q.trim() ||
@@ -6585,7 +6625,7 @@ onMounted(() => {
                         <Button
                             variant="outline"
                             size="sm"
-                            :disabled="listLoading"
+                            :disabled="pageLoading || listLoading"
                             class="h-8 gap-1.5"
                             @click="refreshPage"
                         >
@@ -6685,9 +6725,7 @@ onMounted(() => {
                 <!-- Records list -->
                 <div class="min-w-0">
                     <Card
-                        v-if="
-                            canReadMedicalRecords
-                        "
+                        v-if="canReadMedicalRecords || pageLoading"
                         id="consultation-records-list"
                         class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border-sidebar-border/70 shadow-sm"
                     >
@@ -6705,6 +6743,9 @@ onMounted(() => {
                                         </Badge>
                                         <Badge v-if="recordToolbarStateLabel" variant="outline">
                                             {{ recordToolbarStateLabel }}
+                                        </Badge>
+                                        <Badge variant="outline">
+                                            {{ recordsStreamStateLabel }}
                                         </Badge>
                                     </div>
                                     <div class="space-y-1.5">
@@ -6725,6 +6766,7 @@ onMounted(() => {
                                         variant="outline"
                                         size="sm"
                                         class="gap-1.5"
+                                        :disabled="pageLoading || !canReadMedicalRecords"
                                         @click="filterSheetOpen = true"
                                     >
                                         <AppIcon name="sliders-horizontal" class="size-3.5" />
@@ -6761,6 +6803,7 @@ onMounted(() => {
                                                 ? 'border-primary bg-primary/10'
                                                 : ''
                                         "
+                                        :disabled="pageLoading || !canReadMedicalRecords"
                                         @click="applyRecordSummaryFilter('draft')"
                                     >
                                         <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
@@ -6781,6 +6824,7 @@ onMounted(() => {
                                                 ? 'border-primary bg-primary/10'
                                                 : ''
                                         "
+                                        :disabled="pageLoading || !canReadMedicalRecords"
                                         @click="applyRecordSummaryFilter('finalized')"
                                     >
                                         <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
@@ -6801,6 +6845,7 @@ onMounted(() => {
                                                 ? 'border-primary bg-primary/10'
                                                 : ''
                                         "
+                                        :disabled="pageLoading || !canReadMedicalRecords"
                                         @click="applyRecordSummaryFilter('amended')"
                                     >
                                         <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
@@ -6821,6 +6866,7 @@ onMounted(() => {
                                                 ? 'border-primary bg-primary/10'
                                                 : ''
                                         "
+                                        :disabled="pageLoading || !canReadMedicalRecords"
                                         @click="applyRecordSummaryFilter('archived')"
                                     >
                                         <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
@@ -6980,27 +7026,14 @@ onMounted(() => {
                                     </div>
                                 </div>
                             </div>
-                            <div
-                                v-else
-                                class="flex items-center justify-between gap-3 rounded-lg border border-dashed bg-background/70 px-3 py-2"
-                            >
-                                <p class="text-xs text-muted-foreground">All patients in view. Use filters or open a chart when one patient becomes the focus.</p>
-                                <Button
-                                    v-if="canLaunchConsultationFromAppointments"
-                                    size="sm"
-                                    variant="outline"
-                                    class="h-8 shrink-0 gap-1.5"
-                                    @click="beginNewConsultationWorkspace()"
-                                >
-                                    <AppIcon name="stethoscope" class="size-3.5" />
-                                    Start from Appointments
-                                </Button>
-                            </div>
-
                             <div class="border-t pt-3">
                                 <div class="space-y-1">
-                                    <p class="text-sm text-muted-foreground">
-                                        {{ pagination?.total ?? 0 }} records sorted by latest encounter.
+                                    <Skeleton
+                                        v-if="pageLoading || isInitialRecordsLoading"
+                                        class="h-5 w-36"
+                                    />
+                                    <p v-else-if="records.length > 0 || listLoading" class="text-sm text-muted-foreground">
+                                        {{ recordsStreamStateLabel }}<span v-if="recordsLoaded && records.length > 0"> sorted by latest encounter.</span>
                                     </p>
                                 </div>
                             </div>
@@ -7013,22 +7046,69 @@ onMounted(() => {
                                     class="space-y-3 p-4"
                                 >
                                     <div
-                                        v-if="
-                                            (pageLoading || listLoading) &&
-                                            records.length === 0
-                                        "
-                                        class="space-y-2"
+                                        v-if="pageLoading || isInitialRecordsLoading"
+                                        class="divide-y rounded-lg border bg-background"
                                     >
-                                        <Skeleton class="h-24 w-full" />
-                                        <Skeleton class="h-24 w-full" />
-                                        <Skeleton class="h-24 w-full" />
+                                        <span class="sr-only">Loading records</span>
+                                        <div
+                                            v-for="row in 5"
+                                            :key="`medical-record-loading-${row}`"
+                                            class="flex items-center gap-3 px-3 py-3"
+                                        >
+                                            <Skeleton class="h-4 w-4 shrink-0 rounded-sm" />
+                                            <div class="min-w-0 flex-1 space-y-2">
+                                                <Skeleton class="h-4 w-40 max-w-full" />
+                                                <Skeleton class="h-3 w-64 max-w-full" />
+                                            </div>
+                                            <Skeleton class="hidden h-3 w-28 shrink-0 sm:block" />
+                                            <Skeleton class="hidden h-3 w-24 shrink-0 lg:block" />
+                                            <Skeleton class="h-5 w-16 shrink-0 rounded-full" />
+                                            <Skeleton class="hidden h-5 w-20 shrink-0 rounded-full sm:block" />
+                                        </div>
                                     </div>
                                     <div
                                         v-else-if="records.length === 0"
-                                        class="rounded-lg border border-dashed p-6 text-sm text-muted-foreground"
+                                        class="flex flex-col items-center justify-center px-4 py-12 text-center"
                                     >
-                                        No medical records found for the current
-                                        filters.
+                                        <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                            <AppIcon name="file-text" class="size-5 text-muted-foreground/40" />
+                                        </div>
+                                        <div class="mt-3">
+                                            <p class="text-sm font-medium text-muted-foreground">{{ emptyRecordsTitle }}</p>
+                                            <p class="mt-1 max-w-sm text-xs text-muted-foreground/70">
+                                                {{ emptyRecordsDescription }}
+                                            </p>
+                                        </div>
+                                        <div class="mt-4 flex flex-wrap justify-center gap-2">
+                                            <Button
+                                                v-if="hasActiveRecordFilters"
+                                                size="sm"
+                                                variant="outline"
+                                                class="gap-1.5"
+                                                @click="resetRecordFilters"
+                                            >
+                                                <AppIcon name="circle-x" class="size-3.5" />
+                                                Clear filters
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                class="gap-1.5"
+                                                @click="filterSheetOpen = true"
+                                            >
+                                                <AppIcon name="sliders-horizontal" class="size-3.5" />
+                                                Search & filter
+                                            </Button>
+                                            <Button
+                                                v-if="canLaunchConsultationFromAppointments"
+                                                size="sm"
+                                                class="gap-1.5"
+                                                @click="beginNewConsultationWorkspace()"
+                                            >
+                                                <AppIcon name="stethoscope" class="size-3.5" />
+                                                Start from Appointments
+                                            </Button>
+                                        </div>
                                     </div>
                                     <div
                                         v-else

@@ -913,6 +913,57 @@ const activeOrderCount = computed(
         careCounts.value.pharmacyActive +
         careCounts.value.procedureActive,
 );
+const ordersSummaryLoading = computed(
+    () =>
+        patientLoading.value ||
+        (activeOrderCount.value === 0 &&
+            (laboratoryOrdersLoading.value ||
+                radiologyOrdersLoading.value ||
+                pharmacyOrdersLoading.value ||
+                theatreProceduresLoading.value)),
+);
+const visitSummaryLoading = computed(
+    () =>
+        patientLoading.value ||
+        (appointmentsLoading.value && appointments.value.length === 0),
+);
+const recordsSummaryLoading = computed(
+    () =>
+        patientLoading.value ||
+        (recordsLoading.value && recordsTotal.value === 0),
+);
+const timelineSummaryLoading = computed(
+    () =>
+        patientLoading.value ||
+        (timelineEvents.value.length === 0 &&
+            (appointmentsLoading.value ||
+                recordsLoading.value ||
+                laboratoryOrdersLoading.value ||
+                radiologyOrdersLoading.value ||
+                pharmacyOrdersLoading.value ||
+                theatreProceduresLoading.value ||
+                billingInvoicesLoading.value)),
+);
+const visitSummaryLabel = computed(() => {
+    if (primaryVisit.value) {
+        return formatEnumLabel(primaryVisit.value.status || 'scheduled');
+    }
+
+    return 'No visit';
+});
+const activeOrdersSummaryLabel = computed(() =>
+    activeOrderCount.value > 0 ? `${activeOrderCount.value} open` : 'None open',
+);
+const clinicalNotesSummaryLabel = computed(() =>
+    chartCounts.value.records > 0
+        ? `${chartCounts.value.records} record${chartCounts.value.records === 1 ? '' : 's'}`
+        : 'None yet',
+);
+const timelineSummaryLabel = computed(() =>
+    chartCounts.value.timelineEvents > 0
+        ? `${chartCounts.value.timelineEvents} event${chartCounts.value.timelineEvents === 1 ? '' : 's'}`
+        : 'No events',
+);
 
 const latestLaboratoryResult = computed(
     () =>
@@ -3445,11 +3496,12 @@ onMounted(() => {
                 </div>
             </section>
 
-            <section v-if="patient" class="grid gap-2 md:grid-cols-4">
+            <section v-if="patient || patientLoading" class="grid gap-2 md:grid-cols-4">
                 <button
                     type="button"
                     class="group flex min-h-14 items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
                     :class="activeTab === 'visits' ? 'border-primary/50 bg-primary/10' : 'border-border bg-muted/30'"
+                    :disabled="patientLoading"
                     @click="activeTab = 'visits'"
                 >
                     <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
@@ -3457,13 +3509,15 @@ onMounted(() => {
                     </span>
                     <span class="min-w-0">
                         <span class="block text-xs font-medium text-muted-foreground">Visit focus</span>
-                        <span class="mt-0.5 block truncate text-sm font-semibold text-foreground">{{ primaryVisit ? formatEnumLabel(primaryVisit.status || 'scheduled') : 'No active visit' }}</span>
+                        <Skeleton v-if="visitSummaryLoading" class="mt-1 h-4 w-24" />
+                        <span v-else class="mt-0.5 block truncate text-sm font-semibold text-foreground">{{ visitSummaryLabel }}</span>
                     </span>
                 </button>
                 <button
                     type="button"
                     class="group flex min-h-14 items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
                     :class="activeTab === 'orders' ? 'border-primary/50 bg-primary/10' : 'border-border bg-muted/30'"
+                    :disabled="patientLoading"
                     @click="activeTab = 'orders'"
                 >
                     <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
@@ -3471,13 +3525,15 @@ onMounted(() => {
                     </span>
                     <span class="min-w-0">
                         <span class="block text-xs font-medium text-muted-foreground">Active orders</span>
-                        <span class="mt-0.5 block text-sm font-semibold text-foreground">{{ activeOrderCount }} open</span>
+                        <Skeleton v-if="ordersSummaryLoading" class="mt-1 h-4 w-16" />
+                        <span v-else class="mt-0.5 block text-sm font-semibold text-foreground">{{ activeOrdersSummaryLabel }}</span>
                     </span>
                 </button>
                 <button
                     type="button"
                     class="group flex min-h-14 items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
                     :class="activeTab === 'records' ? 'border-primary/50 bg-primary/10' : 'border-border bg-muted/30'"
+                    :disabled="patientLoading"
                     @click="activeTab = 'records'"
                 >
                     <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
@@ -3485,13 +3541,15 @@ onMounted(() => {
                     </span>
                     <span class="min-w-0">
                         <span class="block text-xs font-medium text-muted-foreground">Clinical notes</span>
-                        <span class="mt-0.5 block text-sm font-semibold text-foreground">{{ chartCounts.records }} records</span>
+                        <Skeleton v-if="recordsSummaryLoading" class="mt-1 h-4 w-20" />
+                        <span v-else class="mt-0.5 block text-sm font-semibold text-foreground">{{ clinicalNotesSummaryLabel }}</span>
                     </span>
                 </button>
                 <button
                     type="button"
                     class="group flex min-h-14 items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
                     :class="activeTab === 'timeline' ? 'border-primary/50 bg-primary/10' : 'border-border bg-muted/30'"
+                    :disabled="patientLoading"
                     @click="activeTab = 'timeline'"
                 >
                     <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border group-hover:text-primary">
@@ -3499,7 +3557,8 @@ onMounted(() => {
                     </span>
                     <span class="min-w-0">
                         <span class="block text-xs font-medium text-muted-foreground">Timeline</span>
-                        <span class="mt-0.5 block text-sm font-semibold text-foreground">{{ chartCounts.timelineEvents }} events</span>
+                        <Skeleton v-if="timelineSummaryLoading" class="mt-1 h-4 w-20" />
+                        <span v-else class="mt-0.5 block text-sm font-semibold text-foreground">{{ timelineSummaryLabel }}</span>
                     </span>
                 </button>
             </section>
