@@ -379,6 +379,7 @@ const initialTabQuery = queryParam('tab').trim();
 const initialOpenQuery = queryParam('open').trim();
 const initialPageQuery = queryParam('page').trim();
 const initialFocusedAppointmentId = queryParam('focusAppointmentId').trim();
+const initialFocusAction = queryFocusActionParam();
 const initialCreateIntent = shouldOpenCreateFromQuery();
 const initialCreatePrefill = createPrefillQueryValues();
 const hasExplicitQueueIntent = Boolean(
@@ -392,6 +393,7 @@ const hasExplicitQueueIntent = Boolean(
     || initialTabQuery
     || initialOpenQuery
     || initialFocusedAppointmentId
+    || initialFocusAction !== 'details'
     || initialPageQuery,
 );
 
@@ -1167,6 +1169,12 @@ function queryQueueModeParam(): QueueMode {
     const raw = queryParam('view');
     if (raw === 'triage' || raw === 'clinical') return raw;
     return 'all';
+}
+type AppointmentFocusAction = 'details' | 'triage' | 'consultation';
+function queryFocusActionParam(): AppointmentFocusAction {
+    const raw = queryParam('focusAction');
+    if (raw === 'triage' || raw === 'consultation') return raw;
+    return 'details';
 }
 function shouldOpenCreateFromQuery(): boolean {
     return queryParam('tab') === 'new' || queryParam('open') === 'schedule';
@@ -3667,6 +3675,13 @@ function sourceAdmissionMedicalRecordsHref(
     return `${url.pathname}${url.search}`;
 }
 
+async function loadFocusedAppointment(appointmentId: string): Promise<Appointment> {
+    const response = await apiRequest<ApiItemResponse<Appointment>>('GET', `/appointments/${appointmentId}`);
+    replaceAppointmentInState(response.data);
+    await hydratePatientSummary(response.data.patientId);
+    return response.data;
+}
+
 async function openDetails(appointment: Appointment): Promise<void> {
     detailsOpen.value = true;
     detailsLoading.value = true;
@@ -4402,9 +4417,35 @@ onMounted(async () => {
         return;
     }
     if (initialFocusedAppointmentId) {
-        await openDetails(
-            appointmentDetailsPlaceholder(initialFocusedAppointmentId),
-        );
+        if (initialFocusAction === 'triage') {
+            try {
+                const appointment = await loadFocusedAppointment(initialFocusedAppointmentId);
+                if (appointment.status === 'waiting_triage' && canRecordOpdTriage.value) {
+                    openTriageSheet(appointment);
+                    return;
+                }
+                await openDetails(appointment);
+            } catch {
+                await openDetails(appointmentDetailsPlaceholder(initialFocusedAppointmentId));
+            }
+            return;
+        }
+
+        if (initialFocusAction === 'consultation') {
+            try {
+                const appointment = await loadFocusedAppointment(initialFocusedAppointmentId);
+                if (canAccessConsultationWorkflow(appointment)) {
+                    await launchConsultationWorkflow(appointment);
+                    return;
+                }
+                await openDetails(appointment);
+            } catch {
+                await openDetails(appointmentDetailsPlaceholder(initialFocusedAppointmentId));
+            }
+            return;
+        }
+
+        await openDetails(appointmentDetailsPlaceholder(initialFocusedAppointmentId));
         return;
     }
 

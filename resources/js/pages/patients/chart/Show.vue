@@ -470,6 +470,14 @@ const canReadBillingInvoices = computed(
 const canCreateBillingInvoices = computed(
     () => isFacilitySuperAdmin.value || hasPermission('billing.invoices.create'),
 );
+const canRecordOpdTriage = computed(
+    () => isFacilitySuperAdmin.value
+        || hasPermission('emergency.triage.create')
+        || hasPermission('emergency.triage.update-status'),
+);
+const canStartConsultation = computed(
+    () => isFacilitySuperAdmin.value || hasPermission('appointments.start-consultation'),
+);
 const handoffSource = queryParam('from');
 const handoffAppointmentId = queryParam('appointmentId');
 const focusedAppointmentId = ref(handoffAppointmentId);
@@ -585,27 +593,20 @@ const hasOpenVisitInChart = computed(() =>
     Boolean(primaryVisit.value && openVisitStatuses.includes(primaryVisit.value.status || '')),
 );
 const visitPrimaryActionHref = computed(() =>
-    hasOpenVisitInChart.value ? appointmentsWorkspaceHref.value : scheduleAppointmentHref.value,
+    primaryVisit.value && hasOpenVisitInChart.value
+        ? appointmentWorkflowHref(primaryVisit.value)
+        : scheduleAppointmentHref.value,
 );
 const visitPrimaryActionLabel = computed(() => {
     if (!hasOpenVisitInChart.value || !primaryVisit.value) return 'Schedule appointment';
 
-    switch (primaryVisit.value.status) {
-        case 'in_consultation':
-            return 'Resume consultation';
-        case 'waiting_provider':
-            return 'Start consultation';
-        case 'waiting_triage':
-            return 'Open triage';
-        case 'scheduled':
-            return 'Open scheduled visit';
-        default:
-            return 'Open current visit';
-    }
+    return appointmentPrimaryActionLabel(primaryVisit.value);
 });
-const visitPrimaryActionIcon = computed(() =>
-    hasOpenVisitInChart.value ? 'calendar-clock' : 'calendar-plus-2',
-);
+const visitPrimaryActionIcon = computed(() => {
+    if (!hasOpenVisitInChart.value || !primaryVisit.value) return 'calendar-plus-2';
+
+    return appointmentPrimaryActionIcon(primaryVisit.value);
+});
 const visitWorkspaceActionLabel = computed(() =>
     hasOpenVisitInChart.value ? 'Open visit workspace' : 'Open visits',
 );
@@ -2757,9 +2758,15 @@ function recordRegistryHref(record: MedicalRecord): string {
 }
 
 
-function appointmentWorkspaceHref(appointment: Appointment): string {
+type AppointmentWorkspaceAction = 'details' | 'triage' | 'consultation';
+
+function appointmentWorkspaceHref(
+    appointment: Appointment,
+    action: AppointmentWorkspaceAction = 'details',
+): string {
     const params = new URLSearchParams({
         focusAppointmentId: appointment.id,
+        from: 'patient-chart',
     });
     const normalizedStatus = String(appointment.status ?? '').trim();
     if (
@@ -2771,6 +2778,13 @@ function appointmentWorkspaceHref(appointment: Appointment): string {
     ) {
         params.set('status', normalizedStatus);
     }
+    if (action === 'triage') {
+        params.set('view', 'triage');
+        params.set('focusAction', 'triage');
+    } else if (action === 'consultation') {
+        params.set('view', 'clinical');
+        params.set('focusAction', 'consultation');
+    }
     return `/appointments?${params.toString()}`;
 }
 
@@ -2778,12 +2792,22 @@ function appointmentDetailsHref(appointment: Appointment): string {
     return appointmentWorkspaceHref(appointment);
 }
 
-function consultationHrefForAppointment(appointment: Appointment | null): string {
-    if (appointment) {
-        return appointmentWorkspaceHref(appointment);
+function appointmentWorkflowAction(appointment: Appointment | null): AppointmentWorkspaceAction {
+    if (appointment?.status === 'waiting_triage' && canRecordOpdTriage.value) {
+        return 'triage';
+    }
+    if (
+        (appointment?.status === 'waiting_provider' || appointment?.status === 'in_consultation')
+        && canStartConsultation.value
+    ) {
+        return 'consultation';
     }
 
-    return `/appointments?patientId=${encodeURIComponent(props.patientId)}&from=patient-chart`;
+    return 'details';
+}
+
+function appointmentWorkflowHref(appointment: Appointment): string {
+    return appointmentWorkspaceHref(appointment, appointmentWorkflowAction(appointment));
 }
 
 function appointmentStatusVariant(status: string | null | undefined): 'default' | 'secondary' | 'outline' | 'destructive' {
@@ -3220,6 +3244,12 @@ function recordStatusVariant(status: string | null | undefined): 'default' | 'se
 }
 
 function appointmentActionLabel(appointment: Appointment | null): string {
+    const action = appointmentWorkflowAction(appointment);
+    if (action === 'details') {
+        if (appointment?.status === 'scheduled') return 'Open scheduled visit';
+        return 'Open visit';
+    }
+
     switch (appointment?.status) {
         case 'in_consultation':
             return 'Resume consultation';
@@ -3237,21 +3267,25 @@ function shouldShowAppointmentCareAction(appointment: Appointment | null): boole
 }
 
 function appointmentPrimaryActionHref(appointment: Appointment): string {
-    return canReadMedicalRecords.value && shouldShowAppointmentCareAction(appointment)
-        ? consultationHrefForAppointment(appointment)
+    return shouldShowAppointmentCareAction(appointment)
+        ? appointmentWorkflowHref(appointment)
         : appointmentDetailsHref(appointment);
 }
 
 function appointmentPrimaryActionLabel(appointment: Appointment): string {
-    return canReadMedicalRecords.value && shouldShowAppointmentCareAction(appointment)
+    return shouldShowAppointmentCareAction(appointment)
         ? appointmentActionLabel(appointment)
         : 'Open visit';
 }
 
 function appointmentPrimaryActionIcon(appointment: Appointment): string {
-    return canReadMedicalRecords.value && shouldShowAppointmentCareAction(appointment)
-        ? 'stethoscope'
-        : 'calendar-clock';
+    if (!shouldShowAppointmentCareAction(appointment)) return 'calendar-clock';
+
+    const action = appointmentWorkflowAction(appointment);
+    if (action === 'triage') return 'heart-pulse';
+    if (action === 'consultation') return 'stethoscope';
+
+    return 'calendar-clock';
 }
 
 function timelineCategoryLabel(category: ChartTimelineEvent['category']): string {
