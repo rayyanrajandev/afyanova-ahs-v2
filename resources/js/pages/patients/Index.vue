@@ -761,6 +761,7 @@ const browserOnline = ref(
 const offlinePatientRegistrations = ref<OfflinePatientRegistrationRecord[]>([]);
 const offlinePatientSyncLoading = ref(false);
 const offlinePatientSyncError = ref<string | null>(null);
+const offlineLastSavedPatientNumber = ref<string | null>(null);
 const offlinePatientPendingCount = computed(
     () =>
         offlinePatientRegistrations.value.filter((record) =>
@@ -772,6 +773,11 @@ const offlinePatientFailedCount = computed(
         offlinePatientRegistrations.value.filter(
             (record) => record.status === 'failed',
         ).length,
+);
+const offlinePatientFailedRecords = computed(() =>
+    offlinePatientRegistrations.value.filter(
+        (record) => record.status === 'failed',
+    ),
 );
 
 // ── Draft auto-save ────────────────────────────────────────────────────────
@@ -4610,15 +4616,28 @@ function addOfflinePatientToCurrentList(
     ];
 }
 
+function offlinePatientRecordName(
+    record: OfflinePatientRegistrationRecord,
+): string {
+    return [
+        record.payload.firstName,
+        record.payload.middleName,
+        record.payload.lastName,
+    ]
+        .filter((part): part is string => Boolean(part && part.trim() !== ''))
+        .join(' ');
+}
+
 async function savePatientRegistrationOffline(
     payload: ReturnType<typeof payloadFromForm>,
 ): Promise<void> {
     const record = await enqueueOfflinePatientRegistration(payload);
     addOfflinePatientToCurrentList(record);
+    offlineLastSavedPatientNumber.value = record.temporaryPatientNumber;
     await refreshOfflinePatientRegistrations();
 
     notifySuccess(
-        `Saved offline as ${record.temporaryPatientNumber}. It will upload when internet returns.`,
+        `Patient saved offline as ${record.temporaryPatientNumber}. It will upload when internet returns.`,
     );
 
     resetRegistrationForm();
@@ -4650,10 +4669,15 @@ async function syncOfflinePatientRegistrations(options?: {
                     `${result.synced} offline patient registration(s) uploaded.`,
                 );
             }
+            if (result.remaining === 0) {
+                offlineLastSavedPatientNumber.value = null;
+            }
             searchForm.page = 1;
             await Promise.all([loadPatients(), loadPatientStatusCounts()]);
-        } else if (result.failed > 0 && !options?.silent) {
-            notifyError('Some offline patient registrations could not sync.');
+        } else if (result.failed > 0) {
+            notifyError(
+                'Some offline patient registrations need review before they can upload.',
+            );
         }
     } catch (error) {
         offlinePatientSyncError.value = messageFromUnknown(
@@ -5580,7 +5604,8 @@ onMounted(() => {
                 v-if="
                     offlinePatientPendingCount > 0 ||
                     !browserOnline ||
-                    offlinePatientSyncError
+                    offlinePatientSyncError ||
+                    offlineLastSavedPatientNumber
                 "
                 :variant="
                     offlinePatientFailedCount > 0 ? 'destructive' : 'default'
@@ -5590,39 +5615,70 @@ onMounted(() => {
                 <AppIcon name="receipt" class="size-4" />
                 <AlertTitle>
                     {{
-                        browserOnline
-                            ? `${offlinePatientPendingCount} offline patient registration${offlinePatientPendingCount === 1 ? '' : 's'} pending upload`
-                            : 'Offline patient registration enabled'
+                        offlinePatientFailedCount > 0
+                            ? `${offlinePatientFailedCount} offline patient registration${offlinePatientFailedCount === 1 ? '' : 's'} need review`
+                            : offlineLastSavedPatientNumber
+                              ? `Saved offline: ${offlineLastSavedPatientNumber}`
+                              : browserOnline
+                                ? `${offlinePatientPendingCount} offline patient registration${offlinePatientPendingCount === 1 ? '' : 's'} pending upload`
+                                : 'Offline patient registration enabled'
                     }}
                 </AlertTitle>
                 <AlertDescription>
-                    <div
-                        class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                        <p>
-                            {{
-                                offlinePatientSyncError ||
-                                (browserOnline
-                                    ? 'Saved offline records will sync to the cloud database. The local project database is not used.'
-                                    : 'New patient registrations are saved on this browser and uploaded to the cloud when internet returns.')
-                            }}
-                        </p>
-                        <Button
-                            v-if="
-                                browserOnline && offlinePatientPendingCount > 0
-                            "
-                            size="sm"
-                            variant="outline"
-                            class="h-8 shrink-0"
-                            :disabled="offlinePatientSyncLoading"
-                            @click="syncOfflinePatientRegistrations()"
+                    <div class="flex flex-col gap-3">
+                        <div
+                            class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
                         >
-                            {{
-                                offlinePatientSyncLoading
-                                    ? 'Uploading...'
-                                    : 'Upload now'
-                            }}
-                        </Button>
+                            <p>
+                                {{
+                                    offlinePatientSyncError ||
+                                    (offlinePatientFailedCount > 0
+                                        ? 'The cloud rejected one or more saved registrations. This can happen when a duplicate patient already exists or required data needs correction.'
+                                        : offlineLastSavedPatientNumber
+                                          ? 'The registration is safely stored on this browser. It will upload to the cloud when internet is available.'
+                                          : browserOnline
+                                            ? 'Saved offline records will sync to the cloud database. The local project database is not used.'
+                                            : 'New patient registrations are saved on this browser and uploaded to the cloud when internet returns.')
+                                }}
+                            </p>
+                            <Button
+                                v-if="
+                                    browserOnline &&
+                                    offlinePatientPendingCount > 0
+                                "
+                                size="sm"
+                                variant="outline"
+                                class="h-8 shrink-0"
+                                :disabled="offlinePatientSyncLoading"
+                                @click="syncOfflinePatientRegistrations()"
+                            >
+                                {{
+                                    offlinePatientSyncLoading
+                                        ? 'Uploading...'
+                                        : 'Upload now'
+                                }}
+                            </Button>
+                        </div>
+                        <div
+                            v-if="offlinePatientFailedRecords.length"
+                            class="space-y-1 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs"
+                        >
+                            <p
+                                v-for="record in offlinePatientFailedRecords.slice(
+                                    0,
+                                    3,
+                                )"
+                                :key="record.id"
+                            >
+                                <span class="font-medium">{{
+                                    offlinePatientRecordName(record) ||
+                                    record.temporaryPatientNumber
+                                }}</span>
+                                <span class="text-muted-foreground">
+                                    - {{ record.error || 'Upload failed.' }}
+                                </span>
+                            </p>
+                        </div>
                     </div>
                 </AlertDescription>
             </Alert>
