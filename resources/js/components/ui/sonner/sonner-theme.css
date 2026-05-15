@@ -1,0 +1,81 @@
+[data-sonner-toaster].toaster {
+    z-index: 120 !important;
+    --width: min(24rem, calc(100vw - 2rem));
+    --offset: 1rem;
+    --mobile-offset: 0.75rem;
+}
+
+[data-sonner-toaster].toaster [data-sonner-toast] {
+    min-height: 3.25rem !important;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent) !important;
+    border-left: 4px solid var(--border) !important;
+    border-radius: 0.75rem !important;
+    background: color-mix(in srgb, var(--popover) 96%, transparent) !important;
+    color: var(--popover-foreground) !important;
+    box-shadow:
+        0 18px 45px color-mix(in srgb, var(--foreground) 13%, transparent),
+        0 2px 8px color-mix(in srgb, var(--foreground) 8%, transparent) !important;
+    backdrop-filter: blur(14px) saturate(1.08);
+    -webkit-backdrop-filter: blur(14px) saturate(1.08);
+    padding: 0.875rem 1rem !important;
+}
+
+[data-sonner-toaster].toaster [data-sonner-toast]::before {
+    display: none !important;
+}
+
+[data-sonner-toaster].toaster [data-sonner-toast][data-type='success'] {
+    border-left-color: var(--success) !important;
+}
+
+[data-sonner-toaster].toaster [data-sonner-toast][data-type='error'] {
+    border-left-color: var(--destructive) !important;
+}
+
+[data-sonner-toaster].toaster [data-sonner-toast][data-type='warning'] {
+    border-left-color: var(--warning) !important;
+}
+
+[data-sonner-toaster].toaster [data-sonner-toast][data-type='info'] {
+    border-left-color: var(--info) !important;
+}
+
+[data-sonner-toaster].toaster [data-sonner-toast] [data-icon] {
+    margin-inline-end: 0.625rem !important;
+}
+
+[data-sonner-toaster].toaster [data-sonner-toast] [data-title] {
+    font-size: 0.875rem !important;
+    font-weight: 600 !important;
+    line-height: 1.35 !important;
+    letter-spacing: 0 !important;
+}
+
+[data-sonner-toaster].toaster [data-sonner-toast] [data-description] {
+    margin-top: 0.125rem !important;
+    font-size: 0.8125rem !important;
+    line-height: 1.45 !important;
+    color: var(--muted-foreground) !important;
+}
+
+[data-sonner-toaster].toaster [data-sonner-toast] [data-close-button] {
+    top: 0.625rem !important;
+    right: 0.625rem !important;
+    display: inline-flex !important;
+    width: 1.5rem !important;
+    height: 1.5rem !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 1px solid transparent !important;
+    border-radius: 999px !important;
+    background: transparent !important;
+    color: var(--muted-foreground) !important;
+    opacity: 0.72 !important;
+}
+
+[data-sonner-toaster].toaster [data-sonner-toast] [data-close-button]:hover {
+    border-color: var(--border) !important;
+    background: var(--muted) !important;
+    color: var(--foreground) !important;
+    opacity: 1 !important;
+}

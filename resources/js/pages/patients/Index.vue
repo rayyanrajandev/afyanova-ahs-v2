@@ -1624,6 +1624,14 @@ const editErrors = ref<Record<string, string[]>>({});
 const editOptionalDetailsOpen = ref(false);
 const editErrorSummaryRef = ref<HTMLElement | null>(null);
 const editBirthInputMode = ref<RegistrationBirthInputMode>('exact');
+const editProcessingTitle = computed(() =>
+    browserOnline.value ? 'Saving patient changes' : 'Saving edit offline',
+);
+const editProcessingDescription = computed(() =>
+    browserOnline.value
+        ? 'Updating the patient record in the cloud. Do not refresh or close this sheet.'
+        : 'Saving this correction safely on this browser. It will upload when internet returns.',
+);
 const editForm = reactive<PatientEditForm>({
     firstName: '',
     middleName: '',
@@ -11014,7 +11022,16 @@ onMounted(() => {
                 </SheetHeader>
 
                 <ScrollArea class="min-h-0 flex-1">
-                    <div class="grid gap-4 px-6 py-4 pb-8">
+                    <div
+                        class="grid gap-4 px-6 py-4 pb-8"
+                        :aria-busy="editLoading"
+                    >
+                        <ProcessingStatePanel
+                            v-if="editLoading"
+                            :title="editProcessingTitle"
+                            :description="editProcessingDescription"
+                        />
+
                         <div
                             v-if="editTargetPatient"
                             class="flex flex-col gap-3 rounded-lg border bg-muted/20 px-3 py-3 text-xs sm:flex-row sm:items-center sm:justify-between"
@@ -11633,7 +11650,8 @@ onMounted(() => {
                         class="h-8 w-full gap-1.5 px-3 sm:w-auto"
                         @click="updatePatient"
                     >
-                        <AppIcon name="check-circle" class="size-3.5" />
+                        <Spinner v-if="editLoading" class="size-3.5" />
+                        <AppIcon v-else name="check-circle" class="size-3.5" />
                         {{ editLoading ? 'Saving...' : 'Save Changes' }}
                     </Button>
                 </SheetFooter>

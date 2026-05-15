@@ -11,6 +11,7 @@ import {
 import { onBeforeUnmount, onMounted } from 'vue';
 import { Toaster as Sonner, toast } from 'vue-sonner';
 import { cn } from '@/lib/utils';
+import './sonner-theme.css';
 
 const props = defineProps<ToasterProps>();
 
