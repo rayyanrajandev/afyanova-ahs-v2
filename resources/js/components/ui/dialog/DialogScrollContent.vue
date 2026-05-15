@@ -67,6 +67,26 @@ const variantClass = computed(() => {
 
   return cn("gap-4", sizeClass.value)
 })
+
+function handlePointerDownOutside(event: Event): void {
+  const customEvent = event as CustomEvent<{ originalEvent?: PointerEvent }>
+  const originalEvent = customEvent.detail?.originalEvent
+  const target = originalEvent?.target as HTMLElement | null
+
+  if (target?.closest("[data-sonner-toaster]")) {
+    event.preventDefault()
+    return
+  }
+
+  if (!originalEvent || !target) return
+
+  if (
+    originalEvent.offsetX > target.clientWidth
+    || originalEvent.offsetY > target.clientHeight
+  ) {
+    event.preventDefault()
+  }
+}
 </script>
 
 <template>
@@ -84,13 +104,7 @@ const variantClass = computed(() => {
           )
         "
         v-bind="{ ...$attrs, ...forwarded }"
-        @pointer-down-outside="(event) => {
-          const originalEvent = event.detail.originalEvent;
-          const target = originalEvent.target as HTMLElement;
-          if (originalEvent.offsetX > target.clientWidth || originalEvent.offsetY > target.clientHeight) {
-            event.preventDefault();
-          }
-        }"
+        @pointer-down-outside="handlePointerDownOutside"
       >
         <slot />
 

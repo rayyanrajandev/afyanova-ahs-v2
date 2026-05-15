@@ -2,10 +2,12 @@ import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import type { DefineComponent } from 'vue';
 import { createApp, Fragment, h } from 'vue';
+import 'vue-sonner/style.css';
 import '../css/app.css';
 import { Toaster } from './components/ui/sonner';
 import { initializeTheme } from './composables/useAppearance';
 import { initializeUiPreferences } from './composables/useUiPreferences';
+import { purgeKnownSensitiveBrowserStorage } from './lib/browserStoragePolicy';
 import { buildDocumentTitle, syncClientBranding } from './lib/branding';
 
 syncClientBranding(
@@ -14,6 +16,7 @@ syncClientBranding(
 
 initializeTheme();
 initializeUiPreferences();
+purgeKnownSensitiveBrowserStorage();
 
 createInertiaApp({
     title: (title) => buildDocumentTitle(title),
@@ -25,7 +28,10 @@ createInertiaApp({
     setup({ el, App, props, plugin }) {
         createApp({
             render: () =>
-                h(Fragment, null, [h(App, props), h(Toaster, { richColors: true })]),
+                h(Fragment, null, [
+                    h(App, props),
+                    h(Toaster, { richColors: true }),
+                ]),
         })
             .use(plugin)
             .mount(el);

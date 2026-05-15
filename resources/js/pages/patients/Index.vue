@@ -14,6 +14,8 @@ import SearchableSelectField from '@/components/forms/SearchableSelectField.vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import ProcessingStatePanel from '@/components/workflow/ProcessingStatePanel.vue';
 import {
     Card,
     CardContent,
@@ -760,6 +762,27 @@ const preSubmitDuplicateCheckLoading = ref(false);
 const preSubmitDuplicateCheckError = ref<string | null>(null);
 const preSubmitDuplicateMatches = ref<Patient[]>([]);
 const preSubmitDuplicateWarningAcknowledged = ref(false);
+const registrationProcessingVisible = computed(
+    () => createLoading.value || preSubmitDuplicateCheckLoading.value,
+);
+const registrationProcessingTitle = computed(() => {
+    if (preSubmitDuplicateCheckLoading.value) {
+        return 'Checking possible duplicates';
+    }
+
+    return browserOnline.value ? 'Registering patient' : 'Saving offline';
+});
+const registrationProcessingDescription = computed(() => {
+    if (preSubmitDuplicateCheckLoading.value) {
+        return 'Comparing patient identifiers before the record is created.';
+    }
+
+    if (!browserOnline.value) {
+        return 'Saving this registration safely on this browser. It will upload when internet returns.';
+    }
+
+    return 'Saving the patient record to the cloud. Do not refresh or close this page.';
+});
 const browserOnline = ref(
     typeof navigator === 'undefined' ? true : navigator.onLine,
 );
@@ -6787,7 +6810,16 @@ onMounted(() => {
                 <!-- End draft resume prompt ─────────────────────────────── -->
 
                 <ScrollArea class="min-h-0 flex-1">
-                    <div class="grid gap-4 px-6 py-4 pb-8">
+                    <div
+                        class="grid gap-4 px-6 py-4 pb-8"
+                        :aria-busy="registrationProcessingVisible"
+                    >
+                        <ProcessingStatePanel
+                            v-if="registrationProcessingVisible"
+                            :title="registrationProcessingTitle"
+                            :description="registrationProcessingDescription"
+                        />
+
                         <div
                             class="flex flex-col gap-3 rounded-lg border bg-muted/20 px-3 py-3 text-xs sm:flex-row sm:items-center sm:justify-between"
                         >
@@ -7691,7 +7723,14 @@ onMounted(() => {
                                 class="h-8 w-full gap-1.5 px-3 sm:w-auto"
                                 @click="createPatient"
                             >
-                                <AppIcon name="plus" class="size-3.5" />
+                                <Spinner
+                                    v-if="
+                                        createLoading ||
+                                        preSubmitDuplicateCheckLoading
+                                    "
+                                    class="size-3.5"
+                                />
+                                <AppIcon v-else name="plus" class="size-3.5" />
                                 {{
                                     createLoading
                                         ? tW2('action.creating')
