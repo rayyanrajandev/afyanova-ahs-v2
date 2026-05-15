@@ -355,3 +355,15 @@ export async function syncPendingOfflinePatientRegistrations(): Promise<OfflineP
         remaining,
     };
 }
+
+export function registerOfflinePatientServiceWorker(): void {
+    if (typeof window === 'undefined') return;
+    if (!('serviceWorker' in navigator)) return;
+    if (import.meta.env.DEV) return;
+
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {
+            // Offline registration still works without page refresh support.
+        });
+    });
+}

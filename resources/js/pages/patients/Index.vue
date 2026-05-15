@@ -77,6 +77,7 @@ import {
     enqueueOfflinePatientRegistration,
     isLikelyPatientOfflineFailure,
     listOfflinePatientRegistrations,
+    registerOfflinePatientServiceWorker,
     syncPendingOfflinePatientRegistrations,
     type OfflinePatientRegistrationRecord,
 } from '@/lib/offlinePatientRegistration';
@@ -5466,6 +5467,7 @@ onBeforeUnmount(() => {
 });
 
 onMounted(() => {
+    registerOfflinePatientServiceWorker();
     browserOnline.value =
         typeof navigator === 'undefined' ? true : navigator.onLine;
     window.addEventListener('online', handleBrowserOnline);
@@ -6506,9 +6508,7 @@ onMounted(() => {
                                 >
                                     {{
                                         registrationRequiredReadiness.complete
-                                    }}/{{
-                                        registrationRequiredReadiness.total
-                                    }}
+                                    }}/{{ registrationRequiredReadiness.total }}
                                     required
                                 </Badge>
                             </div>
@@ -8790,9 +8790,7 @@ onMounted(() => {
                                         <p
                                             class="truncate text-muted-foreground"
                                         >
-                                            {{
-                                                detailsTimelineEvents.length
-                                            }}
+                                            {{ detailsTimelineEvents.length }}
                                             recorded events
                                         </p>
                                     </div>
@@ -10529,9 +10527,7 @@ onMounted(() => {
                                     </Button>
                                     <p class="text-xs text-muted-foreground">
                                         Page
-                                        {{
-                                            detailsAuditMeta?.currentPage ?? 1
-                                        }}
+                                        {{ detailsAuditMeta?.currentPage ?? 1 }}
                                         of
                                         {{ detailsAuditMeta?.lastPage ?? 1 }} |
                                         {{ detailsAuditTotalEntries }} logs
