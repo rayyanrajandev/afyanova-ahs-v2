@@ -18,11 +18,15 @@ export type OfflinePatientRegistrationPayload = {
     nextOfKinPhone: string | null;
 };
 
+export type OfflinePatientUpdatePayload = OfflinePatientRegistrationPayload;
+
 export type OfflinePatientRegistrationStatus =
     | 'pending'
     | 'syncing'
     | 'synced'
     | 'failed';
+
+export type OfflinePatientUpdateStatus = OfflinePatientRegistrationStatus;
 
 export type OfflinePatientRegistrationRecord = {
     id: string;
@@ -39,6 +43,21 @@ export type OfflinePatientRegistrationRecord = {
     cloudPatientNumber: string | null;
 };
 
+export type OfflinePatientUpdateRecord = {
+    id: string;
+    patientId: string;
+    patientNumber: string | null;
+    patientName: string;
+    idempotencyKey: string;
+    payload: OfflinePatientUpdatePayload;
+    status: OfflinePatientUpdateStatus;
+    attempts: number;
+    createdAt: string;
+    updatedAt: string;
+    syncedAt: string | null;
+    error: string | null;
+};
+
 export type OfflinePatientSyncResult = {
     attempted: number;
     synced: number;
@@ -47,8 +66,9 @@ export type OfflinePatientSyncResult = {
 };
 
 const DATABASE_NAME = 'afyanova-offline';
-const DATABASE_VERSION = 1;
-const STORE_NAME = 'patient-registration-outbox';
+const DATABASE_VERSION = 2;
+const REGISTRATION_STORE_NAME = 'patient-registration-outbox';
+const UPDATE_STORE_NAME = 'patient-update-outbox';
 
 let databasePromise: Promise<IDBDatabase> | null = null;
 
@@ -78,10 +98,42 @@ function generateOfflineId(): string {
     return `offline-patient-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
 }
 
+function generateOfflineUpdateId(): string {
+    if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
+        return `offline-patient-update-${window.crypto.randomUUID()}`;
+    }
+
+    return `offline-patient-update-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
 function generateTemporaryPatientNumber(createdAt: string): string {
     const date = createdAt.slice(0, 10).replaceAll('-', '');
     const time = createdAt.slice(11, 19).replaceAll(':', '');
     return `TMP-PAT-${date}-${time}-${randomSuffix()}`;
+}
+
+function ensureRegistrationStore(db: IDBDatabase): void {
+    if (!db.objectStoreNames.contains(REGISTRATION_STORE_NAME)) {
+        const store = db.createObjectStore(REGISTRATION_STORE_NAME, {
+            keyPath: 'id',
+        });
+        store.createIndex('status', 'status', { unique: false });
+        store.createIndex('createdAt', 'createdAt', { unique: false });
+        store.createIndex('temporaryPatientNumber', 'temporaryPatientNumber', {
+            unique: true,
+        });
+    }
+}
+
+function ensureUpdateStore(db: IDBDatabase): void {
+    if (!db.objectStoreNames.contains(UPDATE_STORE_NAME)) {
+        const store = db.createObjectStore(UPDATE_STORE_NAME, {
+            keyPath: 'id',
+        });
+        store.createIndex('status', 'status', { unique: false });
+        store.createIndex('patientId', 'patientId', { unique: false });
+        store.createIndex('createdAt', 'createdAt', { unique: false });
+    }
 }
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -99,18 +151,8 @@ function openDatabase(): Promise<IDBDatabase> {
 
         request.onupgradeneeded = () => {
             const db = request.result;
-            if (!db.objectStoreNames.contains(STORE_NAME)) {
-                const store = db.createObjectStore(STORE_NAME, {
-                    keyPath: 'id',
-                });
-                store.createIndex('status', 'status', { unique: false });
-                store.createIndex('createdAt', 'createdAt', { unique: false });
-                store.createIndex(
-                    'temporaryPatientNumber',
-                    'temporaryPatientNumber',
-                    { unique: true },
-                );
-            }
+            ensureRegistrationStore(db);
+            ensureUpdateStore(db);
         };
 
         request.onsuccess = () => resolve(request.result);
@@ -128,12 +170,13 @@ function openDatabase(): Promise<IDBDatabase> {
 async function withStore<T>(
     mode: IDBTransactionMode,
     callback: (store: IDBObjectStore) => IDBRequest<T> | void,
+    storeName = REGISTRATION_STORE_NAME,
 ): Promise<T | undefined> {
     const db = await openDatabase();
 
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction(STORE_NAME, mode);
-        const store = transaction.objectStore(STORE_NAME);
+        const transaction = db.transaction(storeName, mode);
+        const store = transaction.objectStore(storeName);
         let request: IDBRequest<T> | void;
 
         transaction.oncomplete = () =>
@@ -177,12 +220,81 @@ export async function enqueueOfflinePatientRegistration(
     return record;
 }
 
+export async function updateOfflinePatientRegistrationDraft(
+    recordId: string,
+    payload: OfflinePatientRegistrationPayload,
+): Promise<OfflinePatientRegistrationRecord> {
+    const record = await withStore<OfflinePatientRegistrationRecord>(
+        'readonly',
+        (store) => store.get(recordId),
+    );
+
+    if (!record) {
+        throw new Error('Offline patient registration was not found.');
+    }
+
+    const updatedRecord: OfflinePatientRegistrationRecord = {
+        ...record,
+        payload,
+        status: 'pending',
+        updatedAt: nowIso(),
+        error: null,
+    };
+
+    await saveOfflinePatientRegistration(updatedRecord);
+
+    return updatedRecord;
+}
+
+export async function enqueueOfflinePatientUpdate(
+    patient: { id: string; patientNumber: string | null; patientName: string },
+    payload: OfflinePatientUpdatePayload,
+): Promise<OfflinePatientUpdateRecord> {
+    const createdAt = nowIso();
+    const record: OfflinePatientUpdateRecord = {
+        id: generateOfflineUpdateId(),
+        patientId: patient.id,
+        patientNumber: patient.patientNumber,
+        patientName: patient.patientName,
+        idempotencyKey: generateRequestKey('offline-patient-update'),
+        payload,
+        status: 'pending',
+        attempts: 0,
+        createdAt,
+        updatedAt: createdAt,
+        syncedAt: null,
+        error: null,
+    };
+
+    await withStore(
+        'readwrite',
+        (store) => store.add(record),
+        UPDATE_STORE_NAME,
+    );
+
+    return record;
+}
+
 export async function listOfflinePatientRegistrations(): Promise<
     OfflinePatientRegistrationRecord[]
 > {
     const records = await withStore<OfflinePatientRegistrationRecord[]>(
         'readonly',
         (store) => store.getAll(),
+    );
+
+    return (records ?? []).sort((left, right) =>
+        left.createdAt.localeCompare(right.createdAt),
+    );
+}
+
+export async function listOfflinePatientUpdates(): Promise<
+    OfflinePatientUpdateRecord[]
+> {
+    const records = await withStore<OfflinePatientUpdateRecord[]>(
+        'readonly',
+        (store) => store.getAll(),
+        UPDATE_STORE_NAME,
     );
 
     return (records ?? []).sort((left, right) =>
@@ -198,10 +310,28 @@ export async function countPendingOfflinePatientRegistrations(): Promise<number>
     ).length;
 }
 
+export async function countPendingOfflinePatientUpdates(): Promise<number> {
+    const records = await listOfflinePatientUpdates();
+
+    return records.filter(
+        (record) => record.status === 'pending' || record.status === 'failed',
+    ).length;
+}
+
 async function saveOfflinePatientRegistration(
     record: OfflinePatientRegistrationRecord,
 ): Promise<void> {
     await withStore('readwrite', (store) => store.put(record));
+}
+
+async function saveOfflinePatientUpdate(
+    record: OfflinePatientUpdateRecord,
+): Promise<void> {
+    await withStore(
+        'readwrite',
+        (store) => store.put(record),
+        UPDATE_STORE_NAME,
+    );
 }
 
 function isNetworkFailure(error: unknown): boolean {
@@ -255,6 +385,42 @@ async function postPatientToCloud(
     if (response.status === 419 && retryOnCsrfMismatch) {
         await refreshCsrfToken();
         return postPatientToCloud(record, false);
+    }
+
+    const payload = await parseResponseJson(response);
+
+    if (!response.ok) {
+        const message =
+            typeof payload.message === 'string' && payload.message.trim() !== ''
+                ? payload.message
+                : `${response.status} ${response.statusText}`;
+        throw new Error(message);
+    }
+
+    return payload;
+}
+
+async function patchPatientToCloud(
+    record: OfflinePatientUpdateRecord,
+    retryOnCsrfMismatch = true,
+): Promise<Record<string, unknown>> {
+    const response = await fetch(`/api/v1/patients/${record.patientId}`, {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-Idempotency-Key': record.idempotencyKey,
+            'X-Offline-Update-Id': record.id,
+            ...csrfRequestHeaders(),
+        },
+        body: JSON.stringify(record.payload),
+    });
+
+    if (response.status === 419 && retryOnCsrfMismatch) {
+        await refreshCsrfToken();
+        return patchPatientToCloud(record, false);
     }
 
     const payload = await parseResponseJson(response);
@@ -347,6 +513,69 @@ export async function syncPendingOfflinePatientRegistrations(): Promise<OfflineP
     }
 
     const remaining = await countPendingOfflinePatientRegistrations();
+
+    return {
+        attempted: records.length,
+        synced,
+        failed,
+        remaining,
+    };
+}
+
+export async function syncPendingOfflinePatientUpdates(): Promise<OfflinePatientSyncResult> {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        const remaining = await countPendingOfflinePatientUpdates();
+        return { attempted: 0, synced: 0, failed: 0, remaining };
+    }
+
+    const records = (await listOfflinePatientUpdates()).filter(
+        (record) => record.status === 'pending' || record.status === 'failed',
+    );
+
+    let synced = 0;
+    let failed = 0;
+
+    for (const record of records) {
+        const syncingRecord: OfflinePatientUpdateRecord = {
+            ...record,
+            status: 'syncing',
+            attempts: record.attempts + 1,
+            updatedAt: nowIso(),
+            error: null,
+        };
+        await saveOfflinePatientUpdate(syncingRecord);
+
+        try {
+            await patchPatientToCloud(syncingRecord);
+
+            await saveOfflinePatientUpdate({
+                ...syncingRecord,
+                status: 'synced',
+                syncedAt: nowIso(),
+                updatedAt: nowIso(),
+                error: null,
+            });
+            synced += 1;
+        } catch (error) {
+            const failedRecord: OfflinePatientUpdateRecord = {
+                ...syncingRecord,
+                status: 'failed',
+                updatedAt: nowIso(),
+                error:
+                    error instanceof Error
+                        ? error.message
+                        : 'Unable to sync patient update.',
+            };
+            await saveOfflinePatientUpdate(failedRecord);
+            failed += 1;
+
+            if (isNetworkFailure(error)) {
+                break;
+            }
+        }
+    }
+
+    const remaining = await countPendingOfflinePatientUpdates();
 
     return {
         attempted: records.length,

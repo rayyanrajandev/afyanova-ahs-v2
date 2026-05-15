@@ -75,11 +75,16 @@ import { createLocaleTranslator } from '@/lib/locale';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import {
     enqueueOfflinePatientRegistration,
+    enqueueOfflinePatientUpdate,
     isLikelyPatientOfflineFailure,
     listOfflinePatientRegistrations,
+    listOfflinePatientUpdates,
     registerOfflinePatientServiceWorker,
     syncPendingOfflinePatientRegistrations,
+    syncPendingOfflinePatientUpdates,
+    updateOfflinePatientRegistrationDraft,
     type OfflinePatientRegistrationRecord,
+    type OfflinePatientUpdateRecord,
 } from '@/lib/offlinePatientRegistration';
 import { patientChartHref } from '@/lib/patientChart';
 import {
@@ -759,14 +764,27 @@ const browserOnline = ref(
     typeof navigator === 'undefined' ? true : navigator.onLine,
 );
 const offlinePatientRegistrations = ref<OfflinePatientRegistrationRecord[]>([]);
+const offlinePatientUpdates = ref<OfflinePatientUpdateRecord[]>([]);
 const offlinePatientSyncLoading = ref(false);
 const offlinePatientSyncError = ref<string | null>(null);
 const offlineLastSavedPatientNumber = ref<string | null>(null);
+const offlineLastSavedUpdateLabel = ref<string | null>(null);
 const offlinePatientPendingCount = computed(
     () =>
         offlinePatientRegistrations.value.filter((record) =>
             ['pending', 'syncing', 'failed'].includes(record.status),
         ).length,
+);
+const offlinePatientUpdatePendingCount = computed(
+    () =>
+        offlinePatientUpdates.value.filter((record) =>
+            ['pending', 'syncing', 'failed'].includes(record.status),
+        ).length,
+);
+const offlinePatientChangePendingCount = computed(
+    () =>
+        offlinePatientPendingCount.value +
+        offlinePatientUpdatePendingCount.value,
 );
 const offlinePatientFailedCount = computed(
     () =>
@@ -774,10 +792,23 @@ const offlinePatientFailedCount = computed(
             (record) => record.status === 'failed',
         ).length,
 );
+const offlinePatientUpdateFailedCount = computed(
+    () =>
+        offlinePatientUpdates.value.filter(
+            (record) => record.status === 'failed',
+        ).length,
+);
+const offlinePatientChangeFailedCount = computed(
+    () =>
+        offlinePatientFailedCount.value + offlinePatientUpdateFailedCount.value,
+);
 const offlinePatientFailedRecords = computed(() =>
     offlinePatientRegistrations.value.filter(
         (record) => record.status === 'failed',
     ),
+);
+const offlinePatientFailedUpdateRecords = computed(() =>
+    offlinePatientUpdates.value.filter((record) => record.status === 'failed'),
 );
 
 // ── Draft auto-save ────────────────────────────────────────────────────────
@@ -4568,13 +4599,17 @@ function payloadFromForm() {
 
 async function refreshOfflinePatientRegistrations(): Promise<void> {
     try {
-        offlinePatientRegistrations.value =
-            await listOfflinePatientRegistrations();
+        const [registrations, updates] = await Promise.all([
+            listOfflinePatientRegistrations(),
+            listOfflinePatientUpdates(),
+        ]);
+        offlinePatientRegistrations.value = registrations;
+        offlinePatientUpdates.value = updates;
         offlinePatientSyncError.value = null;
     } catch (error) {
         offlinePatientSyncError.value = messageFromUnknown(
             error,
-            'Unable to read offline patient registrations.',
+            'Unable to read offline patient changes.',
         );
     }
 }
@@ -4616,6 +4651,65 @@ function addOfflinePatientToCurrentList(
     ];
 }
 
+function patientFromOfflineUpdateRecord(
+    record: OfflinePatientUpdateRecord,
+): Patient {
+    return {
+        id: record.patientId,
+        patientNumber: record.patientNumber,
+        firstName: record.payload.firstName,
+        middleName: record.payload.middleName,
+        lastName: record.payload.lastName,
+        gender: record.payload.gender,
+        dateOfBirth: record.payload.dateOfBirth,
+        phone: record.payload.phone,
+        email: record.payload.email,
+        nationalId: record.payload.nationalId,
+        countryCode: record.payload.countryCode,
+        region: record.payload.region,
+        district: record.payload.district,
+        addressLine: record.payload.addressLine,
+        nextOfKinName: record.payload.nextOfKinName,
+        nextOfKinPhone: record.payload.nextOfKinPhone,
+        status: null,
+        statusReason: 'Edited on this device and waiting for cloud sync.',
+        createdAt: null,
+        updatedAt: record.updatedAt,
+    };
+}
+
+function applyOfflinePatientUpdate(record: OfflinePatientUpdateRecord): void {
+    const patch = patientFromOfflineUpdateRecord(record);
+    const idx = patients.value.findIndex(
+        (patient) => patient.id === record.patientId,
+    );
+
+    if (idx !== -1) {
+        patients.value[idx] = {
+            ...patients.value[idx],
+            ...patch,
+            status: patients.value[idx].status,
+            createdAt: patients.value[idx].createdAt,
+        };
+    }
+
+    if (detailsSheetPatient.value?.id === record.patientId) {
+        Object.assign(detailsSheetPatient.value, {
+            ...patch,
+            status: detailsSheetPatient.value.status,
+            createdAt: detailsSheetPatient.value.createdAt,
+        });
+    }
+
+    if (editTargetPatient.value?.id === record.patientId) {
+        Object.assign(editTargetPatient.value, {
+            ...patch,
+            status: editTargetPatient.value.status,
+            createdAt: editTargetPatient.value.createdAt,
+        });
+    }
+}
+
 function offlinePatientRecordName(
     record: OfflinePatientRegistrationRecord,
 ): string {
@@ -4626,6 +4720,25 @@ function offlinePatientRecordName(
     ]
         .filter((part): part is string => Boolean(part && part.trim() !== ''))
         .join(' ');
+}
+
+function offlinePatientUpdateRecordName(
+    record: OfflinePatientUpdateRecord,
+): string {
+    return (
+        record.patientName ||
+        [
+            record.payload.firstName,
+            record.payload.middleName,
+            record.payload.lastName,
+        ]
+            .filter((part): part is string =>
+                Boolean(part && part.trim() !== ''),
+            )
+            .join(' ') ||
+        record.patientNumber ||
+        record.patientId.slice(0, 8)
+    );
 }
 
 async function savePatientRegistrationOffline(
@@ -4660,29 +4773,35 @@ async function syncOfflinePatientRegistrations(options?: {
     offlinePatientSyncError.value = null;
 
     try {
-        const result = await syncPendingOfflinePatientRegistrations();
+        const [registrationResult, updateResult] = await Promise.all([
+            syncPendingOfflinePatientRegistrations(),
+            syncPendingOfflinePatientUpdates(),
+        ]);
         await refreshOfflinePatientRegistrations();
 
-        if (result.synced > 0) {
+        const synced = registrationResult.synced + updateResult.synced;
+        const failed = registrationResult.failed + updateResult.failed;
+        const remaining = registrationResult.remaining + updateResult.remaining;
+
+        if (synced > 0) {
             if (!options?.silent) {
-                notifySuccess(
-                    `${result.synced} offline patient registration(s) uploaded.`,
-                );
+                notifySuccess(`${synced} offline patient change(s) uploaded.`);
             }
-            if (result.remaining === 0) {
+            if (remaining === 0) {
                 offlineLastSavedPatientNumber.value = null;
+                offlineLastSavedUpdateLabel.value = null;
             }
             searchForm.page = 1;
             await Promise.all([loadPatients(), loadPatientStatusCounts()]);
-        } else if (result.failed > 0) {
+        } else if (failed > 0) {
             notifyError(
-                'Some offline patient registrations need review before they can upload.',
+                'Some offline patient changes need review before they can upload.',
             );
         }
     } catch (error) {
         offlinePatientSyncError.value = messageFromUnknown(
             error,
-            'Unable to sync offline patient registrations.',
+            'Unable to sync offline patient changes.',
         );
         if (!options?.silent) notifyError(offlinePatientSyncError.value);
     } finally {
@@ -5045,8 +5164,95 @@ function editFieldError(key: string): string | null {
     return editErrors.value[key]?.[0] ?? null;
 }
 
+function payloadFromEditForm() {
+    const dateOfBirth =
+        asTrimmedString(editForm.dateOfBirth) ||
+        deriveDateOfBirthFromAgeParts(
+            asTrimmedString(editForm.ageYears),
+            asTrimmedString(editForm.ageMonths),
+        ) ||
+        '';
+
+    return {
+        firstName: editForm.firstName.trim(),
+        middleName: editForm.middleName.trim() || null,
+        lastName: editForm.lastName.trim(),
+        gender: editForm.gender || null,
+        dateOfBirth: dateOfBirth || null,
+        phone: editForm.phone.trim(),
+        email: editForm.email.trim() || null,
+        nationalId: editForm.nationalId.trim() || null,
+        countryCode: normalizeCountryCode(editForm.countryCode) || null,
+        region: editForm.region.trim() || null,
+        district: editForm.district.trim() || null,
+        addressLine: editForm.addressLine.trim() || null,
+        nextOfKinName: editForm.nextOfKinName.trim() || null,
+        nextOfKinPhone: editForm.nextOfKinPhone.trim() || null,
+    };
+}
+
+function isOfflineRegistrationPatient(patient: Patient): boolean {
+    return (
+        patient.id.startsWith('offline-patient-') ||
+        Boolean(patient.patientNumber?.startsWith('TMP-PAT-'))
+    );
+}
+
+async function savePatientUpdateOffline(
+    patient: Patient,
+    payload: ReturnType<typeof payloadFromEditForm>,
+): Promise<void> {
+    if (isOfflineRegistrationPatient(patient)) {
+        const record = await updateOfflinePatientRegistrationDraft(patient.id, {
+            ...payload,
+            gender: payload.gender || '',
+            dateOfBirth: payload.dateOfBirth || '',
+            countryCode: payload.countryCode || '',
+            region: payload.region || '',
+            district: payload.district || '',
+            addressLine: payload.addressLine || '',
+        });
+        addOfflinePatientToCurrentList(record);
+        offlineLastSavedPatientNumber.value = record.temporaryPatientNumber;
+        await refreshOfflinePatientRegistrations();
+        notifySuccess(
+            `Offline registration ${record.temporaryPatientNumber} updated on this browser. It will upload when internet returns.`,
+        );
+        closeEditSheet();
+        return;
+    }
+
+    const record = await enqueueOfflinePatientUpdate(
+        {
+            id: patient.id,
+            patientNumber: patient.patientNumber,
+            patientName: patientName(patient),
+        },
+        {
+            ...payload,
+            gender: payload.gender || '',
+            dateOfBirth: payload.dateOfBirth || '',
+            countryCode: payload.countryCode || '',
+            region: payload.region || '',
+            district: payload.district || '',
+            addressLine: payload.addressLine || '',
+        },
+    );
+    applyOfflinePatientUpdate(record);
+    offlineLastSavedUpdateLabel.value =
+        record.patientNumber || offlinePatientUpdateRecordName(record);
+    await refreshOfflinePatientRegistrations();
+
+    notifySuccess(
+        `Patient edit saved offline for ${offlinePatientUpdateRecordName(record)}. It will upload when internet returns.`,
+    );
+
+    closeEditSheet();
+}
+
 async function updatePatient() {
     if (!editTargetPatient.value || editLoading.value) return;
+    const targetPatient = editTargetPatient.value;
     editErrors.value = {};
     const editPhone = editForm.phone.trim();
     if (editPhone === '') {
@@ -5061,36 +5267,28 @@ async function updatePatient() {
     }
 
     editLoading.value = true;
-    const dateOfBirth =
-        asTrimmedString(editForm.dateOfBirth) ||
-        deriveDateOfBirthFromAgeParts(
-            asTrimmedString(editForm.ageYears),
-            asTrimmedString(editForm.ageMonths),
-        ) ||
-        '';
+    const payload = payloadFromEditForm();
+    if (!browserOnline.value) {
+        try {
+            await savePatientUpdateOffline(targetPatient, payload);
+        } catch (error) {
+            notifyError(
+                messageFromUnknown(
+                    error,
+                    'Unable to save patient edit offline.',
+                ),
+            );
+        } finally {
+            editLoading.value = false;
+        }
+        return;
+    }
+
     try {
         const response = await apiRequest<{ data: Patient }>(
             'PATCH',
-            `/patients/${editTargetPatient.value.id}`,
-            {
-                body: {
-                    firstName: editForm.firstName.trim(),
-                    middleName: editForm.middleName.trim() || null,
-                    lastName: editForm.lastName.trim(),
-                    gender: editForm.gender || null,
-                    dateOfBirth: dateOfBirth || null,
-                    phone: editPhone,
-                    email: editForm.email.trim() || null,
-                    nationalId: editForm.nationalId.trim() || null,
-                    countryCode:
-                        normalizeCountryCode(editForm.countryCode) || null,
-                    region: editForm.region.trim() || null,
-                    district: editForm.district.trim() || null,
-                    addressLine: editForm.addressLine.trim() || null,
-                    nextOfKinName: editForm.nextOfKinName.trim() || null,
-                    nextOfKinPhone: editForm.nextOfKinPhone.trim() || null,
-                },
-            },
+            `/patients/${targetPatient.id}`,
+            { body: payload },
         );
         if (detailsSheetPatient.value?.id === response.data.id) {
             Object.assign(detailsSheetPatient.value, response.data);
@@ -5108,7 +5306,9 @@ async function updatePatient() {
             status?: number;
             payload?: ValidationErrorResponse;
         };
-        if (apiError.status === 409) {
+        if (isLikelyPatientOfflineFailure(error)) {
+            await savePatientUpdateOffline(targetPatient, payload);
+        } else if (apiError.status === 409) {
             const message =
                 apiError.payload?.message ||
                 'Another active patient already uses this National ID or patient number.';
@@ -5508,7 +5708,7 @@ onMounted(() => {
     window.addEventListener('offline', handleBrowserOffline);
     clearDraftFromStorage();
     void refreshOfflinePatientRegistrations().then(() => {
-        if (browserOnline.value && offlinePatientPendingCount.value > 0) {
+        if (browserOnline.value && offlinePatientChangePendingCount.value > 0) {
             void syncOfflinePatientRegistrations({ silent: true });
         }
     });
@@ -5602,26 +5802,31 @@ onMounted(() => {
 
             <Alert
                 v-if="
-                    offlinePatientPendingCount > 0 ||
+                    offlinePatientChangePendingCount > 0 ||
                     !browserOnline ||
                     offlinePatientSyncError ||
-                    offlineLastSavedPatientNumber
+                    offlineLastSavedPatientNumber ||
+                    offlineLastSavedUpdateLabel
                 "
                 :variant="
-                    offlinePatientFailedCount > 0 ? 'destructive' : 'default'
+                    offlinePatientChangeFailedCount > 0
+                        ? 'destructive'
+                        : 'default'
                 "
                 class="rounded-lg"
             >
                 <AppIcon name="receipt" class="size-4" />
                 <AlertTitle>
                     {{
-                        offlinePatientFailedCount > 0
-                            ? `${offlinePatientFailedCount} offline patient registration${offlinePatientFailedCount === 1 ? '' : 's'} need review`
+                        offlinePatientChangeFailedCount > 0
+                            ? `${offlinePatientChangeFailedCount} offline patient change${offlinePatientChangeFailedCount === 1 ? '' : 's'} need review`
                             : offlineLastSavedPatientNumber
                               ? `Saved offline: ${offlineLastSavedPatientNumber}`
-                              : browserOnline
-                                ? `${offlinePatientPendingCount} offline patient registration${offlinePatientPendingCount === 1 ? '' : 's'} pending upload`
-                                : 'Offline patient registration enabled'
+                              : offlineLastSavedUpdateLabel
+                                ? `Saved offline edit: ${offlineLastSavedUpdateLabel}`
+                                : browserOnline
+                                  ? `${offlinePatientChangePendingCount} offline patient change${offlinePatientChangePendingCount === 1 ? '' : 's'} pending upload`
+                                  : 'Offline patient changes enabled'
                     }}
                 </AlertTitle>
                 <AlertDescription>
@@ -5632,19 +5837,21 @@ onMounted(() => {
                             <p>
                                 {{
                                     offlinePatientSyncError ||
-                                    (offlinePatientFailedCount > 0
-                                        ? 'The cloud rejected one or more saved registrations. This can happen when a duplicate patient already exists or required data needs correction.'
+                                    (offlinePatientChangeFailedCount > 0
+                                        ? 'The cloud rejected one or more saved patient changes. This can happen when a duplicate patient already exists or required data needs correction.'
                                         : offlineLastSavedPatientNumber
                                           ? 'The registration is safely stored on this browser. It will upload to the cloud when internet is available.'
-                                          : browserOnline
-                                            ? 'Saved offline records will sync to the cloud database. The local project database is not used.'
-                                            : 'New patient registrations are saved on this browser and uploaded to the cloud when internet returns.')
+                                          : offlineLastSavedUpdateLabel
+                                            ? 'The edit is safely stored on this browser. It will upload to the cloud when internet is available.'
+                                            : browserOnline
+                                              ? 'Saved offline patient changes will sync to the cloud database. The local project database is not used.'
+                                              : 'Patient registrations and profile edits are saved on this browser and uploaded to the cloud when internet returns.')
                                 }}
                             </p>
                             <Button
                                 v-if="
                                     browserOnline &&
-                                    offlinePatientPendingCount > 0
+                                    offlinePatientChangePendingCount > 0
                                 "
                                 size="sm"
                                 variant="outline"
@@ -5660,7 +5867,10 @@ onMounted(() => {
                             </Button>
                         </div>
                         <div
-                            v-if="offlinePatientFailedRecords.length"
+                            v-if="
+                                offlinePatientFailedRecords.length ||
+                                offlinePatientFailedUpdateRecords.length
+                            "
                             class="space-y-1 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs"
                         >
                             <p
@@ -5673,6 +5883,20 @@ onMounted(() => {
                                 <span class="font-medium">{{
                                     offlinePatientRecordName(record) ||
                                     record.temporaryPatientNumber
+                                }}</span>
+                                <span class="text-muted-foreground">
+                                    - {{ record.error || 'Upload failed.' }}
+                                </span>
+                            </p>
+                            <p
+                                v-for="record in offlinePatientFailedUpdateRecords.slice(
+                                    0,
+                                    3,
+                                )"
+                                :key="record.id"
+                            >
+                                <span class="font-medium">{{
+                                    offlinePatientUpdateRecordName(record)
                                 }}</span>
                                 <span class="text-muted-foreground">
                                     - {{ record.error || 'Upload failed.' }}
