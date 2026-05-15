@@ -2,6 +2,7 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -92,201 +93,174 @@ function dateLabel(value: string | null | undefined): string {
 <template>
     <Head title="Subscription Required" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div
-            class="flex min-h-full flex-1 items-center justify-center p-4 md:p-8"
-        >
-            <Card
-                class="w-full max-w-4xl rounded-lg border-sidebar-border/70 shadow-sm"
+        <div class="flex flex-1 flex-col gap-4 overflow-x-hidden p-4 md:p-6">
+            <div
+                class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between"
             >
-                <CardContent class="p-0">
-                    <div class="border-b bg-muted/20 px-5 py-4 md:px-6">
-                        <div
-                            class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
-                        >
-                            <div class="flex min-w-0 items-start gap-3">
-                                <span
-                                    class="flex size-10 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground"
-                                >
-                                    <AppIcon name="receipt" class="size-5" />
-                                </span>
-                                <div class="min-w-0">
-                                    <div
-                                        class="mb-1 flex flex-wrap items-center gap-2"
-                                    >
-                                        <Badge
-                                            variant="outline"
-                                            class="rounded-md"
-                                            >Plan access</Badge
-                                        >
-                                        <Badge
-                                            variant="destructive"
-                                            class="rounded-md"
-                                            >{{ statusLabel }}</Badge
-                                        >
-                                    </div>
-                                    <h1
-                                        class="text-lg leading-6 font-semibold text-foreground"
-                                    >
-                                        Not included in this facility's plan
-                                    </h1>
-                                    <p
-                                        class="mt-1 max-w-2xl text-sm leading-5 text-muted-foreground"
-                                    >
-                                        {{ accessMessage }}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div class="flex shrink-0 flex-wrap gap-2">
-                                <Button variant="outline" as-child>
-                                    <Link href="/dashboard">Dashboard</Link>
-                                </Button>
-                                <Button v-if="canOpenFacilityConfig" as-child>
-                                    <Link href="/platform/admin/facility-config"
-                                        >Facility configuration</Link
-                                    >
-                                </Button>
-                            </div>
-                        </div>
+                <div class="min-w-0">
+                    <div
+                        class="flex items-center gap-2 text-2xl font-semibold tracking-tight"
+                    >
+                        <AppIcon
+                            name="shield-alert"
+                            class="size-6 text-muted-foreground"
+                        />
+                        <span>Plan access restricted</span>
                     </div>
+                    <p class="mt-1 max-w-3xl text-sm text-muted-foreground">
+                        This facility subscription does not currently unlock the
+                        requested service.
+                    </p>
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        <Badge variant="outline">Subscription</Badge>
+                        <Badge variant="destructive">{{ statusLabel }}</Badge>
+                    </div>
+                </div>
 
-                    <div class="grid gap-4 p-5 md:p-6">
-                        <div class="grid gap-2 md:grid-cols-3">
-                            <div
-                                class="rounded-lg border bg-background px-3 py-2.5"
-                            >
-                                <p
-                                    class="text-xs font-medium tracking-normal text-muted-foreground uppercase"
-                                >
-                                    Facility
-                                </p>
-                                <p
-                                    class="mt-1 truncate text-sm font-medium text-foreground"
-                                    :title="facilityLabel"
-                                >
-                                    {{ facilityLabel }}
-                                </p>
-                            </div>
-                            <div
-                                class="rounded-lg border bg-background px-3 py-2.5"
-                            >
-                                <p
-                                    class="text-xs font-medium tracking-normal text-muted-foreground uppercase"
-                                >
-                                    Plan
-                                </p>
-                                <p
-                                    class="mt-1 truncate text-sm font-medium text-foreground"
-                                    :title="planLabel"
-                                >
-                                    {{ planLabel }}
-                                </p>
-                            </div>
-                            <div
-                                class="rounded-lg border bg-background px-3 py-2.5"
-                            >
-                                <p
-                                    class="text-xs font-medium tracking-normal text-muted-foreground uppercase"
-                                >
-                                    Period ends
-                                </p>
-                                <p
-                                    class="mt-1 truncate text-sm font-medium text-foreground"
-                                >
-                                    {{
-                                        dateLabel(
-                                            props.access.subscription
-                                                ?.currentPeriodEndsAt,
-                                        )
-                                    }}
-                                </p>
-                            </div>
-                        </div>
+                <div class="flex flex-wrap gap-2">
+                    <Button variant="outline" as-child>
+                        <Link href="/dashboard">Dashboard</Link>
+                    </Button>
+                    <Button v-if="canOpenFacilityConfig" as-child>
+                        <Link href="/platform/admin/facility-config">
+                            Facility configuration
+                        </Link>
+                    </Button>
+                </div>
+            </div>
 
-                        <div class="grid gap-3 md:grid-cols-2">
-                            <div class="rounded-lg border p-3">
-                                <div
-                                    class="flex items-center justify-between gap-3"
-                                >
-                                    <p class="text-sm font-medium">
-                                        Required access
-                                    </p>
-                                    <Badge
-                                        v-if="
-                                            (
-                                                props.access
-                                                    .requiredEntitlements ?? []
-                                            ).length > 1
-                                        "
-                                        variant="outline"
-                                        class="rounded-md"
-                                    >
-                                        Any one
-                                    </Badge>
-                                </div>
-                                <div class="mt-3 flex flex-wrap gap-1.5">
-                                    <Badge
-                                        v-for="entitlement in props.access
-                                            .requiredEntitlements ?? []"
-                                        :key="entitlement"
-                                        variant="outline"
-                                    >
-                                        {{ entitlementLabel(entitlement) }}
-                                    </Badge>
-                                    <span
-                                        v-if="
-                                            (
-                                                props.access
-                                                    .requiredEntitlements ?? []
-                                            ).length === 0
-                                        "
-                                        class="text-sm text-muted-foreground"
-                                    >
-                                        Required entitlement was not provided.
-                                    </span>
-                                </div>
-                            </div>
+            <Alert variant="destructive" class="rounded-lg">
+                <AppIcon name="receipt" class="size-4" />
+                <AlertTitle>Not included in this facility's plan</AlertTitle>
+                <AlertDescription>{{ accessMessage }}</AlertDescription>
+            </Alert>
 
-                            <div class="rounded-lg border p-3">
-                                <p class="text-sm font-medium">
-                                    Missing access
-                                </p>
-                                <div class="mt-3 flex flex-wrap gap-1.5">
-                                    <Badge
-                                        v-for="entitlement in props.access
-                                            .missingEntitlements ?? []"
-                                        :key="entitlement"
-                                        variant="destructive"
-                                    >
-                                        {{ entitlementLabel(entitlement) }}
-                                    </Badge>
-                                    <span
-                                        v-if="
-                                            (
-                                                props.access
-                                                    .missingEntitlements ?? []
-                                            ).length === 0
-                                        "
-                                        class="text-sm text-muted-foreground"
-                                    >
-                                        Activate or update the facility
-                                        subscription.
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
+            <div class="grid gap-3 md:grid-cols-3">
+                <Card class="rounded-lg border-sidebar-border/70">
+                    <CardContent class="p-4">
                         <p
-                            v-if="!canOpenFacilityConfig"
-                            class="text-sm text-muted-foreground"
+                            class="text-xs font-medium tracking-normal text-muted-foreground uppercase"
                         >
-                            Contact a facility administrator to activate the
-                            subscription or assign a plan that includes this
-                            service.
+                            Facility
                         </p>
-                    </div>
-                </CardContent>
-            </Card>
+                        <p
+                            class="mt-1 truncate text-sm font-medium text-foreground"
+                            :title="facilityLabel"
+                        >
+                            {{ facilityLabel }}
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card class="rounded-lg border-sidebar-border/70">
+                    <CardContent class="p-4">
+                        <p
+                            class="text-xs font-medium tracking-normal text-muted-foreground uppercase"
+                        >
+                            Plan
+                        </p>
+                        <p
+                            class="mt-1 truncate text-sm font-medium text-foreground"
+                            :title="planLabel"
+                        >
+                            {{ planLabel }}
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card class="rounded-lg border-sidebar-border/70">
+                    <CardContent class="p-4">
+                        <p
+                            class="text-xs font-medium tracking-normal text-muted-foreground uppercase"
+                        >
+                            Period ends
+                        </p>
+                        <p
+                            class="mt-1 truncate text-sm font-medium text-foreground"
+                        >
+                            {{
+                                dateLabel(
+                                    props.access.subscription
+                                        ?.currentPeriodEndsAt,
+                                )
+                            }}
+                        </p>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <div class="grid gap-3 md:grid-cols-2">
+                <Card class="rounded-lg border-sidebar-border/70">
+                    <CardContent class="p-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <p class="text-sm font-medium">Required access</p>
+                            <Badge
+                                v-if="
+                                    (props.access.requiredEntitlements ?? [])
+                                        .length > 1
+                                "
+                                variant="outline"
+                                class="rounded-md"
+                            >
+                                Any one
+                            </Badge>
+                        </div>
+                        <div class="mt-3 flex flex-wrap gap-1.5">
+                            <Badge
+                                v-for="entitlement in props.access
+                                    .requiredEntitlements ?? []"
+                                :key="entitlement"
+                                variant="outline"
+                            >
+                                {{ entitlementLabel(entitlement) }}
+                            </Badge>
+                            <span
+                                v-if="
+                                    (props.access.requiredEntitlements ?? [])
+                                        .length === 0
+                                "
+                                class="text-sm text-muted-foreground"
+                            >
+                                Required entitlement was not provided.
+                            </span>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card class="rounded-lg border-sidebar-border/70">
+                    <CardContent class="p-4">
+                        <p class="text-sm font-medium">Missing access</p>
+                        <div class="mt-3 flex flex-wrap gap-1.5">
+                            <Badge
+                                v-for="entitlement in props.access
+                                    .missingEntitlements ?? []"
+                                :key="entitlement"
+                                variant="destructive"
+                            >
+                                {{ entitlementLabel(entitlement) }}
+                            </Badge>
+                            <span
+                                v-if="
+                                    (props.access.missingEntitlements ?? [])
+                                        .length === 0
+                                "
+                                class="text-sm text-muted-foreground"
+                            >
+                                Activate or update the facility subscription.
+                            </span>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <Alert v-if="!canOpenFacilityConfig" class="rounded-lg">
+                <AppIcon name="info" class="size-4" />
+                <AlertTitle>Administrator action needed</AlertTitle>
+                <AlertDescription>
+                    Contact a facility administrator to activate the
+                    subscription or assign a plan that includes this service.
+                </AlertDescription>
+            </Alert>
         </div>
     </AppLayout>
 </template>
