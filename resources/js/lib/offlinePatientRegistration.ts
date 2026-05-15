@@ -362,8 +362,17 @@ export function registerOfflinePatientServiceWorker(): void {
     if (import.meta.env.DEV) return;
 
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(() => {
-            // Offline registration still works without page refresh support.
-        });
+        void navigator.serviceWorker
+            .register('/sw.js')
+            .then(() => navigator.serviceWorker.ready)
+            .then((registration) => {
+                registration.active?.postMessage({
+                    type: 'CACHE_PATIENT_NAVIGATION',
+                    url: window.location.href,
+                });
+            })
+            .catch(() => {
+                // Offline registration still works without page refresh support.
+            });
     });
 }

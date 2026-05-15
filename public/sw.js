@@ -1,4 +1,4 @@
-const CACHE_NAME = 'afyanova-patient-offline-v1';
+const CACHE_NAME = 'afyanova-patient-offline-v2';
 const OFFLINE_URL = '/offline.html';
 const PATIENT_NAVIGATION_PATHS = new Set(['/patients']);
 const STATIC_PATH_PREFIXES = ['/build/'];
@@ -56,6 +56,16 @@ function isExcludedRequest(url) {
     );
 }
 
+function patientNavigationCacheRequest(url) {
+    return new Request(`${url.origin}${url.pathname}`, {
+        method: 'GET',
+        headers: {
+            Accept: 'text/html,application/xhtml+xml',
+        },
+        credentials: 'same-origin',
+    });
+}
+
 async function cacheFirst(request) {
     const cached = await caches.match(request);
     if (cached) return cached;
@@ -89,6 +99,28 @@ async function networkFirstPatientNavigation(request) {
         );
     }
 }
+
+async function cachePatientNavigation(urlString) {
+    const url = new URL(urlString, self.location.origin);
+    if (!isSameOrigin(url) || !PATIENT_NAVIGATION_PATHS.has(url.pathname)) {
+        return;
+    }
+
+    const request = patientNavigationCacheRequest(url);
+    const response = await fetch(request);
+    const contentType = response.headers.get('content-type') ?? '';
+
+    if (response.ok && contentType.includes('text/html')) {
+        const cache = await caches.open(CACHE_NAME);
+        await cache.put(request, response.clone());
+    }
+}
+
+self.addEventListener('message', (event) => {
+    if (event.data?.type !== 'CACHE_PATIENT_NAVIGATION') return;
+
+    event.waitUntil(cachePatientNavigation(event.data.url));
+});
 
 self.addEventListener('fetch', (event) => {
     const { request } = event;
