@@ -663,6 +663,7 @@ const loading = ref(true);
 const listLoading = ref(false);
 const createLoading = ref(false);
 const listErrors = ref<string[]>([]);
+const patientListOfflineUnavailable = ref(false);
 const createErrors = ref<Record<string, string[]>>({});
 const createMessage = ref<string | null>(null);
 const createdWarnings = ref<PatientWarning[]>([]);
@@ -3658,6 +3659,7 @@ async function loadPatients() {
 
     listLoading.value = true;
     listErrors.value = [];
+    patientListOfflineUnavailable.value = false;
 
     try {
         const response = await apiRequest<PatientListResponse>(
@@ -3680,7 +3682,15 @@ async function loadPatients() {
 
         patients.value = response.data;
         pagination.value = response.meta;
+        patientListOfflineUnavailable.value = false;
     } catch (error) {
+        if (isLikelyPatientOfflineFailure(error)) {
+            browserOnline.value = false;
+            patientListOfflineUnavailable.value = true;
+            pagination.value = null;
+            return;
+        }
+
         patients.value = [];
         pagination.value = null;
         listErrors.value.push(
@@ -5794,21 +5804,45 @@ onMounted(() => {
                             }}</AlertDescription>
                         </Alert>
                         <Alert
-                            v-if="listErrors.length"
-                            variant="destructive"
+                            v-if="
+                                patientListOfflineUnavailable ||
+                                listErrors.length
+                            "
+                            :variant="
+                                patientListOfflineUnavailable
+                                    ? 'default'
+                                    : 'destructive'
+                            "
                             class="py-2"
                         >
-                            <AppIcon name="circle-x" class="size-4" />
-                            <AlertTitle class="text-xs font-medium"
-                                >Request error</AlertTitle
-                            >
+                            <AppIcon
+                                :name="
+                                    patientListOfflineUnavailable
+                                        ? 'receipt'
+                                        : 'circle-x'
+                                "
+                                class="size-4"
+                            />
+                            <AlertTitle class="text-xs font-medium">{{
+                                patientListOfflineUnavailable
+                                    ? 'Cloud registry unavailable offline'
+                                    : 'Request error'
+                            }}</AlertTitle>
                             <AlertDescription class="text-xs">
-                                <p
-                                    v-for="errorMessage in listErrors"
-                                    :key="errorMessage"
-                                >
-                                    {{ errorMessage }}
+                                <p v-if="patientListOfflineUnavailable">
+                                    Patient list data needs the cloud
+                                    connection. New registrations can still be
+                                    saved on this browser and uploaded when
+                                    internet returns.
                                 </p>
+                                <template v-else>
+                                    <p
+                                        v-for="errorMessage in listErrors"
+                                        :key="errorMessage"
+                                    >
+                                        {{ errorMessage }}
+                                    </p>
+                                </template>
                             </AlertDescription>
                         </Alert>
                     </div>
@@ -5881,7 +5915,10 @@ onMounted(() => {
 
                             <!-- EMPTY STATE -->
                             <div
-                                v-else-if="patients.length === 0"
+                                v-else-if="
+                                    patientListOfflineUnavailable ||
+                                    patients.length === 0
+                                "
                                 class="flex flex-col items-center justify-center py-16 text-center"
                             >
                                 <div
@@ -5893,13 +5930,20 @@ onMounted(() => {
                                     />
                                 </div>
                                 <p class="text-sm font-medium">
-                                    No patients found
+                                    {{
+                                        patientListOfflineUnavailable
+                                            ? 'Cloud patient list is offline'
+                                            : 'No patients found'
+                                    }}
                                 </p>
                                 <p
                                     class="mt-1 max-w-sm text-xs text-muted-foreground"
                                 >
-                                    Try adjusting your search query or status
-                                    filter, or register a new patient.
+                                    {{
+                                        patientListOfflineUnavailable
+                                            ? 'Existing patient records cannot refresh until internet returns. You can still register a patient offline from this device.'
+                                            : 'Try adjusting your search query or status filter, or register a new patient.'
+                                    }}
                                 </p>
                                 <Button
                                     size="sm"
