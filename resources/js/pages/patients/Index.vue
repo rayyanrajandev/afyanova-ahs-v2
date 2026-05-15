@@ -1632,6 +1632,7 @@ const editProcessingDescription = computed(() =>
         ? 'Updating the patient record in the cloud. Do not refresh or close this sheet.'
         : 'Saving this correction safely on this browser. It will upload when internet returns.',
 );
+const MIN_PROCESSING_PANEL_MS = 750;
 const editForm = reactive<PatientEditForm>({
     firstName: '',
     middleName: '',
@@ -5195,6 +5196,13 @@ function editFieldError(key: string): string | null {
     return editErrors.value[key]?.[0] ?? null;
 }
 
+async function waitForMinimumProcessingPanel(startedAt: number): Promise<void> {
+    const remaining = MIN_PROCESSING_PANEL_MS - (Date.now() - startedAt);
+    if (remaining <= 0) return;
+
+    await new Promise((resolve) => window.setTimeout(resolve, remaining));
+}
+
 function payloadFromEditForm() {
     const dateOfBirth =
         asTrimmedString(editForm.dateOfBirth) ||
@@ -5298,6 +5306,7 @@ async function updatePatient() {
     }
 
     editLoading.value = true;
+    const processingStartedAt = Date.now();
     const payload = payloadFromEditForm();
     if (!browserOnline.value) {
         try {
@@ -5330,6 +5339,7 @@ async function updatePatient() {
         const idx = patients.value.findIndex((p) => p.id === response.data.id);
         if (idx !== -1)
             patients.value[idx] = { ...patients.value[idx], ...response.data };
+        await waitForMinimumProcessingPanel(processingStartedAt);
         notifySuccess('Patient record updated.');
         closeEditSheet();
     } catch (error) {
