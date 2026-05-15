@@ -22,8 +22,11 @@ use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\ServiceRequest\Application\UseCases\ListActiveWalkInsForPatientIdsUseCase;
 use App\Modules\ServiceRequest\Application\UseCases\SummarizeActiveWalkInsForPatientIdsUseCase;
 use App\Modules\ServiceRequest\Presentation\Http\Transformers\ServiceRequestResponseTransformer;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PatientController extends Controller
@@ -112,12 +115,43 @@ class PatientController extends Controller
     public function store(StorePatientRequest $request, CreatePatientUseCase $useCase): JsonResponse
     {
         $validated = $request->validated();
+        $syncContext = $this->registrationSyncContext($request, $validated);
+
+        if ($syncContext !== null) {
+            $existingSync = $this->findRegistrationSync($syncContext['idempotencyKey']);
+
+            if ($existingSync !== null) {
+                return $this->registrationSyncReplayResponse($existingSync, $syncContext['requestHash']);
+            }
+        }
 
         try {
-            $result = $useCase->execute(
-                payload: $this->toPersistencePayload($validated),
-                actorId: $request->user()?->id,
-            );
+            $result = DB::transaction(function () use ($syncContext, $useCase, $validated, $request): array {
+                if ($syncContext !== null) {
+                    $this->createRegistrationSyncPlaceholder($syncContext);
+                }
+
+                $created = $useCase->execute(
+                    payload: $this->toPersistencePayload($validated),
+                    actorId: $request->user()?->id,
+                );
+
+                if ($syncContext !== null) {
+                    $this->completeRegistrationSync($syncContext['idempotencyKey'], $created);
+                }
+
+                return $created;
+            });
+        } catch (QueryException $exception) {
+            if ($syncContext !== null) {
+                $existingSync = $this->findRegistrationSync($syncContext['idempotencyKey']);
+
+                if ($existingSync !== null) {
+                    return $this->registrationSyncReplayResponse($existingSync, $syncContext['requestHash']);
+                }
+            }
+
+            throw $exception;
         } catch (DuplicatePatientException $exception) {
             return response()->json([
                 'message' => 'Another active patient already uses this National ID or patient number.',
@@ -326,5 +360,100 @@ class PatientController extends Controller
         }
 
         return $payload;
+    }
+
+    /**
+     * @param array<string, mixed> $validated
+     * @return array{idempotencyKey: string, offlineRegistrationId: string|null, requestHash: string, userId: int|null}|null
+     */
+    private function registrationSyncContext(Request $request, array $validated): ?array
+    {
+        $idempotencyKey = trim((string) $request->header('X-Idempotency-Key', ''));
+
+        if ($idempotencyKey === '') {
+            return null;
+        }
+
+        $requestPayload = $this->toPersistencePayload($validated);
+        ksort($requestPayload);
+
+        return [
+            'idempotencyKey' => Str::limit($idempotencyKey, 160, ''),
+            'offlineRegistrationId' => $this->nullableHeader($request, 'X-Offline-Registration-Id'),
+            'requestHash' => hash('sha256', json_encode($requestPayload, JSON_THROW_ON_ERROR)),
+            'userId' => $request->user()?->id,
+        ];
+    }
+
+    private function nullableHeader(Request $request, string $name): ?string
+    {
+        $value = trim((string) $request->header($name, ''));
+
+        return $value === '' ? null : Str::limit($value, 160, '');
+    }
+
+    /**
+     * @param array{idempotencyKey: string, offlineRegistrationId: string|null, requestHash: string, userId: int|null} $syncContext
+     */
+    private function createRegistrationSyncPlaceholder(array $syncContext): void
+    {
+        DB::table('patient_registration_syncs')->insert([
+            'id' => (string) Str::uuid(),
+            'tenant_id' => null,
+            'user_id' => $syncContext['userId'],
+            'patient_id' => null,
+            'idempotency_key' => $syncContext['idempotencyKey'],
+            'offline_registration_id' => $syncContext['offlineRegistrationId'],
+            'request_hash' => $syncContext['requestHash'],
+            'response_payload' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function completeRegistrationSync(string $idempotencyKey, array $result): void
+    {
+        $patient = $result['patient'];
+        $responsePayload = [
+            'data' => PatientResponseTransformer::transform($patient),
+            'warnings' => $result['warnings'],
+        ];
+
+        DB::table('patient_registration_syncs')
+            ->where('idempotency_key', $idempotencyKey)
+            ->update([
+                'tenant_id' => $patient['tenant_id'] ?? null,
+                'patient_id' => $patient['id'] ?? null,
+                'response_payload' => json_encode($responsePayload, JSON_THROW_ON_ERROR),
+                'updated_at' => now(),
+            ]);
+    }
+
+    private function findRegistrationSync(string $idempotencyKey): ?object
+    {
+        return DB::table('patient_registration_syncs')
+            ->where('idempotency_key', $idempotencyKey)
+            ->first();
+    }
+
+    private function registrationSyncReplayResponse(object $sync, string $requestHash): JsonResponse
+    {
+        if (($sync->request_hash ?? null) !== $requestHash) {
+            return response()->json([
+                'message' => 'This patient registration sync key was already used for a different payload.',
+            ], 409);
+        }
+
+        if (empty($sync->patient_id) || empty($sync->response_payload)) {
+            return response()->json([
+                'message' => 'This patient registration is already being uploaded. Please try again shortly.',
+            ], 409);
+        }
+
+        $payload = is_string($sync->response_payload)
+            ? json_decode($sync->response_payload, true, 512, JSON_THROW_ON_ERROR)
+            : (array) $sync->response_payload;
+
+        return response()->json($payload, 200);
     }
 }
