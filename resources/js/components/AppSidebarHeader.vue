@@ -3,6 +3,7 @@ import { router, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import Breadcrumbs from '@/components/Breadcrumbs.vue';
+import GlobalPatientSearch from '@/components/GlobalPatientSearch.vue';
 import OPDQuickCommandPalette from '@/components/OPDQuickCommandPalette.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -183,15 +184,20 @@ function selectScope(key: string) {
 
 <template>
     <header
-        class="flex h-16 shrink-0 items-center gap-2 border-b border-sidebar-border/70 px-6 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 md:px-4"
+        class="grid h-16 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-b border-sidebar-border/70 px-6 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 md:px-4"
     >
-        <div class="flex min-w-0 flex-1 items-center gap-2">
+        <div class="flex min-w-0 items-center gap-2 justify-self-start overflow-hidden">
             <SidebarTrigger class="-ml-1 shrink-0" />
             <template v-if="breadcrumbs && breadcrumbs.length > 0">
                 <Breadcrumbs :breadcrumbs="breadcrumbs" />
             </template>
         </div>
-        <div class="ml-auto flex items-center gap-2">
+
+        <div class="hidden min-w-0 justify-self-center md:flex">
+            <GlobalPatientSearch />
+        </div>
+
+        <div class="flex min-w-0 items-center justify-self-end gap-2">
             <DropdownMenu>
                 <DropdownMenuTrigger as-child>
                     <Button
@@ -261,6 +267,9 @@ function selectScope(key: string) {
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
+            <div class="md:hidden">
+                <GlobalPatientSearch />
+            </div>
             <OPDQuickCommandPalette />
         </div>
     </header>
