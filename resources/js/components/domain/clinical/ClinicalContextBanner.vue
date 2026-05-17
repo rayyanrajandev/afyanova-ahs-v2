@@ -68,7 +68,7 @@ const toneClasses = computed(() => {
         aria-live="polite"
     >
         <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-            <div class="min-w-0 space-y-1">
+            <div class="min-w-0">
                 <div class="flex min-w-0 flex-wrap items-center gap-2">
                     <div
                         class="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary ring-1 ring-primary/15"
@@ -85,45 +85,45 @@ const toneClasses = computed(() => {
                         </p>
                     </div>
                 </div>
-
-                <div
-                    v-if="hasAnyContext"
-                    class="grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-2 pt-1 text-sm"
-                >
-                    <div v-if="hasPatientContext" class="min-w-0 rounded-md border bg-background/70 px-3 py-2">
-                        <div class="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                            <AppIcon name="user" class="size-3" aria-hidden="true" />
-                            Patient
-                        </div>
-                        <p class="mt-1 truncate font-medium text-foreground">{{ patientName || 'Selected patient' }}</p>
-                        <p v-if="patientMeta || patientNumber" class="mt-0.5 truncate text-xs text-muted-foreground">
-                            {{ patientMeta || patientNumber }}
-                        </p>
-                    </div>
-
-                    <div v-if="hasFacilityContext" class="min-w-0 rounded-md border bg-background/70 px-3 py-2">
-                        <div class="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                            <AppIcon name="building-2" class="size-3" aria-hidden="true" />
-                            Facility
-                        </div>
-                        <p class="mt-1 truncate font-medium text-foreground">{{ facilityName || 'No facility selected' }}</p>
-                        <p v-if="tenantName" class="mt-0.5 truncate text-xs text-muted-foreground">{{ tenantName }}</p>
-                    </div>
-
-                    <div v-if="hasWorkflowContext" class="min-w-0 rounded-md border bg-background/70 px-3 py-2">
-                        <div class="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                            <AppIcon name="activity" class="size-3" aria-hidden="true" />
-                            Workflow
-                        </div>
-                        <p class="mt-1 truncate font-medium text-foreground">{{ contextLabel || 'Active workflow' }}</p>
-                        <p v-if="contextMeta" class="mt-0.5 truncate text-xs text-muted-foreground">{{ contextMeta }}</p>
-                    </div>
-                </div>
             </div>
 
             <div v-if="statusLabel || $slots.actions" class="flex shrink-0 flex-wrap items-center gap-2 justify-start lg:justify-end">
                 <Badge v-if="statusLabel" :variant="statusVariant">{{ statusLabel }}</Badge>
                 <slot name="actions" />
+            </div>
+
+            <div
+                v-if="hasAnyContext"
+                class="grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-2 text-sm lg:col-span-2"
+            >
+                <div v-if="hasPatientContext" class="min-w-0 rounded-md border bg-background/70 px-3 py-2">
+                    <div class="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                        <AppIcon name="user" class="size-3" aria-hidden="true" />
+                        Patient
+                    </div>
+                    <p class="mt-1 truncate font-medium text-foreground">{{ patientName || 'Selected patient' }}</p>
+                    <p v-if="patientMeta || patientNumber" class="mt-0.5 truncate text-xs text-muted-foreground">
+                        {{ patientMeta || patientNumber }}
+                    </p>
+                </div>
+
+                <div v-if="hasFacilityContext" class="min-w-0 rounded-md border bg-background/70 px-3 py-2">
+                    <div class="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                        <AppIcon name="building-2" class="size-3" aria-hidden="true" />
+                        Facility
+                    </div>
+                    <p class="mt-1 truncate font-medium text-foreground">{{ facilityName || 'No facility selected' }}</p>
+                    <p v-if="tenantName" class="mt-0.5 truncate text-xs text-muted-foreground">{{ tenantName }}</p>
+                </div>
+
+                <div v-if="hasWorkflowContext" class="min-w-0 rounded-md border bg-background/70 px-3 py-2">
+                    <div class="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                        <AppIcon name="activity" class="size-3" aria-hidden="true" />
+                        Workflow
+                    </div>
+                    <p class="mt-1 truncate font-medium text-foreground">{{ contextLabel || 'Active workflow' }}</p>
+                    <p v-if="contextMeta" class="mt-0.5 truncate text-xs text-muted-foreground">{{ contextMeta }}</p>
+                </div>
             </div>
         </div>
 
