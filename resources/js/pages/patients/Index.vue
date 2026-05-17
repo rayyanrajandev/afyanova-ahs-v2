@@ -6834,6 +6834,7 @@ onMounted(() => {
                     >
                         <ProcessingStatePanel
                             v-if="registrationProcessingVisible"
+                            compact
                             :title="registrationProcessingTitle"
                             :description="registrationProcessingDescription"
                         />
@@ -7151,11 +7152,13 @@ onMounted(() => {
                             </Alert>
                         </div>
                         <!-- Primary intake -->
-                        <fieldset class="grid gap-4 rounded-lg border p-3">
+                        <fieldset
+                            class="grid gap-4 rounded-lg border bg-card/80 p-4 shadow-sm sm:p-5"
+                        >
                             <legend
-                                class="px-2 text-sm font-medium text-muted-foreground"
+                                class="-ml-1 rounded-lg border bg-background px-3 py-1 text-xs font-semibold text-foreground shadow-sm"
                             >
-                                Patient identity
+                                1. Patient identity
                             </legend>
 
                             <!-- Row 1: First name | Last name -->
@@ -7292,11 +7295,13 @@ onMounted(() => {
                             </div>
                         </fieldset>
 
-                        <fieldset class="grid gap-4 rounded-lg border p-3">
+                        <fieldset
+                            class="grid gap-4 rounded-lg border bg-card/80 p-4 shadow-sm sm:p-5"
+                        >
                             <legend
-                                class="px-2 text-sm font-medium text-muted-foreground"
+                                class="-ml-1 rounded-lg border bg-background px-3 py-1 text-xs font-semibold text-foreground shadow-sm"
                             >
-                                Age and date of birth
+                                2. Age and date of birth
                             </legend>
                             <!-- Age / date of birth -->
                             <div class="grid gap-2">
@@ -7474,11 +7479,13 @@ onMounted(() => {
                             </div>
                         </fieldset>
 
-                        <fieldset class="grid gap-4 rounded-lg border p-3">
+                        <fieldset
+                            class="grid gap-4 rounded-lg border bg-card/80 p-4 shadow-sm sm:p-5"
+                        >
                             <legend
-                                class="px-2 text-sm font-medium text-muted-foreground"
+                                class="-ml-1 rounded-lg border bg-background px-3 py-1 text-xs font-semibold text-foreground shadow-sm"
                             >
-                                Contact and address
+                                3. Contact and address
                             </legend>
                             <!-- Phone (primary contact) -->
                             <div class="grid gap-1.5">
@@ -7569,12 +7576,12 @@ onMounted(() => {
                         <!-- Additional details (optional) -->
                         <Collapsible v-model:open="registerOptionalDetailsOpen">
                             <fieldset
-                                class="rounded-lg border border-dashed p-3"
+                                class="rounded-lg border border-dashed bg-muted/10 p-4 shadow-sm sm:p-5"
                             >
                                 <legend
-                                    class="px-2 text-sm font-medium text-muted-foreground"
+                                    class="-ml-1 rounded-lg border bg-background px-3 py-1 text-xs font-semibold text-foreground shadow-sm"
                                 >
-                                    Additional details
+                                    4. Additional details
                                 </legend>
                                 <div
                                     class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
@@ -7688,11 +7695,13 @@ onMounted(() => {
                     </div>
                 </ScrollArea>
 
-                <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
+                <SheetFooter
+                    class="shrink-0 border-t bg-background/95 px-4 py-3 backdrop-blur"
+                >
                     <div
                         class="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
                     >
-                        <div class="flex flex-col gap-0.5">
+                        <div class="flex min-w-0 flex-col gap-1">
                             <p class="text-xs text-muted-foreground">
                                 {{ registrationPatientNamePreview }} |
                                 {{ registrationRequiredReadiness.complete }}/{{
@@ -7721,7 +7730,7 @@ onMounted(() => {
                             </p>
                         </div>
                         <div
-                            class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center"
+                            class="flex shrink-0 flex-col-reverse gap-2 sm:flex-row sm:items-center"
                         >
                             <Button
                                 size="sm"
@@ -7738,7 +7747,7 @@ onMounted(() => {
                                     createLoading ||
                                     preSubmitDuplicateCheckLoading
                                 "
-                                class="h-8 w-full gap-1.5 px-3 sm:w-auto"
+                                class="h-9 w-full gap-1.5 px-4 sm:w-auto"
                                 @click="createPatient"
                             >
                                 <Spinner
@@ -11107,11 +11116,13 @@ onMounted(() => {
                             </Alert>
                         </div>
 
-                        <fieldset class="grid gap-4 rounded-lg border p-3">
+                        <fieldset
+                            class="grid gap-4 rounded-lg border bg-card/80 p-4 shadow-sm sm:p-5"
+                        >
                             <legend
-                                class="px-2 text-sm font-medium text-muted-foreground"
+                                class="-ml-1 rounded-lg border bg-background px-3 py-1 text-xs font-semibold text-foreground shadow-sm"
                             >
-                                Patient identity
+                                1. Patient identity
                             </legend>
                             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 <div class="grid gap-1.5">
@@ -11244,11 +11255,13 @@ onMounted(() => {
                             </div>
                         </fieldset>
 
-                        <fieldset class="grid gap-4 rounded-lg border p-3">
+                        <fieldset
+                            class="grid gap-4 rounded-lg border bg-card/80 p-4 shadow-sm sm:p-5"
+                        >
                             <legend
-                                class="px-2 text-sm font-medium text-muted-foreground"
+                                class="-ml-1 rounded-lg border bg-background px-3 py-1 text-xs font-semibold text-foreground shadow-sm"
                             >
-                                Age and date of birth
+                                2. Age and date of birth
                             </legend>
                             <div class="grid gap-2">
                                 <div
@@ -11405,11 +11418,13 @@ onMounted(() => {
                             </div>
                         </fieldset>
 
-                        <fieldset class="grid gap-4 rounded-lg border p-3">
+                        <fieldset
+                            class="grid gap-4 rounded-lg border bg-card/80 p-4 shadow-sm sm:p-5"
+                        >
                             <legend
-                                class="px-2 text-sm font-medium text-muted-foreground"
+                                class="-ml-1 rounded-lg border bg-background px-3 py-1 text-xs font-semibold text-foreground shadow-sm"
                             >
-                                Contact and address
+                                3. Contact and address
                             </legend>
                             <div class="grid gap-1.5">
                                 <Label
@@ -11491,7 +11506,9 @@ onMounted(() => {
                         </fieldset>
 
                         <Collapsible v-model:open="editOptionalDetailsOpen">
-                            <Card class="rounded-lg border-dashed shadow-sm">
+                            <Card
+                                class="rounded-lg border-dashed bg-muted/10 shadow-sm"
+                            >
                                 <CardContent class="p-4 sm:p-5">
                                     <div
                                         class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
@@ -11644,27 +11661,44 @@ onMounted(() => {
                 </ScrollArea>
 
                 <SheetFooter
-                    class="shrink-0 flex-col-reverse gap-2 border-t bg-muted/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-end"
+                    class="shrink-0 flex-col gap-2 border-t bg-background/95 px-4 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between"
                 >
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        :disabled="editLoading"
-                        class="w-full sm:w-auto"
-                        @click="closeEditSheet"
+                    <div class="min-w-0 text-xs text-muted-foreground">
+                        <span v-if="editLoading">Saving patient changes...</span>
+                        <span v-else-if="editTargetPatient">
+                            {{ patientName(editTargetPatient) }}
+                            <template v-if="editTargetPatient.patientNumber">
+                                | {{ editTargetPatient.patientNumber }}
+                            </template>
+                        </span>
+                    </div>
+                    <div
+                        class="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row sm:items-center"
                     >
-                        Cancel
-                    </Button>
-                    <Button
-                        size="sm"
-                        :disabled="editLoading"
-                        class="h-8 w-full gap-1.5 px-3 sm:w-auto"
-                        @click="updatePatient"
-                    >
-                        <Spinner v-if="editLoading" class="size-3.5" />
-                        <AppIcon v-else name="check-circle" class="size-3.5" />
-                        {{ editLoading ? 'Saving...' : 'Save Changes' }}
-                    </Button>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            :disabled="editLoading"
+                            class="w-full sm:w-auto"
+                            @click="closeEditSheet"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            size="sm"
+                            :disabled="editLoading"
+                            class="h-9 w-full gap-1.5 px-4 sm:w-auto"
+                            @click="updatePatient"
+                        >
+                            <Spinner v-if="editLoading" class="size-3.5" />
+                            <AppIcon
+                                v-else
+                                name="check-circle"
+                                class="size-3.5"
+                            />
+                            {{ editLoading ? 'Saving...' : 'Save Changes' }}
+                        </Button>
+                    </div>
                 </SheetFooter>
             </SheetContent>
         </Sheet>
