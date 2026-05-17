@@ -11633,46 +11633,38 @@ onMounted(() => {
                                 </CollapsibleContent>
                             </Card>
                         </Collapsible>
+                        <ProcessingStatePanel
+                            v-if="editLoading"
+                            compact
+                            :title="editProcessingTitle"
+                            :description="editProcessingDescription"
+                            class="w-full"
+                        />
                     </div>
                 </ScrollArea>
 
                 <SheetFooter
-                    class="shrink-0 flex-col gap-2 border-t bg-muted/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                    class="shrink-0 flex-col-reverse gap-2 border-t bg-muted/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-end"
                 >
-                    <ProcessingStatePanel
-                        v-if="editLoading"
-                        compact
-                        :title="editProcessingTitle"
-                        :description="editProcessingDescription"
-                        class="w-full sm:max-w-md"
-                    />
-                    <div
-                        class="flex w-full flex-col-reverse gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:items-center"
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        :disabled="editLoading"
+                        class="w-full sm:w-auto"
+                        @click="closeEditSheet"
                     >
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            :disabled="editLoading"
-                            class="w-full sm:w-auto"
-                            @click="closeEditSheet"
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            size="sm"
-                            :disabled="editLoading"
-                            class="h-8 w-full gap-1.5 px-3 sm:w-auto"
-                            @click="updatePatient"
-                        >
-                            <Spinner v-if="editLoading" class="size-3.5" />
-                            <AppIcon
-                                v-else
-                                name="check-circle"
-                                class="size-3.5"
-                            />
-                            {{ editLoading ? 'Saving...' : 'Save Changes' }}
-                        </Button>
-                    </div>
+                        Cancel
+                    </Button>
+                    <Button
+                        size="sm"
+                        :disabled="editLoading"
+                        class="h-8 w-full gap-1.5 px-3 sm:w-auto"
+                        @click="updatePatient"
+                    >
+                        <Spinner v-if="editLoading" class="size-3.5" />
+                        <AppIcon v-else name="check-circle" class="size-3.5" />
+                        {{ editLoading ? 'Saving...' : 'Save Changes' }}
+                    </Button>
                 </SheetFooter>
             </SheetContent>
         </Sheet>
