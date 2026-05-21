@@ -16,7 +16,14 @@ class RecordAppointmentTriageUseCase
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
     ) {}
 
-    public function execute(string $id, string $triageVitalsSummary, ?string $triageNotes, ?string $triageCategory = null, ?int $actorId = null): ?array
+    public function execute(
+        string $id,
+        string $triageVitalsSummary,
+        ?string $triageNotes,
+        ?string $triageCategory = null,
+        array $routing = [],
+        ?int $actorId = null,
+    ): ?array
     {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
 
@@ -41,7 +48,26 @@ class RecordAppointmentTriageUseCase
             $normalizedCategory = null;
         }
 
+        $currentDepartment = $this->normalizeNullableString($existing['department'] ?? null);
+        $currentClinicianUserId = $this->normalizeNullableInt($existing['clinician_user_id'] ?? null);
+
+        $nextDepartment = array_key_exists('department', $routing)
+            ? $this->normalizeNullableString($routing['department'] ?? null)
+            : $currentDepartment;
+        $nextClinicianUserId = array_key_exists('clinician_user_id', $routing)
+            ? $this->normalizeNullableInt($routing['clinician_user_id'] ?? null)
+            : $currentClinicianUserId;
+
+        if ($nextDepartment === null && $nextClinicianUserId === null) {
+            throw ValidationException::withMessages([
+                'department' => ['Choose a clinic/department or route the visit to a named provider before completing triage.'],
+                'clinicianUserId' => ['Assign a provider or select a clinic/department pool before completing triage.'],
+            ]);
+        }
+
         $updated = $this->appointmentRepository->update($id, [
+            'clinician_user_id' => $nextClinicianUserId,
+            'department' => $nextDepartment,
             'triage_vitals_summary' => $triageVitalsSummary,
             'triage_notes' => $triageNotes,
             'triage_category' => $normalizedCategory,
@@ -66,6 +92,9 @@ class RecordAppointmentTriageUseCase
                     'handoff_to_provider' => true,
                     'previous_status' => $existing['status'] ?? null,
                     'next_status' => $updated['status'] ?? null,
+                    'routing_mode' => $nextClinicianUserId !== null ? 'specific_provider' : 'department_pool',
+                    'department' => $updated['department'] ?? null,
+                    'clinician_user_id' => $updated['clinician_user_id'] ?? null,
                 ],
             );
         }
@@ -79,6 +108,8 @@ class RecordAppointmentTriageUseCase
     private function extractChanges(array $before, array $after): array
     {
         $trackedFields = [
+            'clinician_user_id',
+            'department',
             'triage_vitals_summary',
             'triage_notes',
             'triage_category',
@@ -104,5 +135,19 @@ class RecordAppointmentTriageUseCase
         }
 
         return $changes;
+    }
+
+    private function normalizeNullableString(mixed $value): ?string
+    {
+        $normalized = trim((string) ($value ?? ''));
+
+        return $normalized !== '' ? $normalized : null;
+    }
+
+    private function normalizeNullableInt(mixed $value): ?int
+    {
+        $normalized = (int) ($value ?? 0);
+
+        return $normalized > 0 ? $normalized : null;
     }
 }

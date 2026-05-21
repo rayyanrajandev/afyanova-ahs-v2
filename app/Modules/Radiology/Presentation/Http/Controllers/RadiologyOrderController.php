@@ -223,6 +223,7 @@ class RadiologyOrderController extends Controller
     ): JsonResponse {
         $payload = $request->validate([
             'patientId' => ['required', 'uuid'],
+            'encounterId' => ['nullable', 'uuid'],
             'appointmentId' => ['nullable', 'uuid'],
             'admissionId' => ['nullable', 'uuid'],
             'radiologyProcedureCatalogItemId' => ['nullable', 'uuid', 'required_without:procedureCode'],
@@ -231,6 +232,7 @@ class RadiologyOrderController extends Controller
 
         $result = $useCase->execute([
             'patient_id' => $payload['patientId'],
+            'encounter_id' => $payload['encounterId'] ?? null,
             'appointment_id' => $payload['appointmentId'] ?? null,
             'admission_id' => $payload['admissionId'] ?? null,
             'radiology_procedure_catalog_item_id' => $payload['radiologyProcedureCatalogItemId'] ?? null,
@@ -332,6 +334,7 @@ class RadiologyOrderController extends Controller
     {
         $fieldMap = [
             'patientId' => 'patient_id',
+            'encounterId' => 'encounter_id',
             'admissionId' => 'admission_id',
             'appointmentId' => 'appointment_id',
             'entryMode' => 'entry_mode',

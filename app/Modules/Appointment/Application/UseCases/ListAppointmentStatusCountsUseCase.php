@@ -26,6 +26,11 @@ class ListAppointmentStatusCountsUseCase
             $clinicianUserId = null;
         }
 
+        $department = isset($filters['department']) ? trim((string) $filters['department']) : null;
+        $department = $department === '' ? null : $department;
+
+        $unassignedClinicianOnly = $this->parseTruthyFilter($filters['unassignedClinician'] ?? null);
+
         $status = isset($filters['status']) ? trim((string) $filters['status']) : null;
         if ($status === '') {
             $status = null;
@@ -43,9 +48,22 @@ class ListAppointmentStatusCountsUseCase
             query: $query,
             patientId: $patientId,
             clinicianUserId: $clinicianUserId,
+            department: $department,
+            unassignedClinicianOnly: $unassignedClinicianOnly,
             status: $status,
             fromDateTime: $fromDateTime,
             toDateTime: $toDateTime,
         );
+    }
+
+    private function parseTruthyFilter(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        $normalized = strtolower(trim((string) $value));
+
+        return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
     }
 }

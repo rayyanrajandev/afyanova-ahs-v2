@@ -18,9 +18,13 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import LeaveWorkflowDialog from '@/components/workflow/LeaveWorkflowDialog.vue';
+import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { usePlatformCountryProfile } from '@/composables/usePlatformCountryProfile';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { apiGetBlob, apiRequestJson } from '@/lib/apiClient';
+import { generateRequestKey } from '@/lib/idempotency';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
@@ -221,6 +225,8 @@ const showCatalogAdvancedFilters = ref(false);
 
 const createLoading = ref(false);
 const createErrors = ref<Record<string, string[]>>({});
+const createDiscardConfirmOpen = ref(false);
+const createItemRequestKey = ref(generateRequestKey('billing-service-catalog-create'));
 const createFamilyPreviewLoading = ref(false);
 const createFamilyPreviewError = ref<string | null>(null);
 const createFamilyPreviewItems = ref<CatalogItem[]>([]);
@@ -259,6 +265,7 @@ const createForm = reactive({
 const detailsOpen = ref(false);
 const detailsLoading = ref(false);
 const detailsError = ref<string | null>(null);
+const detailsDiscardConfirmOpen = ref(false);
 const detailsTab = ref('overview');
 const selectedItem = ref<CatalogItem | null>(null);
 const versionHistoryLoading = ref(false);
@@ -679,6 +686,32 @@ const createTariffBlockers = computed(() => {
     return blockers;
 });
 
+const hasPendingCreateCatalogWorkflow = computed(() => Boolean(
+    createForm.identitySource !== 'clinical'
+    || createForm.clinicalCatalogItemId.trim()
+    || createForm.serviceCode.trim()
+    || createForm.serviceName.trim()
+    || createForm.serviceType.trim()
+    || createForm.departmentId.trim()
+    || createForm.unit.trim()
+    || createForm.basePrice.trim()
+    || createForm.currencyCode.trim().toUpperCase() !== defaultCurrencyCode.value.toUpperCase()
+    || createForm.taxRatePercent.trim()
+    || createForm.isTaxable !== 'false'
+    || createForm.effectiveFrom.trim()
+    || createForm.effectiveTo.trim()
+    || createForm.description.trim()
+    || createForm.facilityTier.trim()
+    || createForm.standardsLocal.trim()
+    || createForm.standardsNhif.trim()
+    || createForm.standardsMsd.trim()
+    || createForm.standardsLoinc.trim()
+    || createForm.standardsSnomedCt.trim()
+    || createForm.standardsCpt.trim()
+    || createForm.standardsIcd.trim()
+    || createForm.metadataText.trim() !== '{}'
+));
+
 const revisionGovernanceMessage = computed(() => {
     if (revisionWindowValidationMessage.value) {
         return revisionWindowValidationMessage.value;
@@ -881,8 +914,10 @@ const versionHistoryImpactSummary = computed(() => {
 
 const identityLoading = ref(false);
 const identityErrors = ref<Record<string, string[]>>({});
+const identityRequestKey = ref(generateRequestKey('billing-service-catalog-identity'));
 const pricingLoading = ref(false);
 const pricingErrors = ref<Record<string, string[]>>({});
+const pricingRequestKey = ref(generateRequestKey('billing-service-catalog-pricing'));
 const editForm = reactive({
     serviceCode: '',
     serviceName: '',
@@ -944,6 +979,7 @@ function applyStandardsCodesToForm(form: StandardsForm, codes: StandardsCodes | 
 
 const revisionLoading = ref(false);
 const revisionErrors = ref<Record<string, string[]>>({});
+const revisionRequestKey = ref(generateRequestKey('billing-service-catalog-revision'));
 const revisionForm = reactive({
     basePrice: '',
     taxRatePercent: '',
@@ -956,6 +992,7 @@ const revisionForm = reactive({
 
 const statusLoading = ref(false);
 const statusErrors = ref<Record<string, string[]>>({});
+const statusRequestKey = ref(generateRequestKey('billing-service-catalog-status'));
 const statusForm = reactive({ status: 'active' as CatalogStatus, reason: '' });
 
 const auditLoading = ref(false);
@@ -967,10 +1004,6 @@ const auditFilters = reactive({ q: '', action: '', actorType: '', actorId: '', f
 
 function firstError(errors: Record<string, string[]> | null | undefined, key: string): string | null {
     return errors?.[key]?.[0] ?? null;
-}
-
-function csrfToken(): string | null {
-    return document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? null;
 }
 
 function toDateTimeInput(value: string | null): string {
@@ -1160,16 +1193,92 @@ function formatCoverageRange(min: number | null, max: number | null): string {
     return `${min.toFixed(0)}%-${max.toFixed(0)}% default coverage`;
 }
 
-function openCatalogQueueWorkspace(): void {
+function resetCreateCatalogForm(): void {
+    createForm.identitySource = 'clinical';
+    createForm.clinicalCatalogItemId = '';
+    createForm.serviceCode = '';
+    createForm.serviceName = '';
+    createForm.serviceType = '';
+    createForm.departmentId = '';
+    createForm.unit = '';
+    createForm.basePrice = '';
+    createForm.currencyCode = defaultCurrencyCode.value;
+    createForm.taxRatePercent = '';
+    createForm.isTaxable = 'false';
+    createForm.effectiveFrom = '';
+    createForm.effectiveTo = '';
+    createForm.description = '';
+    createForm.facilityTier = '';
+    applyStandardsCodesToForm(createForm, null);
+    createForm.metadataText = '{}';
+    clearCreateFamilyPreview();
+    createErrors.value = {};
+}
+
+function rotateCreateItemRequestKey(): void {
+    createItemRequestKey.value = generateRequestKey('billing-service-catalog-create');
+}
+
+function rotateIdentityRequestKey(): void {
+    identityRequestKey.value = generateRequestKey('billing-service-catalog-identity');
+}
+
+function rotatePricingRequestKey(): void {
+    pricingRequestKey.value = generateRequestKey('billing-service-catalog-pricing');
+}
+
+function rotateRevisionRequestKey(): void {
+    revisionRequestKey.value = generateRequestKey('billing-service-catalog-revision');
+}
+
+function rotateStatusRequestKey(): void {
+    statusRequestKey.value = generateRequestKey('billing-service-catalog-status');
+}
+
+function closeCatalogRegisterWorkspace(): void {
     catalogWorkspaceView.value = 'queue';
+    resetCreateCatalogForm();
+    rotateCreateItemRequestKey();
+}
+
+function requestCatalogWorkspaceViewChange(view: 'queue' | 'register'): void {
+    if (view === 'register') {
+        if (!canManagePricing.value) return;
+        if (createLinkedClinicalModeLocked.value) {
+            createForm.identitySource = 'standalone';
+        }
+        if (catalogWorkspaceView.value !== 'register') {
+            resetCreateCatalogForm();
+            if (createLinkedClinicalModeLocked.value) {
+                createForm.identitySource = 'standalone';
+            }
+            rotateCreateItemRequestKey();
+        }
+        catalogWorkspaceView.value = 'register';
+        return;
+    }
+
+    if (createLoading.value) return;
+
+    if (catalogWorkspaceView.value === 'register' && hasPendingCreateCatalogWorkflow.value) {
+        createDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    closeCatalogRegisterWorkspace();
+}
+
+function confirmCreateCatalogDiscard(): void {
+    createDiscardConfirmOpen.value = false;
+    closeCatalogRegisterWorkspace();
+}
+
+function openCatalogQueueWorkspace(): void {
+    requestCatalogWorkspaceViewChange('queue');
 }
 
 function openCatalogRegisterWorkspace(): void {
-    if (!canManagePricing.value) return;
-    if (createLinkedClinicalModeLocked.value) {
-        createForm.identitySource = 'standalone';
-    }
-    catalogWorkspaceView.value = 'register';
+    requestCatalogWorkspaceViewChange('register');
 }
 
 function applyCatalogStatusPreset(status: '' | CatalogStatus): void {
@@ -1411,6 +1520,96 @@ const auditToTime = computed({
     },
 });
 
+const hasPendingIdentityWorkflow = computed(() => {
+    const item = selectedItem.value;
+    if (!detailsOpen.value || !item) return false;
+
+    return (
+        editForm.serviceCode.trim() !== String(item.serviceCode ?? '').trim()
+        || editForm.serviceName.trim() !== String(item.serviceName ?? '').trim()
+        || editForm.serviceType.trim() !== String(item.serviceType ?? '').trim()
+        || editForm.departmentId.trim() !== String(item.departmentId ?? '').trim()
+        || editForm.unit.trim() !== String(item.unit ?? '').trim()
+        || editForm.facilityTier.trim() !== String(item.facilityTier ?? '').trim()
+        || editForm.standardsLocal.trim() !== String(item.codes?.LOCAL ?? '').trim()
+        || editForm.standardsNhif.trim() !== String(item.codes?.NHIF ?? '').trim()
+        || editForm.standardsMsd.trim() !== String(item.codes?.MSD ?? '').trim()
+        || editForm.standardsLoinc.trim() !== String(item.codes?.LOINC ?? '').trim()
+        || editForm.standardsSnomedCt.trim() !== String(item.codes?.SNOMED_CT ?? '').trim()
+        || editForm.standardsCpt.trim() !== String(item.codes?.CPT ?? '').trim()
+        || editForm.standardsIcd.trim() !== String(item.codes?.ICD ?? '').trim()
+    );
+});
+
+const hasPendingPricingWorkflow = computed(() => {
+    const item = selectedItem.value;
+    if (!detailsOpen.value || !item) return false;
+
+    return (
+        editForm.basePrice.trim() !== String(item.basePrice ?? '').trim()
+        || editForm.currencyCode.trim().toUpperCase() !== String(item.currencyCode ?? defaultCurrencyCode.value).trim().toUpperCase()
+        || editForm.taxRatePercent.trim() !== String(item.taxRatePercent ?? '').trim()
+        || editForm.isTaxable !== (item.isTaxable === null ? '' : (item.isTaxable ? 'true' : 'false'))
+        || editForm.effectiveFrom.trim() !== toDateTimeInput(item.effectiveFrom)
+        || editForm.effectiveTo.trim() !== toDateTimeInput(item.effectiveTo)
+        || editForm.description.trim() !== String(item.description ?? '').trim()
+        || editForm.metadataText.trim() !== JSON.stringify(item.metadata ?? {}, null, 2)
+    );
+});
+
+const hasPendingRevisionWorkflow = computed(() => {
+    const item = selectedItem.value;
+    if (!detailsOpen.value || !item) return false;
+
+    return (
+        revisionForm.basePrice.trim() !== String(item.basePrice ?? '').trim()
+        || revisionForm.taxRatePercent.trim() !== String(item.taxRatePercent ?? '').trim()
+        || revisionForm.isTaxable !== (item.isTaxable === null ? '' : (item.isTaxable ? 'true' : 'false'))
+        || revisionForm.effectiveFrom.trim()
+        || revisionForm.effectiveTo.trim()
+        || revisionForm.description.trim() !== String(item.description ?? '').trim()
+        || revisionForm.metadataText.trim() !== JSON.stringify(item.metadata ?? {}, null, 2)
+    );
+});
+
+const hasPendingStatusWorkflow = computed(() => {
+    const item = selectedItem.value;
+    if (!detailsOpen.value || !item) return false;
+
+    return (
+        statusForm.status !== (item.status ?? 'active')
+        || statusForm.reason.trim() !== String(item.statusReason ?? '').trim()
+    );
+});
+
+const hasPendingCatalogDetailsWorkflow = computed(() => (
+    hasPendingIdentityWorkflow.value
+    || hasPendingPricingWorkflow.value
+    || hasPendingRevisionWorkflow.value
+    || hasPendingStatusWorkflow.value
+));
+
+const isSubmittingCatalogWorkflow = computed(() => (
+    createLoading.value
+    || identityLoading.value
+    || pricingLoading.value
+    || revisionLoading.value
+    || statusLoading.value
+));
+
+const {
+    confirmOpen: leaveConfirmOpen,
+    confirmLeave: confirmPendingCatalogWorkflowLeave,
+    cancelLeave: cancelPendingCatalogWorkflowLeave,
+} = usePendingWorkflowLeaveGuard({
+    shouldBlock: computed(() => (
+        (catalogWorkspaceView.value === 'register' && hasPendingCreateCatalogWorkflow.value)
+        || (detailsOpen.value && hasPendingCatalogDetailsWorkflow.value)
+    )),
+    isSubmitting: isSubmittingCatalogWorkflow,
+    blockBrowserUnload: false,
+});
+
 function hydrateEditForm(item: CatalogItem): void {
     editForm.serviceCode = item.serviceCode ?? '';
     editForm.serviceName = item.serviceName ?? '';
@@ -1548,37 +1747,21 @@ function clearCreateClinicalCatalogSelection(): void {
 async function apiRequest<T>(
     method: 'GET' | 'POST' | 'PATCH',
     path: string,
-    options?: { query?: Record<string, string | number | null>; body?: Record<string, unknown> },
+    options?: {
+        query?: Record<string, string | number | null>;
+        body?: Record<string, unknown>;
+        entitlementContext?: string;
+        idempotencyKey?: string | null;
+        requestId?: string | null;
+    },
 ): Promise<T> {
-    const url = new URL(`/api/v1${path}`, window.location.origin);
-    Object.entries(options?.query ?? {}).forEach(([key, value]) => {
-        if (value === null || value === '') return;
-        url.searchParams.set(key, String(value));
+    return apiRequestJson<T>(method, path, {
+        query: options?.query,
+        body: options?.body,
+        entitlementContext: options?.entitlementContext,
+        idempotencyKey: options?.idempotencyKey,
+        requestId: options?.requestId,
     });
-
-    const headers: Record<string, string> = { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
-    let body: string | undefined;
-
-    if (method !== 'GET') {
-        headers['Content-Type'] = 'application/json';
-        const token = csrfToken();
-        if (token) headers['X-CSRF-TOKEN'] = token;
-        body = JSON.stringify(options?.body ?? {});
-    }
-
-    const response = await fetch(url.toString(), { method, credentials: 'same-origin', headers, body });
-    const payload = (await response.json().catch(() => ({}))) as ValidationErrorResponse;
-    if (!response.ok) {
-        const error = new Error(payload.message ?? `${response.status} ${response.statusText}`) as Error & {
-            status?: number;
-            payload?: ValidationErrorResponse;
-        };
-        error.status = response.status;
-        error.payload = payload;
-        throw error;
-    }
-
-    return payload as T;
 }
 
 async function loadClinicalCatalogLookupSource(path: string): Promise<ClinicalCatalogLookupItem[]> {
@@ -1802,6 +1985,7 @@ async function createItem(): Promise<void> {
     }
 
     try {
+        const requestKey = createItemRequestKey.value;
         await apiRequest<CatalogResponse>('POST', '/billing-service-catalog/items', {
             body: {
                 clinicalCatalogItemId: createForm.identitySource === 'clinical'
@@ -1823,28 +2007,12 @@ async function createItem(): Promise<void> {
                 codes: standardsCodesFromForm(createForm),
                 metadata,
             },
+            entitlementContext: 'Billing service catalog create',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
 
-        createForm.identitySource = 'clinical';
-        createForm.clinicalCatalogItemId = '';
-        createForm.serviceCode = '';
-        createForm.serviceName = '';
-        createForm.serviceType = '';
-        createForm.departmentId = '';
-        createForm.unit = '';
-        createForm.basePrice = '';
-        createForm.currencyCode = defaultCurrencyCode.value;
-        createForm.taxRatePercent = '';
-        createForm.isTaxable = 'false';
-        createForm.effectiveFrom = '';
-        createForm.effectiveTo = '';
-        createForm.description = '';
-        createForm.facilityTier = '';
-        applyStandardsCodesToForm(createForm, null);
-        createForm.metadataText = '{}';
-        clearCreateFamilyPreview();
-
-        catalogWorkspaceView.value = 'queue';
+        closeCatalogRegisterWorkspace();
         notifySuccess('Service catalog item created.');
         await loadItems();
     } catch (error) {
@@ -1901,6 +2069,10 @@ function openDetails(item: CatalogItem): void {
     auditLogs.value = [];
     auditMeta.value = null;
     Object.assign(auditFilters, { q: '', action: '', actorType: '', actorId: '', from: '', to: '', perPage: 20, page: 1 });
+    rotateIdentityRequestKey();
+    rotatePricingRequestKey();
+    rotateRevisionRequestKey();
+    rotateStatusRequestKey();
 
     void loadDetails(itemId);
 }
@@ -1911,6 +2083,31 @@ function closeDetails(): void {
     versionHistory.value = [];
     payerImpactSummary.value = null;
     payerImpactError.value = null;
+    rotateIdentityRequestKey();
+    rotatePricingRequestKey();
+    rotateRevisionRequestKey();
+    rotateStatusRequestKey();
+}
+
+function requestDetailsOpenChange(open: boolean): void {
+    if (open) {
+        detailsOpen.value = true;
+        return;
+    }
+
+    if (identityLoading.value || pricingLoading.value || revisionLoading.value || statusLoading.value) return;
+
+    if (hasPendingCatalogDetailsWorkflow.value) {
+        detailsDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    closeDetails();
+}
+
+function confirmDetailsDiscard(): void {
+    detailsDiscardConfirmOpen.value = false;
+    closeDetails();
 }
 
 async function saveIdentity(): Promise<void> {
@@ -1946,13 +2143,18 @@ async function saveIdentity(): Promise<void> {
             body.departmentId = null;
         }
 
+        const requestKey = identityRequestKey.value;
         const response = await apiRequest<CatalogResponse>('PATCH', `/billing-service-catalog/items/${itemId}`, {
             body,
+            entitlementContext: 'Billing service catalog identity update',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
 
         selectedItem.value = response.data;
         hydrateEditForm(response.data);
         syncItemInList(response.data);
+        rotateIdentityRequestKey();
         await loadPayerImpact(String(response.data.id ?? itemId));
         notifySuccess('Service details updated.');
         await loadStatusCounts();
@@ -1993,6 +2195,7 @@ async function savePricing(): Promise<void> {
     }
 
     try {
+        const requestKey = pricingRequestKey.value;
         const response = await apiRequest<CatalogResponse>('PATCH', `/billing-service-catalog/items/${itemId}`, {
             body: {
                 basePrice,
@@ -2004,11 +2207,15 @@ async function savePricing(): Promise<void> {
                 description: editForm.description.trim() || null,
                 metadata,
             },
+            entitlementContext: 'Billing service catalog pricing update',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
 
         selectedItem.value = response.data;
         hydrateEditForm(response.data);
         syncItemInList(response.data);
+        rotatePricingRequestKey();
         await loadPayerImpact(String(response.data.id ?? itemId));
         notifySuccess('Service pricing updated.');
         await loadStatusCounts();
@@ -2039,16 +2246,21 @@ async function saveStatus(): Promise<void> {
     }
 
     try {
+        const requestKey = statusRequestKey.value;
         const response = await apiRequest<CatalogResponse>('PATCH', `/billing-service-catalog/items/${itemId}/status`, {
             body: {
                 status: statusForm.status,
                 reason: reason || null,
             },
+            entitlementContext: 'Billing service catalog status update',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
 
         selectedItem.value = response.data;
         hydrateEditForm(response.data);
         syncItemInList(response.data);
+        rotateStatusRequestKey();
         await loadPayerImpact(String(response.data.id ?? itemId));
         notifySuccess('Service catalog item status updated.');
         await loadStatusCounts();
@@ -2089,6 +2301,7 @@ async function createRevision(): Promise<void> {
     }
 
     try {
+        const requestKey = revisionRequestKey.value;
         const response = await apiRequest<CatalogResponse>('POST', `/billing-service-catalog/items/${itemId}/revisions`, {
             body: {
                 basePrice,
@@ -2099,11 +2312,15 @@ async function createRevision(): Promise<void> {
                 description: revisionForm.description.trim() || null,
                 metadata,
             },
+            entitlementContext: 'Billing service catalog revision create',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
 
         selectedItem.value = response.data;
         hydrateEditForm(response.data);
         hydrateRevisionForm(response.data);
+        rotateRevisionRequestKey();
         await loadVersionHistory(String(response.data.id ?? itemId));
         await loadPayerImpact(String(response.data.id ?? itemId));
         notifySuccess('Price version created.');
@@ -2207,15 +2424,6 @@ function resetAuditFilters(): void {
     void loadAuditLogs(1);
 }
 
-function auditFileNameFromDisposition(value: string | null): string | null {
-    if (!value) return null;
-    const utfMatch = value.match(/filename\*=UTF-8''([^;]+)/i);
-    if (utfMatch?.[1]) return decodeURIComponent(utfMatch[1]);
-    const basicMatch = value.match(/filename="?([^";]+)"?/i);
-    if (basicMatch?.[1]) return basicMatch[1];
-    return null;
-}
-
 async function exportAuditLogs(): Promise<void> {
     if (!canViewAudit.value || auditExporting.value) return;
 
@@ -2225,41 +2433,23 @@ async function exportAuditLogs(): Promise<void> {
     auditExporting.value = true;
 
     try {
-        const url = new URL(`/api/v1/billing-service-catalog/items/${itemId}/audit-logs/export`, window.location.origin);
-        const query: Record<string, string | null> = {
-            q: auditFilters.q.trim() || null,
-            action: auditFilters.action.trim() || null,
-            actorType: auditFilters.actorType || null,
-            actorId: auditFilters.actorId.trim() || null,
-            from: toApiDateTime(auditFilters.from),
-            to: toApiDateTime(auditFilters.to),
-        };
-
-        Object.entries(query).forEach(([key, value]) => {
-            if (!value) return;
-            url.searchParams.set(key, value);
+        const { blob, filename } = await apiGetBlob(`/billing-service-catalog/items/${itemId}/audit-logs/export`, {
+            query: {
+                q: auditFilters.q.trim() || null,
+                action: auditFilters.action.trim() || null,
+                actorType: auditFilters.actorType || null,
+                actorId: auditFilters.actorId.trim() || null,
+                from: toApiDateTime(auditFilters.from),
+                to: toApiDateTime(auditFilters.to),
+            },
+            entitlementContext: 'Billing service catalog audit export',
         });
 
-        const headers: Record<string, string> = {
-            Accept: 'text/csv,application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-        };
-        const token = csrfToken();
-        if (token) headers['X-CSRF-TOKEN'] = token;
-
-        const response = await fetch(url.toString(), { method: 'GET', credentials: 'same-origin', headers });
-
-        if (!response.ok) {
-            const payload = (await response.json().catch(() => ({}))) as ValidationErrorResponse;
-            throw new Error(payload.message ?? `${response.status} ${response.statusText}`);
-        }
-
-        const blob = await response.blob();
-        const filename = auditFileNameFromDisposition(response.headers.get('Content-Disposition')) ?? `billing-service-catalog-audit-${itemId}.csv`;
+        const downloadName = filename ?? `billing-service-catalog-audit-${itemId}.csv`;
         const objectUrl = window.URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         anchor.href = objectUrl;
-        anchor.download = filename;
+        anchor.download = downloadName;
         document.body.append(anchor);
         anchor.click();
         anchor.remove();
@@ -3250,7 +3440,7 @@ watch(
                 </CardContent>
             </Card>
 
-            <Sheet :open="detailsOpen" @update:open="(open) => (open ? (detailsOpen = true) : closeDetails())">
+            <Sheet :open="detailsOpen" @update:open="requestDetailsOpenChange">
                 <SheetContent side="right" variant="workspace" size="6xl">
                     <SheetHeader class="shrink-0 border-b px-6 py-4 text-left pr-12">
                         <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
@@ -3944,10 +4134,40 @@ watch(
                     </div>
 
                     <SheetFooter class="border-t px-4 py-3">
-                        <Button variant="outline" @click="closeDetails">Close</Button>
+                        <Button variant="outline" @click="requestDetailsOpenChange(false)">Close</Button>
                     </SheetFooter>
                 </SheetContent>
             </Sheet>
+
+            <LeaveWorkflowDialog
+                :open="leaveConfirmOpen"
+                title="Leave billing service catalog workflow?"
+                description="A billing service catalog form still has unsaved pricing or governance changes. Stay here to finish the work, or leave this page and discard the unfinished updates."
+                stay-label="Stay on workflow"
+                leave-label="Leave page"
+                @update:open="cancelPendingCatalogWorkflowLeave"
+                @confirm="confirmPendingCatalogWorkflowLeave"
+            />
+
+            <LeaveWorkflowDialog
+                :open="createDiscardConfirmOpen"
+                title="Discard new service price draft?"
+                description="This new service price still has unsaved tariff details. Keep editing to finish the registration, or discard the draft."
+                stay-label="Keep editing"
+                leave-label="Discard draft"
+                @update:open="createDiscardConfirmOpen = false"
+                @confirm="confirmCreateCatalogDiscard"
+            />
+
+            <LeaveWorkflowDialog
+                :open="detailsDiscardConfirmOpen"
+                title="Discard service price changes?"
+                description="This service price sheet still has unsaved edits. Keep editing to preserve the pricing update, or discard the unfinished changes."
+                stay-label="Keep editing"
+                leave-label="Discard changes"
+                @update:open="detailsDiscardConfirmOpen = false"
+                @confirm="confirmDetailsDiscard"
+            />
         </div>
     </AppLayout>
 </template>

@@ -21,6 +21,7 @@ use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryExte
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryProcurementController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventorySupplierController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryWarehouseController;
+use App\Modules\Encounter\Presentation\Http\Controllers\EncounterController;
 use App\Modules\Laboratory\Presentation\Http\Controllers\LaboratoryOrderController;
 use App\Modules\MedicalRecord\Presentation\Http\Controllers\MedicalRecordController;
 use App\Modules\Patient\Presentation\Http\Controllers\PatientController;
@@ -581,7 +582,7 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:appointments.read')
         ->name('appointments.status-counts');
     Route::get('appointments/department-options', [AppointmentController::class, 'departmentOptions'])
-        ->middleware('can:appointments.create')
+        ->middleware('can:appointments.read-routing-options')
         ->name('appointments.department-options');
     Route::get('appointments/referrals/network', [AppointmentController::class, 'referralNetwork'])
         ->middleware('can:appointments.read')
@@ -595,6 +596,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('appointments/{id}', [AppointmentController::class, 'show'])
         ->middleware('can:appointments.read')
         ->name('appointments.show');
+    Route::get('appointments/{id}/encounter', [AppointmentController::class, 'encounter'])
+        ->middleware(['can:medical.records.read', 'can:medical.records.create'])
+        ->name('appointments.encounter');
     Route::patch('appointments/{id}', [AppointmentController::class, 'update'])
         ->middleware('can:appointments.update')
         ->name('appointments.update');
@@ -685,7 +689,7 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:medical.records.read')
         ->name('medical-records.show');
     Route::patch('medical-records/{id}', [MedicalRecordController::class, 'update'])
-        ->middleware('can:medical.records.update')
+        ->middleware('can:medical-records.update-draft,id')
         ->name('medical-records.update');
     Route::patch('medical-records/{id}/status', [MedicalRecordController::class, 'updateStatus'])
         ->name('medical-records.update-status');
@@ -707,6 +711,21 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::post('medical-records/{id}/signer-attestations', [MedicalRecordController::class, 'storeSignerAttestation'])
         ->middleware('can:medical.records.attest')
         ->name('medical-records.signer-attestations.store');
+
+    Route::get('encounters/by-appointment/{appointmentId}', [EncounterController::class, 'resolveForAppointment'])
+        ->middleware('can:medical.records.read')
+        ->name('encounters.by-appointment.resolve');
+    Route::get('encounters/{id}', [EncounterController::class, 'show'])
+        ->middleware('can:medical.records.read')
+        ->name('encounters.show');
+    Route::patch('encounters/{id}/status', [EncounterController::class, 'updateStatus'])
+        ->name('encounters.update-status');
+    Route::get('encounters/{id}/audit-logs/export', [EncounterController::class, 'exportAuditLogsCsv'])
+        ->middleware('can:medical-records.view-audit-logs')
+        ->name('encounters.audit-logs.export');
+    Route::get('encounters/{id}/audit-logs', [EncounterController::class, 'auditLogs'])
+        ->middleware('can:medical-records.view-audit-logs')
+        ->name('encounters.audit-logs');
 
     Route::get('laboratory-orders', [LaboratoryOrderController::class, 'index'])
         ->middleware('can:laboratory.orders.read')

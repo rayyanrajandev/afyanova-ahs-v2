@@ -10,6 +10,7 @@ class MedicalRecordResponseTransformer
             'id' => $record['id'] ?? null,
             'recordNumber' => $record['record_number'] ?? null,
             'patientId' => $record['patient_id'] ?? null,
+            'encounterId' => $record['encounter_id'] ?? null,
             'admissionId' => $record['admission_id'] ?? null,
             'appointmentId' => $record['appointment_id'] ?? null,
             'appointmentReferralId' => $record['appointment_referral_id'] ?? null,

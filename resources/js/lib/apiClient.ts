@@ -6,12 +6,23 @@ export const API_V1_PREFIX = '/api/v1';
 
 export type ApiJsonMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
-export type ApiJsonQuery = Record<string, string | number | null | undefined>;
+export type ApiJsonQuery = Record<
+    string,
+    string | number | boolean | string[] | null | undefined
+>;
 
 export type ApiJsonRequestOptions = {
     query?: ApiJsonQuery;
     /** JSON body for mutating methods (ignored for GET). */
     body?: Record<string, unknown>;
+    /** Best-effort delivery hint for background-safe writes such as autosave flushes. */
+    keepalive?: boolean;
+    /** Optional extra headers for feature-specific correlation or workflow metadata. */
+    headers?: Record<string, string>;
+    /** Stable dedupe key for critical writes. */
+    idempotencyKey?: string | null;
+    /** Correlates client-side retries and server-side logs. */
+    requestId?: string | null;
     /**
      * Shown in facility-entitlement toasts; defaults to the request path.
      * Use a short human label for noisy dashboards (e.g. "Admission counts").
@@ -38,9 +49,23 @@ export function isApiClientError(error: unknown): error is ApiClientError {
 
 function appendSearchParams(url: URL, query: ApiJsonQuery | undefined): void {
     Object.entries(query ?? {}).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+            value
+                .map((item) => String(item).trim())
+                .filter(Boolean)
+                .forEach((item) => url.searchParams.append(key, item));
+            return;
+        }
+
         if (value === null || value === undefined || value === '') {
             return;
         }
+
+        if (typeof value === 'boolean') {
+            url.searchParams.set(key, value ? '1' : '0');
+            return;
+        }
+
         url.searchParams.set(key, String(value));
     });
 }
@@ -86,7 +111,16 @@ export async function apiRequestJson<T>(
     const headers: Record<string, string> = {
         Accept: 'application/json',
         'X-Requested-With': 'XMLHttpRequest',
+        ...(options?.headers ?? {}),
     };
+
+    if (options?.idempotencyKey) {
+        headers['X-Idempotency-Key'] = options.idempotencyKey;
+    }
+
+    if (options?.requestId) {
+        headers['X-Request-Id'] = options.requestId;
+    }
 
     let body: string | undefined;
     if (method === 'POST' || method === 'PATCH' || method === 'PUT') {
@@ -106,6 +140,7 @@ export async function apiRequestJson<T>(
         credentials: 'same-origin',
         headers,
         body,
+        keepalive: options?.keepalive === true,
     });
 
     const payload = await parseJsonBody(response);

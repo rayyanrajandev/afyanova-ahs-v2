@@ -25,6 +25,7 @@ class MedicalRecordModel extends Model
         'tenant_id',
         'facility_id',
         'patient_id',
+        'encounter_id',
         'admission_id',
         'appointment_id',
         'appointment_referral_id',

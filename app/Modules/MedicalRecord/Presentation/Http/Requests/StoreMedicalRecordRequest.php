@@ -23,6 +23,7 @@ class StoreMedicalRecordRequest extends FormRequest
     {
         return [
             'patientId' => ['required', 'uuid'],
+            'encounterId' => ['nullable', 'uuid'],
             'admissionId' => ['nullable', 'uuid'],
             'appointmentId' => ['nullable', 'uuid'],
             'appointmentReferralId' => ['nullable', 'uuid'],

@@ -19,6 +19,7 @@ class StoreBillingInvoiceRequest extends FormRequest
     {
         return [
             'patientId' => ['required', 'uuid'],
+            'encounterId' => ['nullable', 'uuid'],
             'admissionId' => ['nullable', 'uuid'],
             'appointmentId' => ['nullable', 'uuid'],
             'billingPayerContractId' => ['nullable', 'uuid', 'exists:billing_payer_contracts,id'],

@@ -9,8 +9,10 @@ use App\Modules\MedicalRecord\Application\Exceptions\AppointmentReferralNotEligi
 use App\Modules\MedicalRecord\Application\Exceptions\ConsultationOwnerConflictForMedicalRecordException;
 use App\Modules\MedicalRecord\Application\Exceptions\DuplicateEncounterDraftMedicalRecordException;
 use App\Modules\MedicalRecord\Application\Exceptions\InvalidMedicalRecordDiagnosisCodeException;
+use App\Modules\MedicalRecord\Application\Exceptions\InvalidMedicalRecordStatusTransitionException;
 use App\Modules\MedicalRecord\Application\Exceptions\InvalidMedicalRecordTypeException;
 use App\Modules\MedicalRecord\Application\Exceptions\MedicalRecordContentLockedException;
+use App\Modules\MedicalRecord\Application\Exceptions\MedicalRecordDraftConflictException;
 use App\Modules\MedicalRecord\Application\Exceptions\InvalidMedicalRecordVersionComparisonException;
 use App\Modules\MedicalRecord\Application\Exceptions\MedicalRecordSignerAttestationNotAllowedException;
 use App\Modules\MedicalRecord\Application\Exceptions\PatientNotEligibleForMedicalRecordException;
@@ -112,16 +114,24 @@ class MedicalRecordController extends Controller
 
     public function update(string $id, UpdateMedicalRecordRequest $request, UpdateMedicalRecordUseCase $useCase): JsonResponse
     {
+        $validated = $request->validated();
+
         try {
             $record = $useCase->execute(
                 id: $id,
-                payload: $this->toPersistencePayload($request->validated()),
+                payload: $this->toPersistencePayload($validated),
                 actorId: $request->user()?->id,
+                expectedUpdatedAt: $validated['expectedUpdatedAt'] ?? null,
+                forceDraftSave: (bool) ($validated['forceDraftSave'] ?? false),
             );
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return $this->tenantScopeRequiredError($exception->getMessage());
         } catch (ConsultationOwnerConflictForMedicalRecordException $exception) {
             return $this->consultationOwnerConflictError($exception->ownerUserId());
+        } catch (MedicalRecordDraftConflictException $exception) {
+            return $this->draftConflictError($exception->currentRecord());
+        } catch (InvalidMedicalRecordStatusTransitionException $exception) {
+            return $this->validationError('status', $exception->getMessage());
         } catch (PatientNotEligibleForMedicalRecordException $exception) {
             return $this->validationError('patientId', $exception->getMessage());
         } catch (AppointmentNotEligibleForMedicalRecordException $exception) {
@@ -163,6 +173,8 @@ class MedicalRecordController extends Controller
             return $this->tenantScopeRequiredError($exception->getMessage());
         } catch (ConsultationOwnerConflictForMedicalRecordException $exception) {
             return $this->consultationOwnerConflictError($exception->ownerUserId());
+        } catch (InvalidMedicalRecordStatusTransitionException $exception) {
+            return $this->validationError('status', $exception->getMessage());
         }
 
         abort_if($record === null, 404, 'Medical record not found.');
@@ -327,10 +339,28 @@ class MedicalRecordController extends Controller
         ], 409);
     }
 
+    /**
+     * @param  array<string, mixed>  $currentRecord
+     */
+    private function draftConflictError(array $currentRecord): JsonResponse
+    {
+        return response()->json([
+            'message' => 'This draft was updated elsewhere. Reload the chart copy or overwrite with your changes.',
+            'code' => 'MEDICAL_RECORD_DRAFT_CONFLICT',
+            'errors' => [
+                'expectedUpdatedAt' => ['The draft changed before this save could complete.'],
+            ],
+            'context' => [
+                'currentRecord' => MedicalRecordResponseTransformer::transform($currentRecord),
+            ],
+        ], 409);
+    }
+
     private function toPersistencePayload(array $validated): array
     {
         $fieldMap = [
             'patientId' => 'patient_id',
+            'encounterId' => 'encounter_id',
             'admissionId' => 'admission_id',
             'appointmentId' => 'appointment_id',
             'appointmentReferralId' => 'appointment_referral_id',

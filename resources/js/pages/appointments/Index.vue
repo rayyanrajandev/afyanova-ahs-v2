@@ -1,8 +1,11 @@
 
 <script setup lang="ts">
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { watchDebounced } from '@vueuse/core';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
+import ClinicianPicker from '@/components/domain/clinical/ClinicianPicker.vue';
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
@@ -40,6 +43,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { apiGet, apiPatch, apiRequestJson, isApiClientError } from '@/lib/apiClient';
+import { encounterWorkspaceHref, encounterWorkspaceLegacyAppointmentHref } from '@/lib/encounterWorkspace';
 import {
     FINANCIAL_CLASS_OPTIONS,
     compactVisitCoverageSummary,
@@ -58,6 +63,16 @@ type QueueMode = 'all' | 'triage' | 'clinical';
 type AppointmentStatus = 'scheduled' | 'waiting_triage' | 'waiting_provider' | 'in_consultation' | 'completed' | 'cancelled' | 'no_show';
 type ReferralType = 'internal' | 'external';
 type ReferralPriority = 'routine' | 'urgent' | 'critical';
+type TriageRoutingMode = 'department_pool' | 'specific_provider';
+type TriageStructuredFieldKey =
+    | 'bloodPressure'
+    | 'pulse'
+    | 'temperature'
+    | 'respiratoryRate'
+    | 'oxygenSaturation'
+    | 'weight'
+    | 'height'
+    | 'glucose';
 
 type Appointment = {
     id: string;
@@ -109,6 +124,14 @@ type BillingPayerContract = {
 type BillingPayerContractListResponse = {
     data: BillingPayerContract[];
     meta?: { currentPage?: number; perPage?: number; total?: number; lastPage?: number };
+};
+
+type TriageStructuredFieldDefinition = {
+    key: TriageStructuredFieldKey;
+    label: string;
+    shortLabel: string;
+    placeholder: string;
+    inputMode?: 'text' | 'numeric' | 'decimal';
 };
 
 type Referral = {
@@ -307,6 +330,20 @@ type ApiError = Error & {
 };
 
 type ApiItemResponse<T> = { data: T };
+
+type EncounterSummary = {
+    id: string;
+    encounterNumber: string | null;
+    patientId: string | null;
+    appointmentId: string | null;
+    admissionId: string | null;
+    primaryClinicianUserId: number | null;
+    status: string | null;
+    statusReason: string | null;
+    openedAt: string | null;
+    closedAt: string | null;
+    updatedAt: string | null;
+};
 type ApiListResponse<T> = {
     data: T[];
     meta?: {
@@ -367,6 +404,8 @@ const initialPatientId = queryParam('patientId').trim();
 const initialPatientName = queryParam('patientName').trim();
 const initialPatientNumber = queryParam('patientNumber').trim();
 const initialClinicianUserId = queryParam('clinicianUserId').trim();
+const initialDepartment = queryParam('department').trim();
+const initialUnassignedClinician = ['1', 'true', 'yes', 'on'].includes(queryParam('unassignedClinician').trim().toLowerCase());
 const initialFrom = queryDateFilterParam('from');
 const initialTo = queryDateFilterParam('to');
 const initialStatusQuery = queryParam('status').trim();
@@ -379,6 +418,7 @@ const initialTabQuery = queryParam('tab').trim();
 const initialOpenQuery = queryParam('open').trim();
 const initialPageQuery = queryParam('page').trim();
 const initialFocusedAppointmentId = queryParam('focusAppointmentId').trim();
+const initialDetailsTabQuery = queryParam('detailsTab').trim();
 const initialFocusAction = queryFocusActionParam();
 const initialCreateIntent = shouldOpenCreateFromQuery();
 const initialCreatePrefill = createPrefillQueryValues();
@@ -386,6 +426,8 @@ const hasExplicitQueueIntent = Boolean(
     initialQueryText
     || initialPatientId
     || initialClinicianUserId
+    || initialDepartment
+    || initialUnassignedClinician
     || initialFrom
     || initialTo
     || initialStatusQuery
@@ -404,6 +446,8 @@ const searchForm = reactive({
     q: initialQueryText,
     patientId: initialPatientId,
     clinicianUserId: initialClinicianUserId,
+    department: initialDepartment,
+    unassignedClinician: initialUnassignedClinician,
     from: initialFrom,
     to: initialTo,
     page: queryPositiveIntParam('page', 1),
@@ -543,10 +587,81 @@ const triageSheetOpen = ref(false);
 const triageSubmitting = ref(false);
 const triageErrors = ref<Record<string, string[]>>({});
 const triageTargetAppointment = ref<Appointment | null>(null);
+const triageClinicianAutoDepartment = ref('');
+const TRIAGE_STRUCTURED_FIELDS: TriageStructuredFieldDefinition[] = [
+    {
+        key: 'bloodPressure',
+        label: 'Blood pressure',
+        shortLabel: 'BP',
+        placeholder: '118/74',
+        inputMode: 'text',
+    },
+    {
+        key: 'pulse',
+        label: 'Pulse',
+        shortLabel: 'Pulse',
+        placeholder: '82',
+        inputMode: 'numeric',
+    },
+    {
+        key: 'temperature',
+        label: 'Temperature',
+        shortLabel: 'Temp',
+        placeholder: '37.1',
+        inputMode: 'decimal',
+    },
+    {
+        key: 'respiratoryRate',
+        label: 'Respiratory rate',
+        shortLabel: 'RR',
+        placeholder: '18',
+        inputMode: 'numeric',
+    },
+    {
+        key: 'oxygenSaturation',
+        label: 'SpO2',
+        shortLabel: 'SpO2',
+        placeholder: '98',
+        inputMode: 'numeric',
+    },
+    {
+        key: 'weight',
+        label: 'Weight',
+        shortLabel: 'Weight',
+        placeholder: '70',
+        inputMode: 'decimal',
+    },
+    {
+        key: 'height',
+        label: 'Height',
+        shortLabel: 'Height',
+        placeholder: '170',
+        inputMode: 'decimal',
+    },
+    {
+        key: 'glucose',
+        label: 'Blood sugar',
+        shortLabel: 'Glucose',
+        placeholder: '110 mg/dL',
+        inputMode: 'text',
+    },
+];
 const triageForm = reactive({
+    routingMode: 'department_pool' as TriageRoutingMode,
+    department: '',
+    clinicianUserId: '',
     triageVitalsSummary: '',
     triageNotes: '',
     triageCategory: '' as '' | 'P1' | 'P2' | 'P3' | 'P4' | 'P5',
+    bloodPressure: '',
+    pulse: '',
+    temperature: '',
+    respiratoryRate: '',
+    oxygenSaturation: '',
+    weight: '',
+    height: '',
+    glucose: '',
+    additionalSummary: '',
 });
 const rescheduleDialogOpen = ref(false);
 const rescheduleSubmitting = ref(false);
@@ -588,6 +703,38 @@ const consultationTakeoverTarget = ref<Appointment | null>(null);
 const consultationTakeoverReason = ref('');
 const consultationTakeoverError = ref<string | null>(null);
 const consultationTakeoverSubmitting = ref(false);
+const pendingInitialFocusAppointmentId = ref(initialFocusedAppointmentId);
+const pendingInitialDetailsTab = ref(initialDetailsTabQuery);
+const triageVitalPreviewBadges = computed(() =>
+    TRIAGE_STRUCTURED_FIELDS
+        .map((field) => {
+            const value = formatStructuredTriageFieldValue(
+                field.key,
+                triageForm[field.key],
+            );
+            if (!value) return null;
+
+            return {
+                key: field.key,
+                text: `${field.shortLabel} ${value}`,
+            };
+        })
+        .filter(
+            (badge): badge is { key: TriageStructuredFieldKey; text: string } =>
+                badge !== null,
+        ),
+);
+const triageAdditionalSummaryPreview = computed(() =>
+    normalizeTriageText(triageForm.additionalSummary),
+);
+const triageComposedSummary = computed(() => {
+    const parts = triageVitalPreviewBadges.value.map((badge) => badge.text);
+    if (triageAdditionalSummaryPreview.value) {
+        parts.push(triageAdditionalSummaryPreview.value);
+    }
+
+    return parts.join(', ');
+});
 
 const patientDirectory = ref<Record<string, PatientSummary>>({});
 const pendingPatientLookupIds = new Set<string>();
@@ -606,6 +753,13 @@ let bypassAppointmentsNavigationGuard = false;
 
 const canRead = computed(() => isFacilitySuperAdmin.value || hasPermission('appointments.read'));
 const canCreate = computed(() => isFacilitySuperAdmin.value || hasPermission('appointments.create'));
+const canReadRoutingOptions = computed(() => isFacilitySuperAdmin.value
+    || hasPermission('appointments.create')
+    || hasPermission('appointments.update')
+    || hasPermission('appointments.update-status')
+    || hasPermission('emergency.triage.create')
+    || hasPermission('emergency.triage.update')
+    || hasPermission('emergency.triage.update-status'));
 const canReadClinicianDirectory = computed(() => isFacilitySuperAdmin.value || hasPermission('staff.clinical-directory.read'));
 const canUpdateStatus = computed(() => isFacilitySuperAdmin.value || hasPermission('appointments.update-status'));
 const canRecordOpdTriage = computed(() => isFacilitySuperAdmin.value
@@ -750,10 +904,14 @@ type ConsultationTypeAnalytics = {
 const consultTypeAnalytics = ref<ConsultationTypeAnalytics>(null);
 async function loadConsultTypeAnalytics(): Promise<void> {
     try {
-        const res = await window.axios.get('/api/appointments/analytics/consultation-type-summary');
-        consultTypeAnalytics.value = res.data.data;
+        const response = await apiGet<ApiItemResponse<NonNullable<ConsultationTypeAnalytics>>>(
+            '/appointments/analytics/consultation-type-summary',
+            undefined,
+            { entitlementContext: 'Appointment consultation type analytics' },
+        );
+        consultTypeAnalytics.value = response.data;
     } catch {
-        // non-critical — fail silently
+        // non-critical - fail silently
     }
 }
 
@@ -868,6 +1026,18 @@ const createRoutingSummary = computed(() => {
 
     return 'Choose a clinic/department or clinician to route the visit. Consultation billing finalizes from the actual consulting clinician and visit context.';
 });
+const createClinicalContextLabel = computed(() =>
+    createForm.sourceAdmissionId.trim() ? 'Post-discharge follow-up' : 'Appointment scheduling',
+);
+const createClinicalContextMeta = computed(() => {
+    const sourceAdmissionId = createForm.sourceAdmissionId.trim();
+
+    if (sourceAdmissionId) {
+        return createSourceAdmissionSummary.value?.admissionNumber || `Admission ${sourceAdmissionId.slice(0, 8)}`;
+    }
+
+    return createRoutingSummary.value;
+});
 const createDepartmentHelperText = computed(() => {
     const clinicianDepartment = selectedCreateClinicianDepartment.value;
     if (clinicianDepartment) {
@@ -881,6 +1051,114 @@ const createVisitReasonHelperText = computed(() => {
         return `Showing visit reasons that best match ${department}. Use Other / custom if the visit needs something different.`;
     }
     return 'Choose a common front-desk visit reason to save time. Use Other / custom if none fits.';
+});
+const triageTargetIsWalkIn = computed(() =>
+    String(triageTargetAppointment.value?.appointmentType ?? '').trim().toLowerCase() === 'walk_in',
+);
+const triageDepartmentOptions = computed(() =>
+    mergeSelectedDepartmentOption(departmentOptions.value, triageForm.department),
+);
+const selectedTriageClinicianProfile = computed<StaffProfileSummary | null>(() => {
+    const clinicianUserId = Number(triageForm.clinicianUserId || 0);
+    if (!Number.isFinite(clinicianUserId) || clinicianUserId <= 0) return null;
+
+    return clinicianDirectory.value.find((row) => row.userId === clinicianUserId) ?? null;
+});
+const selectedTriageClinicianDepartment = computed(() =>
+    String(selectedTriageClinicianProfile.value?.department ?? '').trim(),
+);
+const selectedTriageClinicianSpecialty = computed(() =>
+    String(selectedTriageClinicianProfile.value?.primarySpecialtyName ?? '').trim(),
+);
+const selectedTriageClinicianSpecialtyCode = computed(() =>
+    String(selectedTriageClinicianProfile.value?.primarySpecialtyCode ?? '').trim(),
+);
+const selectedTriageClinicianRole = computed(() =>
+    String(selectedTriageClinicianProfile.value?.jobTitle ?? '').trim(),
+);
+const triageEffectiveDepartment = computed(() =>
+    triageForm.department.trim() || selectedTriageClinicianDepartment.value,
+);
+const triageCanAssignSpecificProvider = computed(() =>
+    canReadClinicianDirectory.value || triageForm.clinicianUserId.trim() !== '',
+);
+const triageClinicianUserIdValue = computed({
+    get: () => triageForm.clinicianUserId,
+    set: (value: string) => {
+        triageForm.clinicianUserId = value;
+        if (value.trim() !== '') {
+            triageForm.routingMode = 'specific_provider';
+        }
+
+        syncTriageDepartmentFromClinician(value);
+    },
+});
+const triageRoutingSummary = computed(() => {
+    const clinician = Number(triageForm.clinicianUserId || 0) > 0
+        ? clinicianDisplayLabel(Number(triageForm.clinicianUserId || 0))
+        : '';
+    const department = triageEffectiveDepartment.value.trim();
+
+    if (triageForm.routingMode === 'specific_provider') {
+        if (clinician && department) {
+            return `${clinician} will receive this patient next through ${department}. Consultation ownership still finalizes from the clinician who starts the visit.`;
+        }
+
+        if (clinician) {
+            return `${clinician} will receive this patient next. Consultation ownership still finalizes when the provider starts the visit.`;
+        }
+
+        return 'Choose the named provider who should receive this patient next.';
+    }
+
+    if (department) {
+        return `${department} owns the next handoff. The patient will wait in that clinic pool until the next available provider starts consultation.`;
+    }
+
+    return triageTargetIsWalkIn.value
+        ? 'Choose the clinic that should own this walk-in before completing triage handoff.'
+        : 'Choose the clinic or named provider that should own the next handoff.';
+});
+const triageDepartmentHelperText = computed(() => {
+    const clinicianDepartment = selectedTriageClinicianDepartment.value;
+    if (clinicianDepartment) {
+        return `Auto-filled from the selected clinician profile: ${clinicianDepartment}. Change it only if a different clinic should own the patient queue.`;
+    }
+
+    if (triageForm.routingMode === 'department_pool') {
+        return 'Required for first-available routing. This clinic owns the patient until a provider starts consultation.';
+    }
+
+    return triageTargetIsWalkIn.value
+        ? 'Recommended for walk-ins so the visit still has a clear clinic owner even when sent to a named provider.'
+        : 'Recommended so the visit still has a clear clinic owner during handoff.';
+});
+const triageClinicianHelperText = computed(() => {
+    if (triageForm.routingMode !== 'specific_provider') {
+        return 'Leave a named provider blank when the patient should wait for the next available clinician in the selected clinic.';
+    }
+
+    if (clinicianDirectoryLoading.value) {
+        return 'Loading active clinician directory.';
+    }
+
+    if (!canReadClinicianDirectory.value) {
+        return triageForm.clinicianUserId.trim() !== ''
+            ? 'The current provider assignment is preserved. Clinical directory access is required to choose a different provider.'
+            : 'Clinical directory access is required to assign a named provider. Use the clinic pool option if you do not have directory access.';
+    }
+
+    if (clinicianDirectoryError.value) {
+        return clinicianDirectoryError.value;
+    }
+
+    if (clinicianDirectoryAvailable.value) {
+        return triageTargetIsWalkIn.value
+            ? 'Select the clinician who should see this walk-in next. Their configured clinic can auto-fill below.'
+            : 'Select the clinician who should receive this patient next. Their configured clinic can auto-fill below.';
+    }
+
+    return 'No active clinicians with linked user accounts are available yet. Use the clinic pool option if needed.';
 });
 const createClinicianUserIdValue = computed({
     get: () => createForm.clinicianUserId,
@@ -947,7 +1225,7 @@ const clinicianHelperText = computed(() => {
         return 'Loading active clinician directory.';
     }
     if (!canReadClinicianDirectory.value) {
-        return 'Clinician directory access is unavailable. Enter clinician user ID manually.';
+        return 'Clinician directory access is required to select a preferred clinician.';
     }
     if (clinicianDirectoryError.value) {
         return clinicianDirectoryError.value;
@@ -955,7 +1233,22 @@ const clinicianHelperText = computed(() => {
     if (clinicianDirectoryAvailable.value) {
         return 'Select the clinician from active staff profiles. Primary specialty appears when it is configured.';
     }
-    return 'No active clinicians with linked user IDs are available. Enter clinician user ID manually.';
+    return 'No active clinicians with linked user accounts are available yet.';
+});
+const referralTargetClinicianHelperText = computed(() => {
+    if (clinicianDirectoryLoading.value) {
+        return 'Loading active clinician directory.';
+    }
+    if (!canReadClinicianDirectory.value) {
+        return 'Clinician directory access is required to select a receiving clinician.';
+    }
+    if (clinicianDirectoryError.value) {
+        return clinicianDirectoryError.value;
+    }
+    if (clinicianDirectoryAvailable.value) {
+        return 'Select the receiving clinician from active staff profiles when the referral has a named owner.';
+    }
+    return 'No active clinicians with linked user accounts are available yet.';
 });
 const statusSelectValue = computed({
     get: () => (statusPreset.value === 'scheduled' || statusPreset.value === 'waiting_triage' || statusPreset.value === 'waiting_provider' || statusPreset.value === 'in_consultation' || statusPreset.value === 'completed'
@@ -1176,6 +1469,161 @@ function queryFocusActionParam(): AppointmentFocusAction {
     if (raw === 'triage' || raw === 'consultation') return raw;
     return 'details';
 }
+
+function appointmentMatchesActiveQueueFilters(appointment: Appointment): boolean {
+    const normalizedStatus = String(appointment.status ?? '').trim();
+    if (statusPreset.value !== 'all' && normalizedStatus !== statusPreset.value) {
+        return false;
+    }
+
+    if (queueMode.value === 'clinical') {
+        const filterClinicianId = Number(searchForm.clinicianUserId || 0);
+        const appointmentClinicianId = Number(appointment.clinicianUserId ?? 0);
+        if (filterClinicianId > 0 && appointmentClinicianId !== filterClinicianId) {
+            return false;
+        }
+    }
+
+    const departmentFilter = searchForm.department.trim().toLowerCase();
+    if (departmentFilter !== '') {
+        const appointmentDepartment = String(appointment.department ?? '').trim().toLowerCase();
+        if (appointmentDepartment !== departmentFilter) {
+            return false;
+        }
+    }
+
+    if (searchForm.unassignedClinician && Number(appointment.clinicianUserId ?? 0) > 0) {
+        return false;
+    }
+
+    return true;
+}
+
+function alignQueueContextToAppointment(appointment: Appointment): void {
+    const normalizedStatus = String(appointment.status ?? '').trim();
+    const assignedClinicianId = Number(appointment.clinicianUserId ?? 0);
+    const department = String(appointment.department ?? '').trim();
+    const assignedToMe =
+        currentUserId.value !== null
+        && assignedClinicianId > 0
+        && assignedClinicianId === currentUserId.value;
+
+    searchForm.page = 1;
+
+    if (normalizedStatus === 'waiting_provider') {
+        statusPreset.value = 'waiting_provider';
+
+        if (assignedToMe && canUseMyClinicalQueue.value) {
+            queueMode.value = 'clinical';
+            searchForm.clinicianUserId = String(currentUserId.value);
+            searchForm.department = '';
+            searchForm.unassignedClinician = false;
+            syncAdvancedFiltersDraftFromSearch();
+            return;
+        }
+
+        if (assignedClinicianId > 0) {
+            queueMode.value = 'all';
+            searchForm.clinicianUserId = String(assignedClinicianId);
+            searchForm.department = '';
+            searchForm.unassignedClinician = false;
+            syncAdvancedFiltersDraftFromSearch();
+            return;
+        }
+
+        if (department !== '') {
+            queueMode.value = 'all';
+            searchForm.clinicianUserId = '';
+            searchForm.department = department;
+            searchForm.unassignedClinician = true;
+            syncAdvancedFiltersDraftFromSearch();
+            return;
+        }
+
+        queueMode.value = 'all';
+        searchForm.clinicianUserId = '';
+        searchForm.department = '';
+        searchForm.unassignedClinician = false;
+        syncAdvancedFiltersDraftFromSearch();
+        return;
+    }
+
+    if (normalizedStatus === 'waiting_triage') {
+        queueMode.value = canUseTriageQueue.value ? 'triage' : 'all';
+        statusPreset.value = 'waiting_triage';
+        searchForm.clinicianUserId = '';
+        searchForm.department = '';
+        searchForm.unassignedClinician = false;
+        syncAdvancedFiltersDraftFromSearch();
+        return;
+    }
+
+    if (normalizedStatus === 'in_consultation' && assignedToMe && canUseMyClinicalQueue.value) {
+        queueMode.value = 'clinical';
+        statusPreset.value = 'in_consultation';
+        searchForm.clinicianUserId = String(currentUserId.value);
+        searchForm.department = '';
+        searchForm.unassignedClinician = false;
+        syncAdvancedFiltersDraftFromSearch();
+        return;
+    }
+
+    if (
+        normalizedStatus === 'scheduled'
+        || normalizedStatus === 'completed'
+        || normalizedStatus === 'cancelled'
+        || normalizedStatus === 'no_show'
+    ) {
+        statusPreset.value = normalizedStatus as WorkspacePreset;
+    }
+}
+
+function pruneAppointmentsOutsideActiveFilters(): void {
+    appointments.value = appointments.value.filter((appointment) => appointmentMatchesActiveQueueFilters(appointment));
+}
+
+function resetQueueListState(): void {
+    appointments.value = [];
+    pagination.value = { currentPage: 1, lastPage: 1, total: 0 };
+}
+
+function shouldReturnToTriageQueueAfterHandoff(): boolean {
+    return canUseTriageQueue.value && (isTriageQueue.value || statusPreset.value === 'waiting_triage');
+}
+
+function applyPostTriageQueueContext(appointment: Appointment): void {
+    if (shouldReturnToTriageQueueAfterHandoff()) {
+        queueMode.value = 'triage';
+        statusPreset.value = 'waiting_triage';
+        searchForm.q = '';
+        searchForm.patientId = '';
+        searchForm.clinicianUserId = '';
+        searchForm.department = '';
+        searchForm.unassignedClinician = false;
+        searchForm.from = '';
+        searchForm.to = '';
+        searchForm.page = 1;
+        triageCategoryFilter.value = null;
+        syncAdvancedFiltersDraftFromSearch();
+        return;
+    }
+
+    alignQueueContextToAppointment(appointment);
+}
+
+function focusActionForAppointment(appointment: Appointment | null | undefined): AppointmentFocusAction {
+    if (!appointment?.id) return 'details';
+    if (appointment.status === 'waiting_triage' && canRecordOpdTriage.value) {
+        return 'triage';
+    }
+    if (
+        (appointment.status === 'waiting_provider' || appointment.status === 'in_consultation')
+        && canAccessConsultationWorkflow(appointment)
+    ) {
+        return 'consultation';
+    }
+    return 'details';
+}
 function shouldOpenCreateFromQuery(): boolean {
     return queryParam('tab') === 'new' || queryParam('open') === 'schedule';
 }
@@ -1254,10 +1702,6 @@ function mergeSelectedDepartmentOption(options: DepartmentOption[], selectedValu
 }
 
 
-function csrfToken(): string | null {
-    return document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? null;
-}
-
 async function apiRequest<T>(
     method: 'GET' | 'POST' | 'PATCH',
     path: string,
@@ -1266,42 +1710,11 @@ async function apiRequest<T>(
         body?: Record<string, unknown>;
     },
 ): Promise<T> {
-    const url = new URL(`/api/v1${path}`, window.location.origin);
-
-    Object.entries(options?.query ?? {}).forEach(([key, value]) => {
-        if (value === null || value === undefined || value === '') return;
-        url.searchParams.set(key, String(value));
+    return apiRequestJson<T>(method, path, {
+        query: options?.query,
+        body: options?.body,
+        entitlementContext: `Appointments ${method} ${path}`,
     });
-
-    const headers: Record<string, string> = {
-        Accept: 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-    };
-
-    let body: string | undefined;
-    if (method !== 'GET') {
-        headers['Content-Type'] = 'application/json';
-        const token = csrfToken();
-        if (token) headers['X-CSRF-TOKEN'] = token;
-        body = JSON.stringify(options?.body ?? {});
-    }
-
-    const response = await fetch(url.toString(), {
-        method,
-        credentials: 'same-origin',
-        headers,
-        body,
-    });
-
-    const payload = (await response.json().catch(() => ({}))) as ValidationPayload;
-    if (!response.ok) {
-        const error = new Error(payload.message ?? `${response.status} ${response.statusText}`) as ApiError;
-        error.status = response.status;
-        error.payload = payload;
-        throw error;
-    }
-
-    return payload as T;
 }
 
 function appointmentFromConflictContext(value: unknown): Appointment | null {
@@ -2375,12 +2788,18 @@ function updateUrl(): void {
     if (searchForm.q.trim()) params.set('q', searchForm.q.trim());
     if (searchForm.patientId) params.set('patientId', searchForm.patientId);
     if (searchForm.clinicianUserId) params.set('clinicianUserId', searchForm.clinicianUserId);
+    if (searchForm.department.trim()) params.set('department', searchForm.department.trim());
+    if (searchForm.unassignedClinician) params.set('unassignedClinician', 'true');
     if (searchForm.from) params.set('from', searchForm.from);
     if (searchForm.to) params.set('to', searchForm.to);
     if (searchForm.page > 1) params.set('page', String(searchForm.page));
     if (searchForm.perPage !== 25) params.set('perPage', String(searchForm.perPage));
     if (detailsOpen.value && detailsAppointment.value?.id) {
         params.set('focusAppointmentId', detailsAppointment.value.id);
+        const focusAction = focusActionForAppointment(detailsAppointment.value);
+        if (focusAction === 'triage' || focusAction === 'consultation') {
+            params.set('focusAction', focusAction);
+        }
         if (detailsTab.value !== 'summary') {
             params.set('detailsTab', detailsTab.value);
         }
@@ -2405,14 +2824,33 @@ function updateUrl(): void {
     window.history.replaceState(window.history.state, '', nextUrl);
 }
 
+function appointmentSearchQueryActive(): boolean {
+    return searchForm.q.trim().length >= 2;
+}
+
+function appointmentListQueryFilters(): Record<string, string | number | null> {
+    const searchActive = appointmentSearchQueryActive();
+
+    return {
+        q: searchForm.q.trim() || null,
+        patientId: searchActive ? null : (searchForm.patientId || null),
+        clinicianUserId: searchActive ? null : (searchForm.clinicianUserId || null),
+        department: searchActive ? null : (searchForm.department.trim() || null),
+        unassignedClinician: searchActive ? null : (searchForm.unassignedClinician ? 'true' : null),
+        from: searchActive ? null : (searchForm.from || null),
+        to: searchActive ? null : (searchForm.to || null),
+    };
+}
+
 async function loadCounts(): Promise<void> {
+    const statusFilter = statusPreset.value === 'all' || statusPreset.value === 'exceptions'
+        ? null
+        : statusPreset.value;
+
     const response = await apiRequest<ApiItemResponse<Record<string, number>>>('GET', '/appointments/status-counts', {
         query: {
-            q: searchForm.q.trim() || null,
-            patientId: searchForm.patientId || null,
-            clinicianUserId: searchForm.clinicianUserId || null,
-            from: searchForm.from || null,
-            to: searchForm.to || null,
+            ...appointmentListQueryFilters(),
+            status: statusFilter,
         },
     });
     counts.value = {
@@ -2439,13 +2877,9 @@ async function loadQueue(): Promise<void> {
     try {
         const response = await apiRequest<ApiListResponse<Appointment>>('GET', '/appointments', {
             query: {
-                q: searchForm.q.trim() || null,
-                patientId: searchForm.patientId || null,
-                clinicianUserId: searchForm.clinicianUserId || null,
+                ...appointmentListQueryFilters(),
                 status: statusPreset.value === 'all' ? null : statusPreset.value,
                 triageCategory: triageCategoryFilter.value || null,
-                from: searchForm.from || null,
-                to: searchForm.to || null,
                 page: searchForm.page,
                 perPage: searchForm.perPage,
             },
@@ -2469,7 +2903,7 @@ async function loadQueue(): Promise<void> {
 }
 
 async function loadDepartmentOptions(): Promise<void> {
-    if (!canCreate.value) {
+    if (!canReadRoutingOptions.value) {
         departmentOptions.value = [];
         departmentOptionsLoading.value = false;
         return;
@@ -2549,6 +2983,165 @@ function statusFieldError(key: string): string | null {
 
 function triageFieldError(key: string): string | null {
     return triageErrors.value[key]?.[0] ?? null;
+}
+
+function normalizeTriageText(value: string | null | undefined): string {
+    return String(value ?? '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function formatStructuredTriageFieldValue(
+    key: TriageStructuredFieldKey,
+    rawValue: string | null | undefined,
+): string {
+    const value = normalizeTriageText(rawValue);
+    if (!value) return '';
+
+    switch (key) {
+        case 'pulse':
+            return /^\d+(?:\.\d+)?$/.test(value) ? `${value} bpm` : value;
+        case 'temperature':
+            return /^\d+(?:\.\d+)?$/.test(value) ? `${value} C` : value;
+        case 'respiratoryRate':
+            return /^\d+(?:\.\d+)?$/.test(value) ? `${value}/min` : value;
+        case 'oxygenSaturation':
+            return /^\d+(?:\.\d+)?$/.test(value) ? `${value}%` : value;
+        case 'weight':
+            return /\bkg\b/i.test(value) ? value : `${value} kg`;
+        case 'height':
+            return /\bcm\b/i.test(value) ? value : `${value} cm`;
+        default:
+            return value;
+    }
+}
+
+function syncTriageDepartmentFromClinician(clinicianUserIdValue: string): void {
+    const normalizedDepartment = String(
+        clinicianDirectory.value.find((row) => row.userId === Number(clinicianUserIdValue || 0))?.department ?? '',
+    ).trim();
+    const currentDepartment = triageForm.department.trim();
+    const previousAutoDepartment = triageClinicianAutoDepartment.value.trim();
+    const shouldReplaceDepartment = currentDepartment === ''
+        || (previousAutoDepartment !== '' && currentDepartment === previousAutoDepartment);
+
+    if (normalizedDepartment !== '' && shouldReplaceDepartment) {
+        triageForm.department = normalizedDepartment;
+    }
+
+    if (normalizedDepartment === '' && previousAutoDepartment !== '' && currentDepartment === previousAutoDepartment) {
+        triageForm.department = '';
+    }
+
+    triageClinicianAutoDepartment.value = normalizedDepartment;
+}
+
+function setTriageStructuredFields(
+    values: Partial<Record<TriageStructuredFieldKey, string>>,
+): void {
+    TRIAGE_STRUCTURED_FIELDS.forEach((field) => {
+        triageForm[field.key] = values[field.key] ?? '';
+    });
+}
+
+function clearTriageStructuredFields(): void {
+    setTriageStructuredFields({});
+    triageForm.additionalSummary = '';
+}
+
+function setTriageRoutingMode(mode: TriageRoutingMode): void {
+    triageForm.routingMode = mode;
+}
+
+function parseTriageSummaryField(
+    source: string,
+    pattern: RegExp,
+): { value: string; rest: string } {
+    const match = pattern.exec(source);
+    if (!match) {
+        return { value: '', rest: source };
+    }
+
+    const value = normalizeTriageText(match[1] ?? '');
+    const start = match.index ?? 0;
+    const end = start + (match[0]?.length ?? 0);
+
+    return {
+        value,
+        rest: `${source.slice(0, start)} ${source.slice(end)}`,
+    };
+}
+
+function cleanupRemainingTriageSummary(source: string): string {
+    return normalizeTriageText(
+        source
+            .replace(/\s*([,;|])\s*/g, ', ')
+            .replace(/(?:,\s*){2,}/g, ', ')
+            .replace(/^[,\s;|:-]+|[,\s;|:-]+$/g, ''),
+    );
+}
+
+function parseTriageVitalsSummary(summary: string | null | undefined): {
+    fields: Record<TriageStructuredFieldKey, string>;
+    additionalSummary: string;
+} {
+    let rest = normalizeTriageText(summary);
+    const fields: Record<TriageStructuredFieldKey, string> = {
+        bloodPressure: '',
+        pulse: '',
+        temperature: '',
+        respiratoryRate: '',
+        oxygenSaturation: '',
+        weight: '',
+        height: '',
+        glucose: '',
+    };
+
+    const parsers: Array<[TriageStructuredFieldKey, RegExp]> = [
+        [
+            'bloodPressure',
+            /\b(?:bp|blood pressure)\s*[:=-]?\s*([0-9]{2,3}\s*\/\s*[0-9]{2,3})\b/i,
+        ],
+        [
+            'pulse',
+            /\b(?:pulse|hr|heart rate)\s*[:=-]?\s*([0-9]{2,3}(?:\.\d+)?(?:\s*bpm)?)\b/i,
+        ],
+        [
+            'temperature',
+            /\b(?:temp|temperature)\s*[:=-]?\s*([0-9]{2,3}(?:\.\d+)?(?:\s*(?:c|f))?)\b/i,
+        ],
+        [
+            'respiratoryRate',
+            /\b(?:rr|resp(?:iratory)? rate)\s*[:=-]?\s*([0-9]{1,3}(?:\.\d+)?(?:\s*\/\s*min)?)\b/i,
+        ],
+        [
+            'oxygenSaturation',
+            /\b(?:spo2|o2 sat|oxygen sat(?:uration)?)\s*[:=-]?\s*([0-9]{1,3}(?:\s*%)?(?:\s*ra)?)\b/i,
+        ],
+        [
+            'weight',
+            /\b(?:weight|wt\.?)\s*[:=-]?\s*([0-9]{1,3}(?:\.\d+)?(?:\s*kg)?)\b/i,
+        ],
+        [
+            'height',
+            /\b(?:height|ht\.?)\s*[:=-]?\s*([0-9]{2,3}(?:\.\d+)?(?:\s*cm)?)\b/i,
+        ],
+        [
+            'glucose',
+            /\b(?:rbs|glucose|blood sugar)\s*[:=-]?\s*([0-9]{1,4}(?:\.\d+)?(?:\s*(?:mg\/dl|mmol\/l))?)\b/i,
+        ],
+    ];
+
+    parsers.forEach(([key, pattern]) => {
+        const parsed = parseTriageSummaryField(rest, pattern);
+        fields[key] = parsed.value;
+        rest = parsed.rest;
+    });
+
+    return {
+        fields,
+        additionalSummary: cleanupRemainingTriageSummary(rest),
+    };
 }
 
 function resetCreateAlerts(): void {
@@ -2798,14 +3391,17 @@ async function submitConsultTypeOverride(): Promise<void> {
     consultTypeOverrideSubmitting.value = true;
 
     try {
-        const res = await window.axios.patch(
-            `/api/appointments/${detailsAppointment.value.id}/consultation-type`,
+        const response = await apiPatch<ApiItemResponse<Appointment>>(
+            `/appointments/${detailsAppointment.value.id}/consultation-type`,
             {
-                consultationType: consultTypeOverrideType.value,
-                consultationTypeOverrideReason: consultTypeOverrideReason.value,
+                entitlementContext: 'Appointment consultation type override',
+                body: {
+                    consultationType: consultTypeOverrideType.value,
+                    consultationTypeOverrideReason: consultTypeOverrideReason.value,
+                },
             },
         );
-        const updated: Appointment = res.data.data;
+        const updated = response.data;
         detailsAppointment.value = { ...detailsAppointment.value, ...updated };
         // Sync back into the list
         const idx = appointments.value.findIndex((a) => a.id === updated.id);
@@ -2813,10 +3409,12 @@ async function submitConsultTypeOverride(): Promise<void> {
         consultTypeOverrideOpen.value = false;
         notifySuccess('Consultation type updated.');
     } catch (error: unknown) {
-        const apiError = error as { response?: { data?: { errors?: Record<string, string[]>; message?: string } } };
-        const firstError = apiError.response?.data?.errors?.consultationTypeOverrideReason?.[0]
-            ?? apiError.response?.data?.errors?.consultationType?.[0]
-            ?? apiError.response?.data?.message
+        const payload = isApiClientError(error) && error.payload && typeof error.payload === 'object'
+            ? error.payload as ValidationPayload
+            : undefined;
+        const firstError = payload?.errors?.consultationTypeOverrideReason?.[0]
+            ?? payload?.errors?.consultationType?.[0]
+            ?? payload?.message
             ?? messageFromUnknown(error, 'Could not update consultation type.');
         consultTypeOverrideError.value = firstError;
     } finally {
@@ -2825,10 +3423,26 @@ async function submitConsultTypeOverride(): Promise<void> {
 }
 
 function openTriageSheet(appointment: Appointment): void {
+    const parsedTriageSummary = parseTriageVitalsSummary(
+        appointment.triageVitalsSummary,
+    );
+    if (departmentOptions.value.length === 0 && !departmentOptionsLoading.value && canReadRoutingOptions.value) {
+        void loadDepartmentOptions();
+    }
+    if (clinicianDirectory.value.length === 0 && !clinicianDirectoryLoading.value && canReadClinicianDirectory.value) {
+        void loadClinicianDirectory();
+    }
     triageTargetAppointment.value = appointment;
+    triageClinicianAutoDepartment.value = '';
+    triageForm.department = normalizeTriageText(appointment.department);
+    triageForm.clinicianUserId = '';
+    triageClinicianUserIdValue.value = appointment.clinicianUserId ? String(appointment.clinicianUserId) : '';
+    triageForm.routingMode = appointment.clinicianUserId ? 'specific_provider' : 'department_pool';
     triageForm.triageVitalsSummary = appointment.triageVitalsSummary || '';
     triageForm.triageNotes = appointment.triageNotes || '';
     triageForm.triageCategory = (appointment.triageCategory as '' | 'P1' | 'P2' | 'P3' | 'P4' | 'P5') || '';
+    setTriageStructuredFields(parsedTriageSummary.fields);
+    triageForm.additionalSummary = parsedTriageSummary.additionalSummary;
     triageErrors.value = {};
     triageSheetOpen.value = true;
 }
@@ -2838,18 +3452,62 @@ function closeTriageSheet(): void {
     triageSubmitting.value = false;
     triageErrors.value = {};
     triageTargetAppointment.value = null;
+    triageClinicianAutoDepartment.value = '';
+    triageForm.routingMode = 'department_pool';
+    triageForm.department = '';
+    triageForm.clinicianUserId = '';
     triageForm.triageVitalsSummary = '';
     triageForm.triageNotes = '';
     triageForm.triageCategory = '';
+    clearTriageStructuredFields();
+}
+
+function triageSuccessMessage(appointment: Appointment): string {
+    const department = normalizeTriageText(appointment.department);
+    const clinicianUserId = Number(appointment.clinicianUserId ?? 0);
+
+    if (clinicianUserId > 0) {
+        const clinician = clinicianDisplayLabel(clinicianUserId);
+        if (department !== '') {
+            return `Triage recorded. Patient routed to ${clinician} through ${department}.`;
+        }
+
+        return `Triage recorded. Patient routed to ${clinician}.`;
+    }
+
+    if (department !== '') {
+        return `Triage recorded. Patient routed to the ${department} provider pool.`;
+    }
+
+    return 'Triage recorded. Patient is now ready for provider review.';
 }
 
 async function submitTriage(): Promise<void> {
     if (!triageTargetAppointment.value) return;
 
     triageErrors.value = {};
+    triageForm.triageVitalsSummary = triageComposedSummary.value;
+    const routingDepartment = normalizeTriageText(triageForm.department);
+    const routingClinicianUserId = triageForm.routingMode === 'specific_provider'
+        ? Number(triageForm.clinicianUserId || 0)
+        : 0;
     if (!triageForm.triageVitalsSummary.trim()) {
         triageErrors.value = {
             triageVitalsSummary: ['Record at least a brief vitals or intake summary before sending the patient to the provider queue.'],
+        };
+        return;
+    }
+
+    if (triageForm.routingMode === 'specific_provider' && (!Number.isFinite(routingClinicianUserId) || routingClinicianUserId <= 0)) {
+        triageErrors.value = {
+            clinicianUserId: ['Choose the named provider who should receive this patient next.'],
+        };
+        return;
+    }
+
+    if (triageForm.routingMode === 'department_pool' && routingDepartment === '') {
+        triageErrors.value = {
+            department: ['Choose the clinic or department that should own this patient before completing triage.'],
         };
         return;
     }
@@ -2865,12 +3523,20 @@ async function submitTriage(): Promise<void> {
                     triageVitalsSummary: triageForm.triageVitalsSummary.trim(),
                     triageNotes: triageForm.triageNotes.trim() || null,
                     triageCategory: triageForm.triageCategory || null,
+                    department: routingDepartment || null,
+                    clinicianUserId: routingClinicianUserId > 0 ? routingClinicianUserId : null,
                 },
             },
         );
-        replaceAppointmentInState(response.data);
+        if (detailsAppointment.value?.id === response.data.id) {
+            detailsAppointment.value = response.data;
+        }
+
         closeTriageSheet();
-        notifySuccess('Triage recorded. Patient is now ready for provider review.');
+        notifySuccess(triageSuccessMessage(response.data));
+
+        applyPostTriageQueueContext(response.data);
+        resetQueueListState();
         await loadQueue();
     } catch (error) {
         const apiError = error as ApiError;
@@ -2931,7 +3597,7 @@ async function submitConsultationTakeover(): Promise<void> {
         await loadQueue();
         closeConsultationTakeoverDialog();
         notifySuccess('Consultation takeover confirmed. Opening chart.');
-        router.visit(consultationWorkflowHref(response.data));
+        router.visit(await resolveAppointmentEncounterHref(response.data));
     } catch (error) {
         const apiError = error as ApiError;
         consultationTakeoverError.value = apiError.payload?.errors?.takeoverReason?.[0]
@@ -2951,7 +3617,7 @@ async function launchConsultationWorkflow(appointment: Appointment): Promise<voi
     }
 
     if (appointment.status === 'in_consultation' && consultationOwnedByCurrentClinician(appointment)) {
-        router.visit(consultationWorkflowHref(appointment));
+        router.visit(await resolveAppointmentEncounterHref(appointment));
         return;
     }
 
@@ -2985,7 +3651,7 @@ async function launchConsultationWorkflow(appointment: Appointment): Promise<voi
             }
         }
 
-        router.visit(consultationWorkflowHref(nextAppointment));
+        router.visit(await resolveAppointmentEncounterHref(nextAppointment));
     } catch (error) {
         const apiError = error as ApiError;
         if (apiError.status === 409 && apiError.payload?.code === 'CONSULTATION_OWNER_CONFLICT') {
@@ -3637,14 +4303,23 @@ function appointmentDetailsPlaceholder(appointmentId: string): Appointment {
     };
 }
 
+function clearPendingInitialDetailsIntent(): void {
+    pendingInitialFocusAppointmentId.value = '';
+    pendingInitialDetailsTab.value = '';
+}
+
 function detailsTabFromUrl(appointment?: Appointment | null): AppointmentDetailsTab {
     const normalizedAppointmentId = (appointment?.id ?? '').trim();
     if (!normalizedAppointmentId) return 'summary';
-    if (queryParam('focusAppointmentId').trim() !== normalizedAppointmentId) {
+    const requestedFocusAppointmentId =
+        queryParam('focusAppointmentId').trim()
+        || pendingInitialFocusAppointmentId.value.trim();
+    if (requestedFocusAppointmentId !== normalizedAppointmentId) {
         return 'summary';
     }
 
-    const requestedTab = queryParam('detailsTab').trim();
+    const requestedTab =
+        queryParam('detailsTab').trim() || pendingInitialDetailsTab.value.trim();
     if (requestedTab === 'overview') return 'summary';
     if (requestedTab === 'referrals') return canShowReferralTab.value ? 'referrals' : 'workflow';
     if (requestedTab === 'audit' && canViewAudit.value) return 'audit';
@@ -3729,10 +4404,14 @@ async function openDetails(appointment: Appointment): Promise<void> {
             detailsTab.value = 'referrals';
         }
         syncDetailsEncounterCareOpenState(true);
+        if (!appointmentMatchesActiveQueueFilters(response.data)) {
+            alignQueueContextToAppointment(response.data);
+        }
     } catch (error) {
         detailsError.value = messageFromUnknown(error, 'Unable to load appointment details.');
     } finally {
         detailsLoading.value = false;
+        updateUrl();
     }
 }
 
@@ -3829,20 +4508,20 @@ function referralNotePrimaryLabel(referral: Referral): string {
 }
 
 function consultationWorkflowHref(appointment: Appointment): string {
-    const url = new URL('/medical-records', window.location.origin);
+    return encounterWorkspaceLegacyAppointmentHref(appointment.id, { from: 'appointments' });
+}
 
-    if (appointment.patientId) {
-        url.searchParams.set('patientId', appointment.patientId);
-    }
-
-    url.searchParams.set('appointmentId', appointment.id);
-    url.searchParams.set('from', 'appointments');
-    url.searchParams.set(
-        'tab',
-        ['waiting_provider', 'in_consultation'].includes(appointment.status || '') ? 'new' : 'list',
+async function resolveAppointmentEncounterHref(appointment: Appointment): Promise<string> {
+    const response = await apiRequest<ApiItemResponse<EncounterSummary>>(
+        'GET',
+        `/appointments/${appointment.id}/encounter`,
     );
 
-    return `${url.pathname}${url.search}`;
+    return encounterWorkspaceHref(response.data.id, {
+        from: 'appointments',
+        patientId: appointment.patientId ?? response.data.patientId ?? undefined,
+        appointmentId: appointment.id,
+    });
 }
 
 function consultationOwnerUserId(appointment: Appointment): number | null {
@@ -4193,6 +4872,8 @@ function resetFilters(): void {
     searchForm.q = '';
     searchForm.patientId = '';
     searchForm.clinicianUserId = '';
+    searchForm.department = '';
+    searchForm.unassignedClinician = false;
     searchForm.from = '';
     searchForm.to = '';
     searchForm.page = 1;
@@ -4212,6 +4893,8 @@ function openTriageQueue(): void {
     searchForm.q = '';
     searchForm.patientId = '';
     searchForm.clinicianUserId = '';
+    searchForm.department = '';
+    searchForm.unassignedClinician = false;
     searchForm.from = '';
     searchForm.to = '';
     searchForm.page = 1;
@@ -4226,6 +4909,8 @@ function openMyClinicalQueue(): void {
     searchForm.q = '';
     searchForm.patientId = '';
     searchForm.clinicianUserId = String(currentUserId.value);
+    searchForm.department = '';
+    searchForm.unassignedClinician = false;
     searchForm.from = '';
     searchForm.to = '';
     searchForm.page = 1;
@@ -4295,6 +4980,17 @@ watch(
             createForm.coverageReference = '';
             createForm.coverageNotes = '';
         }
+    },
+);
+
+watch(
+    () => selectedTriageClinicianDepartment.value,
+    () => {
+        if (triageForm.clinicianUserId.trim() === '') {
+            return;
+        }
+
+        syncTriageDepartmentFromClinician(triageForm.clinicianUserId);
     },
 );
 
@@ -4421,20 +5117,31 @@ onMounted(async () => {
             try {
                 const appointment = await loadFocusedAppointment(initialFocusedAppointmentId);
                 if (appointment.status === 'waiting_triage' && canRecordOpdTriage.value) {
+                    if (!appointmentMatchesActiveQueueFilters(appointment)) {
+                        alignQueueContextToAppointment(appointment);
+                        await loadQueue();
+                    }
                     openTriageSheet(appointment);
+                    clearPendingInitialDetailsIntent();
                     return;
                 }
+                alignQueueContextToAppointment(appointment);
+                await loadQueue();
                 await openDetails(appointment);
             } catch {
                 await openDetails(appointmentDetailsPlaceholder(initialFocusedAppointmentId));
             }
+            clearPendingInitialDetailsIntent();
             return;
         }
 
         if (initialFocusAction === 'consultation') {
             try {
                 const appointment = await loadFocusedAppointment(initialFocusedAppointmentId);
+                alignQueueContextToAppointment(appointment);
+                await loadQueue();
                 if (canAccessConsultationWorkflow(appointment)) {
+                    clearPendingInitialDetailsIntent();
                     await launchConsultationWorkflow(appointment);
                     return;
                 }
@@ -4442,10 +5149,21 @@ onMounted(async () => {
             } catch {
                 await openDetails(appointmentDetailsPlaceholder(initialFocusedAppointmentId));
             }
+            clearPendingInitialDetailsIntent();
             return;
         }
 
-        await openDetails(appointmentDetailsPlaceholder(initialFocusedAppointmentId));
+        try {
+            const appointment = await loadFocusedAppointment(initialFocusedAppointmentId);
+            if (!appointmentMatchesActiveQueueFilters(appointment)) {
+                alignQueueContextToAppointment(appointment);
+                await loadQueue();
+            }
+            await openDetails(appointment);
+        } catch {
+            await openDetails(appointmentDetailsPlaceholder(initialFocusedAppointmentId));
+        }
+        clearPendingInitialDetailsIntent();
         return;
     }
 
@@ -4464,6 +5182,19 @@ function submitSearch(): void {
     searchForm.page = 1;
     void loadQueue();
 }
+
+watchDebounced(
+    () => searchForm.q,
+    () => {
+        if (searchForm.q.trim().length === 1) {
+            return;
+        }
+
+        searchForm.page = 1;
+        void loadQueue();
+    },
+    { debounce: 400, maxWait: 1200 },
+);
 </script>
 <template>
     <Head title="Appointments" />
@@ -4733,7 +5464,7 @@ function submitSearch(): void {
                                     id="appointments-q"
                                     v-model="searchForm.q"
                                     class="h-9 pl-9"
-                                    placeholder="Search appointment number, department, or reason"
+                                    placeholder="Patient name, MRN, phone, appointment #, or reason"
                                     @keyup.enter="submitSearch"
                                 />
                             </div>
@@ -5236,14 +5967,22 @@ function submitSearch(): void {
                                         : 'Capture patient, clinic routing, schedule, and visit coverage in one front-desk workflow.'
                                 }}
                             </SheetDescription>
-                            <div
+                            <ClinicalContextBanner
                                 v-if="createPatientLocked && createForm.patientId"
-                                class="mt-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2 text-sm"
-                            >
-                                <Badge variant="outline">Patient locked</Badge>
-                                <span class="font-medium text-foreground">{{ patientDisplayName(createForm.patientId) }}</span>
-                                <span class="text-muted-foreground">{{ patientMeta(createForm.patientId) }}</span>
-                            </div>
+                                class="mt-3"
+                                title="Appointment context"
+                                description="Patient, facility, and source workflow carried into this scheduling session."
+                                :patient-name="patientDisplayName(createForm.patientId)"
+                                :patient-meta="patientMeta(createForm.patientId)"
+                                :facility-name="scope?.facility?.name || 'No facility selected'"
+                                :tenant-name="scope?.tenant?.name || 'No tenant'"
+                                :context-label="createClinicalContextLabel"
+                                :context-meta="createClinicalContextMeta"
+                                status-label="Patient locked"
+                                status-variant="outline"
+                                locked
+                                tone="muted"
+                            />
                         </SheetHeader>
 
                         <div class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
@@ -5372,35 +6111,22 @@ function submitSearch(): void {
                                     <p class="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Visit routing</p>
                                     <div class="grid gap-4 xl:grid-cols-2">
                                         <div class="grid gap-2">
-                                            <template v-if="canReadClinicianDirectory && clinicianDirectoryAvailable">
-                                                <SearchableSelectField
-                                                    input-id="appointment-create-clinician-user-id"
-                                                    v-model="createClinicianUserIdValue"
-                                                    label="Preferred clinician"
-                                                    :options="clinicianOptions"
-                                                    placeholder="Select clinician"
-                                                    search-placeholder="Search by name, employee number, role, specialty, department, or user ID"
-                                                    :helper-text="clinicianHelperText"
-                                                    :error-message="createFieldError('clinicianUserId')"
-                                                    empty-text="No active clinician matched that search."
-                                                    :disabled="clinicianDirectoryLoading || createSubmitting"
-                                                />
-                                            </template>
-                                            <template v-else>
-                                                <FormFieldShell
-                                                    input-id="appointment-create-clinician-user-id"
-                                                    label="Preferred clinician user ID"
-                                                    :helper-text="clinicianHelperText"
-                                                    :error-message="createFieldError('clinicianUserId')"
-                                                >
-                                                    <Input
-                                                        id="appointment-create-clinician-user-id"
-                                                        v-model="createClinicianUserIdValue"
-                                                        inputmode="numeric"
-                                                        placeholder="Optional clinician user ID"
-                                                    />
-                                                </FormFieldShell>
-                                            </template>
+                                            <ClinicianPicker
+                                                input-id="appointment-create-clinician-user-id"
+                                                v-model="createClinicianUserIdValue"
+                                                label="Preferred clinician"
+                                                :options="clinicianOptions"
+                                                :can-read-directory="canReadClinicianDirectory"
+                                                :directory-available="clinicianDirectoryAvailable"
+                                                :loading="clinicianDirectoryLoading"
+                                                :disabled="createSubmitting"
+                                                placeholder="Select clinician"
+                                                search-placeholder="Search by name, employee number, role, specialty, department, or user ID"
+                                                :helper-text="clinicianHelperText"
+                                                :error-message="createFieldError('clinicianUserId')"
+                                                empty-text="No active clinician matched that search."
+                                                unavailable-description="Leave this optional routing field blank or request staff.clinical-directory.read access."
+                                            />
                                         </div>
                                         <SearchableSelectField
                                             input-id="appointment-create-department"
@@ -5658,18 +6384,18 @@ function submitSearch(): void {
                                         </Alert>
 
                                         <div class="overflow-x-auto">
-                                            <TabsList class="!inline-flex !h-auto min-h-9 flex-nowrap gap-1 rounded-lg bg-muted p-1 text-muted-foreground">
-                                                <TabsTrigger value="summary" class="!h-8 shrink-0 px-3">Summary</TabsTrigger>
-                                                <TabsTrigger value="workflow" class="!h-8 shrink-0 px-3">Workflow</TabsTrigger>
+                                            <TabsList class="flex w-full min-w-max !h-auto min-h-9 flex-nowrap gap-1 rounded-lg bg-muted p-1 text-muted-foreground">
+                                                <TabsTrigger value="summary" class="!h-8 min-w-[7rem] flex-1 px-3">Summary</TabsTrigger>
+                                                <TabsTrigger value="workflow" class="!h-8 min-w-[7rem] flex-1 px-3">Workflow</TabsTrigger>
                                                 <TabsTrigger
                                                     v-if="canShowEncounterCareForAppointment(detailsAppointment)"
                                                     value="encounter"
-                                                    class="!h-8 shrink-0 px-3"
+                                                    class="!h-8 min-w-[7rem] flex-1 px-3"
                                                 >
                                                     Encounter
                                                 </TabsTrigger>
-                                                <TabsTrigger v-if="canShowReferralTab" value="referrals" class="!h-8 shrink-0 px-3">Referrals</TabsTrigger>
-                                                <TabsTrigger v-if="canViewAudit" value="audit" class="!h-8 shrink-0 px-3">Audit</TabsTrigger>
+                                                <TabsTrigger v-if="canShowReferralTab" value="referrals" class="!h-8 min-w-[7rem] flex-1 px-3">Referrals</TabsTrigger>
+                                                <TabsTrigger v-if="canViewAudit" value="audit" class="!h-8 min-w-[7rem] flex-1 px-3">Audit</TabsTrigger>
                                             </TabsList>
                                         </div>
 
@@ -7174,16 +7900,16 @@ function submitSearch(): void {
             </Dialog>
 
             <Sheet :open="triageSheetOpen" @update:open="(open) => (open ? (triageSheetOpen = true) : closeTriageSheet())">
-                <SheetContent side="right" variant="form" size="4xl">
-                    <div class="flex h-full min-h-0 flex-col">
+                <SheetContent side="right" variant="form" size="4xl" class="appointments-create-sheet">
+                    <div class="flex h-full flex-col overflow-hidden">
                         <SheetHeader class="shrink-0 border-b px-6 py-4 text-left pr-12">
                             <SheetTitle>Record nurse triage</SheetTitle>
                             <SheetDescription>
-                                Capture vitals and intake notes, then move the patient into the provider queue.
+                                Capture vitals, route the patient to the correct clinic or provider, and complete the nurse handoff.
                             </SheetDescription>
                         </SheetHeader>
                         <div class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-                            <div class="space-y-4">
+                            <div class="space-y-6">
                                 <div v-if="triageTargetAppointment" class="rounded-lg border px-4 py-3.5">
                                     <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                         <div class="space-y-1">
@@ -7211,7 +7937,7 @@ function submitSearch(): void {
                                 <Alert variant="default">
                                     <AlertTitle>Triage handoff</AlertTitle>
                                     <AlertDescription>
-                                        This step should capture a brief vitals summary and any nursing intake note before the visit moves to provider review.
+                                        This step should capture a brief vitals summary, a nursing intake note, and the next provider routing decision before the visit leaves triage.
                                     </AlertDescription>
                                 </Alert>
                                 <div class="grid gap-2">
@@ -7230,9 +7956,144 @@ function submitSearch(): void {
                                     </select>
                                     <p v-if="triageFieldError('triageCategory')" class="text-sm text-destructive">{{ triageFieldError('triageCategory') }}</p>
                                 </div>
+                                <div class="grid gap-3 rounded-lg border bg-muted/10 p-4">
+                                    <div class="flex flex-col gap-1">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <Label class="text-sm font-semibold text-foreground">Send to provider</Label>
+                                            <Badge variant="outline" class="text-[11px]">
+                                                {{ triageTargetIsWalkIn ? 'Walk-in routing' : 'Provider handoff' }}
+                                            </Badge>
+                                        </div>
+                                        <p class="text-sm text-muted-foreground">{{ triageRoutingSummary }}</p>
+                                    </div>
+                                    <div class="grid gap-3 md:grid-cols-2">
+                                        <button
+                                            type="button"
+                                            class="rounded-lg border px-4 py-3 text-left transition"
+                                            :class="triageForm.routingMode === 'department_pool'
+                                                ? 'border-primary bg-primary/5 shadow-sm'
+                                                : 'border-border bg-background hover:border-primary/40 hover:bg-muted/30'"
+                                            @click="setTriageRoutingMode('department_pool')"
+                                        >
+                                            <p class="text-sm font-medium text-foreground">First available in clinic</p>
+                                            <p class="mt-1 text-xs text-muted-foreground">
+                                                Use the selected clinic or department queue when the next available provider should pick up the patient.
+                                            </p>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="rounded-lg border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60"
+                                            :class="triageForm.routingMode === 'specific_provider'
+                                                ? 'border-primary bg-primary/5 shadow-sm'
+                                                : 'border-border bg-background hover:border-primary/40 hover:bg-muted/30'"
+                                            :disabled="!triageCanAssignSpecificProvider"
+                                            @click="setTriageRoutingMode('specific_provider')"
+                                        >
+                                            <p class="text-sm font-medium text-foreground">Specific provider</p>
+                                            <p class="mt-1 text-xs text-muted-foreground">
+                                                Route directly to a named clinician when continuity, urgency, or clinic instructions require a known owner.
+                                            </p>
+                                        </button>
+                                    </div>
+                                    <div class="grid gap-4 lg:grid-cols-2">
+                                        <SearchableSelectField
+                                            input-id="appointment-triage-department"
+                                            v-model="triageForm.department"
+                                            label="Clinic / department"
+                                            :options="triageDepartmentOptions"
+                                            placeholder="Select clinic or department"
+                                            search-placeholder="Search clinics and departments"
+                                            :helper-text="triageDepartmentHelperText"
+                                            :error-message="triageFieldError('department')"
+                                            :disabled="departmentOptionsLoading || triageSubmitting"
+                                            allow-custom-value
+                                        />
+                                        <div class="grid gap-2">
+                                            <ClinicianPicker
+                                                input-id="appointment-triage-clinician-user-id"
+                                                v-model="triageClinicianUserIdValue"
+                                                label="Named provider"
+                                                :options="clinicianOptions"
+                                                :can-read-directory="canReadClinicianDirectory"
+                                                :directory-available="clinicianDirectoryAvailable"
+                                                :loading="clinicianDirectoryLoading"
+                                                :disabled="triageSubmitting || triageForm.routingMode !== 'specific_provider'"
+                                                placeholder="Select clinician"
+                                                search-placeholder="Search by name, employee number, role, specialty, department, or user ID"
+                                                :helper-text="triageClinicianHelperText"
+                                                :error-message="triageFieldError('clinicianUserId')"
+                                                empty-text="No active clinician matched that search."
+                                                unavailable-description="Use the clinic pool option or request staff.clinical-directory.read access."
+                                            />
+                                        </div>
+                                    </div>
+                                    <div
+                                        v-if="selectedTriageClinicianSpecialty || selectedTriageClinicianRole || selectedTriageClinicianSpecialtyCode"
+                                        class="flex flex-wrap items-center gap-1.5"
+                                    >
+                                        <Badge v-if="selectedTriageClinicianSpecialty" variant="outline" class="text-[11px]">{{ selectedTriageClinicianSpecialty }}</Badge>
+                                        <Badge v-if="selectedTriageClinicianRole" variant="outline" class="text-[11px]">{{ selectedTriageClinicianRole }}</Badge>
+                                        <Badge v-if="selectedTriageClinicianSpecialtyCode" variant="outline" class="text-[11px]">{{ selectedTriageClinicianSpecialtyCode }}</Badge>
+                                    </div>
+                                </div>
                                 <div class="grid gap-2">
-                                    <Label for="appointment-triage-vitals">Vitals / intake summary</Label>
-                                    <Textarea id="appointment-triage-vitals" v-model="triageForm.triageVitalsSummary" rows="4" placeholder="Example: BP 118/74, Pulse 82, Temp 37.1 C, complaint reviewed and stable for provider." />
+                                    <div class="flex items-center justify-between gap-3">
+                                        <Label>Vitals / intake summary</Label>
+                                        <span class="text-xs text-muted-foreground">Saved as one triage summary</span>
+                                    </div>
+                                    <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                        <div
+                                            v-for="field in TRIAGE_STRUCTURED_FIELDS"
+                                            :key="field.key"
+                                            class="grid gap-1.5"
+                                        >
+                                            <Label :for="`appointment-triage-${field.key}`">{{ field.label }}</Label>
+                                            <Input
+                                                :id="`appointment-triage-${field.key}`"
+                                                v-model="triageForm[field.key]"
+                                                :inputmode="field.inputMode"
+                                                :placeholder="field.placeholder"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div class="rounded-lg border bg-muted/20 p-3">
+                                        <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Preview</p>
+                                        <div
+                                            v-if="triageVitalPreviewBadges.length || triageAdditionalSummaryPreview"
+                                            class="mt-2 flex flex-wrap gap-2"
+                                        >
+                                            <Badge
+                                                v-for="badge in triageVitalPreviewBadges"
+                                                :key="badge.key"
+                                                variant="secondary"
+                                                class="px-2.5 py-1 text-xs"
+                                            >
+                                                {{ badge.text }}
+                                            </Badge>
+                                            <Badge
+                                                v-if="triageAdditionalSummaryPreview"
+                                                variant="outline"
+                                                class="px-2.5 py-1 text-xs"
+                                            >
+                                                {{ triageAdditionalSummaryPreview }}
+                                            </Badge>
+                                        </div>
+                                        <p
+                                            v-else
+                                            class="mt-2 text-sm text-muted-foreground"
+                                        >
+                                            Add at least one vital or a brief intake summary before sending the patient to provider review.
+                                        </p>
+                                    </div>
+                                    <div class="grid gap-2">
+                                        <Label for="appointment-triage-vitals-extra">Additional intake summary</Label>
+                                        <Textarea
+                                            id="appointment-triage-vitals-extra"
+                                            v-model="triageForm.additionalSummary"
+                                            rows="3"
+                                            placeholder="Example: Complaint reviewed, pain 7/10, no acute distress."
+                                        />
+                                    </div>
                                     <p v-if="triageFieldError('triageVitalsSummary')" class="text-sm text-destructive">{{ triageFieldError('triageVitalsSummary') }}</p>
                                 </div>
                                 <div class="grid gap-2">
@@ -7245,7 +8106,7 @@ function submitSearch(): void {
                         <SheetFooter class="shrink-0 gap-2 border-t bg-background px-6 py-4">
                             <Button variant="outline" @click="closeTriageSheet">Close</Button>
                             <Button :disabled="triageSubmitting" @click="submitTriage">
-                                {{ triageSubmitting ? 'Saving...' : 'Send to provider queue' }}
+                                {{ triageSubmitting ? 'Saving...' : 'Complete nurse handoff' }}
                             </Button>
                         </SheetFooter>
                     </div>
@@ -7562,8 +8423,22 @@ function submitSearch(): void {
                                 </div>
 
                                 <div class="grid gap-2">
-                                    <Label for="appointment-referral-target-clinician">Target clinician user ID</Label>
-                                    <Input id="appointment-referral-target-clinician" v-model="referralForm.targetClinicianUserId" inputmode="numeric" placeholder="Optional clinician user ID" />
+                                    <ClinicianPicker
+                                        input-id="appointment-referral-target-clinician"
+                                        v-model="referralForm.targetClinicianUserId"
+                                        label="Target clinician"
+                                        :options="clinicianOptions"
+                                        :can-read-directory="canReadClinicianDirectory"
+                                        :directory-available="clinicianDirectoryAvailable"
+                                        :loading="clinicianDirectoryLoading"
+                                        :disabled="referralSubmitting"
+                                        placeholder="Select receiving clinician"
+                                        search-placeholder="Search by name, employee number, role, specialty, department, or user ID"
+                                        :helper-text="referralTargetClinicianHelperText"
+                                        :error-message="referralFieldError('targetClinicianUserId')"
+                                        empty-text="No active clinician matched that search."
+                                        unavailable-description="Leave this optional referral owner blank or request staff.clinical-directory.read access."
+                                    />
                                 </div>
 
                                 <div class="grid gap-2">

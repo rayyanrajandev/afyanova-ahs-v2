@@ -2277,12 +2277,14 @@ function patientAppointmentWorkflowHref(
 
     if (appointment.status === 'waiting_triage' && canRecordOpdTriage.value) {
         extra.view = 'triage';
+        extra.detailsTab = 'workflow';
     } else if (
         (appointment.status === 'waiting_provider' ||
             appointment.status === 'in_consultation') &&
         canManageProviderSession.value
     ) {
         extra.view = 'clinical';
+        extra.detailsTab = 'workflow';
     }
 
     return patientTimelineHref('/appointments', patient.id, extra, {

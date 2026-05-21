@@ -4,6 +4,7 @@ use App\Modules\Billing\Presentation\Http\Controllers\BillingInvoiceDocumentCont
 use App\Modules\ClaimsInsurance\Presentation\Http\Controllers\ClaimsInsuranceDocumentController;
 use App\Modules\InpatientWard\Presentation\Http\Controllers\InpatientWardDischargeChecklistDocumentController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryWarehouseTransferDocumentController;
+use App\Modules\Encounter\Presentation\Http\Controllers\EncounterDocumentController;
 use App\Modules\MedicalRecord\Presentation\Http\Controllers\MedicalRecordDocumentController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformBrandingController;
 use App\Modules\Pos\Presentation\Http\Controllers\PosRegisterSessionDocumentController;
@@ -50,6 +51,18 @@ Route::get('admissions', function () {
     'facility.entitlement.any:admissions.management,appointments.scheduling',
 ])->name('admissions.page');
 
+Route::get('encounters/{encounterId}', function (string $encounterId) {
+    return Inertia::render('encounters/Show', [
+        'encounterId' => $encounterId,
+    ]);
+})->middleware(['auth', 'verified', 'can:medical.records.read', 'can:medical.records.create', 'facility.entitlement:medical_records.core'])->name('encounters.show');
+
+Route::get('encounters/by-appointment/{appointmentId}', function (string $appointmentId) {
+    return Inertia::render('encounters/Show', [
+        'legacyAppointmentId' => $appointmentId,
+    ]);
+})->middleware(['auth', 'verified', 'can:medical.records.read', 'can:medical.records.create', 'facility.entitlement:medical_records.core'])->name('encounters.by-appointment');
+
 Route::get('medical-records', function () {
     return Inertia::render('medical-records/Index');
 })->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])->name('medical-records.page');
@@ -61,6 +74,14 @@ Route::get('medical-records/{id}/print', [MedicalRecordDocumentController::class
 Route::get('medical-records/{id}/pdf', [MedicalRecordDocumentController::class, 'downloadPdf'])
     ->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])
     ->name('medical-records.pdf.download');
+
+Route::get('encounters/{id}/print', [EncounterDocumentController::class, 'show'])
+    ->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])
+    ->name('encounters.print.page');
+
+Route::get('encounters/{id}/pdf', [EncounterDocumentController::class, 'downloadPdf'])
+    ->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])
+    ->name('encounters.pdf.download');
 
 Route::get('laboratory-orders', function () {
     return Inertia::render('laboratory-orders/Index');

@@ -3,6 +3,8 @@ import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import LinkedContextLookupField from '@/components/context/LinkedContextLookupField.vue';
+import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
+import ClinicianPicker from '@/components/domain/clinical/ClinicianPicker.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycleActionDialog.vue';
@@ -551,7 +553,7 @@ function theatreCreateDraftMatchesInitialContext(draft: TheatreCreateDraft): boo
 }
 
 const THEATRE_CREATE_LEAVE_TITLE = 'Leave procedure scheduling?';
-const THEATRE_CREATE_LEAVE_DESCRIPTION = 'Procedure scheduling is still in progress. Stay here to finish the case setup, or leave this page and restore the draft later on this device.';
+const THEATRE_CREATE_LEAVE_DESCRIPTION = 'Procedure scheduling is still in progress. Stay here to finish the case setup, or leave and return only to work already saved as a draft.';
 
 function normalizeLookupValue(value: string | null | undefined): string {
     return (value ?? '').trim().toLowerCase();
@@ -720,6 +722,25 @@ const createContextActionLabel = computed(() => {
     }
 
     return 'Update context';
+});
+const createWorkflowContextLabel = computed(() => {
+    if (!createForm.patientId.trim()) return 'Select patient and encounter';
+    if (hasCreateAppointmentContext.value && hasCreateAdmissionContext.value) {
+        return 'Appointment and admission handoff';
+    }
+    if (hasCreateAppointmentContext.value) return 'Appointment handoff';
+    if (hasCreateAdmissionContext.value) return 'Inpatient admission handoff';
+    return 'Standalone theatre scheduling';
+});
+const createContextStatusLabel = computed(() => {
+    if (createPatientContextLocked.value) return 'Locked patient';
+    return createContextModeLabel.value;
+});
+const createContextStatusVariant = computed<
+    'default' | 'secondary' | 'outline' | 'destructive'
+>(() => {
+    if (createPatientContextLocked.value) return 'default';
+    return createContextModeVariant.value;
 });
 
 const createPatientContextLabel = computed(() => {
@@ -1457,8 +1478,8 @@ const {
     canRestore: theatreCreateDraftMatchesInitialContext,
     onRestored: () => {
         createDraftNotice.value = createServerDraftId.value
-            ? 'Restored your saved procedure draft on this device.'
-            : 'Restored your in-progress procedure draft on this device.';
+            ? 'Restored your saved procedure draft.'
+            : 'Restored your in-progress procedure draft.';
         theatreWorkspaceView.value = 'create';
     },
 });
@@ -1574,7 +1595,7 @@ const createOperatingClinicianHelperText = computed(() => {
         return 'Loading clinician directory.';
     }
     if (!canReadTheatreClinicianDirectory.value) {
-        return 'Enter the operating clinician user ID manually.';
+        return 'Clinician directory access is required to assign the operating clinician.';
     }
     if (theatreCliniciansError.value) {
         return theatreCliniciansError.value;
@@ -1583,7 +1604,7 @@ const createOperatingClinicianHelperText = computed(() => {
         return 'Select the operating clinician.';
     }
 
-    return 'No clinician profiles found. Enter the user ID manually.';
+    return 'No active clinician profiles with linked user accounts are available yet.';
 });
 
 const createAnesthetistHelperText = computed(() => {
@@ -1591,7 +1612,7 @@ const createAnesthetistHelperText = computed(() => {
         return 'Loading anaesthesia staff.';
     }
     if (!canReadTheatreClinicianDirectory.value) {
-        return 'Enter the anesthetist user ID manually if needed.';
+        return 'Clinician directory access is required to select anaesthesia staff.';
     }
     if (theatreCliniciansError.value) {
         return theatreCliniciansError.value;
@@ -1600,7 +1621,7 @@ const createAnesthetistHelperText = computed(() => {
         return 'Select the anesthetist when assigned.';
     }
 
-    return 'No anaesthesia staff found. Enter the user ID manually if needed.';
+    return 'No active anaesthesia staff with linked user accounts are available yet.';
 });
 const createScheduledAtHelperText = computed(
     () => 'Choose the planned theatre start time.',
@@ -3238,8 +3259,8 @@ async function saveCreateDraftRequest(options?: {
 
     if (!options?.silent) {
         createDraftNotice.value = wasSavedDraft
-            ? 'Saved your procedure draft on this device. Sign it when the booking is ready.'
-            : 'Procedure draft saved on this device. Sign it when the booking is ready.';
+            ? 'Saved your procedure draft. Sign it when the booking is ready.'
+            : 'Procedure draft saved. Sign it when the booking is ready.';
         notifySuccess('Procedure draft saved.');
     }
 
@@ -3289,7 +3310,7 @@ async function discardSavedCreateDraft(): Promise<void> {
         );
         createServerDraftId.value = '';
         resetCreateProcedureDraftFields();
-        createDraftNotice.value = 'Discarded the saved procedure draft from this device.';
+        createDraftNotice.value = 'Discarded the saved procedure draft.';
         clearPersistedTheatreCreateDraft();
         clearCreateLifecycleMode();
         notifySuccess('Procedure draft discarded.');
@@ -4860,277 +4881,163 @@ onMounted(async () => {
                             v-model:open="createContextEditorOpen"
                             class="rounded-lg border bg-muted/20 p-3"
                         >
-                            <div class="flex flex-col gap-3">
+                            <ClinicalContextBanner
+                                title="Theatre procedure context"
+                                description="Confirm the patient, outpatient handoff, and inpatient stay before entering procedure details."
+                                :patient-name="createForm.patientId.trim() ? createPatientContextLabel : null"
+                                :patient-meta="createForm.patientId.trim() ? createPatientContextMeta : null"
+                                :patient-number="createPatientSummary?.patientNumber || null"
+                                :context-label="createWorkflowContextLabel"
+                                :context-meta="createContextSummary"
+                                :status-label="createContextStatusLabel"
+                                :status-variant="createContextStatusVariant"
+                                :locked="createPatientContextLocked"
+                                tone="muted"
+                            >
+                                <template #actions>
+                                    <Button
+                                        v-if="openedFromPatientChart && createForm.patientId"
+                                        variant="outline"
+                                        size="sm"
+                                        as-child
+                                    >
+                                        <Link :href="createPatientChartHref">
+                                            Back to Patient Chart
+                                        </Link>
+                                    </Button>
+                                    <Button
+                                        v-if="
+                                            canReadMedicalRecords &&
+                                            createForm.patientId &&
+                                            (
+                                                createForm.appointmentId ||
+                                                createForm.admissionId ||
+                                                hasCreateMedicalRecordContext
+                                            )
+                                        "
+                                        variant="outline"
+                                        size="sm"
+                                        as-child
+                                    >
+                                        <Link :href="consultationContextHref">
+                                            {{ consultationReturnLabel }}
+                                        </Link>
+                                    </Button>
+                                    <Button
+                                        v-if="canReadAppointments && createForm.appointmentId"
+                                        variant="outline"
+                                        size="sm"
+                                        as-child
+                                    >
+                                        <Link :href="appointmentContextHref(createForm.appointmentId)">
+                                            Back to Appointments
+                                        </Link>
+                                    </Button>
+                                    <Button
+                                        v-if="canReadAdmissions && createForm.admissionId"
+                                        variant="outline"
+                                        size="sm"
+                                        as-child
+                                    >
+                                        <Link :href="contextCreateHref('/admissions')">
+                                            Back to Admissions
+                                        </Link>
+                                    </Button>
+                                    <CollapsibleTrigger as-child>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            class="gap-1.5"
+                                            @click="
+                                                createContextEditorTab =
+                                                    createPatientContextLocked
+                                                        ? 'patient'
+                                                        : hasCreateAppointmentContext
+                                                          ? 'appointment'
+                                                          : hasCreateAdmissionContext
+                                                            ? 'admission'
+                                                            : 'patient'
+                                            "
+                                        >
+                                            <AppIcon
+                                                :name="
+                                                    createContextEditorOpen
+                                                        ? 'chevron-up'
+                                                        : 'sliders-horizontal'
+                                                "
+                                                class="size-3.5"
+                                            />
+                                            {{ createContextActionLabel }}
+                                        </Button>
+                                    </CollapsibleTrigger>
+                                </template>
+
                                 <div
-                                    class="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between"
+                                    v-if="showClinicalHandoffBanner"
+                                    class="flex flex-col gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3"
                                 >
-                                    <div class="min-w-0 space-y-2">
-                                        <div class="flex flex-wrap items-center gap-1.5">
-                                            <Badge :variant="createContextModeVariant">
-                                                {{ createContextModeLabel }}
-                                            </Badge>
-                                            <Badge
-                                                v-if="createPatientContextLocked"
-                                                variant="secondary"
-                                                class="text-[10px]"
-                                            >
-                                                Locked patient
-                                            </Badge>
-                                            <Badge
-                                                v-if="hasCreateAppointmentContext && createAppointmentContextStatusLabel"
-                                                variant="secondary"
-                                                class="text-[10px]"
-                                            >
-                                                {{ createAppointmentContextStatusLabel }}
-                                            </Badge>
-                                            <Badge
-                                                v-if="hasCreateAdmissionContext && createAdmissionContextStatusLabel"
-                                                variant="secondary"
-                                                class="text-[10px]"
-                                            >
-                                                {{ createAdmissionContextStatusLabel }}
-                                            </Badge>
-                                        </div>
-                                        <div class="flex min-w-0 flex-wrap items-center gap-2">
-                                            <div class="flex min-w-0 items-center gap-2">
-                                                <AppIcon
-                                                    name="user"
-                                                    class="size-3.5 shrink-0 text-muted-foreground"
-                                                />
-                                                <span
-                                                    class="truncate text-sm font-medium"
-                                                    :title="createPatientContextMeta"
-                                                >
-                                                    {{ createPatientContextLabel }}
-                                                </span>
-                                            </div>
-                                            <Badge
-                                                v-if="createPatientSummary?.patientNumber"
-                                                variant="outline"
-                                                class="text-[10px]"
-                                            >
-                                                Patient No. {{ createPatientSummary?.patientNumber }}
-                                            </Badge>
-                                        </div>
+                                    <div class="space-y-1">
+                                        <p class="text-sm font-medium">Clinical handoff</p>
                                         <p class="text-xs text-muted-foreground">
-                                            {{ createContextSummary }}
+                                            {{
+                                                createPatientContextLocked
+                                                    ? 'This procedure opened from a carried-forward clinical workflow. Patient stays locked until you choose a different patient.'
+                                                    : 'Review or remove the carried-forward appointment or admission context before scheduling theatre work.'
+                                            }}
                                         </p>
                                     </div>
-                                    <div class="flex flex-wrap gap-2 xl:justify-end">
+                                    <div class="flex flex-wrap gap-2">
                                         <Button
-                                            v-if="openedFromPatientChart && createForm.patientId"
+                                            v-if="createPatientContextLocked"
+                                            type="button"
                                             variant="outline"
                                             size="sm"
-                                            as-child
+                                            @click="unlockCreatePatientContext"
                                         >
-                                            <Link :href="createPatientChartHref">
-                                                Back to Patient Chart
-                                            </Link>
+                                            Change Patient
                                         </Button>
                                         <Button
-                                            v-if="
-                                                canReadMedicalRecords &&
-                                                createForm.patientId &&
-                                                (
-                                                    createForm.appointmentId ||
-                                                    createForm.admissionId ||
-                                                    hasCreateMedicalRecordContext
-                                                )
-                                            "
+                                            v-else-if="createForm.appointmentId || createForm.admissionId"
+                                            type="button"
                                             variant="outline"
                                             size="sm"
-                                            as-child
+                                            @click="clearCreateClinicalLinks"
                                         >
-                                            <Link :href="consultationContextHref">
-                                                {{ consultationReturnLabel }}
-                                            </Link>
+                                            Unlink Clinical Context
                                         </Button>
-                                        <Button
-                                            v-if="canReadAppointments && createForm.appointmentId"
-                                            variant="outline"
-                                            size="sm"
-                                            as-child
-                                        >
-                                            <Link :href="appointmentContextHref(createForm.appointmentId)">
-                                                Back to Appointments
-                                            </Link>
-                                        </Button>
-                                        <Button
-                                            v-if="canReadAdmissions && createForm.admissionId"
-                                            variant="outline"
-                                            size="sm"
-                                            as-child
-                                        >
-                                            <Link :href="contextCreateHref('/admissions')">
-                                                Back to Admissions
-                                            </Link>
-                                        </Button>
-                                        <CollapsibleTrigger as-child>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                class="gap-1.5"
-                                                @click="
-                                                    createContextEditorTab =
-                                                        createPatientContextLocked
-                                                            ? 'patient'
-                                                            : hasCreateAppointmentContext
-                                                              ? 'appointment'
-                                                              : hasCreateAdmissionContext
-                                                                ? 'admission'
-                                                                : 'patient'
-                                                "
-                                            >
-                                                <AppIcon
-                                                    :name="
-                                                        createContextEditorOpen
-                                                            ? 'chevron-up'
-                                                            : 'sliders-horizontal'
-                                                    "
-                                                    class="size-3.5"
-                                                />
-                                                {{ createContextActionLabel }}
-                                            </Button>
-                                        </CollapsibleTrigger>
                                     </div>
                                 </div>
+
                                 <div
                                     v-if="hasCreateAppointmentContext || hasCreateAdmissionContext"
-                                    class="flex flex-wrap gap-2"
+                                    class="grid gap-2 lg:grid-cols-2"
                                 >
                                     <div
                                         v-if="hasCreateAppointmentContext"
-                                        class="inline-flex items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs"
-                                        :title="
-                                            [
-                                                createAppointmentContextLabel,
-                                                createAppointmentContextMeta,
-                                                createAppointmentContextReason,
-                                            ]
-                                                .filter(Boolean)
-                                                .join(' | ')
-                                        "
+                                        class="flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2"
+                                        :class="hasCreateAppointmentContext ? 'border-primary/30 bg-primary/5' : 'bg-background/80'"
                                     >
                                         <AppIcon
                                             name="calendar-clock"
-                                            class="size-3.5 text-muted-foreground"
+                                            class="size-3.5 shrink-0 text-muted-foreground"
                                         />
-                                        <span class="font-medium">
-                                            {{ createAppointmentContextLabel }}
-                                        </span>
-                                        <span
-                                            v-if="createAppointmentContextSourceLabel"
-                                            class="text-muted-foreground"
-                                        >
-                                            | {{ createAppointmentContextSourceLabel }}
-                                        </span>
-                                    </div>
-                                    <div
-                                        v-if="hasCreateAdmissionContext"
-                                        class="inline-flex items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs"
-                                        :title="
-                                            [
-                                                createAdmissionContextLabel,
-                                                createAdmissionContextMeta,
-                                                createAdmissionContextReason,
-                                            ]
-                                                .filter(Boolean)
-                                                .join(' | ')
-                                        "
-                                    >
-                                        <AppIcon
-                                            name="bed-double"
-                                            class="size-3.5 text-muted-foreground"
-                                        />
-                                        <span class="font-medium">
-                                            {{ createAdmissionContextLabel }}
-                                        </span>
-                                        <span
-                                            v-if="createAdmissionContextSourceLabel"
-                                            class="text-muted-foreground"
-                                        >
-                                            | {{ createAdmissionContextSourceLabel }}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                            <CollapsibleContent class="pt-3">
-                                <div class="rounded-lg border bg-background p-4">
-                            <div
-                                v-if="showClinicalHandoffBanner"
-                                class="flex flex-col gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3"
-                            >
-                                <div class="space-y-1">
-                                    <p class="text-sm font-medium">Clinical handoff</p>
-                                    <p class="text-xs text-muted-foreground">
-                                        {{
-                                            createPatientContextLocked
-                                                ? 'This procedure opened from a carried-forward clinical workflow. Patient stays locked until you choose a different patient.'
-                                                : 'Review or remove the carried-forward appointment or admission context before scheduling theatre work.'
-                                        }}
-                                    </p>
-                                </div>
-                                <div class="flex flex-wrap gap-2">
-                                    <Button
-                                        v-if="createPatientContextLocked"
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        @click="unlockCreatePatientContext"
-                                    >
-                                        Change Patient
-                                    </Button>
-                                    <Button
-                                        v-else-if="createForm.appointmentId || createForm.admissionId"
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        @click="clearCreateClinicalLinks"
-                                    >
-                                        Unlink Clinical Context
-                                    </Button>
-                                </div>
-                            </div>
-
-                            <div class="space-y-1">
-                                <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                    Patient & context
-                                </p>
-                                <p class="text-xs text-muted-foreground">
-                                    Confirm the patient, outpatient handoff, and inpatient stay before entering procedure details.
-                                </p>
-                            </div>
-
-                            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                                <div
-                                    class="rounded-lg border p-3"
-                                    :class="createForm.patientId ? 'border-primary/30 bg-primary/5' : 'bg-background'"
-                                >
-                                    <div class="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                        <AppIcon name="user" class="size-3.5" />
-                                        Patient
-                                    </div>
-                                    <p class="mt-2 text-sm font-medium">{{ createPatientContextLabel }}</p>
-                                    <p class="text-xs text-muted-foreground">{{ createPatientContextMeta }}</p>
-                                </div>
-
-                                <div
-                                    class="rounded-lg border p-3"
-                                    :class="hasCreateAppointmentContext ? 'border-primary/30 bg-primary/5' : 'bg-background'"
-                                >
-                                    <div class="flex items-start justify-between gap-2">
-                                        <div class="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                            <AppIcon name="calendar-clock" class="size-3.5" />
-                                            Appointment
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex min-w-0 items-center gap-2">
+                                                <span class="shrink-0 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                                    Appointment
+                                                </span>
+                                                <span
+                                                    class="truncate text-sm font-medium"
+                                                    :title="[createAppointmentContextLabel, createAppointmentContextMeta, createAppointmentContextReason].filter(Boolean).join(' | ')"
+                                                >
+                                                    {{ createAppointmentContextLabel }}
+                                                </span>
+                                            </div>
+                                            <p class="truncate text-xs text-muted-foreground">
+                                                {{ createAppointmentContextMeta }}
+                                            </p>
                                         </div>
-                                        <div class="flex flex-wrap justify-end gap-1.5">
-                                            <Badge
-                                                v-if="createAppointmentContextStatusLabel"
-                                                variant="secondary"
-                                                class="text-[10px]"
-                                            >
-                                                {{ createAppointmentContextStatusLabel }}
-                                            </Badge>
+                                        <div class="flex shrink-0 flex-wrap gap-1">
                                             <Badge
                                                 v-if="createAppointmentContextSourceLabel"
                                                 variant="outline"
@@ -5138,69 +5045,41 @@ onMounted(async () => {
                                             >
                                                 {{ createAppointmentContextSourceLabel }}
                                             </Badge>
-                                        </div>
-                                    </div>
-                                    <p class="mt-2 text-sm font-medium">{{ createAppointmentContextLabel }}</p>
-                                    <p class="text-xs text-muted-foreground">{{ createAppointmentContextMeta }}</p>
-                                    <p
-                                        v-if="createAppointmentContextReason"
-                                        class="mt-1 text-xs text-muted-foreground"
-                                    >
-                                        {{ createAppointmentContextReason }}
-                                    </p>
-                                    <div v-if="hasCreateAppointmentContext" class="mt-3 flex flex-wrap gap-2">
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            class="gap-1.5"
-                                            @click="createContextEditorTab = 'appointment'"
-                                        >
-                                            Review
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            class="gap-1.5"
-                                            @click="clearCreateAppointmentLink()"
-                                        >
-                                            Remove
-                                        </Button>
-                                    </div>
-                                    <div
-                                        v-else-if="createForm.patientId.trim()"
-                                        class="mt-3 flex flex-wrap gap-2"
-                                    >
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            class="gap-1.5"
-                                            @click="createContextEditorTab = 'appointment'"
-                                        >
-                                            Relink
-                                        </Button>
-                                    </div>
-                                </div>
-
-                                <div
-                                    class="rounded-lg border p-3"
-                                    :class="hasCreateAdmissionContext ? 'border-primary/30 bg-primary/5' : 'bg-background'"
-                                >
-                                    <div class="flex items-start justify-between gap-2">
-                                        <div class="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                            <AppIcon name="bed-double" class="size-3.5" />
-                                            Admission
-                                        </div>
-                                        <div class="flex flex-wrap justify-end gap-1.5">
                                             <Badge
-                                                v-if="createAdmissionContextStatusLabel"
+                                                v-if="createAppointmentContextStatusLabel"
                                                 variant="secondary"
                                                 class="text-[10px]"
                                             >
-                                                {{ createAdmissionContextStatusLabel }}
+                                                {{ createAppointmentContextStatusLabel }}
                                             </Badge>
+                                        </div>
+                                    </div>
+                                    <div
+                                        v-if="hasCreateAdmissionContext"
+                                        class="flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2"
+                                        :class="hasCreateAdmissionContext ? 'border-primary/30 bg-primary/5' : 'bg-background/80'"
+                                    >
+                                        <AppIcon
+                                            name="bed-double"
+                                            class="size-3.5 shrink-0 text-muted-foreground"
+                                        />
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex min-w-0 items-center gap-2">
+                                                <span class="shrink-0 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                                    Admission
+                                                </span>
+                                                <span
+                                                    class="truncate text-sm font-medium"
+                                                    :title="[createAdmissionContextLabel, createAdmissionContextMeta, createAdmissionContextReason].filter(Boolean).join(' | ')"
+                                                >
+                                                    {{ createAdmissionContextLabel }}
+                                                </span>
+                                            </div>
+                                            <p class="truncate text-xs text-muted-foreground">
+                                                {{ createAdmissionContextMeta }}
+                                            </p>
+                                        </div>
+                                        <div class="flex shrink-0 flex-wrap gap-1">
                                             <Badge
                                                 v-if="createAdmissionContextSourceLabel"
                                                 variant="outline"
@@ -5208,164 +5087,130 @@ onMounted(async () => {
                                             >
                                                 {{ createAdmissionContextSourceLabel }}
                                             </Badge>
-                                        </div>
-                                    </div>
-                                    <p class="mt-2 text-sm font-medium">{{ createAdmissionContextLabel }}</p>
-                                    <p class="text-xs text-muted-foreground">{{ createAdmissionContextMeta }}</p>
-                                    <p
-                                        v-if="createAdmissionContextReason"
-                                        class="mt-1 text-xs text-muted-foreground"
-                                    >
-                                        {{ createAdmissionContextReason }}
-                                    </p>
-                                    <div v-if="hasCreateAdmissionContext" class="mt-3 flex flex-wrap gap-2">
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            class="gap-1.5"
-                                            @click="createContextEditorTab = 'admission'"
-                                        >
-                                            Review
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            class="gap-1.5"
-                                            @click="clearCreateAdmissionLink()"
-                                        >
-                                            Remove
-                                        </Button>
-                                    </div>
-                                    <div
-                                        v-else-if="createForm.patientId.trim()"
-                                        class="mt-3 flex flex-wrap gap-2"
-                                    >
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            class="gap-1.5"
-                                            @click="createContextEditorTab = 'admission'"
-                                        >
-                                            Relink
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="space-y-3">
-                                <div class="space-y-1">
-                                    <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                        Context editor
-                                    </p>
-                                    <p class="text-xs text-muted-foreground">
-                                        {{ createContextEditorDescription }}
-                                    </p>
-                                </div>
-                                <Tabs v-model="createContextEditorTab" class="w-full">
-                                    <TabsList class="grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-3">
-                                        <TabsTrigger
-                                            value="patient"
-                                            class="inline-flex min-h-10 items-center gap-1.5 text-xs sm:text-sm"
-                                        >
-                                            <AppIcon name="user" class="size-3.5" />
-                                            Patient
-                                        </TabsTrigger>
-                                        <TabsTrigger
-                                            value="appointment"
-                                            :disabled="!createForm.patientId.trim()"
-                                            class="inline-flex min-h-10 items-center gap-1.5 text-xs sm:text-sm"
-                                        >
-                                            <AppIcon name="calendar-clock" class="size-3.5" />
-                                            Appointment
-                                        </TabsTrigger>
-                                        <TabsTrigger
-                                            value="admission"
-                                            :disabled="!createForm.patientId.trim()"
-                                            class="inline-flex min-h-10 items-center gap-1.5 text-xs sm:text-sm"
-                                        >
-                                            <AppIcon name="bed-double" class="size-3.5" />
-                                            Admission
-                                        </TabsTrigger>
-                                    </TabsList>
-                                </Tabs>
-                                <div class="rounded-lg border bg-muted/20 p-4">
-                                    <div v-show="createContextEditorTab === 'patient'" class="grid gap-3">
-                                        <PatientLookupField
-                                            input-id="theatre-create-patient"
-                                            v-model="createForm.patientId"
-                                            label="Patient"
-                                            patient-status="active"
-                                            :helper-text="
-                                                createPatientContextLocked
-                                                    ? 'Patient is locked from the clinical handoff. Use Change Patient to unlock.'
-                                                    : 'Search by patient number, name, phone, email, or national ID.'
-                                            "
-                                            :disabled="createPatientContextLocked"
-                                            :error-message="createFieldError('patientId')"
-                                        />
-                                    </div>
-
-                                    <div v-show="createContextEditorTab === 'appointment'" class="grid gap-3">
-                                        <LinkedContextLookupField
-                                            input-id="theatre-create-appointment"
-                                            v-model="createForm.appointmentId"
-                                            :patient-id="createForm.patientId"
-                                            label="Appointment link"
-                                            resource="appointments"
-                                            status="checked_in"
-                                            :helper-text="
-                                                createForm.patientId.trim()
-                                                    ? 'Search checked-in appointments for the selected patient.'
-                                                    : 'Select a patient first to search appointments.'
-                                            "
-                                            :disabled="!createForm.patientId.trim()"
-                                            :error-message="createFieldError('appointmentId')"
-                                        />
-                                        <div v-if="createForm.appointmentId.trim()" class="flex justify-end">
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="outline"
-                                                class="gap-1.5"
-                                                @click="clearCreateAppointmentLink()"
+                                            <Badge
+                                                v-if="createAdmissionContextStatusLabel"
+                                                variant="secondary"
+                                                class="text-[10px]"
                                             >
-                                                Remove appointment link
-                                            </Button>
-                                        </div>
-                                    </div>
-
-                                    <div v-show="createContextEditorTab === 'admission'" class="grid gap-3">
-                                        <LinkedContextLookupField
-                                            input-id="theatre-create-admission"
-                                            v-model="createForm.admissionId"
-                                            :patient-id="createForm.patientId"
-                                            label="Admission link"
-                                            resource="admissions"
-                                            status="admitted"
-                                            :helper-text="
-                                                createForm.patientId.trim()
-                                                    ? 'Search active admissions for the selected patient.'
-                                                    : 'Select a patient first to search admissions.'
-                                            "
-                                            :disabled="!createForm.patientId.trim()"
-                                            :error-message="createFieldError('admissionId')"
-                                        />
-                                        <div v-if="createForm.admissionId.trim()" class="flex justify-end">
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="outline"
-                                                class="gap-1.5"
-                                                @click="clearCreateAdmissionLink()"
-                                            >
-                                                Remove admission link
-                                            </Button>
+                                                {{ createAdmissionContextStatusLabel }}
+                                            </Badge>
                                         </div>
                                     </div>
                                 </div>
+                            </ClinicalContextBanner>
+                            <CollapsibleContent class="pt-3">
+                                <div class="rounded-lg border bg-background p-4">
+                                    <div class="space-y-3">
+                                        <div class="space-y-1">
+                                            <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                                Context editor
+                                            </p>
+                                            <p class="text-xs text-muted-foreground">
+                                                {{ createContextEditorDescription }}
+                                            </p>
+                                        </div>
+                                        <Tabs v-model="createContextEditorTab" class="w-full">
+                                            <TabsList class="grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-3">
+                                                <TabsTrigger
+                                                    value="patient"
+                                                    class="inline-flex min-h-10 items-center gap-1.5 text-xs sm:text-sm"
+                                                >
+                                                    <AppIcon name="user" class="size-3.5" />
+                                                    Patient
+                                                </TabsTrigger>
+                                                <TabsTrigger
+                                                    value="appointment"
+                                                    :disabled="!createForm.patientId.trim()"
+                                                    class="inline-flex min-h-10 items-center gap-1.5 text-xs sm:text-sm"
+                                                >
+                                                    <AppIcon name="calendar-clock" class="size-3.5" />
+                                                    Appointment
+                                                </TabsTrigger>
+                                                <TabsTrigger
+                                                    value="admission"
+                                                    :disabled="!createForm.patientId.trim()"
+                                                    class="inline-flex min-h-10 items-center gap-1.5 text-xs sm:text-sm"
+                                                >
+                                                    <AppIcon name="bed-double" class="size-3.5" />
+                                                    Admission
+                                                </TabsTrigger>
+                                            </TabsList>
+                                        </Tabs>
+                                        <div class="rounded-lg border bg-muted/20 p-4">
+                                            <div v-show="createContextEditorTab === 'patient'" class="grid gap-3">
+                                                <PatientLookupField
+                                                    input-id="theatre-create-patient"
+                                                    v-model="createForm.patientId"
+                                                    label="Patient"
+                                                    patient-status="active"
+                                                    :helper-text="
+                                                        createPatientContextLocked
+                                                            ? 'Patient is locked from the clinical handoff. Use Change Patient to unlock.'
+                                                            : 'Search by patient number, name, phone, email, or national ID.'
+                                                    "
+                                                    :disabled="createPatientContextLocked"
+                                                    :error-message="createFieldError('patientId')"
+                                                />
+                                            </div>
+
+                                            <div v-show="createContextEditorTab === 'appointment'" class="grid gap-3">
+                                                <LinkedContextLookupField
+                                                    input-id="theatre-create-appointment"
+                                                    v-model="createForm.appointmentId"
+                                                    :patient-id="createForm.patientId"
+                                                    label="Appointment link"
+                                                    resource="appointments"
+                                                    status="checked_in"
+                                                    :helper-text="
+                                                        createForm.patientId.trim()
+                                                            ? 'Search checked-in appointments for the selected patient.'
+                                                            : 'Select a patient first to search appointments.'
+                                                    "
+                                                    :disabled="!createForm.patientId.trim()"
+                                                    :error-message="createFieldError('appointmentId')"
+                                                />
+                                                <div v-if="createForm.appointmentId.trim()" class="flex justify-end">
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="outline"
+                                                        class="gap-1.5"
+                                                        @click="clearCreateAppointmentLink()"
+                                                    >
+                                                        Remove appointment link
+                                                    </Button>
+                                                </div>
+                                            </div>
+
+                                            <div v-show="createContextEditorTab === 'admission'" class="grid gap-3">
+                                                <LinkedContextLookupField
+                                                    input-id="theatre-create-admission"
+                                                    v-model="createForm.admissionId"
+                                                    :patient-id="createForm.patientId"
+                                                    label="Admission link"
+                                                    resource="admissions"
+                                                    status="admitted"
+                                                    :helper-text="
+                                                        createForm.patientId.trim()
+                                                            ? 'Search active admissions for the selected patient.'
+                                                            : 'Select a patient first to search admissions.'
+                                                    "
+                                                    :disabled="!createForm.patientId.trim()"
+                                                    :error-message="createFieldError('admissionId')"
+                                                />
+                                                <div v-if="createForm.admissionId.trim()" class="flex justify-end">
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="outline"
+                                                        class="gap-1.5"
+                                                        @click="clearCreateAdmissionLink()"
+                                                    >
+                                                        Remove admission link
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </CollapsibleContent>
@@ -5489,68 +5334,46 @@ onMounted(async () => {
 
                                 <div class="grid gap-3 lg:grid-cols-3">
                                     <div class="space-y-1">
-                                        <template
-                                            v-if="canReadTheatreClinicianDirectory"
-                                        >
-                                            <SearchableSelectField
-                                                input-id="create-operating"
-                                                v-model="createForm.operatingClinicianUserId"
-                                                label="Operating clinician"
-                                                :options="createTheatreClinicianOptions"
-                                                placeholder="Select operating clinician"
-                                                search-placeholder="Search by employee number, job title, department, or user ID"
-                                                :helper-text="createOperatingClinicianHelperText"
-                                                :error-message="createFieldError('operatingClinicianUserId')"
-                                                message-class="min-h-8"
-                                                empty-text="No active clinician matched that search."
-                                                :disabled="!canCreate || createSubmitting"
-                                            />
-                                        </template>
-                                        <template v-else>
-                                            <Label for="create-operating">Operating clinician user ID</Label>
-                                            <Input
-                                                id="create-operating"
-                                                v-model="createForm.operatingClinicianUserId"
-                                                :disabled="!canCreate || createSubmitting"
-                                                type="number"
-                                                min="1"
-                                                placeholder="Required"
-                                            />
-                                            <p class="text-xs text-muted-foreground">{{ createOperatingClinicianHelperText }}</p>
-                                            <p v-if="createFieldError('operatingClinicianUserId')" class="text-xs text-red-600">{{ createFieldError('operatingClinicianUserId') }}</p>
-                                        </template>
+                                        <ClinicianPicker
+                                            input-id="create-operating"
+                                            v-model="createForm.operatingClinicianUserId"
+                                            label="Operating clinician"
+                                            :options="createTheatreClinicianOptions"
+                                            :can-read-directory="canReadTheatreClinicianDirectory"
+                                            :directory-available="theatreClinicianDirectoryAvailable"
+                                            :loading="theatreCliniciansLoading"
+                                            :require-available-options="false"
+                                            placeholder="Select operating clinician"
+                                            search-placeholder="Search by employee number, job title, department, or user ID"
+                                            :helper-text="createOperatingClinicianHelperText"
+                                            :error-message="createFieldError('operatingClinicianUserId')"
+                                            message-class="min-h-8"
+                                            empty-text="No active clinician matched that search."
+                                            :disabled="!canCreate || createSubmitting"
+                                            unavailable-description="Request staff.clinical-directory.read access before assigning the surgical team."
+                                        />
                                     </div>
 
                                     <div class="space-y-1">
-                                        <template
-                                            v-if="canReadTheatreClinicianDirectory"
-                                        >
-                                            <SearchableSelectField
-                                                input-id="create-anesthetist"
-                                                v-model="createForm.anesthetistUserId"
-                                                label="Anesthetist"
-                                                :options="createTheatreAnesthetistOptions"
-                                                placeholder="Select anesthetist"
-                                                search-placeholder="Search by employee number, job title, department, or user ID"
-                                                :helper-text="createAnesthetistHelperText"
-                                                :error-message="createFieldError('anesthetistUserId')"
-                                                message-class="min-h-8"
-                                                empty-text="No active anesthetist matched that search."
-                                                :disabled="!canCreate || createSubmitting"
-                                            />
-                                        </template>
-                                        <template v-else>
-                                            <Label for="create-anesthetist">Anesthetist user ID</Label>
-                                            <Input
-                                                id="create-anesthetist"
-                                                v-model="createForm.anesthetistUserId"
-                                                :disabled="!canCreate || createSubmitting"
-                                                type="number"
-                                                min="1"
-                                                placeholder="Optional"
-                                            />
-                                            <p class="text-xs text-muted-foreground">{{ createAnesthetistHelperText }}</p>
-                                        </template>
+                                        <ClinicianPicker
+                                            input-id="create-anesthetist"
+                                            v-model="createForm.anesthetistUserId"
+                                            label="Anesthetist"
+                                            :options="createTheatreAnesthetistOptions"
+                                            :can-read-directory="canReadTheatreClinicianDirectory"
+                                            :directory-available="theatreClinicianDirectoryAvailable"
+                                            :loading="theatreCliniciansLoading"
+                                            :require-available-options="false"
+                                            placeholder="Select anesthetist"
+                                            search-placeholder="Search by employee number, job title, department, or user ID"
+                                            :helper-text="createAnesthetistHelperText"
+                                            :error-message="createFieldError('anesthetistUserId')"
+                                            message-class="min-h-8"
+                                            empty-text="No active anesthetist matched that search."
+                                            :disabled="!canCreate || createSubmitting"
+                                            unavailable-title="Anaesthesia directory unavailable"
+                                            unavailable-description="Request staff.clinical-directory.read access before assigning anaesthesia staff."
+                                        />
                                     </div>
                                     <FormFieldShell
                                         input-id="create-scheduled"

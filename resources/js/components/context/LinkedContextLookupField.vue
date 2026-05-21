@@ -61,6 +61,7 @@ const props = withDefaults(
         status?: string;
         statuses?: string[];
         perPage?: number;
+        allowManualIdFallback?: boolean;
     }>(),
     {
         patientId: '',
@@ -71,6 +72,7 @@ const props = withDefaults(
         status: '',
         statuses: () => [],
         perPage: 10,
+        allowManualIdFallback: false,
     },
 );
 
@@ -199,9 +201,11 @@ function isForbiddenError(error: unknown): boolean {
     return (error as ApiError | undefined)?.status === 403;
 }
 
-function setAccessDeniedFallback() {
+function setAccessDeniedState() {
     accessDenied.value = true;
-    accessDeniedMessage.value = `${recordTypeLabel()} lookup is restricted by permissions. Enter UUID manually.`;
+    accessDeniedMessage.value = props.allowManualIdFallback
+        ? `${recordTypeLabel()} lookup is restricted by permissions. Enter a UUID only after support has verified the record.`
+        : `${recordTypeLabel()} lookup is restricted by permissions. Request lookup access before linking this context.`;
     searchResults.value = [];
     searchLoading.value = false;
     hydrateLoading.value = false;
@@ -252,7 +256,7 @@ async function searchRecords(force = false) {
             );
     } catch (error) {
         if (isForbiddenError(error)) {
-            setAccessDeniedFallback();
+            setAccessDeniedState();
             return;
         }
         searchResults.value = [];
@@ -283,7 +287,7 @@ async function hydrateSelected(id: string) {
         emit('selected', response.data);
     } catch (error) {
         if (isForbiddenError(error)) {
-            setAccessDeniedFallback();
+            setAccessDeniedState();
             emit('selected', null);
             return;
         }
@@ -372,7 +376,10 @@ onBeforeUnmount(clearDebounce);
         :error-message="errorMessage"
     >
         <template v-if="accessDenied">
-            <div class="flex flex-nowrap items-stretch overflow-hidden rounded-md border border-input bg-transparent shadow-xs focus-within:ring-2 focus-within:ring-ring/50 focus-within:ring-offset-0">
+            <div
+                v-if="allowManualIdFallback"
+                class="flex flex-nowrap items-stretch overflow-hidden rounded-md border border-input bg-transparent shadow-xs focus-within:ring-2 focus-within:ring-ring/50 focus-within:ring-offset-0"
+            >
                 <Input
                     :id="inputId"
                     :value="modelValue"
@@ -394,11 +401,24 @@ onBeforeUnmount(clearDebounce);
                     Clear
                 </Button>
             </div>
-            <Alert>
+            <Alert variant="destructive">
                 <AlertDescription class="text-xs">
                     {{ accessDeniedMessage }}
+                    <span v-if="!allowManualIdFallback && modelValue">
+                        Existing linked context is retained, but it cannot be changed here without lookup access.
+                    </span>
                 </AlertDescription>
             </Alert>
+            <Button
+                v-if="!allowManualIdFallback && modelValue"
+                type="button"
+                variant="outline"
+                size="sm"
+                :disabled="disabled"
+                @click="clearSelection"
+            >
+                Clear linked context
+            </Button>
         </template>
         <template v-else>
             <div class="flex flex-nowrap items-stretch overflow-hidden rounded-md border border-input bg-transparent shadow-xs focus-within:ring-2 focus-within:ring-ring/50 focus-within:ring-offset-0">

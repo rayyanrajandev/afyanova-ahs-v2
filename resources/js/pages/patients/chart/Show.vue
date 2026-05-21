@@ -1597,7 +1597,7 @@ const visitHandoffActiveVisit = computed<Appointment | null>(() =>
 
 const visitHandoffExistingVisitHref = computed(() => {
     if (!visitHandoffActiveVisit.value || !canReadAppointments.value) return null;
-    return appointmentWorkflowHref(visitHandoffActiveVisit.value);
+    return appointmentHandoffWorkflowHref(visitHandoffActiveVisit.value);
 });
 
 const visitHandoffScheduleAppointmentHref = computed(() =>
@@ -3355,9 +3355,40 @@ function appointmentWorkspaceHref(
     if (action === 'triage') {
         params.set('view', 'triage');
         params.set('focusAction', 'triage');
+        params.set('detailsTab', 'workflow');
     } else if (action === 'consultation') {
         params.set('view', 'clinical');
         params.set('focusAction', 'consultation');
+        params.set('detailsTab', 'workflow');
+    }
+    return `/appointments?${params.toString()}`;
+}
+
+function appointmentHandoffWorkflowHref(appointment: Appointment): string {
+    const params = new URLSearchParams({
+        focusAppointmentId: appointment.id,
+        from: 'patient-chart',
+    });
+    const normalizedStatus = String(appointment.status ?? '').trim();
+    if (
+        normalizedStatus === 'scheduled'
+        || normalizedStatus === 'waiting_triage'
+        || normalizedStatus === 'waiting_provider'
+        || normalizedStatus === 'in_consultation'
+        || normalizedStatus === 'completed'
+    ) {
+        params.set('status', normalizedStatus);
+    }
+    if (normalizedStatus === 'waiting_triage' && canRecordOpdTriage.value) {
+        params.set('view', 'triage');
+        params.set('detailsTab', 'workflow');
+    } else if (
+        (normalizedStatus === 'waiting_provider'
+            || normalizedStatus === 'in_consultation')
+        && canStartConsultation.value
+    ) {
+        params.set('view', 'clinical');
+        params.set('detailsTab', 'workflow');
     }
     return `/appointments?${params.toString()}`;
 }

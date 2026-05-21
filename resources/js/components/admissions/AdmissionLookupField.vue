@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { clearSensitiveLocalStorageKey } from '@/lib/browserStoragePolicy';
 
 type AdmissionSummary = {
     id: string;
@@ -57,6 +58,7 @@ const props = withDefaults(
         errorMessage?: string | null;
         disabled?: boolean;
         perPage?: number;
+        allowManualIdFallback?: boolean;
     }>(),
     {
         placeholder: 'Search by admission number, patient name, patient number, ward, or bed',
@@ -64,6 +66,7 @@ const props = withDefaults(
         errorMessage: null,
         disabled: false,
         perPage: 10,
+        allowManualIdFallback: false,
     },
 );
 
@@ -164,51 +167,23 @@ function sanitizeAdmission(admission: AdmissionSummary): AdmissionSummary {
     };
 }
 
+function clearPersistedRecentLookupActivity() {
+    clearSensitiveLocalStorageKey(RECENT_SEARCHES_KEY);
+    clearSensitiveLocalStorageKey(RECENT_ADMISSIONS_KEY);
+}
+
 function loadRecentLookupActivity() {
-    if (typeof window === 'undefined') return;
-
-    try {
-        const storedSearches = JSON.parse(window.localStorage.getItem(RECENT_SEARCHES_KEY) ?? '[]');
-        recentSearches.value = Array.isArray(storedSearches)
-            ? storedSearches
-                .filter((value): value is string => typeof value === 'string')
-                .map((value) => value.trim())
-                .filter(Boolean)
-                .slice(0, RECENT_SEARCH_LIMIT)
-            : [];
-    } catch {
-        recentSearches.value = [];
-    }
-
-    try {
-        const storedAdmissions = JSON.parse(window.localStorage.getItem(RECENT_ADMISSIONS_KEY) ?? '[]');
-        recentAdmissions.value = Array.isArray(storedAdmissions)
-            ? storedAdmissions
-                .filter((value): value is AdmissionSummary => Boolean(value) && typeof value === 'object' && typeof (value as AdmissionSummary).id === 'string')
-                .map((admission) => sanitizeAdmission(admission))
-                .slice(0, RECENT_ADMISSION_LIMIT)
-            : [];
-    } catch {
-        recentAdmissions.value = [];
-    }
+    clearPersistedRecentLookupActivity();
+    recentSearches.value = [];
+    recentAdmissions.value = [];
 }
 
 function persistRecentSearches() {
-    if (typeof window === 'undefined') return;
-
-    window.localStorage.setItem(
-        RECENT_SEARCHES_KEY,
-        JSON.stringify(recentSearches.value.slice(0, RECENT_SEARCH_LIMIT)),
-    );
+    clearSensitiveLocalStorageKey(RECENT_SEARCHES_KEY);
 }
 
 function persistRecentAdmissions() {
-    if (typeof window === 'undefined') return;
-
-    window.localStorage.setItem(
-        RECENT_ADMISSIONS_KEY,
-        JSON.stringify(recentAdmissions.value.slice(0, RECENT_ADMISSION_LIMIT)),
-    );
+    clearSensitiveLocalStorageKey(RECENT_ADMISSIONS_KEY);
 }
 
 function rememberSearchQuery(value: string) {
@@ -343,9 +318,11 @@ function isForbiddenError(error: unknown): boolean {
     return (error as ApiError | undefined)?.status === 403;
 }
 
-function setAccessDeniedFallback() {
+function setAccessDeniedState() {
     accessDenied.value = true;
-    accessDeniedMessage.value = 'Admission lookup is restricted by permissions. Enter admission UUID manually.';
+    accessDeniedMessage.value = props.allowManualIdFallback
+        ? 'Admission lookup is restricted by permissions. Enter an admission UUID only after support has verified the record.'
+        : 'Admission lookup is restricted by permissions. Request admission lookup access before linking an admission.';
     searchResults.value = [];
     searchResultCount.value = 0;
     advancedSearchResults.value = [];
@@ -391,7 +368,7 @@ async function searchAdmissions() {
         searchResultCount.value = Number(response.meta?.total ?? response.data?.length ?? 0);
     } catch (error) {
         if (isForbiddenError(error)) {
-            setAccessDeniedFallback();
+            setAccessDeniedState();
             return;
         }
         searchResults.value = [];
@@ -440,7 +417,7 @@ async function searchAdvancedAdmissions(page = 1) {
         advancedSearchPage.value = Number(response.meta?.currentPage ?? page);
     } catch (error) {
         if (isForbiddenError(error)) {
-            setAccessDeniedFallback();
+            setAccessDeniedState();
             return;
         }
         advancedSearchResults.value = [];
@@ -489,7 +466,7 @@ async function hydrateSelectedAdmission(admissionId: string) {
         }
     } catch (error) {
         if (isForbiddenError(error)) {
-            setAccessDeniedFallback();
+            setAccessDeniedState();
             emit('selected', null);
             return;
         }
@@ -642,7 +619,10 @@ onBeforeUnmount(clearDebounce);
         >
             <template #access-denied>
                 <div class="space-y-2">
-                    <div class="flex flex-nowrap items-stretch overflow-hidden rounded-lg border border-input bg-transparent shadow-xs focus-within:ring-2 focus-within:ring-ring/50 focus-within:ring-offset-0">
+                    <div
+                        v-if="allowManualIdFallback"
+                        class="flex flex-nowrap items-stretch overflow-hidden rounded-lg border border-input bg-transparent shadow-xs focus-within:ring-2 focus-within:ring-ring/50 focus-within:ring-offset-0"
+                    >
                         <span class="flex h-8 shrink-0 items-center border-0 border-r border-input bg-muted/30 pl-3 pr-2 text-muted-foreground">
                             <AppIcon name="search" class="size-4" aria-hidden />
                         </span>
@@ -657,8 +637,22 @@ onBeforeUnmount(clearDebounce);
                     <Alert variant="destructive">
                         <AlertDescription class="text-xs">
                             {{ accessDeniedMessage }}
+                            <span v-if="!allowManualIdFallback && modelValue">
+                                Existing linked admission context is retained, but it cannot be changed here without lookup access.
+                            </span>
                         </AlertDescription>
                     </Alert>
+
+                    <Button
+                        v-if="!allowManualIdFallback && modelValue"
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        :disabled="disabled"
+                        @click="clearSelection"
+                    >
+                        Clear linked admission
+                    </Button>
                 </div>
             </template>
 

@@ -2,6 +2,7 @@
 import { Head } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,13 +13,14 @@ import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import LeaveWorkflowDialog from '@/components/workflow/LeaveWorkflowDialog.vue';
+import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { csrfRequestHeaders, refreshCsrfToken } from '@/lib/csrf';
+import { apiGet, apiPost } from '@/lib/apiClient';
+import { generateRequestKey } from '@/lib/idempotency';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
-
-type ApiError = { message?: string };
 type DiscountType = 'percentage' | 'fixed' | 'full_waiver';
 type DiscountPolicy = {
     id: string;
@@ -70,7 +72,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Discount Policies', href: '/billing-discounts' },
 ];
 
-const { permissionState } = usePlatformAccess();
+const { permissionState, scope } = usePlatformAccess();
 const canRead = computed(() => permissionState('billing.discounts.read') === 'allowed');
 const canManage = computed(() => permissionState('billing.discounts.manage') === 'allowed');
 
@@ -93,6 +95,10 @@ const selectedPolicy = ref<DiscountPolicy | null>(null);
 const createDialogOpen = ref(false);
 const applyDialogOpen = ref(false);
 const lastApplication = ref<DiscountApplication | null>(null);
+const createDiscardConfirmOpen = ref(false);
+const applyDiscardConfirmOpen = ref(false);
+const createPolicyRequestKey = ref(generateRequestKey('billing-discount-policy'));
+const applyPolicyRequestKey = ref(generateRequestKey('billing-discount-apply'));
 
 const createForm = reactive({
     code: '',
@@ -126,6 +132,101 @@ const leadPolicyAction = computed(() => {
     if (selectedPolicy.value.status !== 'active') return 'This policy is inactive and should not be used for new invoice discounts.';
     if (selectedPolicy.value.auto_apply) return 'This policy is marked for auto-apply and should be monitored carefully for scope and dates.';
     return 'Apply this policy only to the right invoice context and keep the concession reason on the billing trail.';
+});
+
+const createPolicyWorkflowContextLabel = computed(() =>
+    createForm.code.trim()
+        ? `${createForm.code.trim().toUpperCase()} policy draft`
+        : 'Create discount policy draft',
+);
+
+const createPolicyWorkflowContextMeta = computed(() => {
+    const parts = [
+        formatStatusLabel(createForm.discountType),
+        createForm.autoApply === 'true' ? 'Auto apply' : 'Manual apply',
+        createForm.requiresApprovalAboveAmount.trim()
+            ? `Threshold ${formatCurrency(createForm.requiresApprovalAboveAmount)}`
+            : 'No approval threshold',
+    ].filter(Boolean);
+
+    return parts.join(' | ');
+});
+
+const createPolicyContextStatusLabel = computed(() => {
+    if (createForm.code.trim() && createForm.name.trim()) return 'Ready to save';
+    if (createForm.code.trim() || createForm.name.trim()) return 'Complete required fields';
+    return 'New draft';
+});
+
+const createPolicyContextStatusVariant = computed<
+    'default' | 'secondary' | 'outline' | 'destructive'
+>(() => (createForm.code.trim() && createForm.name.trim() ? 'default' : 'outline'));
+
+const selectedPolicyContextLabel = computed(() =>
+    selectedPolicy.value?.name?.trim()
+    || selectedPolicy.value?.code?.trim()
+    || 'Selected discount policy',
+);
+
+const selectedPolicyContextMeta = computed(() => {
+    if (!selectedPolicy.value) {
+        return 'Select a finance-governed policy before applying a concession to an invoice.';
+    }
+
+    const parts = [
+        selectedPolicy.value.code?.trim() || null,
+        policyValueLabel(selectedPolicy.value),
+        selectedPolicy.value.auto_apply ? 'Auto apply enabled' : 'Manual apply only',
+    ].filter(Boolean);
+
+    return parts.join(' | ');
+});
+
+const applyPolicyContextStatusLabel = computed(() => {
+    if (!selectedPolicy.value) return 'Policy required';
+    if (!applyForm.invoiceNumber.trim()) return 'Invoice required';
+    return 'Ready to apply';
+});
+
+const applyPolicyContextStatusVariant = computed<
+    'default' | 'secondary' | 'outline' | 'destructive'
+>(() => {
+    if (!selectedPolicy.value || !applyForm.invoiceNumber.trim()) return 'outline';
+    return selectedPolicy.value.status === 'active' ? 'default' : 'secondary';
+});
+
+const hasPendingCreatePolicyWorkflow = computed(() => Boolean(
+    createForm.code.trim()
+    || createForm.name.trim()
+    || createForm.description.trim()
+    || createForm.discountType !== 'percentage'
+    || createForm.discountValue.trim()
+    || createForm.discountPercentage.trim()
+    || createForm.autoApply !== 'false'
+    || createForm.requiresApprovalAboveAmount.trim()
+    || createForm.activeFromDate.trim()
+    || createForm.activeToDate.trim()
+    || createForm.applicableServices.trim()
+    || createForm.status !== 'active',
+));
+
+const hasPendingApplyPolicyWorkflow = computed(() => Boolean(
+    applyForm.invoiceNumber.trim() || applyForm.reason.trim(),
+));
+
+const hasPendingDiscountWorkflow = computed(() => (
+    (createDialogOpen.value && hasPendingCreatePolicyWorkflow.value)
+    || (applyDialogOpen.value && hasPendingApplyPolicyWorkflow.value)
+));
+
+const {
+    confirmOpen: leaveConfirmOpen,
+    confirmLeave: confirmPendingDiscountWorkflowLeave,
+    cancelLeave: cancelPendingDiscountWorkflowLeave,
+} = usePendingWorkflowLeaveGuard({
+    shouldBlock: hasPendingDiscountWorkflow,
+    isSubmitting: actionLoading,
+    blockBrowserUnload: false,
 });
 
 function discountFinanceSetupMissing(application: DiscountApplication | null | undefined): boolean {
@@ -193,36 +294,26 @@ function policyValueLabel(policy: DiscountPolicy | null): string {
 async function apiRequest<T>(
     method: 'GET' | 'POST',
     path: string,
-    options?: { query?: Record<string, string | number | null>; body?: Record<string, unknown> },
+    options?: {
+        query?: Record<string, string | number | null>;
+        body?: Record<string, unknown>;
+        entitlementContext?: string;
+        idempotencyKey?: string | null;
+        requestId?: string | null;
+    },
 ): Promise<T> {
-    const url = new URL(`/api/v1${path}`, window.location.origin);
-    Object.entries(options?.query ?? {}).forEach(([key, value]) => {
-        if (value === null || value === '') return;
-        url.searchParams.set(key, String(value));
-    });
-
-    const headers: Record<string, string> = {
-        Accept: 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-    };
-
-    let body: string | undefined;
-    if (method !== 'GET') {
-        await refreshCsrfToken();
-        Object.assign(headers, csrfRequestHeaders(), { 'Content-Type': 'application/json' });
-        body = JSON.stringify(options?.body ?? {});
+    if (method === 'GET') {
+        return apiGet<T>(path, options?.query, {
+            entitlementContext: options?.entitlementContext,
+        });
     }
 
-    const response = await fetch(url.toString(), {
-        method,
-        credentials: 'same-origin',
-        headers,
-        body,
+    return apiPost<T>(path, {
+        body: options?.body,
+        entitlementContext: options?.entitlementContext,
+        idempotencyKey: options?.idempotencyKey,
+        requestId: options?.requestId,
     });
-
-    const payload = (await response.json().catch(() => ({}))) as T & ApiError;
-    if (!response.ok) throw new Error(payload.message || `${response.status} ${response.statusText}`);
-    return payload;
 }
 
 async function loadPolicies(preserveSelection = true) {
@@ -293,8 +384,78 @@ function resetApplyForm() {
     applyForm.reason = '';
 }
 
+function rotateCreatePolicyRequestKey(): void {
+    createPolicyRequestKey.value = generateRequestKey('billing-discount-policy');
+}
+
+function rotateApplyPolicyRequestKey(): void {
+    applyPolicyRequestKey.value = generateRequestKey('billing-discount-apply');
+}
+
+function openCreateDialog(): void {
+    resetCreateForm();
+    rotateCreatePolicyRequestKey();
+    createDialogOpen.value = true;
+}
+
+function openApplyDialog(): void {
+    resetApplyForm();
+    rotateApplyPolicyRequestKey();
+    applyDialogOpen.value = true;
+}
+
+function requestCreateDialogOpenChange(open: boolean): void {
+    if (open) {
+        openCreateDialog();
+        return;
+    }
+
+    if (actionLoading.value) return;
+
+    if (hasPendingCreatePolicyWorkflow.value) {
+        createDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    createDialogOpen.value = false;
+    resetCreateForm();
+    rotateCreatePolicyRequestKey();
+}
+
+function requestApplyDialogOpenChange(open: boolean): void {
+    if (open) {
+        openApplyDialog();
+        return;
+    }
+
+    if (actionLoading.value) return;
+
+    if (hasPendingApplyPolicyWorkflow.value) {
+        applyDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    applyDialogOpen.value = false;
+    resetApplyForm();
+    rotateApplyPolicyRequestKey();
+}
+
+function confirmCreateDialogDiscard(): void {
+    createDiscardConfirmOpen.value = false;
+    createDialogOpen.value = false;
+    resetCreateForm();
+    rotateCreatePolicyRequestKey();
+}
+
+function confirmApplyDialogDiscard(): void {
+    applyDiscardConfirmOpen.value = false;
+    applyDialogOpen.value = false;
+    resetApplyForm();
+    rotateApplyPolicyRequestKey();
+}
+
 async function submitCreatePolicy() {
-    if (!canManage.value || !createForm.code.trim() || !createForm.name.trim()) return;
+    if (!canManage.value || actionLoading.value || !createForm.code.trim() || !createForm.name.trim()) return;
 
     actionLoading.value = true;
     try {
@@ -316,10 +477,17 @@ async function submitCreatePolicy() {
         if (createForm.discountType === 'percentage') payload.discount_percentage = Number(createForm.discountPercentage || 0);
         if (createForm.discountType === 'fixed') payload.discount_value = Number(createForm.discountValue || 0);
 
-        const response = await apiRequest<ItemResponse<DiscountPolicy>>('POST', '/discount-policies', { body: payload });
+        const requestKey = createPolicyRequestKey.value;
+        const response = await apiRequest<ItemResponse<DiscountPolicy>>('POST', '/discount-policies', {
+            body: payload,
+            entitlementContext: 'Discount policy create',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
+        });
         notifySuccess('Discount policy created.');
         createDialogOpen.value = false;
         resetCreateForm();
+        rotateCreatePolicyRequestKey();
         filters.status = 'all';
         filters.availability = 'all';
         await loadPolicies(false);
@@ -332,22 +500,32 @@ async function submitCreatePolicy() {
 }
 
 async function submitApplyPolicy() {
-    if (!canManage.value || !selectedPolicy.value || !applyForm.invoiceNumber.trim()) return;
+    if (
+        !canManage.value
+        || actionLoading.value
+        || !selectedPolicy.value
+        || !applyForm.invoiceNumber.trim()
+    ) return;
 
     actionLoading.value = true;
     try {
+        const requestKey = applyPolicyRequestKey.value;
         const response = await apiRequest<ItemResponse<DiscountApplication>>('POST', '/discount-applications', {
             body: {
                 invoice_number: applyForm.invoiceNumber.trim(),
                 discount_policy_id: selectedPolicy.value.id,
                 reason: applyForm.reason.trim() || null,
             },
+            entitlementContext: 'Discount policy apply',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
 
         lastApplication.value = response.data;
         notifySuccess('Discount applied to invoice.');
         applyDialogOpen.value = false;
         resetApplyForm();
+        rotateApplyPolicyRequestKey();
     } catch (error) {
         notifyError(messageFromUnknown(error, 'Unable to apply discount policy.'));
     } finally {
@@ -382,7 +560,7 @@ onMounted(async () => {
                 </div>
 
                 <div class="flex flex-wrap gap-2">
-                    <Button v-if="canManage" class="gap-2" @click="createDialogOpen = true">
+                    <Button v-if="canManage" class="gap-2" @click="openCreateDialog">
                         <AppIcon name="plus" class="size-4" />
                         New policy
                     </Button>
@@ -550,7 +728,7 @@ onMounted(async () => {
                                 </div>
 
                                 <div class="flex flex-wrap gap-2">
-                                    <Button v-if="canManage && selectedPolicy.status === 'active'" class="gap-2" @click="applyDialogOpen = true">
+                                    <Button v-if="canManage && selectedPolicy.status === 'active'" class="gap-2" @click="openApplyDialog">
                                         <AppIcon name="receipt" class="size-4" />
                                         Apply to invoice
                                     </Button>
@@ -660,14 +838,14 @@ onMounted(async () => {
                                     Choose a discount policy from the board or create a new one for finance operations.
                                 </p>
                             </div>
-                            <Button v-if="canManage" @click="createDialogOpen = true">New policy</Button>
+                            <Button v-if="canManage" @click="openCreateDialog">New policy</Button>
                         </CardContent>
                     </Card>
                 </div>
             </div>
         </div>
 
-        <Dialog :open="createDialogOpen" @update:open="createDialogOpen = $event">
+        <Dialog :open="createDialogOpen" @update:open="requestCreateDialogOpenChange">
             <DialogContent class="rounded-lg sm:max-w-2xl">
                 <DialogHeader>
                     <DialogTitle>Create discount policy</DialogTitle>
@@ -677,6 +855,17 @@ onMounted(async () => {
                 </DialogHeader>
 
                 <div class="grid gap-4 py-2">
+                    <ClinicalContextBanner
+                        title="Discount policy context"
+                        description="Confirm the governance mode, threshold, and facility before saving a new concession rule."
+                        :facility-name="scope?.facility?.name || null"
+                        :tenant-name="scope?.tenant?.name || null"
+                        :context-label="createPolicyWorkflowContextLabel"
+                        :context-meta="createPolicyWorkflowContextMeta"
+                        :status-label="createPolicyContextStatusLabel"
+                        :status-variant="createPolicyContextStatusVariant"
+                        tone="muted"
+                    />
                     <div class="grid gap-4 sm:grid-cols-2">
                         <div class="grid gap-2">
                             <Label for="discount-create-code">Policy code</Label>
@@ -754,13 +943,13 @@ onMounted(async () => {
                 </div>
 
                 <DialogFooter>
-                    <Button variant="outline" :disabled="actionLoading" @click="createDialogOpen = false">Cancel</Button>
+                    <Button variant="outline" :disabled="actionLoading" @click="requestCreateDialogOpenChange(false)">Cancel</Button>
                     <Button :disabled="actionLoading || !createForm.code.trim() || !createForm.name.trim()" @click="submitCreatePolicy">Create policy</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
 
-        <Dialog :open="applyDialogOpen" @update:open="applyDialogOpen = $event">
+        <Dialog :open="applyDialogOpen" @update:open="requestApplyDialogOpenChange">
             <DialogContent class="rounded-lg sm:max-w-lg">
                 <DialogHeader>
                     <DialogTitle>Apply discount policy</DialogTitle>
@@ -770,6 +959,17 @@ onMounted(async () => {
                 </DialogHeader>
 
                 <div class="grid gap-4 py-2">
+                    <ClinicalContextBanner
+                        title="Invoice discount context"
+                        description="Confirm the selected policy, concession value, and billing facility before applying the discount to an invoice."
+                        :facility-name="scope?.facility?.name || null"
+                        :tenant-name="scope?.tenant?.name || null"
+                        :context-label="selectedPolicyContextLabel"
+                        :context-meta="selectedPolicyContextMeta"
+                        :status-label="applyPolicyContextStatusLabel"
+                        :status-variant="applyPolicyContextStatusVariant"
+                        tone="muted"
+                    />
                     <div class="rounded-lg border border-sidebar-border/70 p-3 text-sm text-muted-foreground">
                         <p class="text-xs uppercase tracking-[0.16em]">Selected policy</p>
                         <p class="mt-1 font-medium text-foreground">
@@ -789,10 +989,40 @@ onMounted(async () => {
                 </div>
 
                 <DialogFooter>
-                    <Button variant="outline" :disabled="actionLoading" @click="applyDialogOpen = false">Cancel</Button>
+                    <Button variant="outline" :disabled="actionLoading" @click="requestApplyDialogOpenChange(false)">Cancel</Button>
                     <Button :disabled="actionLoading || !applyForm.invoiceNumber.trim()" @click="submitApplyPolicy">Apply policy</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+
+        <LeaveWorkflowDialog
+            :open="leaveConfirmOpen"
+            title="Leave discount workflow?"
+            description="A discount policy form still has unsaved changes. Stay here to finish it, or leave this page and discard the unfinished finance work."
+            stay-label="Stay on workflow"
+            leave-label="Leave page"
+            @update:open="cancelPendingDiscountWorkflowLeave"
+            @confirm="confirmPendingDiscountWorkflowLeave"
+        />
+
+        <LeaveWorkflowDialog
+            :open="createDiscardConfirmOpen"
+            title="Discard discount policy draft?"
+            description="This policy draft has unsaved governance details. Keep editing to finish the rule, or discard it and close the form."
+            stay-label="Keep editing"
+            leave-label="Discard draft"
+            @update:open="createDiscardConfirmOpen = false"
+            @confirm="confirmCreateDialogDiscard"
+        />
+
+        <LeaveWorkflowDialog
+            :open="applyDiscardConfirmOpen"
+            title="Discard discount application?"
+            description="This invoice-discount form has unsaved invoice or reason details. Keep editing to apply the policy safely, or discard the form."
+            stay-label="Keep editing"
+            leave-label="Discard form"
+            @update:open="applyDiscardConfirmOpen = false"
+            @confirm="confirmApplyDialogDiscard"
+        />
     </AppLayout>
 </template>

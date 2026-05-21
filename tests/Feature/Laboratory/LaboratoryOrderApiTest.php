@@ -1,11 +1,13 @@
 <?php
 
 use App\Models\User;
+use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
 use App\Http\Middleware\EnforceTenantIsolationWhenEnabled;
 use App\Jobs\GenerateAuditExportCsvJob;
 use App\Modules\Admission\Infrastructure\Models\AdmissionModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderAuditLogModel;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
+use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Platform\Infrastructure\Models\AuditExportJobModel;
@@ -21,6 +23,7 @@ use App\Models\Permission;
 uses(RefreshDatabase::class);
 
 beforeEach(function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
     ensureLaboratoryActiveLabTestCatalogItem();
 });
 
@@ -1673,3 +1676,90 @@ function seedLaboratoryPlatformScopeFacility(
     return [$tenantId, $facilityId];
 }
 
+it('detects same-encounter laboratory duplicates by encounter id', function (): void {
+    $user = makeLaboratoryUser();
+    $patient = makeLaboratoryPatient();
+    $catalogItem = ensureLaboratoryActiveLabTestCatalogItem();
+
+    $encounter = EncounterModel::query()->create([
+        'encounter_number' => 'ENC'.now()->format('Ymd').strtoupper(Str::random(6)),
+        'patient_id' => $patient->id,
+        'appointment_id' => null,
+        'admission_id' => null,
+        'status' => 'in_progress',
+        'opened_at' => now(),
+    ]);
+
+    LaboratoryOrderModel::query()->create([
+        'order_number' => 'LAB'.now()->format('Ymd').strtoupper(Str::random(6)),
+        'patient_id' => $patient->id,
+        'encounter_id' => $encounter->id,
+        'appointment_id' => null,
+        'admission_id' => null,
+        'lab_test_catalog_item_id' => $catalogItem->id,
+        'test_code' => $catalogItem->code,
+        'test_name' => $catalogItem->name,
+        'priority' => 'routine',
+        'specimen_type' => 'Blood',
+        'clinical_notes' => 'Existing encounter order',
+        'ordered_at' => now()->subHour(),
+        'status' => 'ordered',
+        'entry_state' => 'active',
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/laboratory-orders/duplicate-check?'.http_build_query([
+            'patientId' => $patient->id,
+            'encounterId' => $encounter->id,
+            'labTestCatalogItemId' => $catalogItem->id,
+        ]))
+        ->assertOk()
+        ->assertJsonPath('data.severity', 'critical')
+        ->assertJsonCount(1, 'data.sameEncounterDuplicates')
+        ->assertJsonPath('data.sameEncounterDuplicates.0.encounterId', $encounter->id);
+});
+
+it('filters laboratory orders by encounter id', function (): void {
+    $user = makeLaboratoryUser();
+    $patient = makeLaboratoryPatient();
+    $catalogItem = ensureLaboratoryActiveLabTestCatalogItem();
+
+    $encounter = EncounterModel::query()->create([
+        'encounter_number' => 'ENC'.now()->format('Ymd').strtoupper(Str::random(6)),
+        'patient_id' => $patient->id,
+        'status' => 'in_progress',
+        'opened_at' => now(),
+    ]);
+
+    $otherEncounter = EncounterModel::query()->create([
+        'encounter_number' => 'ENC'.now()->format('Ymd').strtoupper(Str::random(6)),
+        'patient_id' => $patient->id,
+        'status' => 'in_progress',
+        'opened_at' => now(),
+    ]);
+
+    foreach ([$encounter->id, $otherEncounter->id] as $encounterId) {
+        LaboratoryOrderModel::query()->create([
+            'order_number' => 'LAB'.now()->format('Ymd').strtoupper(Str::random(6)),
+            'patient_id' => $patient->id,
+            'encounter_id' => $encounterId,
+            'lab_test_catalog_item_id' => $catalogItem->id,
+            'test_code' => $catalogItem->code,
+            'test_name' => $catalogItem->name,
+            'priority' => 'routine',
+            'ordered_at' => now(),
+            'status' => 'ordered',
+            'entry_state' => 'active',
+        ]);
+    }
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/laboratory-orders?'.http_build_query([
+            'patientId' => $patient->id,
+            'encounterId' => $encounter->id,
+            'perPage' => 10,
+        ]))
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.encounterId', $encounter->id);
+});

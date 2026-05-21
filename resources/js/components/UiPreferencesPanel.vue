@@ -36,6 +36,7 @@ const colorSchemeOptions: {
     { value: 'emerald', label: 'Emerald', color: 'hsl(155 66% 38%)', accent: 'hsl(162 60% 40%)' },
     { value: 'violet', label: 'Violet', color: 'hsl(258 74% 56%)', accent: 'hsl(226 70% 58%)' },
     { value: 'amber', label: 'Amber', color: 'hsl(34 92% 48%)', accent: 'hsl(20 86% 52%)' },
+    { value: 'sky', label: 'Sky', color: 'hsl(199 89% 48%)', accent: 'hsl(191 82% 42%)' },
 ];
 
 const fontOptions: {

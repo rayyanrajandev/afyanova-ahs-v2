@@ -36,6 +36,35 @@ class MedicalRecordDocumentController extends Controller
         ));
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    public function buildPrintPayload(
+        string $id,
+        Request $request,
+        GetMedicalRecordUseCase $recordUseCase,
+        DocumentContextLookup $documentContextLookup,
+        ClinicalDocumentLookup $clinicalDocumentLookup,
+        SystemBrandingManager $brandingManager,
+        ?array $encounterSummary = null,
+    ): array {
+        $payload = $this->buildPayload(
+            id: $id,
+            request: $request,
+            recordUseCase: $recordUseCase,
+            documentContextLookup: $documentContextLookup,
+            clinicalDocumentLookup: $clinicalDocumentLookup,
+            brandingManager: $brandingManager,
+        );
+
+        if ($encounterSummary !== null) {
+            $payload['encounterSummary'] = $encounterSummary;
+            $payload['chartPacketMode'] = 'encounter';
+        }
+
+        return $payload;
+    }
+
     public function downloadPdf(
         string $id,
         Request $request,
@@ -115,6 +144,8 @@ class MedicalRecordDocumentController extends Controller
         $record = $recordUseCase->execute($id);
         abort_if($record === null, 404, 'Medical record not found.');
 
+        $encounterId = trim((string) ($record['encounter_id'] ?? ''));
+
         $canViewEncounterOrders = [
             'laboratory' => (bool) $request->user()?->can('laboratory.orders.read'),
             'pharmacy' => (bool) $request->user()?->can('pharmacy.orders.read'),
@@ -140,6 +171,7 @@ class MedicalRecordDocumentController extends Controller
                         $record['patient_id'] ?? null,
                         $record['appointment_id'] ?? null,
                         $record['admission_id'] ?? null,
+                        encounterId: $encounterId !== '' ? $encounterId : null,
                     )
                     : [],
                 'pharmacy' => $canViewEncounterOrders['pharmacy']
@@ -147,6 +179,7 @@ class MedicalRecordDocumentController extends Controller
                         $record['patient_id'] ?? null,
                         $record['appointment_id'] ?? null,
                         $record['admission_id'] ?? null,
+                        encounterId: $encounterId !== '' ? $encounterId : null,
                     )
                     : [],
                 'radiology' => $canViewEncounterOrders['radiology']
@@ -154,6 +187,7 @@ class MedicalRecordDocumentController extends Controller
                         $record['patient_id'] ?? null,
                         $record['appointment_id'] ?? null,
                         $record['admission_id'] ?? null,
+                        encounterId: $encounterId !== '' ? $encounterId : null,
                     )
                     : [],
                 'theatre' => $canViewEncounterOrders['theatre']
@@ -161,6 +195,7 @@ class MedicalRecordDocumentController extends Controller
                         $record['patient_id'] ?? null,
                         $record['appointment_id'] ?? null,
                         $record['admission_id'] ?? null,
+                        encounterId: $encounterId !== '' ? $encounterId : null,
                     )
                     : [],
             ],

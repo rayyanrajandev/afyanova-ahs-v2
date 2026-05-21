@@ -5,6 +5,7 @@ namespace App\Modules\Billing\Application\UseCases;
 use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
 use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
+use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Modules\Platform\Domain\Services\DefaultCurrencyResolverInterface;
@@ -44,8 +45,22 @@ class ListBillingChargeCaptureCandidatesUseCase
     public function execute(array $filters): array
     {
         $patientId = trim((string) ($filters['patientId'] ?? ''));
+        $encounterId = $this->normalizeNullableUuid($filters['encounterId'] ?? null);
         $appointmentId = $this->normalizeNullableUuid($filters['appointmentId'] ?? null);
         $admissionId = $this->normalizeNullableUuid($filters['admissionId'] ?? null);
+
+        if ($encounterId !== null) {
+            $encounter = EncounterModel::query()->find($encounterId);
+            if ($encounter !== null) {
+                if ($patientId === '') {
+                    $patientId = trim((string) ($encounter->patient_id ?? ''));
+                }
+
+                $appointmentId = $this->normalizeNullableUuid($encounter->appointment_id) ?? $appointmentId;
+                $admissionId = $this->normalizeNullableUuid($encounter->admission_id) ?? $admissionId;
+            }
+        }
+
         $currencyCode = strtoupper(trim((string) ($filters['currencyCode'] ?? '')));
         $currencyCode = $currencyCode !== '' ? $currencyCode : $this->defaultCurrencyResolver->resolve();
         $includeInvoiced = filter_var($filters['includeInvoiced'] ?? false, FILTER_VALIDATE_BOOL);
@@ -60,11 +75,11 @@ class ListBillingChargeCaptureCandidatesUseCase
 
         $invoicedSources = $this->invoicedSourceIndex($patientId);
         $candidates = array_merge(
-            $this->consultationCandidates($patientId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
-            $this->laboratoryCandidates($patientId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
-            $this->radiologyCandidates($patientId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
-            $this->pharmacyCandidates($patientId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
-            $this->theatreCandidates($patientId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
+            $this->consultationCandidates($patientId, $encounterId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
+            $this->laboratoryCandidates($patientId, $encounterId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
+            $this->radiologyCandidates($patientId, $encounterId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
+            $this->pharmacyCandidates($patientId, $encounterId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
+            $this->theatreCandidates($patientId, $encounterId, $appointmentId, $admissionId, $currencyCode, $invoicedSources),
         );
 
         usort(
@@ -96,6 +111,7 @@ class ListBillingChargeCaptureCandidatesUseCase
      */
     private function consultationCandidates(
         string $patientId,
+        ?string $encounterId,
         ?string $appointmentId,
         ?string $admissionId,
         string $currencyCode,
@@ -175,6 +191,7 @@ class ListBillingChargeCaptureCandidatesUseCase
      */
     private function laboratoryCandidates(
         string $patientId,
+        ?string $encounterId,
         ?string $appointmentId,
         ?string $admissionId,
         string $currencyCode,
@@ -188,7 +205,7 @@ class ListBillingChargeCaptureCandidatesUseCase
                     ->orWhereNotNull('resulted_at');
             });
 
-        $this->applyClinicalContextFilters($query, $appointmentId, $admissionId);
+        $this->applyClinicalContextFilters($query, $encounterId, $appointmentId, $admissionId);
         $this->applyPlatformScopeIfEnabled($query);
 
         $orders = $query
@@ -230,6 +247,7 @@ class ListBillingChargeCaptureCandidatesUseCase
      */
     private function radiologyCandidates(
         string $patientId,
+        ?string $encounterId,
         ?string $appointmentId,
         ?string $admissionId,
         string $currencyCode,
@@ -243,7 +261,7 @@ class ListBillingChargeCaptureCandidatesUseCase
                     ->orWhereNotNull('completed_at');
             });
 
-        $this->applyClinicalContextFilters($query, $appointmentId, $admissionId);
+        $this->applyClinicalContextFilters($query, $encounterId, $appointmentId, $admissionId);
         $this->applyPlatformScopeIfEnabled($query);
 
         $orders = $query
@@ -285,6 +303,7 @@ class ListBillingChargeCaptureCandidatesUseCase
      */
     private function pharmacyCandidates(
         string $patientId,
+        ?string $encounterId,
         ?string $appointmentId,
         ?string $admissionId,
         string $currencyCode,
@@ -298,7 +317,7 @@ class ListBillingChargeCaptureCandidatesUseCase
                     ->orWhere('quantity_dispensed', '>', 0);
             });
 
-        $this->applyClinicalContextFilters($query, $appointmentId, $admissionId);
+        $this->applyClinicalContextFilters($query, $encounterId, $appointmentId, $admissionId);
         $this->applyPlatformScopeIfEnabled($query);
 
         $orders = $query
@@ -346,6 +365,7 @@ class ListBillingChargeCaptureCandidatesUseCase
      */
     private function theatreCandidates(
         string $patientId,
+        ?string $encounterId,
         ?string $appointmentId,
         ?string $admissionId,
         string $currencyCode,
@@ -359,7 +379,7 @@ class ListBillingChargeCaptureCandidatesUseCase
                     ->orWhereNotNull('completed_at');
             });
 
-        $this->applyClinicalContextFilters($query, $appointmentId, $admissionId);
+        $this->applyClinicalContextFilters($query, $encounterId, $appointmentId, $admissionId);
         $this->applyPlatformScopeIfEnabled($query);
 
         $procedures = $query
@@ -934,8 +954,18 @@ class ListBillingChargeCaptureCandidatesUseCase
         return $catalogUnit !== '' ? $catalogUnit : $fallbackUnit;
     }
 
-    private function applyClinicalContextFilters(Builder $query, ?string $appointmentId, ?string $admissionId): void
-    {
+    private function applyClinicalContextFilters(
+        Builder $query,
+        ?string $encounterId,
+        ?string $appointmentId,
+        ?string $admissionId,
+    ): void {
+        if ($encounterId !== null) {
+            $query->where('encounter_id', $encounterId);
+
+            return;
+        }
+
         if ($appointmentId !== null) {
             $query->where('appointment_id', $appointmentId);
         }

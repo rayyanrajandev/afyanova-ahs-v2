@@ -5,6 +5,7 @@ namespace App\Modules\Billing\Application\UseCases;
 use App\Modules\Billing\Application\Exceptions\AdmissionNotEligibleForBillingInvoiceException;
 use App\Modules\Billing\Application\Exceptions\AppointmentNotEligibleForBillingInvoiceException;
 use App\Modules\Billing\Application\Exceptions\BillingInvoicePricingResolutionException;
+use App\Modules\Billing\Application\Exceptions\EncounterNotEligibleForBillingInvoiceException;
 use App\Modules\Billing\Application\Exceptions\PatientNotEligibleForBillingInvoiceException;
 use App\Modules\Billing\Application\Support\BillingInvoiceLineItemAutoPricingResolver;
 use App\Modules\Billing\Application\Support\BillingInvoicePayerSummaryResolver;
@@ -15,6 +16,7 @@ use App\Modules\Billing\Domain\Services\AdmissionLookupServiceInterface;
 use App\Modules\Billing\Domain\Services\AppointmentLookupServiceInterface;
 use App\Modules\Billing\Domain\Services\PatientLookupServiceInterface;
 use App\Modules\Billing\Domain\ValueObjects\BillingInvoiceStatus;
+use App\Modules\Encounter\Application\Services\EncounterResolverService;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\DefaultCurrencyResolverInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
@@ -32,6 +34,7 @@ class CreateBillingInvoiceUseCase
         private readonly BillingInvoiceLineItemAutoPricingResolver $lineItemAutoPricingResolver,
         private readonly BillingInvoicePayerSummaryResolver $payerSummaryResolver,
         private readonly ConsultationReviewDiscountApplier $consultationReviewDiscountApplier,
+        private readonly EncounterResolverService $encounterResolverService,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly DefaultCurrencyResolverInterface $defaultCurrencyResolver,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
@@ -49,6 +52,25 @@ class CreateBillingInvoiceUseCase
         }
 
         $appointmentId = $payload['appointment_id'] ?? null;
+        $encounterId = $this->normalizeNullableString($payload['encounter_id'] ?? null);
+        if ($encounterId !== null) {
+            $linkedEncounter = $this->encounterResolverService->findById($encounterId);
+            if ($linkedEncounter === null || (string) $linkedEncounter->patient_id !== $patientId) {
+                throw new EncounterNotEligibleForBillingInvoiceException(
+                    'Encounter is not valid for the selected patient.',
+                );
+            }
+
+            $payload['encounter_id'] = $encounterId;
+            if ($appointmentId === null && $linkedEncounter->appointment_id !== null) {
+                $appointmentId = (string) $linkedEncounter->appointment_id;
+                $payload['appointment_id'] = $appointmentId;
+            }
+            if (($payload['admission_id'] ?? null) === null && $linkedEncounter->admission_id !== null) {
+                $payload['admission_id'] = (string) $linkedEncounter->admission_id;
+            }
+        }
+
         $linkedAppointment = null;
         if ($appointmentId === null && ($payload['admission_id'] ?? null) === null) {
             $linkedAppointment = $this->appointmentLookupService->findSingleActiveBillingAppointmentForPatient($patientId);
@@ -154,6 +176,7 @@ class CreateBillingInvoiceUseCase
     {
         $mergedPayload = [
             'patient_id' => $existingDraft['patient_id'] ?? $payload['patient_id'],
+            'encounter_id' => $payload['encounter_id'] ?? ($existingDraft['encounter_id'] ?? null),
             'admission_id' => $payload['admission_id'] ?? ($existingDraft['admission_id'] ?? null),
             'appointment_id' => $payload['appointment_id'] ?? ($existingDraft['appointment_id'] ?? null),
             'billing_payer_contract_id' => $payload['billing_payer_contract_id'] ?? ($existingDraft['billing_payer_contract_id'] ?? null),
@@ -268,6 +291,7 @@ class CreateBillingInvoiceUseCase
             'tenant_id',
             'facility_id',
             'patient_id',
+            'encounter_id',
             'admission_id',
             'appointment_id',
             'billing_payer_contract_id',

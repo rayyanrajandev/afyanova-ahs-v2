@@ -4,6 +4,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import BillingInvoiceLookupField from '@/components/billing/BillingInvoiceLookupField.vue';
 import CashBillingAccountLookupField from '@/components/billing/CashBillingAccountLookupField.vue';
+import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,9 +14,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import LeaveWorkflowDialog from '@/components/workflow/LeaveWorkflowDialog.vue';
+import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { csrfRequestHeaders, refreshCsrfToken } from '@/lib/csrf';
+import { apiGet, apiPost } from '@/lib/apiClient';
+import { generateRequestKey } from '@/lib/idempotency';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
 
@@ -56,13 +60,42 @@ type PaymentPlan = {
 };
 type ApiListResponse<T> = { success: boolean; data: T[]; meta: Pagination };
 type ApiItemResponse<T> = { success: boolean; data: T };
+type BillingInvoiceLookupSummary = {
+    id: string;
+    invoiceNumber: string | null;
+    patientId: string | null;
+    currencyCode: string | null;
+    totalAmount: number | string | null;
+    paidAmount: number | string | null;
+    balanceAmount: number | string | null;
+    status: string | null;
+};
+type CashBillingAccountLookupSummary = {
+    id: string;
+    patient_id: string | null;
+    currency_code: string | null;
+    account_balance: number | null;
+    total_charged: number | null;
+    total_paid: number | null;
+    status: string | null;
+    patient?: {
+        id: string | null;
+        patient_number: string | null;
+        first_name: string | null;
+        middle_name: string | null;
+        last_name: string | null;
+        display_name: string | null;
+        phone: string | null;
+        status: string | null;
+    } | null;
+};
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Billing', href: '/billing-invoices' },
     { title: 'Payment Plans', href: '/billing-payment-plans' },
 ];
 
-const { permissionState } = usePlatformAccess();
+const { permissionState, scope } = usePlatformAccess();
 const canRead = computed(() => permissionState('billing.invoices.read') === 'allowed');
 const canManage = computed(() => permissionState('billing.payments.record') === 'allowed');
 
@@ -76,6 +109,12 @@ const selectedPlanId = ref<string | null>(null);
 const selectedPlan = ref<PaymentPlan | null>(null);
 const createDialogOpen = ref(false);
 const paymentDialogOpen = ref(false);
+const createSelectedInvoice = ref<BillingInvoiceLookupSummary | null>(null);
+const createSelectedCashAccount = ref<CashBillingAccountLookupSummary | null>(null);
+const createDiscardConfirmOpen = ref(false);
+const paymentDiscardConfirmOpen = ref(false);
+const createPlanRequestKey = ref(generateRequestKey('billing-payment-plan'));
+const postPlanPaymentRequestKey = ref(generateRequestKey('billing-plan-payment'));
 
 const filters = reactive({ q: '', status: 'all', page: 1, perPage: 15 });
 const createForm = reactive({
@@ -96,6 +135,135 @@ const createForm = reactive({
 });
 const paymentForm = reactive({ amount: '', paymentMethod: 'cash', paymentReference: '', note: '' });
 
+const createPlanPatientName = computed(() => {
+    if (createForm.sourceType === 'cash') {
+        const patient = createSelectedCashAccount.value?.patient;
+        const fullName = [patient?.first_name, patient?.middle_name, patient?.last_name]
+            .filter(Boolean)
+            .join(' ')
+            .trim();
+
+        return fullName || patient?.display_name || (patient?.patient_number ? `Patient ${patient.patient_number}` : null);
+    }
+
+    const patientId = String(createSelectedInvoice.value?.patientId ?? '').trim();
+    return patientId ? `Patient ${patientId}` : null;
+});
+
+const createPlanPatientMeta = computed(() => {
+    if (createForm.sourceType === 'cash') {
+        const patient = createSelectedCashAccount.value?.patient;
+        if (!patient) return null;
+
+        const parts = [
+            patient.patient_number?.trim() ? `Patient No. ${patient.patient_number.trim()}` : null,
+            patient.phone?.trim() || null,
+        ].filter(Boolean);
+
+        return parts.length > 0 ? parts.join(' · ') : null;
+    }
+
+    const patientId = String(createSelectedInvoice.value?.patientId ?? '').trim();
+    return patientId ? `Patient ID ${patientId}` : null;
+});
+
+const createPlanWorkflowContextLabel = computed(() => {
+    if (createForm.sourceType === 'invoice') {
+        return createForm.billingInvoiceId.trim() ? 'Billing invoice settlement plan' : 'Select billing invoice';
+    }
+
+    return createForm.cashBillingAccountId.trim() ? 'Cash account recovery plan' : 'Select cash billing account';
+});
+
+const createPlanWorkflowContextMeta = computed(() => {
+    if (createForm.sourceType === 'invoice') {
+        const invoice = createSelectedInvoice.value;
+        if (invoice) {
+            return [
+                invoice.invoiceNumber?.trim() || null,
+                formatCurrency(Number(invoice.balanceAmount ?? 0), invoice.currencyCode || 'TZS'),
+            ]
+                .filter(Boolean)
+                .join(' · ');
+        }
+
+        return 'Search issued or partially paid invoices and attach the plan to the open balance.';
+    }
+
+    const account = createSelectedCashAccount.value;
+    if (account) {
+        const patient = account.patient;
+        const patientLabel = patient?.patient_number?.trim() || String(account.patient_id ?? '').trim() || null;
+
+        return [
+            patientLabel ? `Patient ${patientLabel}` : null,
+            formatCurrency(Number(account.account_balance ?? 0), account.currency_code || 'TZS'),
+        ]
+            .filter(Boolean)
+            .join(' · ');
+    }
+
+    return 'Search the cashier workboard and attach the plan to the selected walk-in account balance.';
+});
+
+const createPlanContextStatusLabel = computed(() => {
+    if (createForm.sourceType === 'invoice') {
+        return createForm.billingInvoiceId.trim() ? 'Invoice linked' : 'Invoice required';
+    }
+
+    return createForm.cashBillingAccountId.trim() ? 'Cash account linked' : 'Cash account required';
+});
+
+const createPlanContextStatusVariant = computed<
+    'default' | 'secondary' | 'outline' | 'destructive'
+>(() => {
+    if (createForm.sourceType === 'invoice') {
+        return createForm.billingInvoiceId.trim() ? 'default' : 'outline';
+    }
+
+    return createForm.cashBillingAccountId.trim() ? 'secondary' : 'outline';
+});
+
+function createPlanSourceMetricLabel(): string {
+    return createForm.sourceType === 'invoice' ? 'Open balance' : 'Account balance';
+}
+
+function createPlanSourceMetricValue(): string {
+    if (createForm.sourceType === 'invoice') {
+        return createSelectedInvoice.value
+            ? formatCurrency(Number(createSelectedInvoice.value.balanceAmount ?? 0), createSelectedInvoice.value.currencyCode || 'TZS')
+            : 'Select source';
+    }
+
+    return createSelectedCashAccount.value
+        ? formatCurrency(Number(createSelectedCashAccount.value.account_balance ?? 0), createSelectedCashAccount.value.currency_code || 'TZS')
+        : 'Select source';
+}
+
+function createPlanSourceSecondaryLabel(): string {
+    return createForm.sourceType === 'invoice' ? 'Invoice status' : 'Account status';
+}
+
+function createPlanSourceSecondaryValue(): string {
+    if (createForm.sourceType === 'invoice') {
+        return createSelectedInvoice.value
+            ? formatStatusLabel(createSelectedInvoice.value.status ?? null)
+            : 'Select source';
+    }
+
+    return createSelectedCashAccount.value
+        ? formatStatusLabel(createSelectedCashAccount.value.status ?? null)
+        : 'Select source';
+}
+
+function handleCreateInvoiceSelected(invoice: BillingInvoiceLookupSummary | null): void {
+    createSelectedInvoice.value = invoice;
+}
+
+function handleCreateCashAccountSelected(account: CashBillingAccountLookupSummary | null): void {
+    createSelectedCashAccount.value = account;
+}
+
 const selectedSourceHref = computed(() => {
     if (!selectedPlan.value) return null;
     if (selectedPlan.value.billingInvoiceId) return '/billing-invoices';
@@ -103,25 +271,111 @@ const selectedSourceHref = computed(() => {
     return null;
 });
 
-async function apiRequest<T>(method: 'GET' | 'POST', path: string, options?: { query?: Record<string, string | number>; body?: Record<string, unknown> }): Promise<T> {
-    const url = new URL(`/api/v1${path}`, window.location.origin);
-    Object.entries(options?.query ?? {}).forEach(([key, value]) => {
-        if (value === '' || value === 'all') return;
-        url.searchParams.set(key, String(value));
-    });
+const selectedPlanPatientName = computed(() =>
+    selectedPlan.value?.patient?.displayName
+    || selectedPlan.value?.patient?.patientNumber
+    || null,
+);
 
-    const headers: Record<string, string> = { Accept: 'application/json' };
-    let body: string | undefined;
-    if (method === 'POST') {
-        await refreshCsrfToken();
-        Object.assign(headers, csrfRequestHeaders(), { 'Content-Type': 'application/json' });
-        body = JSON.stringify(options?.body ?? {});
+const selectedPlanPatientMeta = computed(() =>
+    selectedPlan.value?.patient?.patientNumber
+        ? `Patient No. ${selectedPlan.value.patient.patientNumber}`
+        : null,
+);
+
+const paymentWorkflowContextLabel = computed(() =>
+    selectedPlan.value?.planName
+    || selectedPlan.value?.planNumber
+    || 'Selected payment plan',
+);
+
+const paymentWorkflowContextMeta = computed(() => {
+    if (!selectedPlan.value) return 'Select a payment plan before posting an installment collection.';
+
+    return [
+        selectedPlan.value.invoiceNumber?.trim() || null,
+        formatCurrency(selectedPlan.value.balanceAmount, selectedPlan.value.currencyCode || 'TZS'),
+    ]
+        .filter(Boolean)
+        .join(' | ');
+});
+
+const paymentContextStatusLabel = computed(() => {
+    if (!selectedPlan.value) return 'Plan required';
+    if (!paymentForm.amount.trim()) return 'Amount required';
+    return 'Ready to post';
+});
+
+const paymentContextStatusVariant = computed<
+    'default' | 'secondary' | 'outline' | 'destructive'
+>(() => (!selectedPlan.value || !paymentForm.amount.trim() ? 'outline' : 'default'));
+
+const hasPendingCreatePlanWorkflow = computed(() => Boolean(
+    createForm.sourceType !== 'invoice'
+    || createForm.billingInvoiceId.trim()
+    || createForm.cashBillingAccountId.trim()
+    || createForm.planName.trim()
+    || createForm.totalAmount.trim()
+    || createForm.downPaymentAmount.trim()
+    || createForm.downPaymentPaymentMethod !== 'cash'
+    || createForm.downPaymentReference.trim()
+    || createForm.payerType !== 'self_pay'
+    || createForm.installmentCount !== '3'
+    || createForm.installmentFrequency !== 'monthly'
+    || createForm.installmentIntervalDays.trim()
+    || createForm.firstDueDate.trim()
+    || createForm.termsAndNotes.trim(),
+));
+
+const hasPendingPaymentWorkflow = computed(() => Boolean(
+    paymentForm.amount.trim()
+    || paymentForm.paymentMethod !== 'cash'
+    || paymentForm.paymentReference.trim()
+    || paymentForm.note.trim(),
+));
+
+const hasPendingPaymentPlanWorkflow = computed(() => (
+    (createDialogOpen.value && hasPendingCreatePlanWorkflow.value)
+    || (paymentDialogOpen.value && hasPendingPaymentWorkflow.value)
+));
+
+const {
+    confirmOpen: leaveConfirmOpen,
+    confirmLeave: confirmPendingPaymentPlanWorkflowLeave,
+    cancelLeave: cancelPendingPaymentPlanWorkflowLeave,
+} = usePendingWorkflowLeaveGuard({
+    shouldBlock: hasPendingPaymentPlanWorkflow,
+    isSubmitting: actionLoading,
+    blockBrowserUnload: false,
+});
+
+async function apiRequest<T>(
+    method: 'GET' | 'POST',
+    path: string,
+    options?: {
+        query?: Record<string, string | number>;
+        body?: Record<string, unknown>;
+        entitlementContext?: string;
+        idempotencyKey?: string | null;
+        requestId?: string | null;
+    },
+): Promise<T> {
+    if (method === 'GET') {
+        const query = Object.fromEntries(
+            Object.entries(options?.query ?? {}).filter(([, value]) => value !== '' && value !== 'all'),
+        );
+
+        return apiGet<T>(path, query, {
+            entitlementContext: options?.entitlementContext,
+        });
     }
 
-    const response = await fetch(url.toString(), { method, headers, body, credentials: 'same-origin' });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.message || `Request failed with status ${response.status}.`);
-    return payload as T;
+    return apiPost<T>(path, {
+        body: options?.body,
+        entitlementContext: options?.entitlementContext,
+        idempotencyKey: options?.idempotencyKey,
+        requestId: options?.requestId,
+    });
 }
 
 function formatCurrency(value: number | null | undefined, currency = 'TZS'): string {
@@ -146,6 +400,102 @@ function statusVariant(status: string | null | undefined): 'default' | 'secondar
     if (status === 'defaulted') return 'destructive';
     if (status === 'partially_paid' || status === 'active') return 'default';
     return 'outline';
+}
+
+function resetCreatePlanForm(): void {
+    createForm.sourceType = 'invoice';
+    createForm.billingInvoiceId = '';
+    createForm.cashBillingAccountId = '';
+    createForm.planName = '';
+    createForm.totalAmount = '';
+    createForm.downPaymentAmount = '';
+    createForm.downPaymentPaymentMethod = 'cash';
+    createForm.downPaymentReference = '';
+    createForm.payerType = 'self_pay';
+    createForm.installmentCount = '3';
+    createForm.installmentFrequency = 'monthly';
+    createForm.installmentIntervalDays = '';
+    createForm.firstDueDate = '';
+    createForm.termsAndNotes = '';
+    createSelectedInvoice.value = null;
+    createSelectedCashAccount.value = null;
+}
+
+function resetPaymentForm(): void {
+    paymentForm.amount = '';
+    paymentForm.paymentMethod = 'cash';
+    paymentForm.paymentReference = '';
+    paymentForm.note = '';
+}
+
+function rotateCreatePlanRequestKey(): void {
+    createPlanRequestKey.value = generateRequestKey('billing-payment-plan');
+}
+
+function rotatePostPaymentRequestKey(): void {
+    postPlanPaymentRequestKey.value = generateRequestKey('billing-plan-payment');
+}
+
+function openCreatePlanDialog(): void {
+    resetCreatePlanForm();
+    rotateCreatePlanRequestKey();
+    createDialogOpen.value = true;
+}
+
+function openPaymentDialog(): void {
+    resetPaymentForm();
+    rotatePostPaymentRequestKey();
+    paymentDialogOpen.value = true;
+}
+
+function requestCreateDialogOpenChange(open: boolean): void {
+    if (open) {
+        openCreatePlanDialog();
+        return;
+    }
+
+    if (actionLoading.value) return;
+
+    if (hasPendingCreatePlanWorkflow.value) {
+        createDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    createDialogOpen.value = false;
+    resetCreatePlanForm();
+    rotateCreatePlanRequestKey();
+}
+
+function requestPaymentDialogOpenChange(open: boolean): void {
+    if (open) {
+        openPaymentDialog();
+        return;
+    }
+
+    if (actionLoading.value) return;
+
+    if (hasPendingPaymentWorkflow.value) {
+        paymentDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    paymentDialogOpen.value = false;
+    resetPaymentForm();
+    rotatePostPaymentRequestKey();
+}
+
+function confirmCreateDialogDiscard(): void {
+    createDiscardConfirmOpen.value = false;
+    createDialogOpen.value = false;
+    resetCreatePlanForm();
+    rotateCreatePlanRequestKey();
+}
+
+function confirmPaymentDialogDiscard(): void {
+    paymentDiscardConfirmOpen.value = false;
+    paymentDialogOpen.value = false;
+    resetPaymentForm();
+    rotatePostPaymentRequestKey();
 }
 
 async function loadPlans(focusSelected = true): Promise<void> {
@@ -189,9 +539,10 @@ async function loadPlan(id: string): Promise<void> {
 }
 
 async function submitCreatePlan(): Promise<void> {
-    if (!canManage.value) return;
+    if (!canManage.value || actionLoading.value) return;
     actionLoading.value = true;
     try {
+        const requestKey = createPlanRequestKey.value;
         await apiRequest<ApiItemResponse<PaymentPlan>>('POST', '/billing-payment-plans', {
             body: {
                 billingInvoiceId: createForm.sourceType === 'invoice' ? createForm.billingInvoiceId : null,
@@ -208,8 +559,13 @@ async function submitCreatePlan(): Promise<void> {
                 firstDueDate: createForm.firstDueDate,
                 termsAndNotes: createForm.termsAndNotes || null,
             },
+            entitlementContext: 'Payment plan create',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
         createDialogOpen.value = false;
+        resetCreatePlanForm();
+        rotateCreatePlanRequestKey();
         notifySuccess('Payment plan created.');
         await loadPlans(false);
     } catch (error) {
@@ -220,9 +576,10 @@ async function submitCreatePlan(): Promise<void> {
 }
 
 async function submitPlanPayment(): Promise<void> {
-    if (!selectedPlan.value || !canManage.value) return;
+    if (!selectedPlan.value || !canManage.value || actionLoading.value) return;
     actionLoading.value = true;
     try {
+        const requestKey = postPlanPaymentRequestKey.value;
         const response = await apiRequest<ApiItemResponse<PaymentPlan>>('POST', `/billing-payment-plans/${selectedPlan.value.id}/payments`, {
             body: {
                 amount: Number(paymentForm.amount),
@@ -230,12 +587,14 @@ async function submitPlanPayment(): Promise<void> {
                 paymentReference: paymentForm.paymentReference || null,
                 note: paymentForm.note || null,
             },
+            entitlementContext: 'Payment plan payment',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
         selectedPlan.value = response.data;
         paymentDialogOpen.value = false;
-        paymentForm.amount = '';
-        paymentForm.paymentReference = '';
-        paymentForm.note = '';
+        resetPaymentForm();
+        rotatePostPaymentRequestKey();
         notifySuccess('Payment posted to the plan and linked billing source.');
         await loadPlans(false);
     } catch (error) {
@@ -250,14 +609,14 @@ onMounted(() => {
     const invoiceId = params.get('billingInvoiceId');
     const cashBillingAccountId = params.get('cashBillingAccountId');
     if (invoiceId) {
+        openCreatePlanDialog();
         createForm.sourceType = 'invoice';
         createForm.billingInvoiceId = invoiceId;
-        createDialogOpen.value = true;
     }
     if (cashBillingAccountId) {
+        openCreatePlanDialog();
         createForm.sourceType = 'cash';
         createForm.cashBillingAccountId = cashBillingAccountId;
-        createDialogOpen.value = true;
     }
     void loadPlans();
 });
@@ -288,7 +647,7 @@ onMounted(() => {
                     <Button variant="outline" as-child>
                         <Link href="/billing-corporate">Corporate Billing</Link>
                     </Button>
-                    <Button v-if="canManage" class="gap-1.5" @click="createDialogOpen = true">
+                    <Button v-if="canManage" class="gap-1.5" @click="openCreatePlanDialog">
                         <AppIcon name="plus" class="size-4" />
                         New plan
                     </Button>
@@ -383,7 +742,7 @@ onMounted(() => {
                                 <Button v-if="selectedSourceHref" size="sm" variant="outline" as-child>
                                     <Link :href="selectedSourceHref">Open source workflow</Link>
                                 </Button>
-                                <Button v-if="canManage" size="sm" class="gap-1.5" @click="paymentDialogOpen = true">
+                                <Button v-if="canManage" size="sm" class="gap-1.5" @click="openPaymentDialog">
                                     <AppIcon name="banknote" class="size-3.5" />
                                     Record payment
                                 </Button>
@@ -456,13 +815,45 @@ onMounted(() => {
             </div>
         </div>
 
-        <Dialog v-model:open="createDialogOpen">
+        <Dialog :open="createDialogOpen" @update:open="requestCreateDialogOpenChange">
             <DialogContent class="max-w-2xl">
                 <DialogHeader>
                     <DialogTitle>Create payment plan</DialogTitle>
                     <DialogDescription>Link the plan to an existing invoice or cash account so every collection flows through the current billing ledger.</DialogDescription>
                 </DialogHeader>
                 <div class="grid gap-4">
+                    <ClinicalContextBanner
+                        title="Payment plan context"
+                        description="Confirm the patient, source balance, and billing pathway before structuring installments."
+                        :patient-name="createPlanPatientName"
+                        :patient-meta="createPlanPatientMeta"
+                        :facility-name="scope?.facility?.name || null"
+                        :tenant-name="scope?.tenant?.name || null"
+                        :context-label="createPlanWorkflowContextLabel"
+                        :context-meta="createPlanWorkflowContextMeta"
+                        :status-label="createPlanContextStatusLabel"
+                        :status-variant="createPlanContextStatusVariant"
+                        tone="muted"
+                    >
+                        <div class="grid gap-2 sm:grid-cols-2">
+                            <div class="rounded-md border bg-background/80 px-3 py-2">
+                                <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                    {{ createPlanSourceMetricLabel() }}
+                                </p>
+                                <p class="mt-1 text-sm font-medium text-foreground">
+                                    {{ createPlanSourceMetricValue() }}
+                                </p>
+                            </div>
+                            <div class="rounded-md border bg-background/80 px-3 py-2">
+                                <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                    {{ createPlanSourceSecondaryLabel() }}
+                                </p>
+                                <p class="mt-1 text-sm font-medium text-foreground">
+                                    {{ createPlanSourceSecondaryValue() }}
+                                </p>
+                            </div>
+                        </div>
+                    </ClinicalContextBanner>
                     <div class="grid gap-2 sm:grid-cols-3">
                         <div class="grid gap-2">
                             <Label>Source type</Label>
@@ -482,6 +873,7 @@ onMounted(() => {
                             helper-text="Search issued or partially paid invoices and attach this plan to the open balance."
                             :statuses="['issued', 'partially_paid']"
                             class="sm:col-span-2"
+                            @selected="handleCreateInvoiceSelected"
                         />
                         <CashBillingAccountLookupField
                             v-else
@@ -490,6 +882,7 @@ onMounted(() => {
                             label="Cash billing account"
                             helper-text="Search the cashier workboard and attach the plan to the selected walk-in account balance."
                             class="sm:col-span-2"
+                            @selected="handleCreateCashAccountSelected"
                         />
                     </div>
                     <div class="grid gap-2 sm:grid-cols-2">
@@ -571,19 +964,32 @@ onMounted(() => {
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button variant="outline" @click="createDialogOpen = false">Cancel</Button>
+                    <Button variant="outline" :disabled="actionLoading" @click="requestCreateDialogOpenChange(false)">Cancel</Button>
                     <Button :disabled="actionLoading" @click="submitCreatePlan">{{ actionLoading ? 'Creating...' : 'Create plan' }}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
 
-        <Dialog v-model:open="paymentDialogOpen">
+        <Dialog :open="paymentDialogOpen" @update:open="requestPaymentDialogOpenChange">
             <DialogContent class="max-w-lg">
                 <DialogHeader>
                     <DialogTitle>Record installment payment</DialogTitle>
                     <DialogDescription>Post the payment to the linked billing source, then allocate it across the open installment schedule.</DialogDescription>
                 </DialogHeader>
                 <div class="grid gap-4">
+                    <ClinicalContextBanner
+                        title="Payment collection context"
+                        description="Confirm the patient, plan, and remaining balance before posting the installment payment."
+                        :patient-name="selectedPlanPatientName"
+                        :patient-meta="selectedPlanPatientMeta"
+                        :facility-name="scope?.facility?.name || null"
+                        :tenant-name="scope?.tenant?.name || null"
+                        :context-label="paymentWorkflowContextLabel"
+                        :context-meta="paymentWorkflowContextMeta"
+                        :status-label="paymentContextStatusLabel"
+                        :status-variant="paymentContextStatusVariant"
+                        tone="muted"
+                    />
                     <div class="grid gap-2 sm:grid-cols-3">
                         <div class="grid gap-2">
                             <Label>Amount</Label>
@@ -614,10 +1020,40 @@ onMounted(() => {
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button variant="outline" @click="paymentDialogOpen = false">Cancel</Button>
+                    <Button variant="outline" :disabled="actionLoading" @click="requestPaymentDialogOpenChange(false)">Cancel</Button>
                     <Button :disabled="actionLoading" @click="submitPlanPayment">{{ actionLoading ? 'Posting...' : 'Post payment' }}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+
+        <LeaveWorkflowDialog
+            :open="leaveConfirmOpen"
+            title="Leave payment plan workflow?"
+            description="A payment plan form still has unsaved changes. Stay here to finish it, or leave this page and discard the unfinished billing work."
+            stay-label="Stay on workflow"
+            leave-label="Leave page"
+            @update:open="cancelPendingPaymentPlanWorkflowLeave"
+            @confirm="confirmPendingPaymentPlanWorkflowLeave"
+        />
+
+        <LeaveWorkflowDialog
+            :open="createDiscardConfirmOpen"
+            title="Discard payment plan draft?"
+            description="This plan setup still has unsaved installment details. Keep editing to finish the billing arrangement, or discard the form."
+            stay-label="Keep editing"
+            leave-label="Discard draft"
+            @update:open="createDiscardConfirmOpen = false"
+            @confirm="confirmCreateDialogDiscard"
+        />
+
+        <LeaveWorkflowDialog
+            :open="paymentDiscardConfirmOpen"
+            title="Discard payment posting?"
+            description="This payment form still has unsaved collection details. Keep editing to post the installment safely, or discard the form."
+            stay-label="Keep editing"
+            leave-label="Discard form"
+            @update:open="paymentDiscardConfirmOpen = false"
+            @confirm="confirmPaymentDialogDiscard"
+        />
     </AppLayout>
 </template>

@@ -46,12 +46,27 @@ class ListRadiologyOrdersUseCase
 
         $patientId = isset($filters['patientId']) ? trim((string) $filters['patientId']) : null;
         $patientId = $patientId === '' ? null : $patientId;
+        if ($patientId !== null && ! Str::isUuid($patientId)) {
+            $patientId = null;
+        }
 
         $appointmentId = isset($filters['appointmentId']) ? trim((string) $filters['appointmentId']) : null;
         $appointmentId = $appointmentId === '' ? null : $appointmentId;
+        if ($appointmentId !== null && ! Str::isUuid($appointmentId)) {
+            $appointmentId = null;
+        }
+
+        $encounterId = isset($filters['encounterId']) ? trim((string) $filters['encounterId']) : null;
+        $encounterId = $encounterId === '' ? null : $encounterId;
+        if ($encounterId !== null && ! Str::isUuid($encounterId)) {
+            $encounterId = null;
+        }
 
         $admissionId = isset($filters['admissionId']) ? trim((string) $filters['admissionId']) : null;
         $admissionId = $admissionId === '' ? null : $admissionId;
+        if ($admissionId !== null && ! Str::isUuid($admissionId)) {
+            $admissionId = null;
+        }
 
         $fromDateTime = isset($filters['from']) ? trim((string) $filters['from']) : null;
         $fromDateTime = $fromDateTime === '' ? null : $fromDateTime;
@@ -62,6 +77,7 @@ class ListRadiologyOrdersUseCase
         return $this->radiologyOrderRepository->search(
             query: $query,
             patientId: $patientId,
+            encounterId: $encounterId,
             appointmentId: $appointmentId,
             admissionId: $admissionId,
             status: $status,

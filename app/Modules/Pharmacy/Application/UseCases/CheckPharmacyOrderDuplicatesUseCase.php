@@ -5,6 +5,7 @@ namespace App\Modules\Pharmacy\Application\UseCases;
 use App\Modules\Pharmacy\Domain\ValueObjects\PharmacyOrderStatus;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Support\ClinicalOrders\ClinicalOrderEntryState;
+use App\Support\ClinicalOrders\EncounterScopedOrderQuery;
 use Illuminate\Database\Eloquent\Builder;
 
 class CheckPharmacyOrderDuplicatesUseCase
@@ -16,6 +17,7 @@ class CheckPharmacyOrderDuplicatesUseCase
     public function execute(array $filters): array
     {
         $patientId = trim((string) ($filters['patient_id'] ?? ''));
+        $encounterId = trim((string) ($filters['encounter_id'] ?? ''));
         $appointmentId = trim((string) ($filters['appointment_id'] ?? ''));
         $admissionId = trim((string) ($filters['admission_id'] ?? ''));
         $catalogItemId = trim((string) ($filters['approved_medicine_catalog_item_id'] ?? ''));
@@ -23,17 +25,20 @@ class CheckPharmacyOrderDuplicatesUseCase
         $excludeOrderId = trim((string) ($filters['exclude_order_id'] ?? ''));
 
         $sameEncounterDuplicates = [];
-        if ($appointmentId !== '' || $admissionId !== '') {
-            $sameEncounterDuplicates = $this->baseDuplicateQuery($patientId, $catalogItemId, $medicationCode, $excludeOrderId)
+        if (EncounterScopedOrderQuery::hasVisitScope($encounterId, $appointmentId, $admissionId)) {
+            $sameEncounterQuery = $this->baseDuplicateQuery($patientId, $catalogItemId, $medicationCode, $excludeOrderId)
                 ->whereIn('status', [
                     PharmacyOrderStatus::PENDING->value,
                     PharmacyOrderStatus::IN_PREPARATION->value,
                     PharmacyOrderStatus::PARTIALLY_DISPENSED->value,
-                ])
-                ->where(function (Builder $query) use ($appointmentId, $admissionId): void {
-                    $query->where('appointment_id', $appointmentId !== '' ? $appointmentId : null)
-                        ->where('admission_id', $admissionId !== '' ? $admissionId : null);
-                })
+                ]);
+            EncounterScopedOrderQuery::applySameVisitScope(
+                $sameEncounterQuery,
+                $encounterId,
+                $appointmentId,
+                $admissionId,
+            );
+            $sameEncounterDuplicates = $sameEncounterQuery
                 ->orderByDesc('ordered_at')
                 ->limit(10)
                 ->get()

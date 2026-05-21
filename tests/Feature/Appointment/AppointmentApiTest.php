@@ -52,6 +52,24 @@ function appointmentPayload(string $patientId, array $overrides = []): array
     ], $overrides);
 }
 
+function consultationNotePayload(
+    string $patientId,
+    string $appointmentId,
+    array $overrides = [],
+): array {
+    return array_merge([
+        'patientId' => $patientId,
+        'appointmentId' => $appointmentId,
+        'encounterAt' => now()->toDateTimeString(),
+        'recordType' => 'consultation_note',
+        'subjective' => 'Patient reports mild pain',
+        'objective' => 'Vitals stable',
+        'assessment' => 'Recovering well',
+        'plan' => 'Continue observation for 24 hours',
+        'diagnosisCode' => 'R52',
+    ], $overrides);
+}
+
 function makeAdmission(string $patientId, array $overrides = []): AdmissionModel
 {
     return AdmissionModel::query()->create(array_merge([
@@ -94,6 +112,7 @@ function grantAppointmentTriagePermissions(User $user): void
 {
     foreach ([
         'appointments.read',
+        'appointments.record-triage',
         'emergency.triage.read',
         'emergency.triage.create',
         'emergency.triage.update',
@@ -179,7 +198,7 @@ it('forbids appointment creation without create permission', function (): void {
         ->assertForbidden();
 });
 
-it('forbids appointment department options without create permission', function (): void {
+it('forbids appointment department options without routing access', function (): void {
     $user = User::factory()->create();
     grantAppointmentReadPermission($user);
 
@@ -224,6 +243,25 @@ it('lists only patient-facing appointmentable departments when create permission
         ->assertJsonPath('data.0.value', 'General OPD')
         ->assertJsonMissing(['value' => 'ICT and Systems'])
         ->assertJsonMissing(['value' => 'Billing and Finance']);
+});
+
+it('allows triage staff to read appointment department options for routing', function (): void {
+    $user = User::factory()->create();
+    grantAppointmentTriagePermissions($user);
+
+    DepartmentModel::query()->create([
+        'code' => 'OPD',
+        'name' => 'General OPD',
+        'service_type' => 'Clinical',
+        'is_patient_facing' => true,
+        'is_appointmentable' => true,
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/appointments/department-options')
+        ->assertOk()
+        ->assertJsonPath('data.0.value', 'General OPD');
 });
 
 it('forbids appointment status update without update-status permission', function (): void {
@@ -324,6 +362,81 @@ it('records opd triage and sends the patient to the provider queue', function ()
         ->status->toBe('waiting_provider')
         ->triage_vitals_summary->toBe('BP 118/74, Pulse 82, Temp 37.1 C')
         ->triage_notes->toBe('Stable and ready for provider review.')
+        ->triaged_by_user_id->toBe($triageUser->id);
+});
+
+it('requires routing context before triage can hand off an unassigned visit', function (): void {
+    $creator = makeAppointmentUser();
+    $triageUser = User::factory()->create();
+    grantAppointmentTriagePermissions($triageUser);
+    $patient = makePatient();
+
+    $created = $this->actingAs($creator)
+        ->postJson('/api/v1/appointments', appointmentPayload($patient->id, [
+            'appointmentType' => 'walk_in',
+            'department' => null,
+            'clinicianUserId' => null,
+        ]))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($creator)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/status', [
+            'status' => 'waiting_triage',
+            'reason' => null,
+        ])
+        ->assertOk();
+
+    $this->actingAs($triageUser)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/triage', [
+            'triageVitalsSummary' => 'BP 118/74, Pulse 82, Temp 37.1 C',
+            'triageNotes' => 'Stable and ready for provider review.',
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['department', 'clinicianUserId']);
+});
+
+it('records opd triage and routes a walk-in to a named provider', function (): void {
+    $creator = makeAppointmentUser();
+    $triageUser = User::factory()->create();
+    grantAppointmentTriagePermissions($triageUser);
+    $provider = User::factory()->create();
+    $patient = makePatient();
+
+    $created = $this->actingAs($creator)
+        ->postJson('/api/v1/appointments', appointmentPayload($patient->id, [
+            'appointmentType' => 'walk_in',
+            'department' => null,
+            'clinicianUserId' => null,
+        ]))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($creator)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/status', [
+            'status' => 'waiting_triage',
+            'reason' => null,
+        ])
+        ->assertOk();
+
+    $response = $this->actingAs($triageUser)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/triage', [
+            'triageVitalsSummary' => 'BP 118/74, Pulse 82, Temp 37.1 C',
+            'triageNotes' => 'Stable and ready for provider review.',
+            'department' => 'General OPD',
+            'clinicianUserId' => $provider->id,
+        ])
+        ->assertOk();
+
+    $response
+        ->assertJsonPath('data.status', 'waiting_provider')
+        ->assertJsonPath('data.department', 'General OPD')
+        ->assertJsonPath('data.clinicianUserId', $provider->id);
+
+    expect(AppointmentModel::query()->find($created['id']))
+        ->status->toBe('waiting_provider')
+        ->department->toBe('General OPD')
+        ->clinician_user_id->toBe($provider->id)
         ->triaged_by_user_id->toBe($triageUser->id);
 });
 
@@ -695,44 +808,82 @@ it('returns active consultation to provider queue', function (): void {
 });
 
 it('completes visit from active provider session', function (): void {
-    $creator = makeAppointmentUser();
-    $triageUser = User::factory()->create();
-    grantAppointmentTriagePermissions($triageUser);
     $clinicianUser = User::factory()->create();
     grantAppointmentClinicianPermissions($clinicianUser);
+    $clinicianUser->givePermissionTo('medical.records.finalize');
     $patient = makePatient();
+    $appointment = AppointmentModel::query()->create([
+        'appointment_number' => 'APT'.now()->format('Ymd').strtoupper(Str::random(6)),
+        'patient_id' => $patient->id,
+        'clinician_user_id' => $clinicianUser->id,
+        'department' => 'Outpatient',
+        'scheduled_at' => now()->subMinutes(30)->toDateTimeString(),
+        'duration_minutes' => 30,
+        'reason' => 'General consultation',
+        'notes' => null,
+        'status' => 'in_consultation',
+        'status_reason' => null,
+        'consultation_owner_user_id' => $clinicianUser->id,
+        'consultation_owner_assigned_at' => now()->toDateTimeString(),
+        'consultation_started_at' => now()->toDateTimeString(),
+    ]);
 
-    $created = $this->actingAs($creator)
-        ->postJson('/api/v1/appointments', appointmentPayload($patient->id))
+    $record = $this->actingAs($clinicianUser)
+        ->postJson('/api/v1/medical-records', consultationNotePayload($patient->id, $appointment->id))
         ->assertCreated()
         ->json('data');
 
-    $this->actingAs($creator)
-        ->patchJson('/api/v1/appointments/'.$created['id'].'/status', [
-            'status' => 'waiting_triage',
+    $this->actingAs($clinicianUser)
+        ->patchJson('/api/v1/medical-records/'.$record['id'].'/status', [
+            'status' => 'finalized',
             'reason' => null,
         ])
         ->assertOk();
 
-    $this->actingAs($triageUser)
-        ->patchJson('/api/v1/appointments/'.$created['id'].'/triage', [
-            'triageVitalsSummary' => 'BP 118/74, Pulse 82, Temp 37.1 C',
-            'triageNotes' => 'Stable and ready for provider review.',
-        ])
-        ->assertOk();
-
-    $this->actingAs($clinicianUser)
-        ->patchJson('/api/v1/appointments/'.$created['id'].'/start-consultation')
-        ->assertOk();
-
     $response = $this->actingAs($clinicianUser)
-        ->patchJson('/api/v1/appointments/'.$created['id'].'/provider-workflow', [
+        ->patchJson('/api/v1/appointments/'.$appointment->id.'/provider-workflow', [
             'status' => 'completed',
             'reason' => null,
         ])
         ->assertOk();
 
     $response->assertJsonPath('data.status', 'completed');
+});
+
+it('blocks visit completion when linked consultation note is still draft', function (): void {
+    $clinicianUser = User::factory()->create();
+    grantAppointmentClinicianPermissions($clinicianUser);
+    $patient = makePatient();
+    $appointment = AppointmentModel::query()->create([
+        'appointment_number' => 'APT'.now()->format('Ymd').strtoupper(Str::random(6)),
+        'patient_id' => $patient->id,
+        'clinician_user_id' => $clinicianUser->id,
+        'department' => 'Outpatient',
+        'scheduled_at' => now()->subMinutes(30)->toDateTimeString(),
+        'duration_minutes' => 30,
+        'reason' => 'General consultation',
+        'notes' => null,
+        'status' => 'in_consultation',
+        'status_reason' => null,
+        'consultation_owner_user_id' => $clinicianUser->id,
+        'consultation_owner_assigned_at' => now()->toDateTimeString(),
+        'consultation_started_at' => now()->toDateTimeString(),
+    ]);
+
+    $this->actingAs($clinicianUser)
+        ->postJson('/api/v1/medical-records', consultationNotePayload($patient->id, $appointment->id))
+        ->assertCreated();
+
+    $this->actingAs($clinicianUser)
+        ->patchJson('/api/v1/appointments/'.$appointment->id.'/provider-workflow', [
+            'status' => 'completed',
+            'reason' => null,
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'Finalize the consultation note before closing this visit.')
+        ->assertJsonPath('context.requiresFinalizedConsultationNote', true)
+        ->assertJsonPath('context.hasDraftConsultationNote', true)
+        ->assertJsonPath('context.hasSignedConsultationNote', false);
 });
 
 it('can create appointment for active patient', function (): void {
@@ -1177,6 +1328,112 @@ it('lists and filters appointments', function (): void {
         ->assertJsonPath('meta.total', 1)
         ->assertJsonPath('data.0.reason', 'General consultation')
         ->assertJsonPath('data.0.status', 'scheduled');
+});
+
+it('searches appointments by patient name and number', function (): void {
+    $user = makeAppointmentUser();
+    $patient = makePatient([
+        'first_name' => 'Zainab',
+        'last_name' => 'Okello',
+        'patient_number' => 'PT20260521SEARCH',
+    ]);
+
+    AppointmentModel::query()->create([
+        'appointment_number' => 'APT20260521SEARCH1',
+        'patient_id' => $patient->id,
+        'clinician_user_id' => null,
+        'department' => 'General OPD',
+        'scheduled_at' => now()->toDateTimeString(),
+        'duration_minutes' => 30,
+        'reason' => 'Follow-up review',
+        'notes' => null,
+        'status' => 'waiting_provider',
+        'status_reason' => null,
+    ]);
+
+    AppointmentModel::query()->create([
+        'appointment_number' => 'APT20260521OTHER01',
+        'patient_id' => $patient->id,
+        'clinician_user_id' => null,
+        'department' => 'General OPD',
+        'scheduled_at' => now()->addHour()->toDateTimeString(),
+        'duration_minutes' => 30,
+        'reason' => 'Unrelated visit',
+        'notes' => null,
+        'status' => 'scheduled',
+        'status_reason' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/appointments?q=Zainab+Okello&status=waiting_provider')
+        ->assertOk()
+        ->assertJsonPath('meta.total', 1)
+        ->assertJsonPath('data.0.appointmentNumber', 'APT20260521SEARCH1');
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/appointments?q=PT20260521SEARCH')
+        ->assertOk()
+        ->assertJsonPath('meta.total', 2);
+});
+
+it('lists department pool appointments without an assigned clinician', function (): void {
+    $user = makeAppointmentUser();
+    $patient = makePatient();
+    $provider = User::factory()->create();
+
+    AppointmentModel::query()->create([
+        'appointment_number' => 'APT20260521POOL01',
+        'patient_id' => $patient->id,
+        'clinician_user_id' => null,
+        'department' => 'General OPD',
+        'scheduled_at' => now()->toDateTimeString(),
+        'checked_in_at' => now()->subMinutes(20)->toDateTimeString(),
+        'duration_minutes' => 30,
+        'reason' => 'Clinic pool pickup',
+        'notes' => null,
+        'status' => 'waiting_provider',
+        'status_reason' => null,
+    ]);
+
+    AppointmentModel::query()->create([
+        'appointment_number' => 'APT20260521ASSIGN',
+        'patient_id' => $patient->id,
+        'clinician_user_id' => $provider->id,
+        'department' => 'General OPD',
+        'scheduled_at' => now()->toDateTimeString(),
+        'checked_in_at' => now()->subMinutes(10)->toDateTimeString(),
+        'duration_minutes' => 30,
+        'reason' => 'Named provider visit',
+        'notes' => null,
+        'status' => 'waiting_provider',
+        'status_reason' => null,
+    ]);
+
+    AppointmentModel::query()->create([
+        'appointment_number' => 'APT20260521OTHERDEPT',
+        'patient_id' => $patient->id,
+        'clinician_user_id' => null,
+        'department' => 'Dental Clinic',
+        'scheduled_at' => now()->toDateTimeString(),
+        'checked_in_at' => now()->subMinutes(5)->toDateTimeString(),
+        'duration_minutes' => 30,
+        'reason' => 'Other clinic pool',
+        'notes' => null,
+        'status' => 'waiting_provider',
+        'status_reason' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/appointments?department=General+OPD&unassignedClinician=true&status=waiting_provider')
+        ->assertOk()
+        ->assertJsonPath('meta.total', 1)
+        ->assertJsonPath('data.0.appointmentNumber', 'APT20260521POOL01');
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/appointments/status-counts?department=General+OPD&unassignedClinician=true')
+        ->assertOk()
+        ->assertJsonPath('data.waiting_provider', 1)
+        ->assertJsonPath('data.total', 1);
 });
 
 it('stamps appointment tenant and facility scope when created under resolved platform scope', function (): void {

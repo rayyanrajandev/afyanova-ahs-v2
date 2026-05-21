@@ -27,6 +27,10 @@ use App\Modules\Appointment\Application\UseCases\UpdateAppointmentReferralUseCas
 use App\Modules\Appointment\Application\UseCases\UpdateAppointmentStatusUseCase;
 use App\Modules\Appointment\Application\UseCases\UpdateAppointmentUseCase;
 use App\Modules\Appointment\Application\UseCases\OverrideConsultationTypeUseCase;
+use App\Modules\Encounter\Application\UseCases\ResolveEncounterForAppointmentUseCase;
+use App\Modules\Encounter\Presentation\Http\Transformers\EncounterResponseTransformer;
+use App\Modules\Encounter\Presentation\Http\Transformers\EncounterWorkspaceResponseTransformer;
+use App\Modules\MedicalRecord\Application\Exceptions\AppointmentNotEligibleForMedicalRecordException;
 use App\Modules\Appointment\Domain\Repositories\AppointmentAuditLogRepositoryInterface;
 use App\Modules\Appointment\Presentation\Http\Transformers\AppointmentAuditLogResponseTransformer;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
@@ -45,6 +49,7 @@ use App\Modules\Appointment\Presentation\Http\Transformers\AppointmentReferralAu
 use App\Modules\Appointment\Presentation\Http\Transformers\AppointmentReferralResponseTransformer;
 use App\Modules\Appointment\Presentation\Http\Transformers\AppointmentResponseTransformer;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
+use App\Modules\MedicalRecord\Domain\Repositories\MedicalRecordRepositoryInterface;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -139,6 +144,42 @@ class AppointmentController extends Controller
         ]);
     }
 
+    public function encounter(
+        Request $request,
+        string $id,
+        ResolveEncounterForAppointmentUseCase $useCase,
+    ): JsonResponse {
+        try {
+            $workspace = $useCase->execute(
+                appointmentId: $id,
+                actorId: $request->user()?->id,
+                includeWorkspace: $request->query('view') === 'workspace',
+            );
+        } catch (AppointmentNotEligibleForMedicalRecordException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => 'APPOINTMENT_ENCOUNTER_NOT_ELIGIBLE',
+                'errors' => [
+                    'appointmentId' => [$exception->getMessage()],
+                ],
+            ], 422);
+        }
+
+        abort_if($workspace === null, 404, 'Appointment not found.');
+
+        if ($request->query('view') === 'workspace') {
+            return response()->json([
+                'data' => EncounterWorkspaceResponseTransformer::transform($workspace),
+            ]);
+        }
+
+        $encounter = is_array($workspace['encounter'] ?? null) ? $workspace['encounter'] : [];
+
+        return response()->json([
+            'data' => EncounterResponseTransformer::transform($encounter),
+        ]);
+    }
+
     public function update(string $id, UpdateAppointmentRequest $request, UpdateAppointmentUseCase $useCase): JsonResponse
     {
         try {
@@ -193,13 +234,30 @@ class AppointmentController extends Controller
         RecordAppointmentTriageUseCase $useCase
     ): JsonResponse {
         try {
+            $validated = $request->validated();
             $notes = trim((string) $request->input('triageNotes', ''));
+            $routing = [];
+
+            if (array_key_exists('department', $validated)) {
+                $department = trim((string) ($validated['department'] ?? ''));
+                $routing['department'] = $department !== '' ? $department : null;
+            }
+
+            if (array_key_exists('clinicianUserId', $validated)) {
+                $clinicianUserId = isset($validated['clinicianUserId'])
+                    ? (int) $validated['clinicianUserId']
+                    : null;
+                $routing['clinician_user_id'] = $clinicianUserId !== null && $clinicianUserId > 0
+                    ? $clinicianUserId
+                    : null;
+            }
 
             $appointment = $useCase->execute(
                 id: $id,
                 triageVitalsSummary: trim($request->string('triageVitalsSummary')->value()),
                 triageNotes: $notes !== '' ? $notes : null,
                 triageCategory: $request->filled('triageCategory') ? strtoupper(trim((string) $request->input('triageCategory'))) : null,
+                routing: $routing,
                 actorId: $request->user()?->id,
             );
         } catch (TenantScopeRequiredForIsolationException $exception) {
@@ -473,6 +531,7 @@ class AppointmentController extends Controller
         UpdateAppointmentProviderWorkflowRequest $request,
         GetAppointmentUseCase $getAppointment,
         UpdateAppointmentStatusUseCase $updateStatus,
+        MedicalRecordRepositoryInterface $medicalRecordRepository,
     ): JsonResponse {
         $existing = $getAppointment->execute($id);
         abort_if($existing === null, 404, 'Appointment not found.');
@@ -511,6 +570,27 @@ class AppointmentController extends Controller
                     'requestedStatus' => $targetStatus,
                 ],
             );
+        }
+
+        if ($currentStatus === 'in_consultation' && $targetStatus === 'completed') {
+            $hasDraftConsultationNote = $medicalRecordRepository
+                ->hasDraftConsultationNoteForAppointment($id);
+            $hasSignedConsultationNote = $medicalRecordRepository
+                ->hasSignedConsultationNoteForAppointment($id);
+
+            if ($hasDraftConsultationNote || ! $hasSignedConsultationNote) {
+                return $this->validationErrorResponse(
+                    message: 'Finalize the consultation note before closing this visit.',
+                    errors: [
+                        'status' => ['Closing the visit requires a finalized consultation note.'],
+                    ],
+                    context: [
+                        'requiresFinalizedConsultationNote' => true,
+                        'hasDraftConsultationNote' => $hasDraftConsultationNote,
+                        'hasSignedConsultationNote' => $hasSignedConsultationNote,
+                    ],
+                );
+            }
         }
 
         try {

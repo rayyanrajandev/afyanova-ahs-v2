@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { clearSensitiveLocalStorageKey } from '@/lib/browserStoragePolicy';
 
 type PatientSummary = {
     id: string;
@@ -69,6 +70,7 @@ const props = withDefaults(
         perPage?: number;
         mode?: 'default' | 'filter';
         openOnFocus?: boolean | null;
+        allowManualIdFallback?: boolean;
     }>(),
     {
         placeholder: 'Search patient by number, name, phone, email, or national ID',
@@ -80,6 +82,7 @@ const props = withDefaults(
         perPage: 10,
         mode: 'default',
         openOnFocus: null,
+        allowManualIdFallback: false,
     },
 );
 
@@ -258,60 +261,23 @@ function sanitizePatientSummary(patient: PatientSummary): PatientSummary {
     };
 }
 
+function clearPersistedRecentLookupActivity() {
+    clearSensitiveLocalStorageKey(RECENT_SEARCHES_KEY);
+    clearSensitiveLocalStorageKey(RECENT_PATIENTS_KEY);
+}
+
 function loadRecentLookupActivity() {
-    if (typeof window === 'undefined') return;
-
-    try {
-        const storedSearches = JSON.parse(
-            window.localStorage.getItem(RECENT_SEARCHES_KEY) ?? '[]',
-        );
-        recentSearches.value = Array.isArray(storedSearches)
-            ? storedSearches
-                  .filter((value): value is string => typeof value === 'string')
-                  .map((value) => value.trim())
-                  .filter(Boolean)
-                  .slice(0, RECENT_SEARCH_LIMIT)
-            : [];
-    } catch {
-        recentSearches.value = [];
-    }
-
-    try {
-        const storedPatients = JSON.parse(
-            window.localStorage.getItem(RECENT_PATIENTS_KEY) ?? '[]',
-        );
-        recentPatients.value = Array.isArray(storedPatients)
-            ? storedPatients
-                  .filter(
-                      (value): value is PatientSummary =>
-                          Boolean(value) &&
-                          typeof value === 'object' &&
-                          typeof (value as PatientSummary).id === 'string',
-                  )
-                  .map((patient) => sanitizePatientSummary(patient))
-                  .slice(0, RECENT_PATIENT_LIMIT)
-            : [];
-    } catch {
-        recentPatients.value = [];
-    }
+    clearPersistedRecentLookupActivity();
+    recentSearches.value = [];
+    recentPatients.value = [];
 }
 
 function persistRecentSearches() {
-    if (typeof window === 'undefined') return;
-
-    window.localStorage.setItem(
-        RECENT_SEARCHES_KEY,
-        JSON.stringify(recentSearches.value.slice(0, RECENT_SEARCH_LIMIT)),
-    );
+    clearSensitiveLocalStorageKey(RECENT_SEARCHES_KEY);
 }
 
 function persistRecentPatients() {
-    if (typeof window === 'undefined') return;
-
-    window.localStorage.setItem(
-        RECENT_PATIENTS_KEY,
-        JSON.stringify(recentPatients.value.slice(0, RECENT_PATIENT_LIMIT)),
-    );
+    clearSensitiveLocalStorageKey(RECENT_PATIENTS_KEY);
 }
 
 function rememberSearchQuery(value: string) {
@@ -492,10 +458,11 @@ function isForbiddenError(error: unknown): boolean {
     return (error as ApiError | undefined)?.status === 403;
 }
 
-function setAccessDeniedFallback() {
+function setAccessDeniedState() {
     accessDenied.value = true;
-    accessDeniedMessage.value =
-        'Patient lookup is restricted by permissions. Enter patient UUID manually.';
+    accessDeniedMessage.value = props.allowManualIdFallback
+        ? 'Patient lookup is restricted by permissions. Enter a patient UUID only after support has verified the record.'
+        : 'Patient lookup is restricted by permissions. Request patient lookup access before linking a patient.';
     searchResults.value = [];
     searchResultCount.value = 0;
     advancedSearchResults.value = [];
@@ -548,7 +515,7 @@ async function searchPatients() {
         );
     } catch (error) {
         if (isForbiddenError(error)) {
-            setAccessDeniedFallback();
+            setAccessDeniedState();
             return;
         }
         searchResults.value = [];
@@ -605,7 +572,7 @@ async function searchAdvancedPatients(page = 1) {
         advancedSearchPage.value = Number(response.meta?.currentPage ?? page);
     } catch (error) {
         if (isForbiddenError(error)) {
-            setAccessDeniedFallback();
+            setAccessDeniedState();
             return;
         }
         advancedSearchResults.value = [];
@@ -648,7 +615,7 @@ async function hydrateSelectedPatient(patientId: string) {
         emit('selected', response.data);
     } catch (error) {
         if (isForbiddenError(error)) {
-            setAccessDeniedFallback();
+            setAccessDeniedState();
             emit('selected', null);
             return;
         }
@@ -809,7 +776,10 @@ onBeforeUnmount(clearDebounce);
         >
             <template #access-denied>
                 <div class="space-y-2">
-                    <div class="flex flex-nowrap items-stretch overflow-hidden rounded-lg border border-input bg-transparent shadow-xs focus-within:ring-2 focus-within:ring-ring/50 focus-within:ring-offset-0">
+                    <div
+                        v-if="allowManualIdFallback"
+                        class="flex flex-nowrap items-stretch overflow-hidden rounded-lg border border-input bg-transparent shadow-xs focus-within:ring-2 focus-within:ring-ring/50 focus-within:ring-offset-0"
+                    >
                         <span class="flex h-8 shrink-0 items-center border-0 border-r border-input bg-muted/30 pl-3 pr-2 text-muted-foreground">
                             <AppIcon name="search" class="size-4" aria-hidden />
                         </span>
@@ -835,11 +805,25 @@ onBeforeUnmount(clearDebounce);
                         </Button>
                     </div>
 
-                    <Alert>
+                    <Alert variant="destructive">
                         <AlertDescription class="text-xs">
                             {{ accessDeniedMessage }}
+                            <span v-if="!allowManualIdFallback && modelValue">
+                                Existing linked patient context is retained, but it cannot be changed here without lookup access.
+                            </span>
                         </AlertDescription>
                     </Alert>
+
+                    <Button
+                        v-if="!allowManualIdFallback && modelValue"
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        :disabled="disabled"
+                        @click="clearSelection"
+                    >
+                        Clear linked patient
+                    </Button>
                 </div>
             </template>
 

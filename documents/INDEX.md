@@ -38,6 +38,10 @@ This documentation is organized for Tanzania hospital operations and regulatory 
 
 ### 5. **EXECUTION & TRACKING**
 - `CURRENT_STATUS_2026.md` - Project status and milestones
+- `09-ONLINE_PRODUCTION_COMPLETION_PLAN_2026.md` - Principal architect execution plan to reach strong online production standard
+- `10-FRONTEND_UX_PRODUCT_COMPLETION_PLAN_2026.md` - Frontend UX and product-flow completion plan for modern hospital workflows
+- `10A-FRONTEND_UX_PHASE0_MODULE_COMPLETION_MATRIX_2026.md` - Live module completion matrix for frontend and workflow maturity
+- `10B-FRONTEND_UX_PHASE0_RISK_REGISTER_AND_BACKLOG_2026.md` - Phase 0 UX risk register and prioritized build backlog
 - `05-PHASE_ROADMAP.md` - Phase execution plan
 - `05-ACTIVE_TASKS.md` - Current sprint board
 

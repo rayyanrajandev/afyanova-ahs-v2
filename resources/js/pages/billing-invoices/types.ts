@@ -591,6 +591,7 @@ export type BillingServiceCatalogListResponse = {
 
 export type CreateForm = {
     patientId: string;
+    encounterId: string;
     appointmentId: string;
     admissionId: string;
     billingPayerContractId: string;

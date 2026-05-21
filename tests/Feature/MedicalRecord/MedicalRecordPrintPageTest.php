@@ -1,10 +1,14 @@
 <?php
 
+use App\Http\Middleware\EnsureFacilitySubscriptionEntitlement;
+use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
 use App\Models\User;
 use App\Modules\Admission\Infrastructure\Models\AdmissionModel;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentReferralModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
+use App\Modules\Encounter\Infrastructure\Models\EncounterAuditLogModel;
+use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
 use App\Modules\MedicalRecord\Infrastructure\Models\MedicalRecordAuditLogModel;
 use App\Modules\MedicalRecord\Infrastructure\Models\MedicalRecordModel;
 use App\Modules\MedicalRecord\Infrastructure\Models\MedicalRecordSignerAttestationModel;
@@ -19,6 +23,13 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    $this->withoutMiddleware([
+        EnsureMappedFacilitySubscriptionEntitlement::class,
+        EnsureFacilitySubscriptionEntitlement::class,
+    ]);
+});
 
 function makeMedicalRecordPrintActor(array $permissions = []): User
 {
@@ -466,4 +477,108 @@ it('downloads the medical record as a branded pdf when authorized', function ():
     expect($auditLog?->metadata['user_agent'] ?? null)->toBe('Afyanova-Test-Agent/1.0');
     expect($auditLog?->metadata['document_filename'] ?? '')->toContain('.pdf');
     expect($auditLog?->metadata['generated_at'] ?? null)->not->toBeNull();
+});
+
+it('renders encounter chart packet print page for signed consultation note', function (): void {
+    $actor = makeMedicalRecordPrintActor(['medical.records.read']);
+    $author = makeMedicalRecordPrintActor();
+    $patient = makeMedicalRecordPrintPatient();
+    $appointment = makeMedicalRecordPrintAppointment($patient->id);
+
+    $encounter = EncounterModel::query()->create([
+        'encounter_number' => 'ENC-PRINT-0001',
+        'patient_id' => $patient->id,
+        'appointment_id' => $appointment->id,
+        'status' => 'signed',
+        'opened_at' => '2026-04-09 08:00:00',
+    ]);
+
+    $record = makeMedicalRecordPrintRecord($patient, $author, null, $appointment);
+    $record->forceFill([
+        'encounter_id' => $encounter->id,
+        'record_type' => 'consultation_note',
+        'status' => 'finalized',
+        'signed_by_user_id' => $author->id,
+        'signed_at' => '2026-04-09 10:10:00',
+    ])->save();
+
+    $workspace = app(\App\Modules\Encounter\Application\UseCases\GetEncounterWorkspaceUseCase::class)
+        ->execute($encounter->id);
+    expect($workspace)->not->toBeNull();
+    expect($workspace['primaryMedicalRecord']['status'] ?? null)->toBe('finalized');
+
+    $this->actingAs($actor)
+        ->get('/encounters/'.$encounter->id.'/print')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('medical-records/Print')
+            ->where('chartPacketMode', 'encounter')
+            ->where('encounterSummary.encounterNumber', 'ENC-PRINT-0001')
+            ->where('record.id', $record->id));
+});
+
+it('forbids encounter chart packet print when consultation note is unsigned', function (): void {
+    $actor = makeMedicalRecordPrintActor(['medical.records.read']);
+    $author = makeMedicalRecordPrintActor();
+    $patient = makeMedicalRecordPrintPatient();
+    $appointment = makeMedicalRecordPrintAppointment($patient->id);
+
+    $encounter = EncounterModel::query()->create([
+        'encounter_number' => 'ENC-PRINT-0002',
+        'patient_id' => $patient->id,
+        'appointment_id' => $appointment->id,
+        'status' => 'opened',
+        'opened_at' => '2026-04-09 08:00:00',
+    ]);
+
+    $record = makeMedicalRecordPrintRecord($patient, $author, null, $appointment);
+    $record->forceFill([
+        'encounter_id' => $encounter->id,
+        'record_type' => 'consultation_note',
+        'status' => 'draft',
+        'signed_at' => null,
+        'signed_by_user_id' => null,
+    ])->save();
+
+    $this->actingAs($actor)
+        ->get('/encounters/'.$encounter->id.'/print')
+        ->assertForbidden();
+});
+
+it('writes encounter audit log when chart packet pdf is downloaded', function (): void {
+    $actor = makeMedicalRecordPrintActor(['medical.records.read']);
+    $author = makeMedicalRecordPrintActor();
+    $patient = makeMedicalRecordPrintPatient();
+    $appointment = makeMedicalRecordPrintAppointment($patient->id);
+
+    $encounter = EncounterModel::query()->create([
+        'encounter_number' => 'ENC-PRINT-0003',
+        'patient_id' => $patient->id,
+        'appointment_id' => $appointment->id,
+        'status' => 'signed',
+        'opened_at' => '2026-04-09 08:00:00',
+    ]);
+
+    $record = makeMedicalRecordPrintRecord($patient, $author, null, $appointment);
+    $record->forceFill([
+        'encounter_id' => $encounter->id,
+        'record_type' => 'consultation_note',
+        'status' => 'finalized',
+    ])->save();
+
+    $this->actingAs($actor)
+        ->withHeader('User-Agent', 'Afyanova-Test-Agent/1.0')
+        ->get('/encounters/'.$encounter->id.'/pdf')
+        ->assertOk()
+        ->assertHeader('X-Document-Source', 'encounter');
+
+    $auditLog = EncounterAuditLogModel::query()
+        ->where('encounter_id', $encounter->id)
+        ->where('action', 'encounter.document.pdf.downloaded')
+        ->latest('created_at')
+        ->first();
+
+    expect($auditLog)->not->toBeNull();
+    expect($auditLog?->actor_id)->toBe($actor->id);
+    expect($auditLog?->metadata['primary_medical_record_id'] ?? null)->toBe($record->id);
 });

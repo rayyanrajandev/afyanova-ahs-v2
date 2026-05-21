@@ -5,6 +5,7 @@ namespace App\Modules\Laboratory\Application\UseCases;
 use App\Modules\Laboratory\Domain\ValueObjects\LaboratoryOrderStatus;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Support\ClinicalOrders\ClinicalOrderEntryState;
+use App\Support\ClinicalOrders\EncounterScopedOrderQuery;
 use Illuminate\Database\Eloquent\Builder;
 
 class CheckLaboratoryOrderDuplicatesUseCase
@@ -16,23 +17,27 @@ class CheckLaboratoryOrderDuplicatesUseCase
     public function execute(array $filters): array
     {
         $patientId = trim((string) ($filters['patient_id'] ?? ''));
+        $encounterId = trim((string) ($filters['encounter_id'] ?? ''));
         $appointmentId = trim((string) ($filters['appointment_id'] ?? ''));
         $admissionId = trim((string) ($filters['admission_id'] ?? ''));
         $catalogItemId = trim((string) ($filters['lab_test_catalog_item_id'] ?? ''));
         $testCode = trim((string) ($filters['test_code'] ?? ''));
 
         $sameEncounterDuplicates = [];
-        if ($appointmentId !== '' || $admissionId !== '') {
-            $sameEncounterDuplicates = $this->baseDuplicateQuery($patientId, $catalogItemId, $testCode)
+        if (EncounterScopedOrderQuery::hasVisitScope($encounterId, $appointmentId, $admissionId)) {
+            $sameEncounterQuery = $this->baseDuplicateQuery($patientId, $catalogItemId, $testCode)
                 ->whereIn('status', [
                     LaboratoryOrderStatus::ORDERED->value,
                     LaboratoryOrderStatus::COLLECTED->value,
                     LaboratoryOrderStatus::IN_PROGRESS->value,
-                ])
-                ->where(function (Builder $query) use ($appointmentId, $admissionId): void {
-                    $query->where('appointment_id', $appointmentId !== '' ? $appointmentId : null)
-                        ->where('admission_id', $admissionId !== '' ? $admissionId : null);
-                })
+                ]);
+            EncounterScopedOrderQuery::applySameVisitScope(
+                $sameEncounterQuery,
+                $encounterId,
+                $appointmentId,
+                $admissionId,
+            );
+            $sameEncounterDuplicates = $sameEncounterQuery
                 ->orderByDesc('ordered_at')
                 ->limit(10)
                 ->get()

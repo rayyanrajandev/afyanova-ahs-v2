@@ -241,7 +241,7 @@
     --info: hsl(200 95% 55%);
     --info-foreground: hsl(0 0% 100%);
 
-    --border: hsl(224 14% 22%);
+    --border: hsl(240deg 7.55% 20.78%); /* hsl(224 14% 22%); */
     --input: hsl(224 14% 18%);
     --ring: hsl(213 92% 58%);
 
@@ -477,7 +477,7 @@
 /* ================================================================
    4. THEME PRESETS — switchable accent palettes
    ================================================================
-   Values must match UiThemePreset type: 'yaru' | 'clinic' | 'emerald'
+   Values must match UiThemePreset type: 'yaru' | 'clinic' | 'emerald' | 'violet' | 'amber' | 'sky'
    'yaru' = default (Hospital Blue) — uses base :root colours, no override needed.
    ================================================================ */
 
@@ -561,6 +561,26 @@
     --accent-foreground: hsl(30 80% 8%);
     --sidebar-primary: hsl(40 96% 58%);
     --sidebar-ring: hsl(40 96% 58%);
+}
+
+/* sky - Modern hospital cyan-blue */
+:root[data-theme-preset='sky'] {
+    --primary: hsl(199 89% 48%);
+    --primary-foreground: hsl(0 0% 100%);
+    --ring: hsl(199 89% 48%);
+    --accent: hsl(191 82% 42%);
+    --accent-foreground: hsl(0 0% 100%);
+    --sidebar-primary: hsl(199 89% 48%);
+    --sidebar-ring: hsl(199 89% 48%);
+}
+.dark[data-theme-preset='sky'] {
+    --primary: hsl(199 94% 60%);
+    --primary-foreground: hsl(224 24% 8%);
+    --ring: hsl(199 94% 60%);
+    --accent: hsl(191 88% 52%);
+    --accent-foreground: hsl(224 24% 8%);
+    --sidebar-primary: hsl(199 94% 60%);
+    --sidebar-ring: hsl(199 94% 60%);
 }
 
 /* ================================================================
@@ -1723,3 +1743,20 @@
 }
 .will-change-transform { will-change: transform; }
 .will-change-opacity   { will-change: opacity; }
+
+.encounter-workspace-tabs {
+    min-height: 0;
+}
+
+@media (min-width: 1024px) {
+    .encounter-workspace-tabs .encounter-workspace-pane {
+        display: flex !important;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .encounter-workspace-tabs .encounter-workspace-pane[data-state='inactive'] {
+        display: flex !important;
+    }
+}

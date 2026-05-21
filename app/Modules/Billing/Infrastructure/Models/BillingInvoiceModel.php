@@ -23,6 +23,7 @@ class BillingInvoiceModel extends Model
         'tenant_id',
         'facility_id',
         'patient_id',
+        'encounter_id',
         'admission_id',
         'appointment_id',
         'billing_payer_contract_id',

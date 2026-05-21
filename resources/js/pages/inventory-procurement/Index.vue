@@ -4,6 +4,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import AppIcon from '@/components/AppIcon.vue';
 import BillingInvoiceLookupField from '@/components/billing/BillingInvoiceLookupField.vue';
 import ClaimsInsuranceCaseLookupField from '@/components/claims/ClaimsInsuranceCaseLookupField.vue';
+import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
 import ComboboxField from '@/components/forms/ComboboxField.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
@@ -28,11 +29,14 @@ import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import LeaveWorkflowDialog from '@/components/workflow/LeaveWorkflowDialog.vue';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
+import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersistence';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
+import { generateRequestKey } from '@/lib/idempotency';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
@@ -318,6 +322,13 @@ const updateItemSupplierOpen = ref(false);
 const stockMovementDialogOpen = ref(false);
 const reconcileDialogOpen = ref(false);
 const createProcurementDialogOpen = ref(false);
+const createItemDiscardConfirmOpen = ref(false);
+const procurementDiscardConfirmOpen = ref(false);
+const itemDetailsDiscardConfirmOpen = ref(false);
+const createItemRequestKey = ref(generateRequestKey('inventory-item-create'));
+const procurementRequestKey = ref(generateRequestKey('inventory-procurement-request-create'));
+const itemUpdateRequestKey = ref(generateRequestKey('inventory-item-update'));
+const itemStatusRequestKey = ref(generateRequestKey('inventory-item-status'));
 
 const stockMovementSubmitting = ref(false);
 const stockMovementErrors = ref<Record<string, string[]>>({});
@@ -366,6 +377,7 @@ const transferBatchLoadingByItemId = ref<Record<string, boolean>>({});
 
 const procurementSubmitting = ref(false);
 const procurementErrors = ref<Record<string, string[]>>({});
+const procurementRequestError = ref<string | null>(null);
 const procurementForm = reactive({
     itemId: '',
     itemName: '',
@@ -427,8 +439,39 @@ function openCreateItemDialog() {
     itemCreateRequestError.value = null;
     if (!hasCreateItemDraftContent.value) {
         resetItemForm(itemCreateForm);
+        rotateCreateItemRequestKey();
     }
     createItemDialogOpen.value = true;
+}
+
+function closeCreateItemDialog(): void {
+    createItemDialogOpen.value = false;
+    createItemDiscardConfirmOpen.value = false;
+    itemCreateErrors.value = {};
+    itemCreateRequestError.value = null;
+    clearPersistedCreateItemDraft();
+    resetItemForm(itemCreateForm);
+    rotateCreateItemRequestKey();
+}
+
+function requestCreateItemOpenChange(open: boolean): void {
+    if (open) {
+        createItemDialogOpen.value = true;
+        return;
+    }
+
+    if (itemCreateSubmitting.value) return;
+
+    if (hasPendingCreateItemWorkflow.value) {
+        createItemDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    closeCreateItemDialog();
+}
+
+function confirmCreateItemDiscard(): void {
+    closeCreateItemDialog();
 }
 
 function discardCreateItemDraft(): void {
@@ -436,6 +479,7 @@ function discardCreateItemDraft(): void {
     itemCreateErrors.value = {};
     itemCreateRequestError.value = null;
     resetItemForm(itemCreateForm);
+    rotateCreateItemRequestKey();
     notifySuccess('Inventory item draft cleared.');
 }
 
@@ -532,8 +576,39 @@ function openCreateProcurementDialog() {
     }
 
     procurementErrors.value = {};
+    procurementRequestError.value = null;
     resetProcurementForm();
+    rotateProcurementRequestKey();
     createProcurementDialogOpen.value = true;
+}
+
+function closeCreateProcurementDialog(): void {
+    createProcurementDialogOpen.value = false;
+    procurementDiscardConfirmOpen.value = false;
+    procurementErrors.value = {};
+    procurementRequestError.value = null;
+    resetProcurementForm();
+    rotateProcurementRequestKey();
+}
+
+function requestCreateProcurementOpenChange(open: boolean): void {
+    if (open) {
+        createProcurementDialogOpen.value = true;
+        return;
+    }
+
+    if (procurementSubmitting.value) return;
+
+    if (hasPendingProcurementWorkflow.value) {
+        procurementDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    closeCreateProcurementDialog();
+}
+
+function confirmProcurementDiscard(): void {
+    closeCreateProcurementDialog();
 }
 
 function onTabChange(value: string) {
@@ -1028,6 +1103,7 @@ const itemDetailsTab = ref('overview');
 const itemUpdateForm = reactive<InventoryItemFormState>(createEmptyItemForm());
 const itemUpdateSubmitting = ref(false);
 const itemUpdateErrors = ref<Record<string, string[]>>({});
+const itemUpdateSnapshot = ref('');
 const itemStatusForm = reactive({
     status: 'active',
     reason: '',
@@ -1035,6 +1111,7 @@ const itemStatusForm = reactive({
 const itemStatusOptions = ['active', 'inactive'] as const;
 const itemStatusSubmitting = ref(false);
 const itemStatusError = ref<string | null>(null);
+const itemStatusSnapshot = ref('');
 
 const itemAuditLogs = ref<any[]>([]);
 const itemAuditLoading = ref(false);
@@ -1068,6 +1145,54 @@ type InventoryReferenceDataResponse = {
 function resetItemForm(form: InventoryItemFormState): void {
     Object.assign(form, createEmptyItemForm());
 }
+
+function rotateCreateItemRequestKey(): void {
+    createItemRequestKey.value = generateRequestKey('inventory-item-create');
+}
+
+function rotateProcurementRequestKey(): void {
+    procurementRequestKey.value = generateRequestKey('inventory-procurement-request-create');
+}
+
+function rotateItemUpdateRequestKey(): void {
+    itemUpdateRequestKey.value = generateRequestKey('inventory-item-update');
+}
+
+function rotateItemStatusRequestKey(): void {
+    itemStatusRequestKey.value = generateRequestKey('inventory-item-status');
+}
+
+function procurementFormHasDraftContent(): boolean {
+    return Object.values(procurementForm).some((value) => String(value ?? '').trim().length > 0);
+}
+
+function currentItemUpdateSnapshot(): string {
+    return JSON.stringify(buildItemPayload(itemUpdateForm));
+}
+
+function currentItemStatusSnapshot(): string {
+    return JSON.stringify({
+        status: itemStatusForm.status === 'inactive' ? 'inactive' : 'active',
+        reason: itemStatusForm.reason.trim() || null,
+    });
+}
+
+function captureItemDetailWorkflowSnapshots(): void {
+    itemUpdateSnapshot.value = currentItemUpdateSnapshot();
+    itemStatusSnapshot.value = currentItemStatusSnapshot();
+}
+
+const hasPendingCreateItemWorkflow = computed(() => hasCreateItemDraftContent.value);
+const hasPendingProcurementWorkflow = computed(() => procurementFormHasDraftContent());
+const hasPendingItemUpdateWorkflow = computed(() => Boolean(itemDetails.value) && currentItemUpdateSnapshot() !== itemUpdateSnapshot.value);
+const hasPendingItemStatusWorkflow = computed(() => Boolean(itemDetails.value) && currentItemStatusSnapshot() !== itemStatusSnapshot.value);
+const hasPendingItemDetailsWorkflow = computed(() => hasPendingItemUpdateWorkflow.value || hasPendingItemStatusWorkflow.value);
+const isSubmittingInventoryWorkflow = computed(() => (
+    itemCreateSubmitting.value
+    || procurementSubmitting.value
+    || itemUpdateSubmitting.value
+    || itemStatusSubmitting.value
+));
 
 function selectOptionsFromValues(values: string[]): SelectOption[] {
     return values.map((value) => ({ value, label: formatEnumLabel(value) }));
@@ -1250,6 +1375,20 @@ const itemCreateSubmitReason = computed(() => {
     return null;
 });
 const itemCreateSubmitDisabled = computed(() => itemCreateSubmitting.value || itemCreateSubmitReason.value !== null);
+
+const {
+    confirmOpen: inventoryWorkflowLeaveConfirmOpen,
+    confirmLeave: confirmPendingInventoryWorkflowLeave,
+    cancelLeave: cancelPendingInventoryWorkflowLeave,
+} = usePendingWorkflowLeaveGuard({
+    shouldBlock: computed(() => (
+        (createItemDialogOpen.value && hasPendingCreateItemWorkflow.value)
+        || (createProcurementDialogOpen.value && hasPendingProcurementWorkflow.value)
+        || (itemDetailsOpen.value && hasPendingItemDetailsWorkflow.value)
+    )),
+    isSubmitting: isSubmittingInventoryWorkflow,
+    blockBrowserUnload: false,
+});
 
 function selectClinicalCatalogItem(form: InventoryItemFormState, itemId: string): void {
     form.clinicalCatalogItemId = itemId;
@@ -2310,17 +2449,18 @@ function openDepartmentStockForItem(item: any | null | undefined): void {
     const itemId = String(item?.id ?? '').trim();
     if (!itemId) return;
 
-    departmentStockScopedItem.value = {
-        id: itemId,
-        name: String(item?.itemName ?? item?.name ?? itemId),
-        code: item?.itemCode ?? item?.code ?? null,
-    };
-    departmentStockFilters.q = '';
-    departmentStockFilters.itemId = itemId;
-    departmentStockFilters.page = 1;
-    activeTab.value = 'department-stock';
-    itemDetailsOpen.value = false;
-    void loadDepartmentStock();
+    requestItemDetailsOpenChange(false, () => {
+        departmentStockScopedItem.value = {
+            id: itemId,
+            name: String(item?.itemName ?? item?.name ?? itemId),
+            code: item?.itemCode ?? item?.code ?? null,
+        };
+        departmentStockFilters.q = '';
+        departmentStockFilters.itemId = itemId;
+        departmentStockFilters.page = 1;
+        activeTab.value = 'department-stock';
+        void loadDepartmentStock();
+    });
 }
 
 function clearDepartmentStockItemScope(): void {
@@ -3895,6 +4035,9 @@ const claimLinkSearch = reactive({ q: '', claimStatus: '', page: 1, perPage: 15 
 const createClaimLinkDialogOpen = ref(false);
 const claimLinkSubmitting = ref(false);
 const claimLinkErrors = ref<Record<string, string[]>>({});
+const claimLinkSelectedItem = ref<any | null>(null);
+const claimLinkSelectedClaim = ref<any | null>(null);
+const claimLinkSelectedInvoice = ref<any | null>(null);
 const claimLinkForm = reactive({
     itemId: '', patientId: '', quantityDispensed: '', unit: '', unitCost: '',
     nhifCode: '', payerType: '', payerName: '', insuranceClaimId: '', billingInvoiceId: '', notes: '',
@@ -3941,9 +4084,13 @@ function resetClaimLinkForm() {
     claimLinkForm.unit = ''; claimLinkForm.unitCost = ''; claimLinkForm.nhifCode = '';
     claimLinkForm.payerType = ''; claimLinkForm.payerName = ''; claimLinkForm.insuranceClaimId = '';
     claimLinkForm.billingInvoiceId = ''; claimLinkForm.notes = '';
+    claimLinkSelectedItem.value = null;
+    claimLinkSelectedClaim.value = null;
+    claimLinkSelectedInvoice.value = null;
 }
 
 function handleClaimLinkItemSelected(item: ClaimLinkInventoryItemSelection | null) {
+    claimLinkSelectedItem.value = item;
     if (!item) return;
 
     if (!claimLinkForm.unit && (item.dispensingUnit || item.unit)) {
@@ -3956,6 +4103,7 @@ function handleClaimLinkItemSelected(item: ClaimLinkInventoryItemSelection | nul
 }
 
 function handleClaimLinkClaimsCaseSelected(claim: ClaimLinkClaimsCaseSelection | null) {
+    claimLinkSelectedClaim.value = claim;
     if (!claim) return;
 
     if (!claimLinkForm.patientId && claim.patientId) {
@@ -3974,6 +4122,98 @@ function handleClaimLinkClaimsCaseSelected(claim: ClaimLinkClaimsCaseSelection |
         claimLinkForm.payerName = claim.payerName;
     }
 }
+
+function handleClaimLinkInvoiceSelected(invoice: any | null) {
+    claimLinkSelectedInvoice.value = invoice;
+}
+
+const claimLinkItemContextLabel = computed(() => {
+    const item = claimLinkSelectedItem.value;
+    const name = String(item?.itemName ?? item?.genericName ?? '').trim();
+    const code = String(item?.itemCode ?? '').trim();
+
+    if (name && code) return `${name} (${code})`;
+    if (name) return name;
+    if (code) return code;
+    if (claimLinkForm.itemId.trim()) return `Item ${claimLinkForm.itemId.trim()}`;
+    return 'Select dispensed item';
+});
+
+const claimLinkItemContextMeta = computed(() => {
+    const item = claimLinkSelectedItem.value;
+    const parts: string[] = [];
+    const unit = String(item?.dispensingUnit ?? item?.unit ?? claimLinkForm.unit ?? '').trim();
+    const nhifCode = String(item?.nhifCode ?? claimLinkForm.nhifCode ?? '').trim();
+
+    if (unit) parts.push(`Unit ${unit}`);
+    if (nhifCode) parts.push(`NHIF ${nhifCode}`);
+    if (parts.length > 0) return parts.join(' · ');
+    if (claimLinkForm.itemId.trim()) return 'Dispensed item selected for reimbursement traceability.';
+    return 'Search the inventory catalogue for the dispensed item.';
+});
+
+const claimLinkPatientContextLabel = computed(() =>
+    claimLinkForm.patientId.trim() ? 'Selected patient' : null,
+);
+
+const claimLinkPatientContextMeta = computed(() => {
+    const patientId = claimLinkForm.patientId.trim();
+    if (!patientId) return null;
+
+    const parts = [`Patient ID ${patientId}`];
+    if (claimLinkSelectedClaim.value?.patientId === patientId) parts.push('Matches selected claim');
+    if (claimLinkSelectedInvoice.value?.patientId === patientId) parts.push('Matches selected invoice');
+
+    return parts.join(' · ');
+});
+
+const claimLinkWorkflowContextLabel = computed(() => {
+    if (claimLinkForm.insuranceClaimId.trim() && claimLinkForm.billingInvoiceId.trim()) {
+        return 'Claim and invoice linked';
+    }
+    if (claimLinkForm.insuranceClaimId.trim()) return 'Insurance claim linked';
+    if (claimLinkForm.billingInvoiceId.trim()) return 'Billing invoice linked';
+    if (claimLinkForm.payerType || claimLinkForm.payerName.trim()) return 'Payer context prepared';
+    return 'Manual reimbursement link';
+});
+
+const claimLinkWorkflowContextMeta = computed(() => {
+    const parts: string[] = [];
+    const claimNumber = String(claimLinkSelectedClaim.value?.claimNumber ?? '').trim();
+    const invoiceNumber = String(claimLinkSelectedInvoice.value?.invoiceNumber ?? '').trim();
+    const payerName = claimLinkForm.payerName.trim()
+        || String(claimLinkSelectedClaim.value?.payerName ?? '').trim();
+
+    if (claimNumber) parts.push(claimNumber);
+    else if (claimLinkForm.insuranceClaimId.trim()) parts.push(`Claim ${claimLinkForm.insuranceClaimId.trim()}`);
+
+    if (invoiceNumber) parts.push(invoiceNumber);
+    else if (claimLinkForm.billingInvoiceId.trim()) parts.push(`Invoice ${claimLinkForm.billingInvoiceId.trim()}`);
+
+    if (payerName) parts.push(payerName);
+    else if (claimLinkForm.payerType) parts.push(formatEnumLabel(claimLinkForm.payerType));
+
+    return parts.length > 0
+        ? parts.join(' · ')
+        : 'Connect the dispensed item to claim, invoice, or payer context before submitting.';
+});
+
+const claimLinkContextStatusLabel = computed(() => {
+    if (claimLinkForm.insuranceClaimId.trim()) return 'Claim context linked';
+    if (claimLinkForm.billingInvoiceId.trim()) return 'Invoice context linked';
+    if (claimLinkForm.itemId.trim() && claimLinkForm.patientId.trim()) return 'Ready to link';
+    if (claimLinkForm.itemId.trim() || claimLinkForm.patientId.trim()) return 'Context in progress';
+    return 'Context required';
+});
+
+const claimLinkContextStatusVariant = computed<
+    'default' | 'secondary' | 'outline' | 'destructive'
+>(() => {
+    if (claimLinkForm.insuranceClaimId.trim()) return 'default';
+    if (claimLinkForm.billingInvoiceId.trim()) return 'secondary';
+    if (claimLinkForm.itemId.trim() && claimLinkForm.patientId.trim()) return 'secondary';
+    return 'outline';
+});
 
 async function loadClaimLinks() {
     claimLinkLoading.value = true;
@@ -4241,11 +4481,12 @@ async function submitCreateItem() {
         applyItemCategoryRules(itemCreateForm);
         await apiRequest('POST', '/inventory-procurement/items', {
             body: buildItemPayload(itemCreateForm),
+            idempotencyKey: createItemRequestKey.value,
+            requestId: createItemRequestKey.value,
+            entitlementContext: 'Inventory item create',
         });
         notifySuccess('Inventory item created.');
-        clearPersistedCreateItemDraft();
-        createItemDialogOpen.value = false;
-        resetItemForm(itemCreateForm);
+        closeCreateItemDialog();
         await reloadAll();
     } catch (error) {
         const apiError = error as ApiError;
@@ -4304,10 +4545,13 @@ async function loadItemDetails(itemId: string) {
         const response = await apiRequest<{ data: any }>('GET', `/inventory-procurement/items/${itemId}`);
         itemDetails.value = response.data;
         hydrateItemForms(response.data);
+        captureItemDetailWorkflowSnapshots();
         void loadItemBatches(itemId);
     } catch (error) {
         itemDetails.value = null;
         itemDetailsError.value = messageFromUnknown(error, 'Unable to load inventory item details.');
+        itemUpdateSnapshot.value = '';
+        itemStatusSnapshot.value = '';
     } finally {
         itemDetailsLoading.value = false;
     }
@@ -4324,6 +4568,44 @@ function itemAuditQuery() {
         page: itemAuditFilters.page,
         perPage: itemAuditFilters.perPage,
     };
+}
+
+let pendingItemDetailsCloseAction: (() => void) | null = null;
+
+function closeItemDetails(): void {
+    itemDetailsOpen.value = false;
+    itemDetailsDiscardConfirmOpen.value = false;
+    pendingItemDetailsCloseAction = null;
+    itemUpdateErrors.value = {};
+    itemStatusError.value = null;
+    itemUpdateSnapshot.value = '';
+    itemStatusSnapshot.value = '';
+    rotateItemUpdateRequestKey();
+    rotateItemStatusRequestKey();
+}
+
+function requestItemDetailsOpenChange(open: boolean, afterClose?: () => void): void {
+    if (open) {
+        itemDetailsOpen.value = true;
+        return;
+    }
+
+    if (itemUpdateSubmitting.value || itemStatusSubmitting.value) return;
+
+    if (hasPendingItemDetailsWorkflow.value) {
+        pendingItemDetailsCloseAction = afterClose ?? null;
+        itemDetailsDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    closeItemDetails();
+    afterClose?.();
+}
+
+function confirmItemDetailsDiscard(): void {
+    const afterClose = pendingItemDetailsCloseAction;
+    closeItemDetails();
+    afterClose?.();
 }
 
 async function loadItemAuditLogs() {
@@ -4358,8 +4640,12 @@ async function openItemDetails(item: any) {
     itemDetailsTab.value = 'overview';
     itemDetails.value = null;
     itemDetailsError.value = null;
+    itemDetailsDiscardConfirmOpen.value = false;
+    pendingItemDetailsCloseAction = null;
     itemUpdateErrors.value = {};
     itemStatusError.value = null;
+    rotateItemUpdateRequestKey();
+    rotateItemStatusRequestKey();
     itemBatches.value = [];
     itemBatchesLoading.value = false;
     itemAuditLogs.value = [];
@@ -4387,9 +4673,14 @@ async function submitItemUpdate() {
     try {
         const response = await apiRequest<{ data: any }>('PATCH', `/inventory-procurement/items/${itemDetails.value.id}`, {
             body: buildItemPayload(itemUpdateForm),
+            idempotencyKey: itemUpdateRequestKey.value,
+            requestId: itemUpdateRequestKey.value,
+            entitlementContext: 'Inventory item update',
         });
         itemDetails.value = response.data;
         hydrateItemForms(response.data);
+        captureItemDetailWorkflowSnapshots();
+        rotateItemUpdateRequestKey();
         notifySuccess('Inventory item updated.');
         flashItem(itemDetails.value.id);
         await loadItems();
@@ -4414,9 +4705,14 @@ async function submitItemStatus() {
                 status: itemStatusForm.status,
                 reason: itemStatusForm.reason.trim() || null,
             },
+            idempotencyKey: itemStatusRequestKey.value,
+            requestId: itemStatusRequestKey.value,
+            entitlementContext: 'Inventory item status update',
         });
         itemDetails.value = response.data;
         hydrateItemForms(response.data);
+        captureItemDetailWorkflowSnapshots();
+        rotateItemStatusRequestKey();
         notifySuccess('Inventory item status updated.');
         flashItem(itemDetails.value.id);
         await loadItems();
@@ -8873,8 +9169,8 @@ onMounted(async () => {
                     class="flex flex-col gap-2 rounded-lg border bg-muted/20 px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between"
                 >
                     <div class="min-w-0">
-                        <p class="font-medium">{{ restoredCreateItemDraft ? 'Restored saved draft' : 'Draft autosaved' }}</p>
-                        <p class="text-muted-foreground">This item draft stays on this device until you create it or start fresh.</p>
+                        <p class="font-medium">{{ restoredCreateItemDraft ? 'Restored item draft' : 'Unsaved item draft' }}</p>
+                        <p class="text-muted-foreground">This item draft stays only in this open page until you create it or start fresh.</p>
                     </div>
                     <Button type="button" variant="ghost" size="sm" class="h-7 self-start px-2 sm:self-center" @click="discardCreateItemDraft">
                         Start fresh
@@ -11848,6 +12144,42 @@ onMounted(async () => {
             </SheetHeader>
             <ScrollArea class="min-h-0 flex-1">
             <div class="px-6 py-4 grid gap-4">
+                <ClinicalContextBanner
+                    title="Dispensing reimbursement context"
+                    description="Confirm the dispensed item, patient, and claim or invoice linkage before creating the reimbursement trace."
+                    :patient-name="claimLinkPatientContextLabel"
+                    :patient-meta="claimLinkPatientContextMeta"
+                    :context-label="claimLinkItemContextLabel"
+                    :context-meta="claimLinkWorkflowContextMeta"
+                    :status-label="claimLinkContextStatusLabel"
+                    :status-variant="claimLinkContextStatusVariant"
+                    tone="muted"
+                >
+                    <div class="grid gap-2 lg:grid-cols-2">
+                        <div class="rounded-md border bg-background/80 px-3 py-2">
+                            <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                Item context
+                            </p>
+                            <p class="mt-1 text-sm font-medium text-foreground">
+                                {{ claimLinkItemContextLabel }}
+                            </p>
+                            <p class="text-xs text-muted-foreground">
+                                {{ claimLinkItemContextMeta }}
+                            </p>
+                        </div>
+                        <div class="rounded-md border bg-background/80 px-3 py-2">
+                            <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                Reimbursement path
+                            </p>
+                            <p class="mt-1 text-sm font-medium text-foreground">
+                                {{ claimLinkWorkflowContextLabel }}
+                            </p>
+                            <p class="text-xs text-muted-foreground">
+                                {{ claimLinkWorkflowContextMeta }}
+                            </p>
+                        </div>
+                    </div>
+                </ClinicalContextBanner>
                 <div class="grid grid-cols-2 gap-3">
                     <div class="grid gap-2">
                         <InventoryItemLookupField
@@ -11926,6 +12258,7 @@ onMounted(async () => {
                             label="Billing invoice"
                             helper-text="Search the billing ledger and link the dispensed item to the matching invoice."
                             :statuses="['issued', 'partially_paid']"
+                            @selected="handleClaimLinkInvoiceSelected"
                         />
                     </div>
                 </div>

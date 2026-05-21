@@ -410,6 +410,7 @@ class PharmacyOrderController extends Controller
     ): JsonResponse {
         $payload = $request->validate([
             'patientId' => ['required', 'uuid'],
+            'encounterId' => ['nullable', 'uuid'],
             'appointmentId' => ['nullable', 'uuid'],
             'admissionId' => ['nullable', 'uuid'],
             'approvedMedicineCatalogItemId' => ['nullable', 'uuid', 'required_without:medicationCode'],
@@ -418,6 +419,7 @@ class PharmacyOrderController extends Controller
 
         $result = $useCase->execute([
             'patient_id' => $payload['patientId'],
+            'encounter_id' => $payload['encounterId'] ?? null,
             'appointment_id' => $payload['appointmentId'] ?? null,
             'admission_id' => $payload['admissionId'] ?? null,
             'approved_medicine_catalog_item_id' => $payload['approvedMedicineCatalogItemId'] ?? null,
@@ -766,6 +768,7 @@ class PharmacyOrderController extends Controller
     {
         $fieldMap = [
             'patientId' => 'patient_id',
+            'encounterId' => 'encounter_id',
             'admissionId' => 'admission_id',
             'appointmentId' => 'appointment_id',
             'entryMode' => 'entry_mode',

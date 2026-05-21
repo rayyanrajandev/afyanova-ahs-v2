@@ -2,7 +2,9 @@
 
 namespace App\Modules\MedicalRecord\Application\UseCases;
 
+use App\Modules\Encounter\Application\Services\EncounterLifecycleService;
 use App\Modules\MedicalRecord\Application\Exceptions\ConsultationOwnerConflictForMedicalRecordException;
+use App\Modules\MedicalRecord\Application\Exceptions\InvalidMedicalRecordStatusTransitionException;
 use App\Modules\MedicalRecord\Domain\Repositories\MedicalRecordAuditLogRepositoryInterface;
 use App\Modules\MedicalRecord\Domain\Repositories\MedicalRecordRepositoryInterface;
 use App\Modules\MedicalRecord\Domain\Repositories\MedicalRecordVersionRepositoryInterface;
@@ -17,6 +19,7 @@ class UpdateMedicalRecordStatusUseCase
         private readonly MedicalRecordRepositoryInterface $medicalRecordRepository,
         private readonly MedicalRecordVersionRepositoryInterface $medicalRecordVersionRepository,
         private readonly AppointmentLookupServiceInterface $appointmentLookupService,
+        private readonly EncounterLifecycleService $encounterLifecycleService,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
     ) {}
 
@@ -34,12 +37,25 @@ class UpdateMedicalRecordStatusUseCase
             $actorId,
         );
 
+        $currentStatus = strtolower(trim((string) ($existing['status'] ?? '')));
+        $requestedStatus = strtolower(trim($status));
+        $this->assertValidStatusTransition($currentStatus, $requestedStatus);
+
         $statusUpdatePayload = [
             'status' => $status,
             'status_reason' => $reason,
         ];
 
-        if ($status === MedicalRecordStatus::FINALIZED->value) {
+        if ($requestedStatus === MedicalRecordStatus::AMENDED->value) {
+            $statusUpdatePayload['status'] = MedicalRecordStatus::DRAFT->value;
+        }
+
+        if ($requestedStatus === MedicalRecordStatus::FINALIZED->value) {
+            $wasPreviouslySigned = ($existing['signed_at'] ?? null) !== null;
+            if ($wasPreviouslySigned) {
+                $statusUpdatePayload['status'] = MedicalRecordStatus::AMENDED->value;
+            }
+
             $statusUpdatePayload['signed_by_user_id'] = $actorId;
             $statusUpdatePayload['signed_at'] = now();
         }
@@ -81,7 +97,41 @@ class UpdateMedicalRecordStatusUseCase
             );
         }
 
+        $encounterId = trim((string) ($updated['encounter_id'] ?? ''));
+        if ($encounterId !== '') {
+            $this->encounterLifecycleService->syncFromMedicalRecordStatus(
+                encounterId: $encounterId,
+                medicalRecordStatus: (string) ($updated['status'] ?? ''),
+                reason: is_string($updated['status_reason'] ?? null)
+                    ? $updated['status_reason']
+                    : null,
+                actorId: $actorId,
+            );
+        }
+
         return $updated;
+    }
+
+    private function assertValidStatusTransition(string $fromStatus, string $toStatus): void
+    {
+        if ($fromStatus === $toStatus) {
+            return;
+        }
+
+        $allowed = match ($toStatus) {
+            MedicalRecordStatus::FINALIZED->value => $fromStatus === MedicalRecordStatus::DRAFT->value,
+            MedicalRecordStatus::AMENDED->value => $fromStatus === MedicalRecordStatus::FINALIZED->value,
+            MedicalRecordStatus::ARCHIVED->value => in_array($fromStatus, [
+                MedicalRecordStatus::DRAFT->value,
+                MedicalRecordStatus::FINALIZED->value,
+                MedicalRecordStatus::AMENDED->value,
+            ], true),
+            default => false,
+        };
+
+        if (! $allowed) {
+            throw new InvalidMedicalRecordStatusTransitionException($fromStatus, $toStatus);
+        }
     }
 
     private function assertConsultationOwnershipForEncounterWrite(?string $appointmentId, ?int $actorId): void

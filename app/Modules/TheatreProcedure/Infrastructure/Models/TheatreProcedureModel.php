@@ -26,6 +26,7 @@ class TheatreProcedureModel extends Model
         'tenant_id',
         'facility_id',
         'patient_id',
+        'encounter_id',
         'admission_id',
         'appointment_id',
         'clinical_order_session_id',

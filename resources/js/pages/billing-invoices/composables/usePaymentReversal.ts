@@ -1,5 +1,6 @@
 import { ref, type Ref } from 'vue';
 
+import { generateRequestKey } from '@/lib/idempotency';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 
 import {
@@ -20,6 +21,9 @@ type BillingApiRequest = <T>(
     options?: {
         query?: Record<string, string | number | boolean | string[] | null | undefined>;
         body?: Record<string, unknown>;
+        entitlementContext?: string;
+        idempotencyKey?: string | null;
+        requestId?: string | null;
     },
 ) => Promise<T>;
 
@@ -53,6 +57,9 @@ export function usePaymentReversal(options: UsePaymentReversalOptions) {
     const paymentReversalDialogPayment = ref<BillingInvoicePayment | null>(null);
     const paymentReversalDialogError = ref<string | null>(null);
     const paymentReversalSubmitting = ref(false);
+    const paymentReversalRequestKey = ref(
+        generateRequestKey('billing-payment-reversal'),
+    );
 
     function billingPaymentReversedAmountFor(paymentId: string): number {
         return Math.round(
@@ -117,6 +124,9 @@ export function usePaymentReversal(options: UsePaymentReversalOptions) {
         if (!options.invoiceDetailsInvoice.value) return;
         if (!billingPaymentCanBeReversed(payment)) return;
 
+        paymentReversalRequestKey.value = generateRequestKey(
+            'billing-payment-reversal',
+        );
         paymentReversalDialogInvoice.value = options.invoiceDetailsInvoice.value;
         paymentReversalDialogPayment.value = payment;
         paymentReversalDialogError.value = null;
@@ -158,6 +168,7 @@ export function usePaymentReversal(options: UsePaymentReversalOptions) {
         paymentReversalSubmitting.value = true;
 
         try {
+            const requestKey = paymentReversalRequestKey.value;
             const response =
                 await options.apiRequest<ReverseBillingInvoicePaymentResponse>(
                     'POST',
@@ -172,6 +183,9 @@ export function usePaymentReversal(options: UsePaymentReversalOptions) {
                                 payload.reversalAt,
                             ),
                         },
+                        entitlementContext: 'Billing payment reversal',
+                        idempotencyKey: requestKey,
+                        requestId: requestKey,
                     },
                 );
 

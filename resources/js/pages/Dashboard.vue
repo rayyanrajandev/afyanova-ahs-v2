@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
+import { watchDebounced } from '@vueuse/core';
 import { computed, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -42,10 +43,12 @@ type QueueRow = {
     isOverdue?: boolean;
     group?: string;
     triageCategory?: string | null;
+    searchHaystack?: string;
 };
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/dashboard' }];
 const today = new Date(Date.now() - (new Date().getTimezoneOffset() * 60 * 1000)).toISOString().slice(0, 10);
+const page = usePage();
 
 const { hasPermission, isFacilitySuperAdmin, isPlatformSuperAdmin, multiTenantIsolationEnabled, sessionRoleCodes, scope: platformScope } =
     usePlatformAccess();
@@ -62,6 +65,7 @@ const authMe = ref<any | null>(null);
 const securityStatus = ref<any | null>(null);
 const counts = ref<Record<string, any>>({});
 const lists = ref<Record<string, any[]>>({});
+const clinicianClinicalDepartment = ref<string | null>(null);
 const auditExportHealth = ref<any | null>(null);
 const retryResumeHealth = ref<any | null>(null);
 const lastLoadedAt = ref<string | null>(null);
@@ -69,6 +73,263 @@ const sharedOpsTelemetryLoaded = ref(false);
 
 const nowTick = ref(Date.now());
 let nowTickerHandle: ReturnType<typeof setInterval> | null = null;
+
+const currentUserId = computed<number | null>(() => {
+    const raw = page.props.auth?.user?.id ?? authMe.value?.id;
+    const normalized = Number(raw ?? 0);
+    return Number.isFinite(normalized) && normalized > 0 ? normalized : null;
+});
+
+function clinicianQueueHref(
+    status: 'waiting_provider' | 'in_consultation' | 'completed' = 'waiting_provider',
+    focusAppointmentId?: string,
+    searchQuery?: string,
+): string {
+    const params = new URLSearchParams({
+        view: 'clinical',
+        status,
+        from: today,
+    });
+
+    if (currentUserId.value !== null) {
+        params.set('clinicianUserId', String(currentUserId.value));
+    }
+
+    if (focusAppointmentId && focusAppointmentId !== '') {
+        params.set('focusAppointmentId', focusAppointmentId);
+        if (status === 'waiting_provider' || status === 'in_consultation') {
+            params.set('focusAction', 'consultation');
+        }
+    }
+
+    if (searchQuery && searchQuery.trim() !== '') {
+        params.set('q', searchQuery.trim());
+    }
+
+    return `/appointments?${params.toString()}`;
+}
+
+function departmentQueueHref(
+    department: string,
+    status: 'waiting_provider' | 'in_consultation' = 'waiting_provider',
+    focusAppointmentId?: string,
+    searchQuery?: string,
+): string {
+    const params = new URLSearchParams({
+        view: 'queue',
+        status,
+        from: today,
+        department,
+        unassignedClinician: 'true',
+    });
+
+    if (focusAppointmentId && focusAppointmentId !== '') {
+        params.set('focusAppointmentId', focusAppointmentId);
+        params.set('focusAction', 'consultation');
+    }
+
+    if (searchQuery && searchQuery.trim() !== '') {
+        params.set('q', searchQuery.trim());
+    }
+
+    return `/appointments?${params.toString()}`;
+}
+
+function appointmentsWorklistSearchHref(searchQuery: string): string {
+    const q = searchQuery.trim();
+    if (q === '') {
+        return '/appointments';
+    }
+
+    const params = new URLSearchParams({ q });
+    const preset = activePresetKey.value;
+
+    if (preset === 'clinician' || preset === 'nursing' || preset === 'emergency' || preset === 'front_desk') {
+        params.set('view', 'queue');
+    }
+
+    return `/appointments?${params.toString()}`;
+}
+
+function queueRowMatchesSearch(row: QueueRow, query: string): boolean {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (normalizedQuery === '') {
+        return true;
+    }
+
+    const haystack = (row.searchHaystack ?? [row.title, row.subtitle, row.meta, row.status, row.group].filter(Boolean).join(' '))
+        .toLowerCase();
+
+    return haystack.includes(normalizedQuery);
+}
+
+type DashboardPatientSummary = {
+    firstName?: string | null;
+    middleName?: string | null;
+    lastName?: string | null;
+    patientNumber?: string | null;
+    phone?: string | null;
+};
+
+const dashboardPatientDirectory = ref<Record<string, DashboardPatientSummary>>({});
+const dashboardSearchAppointments = ref<any[]>([]);
+const dashboardSearchLoading = ref(false);
+const pendingDashboardPatientIds = new Set<string>();
+
+function dashboardPatientLabel(patientId: string | null | undefined): string {
+    const normalizedId = String(patientId ?? '').trim();
+    if (!normalizedId) {
+        return '';
+    }
+
+    const patient = dashboardPatientDirectory.value[normalizedId];
+    if (!patient) {
+        return '';
+    }
+
+    const fullName = [patient.firstName, patient.middleName, patient.lastName]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+
+    return fullName || String(patient.patientNumber ?? '').trim();
+}
+
+function dashboardPatientMeta(patientId: string | null | undefined): string {
+    const normalizedId = String(patientId ?? '').trim();
+    if (!normalizedId) {
+        return '';
+    }
+
+    const patient = dashboardPatientDirectory.value[normalizedId];
+    if (!patient) {
+        return '';
+    }
+
+    return [patient.patientNumber, patient.phone].filter(Boolean).join(' | ');
+}
+
+async function hydrateDashboardPatient(patientId: string | null | undefined): Promise<void> {
+    const normalizedId = String(patientId ?? '').trim();
+    if (!normalizedId || dashboardPatientDirectory.value[normalizedId] || pendingDashboardPatientIds.has(normalizedId)) {
+        return;
+    }
+
+    pendingDashboardPatientIds.add(normalizedId);
+    try {
+        const response = await apiGet<ApiEnvelope<DashboardPatientSummary>>(`/patients/${normalizedId}`);
+        if (response.data) {
+            dashboardPatientDirectory.value = {
+                ...dashboardPatientDirectory.value,
+                [normalizedId]: response.data,
+            };
+        }
+    } catch {
+        // Keep dashboard search usable when patient hydration is unavailable.
+    } finally {
+        pendingDashboardPatientIds.delete(normalizedId);
+    }
+}
+
+async function hydrateDashboardPatientsForAppointments(items: any[]): Promise<void> {
+    const uniqueIds = [...new Set(items.map((item) => String(item.patientId ?? '').trim()).filter(Boolean))];
+    await Promise.all(uniqueIds.map((patientId) => hydrateDashboardPatient(patientId)));
+}
+
+function appointmentQueueSearchHaystack(item: Record<string, unknown>): string {
+    const patientId = String(item.patientId ?? '').trim();
+
+    return [
+        dashboardPatientLabel(patientId),
+        dashboardPatientMeta(patientId),
+        item.appointmentNumber,
+        item.reason,
+        item.department,
+        item.id,
+        item.patientId,
+    ]
+        .map((value) => String(value ?? '').trim())
+        .filter(Boolean)
+        .join(' ');
+}
+
+function dashboardAppointmentHref(item: any): string {
+    const appointmentId = String(item.id ?? '').trim();
+    const status = String(item.status ?? '').trim();
+    const assignedClinicianId = Number(item.clinicianUserId ?? 0);
+    const department = String(item.department ?? '').trim();
+    const assignedToMe =
+        currentUserId.value !== null
+        && assignedClinicianId > 0
+        && assignedClinicianId === currentUserId.value;
+
+    if (activePresetKey.value === 'clinician') {
+        if (status === 'in_consultation' && assignedToMe) {
+            return clinicianQueueHref('in_consultation', appointmentId);
+        }
+
+        if (status === 'waiting_provider') {
+            if (assignedToMe) {
+                return clinicianQueueHref('waiting_provider', appointmentId);
+            }
+
+            if (department !== '') {
+                return departmentQueueHref(department, 'waiting_provider', appointmentId);
+            }
+        }
+    }
+
+    const params = new URLSearchParams({ view: 'queue', from: today });
+    if (status !== '') {
+        params.set('status', status);
+    }
+    if (appointmentId !== '') {
+        params.set('focusAppointmentId', appointmentId);
+    }
+
+    return `/appointments?${params.toString()}`;
+}
+
+function appointmentTriageCategory(item: any): QueueRow['triageCategory'] {
+    const category = String(item?.triageCategory ?? item?.triage_category ?? '').trim().toUpperCase();
+    if (category === 'P1' || category === 'P2' || category === 'P3' || category === 'P4' || category === 'P5') {
+        return category;
+    }
+
+    return null;
+}
+
+function mapDashboardSearchAppointmentToRow(item: any): QueueRow {
+    const patientId = String(item.patientId ?? '').trim();
+    const patientName = dashboardPatientLabel(patientId);
+    const patientMeta = dashboardPatientMeta(patientId);
+    const appointmentNumber = String(item.appointmentNumber ?? 'Appointment');
+    const title = patientName ? `${patientName} · ${appointmentNumber}` : appointmentNumber;
+    const triageCategory = appointmentTriageCategory(item);
+
+    return {
+        id: `search-${String(item.id ?? appointmentNumber)}`,
+        title,
+        subtitle: [patientMeta, item.department, item.reason].filter(Boolean).join(' | ') || 'Matching visit in worklist.',
+        meta: triageCategory
+            ? `Status ${formatEnumLabel(String(item.status ?? 'scheduled'))} · ${triageCategory}`
+            : `Status ${formatEnumLabel(String(item.status ?? 'scheduled'))}`,
+        status: formatEnumLabel(String(item.status ?? 'scheduled')),
+        href: dashboardAppointmentHref(item),
+        actionLabel: 'Open visit',
+        searchHaystack: appointmentQueueSearchHaystack(item),
+        triageCategory,
+    };
+}
+
+function resolveClinicalDepartmentFromDirectory(rows: any[] | undefined, userId: number | null): string | null {
+    if (userId === null || !Array.isArray(rows)) return null;
+
+    const match = rows.find((row) => Number(row?.userId ?? 0) === userId);
+    const department = String(match?.department ?? '').trim();
+
+    return department !== '' ? department : null;
+}
 
 type DensityMode = 'comfortable' | 'compact';
 type AutoRefreshKey = 'off' | '30s' | '1m' | '5m';
@@ -425,6 +686,15 @@ function statusVariant(status: string | null | undefined) {
     return 'outline';
 }
 
+function queueRowActionVariant(row: QueueRow): 'default' | 'outline' {
+    const label = String(row.actionLabel ?? '').trim().toLowerCase();
+    if (label.includes('consultation') || label === 'open visit') {
+        return 'default';
+    }
+
+    return 'outline';
+}
+
 const TRIAGE_P_ORDER: Record<string, number> = { P1: 0, P2: 1, P3: 2, P4: 3, P5: 4 };
 
 function dashboardRowBorderClass(row: QueueRow): string {
@@ -514,9 +784,13 @@ async function loadDashboard(depth = 0): Promise<void> {
     lists.value = {
         scheduledAppointments: [],
         checkedInAppointments: [],
+        waitingProviderAppointments: [],
+        inConsultationAppointments: [],
+        departmentPoolWaitingAppointments: [],
         admissions: [],
         draftInvoices: [],
     };
+    clinicianClinicalDepartment.value = null;
 
     if (preset !== 'admin' && !sharedOpsTelemetryLoaded.value) {
         auditExportHealth.value = null;
@@ -524,6 +798,10 @@ async function loadDashboard(depth = 0): Promise<void> {
     }
 
     type BatchEntry = readonly [string, () => Promise<unknown>];
+
+    const clinicianAppointmentQuery = currentUserId.value !== null
+        ? { clinicianUserId: currentUserId.value }
+        : {};
 
     const batch: BatchEntry[] = [
         ['scope', () => safeRequest<ApiEnvelope<any>>('Scope', () => apiGet('/platform/access-scope'))],
@@ -560,7 +838,9 @@ async function loadDashboard(depth = 0): Promise<void> {
         case 'clinician':
             batch.push(
                 ['appointmentCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Appointment counts', 'appointments.read', () => apiGet('/appointments/status-counts')),
+                    guardedRequest<ApiEnvelope<any>>('Appointment counts', 'appointments.read', () =>
+                        apiGet('/appointments/status-counts', clinicianAppointmentQuery),
+                    ),
                 ],
                 ['medicalRecordCounts', () =>
                     guardedRequest<ApiEnvelope<any>>('Medical record counts', 'medical.records.read', () => apiGet('/medical-records/status-counts')),
@@ -572,10 +852,41 @@ async function loadDashboard(depth = 0): Promise<void> {
                     guardedRequest<ApiEnvelope<any>>('Laboratory counts', 'laboratory.orders.read', () => apiGet('/laboratory-orders/status-counts')),
                 ],
                 [
-                    'checkedInAppointments',
+                    'waitingProviderAppointments',
                     () =>
-                        guardedRequest<ApiEnvelope<any>>('Checked-in appointments', 'appointments.read', () =>
-                            apiGet('/appointments', { status: 'checked_in', perPage: 5, sortBy: 'checkedInAt', sortDir: 'asc' }),
+                        guardedRequest<ApiEnvelope<any>>('Waiting provider appointments', 'appointments.read', () =>
+                            apiGet('/appointments', {
+                                ...clinicianAppointmentQuery,
+                                status: 'waiting_provider',
+                                perPage: 5,
+                                sortBy: 'checkedInAt',
+                                sortDir: 'asc',
+                            }),
+                        ),
+                ],
+                [
+                    'inConsultationAppointments',
+                    () =>
+                        guardedRequest<ApiEnvelope<any>>('In-consultation appointments', 'appointments.read', () =>
+                            apiGet('/appointments', {
+                                ...clinicianAppointmentQuery,
+                                status: 'in_consultation',
+                                perPage: 3,
+                                sortBy: 'updatedAt',
+                                sortDir: 'desc',
+                            }),
+                        ),
+                ],
+                [
+                    'clinicalDirectory',
+                    () =>
+                        guardedRequest<ApiEnvelope<any>>('Clinical directory', 'staff.clinical-directory.read', () =>
+                            apiGet('/staff/clinical-directory', {
+                                status: 'active',
+                                clinicalOnly: 'true',
+                                page: 1,
+                                perPage: 200,
+                            }),
                         ),
                 ],
             );
@@ -754,9 +1065,52 @@ async function loadDashboard(depth = 0): Promise<void> {
     lists.value = {
         scheduledAppointments: Array.isArray(bag.scheduledAppointments?.data) ? bag.scheduledAppointments.data : [],
         checkedInAppointments: Array.isArray(bag.checkedInAppointments?.data) ? bag.checkedInAppointments.data : [],
+        waitingProviderAppointments: Array.isArray(bag.waitingProviderAppointments?.data) ? bag.waitingProviderAppointments.data : [],
+        inConsultationAppointments: Array.isArray(bag.inConsultationAppointments?.data) ? bag.inConsultationAppointments.data : [],
+        departmentPoolWaitingAppointments: [],
         admissions: Array.isArray(bag.admissions?.data) ? bag.admissions.data : [],
         draftInvoices: Array.isArray(bag.draftInvoices?.data) ? bag.draftInvoices.data : [],
     };
+
+    if (preset === 'clinician') {
+        const departmentName = resolveClinicalDepartmentFromDirectory(bag.clinicalDirectory?.data, currentUserId.value);
+        clinicianClinicalDepartment.value = departmentName;
+
+        if (departmentName) {
+            const departmentPoolQuery = {
+                department: departmentName,
+                unassignedClinician: true,
+            };
+
+            const [departmentPoolCounts, departmentPoolWaiting] = await Promise.all([
+                guardedRequest<ApiEnvelope<any>>('Department pool counts', 'appointments.read', () =>
+                    apiGet('/appointments/status-counts', departmentPoolQuery),
+                ),
+                guardedRequest<ApiEnvelope<any>>('Department pool appointments', 'appointments.read', () =>
+                    apiGet('/appointments', {
+                        ...departmentPoolQuery,
+                        status: 'waiting_provider',
+                        perPage: 5,
+                        sortBy: 'checkedInAt',
+                        sortDir: 'asc',
+                    }),
+                ),
+            ]);
+
+            counts.value.departmentPoolAppointments = departmentPoolCounts?.data ?? null;
+            lists.value.departmentPoolWaitingAppointments = Array.isArray(departmentPoolWaiting?.data)
+                ? departmentPoolWaiting.data
+                : [];
+        }
+    }
+
+    void hydrateDashboardPatientsForAppointments([
+        ...lists.value.scheduledAppointments,
+        ...lists.value.checkedInAppointments,
+        ...lists.value.waitingProviderAppointments,
+        ...lists.value.inConsultationAppointments,
+        ...lists.value.departmentPoolWaitingAppointments,
+    ]);
 
     if (bag.auditExportHealth !== undefined) {
         auditExportHealth.value = bag.auditExportHealth?.data ?? null;
@@ -836,11 +1190,20 @@ const kpis = computed(() => {
         ];
     }
     if (activePresetKey.value === 'clinician') {
+        const departmentPoolMetric = clinicianClinicalDepartment.value
+            ? metric(
+                'Department pool',
+                `Patients waiting for any provider in ${clinicianClinicalDepartment.value}.`,
+                'users',
+                numberValue(counts.value.departmentPoolAppointments, 'waiting_provider'),
+            )
+            : metric('Pending lab orders', 'Laboratory orders still active downstream.', 'flask-conical', numberValue(counts.value.laboratory, ['ordered', 'collected', 'in_progress']));
+
         return [
-            metric('Checked in', 'Encounters ready for consultation pickup.', 'calendar-clock', numberValue(counts.value.appointments, 'checked_in')),
+            metric('Ready for provider', 'Assigned encounters ready for consultation pickup.', 'calendar-clock', numberValue(counts.value.appointments, 'waiting_provider')),
+            departmentPoolMetric,
             metric('Draft records', 'Documentation still open or unfinished.', 'clipboard-list', numberValue(counts.value.medicalRecords, 'draft')),
             metric('Admitted follow-ups', 'Patients still admitted and likely needing review.', 'bed-double', numberValue(counts.value.admissions, 'admitted')),
-            metric('Pending lab orders', 'Laboratory orders still active downstream.', 'flask-conical', numberValue(counts.value.laboratory, ['ordered', 'collected', 'in_progress'])),
         ];
     }
     if (activePresetKey.value === 'direct_service') {
@@ -949,10 +1312,24 @@ const actions = computed(() => {
         ];
     }
     if (activePresetKey.value === 'clinician') {
+        const departmentPoolWaiting = Number(numberValue(counts.value.departmentPoolAppointments, 'waiting_provider') ?? 0);
+        const departmentAction = clinicianClinicalDepartment.value
+            ? {
+                label: 'Open department pool',
+                icon: 'users' as AppIconName,
+                variant: (departmentPoolWaiting > 0 ? 'default' : 'outline') as 'default' | 'outline',
+                href: departmentQueueHref(clinicianClinicalDepartment.value, 'waiting_provider'),
+            }
+            : null;
+
         return [
-            { label: 'Open checked-in queue', icon: 'calendar-clock', variant: 'default', href: `/appointments?view=queue&status=checked_in&from=${today}` },
-            { label: 'Open medical records', icon: 'clipboard-list', variant: 'outline', href: '/medical-records' },
-            { label: 'Admissions', icon: 'bed-double', variant: 'outline', href: '/admissions?view=queue' },
+            departmentAction ?? { label: 'Open clinician queue', icon: 'calendar-clock', variant: 'default', href: clinicianQueueHref('waiting_provider') },
+            departmentAction
+                ? { label: 'Open my queue', icon: 'calendar-clock', variant: 'outline', href: clinicianQueueHref('waiting_provider') }
+                : { label: 'Open medical records', icon: 'clipboard-list', variant: 'outline', href: '/medical-records' },
+            departmentAction
+                ? { label: 'Open medical records', icon: 'clipboard-list', variant: 'outline', href: '/medical-records' }
+                : { label: 'Admissions', icon: 'bed-double', variant: 'outline', href: '/admissions?view=queue' },
         ];
     }
     if (activePresetKey.value === 'direct_service') {
@@ -1004,44 +1381,114 @@ const queueRows = computed<QueueRow[]>(() => {
         const checkedInRows = [...(lists.value.checkedInAppointments ?? [])]
             .sort(sortByArrival)
             .slice(0, 5)
-            .map((item: any) => ({
+            .map((item: any) => {
+            const triageCategory = appointmentTriageCategory(item);
+
+            return {
             id: `checkedin-${String(item.id ?? item.appointmentNumber ?? Math.random())}`,
             title: String(item.appointmentNumber ?? 'Checked-in patient'),
             subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Checked-in and waiting for clinical handoff.',
-            meta: `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)}`,
+            meta: triageCategory
+                ? `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)} · ${triageCategory}`
+                : `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)}`,
             status: formatEnumLabel(String(item.status ?? 'checked_in')),
             href: `/appointments?view=queue&status=checked_in&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${today}`,
             actionLabel: 'Open checked-in queue',
             isOverdue: false,
             group: 'Checked-in',
-        }));
+            searchHaystack: appointmentQueueSearchHaystack(item),
+            triageCategory,
+        };
+        });
         const scheduledRows = (lists.value.scheduledAppointments ?? []).slice(0, 8).map((item: any) => {
             const scheduledAt = item.scheduledAt ? new Date(item.scheduledAt).getTime() : null;
             const isOverdue = scheduledAt !== null && scheduledAt < now && String(item.status ?? '').toLowerCase() === 'scheduled';
+            const triageCategory = appointmentTriageCategory(item);
+
             return {
                 id: String(item.id ?? item.appointmentNumber ?? Math.random()),
                 title: String(item.appointmentNumber ?? 'Scheduled appointment'),
                 subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Arrival still needs front-desk handling.',
-                meta: `Scheduled ${formatDateTime(item.scheduledAt)}`,
+                meta: triageCategory
+                    ? `Scheduled ${formatDateTime(item.scheduledAt)} · ${triageCategory}`
+                    : `Scheduled ${formatDateTime(item.scheduledAt)}`,
                 status: formatEnumLabel(String(item.status ?? 'scheduled')),
                 href: `/appointments?view=queue&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${today}`,
                 actionLabel: 'Open queue',
                 isOverdue,
                 group: 'Scheduled',
+                searchHaystack: appointmentQueueSearchHaystack(item),
+                triageCategory,
             };
         });
         return [...checkedInRows, ...scheduledRows];
     }
     if (activePresetKey.value === 'clinician') {
-        return (lists.value.checkedInAppointments ?? []).slice(0, 5).map((item: any) => ({
-            id: String(item.id ?? item.appointmentNumber ?? Math.random()),
-            title: String(item.appointmentNumber ?? 'Checked-in appointment'),
+        const departmentLabel = clinicianClinicalDepartment.value;
+        const waitingProviderRows = (lists.value.waitingProviderAppointments ?? []).map((item: any) => {
+            const triageCategory = appointmentTriageCategory(item);
+
+            return {
+            id: `waiting-provider-${String(item.id ?? item.appointmentNumber ?? Math.random())}`,
+            title: dashboardPatientLabel(item.patientId)
+                ? `${dashboardPatientLabel(item.patientId)} · ${String(item.appointmentNumber ?? 'Provider-ready')}`
+                : String(item.appointmentNumber ?? 'Provider-ready appointment'),
             subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Encounter is ready for consultation pickup.',
-            meta: `Scheduled ${formatDateTime(item.scheduledAt)}`,
-            status: formatEnumLabel(String(item.status ?? 'checked_in')),
-            href: `/appointments?view=queue&status=checked_in&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${today}`,
-            actionLabel: 'Open queue',
-        }));
+            meta: triageCategory
+                ? `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)} · ${triageCategory}`
+                : `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)}`,
+            status: formatEnumLabel(String(item.status ?? 'waiting_provider')),
+            href: clinicianQueueHref('waiting_provider', String(item.id ?? '')),
+            actionLabel: 'Open consultation',
+            group: 'My queue — waiting for provider',
+            searchHaystack: appointmentQueueSearchHaystack(item),
+            triageCategory,
+        };
+        });
+        const inConsultationRows = (lists.value.inConsultationAppointments ?? []).map((item: any) => {
+            const triageCategory = appointmentTriageCategory(item);
+
+            return {
+            id: `in-consultation-${String(item.id ?? item.appointmentNumber ?? Math.random())}`,
+            title: dashboardPatientLabel(item.patientId)
+                ? `${dashboardPatientLabel(item.patientId)} · ${String(item.appointmentNumber ?? 'In consultation')}`
+                : String(item.appointmentNumber ?? 'Active consultation'),
+            subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Consultation is already in progress for your assigned patient.',
+            meta: triageCategory
+                ? `Updated ${formatDateTime(item.updatedAt ?? item.checkedInAt ?? item.scheduledAt)} · ${triageCategory}`
+                : `Updated ${formatDateTime(item.updatedAt ?? item.checkedInAt ?? item.scheduledAt)}`,
+            status: formatEnumLabel(String(item.status ?? 'in_consultation')),
+            href: clinicianQueueHref('in_consultation', String(item.id ?? '')),
+            actionLabel: 'Resume consultation',
+            group: 'My queue — in consultation',
+            searchHaystack: appointmentQueueSearchHaystack(item),
+            triageCategory,
+        };
+        });
+        const departmentPoolRows = departmentLabel
+            ? (lists.value.departmentPoolWaitingAppointments ?? []).map((item: any) => {
+                const triageCategory = appointmentTriageCategory(item);
+
+                return {
+                id: `department-pool-${String(item.id ?? item.appointmentNumber ?? Math.random())}`,
+                title: dashboardPatientLabel(item.patientId)
+                    ? `${dashboardPatientLabel(item.patientId)} · ${String(item.appointmentNumber ?? 'Department pool')}`
+                    : String(item.appointmentNumber ?? 'Department pool visit'),
+                subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || `Waiting in the ${departmentLabel} provider pool.`,
+                meta: triageCategory
+                    ? `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)} · ${triageCategory}`
+                    : `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)}`,
+                status: formatEnumLabel(String(item.status ?? 'waiting_provider')),
+                href: departmentQueueHref(departmentLabel, 'waiting_provider', String(item.id ?? '')),
+                actionLabel: 'Pick up consultation',
+                group: `Department pool — ${departmentLabel}`,
+                searchHaystack: appointmentQueueSearchHaystack(item),
+                triageCategory,
+            };
+            })
+            : [];
+
+        return [...waitingProviderRows, ...departmentPoolRows, ...inConsultationRows];
     }
     if (activePresetKey.value === 'direct_service') {
         return directServiceModules.value.map((module) => ({
@@ -1066,17 +1513,25 @@ const queueRows = computed<QueueRow[]>(() => {
         const triageItems = [...(lists.value.checkedInAppointments ?? [])]
             .sort(sortByArrival)
             .slice(0, 3)
-            .map((item: any) => ({
+            .map((item: any) => {
+            const triageCategory = appointmentTriageCategory(item);
+
+            return {
             id: `triage-${String(item.id ?? item.appointmentNumber ?? Math.random())}`,
             title: String(item.appointmentNumber ?? 'Triage patient'),
             subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Checked-in and waiting for nurse assessment.',
-            meta: `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)}`,
+            meta: triageCategory
+                ? `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)} · ${triageCategory}`
+                : `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)}`,
             status: formatEnumLabel(String(item.status ?? 'checked_in')),
             href: `/appointments?view=queue&status=checked_in&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${today}`,
             actionLabel: 'Open triage queue',
             isOverdue: false,
             group: 'Triage',
-        }));
+            searchHaystack: appointmentQueueSearchHaystack(item),
+            triageCategory,
+        };
+        });
         const admissionItems = (lists.value.admissions ?? []).slice(0, 2).map((item: any) => ({
             id: String(item.id ?? item.admissionNumber ?? Math.random()),
             title: String(item.admissionNumber ?? 'Active admission'),
@@ -1108,7 +1563,7 @@ const queueRows = computed<QueueRow[]>(() => {
             const waitMs = arrivalTime ? now - new Date(arrivalTime).getTime() : 0;
             const waitMins = Math.max(0, Math.floor(waitMs / 60_000));
             const isOverdue = waitMins >= 30;
-            const cat = item.triageCategory ? String(item.triageCategory).toUpperCase() : null;
+            const cat = appointmentTriageCategory(item);
             const typeLabel = item.appointmentType === 'walk_in' ? 'Walk-in' : null;
             const subtitleParts = [item.department, item.reason].filter(Boolean);
             if (typeLabel) subtitleParts.unshift(typeLabel);
@@ -1122,6 +1577,7 @@ const queueRows = computed<QueueRow[]>(() => {
                 actionLabel: 'Open triage',
                 isOverdue,
                 triageCategory: cat,
+                searchHaystack: appointmentQueueSearchHaystack(item),
             };
         })
         .sort((a, b) => {
@@ -1155,9 +1611,24 @@ const queueRows = computed<QueueRow[]>(() => {
     }));
 });
 
+const displayedQueueRows = computed(() => {
+    const query = patientSearchQuery.value.trim();
+    if (query.length >= 2) {
+        return dashboardSearchAppointments.value.map((item) => mapDashboardSearchAppointmentToRow(item));
+    }
+
+    if (!query) {
+        return queueRows.value;
+    }
+
+    return queueRows.value.filter((row) => queueRowMatchesSearch(row, query));
+});
+
+const queuePreviewSearchActive = computed(() => patientSearchQuery.value.trim() !== '');
+
 const queueGroupCounts = computed<Map<string, number>>(() => {
     const map = new Map<string, number>();
-    for (const row of queueRows.value) {
+    for (const row of displayedQueueRows.value) {
         if (row.group) {
             map.set(row.group, (map.get(row.group) ?? 0) + 1);
         }
@@ -1167,7 +1638,9 @@ const queueGroupCounts = computed<Map<string, number>>(() => {
 
 const queueTitle = computed(() => {
     if (activePresetKey.value === 'front_desk') return 'Front desk queue';
-    if (activePresetKey.value === 'clinician') return 'Consultation-ready queue';
+    if (activePresetKey.value === 'clinician') {
+        return clinicianClinicalDepartment.value ? 'Clinical queues' : 'Consultation-ready queue';
+    }
     if (activePresetKey.value === 'direct_service') return 'Direct-service queues';
     if (activePresetKey.value === 'nursing') return 'Triage & admissions queue';
     if (activePresetKey.value === 'emergency') return 'Emergency triage queue';
@@ -1177,7 +1650,13 @@ const queueTitle = computed(() => {
 
 const queueDescription = computed(() => {
     if (activePresetKey.value === 'front_desk') return 'Checked-in patients awaiting clinical handoff, followed by upcoming scheduled arrivals.';
-    if (activePresetKey.value === 'clinician') return 'Checked-in encounters ready for consultation pickup.';
+    if (activePresetKey.value === 'clinician') {
+        if (clinicianClinicalDepartment.value) {
+            return `Your assigned patients plus the shared ${clinicianClinicalDepartment.value} department pool when visits are routed to the clinic.`;
+        }
+
+        return 'Patients assigned to you who are waiting for provider review, with active consultations shown below.';
+    }
     if (activePresetKey.value === 'direct_service') return 'Accessible laboratory, pharmacy, and radiology worklists for this session.';
     if (activePresetKey.value === 'nursing') return 'Checked-in patients waiting for triage and active inpatient admissions.';
     if (activePresetKey.value === 'emergency') return 'All checked-in patients sorted by arrival time — longest wait shown first. Rows overdue at 30 min.';
@@ -1222,43 +1701,65 @@ const handoff = computed(() => {
         };
     }
     if (activePresetKey.value === 'clinician') {
-        const checkedIn = numberValue(counts.value.appointments, 'checked_in');
+        const waitingProvider = numberValue(counts.value.appointments, 'waiting_provider');
+        const departmentPoolWaiting = numberValue(counts.value.departmentPoolAppointments, 'waiting_provider');
+        const inConsultation = numberValue(counts.value.appointments, 'in_consultation');
         const draftRecords = numberValue(counts.value.medicalRecords, 'draft');
         const admittedFollowUps = numberValue(counts.value.admissions, 'admitted');
         const hasDraftBlocker = Number(draftRecords ?? 0) > 0;
-        const hasCheckedInBlocker = Number(checkedIn ?? 0) > 0;
+        const hasWaitingProviderBlocker = Number(waitingProvider ?? 0) > 0;
+        const hasDepartmentPoolBlocker = Number(departmentPoolWaiting ?? 0) > 0;
 
         return {
             title: 'Clinician handoff',
-            note: 'OPD and inpatient clinical flow',
+            note: clinicianClinicalDepartment.value
+                ? `OPD flow for ${clinicianClinicalDepartment.value} and assigned patients`
+                : 'OPD and inpatient clinical flow',
             blockerTitle: hasDraftBlocker
                 ? 'Draft records still open'
-                : hasCheckedInBlocker
-                    ? 'Checked-in consultations waiting'
-                    : Number(admittedFollowUps ?? 0) > 0
-                        ? 'Active inpatient follow-up load'
-                        : 'No critical clinician blockers',
+                : hasWaitingProviderBlocker
+                    ? 'Assigned consultations waiting'
+                    : hasDepartmentPoolBlocker
+                        ? 'Department pool patients waiting'
+                        : Number(admittedFollowUps ?? 0) > 0
+                            ? 'Active inpatient follow-up load'
+                            : 'No critical clinician blockers',
             blockerNote: hasDraftBlocker
                 ? 'Clinical documentation still needs completion or finalization.'
-                : hasCheckedInBlocker
-                    ? 'Patients are ready to be picked up into active consultation.'
-                    : Number(admittedFollowUps ?? 0) > 0
-                        ? 'Current inpatients may still need progress review or discharge decisions.'
-                        : 'Consultation queue and note backlog are stable for the next clinical shift.',
-            nextAction: hasCheckedInBlocker
-                ? 'Start the next consultation without leaving the current preset.'
-                : hasDraftBlocker
-                    ? 'Review incomplete notes before new backlog accumulates.'
-                    : 'Review active inpatients for continuation planning.',
+                : hasWaitingProviderBlocker
+                    ? 'Assigned patients are waiting in the provider queue for consultation to begin.'
+                    : hasDepartmentPoolBlocker
+                        ? `Patients are waiting in the ${clinicianClinicalDepartment.value} clinic pool for the next available provider.`
+                        : Number(admittedFollowUps ?? 0) > 0
+                            ? 'Current inpatients may still need progress review or discharge decisions.'
+                            : 'Consultation queue and note backlog are stable for the next clinical shift.',
+            nextAction: hasWaitingProviderBlocker
+                ? 'Start the next assigned consultation without leaving the current preset.'
+                : hasDepartmentPoolBlocker
+                    ? 'Pick up the next patient from your department pool.'
+                    : hasDraftBlocker
+                        ? 'Review incomplete notes before new backlog accumulates.'
+                        : 'Review active inpatients for continuation planning.',
             primaryAction: {
-                label: hasCheckedInBlocker ? 'Open checked-in queue' : 'Open medical records',
-                href: hasCheckedInBlocker ? `/appointments?view=queue&status=checked_in&from=${today}` : '/medical-records',
+                label: hasWaitingProviderBlocker
+                    ? 'Open my queue'
+                    : hasDepartmentPoolBlocker && clinicianClinicalDepartment.value
+                        ? 'Open department pool'
+                        : 'Open medical records',
+                href: hasWaitingProviderBlocker
+                    ? clinicianQueueHref('waiting_provider')
+                    : hasDepartmentPoolBlocker && clinicianClinicalDepartment.value
+                        ? departmentQueueHref(clinicianClinicalDepartment.value, 'waiting_provider')
+                        : '/medical-records',
             },
             secondaryAction: { label: 'Open admissions', href: '/admissions?view=queue' },
             chips: [
-                { label: 'Checked in', value: checkedIn },
+                { label: 'Waiting for provider', value: waitingProvider },
+                ...(clinicianClinicalDepartment.value
+                    ? [{ label: 'Department pool', value: departmentPoolWaiting }]
+                    : []),
+                { label: 'In consultation', value: inConsultation },
                 { label: 'Draft notes', value: draftRecords },
-                { label: 'Admitted follow-ups', value: admittedFollowUps },
             ],
         };
     }
@@ -1783,14 +2284,45 @@ const vitalsOverdueCount = computed(() => Number((counts.value.vitalsOverdue as 
 
 const patientSearchQuery = ref('');
 
+watchDebounced(
+    patientSearchQuery,
+    async () => {
+        const query = patientSearchQuery.value.trim();
+        if (query.length < 2) {
+            dashboardSearchAppointments.value = [];
+            dashboardSearchLoading.value = false;
+            return;
+        }
+
+        dashboardSearchLoading.value = true;
+        try {
+            const response = await apiGet<ApiEnvelope<any[]>>('/appointments', {
+                q: query,
+                perPage: 15,
+                sortBy: 'checkedInAt',
+                sortDir: 'asc',
+            });
+            dashboardSearchAppointments.value = Array.isArray(response.data) ? response.data : [];
+            await hydrateDashboardPatientsForAppointments(dashboardSearchAppointments.value);
+        } catch {
+            dashboardSearchAppointments.value = [];
+        } finally {
+            dashboardSearchLoading.value = false;
+        }
+    },
+    { debounce: 400, maxWait: 1200 },
+);
+
 function goToPatientSearch(): void {
     const q = patientSearchQuery.value.trim();
     if (!q) return;
-    const preset = activePresetKey.value;
-    const base = (preset === 'clinician' || preset === 'nursing' || preset === 'emergency')
-        ? `/appointments?view=queue&status=checked_in&q=${encodeURIComponent(q)}`
-        : `/patients?q=${encodeURIComponent(q)}`;
-    window.location.href = base;
+
+    if (['front_desk', 'clinician', 'nursing', 'emergency'].includes(activePresetKey.value)) {
+        window.location.href = appointmentsWorklistSearchHref(q);
+        return;
+    }
+
+    window.location.href = `/patients?q=${encodeURIComponent(q)}`;
 }
 
 function dismissShiftIntent(presetKey?: DashboardPresetKey): void {
@@ -1799,9 +2331,89 @@ function dismissShiftIntent(presetKey?: DashboardPresetKey): void {
     window.sessionStorage.setItem('dashboard.shift-intent', '1');
 }
 
+const clinicianMyQueueWaitingCount = computed(() =>
+    Number(numberValue(counts.value.appointments, 'waiting_provider') ?? 0),
+);
+
+const departmentPoolWaitingCount = computed(() =>
+    Number(numberValue(counts.value.departmentPoolAppointments, 'waiting_provider') ?? 0),
+);
+
+const showClinicianConsultationQueueAlert = computed(
+    () =>
+        activePresetKey.value === 'clinician'
+        && !loading.value
+        && !refreshing.value
+        && (clinicianMyQueueWaitingCount.value > 0
+            || (Boolean(clinicianClinicalDepartment.value) && departmentPoolWaitingCount.value > 0)),
+);
+
+const clinicianConsultationQueueAlertTitle = computed(() => {
+    const myCount = clinicianMyQueueWaitingCount.value;
+    const poolCount = departmentPoolWaitingCount.value;
+    const department = clinicianClinicalDepartment.value;
+    const segments: string[] = [];
+
+    if (myCount > 0) {
+        segments.push(`${myCount} in your queue`);
+    }
+
+    if (department && poolCount > 0) {
+        segments.push(`${poolCount} in the ${department} department pool`);
+    }
+
+    if (segments.length === 0) {
+        return '';
+    }
+
+    const totalPatients = myCount + poolCount;
+    const patientLabel = `${totalPatients} patient${totalPatients === 1 ? '' : 's'}`;
+
+    if (segments.length === 1) {
+        return `${patientLabel} ${segments[0]}`;
+    }
+
+    return `${patientLabel} ready for consultation — ${segments.join(' and ')}`;
+});
+
+const clinicianConsultationQueueAlertDescription = computed(() => {
+    const myCount = clinicianMyQueueWaitingCount.value;
+    const poolCount = departmentPoolWaitingCount.value;
+    const department = clinicianClinicalDepartment.value;
+    const notes: string[] = [];
+
+    if (myCount > 0) {
+        notes.push(
+            myCount === 1
+                ? 'One visit is assigned to you and listed under My queue — waiting for provider below.'
+                : `${myCount} visits are assigned to you and listed under My queue — waiting for provider below.`,
+        );
+    }
+
+    if (department && poolCount > 0) {
+        notes.push(
+            poolCount === 1
+                ? `One visit is in the shared ${department} pool and is waiting for the next available provider.`
+                : `${poolCount} visits are in the shared ${department} pool and are waiting for the next available provider.`,
+        );
+    }
+
+    return `${notes.join(' ')} Open the matching queue sections below or use the worklist actions above.`;
+});
+
 const queueViewAllHref = computed(() => {
     if (activePresetKey.value === 'front_desk') return `/appointments?view=queue&from=${today}`;
-    if (activePresetKey.value === 'clinician') return `/appointments?view=queue&status=checked_in&from=${today}`;
+    if (activePresetKey.value === 'clinician') {
+        if (clinicianMyQueueWaitingCount.value > 0) {
+            return clinicianQueueHref('waiting_provider');
+        }
+
+        if (clinicianClinicalDepartment.value && departmentPoolWaitingCount.value > 0) {
+            return departmentQueueHref(clinicianClinicalDepartment.value, 'waiting_provider');
+        }
+
+        return clinicianQueueHref('waiting_provider');
+    }
     if (activePresetKey.value === 'nursing') return `/appointments?view=queue&status=checked_in&from=${today}`;
     if (activePresetKey.value === 'emergency') return `/appointments?view=queue&status=checked_in&from=${today}`;
     if (activePresetKey.value === 'cashier') return '/billing-invoices?status=draft';
@@ -2165,6 +2777,19 @@ function switchPreset(key: DashboardPresetKey): void {
                     </Alert>
 
                     <Alert
+                        v-if="showClinicianConsultationQueueAlert"
+                        class="rounded-lg border border-amber-500/40 bg-amber-500/5 py-2.5 text-amber-950 dark:text-amber-200"
+                    >
+                        <AppIcon name="calendar-clock" class="size-4 text-amber-600" />
+                        <AlertTitle class="text-sm font-medium">
+                            {{ clinicianConsultationQueueAlertTitle }}
+                        </AlertTitle>
+                        <AlertDescription class="mt-1 text-xs">
+                            {{ clinicianConsultationQueueAlertDescription }}
+                        </AlertDescription>
+                    </Alert>
+
+                    <Alert
                         v-if="activePresetKey === 'nursing' && !loading && !refreshing && escalatedTaskCount > 0"
                         class="rounded-lg border border-rose-500/40 bg-rose-500/5 py-2.5 text-rose-900 dark:text-rose-200"
                     >
@@ -2203,10 +2828,18 @@ function switchPreset(key: DashboardPresetKey): void {
                         <input
                             v-model="patientSearchQuery"
                             type="search"
-                            placeholder="Search patients or appointments…"
-                            class="h-9 w-full rounded-lg border border-border bg-background pl-8 pr-10 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                            placeholder="Patient name, MRN, phone, or appointment #"
+                            class="h-9 w-full rounded-lg border border-border bg-background pl-8 pr-24 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                             @keydown.enter="goToPatientSearch"
                         />
+                        <button
+                            v-if="patientSearchQuery.trim()"
+                            type="button"
+                            class="absolute right-9 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/10"
+                            @click="goToPatientSearch"
+                        >
+                            Search all
+                        </button>
                         <button
                             v-if="patientSearchQuery.trim()"
                             type="button"
@@ -2248,10 +2881,15 @@ function switchPreset(key: DashboardPresetKey): void {
                             </div>
                             <div class="flex shrink-0 items-center gap-2">
                                 <Badge v-if="!loading" variant="secondary" class="rounded-lg tabular-nums text-[11px]">
-                                    {{ queueRows.length }}
+                                    <template v-if="queuePreviewSearchActive">
+                                        {{ displayedQueueRows.length }} / {{ queueRows.length }}
+                                    </template>
+                                    <template v-else>
+                                        {{ queueRows.length }}
+                                    </template>
                                 </Badge>
                                 <Button
-                                    v-if="queueRows.length > 0 && !loading"
+                                    v-if="(queueRows.length > 0 || queuePreviewSearchActive) && !loading"
                                     as-child
                                     size="sm"
                                     variant="outline"
@@ -2298,12 +2936,41 @@ function switchPreset(key: DashboardPresetKey): void {
                                 </div>
                             </div>
 
+                            <!-- Search: loading or no matches -->
+                            <div
+                                v-else-if="queuePreviewSearchActive && (dashboardSearchLoading || displayedQueueRows.length === 0)"
+                                class="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center"
+                            >
+                                <AppIcon
+                                    :name="dashboardSearchLoading ? 'refresh-cw' : 'search'"
+                                    class="size-8 text-muted-foreground/40"
+                                    :class="dashboardSearchLoading ? 'motion-safe:animate-spin' : ''"
+                                />
+                                <div class="space-y-1">
+                                    <p class="text-sm font-medium text-muted-foreground">
+                                        {{ dashboardSearchLoading ? 'Searching worklist…' : 'No matching visits found' }}
+                                    </p>
+                                    <p v-if="!dashboardSearchLoading" class="text-xs text-muted-foreground/70">
+                                        Try another patient name, MRN, phone, or appointment number, or open the full appointments worklist.
+                                    </p>
+                                </div>
+                                <Button
+                                    v-if="!dashboardSearchLoading"
+                                    size="sm"
+                                    variant="outline"
+                                    class="h-8"
+                                    @click="goToPatientSearch"
+                                >
+                                    Open full worklist
+                                </Button>
+                            </div>
+
                             <!-- Queue rows -->
                             <div v-else class="max-h-[28rem] overflow-y-auto">
-                                <template v-for="(row, index) in queueRows" :key="row.id">
+                                <template v-for="(row, index) in displayedQueueRows" :key="row.id">
                                     <!-- Group header: show when this row starts a new group -->
                                     <div
-                                        v-if="row.group && (index === 0 || queueRows[index - 1]?.group !== row.group)"
+                                        v-if="row.group && (index === 0 || displayedQueueRows[index - 1]?.group !== row.group)"
                                         class="sticky top-0 z-10 flex items-center gap-2 border-b bg-muted/60 px-4 py-1.5 backdrop-blur-sm"
                                     >
                                         <span class="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{{ row.group }}</span>
@@ -2311,9 +2978,8 @@ function switchPreset(key: DashboardPresetKey): void {
                                             {{ queueGroupCounts.get(row.group) ?? 0 }}
                                         </span>
                                     </div>
-                                    <Link
-                                        :href="row.href"
-                                        class="group flex items-start gap-3 border-b py-3 transition-colors last:border-b-0 hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none"
+                                    <div
+                                        class="flex items-start gap-3 border-b px-4 py-3 last:border-b-0"
                                         :class="[dashboardRowBorderClass(row), dashboardRowBgClass(row)]"
                                     >
                                         <span
@@ -2353,15 +3019,17 @@ function switchPreset(key: DashboardPresetKey): void {
                                                 </div>
                                             </div>
                                             <p class="mt-0.5 truncate text-xs text-muted-foreground">{{ row.subtitle }}</p>
-                                            <div class="mt-1 flex items-center justify-between gap-2">
-                                                <span class="text-[11px] text-muted-foreground">{{ row.meta }}</span>
-                                                <span class="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
-                                                    {{ row.actionLabel }}
-                                                    <AppIcon name="chevron-right" class="size-3" />
-                                                </span>
-                                            </div>
+                                            <p class="mt-1 text-[11px] text-muted-foreground">{{ row.meta }}</p>
                                         </div>
-                                    </Link>
+                                        <Button
+                                            as-child
+                                            size="sm"
+                                            :variant="queueRowActionVariant(row)"
+                                            class="mt-0.5 h-7 shrink-0 rounded-lg text-xs"
+                                        >
+                                            <Link :href="row.href">{{ row.actionLabel }}</Link>
+                                        </Button>
+                                    </div>
                                 </template>
                             </div>
                         </CardContent>

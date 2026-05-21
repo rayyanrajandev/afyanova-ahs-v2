@@ -19,6 +19,7 @@ interface SheetContentProps extends DialogContentProps {
   showCloseButton?: boolean
   variant?: "default" | "action" | "form" | "workspace"
   size?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "5xl" | "6xl" | null
+  embedded?: boolean
 }
 
 defineOptions({
@@ -30,6 +31,7 @@ const props = withDefaults(defineProps<SheetContentProps>(), {
   showCloseButton: false,
   variant: "default",
   size: null,
+  embedded: false,
 })
 const emits = defineEmits<DialogContentEmits>()
 
@@ -80,7 +82,15 @@ const sideVariantClass = computed(() => {
 </script>
 
 <template>
-  <DialogPortal>
+  <div
+    v-if="props.embedded"
+    data-slot="sheet-content"
+    :data-sheet-variant="props.variant"
+    :class="cn('flex min-h-0 flex-1 flex-col overflow-hidden bg-background outline-hidden', props.class)"
+  >
+    <slot />
+  </div>
+  <DialogPortal v-else>
     <SheetOverlay />
     <DialogContent
       data-slot="sheet-content"

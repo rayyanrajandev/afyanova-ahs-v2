@@ -2,6 +2,7 @@
 import { Head } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -89,7 +90,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Cash Billing', href: '/billing-cash' },
 ];
 
-const { permissionState } = usePlatformAccess();
+const { permissionState, scope } = usePlatformAccess();
 const canRead = computed(() => permissionState('billing.cash-accounts.read') === 'allowed');
 const canManage = computed(() => permissionState('billing.cash-accounts.manage') === 'allowed');
 
@@ -170,6 +171,49 @@ const leadAccountAction = computed(() => {
     if (!selectedAccount.value) return 'Create or open a cash account to start posting charges.';
     if (selectedAccountBalance.value > 0) return 'Collect payment or continue posting services against this account.';
     return 'This account is balanced. Post a new charge only if new walk-in services are captured.';
+});
+
+const createPatientContextMeta = computed(() => {
+    if (!createPatient.value) return null;
+
+    return [
+        createPatient.value.patientNumber?.trim() ?? null,
+        createPatient.value.phone?.trim() ?? null,
+    ].filter((value): value is string => Boolean(value)).join(' | ') || null;
+});
+
+const createCashAccountStatusLabel = computed(() =>
+    createForm.patientId.trim() ? 'Ready to open' : 'Patient required',
+);
+
+const createCashAccountStatusVariant = computed<
+    'default' | 'secondary' | 'outline' | 'destructive'
+>(() => (createForm.patientId.trim() ? 'default' : 'secondary'));
+
+const selectedAccountPatientMeta = computed(() => {
+    if (!selectedAccount.value?.patient) return null;
+
+    return [
+        selectedAccount.value.patient.patient_number?.trim() ?? null,
+        selectedAccount.value.patient.phone?.trim() ?? null,
+        selectedAccount.value.patient.gender?.trim() ?? null,
+    ].filter((value): value is string => Boolean(value)).join(' | ') || null;
+});
+
+const selectedAccountWorkflowContextLabel = computed(() => {
+    if (!selectedAccount.value) return 'Cash account';
+    return selectedAccount.value.currency_code?.trim()
+        ? `${selectedAccount.value.currency_code.trim()} cash account`
+        : 'Cash account';
+});
+
+const selectedAccountWorkflowContextMeta = computed(() => {
+    if (!selectedAccount.value) return null;
+
+    return [
+        selectedAccount.value.created_at ? `Opened ${formatDateTime(selectedAccount.value.created_at)}` : null,
+        `Balance ${formatCurrency(selectedAccount.value.account_balance, selectedAccount.value.currency_code || 'TZS')}`,
+    ].filter((value): value is string => Boolean(value)).join(' | ');
 });
 
 watch(
@@ -659,21 +703,40 @@ onMounted(async () => {
                     <template v-if="selectedAccount">
                         <Card class="rounded-lg border-sidebar-border/70">
                             <CardHeader class="gap-3">
-                                <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                    <div class="min-w-0">
-                                        <CardTitle class="truncate">{{ patientDisplayName(selectedAccount.patient) }}</CardTitle>
-                                        <CardDescription class="mt-1">
-                                            {{ selectedAccount.patient?.patient_number || 'No patient number' }}
-                                            <span v-if="selectedAccount.patient?.phone"> | {{ selectedAccount.patient.phone }}</span>
-                                        </CardDescription>
-                                    </div>
-                                    <div class="flex flex-wrap gap-2">
-                                        <Badge :variant="badgeVariant(selectedAccount.status)">
-                                            {{ formatStatusLabel(selectedAccount.status) }}
-                                        </Badge>
+                                <ClinicalContextBanner
+                                    title="Cash billing account context"
+                                    description="Confirm the patient, facility, and account state before posting charges or collecting payment."
+                                    :patient-name="patientDisplayName(selectedAccount.patient)"
+                                    :patient-meta="selectedAccountPatientMeta"
+                                    :patient-number="selectedAccount.patient?.patient_number || null"
+                                    :facility-name="scope?.facility?.name || 'No facility selected'"
+                                    :tenant-name="scope?.tenant?.name || 'No tenant'"
+                                    :context-label="selectedAccountWorkflowContextLabel"
+                                    :context-meta="selectedAccountWorkflowContextMeta"
+                                    :status-label="formatStatusLabel(selectedAccount.status)"
+                                    :status-variant="badgeVariant(selectedAccount.status)"
+                                    tone="muted"
+                                >
+                                    <template #actions>
                                         <Badge variant="outline">{{ selectedAccount.currency_code || 'TZS' }}</Badge>
-                                    </div>
-                                </div>
+                                        <template v-if="canManage">
+                                            <Button class="gap-2" @click="chargeDialogOpen = true">
+                                                <AppIcon name="plus" class="size-4" />
+                                                Record charge
+                                            </Button>
+                                            <Button variant="outline" class="gap-2" as-child>
+                                                <a :href="`/billing-payment-plans?cashBillingAccountId=${selectedAccount.id}`">
+                                                    <AppIcon name="calendar-range" class="size-4" />
+                                                    Payment plan
+                                                </a>
+                                            </Button>
+                                            <Button variant="outline" class="gap-2" @click="paymentDialogOpen = true">
+                                                <AppIcon name="banknote" class="size-4" />
+                                                Record payment
+                                            </Button>
+                                        </template>
+                                    </template>
+                                </ClinicalContextBanner>
 
                                 <div class="grid gap-3 sm:grid-cols-3">
                                     <div class="rounded-lg border border-sidebar-border/70 p-3">
@@ -696,22 +759,6 @@ onMounted(async () => {
                                     </div>
                                 </div>
 
-                                <div class="flex flex-wrap gap-2" v-if="canManage">
-                                    <Button class="gap-2" @click="chargeDialogOpen = true">
-                                        <AppIcon name="plus" class="size-4" />
-                                        Record charge
-                                    </Button>
-                                    <Button variant="outline" class="gap-2" as-child>
-                                        <a :href="`/billing-payment-plans?cashBillingAccountId=${selectedAccount.id}`">
-                                            <AppIcon name="calendar-range" class="size-4" />
-                                            Payment plan
-                                        </a>
-                                    </Button>
-                                    <Button variant="outline" class="gap-2" @click="paymentDialogOpen = true">
-                                        <AppIcon name="banknote" class="size-4" />
-                                        Record payment
-                                    </Button>
-                                </div>
                             </CardHeader>
                         </Card>
 
@@ -838,6 +885,21 @@ onMounted(async () => {
                 </DialogHeader>
 
                 <div class="grid gap-4 py-2">
+                    <ClinicalContextBanner
+                        title="Cash account setup context"
+                        description="Confirm the patient and facility before opening a new cashier account."
+                        :patient-name="createPatient ? patientLookupDisplayName(createPatient) : null"
+                        :patient-meta="createPatientContextMeta"
+                        :patient-number="createPatient?.patientNumber || null"
+                        :facility-name="scope?.facility?.name || 'No facility selected'"
+                        :tenant-name="scope?.tenant?.name || 'No tenant'"
+                        context-label="Walk-in cash account"
+                        :context-meta="createForm.currencyCode.trim() ? `Currency: ${createForm.currencyCode.trim().toUpperCase()}` : 'Select the account currency.'"
+                        :status-label="createCashAccountStatusLabel"
+                        :status-variant="createCashAccountStatusVariant"
+                        tone="muted"
+                    />
+
                     <PatientLookupField
                         input-id="cash-billing-create-patient"
                         v-model="createForm.patientId"
@@ -846,15 +908,9 @@ onMounted(async () => {
                         @selected="createPatient = $event"
                     />
 
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <div class="grid gap-2">
-                            <Label for="cash-billing-create-currency">Currency</Label>
-                            <Input id="cash-billing-create-currency" v-model="createForm.currencyCode" maxlength="3" />
-                        </div>
-                        <div class="rounded-lg border border-sidebar-border/70 p-3 text-sm text-muted-foreground">
-                            <p class="text-xs uppercase tracking-[0.16em]">Selected patient</p>
-                            <p class="mt-1 font-medium text-foreground">{{ patientLookupDisplayName(createPatient) }}</p>
-                        </div>
+                    <div class="grid gap-2">
+                        <Label for="cash-billing-create-currency">Currency</Label>
+                        <Input id="cash-billing-create-currency" v-model="createForm.currencyCode" maxlength="3" />
                     </div>
 
                     <div class="grid gap-2">

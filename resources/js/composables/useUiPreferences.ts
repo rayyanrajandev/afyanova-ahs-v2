@@ -17,7 +17,7 @@ const UI_SCALE_STORAGE_KEY = 'ui.scale-preset';
 const BORDER_RADIUS_STORAGE_KEY = 'ui.border-radius';
 
 const ICON_PACK_VALUES: IconPack[] = ['lucide', 'huge'];
-const THEME_PRESET_VALUES: UiThemePreset[] = ['yaru', 'clinic', 'emerald', 'violet', 'amber'];
+const THEME_PRESET_VALUES: UiThemePreset[] = ['yaru', 'clinic', 'emerald', 'violet', 'amber', 'sky'];
 const THEME_BASE_VALUES: UiThemeBase[] = ['slate', 'gray', 'zinc', 'neutral', 'stone'];
 const FONT_FAMILY_VALUES: UiFontFamily[] = ['sans', 'serif', 'compact'];
 const LEGACY_FONT_FAMILY_VALUES: Record<string, UiFontFamily> = {

@@ -6,6 +6,7 @@ import {
     type Ref,
     type WatchStopHandle,
 } from 'vue';
+import { clearSensitiveLocalStorageKey } from '@/lib/browserStoragePolicy';
 
 type BooleanRef = Readonly<Ref<boolean>> | Ref<boolean>;
 
@@ -22,6 +23,7 @@ type WorkflowDraftPersistenceOptions<T> = {
     canRestore?: (draft: T) => boolean;
     onRestored?: () => void;
     version?: number;
+    allowPlainBrowserStorage?: boolean;
 };
 
 export function useWorkflowDraftPersistence<T>(
@@ -29,19 +31,19 @@ export function useWorkflowDraftPersistence<T>(
 ) {
     const restoredDraft = ref(false);
     const version = options.version ?? 1;
+    const plainBrowserStorageEnabled = options.allowPlainBrowserStorage === true;
     let stopPersistenceWatch: WatchStopHandle | null = null;
 
     function clearPersistedDraft(): void {
-        if (typeof window === 'undefined') return;
-
-        try {
-            window.localStorage.removeItem(options.key);
-        } catch {
-            // Ignore storage failures so order entry can continue.
-        }
+        clearSensitiveLocalStorageKey(options.key);
     }
 
     onMounted(() => {
+        if (!plainBrowserStorageEnabled) {
+            clearPersistedDraft();
+            return;
+        }
+
         if (typeof window === 'undefined') return;
 
         try {

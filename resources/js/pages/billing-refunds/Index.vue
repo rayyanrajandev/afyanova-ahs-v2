@@ -2,6 +2,7 @@
 import { Head } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,13 +13,14 @@ import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import LeaveWorkflowDialog from '@/components/workflow/LeaveWorkflowDialog.vue';
+import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { csrfRequestHeaders, refreshCsrfToken } from '@/lib/csrf';
+import { apiGet, apiPost } from '@/lib/apiClient';
+import { generateRequestKey } from '@/lib/idempotency';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
-
-type ApiError = { message?: string };
 type RefundStatus = 'pending' | 'approved' | 'processed' | 'rejected' | 'cancelled' | 'all';
 type RefundRecord = {
     id: string;
@@ -76,7 +78,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Refund Operations', href: '/billing-refunds' },
 ];
 
-const { permissionState } = usePlatformAccess();
+const { permissionState, scope } = usePlatformAccess();
 const canRead = computed(() => permissionState('billing.refunds.read') === 'allowed');
 const canCreate = computed(() => permissionState('billing.refunds.create') === 'allowed');
 const canApprove = computed(() => permissionState('billing.refunds.approve') === 'allowed');
@@ -100,6 +102,12 @@ const selectedRefund = ref<RefundRecord | null>(null);
 const createDialogOpen = ref(false);
 const approveDialogOpen = ref(false);
 const processDialogOpen = ref(false);
+const createDiscardConfirmOpen = ref(false);
+const approveDiscardConfirmOpen = ref(false);
+const processDiscardConfirmOpen = ref(false);
+const createRefundRequestKey = ref(generateRequestKey('billing-refund-create'));
+const approveRefundRequestKey = ref(generateRequestKey('billing-refund-approve'));
+const processRefundRequestKey = ref(generateRequestKey('billing-refund-process'));
 
 const createForm = reactive({
     invoiceNumber: '',
@@ -152,12 +160,117 @@ const queueSummary = computed(() => {
     return `${total} refunds in view | ${pending} pending | ${approved} approved | ${processed} processed`;
 });
 
+const createRefundWorkflowContextLabel = computed(() => {
+    const invoiceNumber = createForm.invoiceNumber.trim();
+    return invoiceNumber ? `Invoice ${invoiceNumber}` : 'Select billing invoice';
+});
+
+const createRefundWorkflowContextMeta = computed(() => {
+    const parts = [
+        formatStatusLabel(createForm.refundReason),
+        formatStatusLabel(createForm.refundMethod),
+        createForm.paymentId.trim() ? `Payment ${createForm.paymentId.trim()}` : null,
+    ].filter(Boolean);
+
+    return parts.length > 0
+        ? parts.join(' · ')
+        : 'Start the refund trail using the invoice number staff already know from the billing desk.';
+});
+
+const createRefundContextStatusLabel = computed(() => {
+    if (createForm.invoiceNumber.trim() && Number(createForm.refundAmount) > 0) {
+        return 'Ready to request';
+    }
+    if (createForm.invoiceNumber.trim()) return 'Amount required';
+    return 'Invoice required';
+});
+
+const createRefundContextStatusVariant = computed<
+    'default' | 'secondary' | 'outline' | 'destructive'
+>(() => {
+    if (createForm.invoiceNumber.trim() && Number(createForm.refundAmount) > 0) return 'default';
+    return 'outline';
+});
+
+const selectedRefundPatientName = computed(() =>
+    selectedRefund.value ? patientLabel(selectedRefund.value) : null,
+);
+
+const selectedRefundPatientMeta = computed(() => {
+    if (!selectedRefund.value) return null;
+
+    const parts = [
+        selectedRefund.value.patient?.patient_number?.trim()
+            ? `Patient No. ${selectedRefund.value.patient.patient_number.trim()}`
+            : null,
+        selectedRefund.value.patient?.phone?.trim() || null,
+    ].filter(Boolean);
+
+    return parts.length > 0 ? parts.join(' · ') : null;
+});
+
+const selectedRefundWorkflowContextLabel = computed(() =>
+    selectedRefund.value?.invoice?.invoice_number?.trim() || 'Refund request',
+);
+
+const selectedRefundWorkflowContextMeta = computed(() => {
+    if (!selectedRefund.value) return null;
+
+    const parts = [
+        formatStatusLabel(selectedRefund.value.refund_reason),
+        formatCurrency(selectedRefund.value.refund_amount, selectedRefund.value.invoice?.currency_code || 'TZS'),
+    ];
+
+    return parts.join(' · ');
+});
+
 const leadRefundAction = computed(() => {
     if (!selectedRefund.value) return 'Open a refund request or select one from the queue to continue approval and payout control.';
     if (selectedRefund.value.refund_status === 'pending') return 'This refund is waiting for finance approval before any money leaves the hospital.';
     if (selectedRefund.value.refund_status === 'approved') return 'This refund is approved and now needs payout proof before it can be closed.';
     if (selectedRefund.value.refund_status === 'processed') return 'This refund is complete. Keep the payout proof and invoice trail together for audit review.';
     return 'Review this refund carefully before taking the next operational step.';
+});
+
+const hasPendingCreateRefundWorkflow = computed(() => Boolean(
+    createForm.invoiceNumber.trim()
+    || createForm.paymentId.trim()
+    || createForm.refundReason !== 'overpayment'
+    || createForm.refundAmount.trim()
+    || createForm.refundMethod !== 'cash'
+    || createForm.mobileMoneyProvider.trim()
+    || createForm.mobileMoneyReference.trim()
+    || createForm.cardReference.trim()
+    || createForm.checkNumber.trim()
+    || createForm.notes.trim(),
+));
+
+const hasPendingApproveRefundWorkflow = computed(() => Boolean(
+    approveForm.actorName.trim() || approveForm.notes.trim(),
+));
+
+const hasPendingProcessRefundWorkflow = computed(() => Boolean(
+    processForm.actorName.trim()
+    || processForm.mobileMoneyReference.trim()
+    || processForm.cardReference.trim()
+    || processForm.checkNumber.trim()
+    || processForm.notes.trim(),
+));
+
+const hasPendingRefundWorkflow = computed(() => (
+    (createDialogOpen.value && hasPendingCreateRefundWorkflow.value)
+    || (approveDialogOpen.value && hasPendingApproveRefundWorkflow.value)
+    || (processDialogOpen.value && hasPendingProcessRefundWorkflow.value)
+));
+
+const {
+    confirmOpen: leaveConfirmOpen,
+    confirmLeave: confirmPendingRefundWorkflowLeave,
+    cancelLeave: cancelPendingRefundWorkflowLeave,
+} = usePendingWorkflowLeaveGuard({
+    shouldBlock: hasPendingRefundWorkflow,
+    isSubmitting: actionLoading,
+    blockBrowserUnload: false,
 });
 
 function refundFinanceSetupMissing(refund: RefundRecord | null | undefined): boolean {
@@ -222,42 +335,30 @@ function patientLabel(refund: RefundRecord): string {
 async function apiRequest<T>(
     method: 'GET' | 'POST',
     path: string,
-    options?: { query?: Record<string, string | number | null>; body?: Record<string, unknown> },
+    options?: {
+        query?: Record<string, string | number | null>;
+        body?: Record<string, unknown>;
+        entitlementContext?: string;
+        idempotencyKey?: string | null;
+        requestId?: string | null;
+    },
 ): Promise<T> {
-    const url = new URL(`/api/v1${path}`, window.location.origin);
+    if (method === 'GET') {
+        const query = Object.fromEntries(
+            Object.entries(options?.query ?? {}).filter(([, value]) => value !== null && value !== ''),
+        );
 
-    Object.entries(options?.query ?? {}).forEach(([key, value]) => {
-        if (value === null || value === '') return;
-        url.searchParams.set(key, String(value));
-    });
-
-    const headers: Record<string, string> = {
-        Accept: 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-    };
-
-    let body: string | undefined;
-    if (method !== 'GET') {
-        await refreshCsrfToken();
-        Object.assign(headers, csrfRequestHeaders(), {
-            'Content-Type': 'application/json',
+        return apiGet<T>(path, query, {
+            entitlementContext: options?.entitlementContext,
         });
-        body = JSON.stringify(options?.body ?? {});
     }
 
-    const response = await fetch(url.toString(), {
-        method,
-        credentials: 'same-origin',
-        headers,
-        body,
+    return apiPost<T>(path, {
+        body: options?.body,
+        entitlementContext: options?.entitlementContext,
+        idempotencyKey: options?.idempotencyKey,
+        requestId: options?.requestId,
     });
-
-    const payload = (await response.json().catch(() => ({}))) as T & ApiError;
-    if (!response.ok) {
-        throw new Error(payload.message || `${response.status} ${response.statusText}`);
-    }
-
-    return payload;
 }
 
 async function loadRefunds(preserveSelection = true) {
@@ -345,12 +446,123 @@ function resetProcessForm() {
     processForm.notes = '';
 }
 
+function rotateCreateRefundRequestKey(): void {
+    createRefundRequestKey.value = generateRequestKey('billing-refund-create');
+}
+
+function rotateApproveRefundRequestKey(): void {
+    approveRefundRequestKey.value = generateRequestKey('billing-refund-approve');
+}
+
+function rotateProcessRefundRequestKey(): void {
+    processRefundRequestKey.value = generateRequestKey('billing-refund-process');
+}
+
+function openCreateRefundDialog(): void {
+    resetCreateForm();
+    rotateCreateRefundRequestKey();
+    createDialogOpen.value = true;
+}
+
+function openApproveRefundDialog(): void {
+    resetApproveForm();
+    rotateApproveRefundRequestKey();
+    approveDialogOpen.value = true;
+}
+
+function openProcessRefundDialog(): void {
+    resetProcessForm();
+    rotateProcessRefundRequestKey();
+    processDialogOpen.value = true;
+}
+
+function requestCreateDialogOpenChange(open: boolean): void {
+    if (open) {
+        openCreateRefundDialog();
+        return;
+    }
+
+    if (actionLoading.value) return;
+
+    if (hasPendingCreateRefundWorkflow.value) {
+        createDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    createDialogOpen.value = false;
+    resetCreateForm();
+    rotateCreateRefundRequestKey();
+}
+
+function requestApproveDialogOpenChange(open: boolean): void {
+    if (open) {
+        openApproveRefundDialog();
+        return;
+    }
+
+    if (actionLoading.value) return;
+
+    if (hasPendingApproveRefundWorkflow.value) {
+        approveDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    approveDialogOpen.value = false;
+    resetApproveForm();
+    rotateApproveRefundRequestKey();
+}
+
+function requestProcessDialogOpenChange(open: boolean): void {
+    if (open) {
+        openProcessRefundDialog();
+        return;
+    }
+
+    if (actionLoading.value) return;
+
+    if (hasPendingProcessRefundWorkflow.value) {
+        processDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    processDialogOpen.value = false;
+    resetProcessForm();
+    rotateProcessRefundRequestKey();
+}
+
+function confirmCreateDialogDiscard(): void {
+    createDiscardConfirmOpen.value = false;
+    createDialogOpen.value = false;
+    resetCreateForm();
+    rotateCreateRefundRequestKey();
+}
+
+function confirmApproveDialogDiscard(): void {
+    approveDiscardConfirmOpen.value = false;
+    approveDialogOpen.value = false;
+    resetApproveForm();
+    rotateApproveRefundRequestKey();
+}
+
+function confirmProcessDialogDiscard(): void {
+    processDiscardConfirmOpen.value = false;
+    processDialogOpen.value = false;
+    resetProcessForm();
+    rotateProcessRefundRequestKey();
+}
+
 async function submitCreateRefund() {
-    if (!canCreate.value || !createForm.invoiceNumber.trim() || Number(createForm.refundAmount) <= 0) return;
+    if (
+        !canCreate.value
+        || actionLoading.value
+        || !createForm.invoiceNumber.trim()
+        || Number(createForm.refundAmount) <= 0
+    ) return;
 
     actionLoading.value = true;
 
     try {
+        const requestKey = createRefundRequestKey.value;
         const response = await apiRequest<ItemResponse<RefundRecord>>('POST', '/billing-refunds', {
             body: {
                 invoice_number: createForm.invoiceNumber.trim(),
@@ -364,11 +576,15 @@ async function submitCreateRefund() {
                 check_number: createForm.refundMethod === 'check' ? createForm.checkNumber.trim() || null : null,
                 notes: createForm.notes.trim() || null,
             },
+            entitlementContext: 'Refund request create',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
 
         notifySuccess('Refund request recorded.');
         createDialogOpen.value = false;
         resetCreateForm();
+        rotateCreateRefundRequestKey();
         filters.status = 'all';
         await loadRefunds(false);
         if (response.data.id) {
@@ -382,21 +598,26 @@ async function submitCreateRefund() {
 }
 
 async function submitApproveRefund() {
-    if (!canApprove.value || !selectedRefund.value) return;
+    if (!canApprove.value || !selectedRefund.value || actionLoading.value) return;
 
     actionLoading.value = true;
 
     try {
+        const requestKey = approveRefundRequestKey.value;
         await apiRequest<ItemResponse<RefundRecord>>('POST', `/billing-refunds/${selectedRefund.value.id}/approve`, {
             body: {
                 actor_name: approveForm.actorName.trim() || null,
                 notes: approveForm.notes.trim() || null,
             },
+            entitlementContext: 'Refund approval',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
 
         notifySuccess('Refund approved.');
         approveDialogOpen.value = false;
         resetApproveForm();
+        rotateApproveRefundRequestKey();
         await loadRefunds();
     } catch (error) {
         notifyError(messageFromUnknown(error, 'Unable to approve refund.'));
@@ -406,11 +627,12 @@ async function submitApproveRefund() {
 }
 
 async function submitProcessRefund() {
-    if (!canProcess.value || !selectedRefund.value) return;
+    if (!canProcess.value || !selectedRefund.value || actionLoading.value) return;
 
     actionLoading.value = true;
 
     try {
+        const requestKey = processRefundRequestKey.value;
         await apiRequest<ItemResponse<RefundRecord>>('POST', `/billing-refunds/${selectedRefund.value.id}/process`, {
             body: {
                 actor_name: processForm.actorName.trim() || null,
@@ -419,11 +641,15 @@ async function submitProcessRefund() {
                 check_number: processForm.checkNumber.trim() || null,
                 notes: processForm.notes.trim() || null,
             },
+            entitlementContext: 'Refund payout processing',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
 
         notifySuccess('Refund processed.');
         processDialogOpen.value = false;
         resetProcessForm();
+        rotateProcessRefundRequestKey();
         await loadRefunds();
     } catch (error) {
         notifyError(messageFromUnknown(error, 'Unable to process refund.'));
@@ -459,7 +685,7 @@ onMounted(async () => {
                 </div>
 
                 <div class="flex flex-wrap gap-2">
-                    <Button v-if="canCreate" class="gap-2" @click="createDialogOpen = true">
+                    <Button v-if="canCreate" class="gap-2" @click="openCreateRefundDialog">
                         <AppIcon name="plus" class="size-4" />
                         New refund request
                     </Button>
@@ -653,7 +879,7 @@ onMounted(async () => {
                                     <Button
                                         v-if="canApprove && selectedRefund.refund_status === 'pending'"
                                         class="gap-2"
-                                        @click="approveDialogOpen = true"
+                                        @click="openApproveRefundDialog"
                                     >
                                         <AppIcon name="check" class="size-4" />
                                         Approve refund
@@ -662,7 +888,7 @@ onMounted(async () => {
                                         v-if="canProcess && selectedRefund.refund_status === 'approved'"
                                         variant="outline"
                                         class="gap-2"
-                                        @click="processDialogOpen = true"
+                                        @click="openProcessRefundDialog"
                                     >
                                         <AppIcon name="banknote" class="size-4" />
                                         Process payout
@@ -806,14 +1032,14 @@ onMounted(async () => {
                                     Choose a refund from the queue or create a new request to start the control flow.
                                 </p>
                             </div>
-                            <Button v-if="canCreate" @click="createDialogOpen = true">New refund request</Button>
+                            <Button v-if="canCreate" @click="openCreateRefundDialog">New refund request</Button>
                         </CardContent>
                     </Card>
                 </div>
             </div>
         </div>
 
-        <Dialog :open="createDialogOpen" @update:open="createDialogOpen = $event">
+        <Dialog :open="createDialogOpen" @update:open="requestCreateDialogOpenChange">
             <DialogContent class="rounded-lg sm:max-w-2xl">
                 <DialogHeader>
                     <DialogTitle>New refund request</DialogTitle>
@@ -823,6 +1049,40 @@ onMounted(async () => {
                 </DialogHeader>
 
                 <div class="grid gap-4 py-2">
+                    <ClinicalContextBanner
+                        title="Refund request context"
+                        description="Confirm the source invoice, refund pathway, and payout route before opening the refund trail."
+                        :facility-name="scope?.facility?.name || null"
+                        :tenant-name="scope?.tenant?.name || null"
+                        :context-label="createRefundWorkflowContextLabel"
+                        :context-meta="createRefundWorkflowContextMeta"
+                        :status-label="createRefundContextStatusLabel"
+                        :status-variant="createRefundContextStatusVariant"
+                        tone="muted"
+                    >
+                        <div class="grid gap-2 sm:grid-cols-2">
+                            <div class="rounded-md border bg-background/80 px-3 py-2">
+                                <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                    Refund amount
+                                </p>
+                                <p class="mt-1 text-sm font-medium text-foreground">
+                                    {{
+                                        Number(createForm.refundAmount) > 0
+                                            ? formatCurrency(Number(createForm.refundAmount), 'TZS')
+                                            : 'Enter amount'
+                                    }}
+                                </p>
+                            </div>
+                            <div class="rounded-md border bg-background/80 px-3 py-2">
+                                <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                    Payout route
+                                </p>
+                                <p class="mt-1 text-sm font-medium text-foreground">
+                                    {{ formatStatusLabel(createForm.refundMethod) }}
+                                </p>
+                            </div>
+                        </div>
+                    </ClinicalContextBanner>
                     <div class="grid gap-4 sm:grid-cols-2">
                         <div class="grid gap-2">
                             <Label for="refund-create-invoice-number">Invoice number</Label>
@@ -917,7 +1177,7 @@ onMounted(async () => {
                 </div>
 
                 <DialogFooter>
-                    <Button variant="outline" :disabled="actionLoading" @click="createDialogOpen = false">Cancel</Button>
+                    <Button variant="outline" :disabled="actionLoading" @click="requestCreateDialogOpenChange(false)">Cancel</Button>
                     <Button :disabled="actionLoading || !createForm.invoiceNumber.trim() || Number(createForm.refundAmount) <= 0" @click="submitCreateRefund">
                         Create refund request
                     </Button>
@@ -925,7 +1185,7 @@ onMounted(async () => {
             </DialogContent>
         </Dialog>
 
-        <Dialog :open="approveDialogOpen" @update:open="approveDialogOpen = $event">
+        <Dialog :open="approveDialogOpen" @update:open="requestApproveDialogOpenChange">
             <DialogContent class="rounded-lg sm:max-w-lg">
                 <DialogHeader>
                     <DialogTitle>Approve refund</DialogTitle>
@@ -935,6 +1195,19 @@ onMounted(async () => {
                 </DialogHeader>
 
                 <div class="grid gap-4 py-2">
+                    <ClinicalContextBanner
+                        title="Refund approval context"
+                        description="Confirm the patient, source invoice, and refund amount before authorizing payout handling."
+                        :patient-name="selectedRefundPatientName"
+                        :patient-meta="selectedRefundPatientMeta"
+                        :facility-name="scope?.facility?.name || null"
+                        :tenant-name="scope?.tenant?.name || null"
+                        :context-label="selectedRefundWorkflowContextLabel"
+                        :context-meta="selectedRefundWorkflowContextMeta"
+                        :status-label="selectedRefund ? formatStatusLabel(selectedRefund.refund_status) : null"
+                        :status-variant="selectedRefund ? refundBadgeVariant(selectedRefund.refund_status) : 'outline'"
+                        tone="muted"
+                    />
                     <div class="rounded-lg border border-sidebar-border/70 p-3 text-sm text-muted-foreground">
                         <p class="text-xs uppercase tracking-[0.16em]">Approval target</p>
                         <p class="mt-1 font-medium text-foreground">
@@ -960,13 +1233,13 @@ onMounted(async () => {
                 </div>
 
                 <DialogFooter>
-                    <Button variant="outline" :disabled="actionLoading" @click="approveDialogOpen = false">Cancel</Button>
+                    <Button variant="outline" :disabled="actionLoading" @click="requestApproveDialogOpenChange(false)">Cancel</Button>
                     <Button :disabled="actionLoading" @click="submitApproveRefund">Approve refund</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
 
-        <Dialog :open="processDialogOpen" @update:open="processDialogOpen = $event">
+        <Dialog :open="processDialogOpen" @update:open="requestProcessDialogOpenChange">
             <DialogContent class="rounded-lg sm:max-w-lg">
                 <DialogHeader>
                     <DialogTitle>Process refund payout</DialogTitle>
@@ -976,6 +1249,19 @@ onMounted(async () => {
                 </DialogHeader>
 
                 <div class="grid gap-4 py-2">
+                    <ClinicalContextBanner
+                        title="Refund payout context"
+                        description="Confirm the patient, invoice trail, and payout method before closing the refund."
+                        :patient-name="selectedRefundPatientName"
+                        :patient-meta="selectedRefundPatientMeta"
+                        :facility-name="scope?.facility?.name || null"
+                        :tenant-name="scope?.tenant?.name || null"
+                        :context-label="selectedRefundWorkflowContextLabel"
+                        :context-meta="selectedRefundWorkflowContextMeta"
+                        :status-label="selectedRefund ? formatStatusLabel(selectedRefund.refund_status) : null"
+                        :status-variant="selectedRefund ? refundBadgeVariant(selectedRefund.refund_status) : 'outline'"
+                        tone="muted"
+                    />
                     <div class="rounded-lg border border-sidebar-border/70 p-3 text-sm text-muted-foreground">
                         <p class="text-xs uppercase tracking-[0.16em]">Payout target</p>
                         <p class="mt-1 font-medium text-foreground">
@@ -1016,10 +1302,50 @@ onMounted(async () => {
                 </div>
 
                 <DialogFooter>
-                    <Button variant="outline" :disabled="actionLoading" @click="processDialogOpen = false">Cancel</Button>
+                    <Button variant="outline" :disabled="actionLoading" @click="requestProcessDialogOpenChange(false)">Cancel</Button>
                     <Button :disabled="actionLoading" @click="submitProcessRefund">Process refund</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+
+        <LeaveWorkflowDialog
+            :open="leaveConfirmOpen"
+            title="Leave refund workflow?"
+            description="A refund form still has unsaved changes. Stay here to finish the finance control step, or leave this page and discard the unfinished work."
+            stay-label="Stay on workflow"
+            leave-label="Leave page"
+            @update:open="cancelPendingRefundWorkflowLeave"
+            @confirm="confirmPendingRefundWorkflowLeave"
+        />
+
+        <LeaveWorkflowDialog
+            :open="createDiscardConfirmOpen"
+            title="Discard refund request?"
+            description="This refund request form has unsaved invoice or payout details. Keep editing to open the refund trail, or discard the form."
+            stay-label="Keep editing"
+            leave-label="Discard form"
+            @update:open="createDiscardConfirmOpen = false"
+            @confirm="confirmCreateDialogDiscard"
+        />
+
+        <LeaveWorkflowDialog
+            :open="approveDiscardConfirmOpen"
+            title="Discard refund approval?"
+            description="This approval form has unsaved approver notes. Keep editing to complete the control step, or discard the form."
+            stay-label="Keep editing"
+            leave-label="Discard form"
+            @update:open="approveDiscardConfirmOpen = false"
+            @confirm="confirmApproveDialogDiscard"
+        />
+
+        <LeaveWorkflowDialog
+            :open="processDiscardConfirmOpen"
+            title="Discard refund payout form?"
+            description="This payout form has unsaved settlement details. Keep editing to close the refund trail safely, or discard the form."
+            stay-label="Keep editing"
+            leave-label="Discard form"
+            @update:open="processDiscardConfirmOpen = false"
+            @confirm="confirmProcessDialogDiscard"
+        />
     </AppLayout>
 </template>

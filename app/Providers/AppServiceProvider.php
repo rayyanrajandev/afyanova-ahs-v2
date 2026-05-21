@@ -5,6 +5,8 @@ namespace App\Providers;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\DefaultCurrencyResolverInterface;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
+use App\Modules\MedicalRecord\Domain\ValueObjects\MedicalRecordStatus;
+use App\Modules\MedicalRecord\Infrastructure\Models\MedicalRecordModel;
 use App\Modules\Platform\Infrastructure\Services\RequestCurrentPlatformScopeContext;
 use App\Modules\Platform\Infrastructure\Services\RequestScopedDefaultCurrencyResolver;
 use App\Modules\Platform\Infrastructure\Services\RequestScopedFeatureFlagResolver;
@@ -54,9 +56,29 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Gate::define('appointments.record-triage', function ($user): bool {
+            if ($this->isFacilitySuperAdmin($user)) {
+                return true;
+            }
+
             return method_exists($user, 'hasPermissionTo')
                 && (
                     (bool) $user->hasPermissionTo('emergency.triage.create')
+                    || (bool) $user->hasPermissionTo('emergency.triage.update')
+                    || (bool) $user->hasPermissionTo('emergency.triage.update-status')
+                );
+        });
+
+        Gate::define('appointments.read-routing-options', function ($user): bool {
+            if ($this->isFacilitySuperAdmin($user)) {
+                return true;
+            }
+
+            return method_exists($user, 'hasPermissionTo')
+                && (
+                    (bool) $user->hasPermissionTo('appointments.create')
+                    || (bool) $user->hasPermissionTo('appointments.update')
+                    || (bool) $user->hasPermissionTo('appointments.update-status')
+                    || (bool) $user->hasPermissionTo('emergency.triage.create')
                     || (bool) $user->hasPermissionTo('emergency.triage.update')
                     || (bool) $user->hasPermissionTo('emergency.triage.update-status')
                 );
@@ -69,6 +91,47 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('appointments.manage-provider-session', function ($user): bool {
             return $this->allowsAppointmentProviderSession($user);
         });
+
+        Gate::define('medical-records.update-draft', function ($user, string $recordId): bool {
+            if ($this->isFacilitySuperAdmin($user)) {
+                return true;
+            }
+
+            if (! method_exists($user, 'hasPermissionTo')) {
+                return false;
+            }
+
+            if ((bool) $user->hasPermissionTo('medical.records.update')) {
+                return true;
+            }
+
+            if (
+                ! (bool) $user->hasPermissionTo('medical.records.read')
+                || ! (bool) $user->hasPermissionTo('medical.records.create')
+            ) {
+                return false;
+            }
+
+            $record = MedicalRecordModel::query()
+                ->select(['id', 'tenant_id', 'facility_id', 'author_user_id', 'status'])
+                ->find($recordId);
+
+            if (
+                $record === null
+                || $record->status !== MedicalRecordStatus::DRAFT->value
+                || (int) $record->author_user_id !== (int) $user->id
+            ) {
+                return false;
+            }
+
+            /** @var CurrentPlatformScopeContextInterface $scopeContext */
+            $scopeContext = app(CurrentPlatformScopeContextInterface::class);
+            $tenantId = $scopeContext->tenantId();
+            $facilityId = $scopeContext->facilityId();
+
+            return ($tenantId === null || (string) $record->tenant_id === $tenantId)
+                && ($facilityId === null || (string) $record->facility_id === $facilityId);
+        });
     }
 
     private function allowsAppointmentProviderSession(mixed $user): bool
@@ -77,10 +140,7 @@ class AppServiceProvider extends ServiceProvider
             return false;
         }
 
-        if (
-            method_exists($user, 'isFacilitySuperAdminAccess')
-            && (bool) $user->isFacilitySuperAdminAccess()
-        ) {
+        if ($this->isFacilitySuperAdmin($user)) {
             return true;
         }
 
@@ -88,6 +148,13 @@ class AppServiceProvider extends ServiceProvider
         $authorization = app(ConsultationProviderAuthorization::class);
 
         return $authorization->allows($user);
+    }
+
+    private function isFacilitySuperAdmin(mixed $user): bool
+    {
+        return $user !== null
+            && method_exists($user, 'isFacilitySuperAdminAccess')
+            && (bool) $user->isFacilitySuperAdminAccess();
     }
 
     private function applyRuntimeBrandingConfig(): void

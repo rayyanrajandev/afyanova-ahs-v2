@@ -55,6 +55,12 @@ class ListLaboratoryOrdersUseCase
             $appointmentId = null;
         }
 
+        $encounterId = isset($filters['encounterId']) ? trim((string) $filters['encounterId']) : null;
+        $encounterId = $encounterId === '' ? null : $encounterId;
+        if ($encounterId !== null && ! Str::isUuid($encounterId)) {
+            $encounterId = null;
+        }
+
         $admissionId = isset($filters['admissionId']) ? trim((string) $filters['admissionId']) : null;
         $admissionId = $admissionId === '' ? null : $admissionId;
         if ($admissionId !== null && ! Str::isUuid($admissionId)) {
@@ -70,6 +76,7 @@ class ListLaboratoryOrdersUseCase
         return $this->laboratoryOrderRepository->search(
             query: $query,
             patientId: $patientId,
+            encounterId: $encounterId,
             appointmentId: $appointmentId,
             admissionId: $admissionId,
             status: $status,

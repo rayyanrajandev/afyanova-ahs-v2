@@ -1,0 +1,134 @@
+<?php
+
+namespace App\Modules\Encounter\Application\Services;
+
+use App\Modules\Encounter\Domain\Repositories\EncounterAuditLogRepositoryInterface;
+use App\Modules\Encounter\Domain\ValueObjects\EncounterStatus;
+use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
+use App\Modules\MedicalRecord\Application\Exceptions\AppointmentNotEligibleForMedicalRecordException;
+use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
+use Illuminate\Support\Str;
+use RuntimeException;
+
+class EncounterResolverService
+{
+    public function __construct(
+        private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
+        private readonly EncounterAuditLogRepositoryInterface $encounterAuditLogRepository,
+    ) {}
+
+    public function findById(string $encounterId): ?EncounterModel
+    {
+        $normalizedId = trim($encounterId);
+
+        return $normalizedId !== ''
+            ? EncounterModel::query()->find($normalizedId)
+            : null;
+    }
+
+    public function findByAppointmentId(string $appointmentId): ?EncounterModel
+    {
+        $normalizedAppointmentId = trim($appointmentId);
+        if ($normalizedAppointmentId === '') {
+            return null;
+        }
+
+        return EncounterModel::query()
+            ->where('appointment_id', $normalizedAppointmentId)
+            ->orderByDesc('updated_at')
+            ->orderByDesc('created_at')
+            ->first();
+    }
+
+    public function findOrCreateForVisit(
+        string $patientId,
+        ?string $appointmentId,
+        ?string $admissionId,
+        ?int $actorId,
+        ?string $requestedEncounterId = null,
+    ): EncounterModel {
+        $normalizedPatientId = trim($patientId);
+        $normalizedAppointmentId = $appointmentId !== null ? trim($appointmentId) : '';
+        $normalizedAdmissionId = $admissionId !== null ? trim($admissionId) : '';
+        $normalizedRequestedEncounterId = $requestedEncounterId !== null ? trim($requestedEncounterId) : '';
+
+        if ($normalizedRequestedEncounterId !== '') {
+            $encounter = $this->findById($normalizedRequestedEncounterId);
+            if (
+                $encounter === null ||
+                (string) $encounter->patient_id !== $normalizedPatientId ||
+                ($normalizedAppointmentId !== '' && (string) ($encounter->appointment_id ?? '') !== $normalizedAppointmentId) ||
+                ($normalizedAdmissionId !== '' && (string) ($encounter->admission_id ?? '') !== $normalizedAdmissionId)
+            ) {
+                throw new AppointmentNotEligibleForMedicalRecordException(
+                    'Encounter is not valid for the selected patient visit context.',
+                );
+            }
+
+            return $encounter;
+        }
+
+        if ($normalizedAppointmentId === '' && $normalizedAdmissionId === '') {
+            throw new AppointmentNotEligibleForMedicalRecordException(
+                'An appointment or admission is required to resolve an encounter.',
+            );
+        }
+
+        $query = EncounterModel::query()->where('patient_id', $normalizedPatientId);
+        if ($normalizedAppointmentId !== '') {
+            $query->where('appointment_id', $normalizedAppointmentId);
+        } else {
+            $query->where('admission_id', $normalizedAdmissionId);
+        }
+
+        $existingEncounter = $query
+            ->orderByDesc('updated_at')
+            ->orderByDesc('created_at')
+            ->first();
+
+        if ($existingEncounter !== null) {
+            return $existingEncounter;
+        }
+
+        $encounter = EncounterModel::query()->create([
+            'encounter_number' => $this->generateEncounterNumber(),
+            'tenant_id' => $this->platformScopeContext->tenantId(),
+            'facility_id' => $this->platformScopeContext->facilityId(),
+            'patient_id' => $normalizedPatientId,
+            'appointment_id' => $normalizedAppointmentId !== '' ? $normalizedAppointmentId : null,
+            'admission_id' => $normalizedAdmissionId !== '' ? $normalizedAdmissionId : null,
+            'primary_clinician_user_id' => $actorId,
+            'status' => EncounterStatus::OPENED->value,
+            'opened_at' => now(),
+        ]);
+
+        $this->encounterAuditLogRepository->write(
+            encounterId: (string) $encounter->id,
+            action: 'encounter.opened',
+            actorId: $actorId,
+            changes: [
+                'after' => [
+                    'status' => EncounterStatus::OPENED->value,
+                    'patient_id' => $normalizedPatientId,
+                    'appointment_id' => $normalizedAppointmentId !== '' ? $normalizedAppointmentId : null,
+                    'admission_id' => $normalizedAdmissionId !== '' ? $normalizedAdmissionId : null,
+                ],
+            ],
+        );
+
+        return $encounter;
+    }
+
+    private function generateEncounterNumber(): string
+    {
+        for ($attempt = 1; $attempt <= 10; $attempt++) {
+            $candidate = 'ENC'.now()->format('Ymd').strtoupper(Str::random(6));
+
+            if (! EncounterModel::query()->where('encounter_number', $candidate)->exists()) {
+                return $candidate;
+            }
+        }
+
+        throw new RuntimeException('Unable to generate unique encounter number.');
+    }
+}

@@ -14,6 +14,7 @@ class BillingInvoiceResponseTransformer
             'id' => $invoice['id'] ?? null,
             'invoiceNumber' => $invoice['invoice_number'] ?? null,
             'patientId' => $invoice['patient_id'] ?? null,
+            'encounterId' => $invoice['encounter_id'] ?? null,
             'admissionId' => $invoice['admission_id'] ?? null,
             'appointmentId' => $invoice['appointment_id'] ?? null,
             'billingPayerContractId' => $invoice['billing_payer_contract_id'] ?? null,

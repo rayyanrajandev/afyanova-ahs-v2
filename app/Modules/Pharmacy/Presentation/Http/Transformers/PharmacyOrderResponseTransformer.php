@@ -12,6 +12,7 @@ class PharmacyOrderResponseTransformer
             'id' => $order['id'] ?? null,
             'orderNumber' => $order['order_number'] ?? null,
             'patientId' => $order['patient_id'] ?? null,
+            'encounterId' => $order['encounter_id'] ?? null,
             'admissionId' => $order['admission_id'] ?? null,
             'appointmentId' => $order['appointment_id'] ?? null,
             'orderSessionId' => $order['clinical_order_session_id'] ?? null,

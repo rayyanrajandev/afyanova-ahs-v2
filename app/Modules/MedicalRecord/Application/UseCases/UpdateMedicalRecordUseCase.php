@@ -2,6 +2,8 @@
 
 namespace App\Modules\MedicalRecord\Application\UseCases;
 
+use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
+use App\Modules\Encounter\Application\Services\EncounterLifecycleService;
 use App\Modules\MedicalRecord\Application\Exceptions\AdmissionNotEligibleForMedicalRecordException;
 use App\Modules\MedicalRecord\Application\Exceptions\AppointmentNotEligibleForMedicalRecordException;
 use App\Modules\MedicalRecord\Application\Exceptions\AppointmentReferralNotEligibleForMedicalRecordException;
@@ -9,6 +11,7 @@ use App\Modules\MedicalRecord\Application\Exceptions\ConsultationOwnerConflictFo
 use App\Modules\MedicalRecord\Application\Exceptions\InvalidMedicalRecordDiagnosisCodeException;
 use App\Modules\MedicalRecord\Application\Exceptions\InvalidMedicalRecordTypeException;
 use App\Modules\MedicalRecord\Application\Exceptions\MedicalRecordContentLockedException;
+use App\Modules\MedicalRecord\Application\Exceptions\MedicalRecordDraftConflictException;
 use App\Modules\MedicalRecord\Application\Exceptions\PatientNotEligibleForMedicalRecordException;
 use App\Modules\MedicalRecord\Application\Exceptions\TheatreProcedureNotEligibleForMedicalRecordException;
 use App\Modules\MedicalRecord\Domain\Repositories\MedicalRecordAuditLogRepositoryInterface;
@@ -38,11 +41,17 @@ class UpdateMedicalRecordUseCase
         private readonly AdmissionLookupServiceInterface $admissionLookupService,
         private readonly TheatreProcedureLookupServiceInterface $theatreProcedureLookupService,
         private readonly DiagnosisTerminologyLookupServiceInterface $diagnosisTerminologyLookupService,
+        private readonly EncounterLifecycleService $encounterLifecycleService,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
     ) {}
 
-    public function execute(string $id, array $payload, ?int $actorId = null): ?array
-    {
+    public function execute(
+        string $id,
+        array $payload,
+        ?int $actorId = null,
+        ?string $expectedUpdatedAt = null,
+        bool $forceDraftSave = false,
+    ): ?array {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
 
         $existing = $this->medicalRecordRepository->findById($id);
@@ -82,6 +91,16 @@ class UpdateMedicalRecordUseCase
             );
         }
 
+        $encounterId = $payload['encounter_id'] ?? ($existing['encounter_id'] ?? null);
+        if ($encounterId !== null) {
+            $payload['encounter_id'] = $this->validatedEncounterId(
+                encounterId: (string) $encounterId,
+                patientId: $patientId,
+                appointmentId: is_string($appointmentId) ? trim($appointmentId) : null,
+                admissionId: is_string($admissionId) ? trim($admissionId) : null,
+            );
+        }
+
         $recordType = $this->applyRecordTypeValidationBaseline($payload, $existing);
         $this->applyAppointmentReferralValidationBaseline(
             $payload,
@@ -99,7 +118,31 @@ class UpdateMedicalRecordUseCase
         );
         $this->applyDiagnosisCodeValidationBaseline($payload);
 
-        $updated = $this->medicalRecordRepository->update($id, $payload);
+        $normalizedExpectedUpdatedAt = $expectedUpdatedAt !== null
+            ? trim((string) $expectedUpdatedAt)
+            : null;
+        $normalizedExpectedUpdatedAt = $normalizedExpectedUpdatedAt === ''
+            ? null
+            : $normalizedExpectedUpdatedAt;
+
+        $updateResult = $this->medicalRecordRepository->updateWithOptimisticLock(
+            id: $id,
+            attributes: $payload,
+            expectedUpdatedAt: $normalizedExpectedUpdatedAt,
+            forceDraftSave: $forceDraftSave,
+        );
+
+        if (($updateResult['outcome'] ?? null) === 'missing') {
+            return null;
+        }
+
+        if (($updateResult['outcome'] ?? null) === 'conflict') {
+            throw new MedicalRecordDraftConflictException(
+                is_array($updateResult['record'] ?? null) ? $updateResult['record'] : $existing,
+            );
+        }
+
+        $updated = is_array($updateResult['record'] ?? null) ? $updateResult['record'] : null;
         if (! $updated) {
             return null;
         }
@@ -122,6 +165,11 @@ class UpdateMedicalRecordUseCase
             );
         }
 
+        $encounterId = trim((string) ($updated['encounter_id'] ?? ''));
+        if ($encounterId !== '') {
+            $this->encounterLifecycleService->markInProgress($encounterId, $actorId);
+        }
+
         return $updated;
     }
 
@@ -132,6 +180,7 @@ class UpdateMedicalRecordUseCase
     {
         $trackedFields = [
             'patient_id',
+            'encounter_id',
             'admission_id',
             'appointment_id',
             'appointment_referral_id',
@@ -352,6 +401,32 @@ class UpdateMedicalRecordUseCase
 
         return (int) ($appointment['clinician_user_id'] ?? 0);
     }
+
+    private function validatedEncounterId(
+        string $encounterId,
+        string $patientId,
+        ?string $appointmentId,
+        ?string $admissionId,
+    ): string {
+        $normalizedEncounterId = trim($encounterId);
+        $encounter = $normalizedEncounterId !== ''
+            ? EncounterModel::query()->find($normalizedEncounterId)
+            : null;
+
+        if (
+            $encounter === null ||
+            (string) $encounter->patient_id !== $patientId ||
+            ($appointmentId !== null && (string) ($encounter->appointment_id ?? '') !== $appointmentId) ||
+            ($admissionId !== null && (string) ($encounter->admission_id ?? '') !== $admissionId)
+        ) {
+            throw new AppointmentNotEligibleForMedicalRecordException(
+                'Encounter is not valid for the selected patient visit context.',
+            );
+        }
+
+        return (string) $encounter->id;
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -359,6 +434,7 @@ class UpdateMedicalRecordUseCase
     {
         $tracked = [
             'patient_id',
+            'encounter_id',
             'admission_id',
             'appointment_id',
             'appointment_referral_id',

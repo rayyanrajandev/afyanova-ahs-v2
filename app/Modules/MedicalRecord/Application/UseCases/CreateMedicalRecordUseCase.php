@@ -2,6 +2,7 @@
 
 namespace App\Modules\MedicalRecord\Application\UseCases;
 
+use App\Modules\Encounter\Application\Services\EncounterResolverService;
 use App\Modules\MedicalRecord\Application\Exceptions\AdmissionNotEligibleForMedicalRecordException;
 use App\Modules\MedicalRecord\Application\Exceptions\AppointmentNotEligibleForMedicalRecordException;
 use App\Modules\MedicalRecord\Application\Exceptions\AppointmentReferralNotEligibleForMedicalRecordException;
@@ -41,6 +42,7 @@ class CreateMedicalRecordUseCase
         private readonly AdmissionLookupServiceInterface $admissionLookupService,
         private readonly TheatreProcedureLookupServiceInterface $theatreProcedureLookupService,
         private readonly DiagnosisTerminologyLookupServiceInterface $diagnosisTerminologyLookupService,
+        private readonly EncounterResolverService $encounterResolverService,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
     ) {}
@@ -89,6 +91,22 @@ class CreateMedicalRecordUseCase
             $admissionId,
             $recordType,
         );
+        $normalizedAppointmentId = is_string($appointmentId) ? trim($appointmentId) : '';
+        $normalizedAdmissionId = is_string($admissionId) ? trim($admissionId) : '';
+        $requestedEncounterId = isset($payload['encounter_id']) ? trim((string) $payload['encounter_id']) : '';
+
+        if ($normalizedAppointmentId !== '' || $normalizedAdmissionId !== '' || $requestedEncounterId !== '') {
+            $payload['encounter_id'] = $this->encounterResolverService->findOrCreateForVisit(
+                patientId: $patientId,
+                appointmentId: $normalizedAppointmentId !== '' ? $normalizedAppointmentId : null,
+                admissionId: $normalizedAdmissionId !== '' ? $normalizedAdmissionId : null,
+                actorId: $actorId,
+                requestedEncounterId: $requestedEncounterId !== '' ? $requestedEncounterId : null,
+            )->id;
+        } else {
+            $payload['encounter_id'] = null;
+        }
+
         if ($appointmentId !== null && $recordType === MedicalRecordNoteType::CONSULTATION_NOTE->value) {
             $existingDraft = $this->medicalRecordRepository->findLatestDraftForAppointment(
                 $patientId,
@@ -109,6 +127,9 @@ class CreateMedicalRecordUseCase
         $payload['record_number'] = $this->generateRecordNumber();
         $payload['tenant_id'] = $this->platformScopeContext->tenantId();
         $payload['facility_id'] = $this->platformScopeContext->facilityId();
+        if ($actorId !== null) {
+            $payload['author_user_id'] = $actorId;
+        }
 
         $createdRecord = $this->medicalRecordRepository->create($payload);
 
@@ -303,6 +324,7 @@ class CreateMedicalRecordUseCase
             'tenant_id',
             'facility_id',
             'patient_id',
+            'encounter_id',
             'admission_id',
             'appointment_id',
             'appointment_referral_id',
@@ -336,6 +358,7 @@ class CreateMedicalRecordUseCase
     {
         $tracked = [
             'patient_id',
+            'encounter_id',
             'admission_id',
             'appointment_id',
             'appointment_referral_id',

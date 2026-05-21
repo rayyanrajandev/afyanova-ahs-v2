@@ -3,6 +3,8 @@ import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import LinkedContextLookupField from '@/components/context/LinkedContextLookupField.vue';
+import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
+import ClinicianPicker from '@/components/domain/clinical/ClinicianPicker.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -631,18 +633,6 @@ const createFeedbackVisible = computed(
     () => Boolean(createMessage.value) || Object.keys(createErrors.value).length > 0,
 );
 
-const createContextSummaryLine = computed(() => {
-    const parts = [createPatientContextLabel.value];
-    if (hasCreateAppointmentContext.value) {
-        parts.push(createAppointmentContextLabel.value);
-    } else if (hasCreateAdmissionContext.value) {
-        parts.push(createAdmissionContextLabel.value);
-    } else {
-        parts.push('No visit context linked');
-    }
-    return parts.join(' | ');
-});
-
 const hasCreateAppointmentContext = computed(() => createForm.appointmentId.trim().length > 0);
 const hasCreateAdmissionContext = computed(() => createForm.admissionId.trim().length > 0);
 
@@ -812,6 +802,44 @@ const createAdmissionContextSourceLabel = computed(() => {
     return null;
 });
 
+const createEmergencyWorkflowContextLabel = computed(() => {
+    if (hasCreateAppointmentContext.value) return createAppointmentContextLabel.value;
+    if (hasCreateAdmissionContext.value) return createAdmissionContextLabel.value;
+    return 'Emergency triage intake';
+});
+
+const createEmergencyWorkflowContextMeta = computed(() => {
+    if (hasCreateAppointmentContext.value) {
+        return createAppointmentContextReason.value || createAppointmentContextMeta.value;
+    }
+    if (hasCreateAdmissionContext.value) {
+        return createAdmissionContextReason.value || createAdmissionContextMeta.value;
+    }
+    return 'No visit context linked';
+});
+
+const createEmergencyContextStatusLabel = computed(() => {
+    if (hasCreateAppointmentContext.value && createAppointmentContextStatusLabel.value) {
+        return createAppointmentContextStatusLabel.value;
+    }
+    if (hasCreateAdmissionContext.value && createAdmissionContextStatusLabel.value) {
+        return createAdmissionContextStatusLabel.value;
+    }
+    return createForm.patientId.trim() ? 'Patient selected' : 'Context needed';
+});
+
+const createEmergencyContextStatusVariant = computed<
+    'default' | 'secondary' | 'outline' | 'destructive'
+>(() => {
+    if (hasCreateAppointmentContext.value && createAppointmentContextStatusLabel.value) {
+        return createAppointmentContextStatusVariant.value;
+    }
+    if (hasCreateAdmissionContext.value && createAdmissionContextStatusLabel.value) {
+        return createAdmissionContextStatusVariant.value;
+    }
+    return createForm.patientId.trim() ? 'outline' : 'secondary';
+});
+
 const createContextEditorDescription = computed(() => {
     if (createContextEditorTab.value === 'patient') {
         return 'Select the patient before attaching appointment or admission context.';
@@ -935,7 +963,7 @@ const transferClinicianHelperText = computed(() => {
         return 'Loading active clinician directory for handoff.';
     }
     if (!canReadTransferClinicianDirectory.value) {
-        return 'Clinician directory access is unavailable. Enter the accepting clinician user ID manually.';
+        return 'Clinician directory access is required to select an accepting clinician.';
     }
     if (transferCliniciansError.value) {
         return transferCliniciansError.value;
@@ -943,7 +971,7 @@ const transferClinicianHelperText = computed(() => {
     if (transferClinicianDirectoryAvailable.value) {
         return 'Select the receiving clinician from active staff profiles.';
     }
-    return 'No active staff profiles with linked user IDs are available. Enter the accepting clinician user ID manually.';
+    return 'No active staff profiles with linked user accounts are available yet.';
 });
 
 function setCreateAppointmentLink(value: string, source: CreateContextLinkSource) {
@@ -3423,14 +3451,21 @@ onMounted(async () => {
                     </CardHeader>
                     <CardContent class="space-y-6">
                         <Alert v-if="createMessage"><AlertTitle class="flex items-center gap-2"><AppIcon name="check-circle" class="size-4" />Created</AlertTitle><AlertDescription>{{ createMessage }}</AlertDescription></Alert>
-                        <div class="rounded-lg border bg-muted/10 p-4">
-                            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                <div class="space-y-1">
-                                    <p class="text-sm font-medium">Patient & triage context</p>
-                                    <p class="text-xs text-muted-foreground">
-                                        {{ createContextSummaryLine }}
-                                    </p>
-                                </div>
+                        <ClinicalContextBanner
+                            title="Patient and triage context"
+                            description="Review the patient, facility, and linked care context before creating the emergency case."
+                            :patient-name="createForm.patientId.trim() ? createPatientContextLabel : null"
+                            :patient-meta="createForm.patientId.trim() ? createPatientContextMeta : null"
+                            :patient-number="createActivePatientSummary?.patientNumber || null"
+                            :facility-name="scope?.facility?.name || 'No facility selected'"
+                            :tenant-name="scope?.tenant?.name || 'No tenant'"
+                            :context-label="createEmergencyWorkflowContextLabel"
+                            :context-meta="createEmergencyWorkflowContextMeta"
+                            :status-label="createEmergencyContextStatusLabel"
+                            :status-variant="createEmergencyContextStatusVariant"
+                            tone="muted"
+                        >
+                            <template #actions>
                                 <Button
                                     id="triage-open-context-dialog"
                                     variant="outline"
@@ -3441,28 +3476,9 @@ onMounted(async () => {
                                     <AppIcon name="sliders-horizontal" class="size-3.5" />
                                     Review or change context
                                 </Button>
-                            </div>
-                            <div class="mt-4 grid gap-2 lg:grid-cols-3">
-                                <div
-                                    class="flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2"
-                                    :class="createForm.patientId ? 'border-primary/30 bg-primary/5' : 'bg-background/80'"
-                                >
-                                    <AppIcon name="user" class="size-3.5 shrink-0 text-muted-foreground" />
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex min-w-0 items-center gap-2">
-                                            <span class="shrink-0 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                                                Patient
-                                            </span>
-                                            <span class="truncate text-sm font-medium" :title="createPatientContextMeta">
-                                                {{ createPatientContextLabel }}
-                                            </span>
-                                        </div>
-                                        <p class="truncate text-xs text-muted-foreground">
-                                            {{ createPatientContextMeta }}
-                                        </p>
-                                    </div>
-                                </div>
+                            </template>
 
+                            <div class="grid gap-2 lg:grid-cols-2">
                                 <div
                                     class="flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2"
                                     :class="hasCreateAppointmentContext ? 'border-primary/30 bg-primary/5' : 'bg-background/80'"
@@ -3481,13 +3497,22 @@ onMounted(async () => {
                                             {{ createAppointmentContextMeta }}
                                         </p>
                                     </div>
-                                    <Badge
-                                        v-if="createAppointmentContextStatusLabel"
-                                        :variant="createAppointmentContextStatusVariant"
-                                        class="shrink-0 text-[10px]"
-                                    >
-                                        {{ createAppointmentContextStatusLabel }}
-                                    </Badge>
+                                    <div class="flex shrink-0 flex-wrap gap-1">
+                                        <Badge
+                                            v-if="createAppointmentContextSourceLabel"
+                                            variant="outline"
+                                            class="text-[10px]"
+                                        >
+                                            {{ createAppointmentContextSourceLabel }}
+                                        </Badge>
+                                        <Badge
+                                            v-if="createAppointmentContextStatusLabel"
+                                            :variant="createAppointmentContextStatusVariant"
+                                            class="text-[10px]"
+                                        >
+                                            {{ createAppointmentContextStatusLabel }}
+                                        </Badge>
+                                    </div>
                                 </div>
 
                                 <div
@@ -3508,16 +3533,25 @@ onMounted(async () => {
                                             {{ createAdmissionContextMeta }}
                                         </p>
                                     </div>
-                                    <Badge
-                                        v-if="createAdmissionContextStatusLabel"
-                                        :variant="createAdmissionContextStatusVariant"
-                                        class="shrink-0 text-[10px]"
-                                    >
-                                        {{ createAdmissionContextStatusLabel }}
-                                    </Badge>
+                                    <div class="flex shrink-0 flex-wrap gap-1">
+                                        <Badge
+                                            v-if="createAdmissionContextSourceLabel"
+                                            variant="outline"
+                                            class="text-[10px]"
+                                        >
+                                            {{ createAdmissionContextSourceLabel }}
+                                        </Badge>
+                                        <Badge
+                                            v-if="createAdmissionContextStatusLabel"
+                                            :variant="createAdmissionContextStatusVariant"
+                                            class="text-[10px]"
+                                        >
+                                            {{ createAdmissionContextStatusLabel }}
+                                        </Badge>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        </ClinicalContextBanner>
                         <div class="space-y-3">
                             <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Arrival & triage</p>
                             <div class="grid gap-3 sm:grid-cols-2">
@@ -4217,25 +4251,21 @@ onMounted(async () => {
                                                                     <p v-if="transferCreateFieldError('transportMode')" class="text-xs text-destructive">{{ transferCreateFieldError('transportMode') }}</p>
                                                                 </div>
                                                                 <div class="grid gap-2">
-                                                                    <template v-if="canReadTransferClinicianDirectory && transferClinicianDirectoryAvailable">
-                                                                        <SearchableSelectField
-                                                                            input-id="transfer-create-clinician"
-                                                                            v-model="transferCreateForm.acceptingClinicianUserId"
-                                                                            label="Accepting clinician"
-                                                                            :options="transferClinicianOptions"
-                                                                            placeholder="Select receiving clinician"
-                                                                            search-placeholder="Search by employee number, role, department, or user ID"
-                                                                            :helper-text="transferClinicianHelperText"
-                                                                            :error-message="transferCreateFieldError('acceptingClinicianUserId')"
-                                                                            empty-text="No active clinician matched that search."
-                                                                        />
-                                                                    </template>
-                                                                    <template v-else>
-                                                                        <Label for="transfer-create-clinician">Accepting clinician user ID</Label>
-                                                                        <Input id="transfer-create-clinician" v-model="transferCreateForm.acceptingClinicianUserId" inputmode="numeric" placeholder="Optional user ID" />
-                                                                        <p class="text-xs text-muted-foreground">{{ transferClinicianHelperText }}</p>
-                                                                        <p v-if="transferCreateFieldError('acceptingClinicianUserId')" class="text-xs text-destructive">{{ transferCreateFieldError('acceptingClinicianUserId') }}</p>
-                                                                    </template>
+                                                                    <ClinicianPicker
+                                                                        input-id="transfer-create-clinician"
+                                                                        v-model="transferCreateForm.acceptingClinicianUserId"
+                                                                        label="Accepting clinician"
+                                                                        :options="transferClinicianOptions"
+                                                                        :can-read-directory="canReadTransferClinicianDirectory"
+                                                                        :directory-available="transferClinicianDirectoryAvailable"
+                                                                        :loading="transferCliniciansLoading"
+                                                                        placeholder="Select receiving clinician"
+                                                                        search-placeholder="Search by employee number, role, department, or user ID"
+                                                                        :helper-text="transferClinicianHelperText"
+                                                                        :error-message="transferCreateFieldError('acceptingClinicianUserId')"
+                                                                        empty-text="No active clinician matched that search."
+                                                                        unavailable-description="Leave this optional handoff field blank or request staff.clinical-directory.read access."
+                                                                    />
                                                                 </div>
                                                                 <div class="grid gap-2 lg:col-span-2">
                                                                     <Label for="transfer-create-requested-at">Requested at</Label>

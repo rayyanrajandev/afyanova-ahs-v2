@@ -108,6 +108,7 @@ class ClinicalDocumentLookup
         mixed $appointmentId,
         mixed $admissionId,
         int $limit = 6,
+        ?string $encounterId = null,
     ): array {
         $patientId = $this->normalizedString($patientId);
         if ($patientId === null) {
@@ -120,6 +121,7 @@ class ClinicalDocumentLookup
             $patientId,
             $this->normalizedString($appointmentId),
             $this->normalizedString($admissionId),
+            $this->normalizedString($encounterId),
         );
 
         return $query
@@ -149,6 +151,7 @@ class ClinicalDocumentLookup
         mixed $appointmentId,
         mixed $admissionId,
         int $limit = 6,
+        ?string $encounterId = null,
     ): array {
         $patientId = $this->normalizedString($patientId);
         if ($patientId === null) {
@@ -161,6 +164,7 @@ class ClinicalDocumentLookup
             $patientId,
             $this->normalizedString($appointmentId),
             $this->normalizedString($admissionId),
+            $this->normalizedString($encounterId),
         );
 
         return $query
@@ -192,6 +196,7 @@ class ClinicalDocumentLookup
         mixed $appointmentId,
         mixed $admissionId,
         int $limit = 6,
+        ?string $encounterId = null,
     ): array {
         $patientId = $this->normalizedString($patientId);
         if ($patientId === null) {
@@ -204,6 +209,7 @@ class ClinicalDocumentLookup
             $patientId,
             $this->normalizedString($appointmentId),
             $this->normalizedString($admissionId),
+            $this->normalizedString($encounterId),
         );
 
         return $query
@@ -233,6 +239,7 @@ class ClinicalDocumentLookup
         mixed $appointmentId,
         mixed $admissionId,
         int $limit = 6,
+        ?string $encounterId = null,
     ): array {
         $patientId = $this->normalizedString($patientId);
         if ($patientId === null) {
@@ -245,6 +252,7 @@ class ClinicalDocumentLookup
             $patientId,
             $this->normalizedString($appointmentId),
             $this->normalizedString($admissionId),
+            $this->normalizedString($encounterId),
         );
 
         return $query
@@ -271,8 +279,15 @@ class ClinicalDocumentLookup
         string $patientId,
         ?string $appointmentId,
         ?string $admissionId,
+        ?string $encounterId = null,
     ): void {
         $query->where('patient_id', $patientId);
+
+        if ($encounterId !== null) {
+            $query->where('encounter_id', $encounterId);
+
+            return;
+        }
 
         if ($appointmentId !== null) {
             $query->where('appointment_id', $appointmentId);

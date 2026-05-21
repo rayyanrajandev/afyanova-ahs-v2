@@ -20,6 +20,12 @@ class ListMedicalRecordStatusCountsUseCase
             $patientId = null;
         }
 
+        $encounterId = isset($filters['encounterId']) ? trim((string) $filters['encounterId']) : null;
+        $encounterId = $encounterId === '' ? null : $encounterId;
+        if ($encounterId !== null && ! Str::isUuid($encounterId)) {
+            $encounterId = null;
+        }
+
         $appointmentReferralId = isset($filters['appointmentReferralId']) ? trim((string) $filters['appointmentReferralId']) : null;
         $appointmentReferralId = $appointmentReferralId === '' ? null : $appointmentReferralId;
         if ($appointmentReferralId !== null && ! Str::isUuid($appointmentReferralId)) {
@@ -50,6 +56,7 @@ class ListMedicalRecordStatusCountsUseCase
         return $this->medicalRecordRepository->statusCounts(
             query: $query,
             patientId: $patientId,
+            encounterId: $encounterId,
             appointmentReferralId: $appointmentReferralId,
             admissionId: $admissionId,
             theatreProcedureId: $theatreProcedureId,

@@ -74,3 +74,58 @@ jobs:
           name: retention-readiness-artifact-php${{ matrix.php-version }}
           path: storage/app/deployment-artifacts/platform_cross_tenant_admin_audit_log_retention_readiness_production_php${{ matrix.php-version }}.json
           if-no-files-found: error
+
+  e2e-smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Node Dependencies
+        run: npm ci
+
+      - name: Install PHP Dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Prepare Environment
+        run: |
+          cp .env.example .env
+          sed -i 's#^APP_URL=.*#APP_URL=http://127.0.0.1:8000#' .env
+          touch database/database.sqlite
+          php artisan key:generate
+          php artisan migrate --force
+
+      - name: Build Assets
+        run: npm run build
+
+      - name: Install Playwright Browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright Smoke Tests
+        env:
+          PLAYWRIGHT_START_SERVER: '1'
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:8000
+        run: npm run test:e2e:smoke
+
+      - name: Upload Playwright Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-smoke-artifacts
+          path: |
+            storage/app/playwright-results
+            storage/app/playwright-report
+          if-no-files-found: ignore

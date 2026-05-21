@@ -10,6 +10,7 @@ use App\Modules\Billing\Application\Exceptions\BillingInvoiceDraftOnlyFieldUpdat
 use App\Modules\Billing\Application\Exceptions\BillingInvoiceLineItemsUpdateNotAllowedException;
 use App\Modules\Billing\Application\Exceptions\BillingInvoicePaymentRecordingNotAllowedException;
 use App\Modules\Billing\Application\Exceptions\BillingInvoicePaymentReversalNotAllowedException;
+use App\Modules\Billing\Application\Exceptions\EncounterNotEligibleForBillingInvoiceException;
 use App\Modules\Billing\Application\Exceptions\BillingInvoicePricingResolutionException;
 use App\Modules\Billing\Application\Exceptions\PatientNotEligibleForBillingInvoiceException;
 use App\Modules\Billing\Application\Support\BillingFinancePostingSnapshotService;
@@ -132,6 +133,7 @@ class BillingInvoiceController extends Controller
 
         $validated = $request->validate([
             'patientId' => ['required', 'uuid'],
+            'encounterId' => ['nullable', 'uuid'],
             'appointmentId' => ['nullable', 'uuid'],
             'admissionId' => ['nullable', 'uuid'],
             'currencyCode' => ['nullable', 'string', 'size:3'],
@@ -180,6 +182,8 @@ class BillingInvoiceController extends Controller
             return $this->validationError('appointmentId', $exception->getMessage());
         } catch (AdmissionNotEligibleForBillingInvoiceException $exception) {
             return $this->validationError('admissionId', $exception->getMessage());
+        } catch (EncounterNotEligibleForBillingInvoiceException $exception) {
+            return $this->validationError('encounterId', $exception->getMessage());
         } catch (BillingInvoicePricingResolutionException $exception) {
             return $this->validationError($exception->field(), $exception->getMessage());
         }
@@ -211,6 +215,8 @@ class BillingInvoiceController extends Controller
             return $this->validationError('appointmentId', $exception->getMessage());
         } catch (AdmissionNotEligibleForBillingInvoiceException $exception) {
             return $this->validationError('admissionId', $exception->getMessage());
+        } catch (EncounterNotEligibleForBillingInvoiceException $exception) {
+            return $this->validationError('encounterId', $exception->getMessage());
         } catch (BillingInvoicePricingResolutionException $exception) {
             return $this->validationError($exception->field(), $exception->getMessage());
         }
@@ -666,6 +672,7 @@ class BillingInvoiceController extends Controller
     {
         $fieldMap = [
             'patientId' => 'patient_id',
+            'encounterId' => 'encounter_id',
             'admissionId' => 'admission_id',
             'appointmentId' => 'appointment_id',
             'billingPayerContractId' => 'billing_payer_contract_id',

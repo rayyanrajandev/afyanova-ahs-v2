@@ -17,6 +17,7 @@ interface RadiologyOrderRepositoryInterface
     public function search(
         ?string $query,
         ?string $patientId,
+        ?string $encounterId,
         ?string $appointmentId,
         ?string $admissionId,
         ?string $status,

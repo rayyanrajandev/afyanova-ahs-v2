@@ -19,6 +19,7 @@ class StoreLaboratoryOrderRequest extends FormRequest
     {
         return [
             'patientId' => ['required', 'uuid'],
+            'encounterId' => ['nullable', 'uuid'],
             'admissionId' => ['nullable', 'uuid'],
             'appointmentId' => ['nullable', 'uuid'],
             'entryMode' => ['nullable', Rule::in(['draft', 'active'])],

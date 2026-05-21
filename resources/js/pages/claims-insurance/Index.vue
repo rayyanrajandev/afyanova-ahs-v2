@@ -3,6 +3,7 @@ import { Head } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
+import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -509,15 +510,50 @@ const createClaimCardDescription = computed(() =>
         : 'Link a billing invoice, set payer context, and capture submission handoff.',
 );
 
-const createClaimSourceTitle = computed(() =>
-    createInvoiceContextLocked.value ? 'Billing handoff' : 'Claim source',
-);
-
 const createClaimSourceDescription = computed(() =>
     createInvoiceContextLocked.value
         ? 'This claim stays tied to the billing invoice so settlement and reconciliation stay aligned.'
         : 'Choose the billing invoice that should move into payer review.',
 );
+const createClaimContextLabel = computed(() => {
+    if (createInvoiceContextLocked.value) return 'Billing invoice handoff';
+    if (createForm.invoiceId.trim()) return 'Linked billing invoice';
+    return 'Generic claim intake';
+});
+const createClaimContextMeta = computed(() => {
+    if (createInvoicePreviewError.value) return createInvoicePreviewError.value;
+    if (createForm.invoiceId.trim()) {
+        return `${createInvoiceSummaryLabel.value} · ${createInvoiceSettlementRouteLabel.value}`;
+    }
+    return createClaimSourceDescription.value;
+});
+const createClaimContextStatusLabel = computed(() => {
+    if (createInvoiceContextLocked.value) return 'Invoice locked';
+    if (createForm.invoiceId.trim()) return 'Invoice linked';
+    return 'Invoice required';
+});
+const createClaimContextStatusVariant = computed<
+    'default' | 'secondary' | 'outline' | 'destructive'
+>(() => {
+    if (createInvoicePreviewError.value) return 'destructive';
+    if (createInvoiceContextLocked.value) return 'secondary';
+    if (createForm.invoiceId.trim()) return 'default';
+    return 'outline';
+});
+const createClaimPatientContextLabel = computed(() => {
+    const patientId = String(createInvoicePreview.value?.patientId ?? '').trim();
+    return patientId ? `Patient ${patientId}` : null;
+});
+const createClaimPatientContextMeta = computed(() => {
+    const preview = createInvoicePreview.value;
+    if (!preview) return null;
+
+    const parts: string[] = [];
+    if (preview.appointmentId?.trim()) parts.push('Appointment linked');
+    if (preview.admissionId?.trim()) parts.push('Admission linked');
+
+    return parts.length > 0 ? parts.join(' · ') : null;
+});
 
 const createResolvedInvoicePayerType = computed(() => {
     const payerType = String(createInvoicePreview.value?.payerSummary?.payerType ?? '').trim();
@@ -2805,44 +2841,46 @@ onMounted(async () => {
                         <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
                             <div class="space-y-4">
                                 <div class="rounded-lg border p-4">
-                                    <div class="flex flex-wrap items-center justify-between gap-2">
-                                        <div>
-                                            <p class="text-sm font-medium">{{ createClaimSourceTitle }}</p>
-                                            <p class="mt-1 text-xs text-muted-foreground">
-                                                {{ createClaimSourceDescription }}
-                                            </p>
-                                        </div>
-                                        <div class="flex flex-col items-end gap-2 text-right">
-                                            <div class="flex flex-wrap items-center justify-end gap-2">
-                                                <Badge :variant="createInvoiceContextLocked ? 'secondary' : createForm.invoiceId.trim() ? 'default' : 'outline'">
-                                                    {{
-                                                        createInvoiceContextLocked
-                                                            ? 'Invoice locked'
-                                                            : createForm.invoiceId.trim()
-                                                              ? 'Invoice linked'
-                                                              : 'Invoice required'
-                                                    }}
-                                                </Badge>
+                                    <div class="space-y-4">
+                                        <ClinicalContextBanner
+                                            title="Claims intake context"
+                                            description="Confirm the billing handoff, patient linkage, and payer posture before creating the claim."
+                                            :patient-name="createClaimPatientContextLabel"
+                                            :patient-meta="createClaimPatientContextMeta"
+                                            :context-label="createClaimContextLabel"
+                                            :context-meta="createClaimContextMeta"
+                                            :status-label="createClaimContextStatusLabel"
+                                            :status-variant="createClaimContextStatusVariant"
+                                            :locked="createInvoiceContextLocked"
+                                            tone="muted"
+                                        >
+                                            <template #actions>
                                                 <Badge :variant="createInvoiceClaimReadinessVariant">
                                                     {{ createInvoiceClaimReadinessLabel }}
                                                 </Badge>
-                                            </div>
-                                            <Button
-                                                v-if="createInvoiceContextLocked"
-                                                type="button"
-                                                size="sm"
-                                                variant="outline"
-                                                class="h-7 px-2 text-xs"
-                                                @click="clearCreateInvoiceLock"
-                                            >
-                                                Open generic intake
-                                            </Button>
-                                        </div>
-                                    </div>
-                                    <div class="mt-4 grid gap-3">
-                                        <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                                            Billing context
-                                        </p>
+                                                <Button
+                                                    v-if="canReadBillingInvoices && createForm.invoiceId.trim()"
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    class="gap-1.5"
+                                                    @click="window.location.assign(claimInvoiceHref(createForm.invoiceId))"
+                                                >
+                                                    <AppIcon name="arrow-up-right" class="size-3.5" />
+                                                    Open Invoice
+                                                </Button>
+                                                <Button
+                                                    v-if="createInvoiceContextLocked"
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    @click="clearCreateInvoiceLock"
+                                                >
+                                                    Open generic intake
+                                                </Button>
+                                            </template>
+                                        </ClinicalContextBanner>
+
                                         <div
                                             v-if="createInvoiceContextLocked"
                                             class="rounded-md border bg-muted/20 p-3"
@@ -2874,31 +2912,6 @@ onMounted(async () => {
                                                 </AlertDescription>
                                             </Alert>
                                             <div v-else class="space-y-3">
-                                                <div class="flex flex-wrap items-start justify-between gap-2">
-                                                    <div class="space-y-1">
-                                                        <p class="text-sm font-medium text-foreground">
-                                                            {{ createInvoiceSummaryLabel }}
-                                                        </p>
-                                                        <p class="text-xs text-muted-foreground">
-                                                            {{ formatEnumLabel(createInvoicePreview?.status || 'draft') }}
-                                                            <span v-if="createInvoicePreview?.patientId">
-                                                                | Patient {{ createInvoicePreview.patientId }}
-                                                            </span>
-                                                        </p>
-                                                    </div>
-                                                    <Button
-                                                        v-if="canReadBillingInvoices && createForm.invoiceId.trim()"
-                                                        type="button"
-                                                        size="sm"
-                                                        variant="outline"
-                                                        class="gap-1.5"
-                                                        @click="window.location.assign(claimInvoiceHref(createForm.invoiceId))"
-                                                    >
-                                                        <AppIcon name="arrow-up-right" class="size-3.5" />
-                                                        Open Invoice
-                                                    </Button>
-                                                </div>
-
                                                 <div class="grid gap-3 sm:grid-cols-2">
                                                     <div class="rounded-md border bg-background/80 p-3">
                                                         <p class="text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -2976,9 +2989,6 @@ onMounted(async () => {
                                             </p>
                                             <p v-if="createFieldError('invoiceId')" class="text-xs text-destructive">{{ createFieldError('invoiceId') }}</p>
                                         </div>
-                                        <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                                            Payer context
-                                        </p>
                                         <div class="grid gap-4 sm:grid-cols-2">
                                             <div v-if="createPayerTypeLocked" class="grid gap-2">
                                                 <Label>Payer type</Label>

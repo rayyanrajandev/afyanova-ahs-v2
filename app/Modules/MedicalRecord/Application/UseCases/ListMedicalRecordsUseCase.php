@@ -43,6 +43,18 @@ class ListMedicalRecordsUseCase
             $patientId = null;
         }
 
+        $encounterId = isset($filters['encounterId']) ? trim((string) $filters['encounterId']) : null;
+        $encounterId = $encounterId === '' ? null : $encounterId;
+        if ($encounterId !== null && ! Str::isUuid($encounterId)) {
+            $encounterId = null;
+        }
+
+        $appointmentId = isset($filters['appointmentId']) ? trim((string) $filters['appointmentId']) : null;
+        $appointmentId = $appointmentId === '' ? null : $appointmentId;
+        if ($appointmentId !== null && ! Str::isUuid($appointmentId)) {
+            $appointmentId = null;
+        }
+
         $appointmentReferralId = isset($filters['appointmentReferralId']) ? trim((string) $filters['appointmentReferralId']) : null;
         $appointmentReferralId = $appointmentReferralId === '' ? null : $appointmentReferralId;
         if ($appointmentReferralId !== null && ! Str::isUuid($appointmentReferralId)) {
@@ -61,6 +73,11 @@ class ListMedicalRecordsUseCase
             $theatreProcedureId = null;
         }
 
+        $authorUserId = isset($filters['authorUserId']) ? (int) $filters['authorUserId'] : null;
+        if ($authorUserId !== null && $authorUserId <= 0) {
+            $authorUserId = null;
+        }
+
         $recordType = isset($filters['recordType']) ? trim((string) $filters['recordType']) : null;
         $recordType = $recordType === '' ? null : $recordType;
 
@@ -73,9 +90,12 @@ class ListMedicalRecordsUseCase
         return $this->medicalRecordRepository->search(
             query: $query,
             patientId: $patientId,
+            encounterId: $encounterId,
+            appointmentId: $appointmentId,
             appointmentReferralId: $appointmentReferralId,
             admissionId: $admissionId,
             theatreProcedureId: $theatreProcedureId,
+            authorUserId: $authorUserId,
             status: $status,
             recordType: $recordType,
             fromDateTime: $fromDateTime,

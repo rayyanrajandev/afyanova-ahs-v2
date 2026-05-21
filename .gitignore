@@ -24,6 +24,10 @@
 /resources/js/actions
 /resources/js/routes
 /resources/js/wayfinder
+/resources/js/**/*.bak*
+/resources/js/**/*.broken_*
+/resources/js/**/*.pre_*
+/resources/js/**/*.recovered.js
 /vendor
 /.appdata
 /.composer-cache

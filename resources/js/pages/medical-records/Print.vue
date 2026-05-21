@@ -159,6 +159,15 @@ type EncounterResourcePermissions = {
     theatre: boolean;
 };
 
+type EncounterSummary = {
+    id?: string | null;
+    encounterNumber?: string | null;
+    status?: string | null;
+    statusReason?: string | null;
+    openedAt?: string | null;
+    closedAt?: string | null;
+};
+
 const props = defineProps<{
     record: MedicalRecordDocument;
     patient: RecordPatient | null;
@@ -175,6 +184,8 @@ const props = defineProps<{
     canViewEncounterOrders: EncounterResourcePermissions;
     documentBranding: SharedDocumentBranding;
     generatedAt: string | null;
+    encounterSummary?: EncounterSummary | null;
+    chartPacketMode?: 'encounter' | 'record' | null;
 }>();
 
 const recordTypeLabel = computed(() =>
@@ -198,13 +209,18 @@ const subtitle = computed(
             props.patient?.patientNumber
                 ? `Patient ${props.patient.patientNumber}`
                 : null,
+            props.chartPacketMode === 'encounter' && props.encounterSummary?.encounterNumber
+                ? `Encounter ${props.encounterSummary.encounterNumber}`
+                : null,
             props.record.encounterAt
                 ? `Encounter ${formatDateTime(props.record.encounterAt)}`
                 : null,
         ]
             .filter(Boolean)
             .join(' | ')
-        || 'Clinical record, signoff, and encounter context',
+        || (props.chartPacketMode === 'encounter'
+            ? 'Signed encounter chart packet'
+            : 'Clinical record, signoff, and encounter context'),
 );
 
 const patientRows = computed(() => [
@@ -223,6 +239,44 @@ const encounterRows = computed(() => {
         ['Encounter At', formatDateTime(props.record.encounterAt)],
         ['Appointment', props.appointment?.appointmentNumber || 'No linked appointment'],
     ];
+
+    if (props.chartPacketMode === 'encounter' && props.encounterSummary) {
+        const summaryRows: Array<[string, string]> = [
+            [
+                'Encounter No.',
+                props.encounterSummary.encounterNumber || 'N/A',
+            ],
+            [
+                'Visit Status',
+                props.encounterSummary.status
+                    ? formatEnumLabel(props.encounterSummary.status)
+                    : 'N/A',
+            ],
+        ];
+
+        if (props.encounterSummary.openedAt) {
+            summaryRows.push([
+                'Opened At',
+                formatDateTime(props.encounterSummary.openedAt),
+            ]);
+        }
+
+        if (props.encounterSummary.closedAt) {
+            summaryRows.push([
+                'Closed At',
+                formatDateTime(props.encounterSummary.closedAt),
+            ]);
+        }
+
+        if (props.encounterSummary.statusReason?.trim()) {
+            summaryRows.push([
+                'Status Reason',
+                props.encounterSummary.statusReason.trim(),
+            ]);
+        }
+
+        return [...summaryRows, ...rows];
+    }
 
     if (props.appointment?.sourceAdmission || props.appointment?.sourceAdmissionId) {
         rows.push([

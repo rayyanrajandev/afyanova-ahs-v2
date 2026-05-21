@@ -52,6 +52,9 @@ import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLe
 import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersistence';
 import { usePlatformCountryProfile } from '@/composables/usePlatformCountryProfile';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { apiRequestJson } from '@/lib/apiClient';
+import { clearSensitiveSessionStorageKey } from '@/lib/browserStoragePolicy';
+import { generateRequestKey } from '@/lib/idempotency';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
 import BillingBoardView from './components/BillingBoardView.vue';
 import BillingCreateAccessRestrictedCard from './components/BillingCreateAccessRestrictedCard.vue';
@@ -276,6 +279,9 @@ const createLoading = ref(false);
 const createBillingDraftPreviewLoading = ref(false);
 const createBillingDraftPreviewInvoice = ref<BillingInvoice | null>(null);
 const createBillingDraftPreviewError = ref<string | null>(null);
+const createInvoiceRequestKey = ref(generateRequestKey('billing-invoice-create'));
+const editInvoiceRequestKey = ref(generateRequestKey('billing-invoice-edit'));
+const statusDialogRequestKey = ref(generateRequestKey('billing-invoice-status'));
 const actionLoadingId = ref<string | null>(null);
 const listErrors = ref<string[]>([]);
 const actionMessage = ref<string | null>(null);
@@ -1351,59 +1357,20 @@ async function writeTextToClipboard(text: string) {
 }
 
 function readBillingAuditExportRetryHandoffFromSession(): BillingAuditExportRetryHandoffContext | null {
-    if (typeof window === 'undefined') return null;
-
-    try {
-        const raw = window.sessionStorage.getItem(
-            billingAuditExportRetryHandoffSessionKey,
-        );
-        if (!raw) return null;
-
-        const parsed = JSON.parse(raw) as Partial<BillingAuditExportRetryHandoffContext>;
-        if (!parsed || typeof parsed !== 'object') return null;
-        if (!parsed.targetInvoiceId || !parsed.jobId) return null;
-
-        return {
-            targetInvoiceId: String(parsed.targetInvoiceId),
-            jobId: String(parsed.jobId),
-            statusGroup: parseAuditExportStatusGroup(String(parsed.statusGroup ?? 'all')),
-            page: Math.max(Number(parsed.page) || 1, 1),
-            perPage: Math.max(Math.min(Number(parsed.perPage) || 8, 50), 1),
-            savedAt:
-                typeof parsed.savedAt === 'string' && parsed.savedAt.trim() !== ''
-                    ? parsed.savedAt
-                    : new Date().toISOString(),
-        };
-    } catch {
-        return null;
-    }
+    clearSensitiveSessionStorageKey(billingAuditExportRetryHandoffSessionKey);
+    return null;
 }
 
 function persistBillingAuditExportRetryHandoff(
     context: BillingAuditExportRetryHandoffContext,
 ) {
-    if (typeof window === 'undefined') return;
-
     lastBillingAuditExportRetryHandoff.value = context;
-    try {
-        window.sessionStorage.setItem(
-            billingAuditExportRetryHandoffSessionKey,
-            JSON.stringify(context),
-        );
-    } catch {
-        // Ignore storage write failures and keep in-memory state.
-    }
+    clearSensitiveSessionStorageKey(billingAuditExportRetryHandoffSessionKey);
 }
 
 function clearLastBillingAuditExportRetryHandoff() {
     lastBillingAuditExportRetryHandoff.value = null;
-    if (typeof window === 'undefined') return;
-
-    try {
-        window.sessionStorage.removeItem(billingAuditExportRetryHandoffSessionKey);
-    } catch {
-        // Ignore storage cleanup failures.
-    }
+    clearSensitiveSessionStorageKey(billingAuditExportRetryHandoffSessionKey);
 }
 
 function readBillingAuditExportRetryResumeTelemetryFromSession(): BillingAuditExportRetryResumeTelemetry {
@@ -1578,6 +1545,7 @@ billingClaimReferenceValidationTelemetry.value =
 
 const initialCreateRouteContext = Object.freeze({
     patientId: queryParam('patientId'),
+    encounterId: queryParam('encounterId'),
     appointmentId: queryParam('appointmentId'),
     admissionId: queryParam('admissionId'),
 });
@@ -1679,6 +1647,7 @@ const sourceWorkflowHref = computed(() => {
 
 const createForm = reactive<CreateForm>({
     patientId: queryParam('patientId'),
+    encounterId: queryParam('encounterId'),
     appointmentId: queryParam('appointmentId'),
     admissionId: queryParam('admissionId'),
     billingPayerContractId: '',
@@ -1919,7 +1888,7 @@ const {
     canRestore: billingCreateDraftMatchesInitialContext,
     onRestored: () => {
         createMessage.value =
-            'Restored your in-progress invoice draft on this device.';
+            'Restored your in-progress invoice draft.';
         setBillingWorkspaceView('create');
     },
 });
@@ -2035,6 +2004,7 @@ function clearCreateWorkspaceDraftTarget() {
 
 function resetCreateWorkspaceToInitialContext() {
     clearCreateWorkspaceDraftTarget();
+    rotateCreateInvoiceRequestKey();
     createPatientContextLocked.value = openedFromClinicalContext.value;
     createForm.patientId = initialCreateRouteContext.patientId;
     createForm.appointmentId = initialCreateRouteContext.appointmentId;
@@ -2059,6 +2029,7 @@ function resetCreateWorkspaceToInitialContext() {
 }
 
 function populateCreateWorkspaceFromInvoice(invoice: BillingInvoice) {
+    rotateCreateInvoiceRequestKey();
     createWorkspaceDraftInvoiceId.value = invoice.id;
     createWorkspaceDraftInvoiceLabel.value = invoice.invoiceNumber ?? 'Draft invoice';
     createPatientContextLocked.value = true;
@@ -2424,76 +2395,36 @@ if (createForm.patientId.trim()) {
     searchForm.patientId = createForm.patientId.trim();
 }
 
-function csrfToken(): string | null {
-    const element = document.querySelector<HTMLMetaElement>(
-        'meta[name="csrf-token"]',
-    );
-    return element?.content ?? null;
-}
-
 async function apiRequest<T>(
     method: 'GET' | 'POST' | 'PATCH',
     path: string,
     options?: {
         query?: Record<string, string | number | boolean | string[] | null | undefined>;
         body?: Record<string, unknown>;
+        entitlementContext?: string;
+        idempotencyKey?: string | null;
+        requestId?: string | null;
     },
 ): Promise<T> {
-    const url = new URL(`/api/v1${path}`, window.location.origin);
-
-    Object.entries(options?.query ?? {}).forEach(([key, value]) => {
-        if (Array.isArray(value)) {
-            value
-                .map((item) => String(item).trim())
-                .filter(Boolean)
-                .forEach((item) => url.searchParams.append(key, item));
-            return;
-        }
-        if (value === null || value === undefined || value === '') return;
-        if (typeof value === 'boolean') {
-            url.searchParams.set(key, value ? '1' : '0');
-            return;
-        }
-        url.searchParams.set(key, String(value));
+    return apiRequestJson<T>(method, path, {
+        query: options?.query,
+        body: options?.body,
+        entitlementContext: options?.entitlementContext,
+        idempotencyKey: options?.idempotencyKey,
+        requestId: options?.requestId,
     });
+}
 
-    const headers: Record<string, string> = {
-        Accept: 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-    };
+function rotateCreateInvoiceRequestKey(): void {
+    createInvoiceRequestKey.value = generateRequestKey('billing-invoice-create');
+}
 
-    let body: string | undefined;
-    if (method !== 'GET') {
-        headers['Content-Type'] = 'application/json';
-        const token = csrfToken();
-        if (token) headers['X-CSRF-TOKEN'] = token;
-        body = JSON.stringify(options?.body ?? {});
-    }
+function rotateEditInvoiceRequestKey(): void {
+    editInvoiceRequestKey.value = generateRequestKey('billing-invoice-edit');
+}
 
-    const response = await fetch(url.toString(), {
-        method,
-        credentials: 'same-origin',
-        headers,
-        body,
-    });
-
-    const payload = (await response
-        .json()
-        .catch(() => ({}))) as ValidationErrorResponse;
-
-    if (!response.ok) {
-        const error = new Error(
-            payload.message ?? `${response.status} ${response.statusText}`,
-        ) as Error & {
-            status?: number;
-            payload?: ValidationErrorResponse;
-        };
-        error.status = response.status;
-        error.payload = payload;
-        throw error;
-    }
-
-    return payload as T;
+function rotateStatusDialogRequestKey(): void {
+    statusDialogRequestKey.value = generateRequestKey('billing-invoice-status');
 }
 
 function clearSearchDebounce() {
@@ -3439,6 +3370,7 @@ async function createInvoice() {
         const resolvedSubtotalAmount =
             lineItems.length > 0 ? createLineItemsSubtotal.value : '';
         const editingDraftInvoiceId = createWorkspaceDraftInvoiceId.value.trim();
+        const requestKey = createInvoiceRequestKey.value;
 
         if (editingDraftInvoiceId) {
             const response = await apiRequest<{ data: BillingInvoice }>(
@@ -3457,6 +3389,9 @@ async function createInvoice() {
                         notes: createForm.notes.trim() || null,
                         lineItems: lineItems.length > 0 ? lineItems : null,
                     },
+                    entitlementContext: 'Billing invoice draft save',
+                    idempotencyKey: requestKey,
+                    requestId: requestKey,
                 },
             );
 
@@ -3499,6 +3434,7 @@ async function createInvoice() {
                 {
                     body: {
                         patientId: createForm.patientId.trim(),
+                        encounterId: createForm.encounterId.trim() || null,
                         appointmentId: createForm.appointmentId.trim() || null,
                         admissionId: createForm.admissionId.trim() || null,
                         billingPayerContractId:
@@ -3514,6 +3450,9 @@ async function createInvoice() {
                         notes: createForm.notes.trim() || null,
                         lineItems: lineItems.length > 0 ? lineItems : null,
                     },
+                    entitlementContext: 'Billing invoice create',
+                    idempotencyKey: requestKey,
+                    requestId: requestKey,
                 },
             );
 
@@ -3569,6 +3508,7 @@ function openInvoiceStatusDialog(
     invoice: BillingInvoice,
     status: BillingInvoiceStatusAction,
 ) {
+    rotateStatusDialogRequestKey();
     pruneBillingClaimReferenceValidationTelemetryIfStale();
 
     statusDialogInitializingPaymentMetadata.value = true;
@@ -6967,6 +6907,7 @@ function nextInvoiceDetailsAuditLogsPage() {
 }
 
 function openEditInvoiceDialog(invoice: BillingInvoice) {
+    rotateEditInvoiceRequestKey();
     resetEditDialogForm();
 
     if (!billingPayerContractsLoaded.value && !billingPayerContractsLoading.value) {
@@ -7044,6 +6985,9 @@ async function submitEditInvoice() {
                     notes: editForm.notes.trim() || null,
                     lineItems: lineItems.length > 0 ? lineItems : null,
                 },
+                entitlementContext: 'Billing invoice edit',
+                idempotencyKey: editInvoiceRequestKey.value,
+                requestId: editInvoiceRequestKey.value,
             },
         );
 
@@ -8265,6 +8209,7 @@ async function loadBillingChargeCaptureCandidates() {
             {
                 query: {
                     patientId,
+                    encounterId: createForm.encounterId.trim() || null,
                     appointmentId: createForm.appointmentId.trim() || null,
                     admissionId: createForm.admissionId.trim() || null,
                     currencyCode: createForm.currencyCode.trim().toUpperCase() || null,
@@ -9123,6 +9068,9 @@ async function recordInvoicePayment(
                     note: payload.note ?? null,
                     paymentAt: payload.paymentAt ?? null,
                 },
+                entitlementContext: 'Billing invoice payment',
+                idempotencyKey: statusDialogRequestKey.value,
+                requestId: statusDialogRequestKey.value,
             },
         );
 
@@ -9197,6 +9145,9 @@ async function updateInvoiceStatus(
                     paymentMethod,
                     paymentReference,
                 },
+                entitlementContext: 'Billing invoice status update',
+                idempotencyKey: statusDialogRequestKey.value,
+                requestId: statusDialogRequestKey.value,
             },
         );
 
@@ -15035,8 +14986,11 @@ onMounted(refreshPage);
                                 :create-form-patient-id="createForm.patientId"
                                 :create-form-appointment-id="createForm.appointmentId"
                                 :create-form-admission-id="createForm.admissionId"
+                                :create-patient-number="createActivePatientSummary?.patientNumber || null"
                                 :create-patient-context-meta="createPatientContextMeta"
                                 :create-patient-context-label="createPatientContextLabel"
+                                :facility-name="scope?.facility?.name || 'No facility selected'"
+                                :tenant-name="scope?.tenant?.name || 'No tenant'"
                                 :has-create-appointment-context="hasCreateAppointmentContext"
                                 :create-appointment-context-label="createAppointmentContextLabel"
                                 :create-appointment-context-meta="createAppointmentContextMeta"

@@ -22,6 +22,8 @@ interface AppointmentRepositoryInterface
         ?string $query,
         ?string $patientId,
         ?int $clinicianUserId,
+        ?string $department,
+        bool $unassignedClinicianOnly,
         ?string $status,
         ?string $triageCategory,
         ?string $fromDateTime,
@@ -36,6 +38,8 @@ interface AppointmentRepositoryInterface
         ?string $query,
         ?string $patientId,
         ?int $clinicianUserId,
+        ?string $department,
+        bool $unassignedClinicianOnly,
         ?string $status,
         ?string $fromDateTime,
         ?string $toDateTime

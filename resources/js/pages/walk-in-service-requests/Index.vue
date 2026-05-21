@@ -3,6 +3,7 @@ import { Head } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -781,6 +782,60 @@ function selectedCreateDepartmentOption(): DepartmentOptionRow | null {
         ?? null;
 }
 
+const selectedCreateServiceTypeOption = computed(() =>
+    serviceTypeCreateOptions.find((option) => option.value === createForm.serviceType) ?? null,
+);
+
+const createPatientContextLabel = computed(() => {
+    const patientId = createForm.patientId.trim();
+    if (!patientId) return null;
+    return resolvedPatientName(patientId) ?? 'Selected patient';
+});
+
+const createPatientContextMeta = computed(() => {
+    if (!createForm.patientId.trim()) return null;
+    return 'Selected from registered patients';
+});
+
+const createRequestWorkflowContextLabel = computed(() =>
+    selectedCreateServiceTypeOption.value?.label ?? 'Direct service request',
+);
+
+const createRequestWorkflowContextMeta = computed(() => {
+    const details = [
+        selectedCreateDepartmentOption.value?.label
+            ? `Destination: ${selectedCreateDepartmentOption.value.label}`
+            : null,
+        createForm.priority ? `Priority: ${formatEnumLabel(createForm.priority)}` : null,
+    ].filter((value): value is string => Boolean(value));
+
+    if (details.length > 0) {
+        return details.join(' | ');
+    }
+
+    if (createForm.serviceType) {
+        return 'Choose the matching destination department before sending the patient.';
+    }
+
+    return 'Select the patient and destination desk before creating the handoff.';
+});
+
+const createRequestContextStatusLabel = computed(() => {
+    if (!createForm.patientId.trim()) return 'Patient required';
+    if (!createForm.serviceType) return 'Destination desk required';
+    if (!createForm.departmentId.trim()) return 'Destination pending';
+    return 'Ready to create';
+});
+
+const createRequestContextStatusVariant = computed<
+    'default' | 'secondary' | 'outline' | 'destructive'
+>(() => {
+    if (!createForm.patientId.trim()) return 'secondary';
+    if (!createForm.serviceType) return 'secondary';
+    if (!createForm.departmentId.trim()) return 'outline';
+    return 'default';
+});
+
 function handleCreateDepartmentChange(value: unknown): void {
     const departmentId = typeof value === 'string' ? value.trim() : String(value ?? '').trim();
     const selected = departmentId
@@ -1086,6 +1141,14 @@ watch(detailsTab, (tab) => {
 watch(() => createForm.serviceType, () => {
     if (createOpen.value) void loadCreateDepartmentOptions();
 });
+
+watch(
+    () => createForm.patientId,
+    (value) => {
+        const patientId = value.trim();
+        if (patientId) void hydratePatientName(patientId);
+    },
+);
 
 onMounted(() => {
     void loadList();
@@ -1858,6 +1921,20 @@ onMounted(() => {
                     </DialogDescription>
                 </DialogHeader>
                 <div class="flex flex-col gap-4 py-2">
+                    <ClinicalContextBanner
+                        title="Direct service request context"
+                        description="Confirm the patient, facility, and destination desk before routing the patient to the receiving team."
+                        :patient-name="createPatientContextLabel"
+                        :patient-meta="createPatientContextMeta"
+                        :facility-name="scope?.facility?.name || 'No facility selected'"
+                        :tenant-name="scope?.tenant?.name || 'No tenant'"
+                        :context-label="createRequestWorkflowContextLabel"
+                        :context-meta="createRequestWorkflowContextMeta"
+                        :status-label="createRequestContextStatusLabel"
+                        :status-variant="createRequestContextStatusVariant"
+                        tone="muted"
+                    />
+
                     <!-- Patient -->
                     <div class="flex flex-col gap-1.5">
                         <PatientLookupField

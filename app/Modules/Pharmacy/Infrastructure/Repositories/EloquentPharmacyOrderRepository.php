@@ -72,6 +72,7 @@ class EloquentPharmacyOrderRepository implements PharmacyOrderRepositoryInterfac
     public function search(
         ?string $query,
         ?string $patientId,
+        ?string $encounterId,
         ?string $appointmentId,
         ?string $admissionId,
         ?string $status,
@@ -101,6 +102,7 @@ class EloquentPharmacyOrderRepository implements PharmacyOrderRepositoryInterfac
                 });
             })
             ->when($patientId, fn (Builder $builder, string $requestedPatientId) => $builder->where('patient_id', $requestedPatientId))
+            ->when($encounterId, fn (Builder $builder, string $requestedEncounterId) => $builder->where('encounter_id', $requestedEncounterId))
             ->when($appointmentId, fn (Builder $builder, string $requestedAppointmentId) => $builder->where('appointment_id', $requestedAppointmentId))
             ->when($admissionId, fn (Builder $builder, string $requestedAdmissionId) => $builder->where('admission_id', $requestedAdmissionId))
             ->when($status, fn (Builder $builder, string $requestedStatus) => $builder->where('status', $requestedStatus))

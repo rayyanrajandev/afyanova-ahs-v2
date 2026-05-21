@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
+import { ref } from 'vue';
 import AppearanceTabs from '@/components/AppearanceTabs.vue';
 import AppIcon from '@/components/AppIcon.vue';
-import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -14,9 +13,8 @@ import {
     SheetTitle,
 } from '@/components/ui/sheet';
 import UiPreferencesPanel from '@/components/UiPreferencesPanel.vue';
-import { useAppearance } from '@/composables/useAppearance';
-import { useUiPreferences } from '@/composables/useUiPreferences';
 import { edit as editAppearance } from '@/routes/appearance';
+import { Link } from '@inertiajs/vue3';
 
 type Props = {
     open: boolean;
@@ -27,43 +25,26 @@ defineProps<Props>();
 const emit = defineEmits<{
     (e: 'update:open', value: boolean): void;
 }>();
-
-const { updateAppearance } = useAppearance();
-const { resetUiPreferences } = useUiPreferences();
-
-function resetSettings(): void {
-    updateAppearance('system');
-    resetUiPreferences();
-}
-
-function closeSettings(): void {
-    emit('update:open', false);
-}
 </script>
 
 <template>
     <Sheet :open="open" @update:open="emit('update:open', $event)">
-        <SheetContent
-            variant="workspace"
-            size="xl"
-            side="right"
-            showCloseButton
-            class="border-l"
-        >
-            <SheetHeader class="shrink-0 border-b bg-card px-6 py-4 pr-12 text-left">
-                <div class="flex items-start gap-3">
-                    <div class="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
-                        <AppIcon name="sliders-horizontal" class="size-4 text-primary" />
+        <SheetContent variant="workspace" size="2xl" side="right" showCloseButton>
+
+            <!-- Header -->
+            <SheetHeader class="shrink-0 border-b px-6 py-4 text-left pr-12">
+                <div class="flex items-center gap-3">
+                    <div class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/60">
+                        <AppIcon name="sliders-horizontal" class="size-4 text-muted-foreground" />
                     </div>
-                    <div class="min-w-0">
-                        <SheetTitle class="text-base font-semibold leading-snug">Theme Settings</SheetTitle>
-                        <SheetDescription class="text-xs">
-                            Customize the workspace look for this browser.
-                        </SheetDescription>
+                    <div>
+                        <SheetTitle class="text-sm font-semibold leading-snug">Preferences</SheetTitle>
+                        <SheetDescription class="text-xs">Appearance, density &amp; icons</SheetDescription>
                     </div>
                 </div>
             </SheetHeader>
 
+            <!-- Scrollable content -->
             <ScrollArea class="min-h-0 flex-1">
                 <div class="space-y-6 px-6 py-5">
                     <section class="space-y-2.5">
@@ -80,24 +61,17 @@ function closeSettings(): void {
                 </div>
             </ScrollArea>
 
-            <SheetFooter class="shrink-0 border-t bg-card px-6 py-3 sm:flex-row sm:items-center">
+            <!-- Footer -->
+            <SheetFooter class="shrink-0 border-t bg-muted/20 px-6 py-3">
                 <Link
                     :href="editAppearance()"
-                    class="inline-flex items-center gap-1.5 self-start text-xs text-muted-foreground transition-colors hover:text-primary sm:self-center"
+                    class="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-primary"
                 >
                     <AppIcon name="arrow-up-right" class="size-3" />
-                    Full settings
+                    Open full settings
                 </Link>
-                <div class="flex flex-col gap-2 sm:ml-auto sm:flex-row">
-                    <Button variant="outline" size="sm" class="gap-1.5" @click="resetSettings">
-                        <AppIcon name="rotate-ccw" class="size-3.5" />
-                        Reset changes
-                    </Button>
-                    <Button size="sm" @click="closeSettings">
-                        Save
-                    </Button>
-                </div>
             </SheetFooter>
+
         </SheetContent>
     </Sheet>
 </template>

@@ -3,6 +3,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import LinkedContextLookupField from '@/components/context/LinkedContextLookupField.vue';
+import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
@@ -4009,6 +4010,44 @@ const createAppointmentContextSourceLabel = computed(() => {
     return null;
 });
 
+const createAdmissionWorkflowContextLabel = computed(() => {
+    if (createAdmissionFromAppointments.value) return 'Consultation handoff';
+    if (hasCreateAppointmentContext.value) return createAppointmentContextLabel.value;
+    return 'Direct admission';
+});
+
+const createAdmissionWorkflowContextMeta = computed(() => {
+    if (hasCreateAppointmentContext.value) {
+        return [
+            createAppointmentContextMeta.value,
+            createAppointmentContextClinician.value,
+            createAppointmentContextReason.value,
+        ]
+            .filter(Boolean)
+            .join(' | ');
+    }
+
+    return createAdmissionHandoffSummary.value;
+});
+
+const createAdmissionContextStatusLabel = computed(() => {
+    if (createAppointmentContextStatusLabel.value) {
+        return createAppointmentContextStatusLabel.value;
+    }
+
+    return createForm.patientId.trim() ? 'Patient selected' : 'Context needed';
+});
+
+const createAdmissionContextStatusVariant = computed<
+    'default' | 'secondary' | 'outline' | 'destructive'
+>(() => {
+    if (createAppointmentContextStatusLabel.value) {
+        return createAppointmentContextStatusVariant.value;
+    }
+
+    return createForm.patientId.trim() ? 'outline' : 'secondary';
+});
+
 const createContextEditorDescription = computed(() => {
     if (createContextEditorTab.value === 'appointment') {
         return 'Link the checked-in appointment that led to this admission, or review the suggested handoff.';
@@ -5822,114 +5861,72 @@ onMounted(initialPageLoad);
                                 </ul>
                             </AlertDescription>
                         </Alert>
-                        <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
-                            <div class="flex flex-col gap-3">
-                                <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                                    <div class="min-w-0 space-y-1">
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <Badge :variant="createAdmissionFromAppointments ? 'default' : hasCreateAppointmentContext ? 'secondary' : 'outline'">
-                                                {{
-                                                    createAdmissionFromAppointments
-                                                        ? 'Consultation handoff'
-                                                        : hasCreateAppointmentContext
-                                                          ? 'Linked appointment'
-                                                          : 'Direct admission'
-                                                }}
-                                            </Badge>
-                                            <Badge
-                                                v-if="createAppointmentContextStatusLabel"
-                                                :variant="createAppointmentContextStatusVariant"
+                        <ClinicalContextBanner
+                            title="Admission context"
+                            description="Confirm patient, facility, and upstream appointment before assigning inpatient placement."
+                            :patient-name="createForm.patientId.trim() ? createPatientContextLabel : null"
+                            :patient-meta="createForm.patientId.trim() ? createPatientContextMeta : null"
+                            :patient-number="createPatientSummary?.patientNumber || null"
+                            :facility-name="scope?.facility?.name || 'No facility selected'"
+                            :tenant-name="scope?.tenant?.name || 'No tenant'"
+                            :context-label="createAdmissionWorkflowContextLabel"
+                            :context-meta="createAdmissionWorkflowContextMeta"
+                            :status-label="createAdmissionContextStatusLabel"
+                            :status-variant="createAdmissionContextStatusVariant"
+                            tone="muted"
+                        >
+                            <template #actions>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    class="gap-1.5"
+                                    @click="openCreateContextEditor(hasCreateAppointmentContext ? 'appointment' : 'patient')"
+                                >
+                                    <AppIcon name="sliders-horizontal" class="size-3.5" />
+                                    {{ createForm.patientId ? 'Change context' : 'Set context' }}
+                                </Button>
+                            </template>
+
+                            <div class="flex flex-col gap-2">
+                                <div
+                                    v-if="hasCreateAppointmentContext"
+                                    class="flex min-w-0 items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2"
+                                >
+                                    <AppIcon
+                                        name="calendar-clock"
+                                        class="size-3.5 shrink-0 text-muted-foreground"
+                                    />
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex min-w-0 items-center gap-2">
+                                            <span class="shrink-0 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                                Appointment
+                                            </span>
+                                            <span
+                                                class="truncate text-sm font-medium"
+                                                :title="[createAppointmentContextLabel, createAppointmentContextMeta, createAppointmentContextClinician, createAppointmentContextReason].filter(Boolean).join(' | ')"
                                             >
-                                                {{ createAppointmentContextStatusLabel }}
-                                            </Badge>
-                                            <Badge
-                                                v-if="createAppointmentContextSourceLabel"
-                                                variant="outline"
-                                            >
-                                                {{ createAppointmentContextSourceLabel }}
-                                            </Badge>
+                                                {{ createAppointmentContextLabel }}
+                                            </span>
                                         </div>
-                                        <p class="text-xs text-muted-foreground">
-                                            {{ createAdmissionHandoffSummary }}
+                                        <p class="truncate text-xs text-muted-foreground">
+                                            {{ createAppointmentContextMeta }}
                                         </p>
                                     </div>
-                                    <div class="flex flex-wrap gap-2">
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            class="gap-1.5"
-                                            @click="openCreateContextEditor(hasCreateAppointmentContext ? 'appointment' : 'patient')"
+                                    <div class="flex shrink-0 flex-wrap items-center gap-1.5">
+                                        <Badge
+                                            v-if="createAppointmentContextStatusLabel"
+                                            :variant="createAppointmentContextStatusVariant"
+                                            class="text-[10px]"
                                         >
-                                            <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                            {{ createForm.patientId ? 'Change context' : 'Set context' }}
-                                        </Button>
-                                    </div>
-                                </div>
-
-                                <div class="grid gap-2 lg:grid-cols-2">
-                                    <div
-                                        class="flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2"
-                                        :class="createForm.patientId ? 'border-primary/30 bg-primary/5' : 'bg-background/80'"
-                                    >
-                                        <AppIcon
-                                            name="user"
-                                            class="size-3.5 shrink-0 text-muted-foreground"
-                                        />
-                                        <div class="min-w-0 flex-1">
-                                            <div class="flex min-w-0 items-center gap-2">
-                                                <span
-                                                    class="shrink-0 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground"
-                                                >
-                                                    Patient
-                                                </span>
-                                                <span
-                                                    class="truncate text-sm font-medium"
-                                                    :title="createPatientContextMeta"
-                                                >
-                                                    {{ createPatientContextLabel }}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div
-                                        class="flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2"
-                                        :class="hasCreateAppointmentContext ? 'border-primary/30 bg-primary/5' : 'bg-background/80'"
-                                    >
-                                        <AppIcon
-                                            name="calendar-clock"
-                                            class="size-3.5 shrink-0 text-muted-foreground"
-                                        />
-                                        <div class="min-w-0 flex-1">
-                                            <div class="flex min-w-0 items-center gap-2">
-                                                <span
-                                                    class="shrink-0 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground"
-                                                >
-                                                    Appointment
-                                                </span>
-                                                <span
-                                                    class="truncate text-sm font-medium"
-                                                    :title="[createAppointmentContextLabel, createAppointmentContextMeta, createAppointmentContextClinician, createAppointmentContextReason].filter(Boolean).join(' | ')"
-                                                >
-                                                    {{ createAppointmentContextLabel }}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div class="flex shrink-0 flex-wrap items-center gap-1.5">
-                                            <Badge
-                                                v-if="createAppointmentContextStatusLabel"
-                                                :variant="createAppointmentContextStatusVariant"
-                                                class="text-[10px]"
-                                            >
-                                                {{ createAppointmentContextStatusLabel }}
-                                            </Badge>
-                                            <Badge
-                                                v-if="createAppointmentContextSourceLabel"
-                                                variant="outline"
-                                                class="text-[10px]"
-                                            >
-                                                {{ createAppointmentContextSourceLabel }}
-                                            </Badge>
-                                        </div>
+                                            {{ createAppointmentContextStatusLabel }}
+                                        </Badge>
+                                        <Badge
+                                            v-if="createAppointmentContextSourceLabel"
+                                            variant="outline"
+                                            class="text-[10px]"
+                                        >
+                                            {{ createAppointmentContextSourceLabel }}
+                                        </Badge>
                                     </div>
                                 </div>
 
@@ -5942,7 +5939,7 @@ onMounted(initialPageLoad);
                                     </Button>
                                 </div>
                             </div>
-                        </div>
+                        </ClinicalContextBanner>
 
                         <Dialog v-model:open="createContextEditorOpen">
                             <DialogContent size="3xl" class="overflow-visible rounded-lg">

@@ -16,6 +16,7 @@ class UpdateMedicalRecordRequest extends FormRequest
      */
     private const ALLOWED_FIELDS = [
         'patientId',
+        'encounterId',
         'admissionId',
         'appointmentId',
         'appointmentReferralId',
@@ -32,8 +33,10 @@ class UpdateMedicalRecordRequest extends FormRequest
 
     public function authorize(): bool
     {
-        return ($this->user()?->can('medical.records.read') ?? false)
-            && ($this->user()?->can('medical.records.update') ?? false);
+        return $this->user()?->can(
+            'medical-records.update-draft',
+            (string) $this->route('id'),
+        ) ?? false;
     }
 
     /**
@@ -43,6 +46,7 @@ class UpdateMedicalRecordRequest extends FormRequest
     {
         return [
             'patientId' => ['sometimes', 'uuid'],
+            'encounterId' => ['nullable', 'uuid'],
             'admissionId' => ['nullable', 'uuid'],
             'appointmentId' => ['nullable', 'uuid'],
             'appointmentReferralId' => ['nullable', 'uuid'],
@@ -55,6 +59,8 @@ class UpdateMedicalRecordRequest extends FormRequest
             'assessment' => ['nullable', 'string'],
             'plan' => ['nullable', 'string'],
             'diagnosisCode' => ['nullable', 'string', 'max:50', 'regex:'.self::ICD10_CODE_PATTERN],
+            'expectedUpdatedAt' => ['nullable', 'date'],
+            'forceDraftSave' => ['sometimes', 'boolean'],
             'status' => ['prohibited'],
             'statusReason' => ['prohibited'],
             'reason' => ['prohibited'],

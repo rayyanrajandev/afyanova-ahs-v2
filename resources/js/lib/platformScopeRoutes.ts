@@ -3,6 +3,7 @@ export const operationalFacilityScopePathPrefixes = [
     '/appointments',
     '/admissions',
     '/medical-records',
+    '/encounters',
     '/laboratory-orders',
     '/pharmacy-orders',
     '/radiology-orders',

@@ -4,6 +4,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AdmissionLookupField from '@/components/admissions/AdmissionLookupField.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
+import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -892,6 +893,43 @@ const latestSelectedAdmissionRoundNote = computed(() => selectedAdmissionRoundNo
 
 const latestSelectedAdmissionHandoff = computed(() =>
     selectedAdmissionRoundNotes.value.find((note) => String(note.handoffNotes ?? '').trim() !== '') ?? null,
+);
+
+const selectedAdmissionPatientMeta = computed(() => {
+    if (!selectedAdmission.value) return null;
+
+    const parts = [
+        selectedAdmission.value.patientNumber?.trim() ?? null,
+        placementLabel(selectedAdmission.value),
+        selectedAdmission.value.admissionReason?.trim()
+            ? `Reason: ${selectedAdmission.value.admissionReason.trim()}`
+            : null,
+    ].filter((value): value is string => Boolean(value));
+
+    return parts.length > 0 ? parts.join(' | ') : null;
+});
+
+const selectedAdmissionContextLabel = computed(() =>
+    selectedAdmission.value?.admissionNumber?.trim() || 'Inpatient admission',
+);
+
+const selectedAdmissionContextMeta = computed(() => {
+    if (!selectedAdmission.value) return null;
+
+    const parts = [
+        `${formatEnumLabel(documentationFlow.value)} workspace`,
+        selectedAdmission.value.admittedAt ? `Admitted ${formatDateTime(selectedAdmission.value.admittedAt)}` : null,
+    ].filter((value): value is string => Boolean(value));
+
+    return parts.length > 0 ? parts.join(' | ') : null;
+});
+
+const selectedAdmissionStatusLabel = computed(() =>
+    selectedAdmission.value?.status ? formatEnumLabel(selectedAdmission.value.status) : 'Admission selected',
+);
+
+const selectedAdmissionStatusVariant = computed<'default' | 'secondary' | 'outline' | 'destructive'>(() =>
+    selectedAdmission.value ? formatStatusVariant(selectedAdmission.value.status) : 'outline',
 );
 
 const selectedAdmissionCarePlans = computed(() =>
@@ -2857,33 +2895,47 @@ async function refreshWardPage(): Promise<void> {
                             </template>
                             <template v-else>
                                 <div class='rounded-lg border border-border/70 bg-muted/20 p-4 dark:bg-muted/10'>
-                                <AdmissionLookupField v-model='selectedAdmissionId' input-id='ward-documentation-admission' label='Current inpatient' helper-text='Search by patient name, patient number, or admission number from active inpatient admissions.' :error-message='fieldError("admissionId")' @selected='openSelectedAdmission' />
-                                <div v-if='selectedAdmission' class='mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
-                                    <Badge variant='outline'>{{ selectedAdmission.admissionNumber || 'Admission' }}</Badge>
-                                    <Badge variant='outline'>{{ selectedAdmission.patientName || 'Patient not loaded' }}</Badge>
-                                    <Badge variant='outline'>{{ placementLabel(selectedAdmission) }}</Badge>
-                                    <Badge variant='outline'>{{ formatEnumLabel(selectedAdmission.status) }}</Badge>
-                                </div>
-                                <div v-if='selectedAdmission && (canCreateMedicalRecords || canReadMedicalRecords)' class='mt-3 flex flex-wrap items-center gap-2'>
-                                    <Button v-if='canCreateMedicalRecords && selectedAdmissionMedicalRecordCreateHref("progress_note")' size='sm' class='gap-1.5' as-child>
-                                        <Link :href='selectedAdmissionMedicalRecordCreateHref("progress_note") || "/medical-records"'>
-                                            <AppIcon name='file-text' class='size-3.5' />
-                                            New progress note
-                                        </Link>
-                                    </Button>
-                                    <Button v-if='canCreateMedicalRecords && selectedAdmissionMedicalRecordCreateHref("nursing_note")' size='sm' class='gap-1.5' as-child>
-                                        <Link :href='selectedAdmissionMedicalRecordCreateHref("nursing_note") || "/medical-records"'>
-                                            <AppIcon name='file-text' class='size-3.5' />
-                                            New nursing note
-                                        </Link>
-                                    </Button>
-                                    <Button v-if='canReadMedicalRecords && selectedAdmissionMedicalRecordBrowseHref("progress_note")' size='sm' variant='outline' class='gap-1.5' as-child>
-                                        <Link :href='selectedAdmissionMedicalRecordBrowseHref("progress_note") || "/medical-records"'>
-                                            <AppIcon name='folder-open' class='size-3.5' />
-                                            Open progress notes
-                                        </Link>
-                                    </Button>
-                                </div>
+                                    <AdmissionLookupField v-model='selectedAdmissionId' input-id='ward-documentation-admission' label='Current inpatient' helper-text='Search by patient name, patient number, or admission number from active inpatient admissions.' :error-message='fieldError("admissionId")' @selected='openSelectedAdmission' />
+                                    <ClinicalContextBanner
+                                        v-if='selectedAdmission'
+                                        class='mt-3'
+                                        title='Inpatient admission context'
+                                        description='Confirm the current patient, facility, and admission before bedside documentation or downstream follow-up.'
+                                        :patient-name='selectedAdmission.patientName || "Patient not loaded"'
+                                        :patient-meta='selectedAdmissionPatientMeta'
+                                        :patient-number='selectedAdmission.patientNumber || null'
+                                        :facility-name='scope?.facility?.name || "No facility selected"'
+                                        :tenant-name='scope?.tenant?.name || "No tenant"'
+                                        :context-label='selectedAdmissionContextLabel'
+                                        :context-meta='selectedAdmissionContextMeta'
+                                        :status-label='selectedAdmissionStatusLabel'
+                                        :status-variant='selectedAdmissionStatusVariant'
+                                        locked
+                                        tone='muted'
+                                    >
+                                        <template #actions>
+                                            <template v-if='canCreateMedicalRecords || canReadMedicalRecords'>
+                                                <Button v-if='canCreateMedicalRecords && selectedAdmissionMedicalRecordCreateHref("progress_note")' size='sm' class='gap-1.5' as-child>
+                                                    <Link :href='selectedAdmissionMedicalRecordCreateHref("progress_note") || "/medical-records"'>
+                                                        <AppIcon name='file-text' class='size-3.5' />
+                                                        New progress note
+                                                    </Link>
+                                                </Button>
+                                                <Button v-if='canCreateMedicalRecords && selectedAdmissionMedicalRecordCreateHref("nursing_note")' size='sm' class='gap-1.5' as-child>
+                                                    <Link :href='selectedAdmissionMedicalRecordCreateHref("nursing_note") || "/medical-records"'>
+                                                        <AppIcon name='file-text' class='size-3.5' />
+                                                        New nursing note
+                                                    </Link>
+                                                </Button>
+                                                <Button v-if='canReadMedicalRecords && selectedAdmissionMedicalRecordBrowseHref("progress_note")' size='sm' variant='outline' class='gap-1.5' as-child>
+                                                    <Link :href='selectedAdmissionMedicalRecordBrowseHref("progress_note") || "/medical-records"'>
+                                                        <AppIcon name='folder-open' class='size-3.5' />
+                                                        Open progress notes
+                                                    </Link>
+                                                </Button>
+                                            </template>
+                                        </template>
+                                    </ClinicalContextBanner>
                                 <div v-if='selectedAdmission' class='mt-3 rounded-lg border border-border/70 bg-background/80 px-4 py-3 dark:bg-background/40'>
                                     <div class='flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between'>
                                         <div class='min-w-0'>
@@ -3714,8 +3766,6 @@ async function refreshWardPage(): Promise<void> {
         </Dialog>
     </AppLayout>
 </template>
-
-
 
 
 

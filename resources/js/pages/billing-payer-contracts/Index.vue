@@ -16,9 +16,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import LeaveWorkflowDialog from '@/components/workflow/LeaveWorkflowDialog.vue';
+import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { usePlatformCountryProfile } from '@/composables/usePlatformCountryProfile';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { apiRequestJson } from '@/lib/apiClient';
+import { generateRequestKey } from '@/lib/idempotency';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
@@ -150,7 +154,6 @@ type CatalogItem = {
     effectiveTo: string | null;
     status: string | null;
 };
-type ApiError = { message?: string };
 type ListResponse<T> = { data: T[]; meta: Pagination };
 type ItemResponse<T> = { data: T };
 type CountsResponse = { data: StatusCounts };
@@ -280,6 +283,8 @@ const contractWorkspaceMode = ref<'list' | 'create'>('list');
 const copayTypeOptions = ['none', 'fixed', 'percentage'] as const;
 
 const createLoading = ref(false);
+const createContractDiscardConfirmOpen = ref(false);
+const createContractRequestKey = ref(generateRequestKey('billing-payer-contract-create'));
 const createForm = reactive({
     contractCode: '',
     contractName: '',
@@ -291,6 +296,8 @@ const createForm = reactive({
 
 const editContractOpen = ref(false);
 const editContractLoading = ref(false);
+const editContractDiscardConfirmOpen = ref(false);
+const editContractRequestKey = ref(generateRequestKey('billing-payer-contract-edit'));
 const editContractTarget = ref<Contract | null>(null);
 const editContractForm = reactive({
     contractCode: '',
@@ -303,10 +310,12 @@ const editContractForm = reactive({
 
 const contractStatusOpen = ref(false);
 const contractStatusLoading = ref(false);
+const contractStatusDiscardConfirmOpen = ref(false);
 const contractStatusError = ref<string | null>(null);
 const contractStatusTarget = ref<'active' | 'inactive' | 'retired'>('active');
 const contractStatusReason = ref('');
 const contractStatusItem = ref<Contract | null>(null);
+const contractStatusRequestKey = ref(generateRequestKey('billing-payer-contract-status'));
 
 const emptyPolicySummaryOverview: PolicySummaryOverview = {
     activePolicies: 0,
@@ -333,6 +342,7 @@ const serviceCatalogLookupError = ref<string | null>(null);
 const serviceCatalogLookupItems = ref<CatalogItem[]>([]);
 
 const createPriceOverrideLoading = ref(false);
+const createPriceOverrideRequestKey = ref(generateRequestKey('billing-payer-contract-price-override-create'));
 const createPriceOverrideForm = reactive({
     billingServiceCatalogItemId: '',
     serviceCode: '',
@@ -348,6 +358,8 @@ const createPriceOverrideForm = reactive({
 
 const editPriceOverrideOpen = ref(false);
 const editPriceOverrideLoading = ref(false);
+const editPriceOverrideDiscardConfirmOpen = ref(false);
+const editPriceOverrideRequestKey = ref(generateRequestKey('billing-payer-contract-price-override-edit'));
 const editPriceOverrideTarget = ref<PriceOverride | null>(null);
 const editPriceOverrideForm = reactive({
     billingServiceCatalogItemId: '',
@@ -364,10 +376,12 @@ const editPriceOverrideForm = reactive({
 
 const priceOverrideStatusOpen = ref(false);
 const priceOverrideStatusLoading = ref(false);
+const priceOverrideStatusDiscardConfirmOpen = ref(false);
 const priceOverrideStatusError = ref<string | null>(null);
 const priceOverrideStatusTarget = ref<'active' | 'inactive' | 'retired'>('active');
 const priceOverrideStatusReason = ref('');
 const priceOverrideStatusItem = ref<PriceOverride | null>(null);
+const priceOverrideStatusRequestKey = ref(generateRequestKey('billing-payer-contract-price-override-status'));
 
 const rulesLoading = ref(false);
 const rulesErrors = ref<string[]>([]);
@@ -376,6 +390,7 @@ const rulesPagination = ref<Pagination | null>(null);
 const ruleFilters = reactive({ q: '', status: '', serviceType: '', coverageDecision: '', page: 1, perPage: 20 });
 
 const createRuleLoading = ref(false);
+const createRuleRequestKey = ref(generateRequestKey('billing-payer-contract-rule-create'));
 const createRuleForm = reactive({
     billingServiceCatalogItemId: '',
     ruleCode: '',
@@ -405,6 +420,8 @@ const createRuleForm = reactive({
 
 const editRuleOpen = ref(false);
 const editRuleLoading = ref(false);
+const editRuleDiscardConfirmOpen = ref(false);
+const editRuleRequestKey = ref(generateRequestKey('billing-payer-contract-rule-edit'));
 const editRuleTarget = ref<Rule | null>(null);
 const editRuleForm = reactive({
     billingServiceCatalogItemId: '',
@@ -435,10 +452,12 @@ const editRuleForm = reactive({
 
 const ruleStatusOpen = ref(false);
 const ruleStatusLoading = ref(false);
+const ruleStatusDiscardConfirmOpen = ref(false);
 const ruleStatusError = ref<string | null>(null);
 const ruleStatusTarget = ref<'active' | 'inactive' | 'retired'>('active');
 const ruleStatusReason = ref('');
 const ruleStatusItem = ref<Rule | null>(null);
+const ruleStatusRequestKey = ref(generateRequestKey('billing-payer-contract-rule-status'));
 
 const contractAuditTarget = ref<Contract | null>(null);
 const contractAuditLoading = ref(false);
@@ -458,6 +477,17 @@ const priceOverrideAuditExporting = ref(false);
 const priceOverrideAuditLogs = ref<AuditLog[]>([]);
 
 const contractShowInitialSkeleton = computed(() => loading.value);
+const isSubmittingWorkflow = computed(() => (
+    createLoading.value
+    || editContractLoading.value
+    || contractStatusLoading.value
+    || createPriceOverrideLoading.value
+    || editPriceOverrideLoading.value
+    || priceOverrideStatusLoading.value
+    || createRuleLoading.value
+    || editRuleLoading.value
+    || ruleStatusLoading.value
+));
 const contractListRefreshing = computed(() => listLoading.value && !loading.value);
 const contractActiveFilterChips = computed(() => {
     const chips: string[] = [];
@@ -928,6 +958,159 @@ const editRuleAutoApproveSelectValue = computed({
     },
 });
 
+const hasPendingCreateContractWorkflow = computed(() => Boolean(
+    createForm.contractCode.trim()
+    || createForm.contractName.trim()
+    || createForm.payerType !== 'insurance'
+    || createForm.payerName.trim()
+    || createForm.currencyCode.trim().toUpperCase() !== defaultCurrencyCode.value.toUpperCase()
+    || createForm.requiresPreAuthorization !== 'true',
+));
+
+const hasPendingCreatePriceOverrideWorkflow = computed(() => Boolean(
+    createPriceOverrideForm.billingServiceCatalogItemId.trim()
+    || createPriceOverrideForm.serviceCode.trim()
+    || createPriceOverrideForm.serviceName.trim()
+    || createPriceOverrideForm.serviceType.trim()
+    || createPriceOverrideForm.department.trim()
+    || createPriceOverrideForm.pricingStrategy !== 'fixed_price'
+    || createPriceOverrideForm.overrideValue.trim()
+    || createPriceOverrideForm.effectiveFrom.trim()
+    || createPriceOverrideForm.effectiveTo.trim()
+    || createPriceOverrideForm.overrideNotes.trim()
+));
+
+const hasPendingCreateRuleWorkflow = computed(() => Boolean(
+    createRuleForm.billingServiceCatalogItemId.trim()
+    || createRuleForm.ruleCode.trim()
+    || createRuleForm.ruleName.trim()
+    || createRuleForm.serviceCode.trim()
+    || createRuleForm.serviceType.trim()
+    || createRuleForm.department.trim()
+    || createRuleForm.diagnosisCode.trim()
+    || createRuleForm.priority.trim()
+    || createRuleForm.minPatientAgeYears.trim()
+    || createRuleForm.maxPatientAgeYears.trim()
+    || createRuleForm.gender !== 'any'
+    || createRuleForm.amountThreshold.trim()
+    || createRuleForm.quantityLimit.trim()
+    || createRuleForm.coverageDecision !== 'covered_with_rule'
+    || createRuleForm.coveragePercentOverride.trim()
+    || createRuleForm.copayType !== 'none'
+    || createRuleForm.copayValue.trim()
+    || createRuleForm.benefitLimitAmount.trim()
+    || createRuleForm.effectiveFrom.trim()
+    || createRuleForm.effectiveTo.trim()
+    || createRuleForm.requiresAuthorization !== 'true'
+    || createRuleForm.autoApprove !== 'false'
+    || createRuleForm.authorizationValidityDays.trim()
+    || createRuleForm.ruleNotes.trim()
+));
+
+const hasPendingEditContractWorkflow = computed(() => {
+    const target = editContractTarget.value;
+    if (!editContractOpen.value || !target) return false;
+
+    return (
+        editContractForm.contractCode.trim() !== String(target.contractCode ?? '').trim()
+        || editContractForm.contractName.trim() !== String(target.contractName ?? '').trim()
+        || editContractForm.payerType !== (target.payerType || 'insurance')
+        || editContractForm.payerName.trim() !== String(target.payerName ?? '').trim()
+        || editContractForm.currencyCode.trim().toUpperCase() !== String(target.currencyCode || defaultCurrencyCode.value).trim().toUpperCase()
+        || editContractForm.requiresPreAuthorization !== (target.requiresPreAuthorization === false ? 'false' : 'true')
+    );
+});
+
+const hasPendingContractStatusWorkflow = computed(() => (
+    contractStatusOpen.value
+    && contractStatusTarget.value !== 'active'
+    && contractStatusReason.value.trim() !== String(contractStatusItem.value?.statusReason ?? '').trim()
+));
+
+const hasPendingEditPriceOverrideWorkflow = computed(() => {
+    const target = editPriceOverrideTarget.value;
+    if (!editPriceOverrideOpen.value || !target) return false;
+
+    return (
+        editPriceOverrideForm.billingServiceCatalogItemId.trim() !== String(target.billingServiceCatalogItemId ?? '').trim()
+        || editPriceOverrideForm.serviceCode.trim().toUpperCase() !== String(target.serviceCode ?? '').trim().toUpperCase()
+        || editPriceOverrideForm.serviceName.trim() !== String(target.serviceName ?? '').trim()
+        || editPriceOverrideForm.serviceType.trim() !== String(target.serviceType ?? '').trim()
+        || editPriceOverrideForm.department.trim() !== String(target.department ?? '').trim()
+        || editPriceOverrideForm.pricingStrategy !== (target.pricingStrategy || 'fixed_price')
+        || editPriceOverrideForm.overrideValue.trim() !== String(target.overrideValue ?? '').trim()
+        || editPriceOverrideForm.effectiveFrom.trim() !== String(target.effectiveFrom ?? '').trim()
+        || editPriceOverrideForm.effectiveTo.trim() !== String(target.effectiveTo ?? '').trim()
+        || editPriceOverrideForm.overrideNotes.trim() !== String(target.overrideNotes ?? '').trim()
+    );
+});
+
+const hasPendingPriceOverrideStatusWorkflow = computed(() => (
+    priceOverrideStatusOpen.value
+    && priceOverrideStatusTarget.value !== 'active'
+    && priceOverrideStatusReason.value.trim() !== String(priceOverrideStatusItem.value?.statusReason ?? '').trim()
+));
+
+const hasPendingEditRuleWorkflow = computed(() => {
+    const target = editRuleTarget.value;
+    if (!editRuleOpen.value || !target) return false;
+
+    return (
+        editRuleForm.billingServiceCatalogItemId.trim() !== String(target.billingServiceCatalogItemId ?? '').trim()
+        || editRuleForm.ruleCode.trim() !== String(target.ruleCode ?? '').trim()
+        || editRuleForm.ruleName.trim() !== String(target.ruleName ?? '').trim()
+        || editRuleForm.serviceCode.trim().toUpperCase() !== String(target.serviceCode ?? '').trim().toUpperCase()
+        || editRuleForm.serviceType.trim() !== String(target.serviceType ?? '').trim()
+        || editRuleForm.department.trim() !== String(target.department ?? '').trim()
+        || editRuleForm.diagnosisCode.trim() !== String(target.diagnosisCode ?? '').trim()
+        || editRuleForm.priority.trim() !== String(target.priority ?? '').trim()
+        || editRuleForm.minPatientAgeYears.trim() !== (target.minPatientAgeYears === null || target.minPatientAgeYears === undefined ? '' : String(target.minPatientAgeYears))
+        || editRuleForm.maxPatientAgeYears.trim() !== (target.maxPatientAgeYears === null || target.maxPatientAgeYears === undefined ? '' : String(target.maxPatientAgeYears))
+        || editRuleForm.gender !== (target.gender || 'any')
+        || editRuleForm.amountThreshold.trim() !== String(target.amountThreshold ?? '').trim()
+        || editRuleForm.quantityLimit.trim() !== (target.quantityLimit === null || target.quantityLimit === undefined ? '' : String(target.quantityLimit))
+        || editRuleForm.coverageDecision !== (target.coverageDecision || 'covered_with_rule')
+        || editRuleForm.coveragePercentOverride.trim() !== (target.coveragePercentOverride === null || target.coveragePercentOverride === undefined ? '' : String(target.coveragePercentOverride))
+        || editRuleForm.copayType !== (target.copayType || 'none')
+        || editRuleForm.copayValue.trim() !== (target.copayValue === null || target.copayValue === undefined ? '' : String(target.copayValue))
+        || editRuleForm.benefitLimitAmount.trim() !== (target.benefitLimitAmount === null || target.benefitLimitAmount === undefined ? '' : String(target.benefitLimitAmount))
+        || editRuleForm.effectiveFrom.trim() !== String(target.effectiveFrom ?? '').trim()
+        || editRuleForm.effectiveTo.trim() !== String(target.effectiveTo ?? '').trim()
+        || editRuleForm.requiresAuthorization !== (target.requiresAuthorization === false ? 'false' : 'true')
+        || editRuleForm.autoApprove !== (target.autoApprove === true ? 'true' : 'false')
+        || editRuleForm.authorizationValidityDays.trim() !== (target.authorizationValidityDays === null || target.authorizationValidityDays === undefined ? '' : String(target.authorizationValidityDays))
+        || editRuleForm.ruleNotes.trim() !== String(target.ruleNotes ?? '').trim()
+    );
+});
+
+const hasPendingRuleStatusWorkflow = computed(() => (
+    ruleStatusOpen.value
+    && ruleStatusTarget.value !== 'active'
+    && ruleStatusReason.value.trim() !== String(ruleStatusItem.value?.statusReason ?? '').trim()
+));
+
+const hasPendingPayerContractWorkflow = computed(() => (
+    (contractWorkspaceMode.value === 'create' && hasPendingCreateContractWorkflow.value)
+    || hasPendingCreatePriceOverrideWorkflow.value
+    || hasPendingCreateRuleWorkflow.value
+    || hasPendingEditContractWorkflow.value
+    || hasPendingContractStatusWorkflow.value
+    || hasPendingEditPriceOverrideWorkflow.value
+    || hasPendingPriceOverrideStatusWorkflow.value
+    || hasPendingEditRuleWorkflow.value
+    || hasPendingRuleStatusWorkflow.value
+));
+
+const {
+    confirmOpen: leaveConfirmOpen,
+    confirmLeave: confirmPendingPayerContractWorkflowLeave,
+    cancelLeave: cancelPendingPayerContractWorkflowLeave,
+} = usePendingWorkflowLeaveGuard({
+    shouldBlock: hasPendingPayerContractWorkflow,
+    isSubmitting: isSubmittingWorkflow,
+    blockBrowserUnload: false,
+});
+
 const scopeWarning = computed(() => {
     if (loading.value) return null;
     if (!multiTenantIsolationEnabled.value) return null;
@@ -936,30 +1119,24 @@ const scopeWarning = computed(() => {
     return null;
 });
 
-function csrfToken(): string | null {
-    return document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? null;
-}
-
-async function apiRequest<T>(method: 'GET' | 'POST' | 'PATCH', path: string, options?: { query?: Record<string, string | number | null>; body?: Record<string, unknown> }): Promise<T> {
-    const url = new URL(`/api/v1${path}`, window.location.origin);
-    Object.entries(options?.query ?? {}).forEach(([key, value]) => {
-        if (value === null || value === '') return;
-        url.searchParams.set(key, String(value));
+async function apiRequest<T>(
+    method: 'GET' | 'POST' | 'PATCH',
+    path: string,
+    options?: {
+        query?: Record<string, string | number | null>;
+        body?: Record<string, unknown>;
+        entitlementContext?: string;
+        idempotencyKey?: string | null;
+        requestId?: string | null;
+    },
+): Promise<T> {
+    return apiRequestJson<T>(method, path, {
+        query: options?.query,
+        body: options?.body,
+        entitlementContext: options?.entitlementContext,
+        idempotencyKey: options?.idempotencyKey,
+        requestId: options?.requestId,
     });
-
-    const headers: Record<string, string> = { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
-    let body: string | undefined;
-    if (method !== 'GET') {
-        headers['Content-Type'] = 'application/json';
-        const token = csrfToken();
-        if (token) headers['X-CSRF-TOKEN'] = token;
-        body = JSON.stringify(options?.body ?? {});
-    }
-
-    const response = await fetch(url.toString(), { method, credentials: 'same-origin', headers, body });
-    const payload = (await response.json().catch(() => ({}))) as ApiError;
-    if (!response.ok) throw new Error(payload.message ?? `${response.status} ${response.statusText}`);
-    return payload as T;
 }
 
 function boolLabel(value: boolean | null): string {
@@ -1619,12 +1796,66 @@ function resetCreateContractForm() {
     });
 }
 
-function openContractListWorkspace(): void {
-    contractWorkspaceMode.value = 'list';
+function rotateCreateContractRequestKey(): void {
+    createContractRequestKey.value = generateRequestKey('billing-payer-contract-create');
 }
 
-function openContractCreateWorkspace(): void {
-    contractWorkspaceMode.value = 'create';
+function rotateEditContractRequestKey(): void {
+    editContractRequestKey.value = generateRequestKey('billing-payer-contract-edit');
+}
+
+function rotateContractStatusRequestKey(): void {
+    contractStatusRequestKey.value = generateRequestKey('billing-payer-contract-status');
+}
+
+function rotateCreatePriceOverrideRequestKey(): void {
+    createPriceOverrideRequestKey.value = generateRequestKey('billing-payer-contract-price-override-create');
+}
+
+function rotateEditPriceOverrideRequestKey(): void {
+    editPriceOverrideRequestKey.value = generateRequestKey('billing-payer-contract-price-override-edit');
+}
+
+function rotatePriceOverrideStatusRequestKey(): void {
+    priceOverrideStatusRequestKey.value = generateRequestKey('billing-payer-contract-price-override-status');
+}
+
+function rotateCreateRuleRequestKey(): void {
+    createRuleRequestKey.value = generateRequestKey('billing-payer-contract-rule-create');
+}
+
+function rotateEditRuleRequestKey(): void {
+    editRuleRequestKey.value = generateRequestKey('billing-payer-contract-rule-edit');
+}
+
+function rotateRuleStatusRequestKey(): void {
+    ruleStatusRequestKey.value = generateRequestKey('billing-payer-contract-rule-status');
+}
+
+function closeContractCreateWorkspace(): void {
+    contractWorkspaceMode.value = 'list';
+    resetCreateContractForm();
+    rotateCreateContractRequestKey();
+}
+
+function requestContractWorkspaceModeChange(mode: 'list' | 'create'): void {
+    if (mode === 'create') {
+        if (contractWorkspaceMode.value !== 'create') {
+            resetCreateContractForm();
+            rotateCreateContractRequestKey();
+        }
+        contractWorkspaceMode.value = 'create';
+        return;
+    }
+
+    if (createLoading.value) return;
+
+    if (contractWorkspaceMode.value === 'create' && hasPendingCreateContractWorkflow.value) {
+        createContractDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    closeContractCreateWorkspace();
 }
 
 function resetCreateRuleForm() {
@@ -1654,6 +1885,7 @@ function resetCreateRuleForm() {
         authorizationValidityDays: '',
         ruleNotes: '',
     });
+    rotateCreateRuleRequestKey();
 }
 
 function resetCreatePriceOverrideForm() {
@@ -1669,6 +1901,180 @@ function resetCreatePriceOverrideForm() {
         effectiveTo: '',
         overrideNotes: '',
     });
+    rotateCreatePriceOverrideRequestKey();
+}
+
+function closeEditContractDialog(): void {
+    editContractOpen.value = false;
+    editContractTarget.value = null;
+    rotateEditContractRequestKey();
+}
+
+function requestEditContractOpenChange(open: boolean): void {
+    if (open) {
+        editContractOpen.value = true;
+        return;
+    }
+
+    if (editContractLoading.value) return;
+
+    if (hasPendingEditContractWorkflow.value) {
+        editContractDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    closeEditContractDialog();
+}
+
+function closeContractStatusDialog(): void {
+    contractStatusOpen.value = false;
+    contractStatusItem.value = null;
+    contractStatusReason.value = '';
+    contractStatusError.value = null;
+    rotateContractStatusRequestKey();
+}
+
+function requestContractStatusOpenChange(open: boolean): void {
+    if (open) {
+        contractStatusOpen.value = true;
+        return;
+    }
+
+    if (contractStatusLoading.value) return;
+
+    if (hasPendingContractStatusWorkflow.value) {
+        contractStatusDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    closeContractStatusDialog();
+}
+
+function closeEditPriceOverrideDialog(): void {
+    editPriceOverrideOpen.value = false;
+    editPriceOverrideTarget.value = null;
+    rotateEditPriceOverrideRequestKey();
+}
+
+function requestEditPriceOverrideOpenChange(open: boolean): void {
+    if (open) {
+        editPriceOverrideOpen.value = true;
+        return;
+    }
+
+    if (editPriceOverrideLoading.value) return;
+
+    if (hasPendingEditPriceOverrideWorkflow.value) {
+        editPriceOverrideDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    closeEditPriceOverrideDialog();
+}
+
+function closePriceOverrideStatusDialog(): void {
+    priceOverrideStatusOpen.value = false;
+    priceOverrideStatusItem.value = null;
+    priceOverrideStatusReason.value = '';
+    priceOverrideStatusError.value = null;
+    rotatePriceOverrideStatusRequestKey();
+}
+
+function requestPriceOverrideStatusOpenChange(open: boolean): void {
+    if (open) {
+        priceOverrideStatusOpen.value = true;
+        return;
+    }
+
+    if (priceOverrideStatusLoading.value) return;
+
+    if (hasPendingPriceOverrideStatusWorkflow.value) {
+        priceOverrideStatusDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    closePriceOverrideStatusDialog();
+}
+
+function closeEditRuleDialog(): void {
+    editRuleOpen.value = false;
+    editRuleTarget.value = null;
+    rotateEditRuleRequestKey();
+}
+
+function requestEditRuleOpenChange(open: boolean): void {
+    if (open) {
+        editRuleOpen.value = true;
+        return;
+    }
+
+    if (editRuleLoading.value) return;
+
+    if (hasPendingEditRuleWorkflow.value) {
+        editRuleDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    closeEditRuleDialog();
+}
+
+function closeRuleStatusDialog(): void {
+    ruleStatusOpen.value = false;
+    ruleStatusItem.value = null;
+    ruleStatusReason.value = '';
+    ruleStatusError.value = null;
+    rotateRuleStatusRequestKey();
+}
+
+function requestRuleStatusOpenChange(open: boolean): void {
+    if (open) {
+        ruleStatusOpen.value = true;
+        return;
+    }
+
+    if (ruleStatusLoading.value) return;
+
+    if (hasPendingRuleStatusWorkflow.value) {
+        ruleStatusDiscardConfirmOpen.value = true;
+        return;
+    }
+
+    closeRuleStatusDialog();
+}
+
+function confirmContractCreateDiscard(): void {
+    createContractDiscardConfirmOpen.value = false;
+    closeContractCreateWorkspace();
+}
+
+function confirmEditContractDiscard(): void {
+    editContractDiscardConfirmOpen.value = false;
+    closeEditContractDialog();
+}
+
+function confirmContractStatusDiscard(): void {
+    contractStatusDiscardConfirmOpen.value = false;
+    closeContractStatusDialog();
+}
+
+function confirmEditPriceOverrideDiscard(): void {
+    editPriceOverrideDiscardConfirmOpen.value = false;
+    closeEditPriceOverrideDialog();
+}
+
+function confirmPriceOverrideStatusDiscard(): void {
+    priceOverrideStatusDiscardConfirmOpen.value = false;
+    closePriceOverrideStatusDialog();
+}
+
+function confirmEditRuleDiscard(): void {
+    editRuleDiscardConfirmOpen.value = false;
+    closeEditRuleDialog();
+}
+
+function confirmRuleStatusDiscard(): void {
+    ruleStatusDiscardConfirmOpen.value = false;
+    closeRuleStatusDialog();
 }
 
 function openContractEdit(item: Contract) {
@@ -1681,6 +2087,7 @@ function openContractEdit(item: Contract) {
         currencyCode: item.currencyCode || defaultCurrencyCode.value,
         requiresPreAuthorization: item.requiresPreAuthorization === false ? 'false' : 'true',
     });
+    rotateEditContractRequestKey();
     editContractOpen.value = true;
 }
 
@@ -1689,6 +2096,7 @@ function openContractStatusDialog(item: Contract, target: 'active' | 'inactive' 
     contractStatusTarget.value = target;
     contractStatusReason.value = target === 'active' ? '' : item.statusReason ?? '';
     contractStatusError.value = null;
+    rotateContractStatusRequestKey();
     contractStatusOpen.value = true;
 }
 
@@ -1721,6 +2129,7 @@ function openRuleEdit(item: Rule) {
         ruleNotes: item.ruleNotes || '',
     });
     syncRuleFormWithCatalog(editRuleForm);
+    rotateEditRuleRequestKey();
     editRuleOpen.value = true;
 }
 
@@ -1739,6 +2148,7 @@ function openPriceOverrideEdit(item: PriceOverride) {
         overrideNotes: item.overrideNotes || '',
     });
     syncPriceOverrideFormWithCatalog(editPriceOverrideForm);
+    rotateEditPriceOverrideRequestKey();
     editPriceOverrideOpen.value = true;
 }
 
@@ -1747,6 +2157,7 @@ function openRuleStatusDialog(item: Rule, target: 'active' | 'inactive' | 'retir
     ruleStatusTarget.value = target;
     ruleStatusReason.value = target === 'active' ? '' : item.statusReason ?? '';
     ruleStatusError.value = null;
+    rotateRuleStatusRequestKey();
     ruleStatusOpen.value = true;
 }
 
@@ -1755,6 +2166,7 @@ function openPriceOverrideStatusDialog(item: PriceOverride, target: 'active' | '
     priceOverrideStatusTarget.value = target;
     priceOverrideStatusReason.value = target === 'active' ? '' : item.statusReason ?? '';
     priceOverrideStatusError.value = null;
+    rotatePriceOverrideStatusRequestKey();
     priceOverrideStatusOpen.value = true;
 }
 
@@ -1829,6 +2241,7 @@ async function createContract() {
 
     createLoading.value = true;
     try {
+        const requestKey = createContractRequestKey.value;
         const response = await apiRequest<ItemResponse<Contract>>('POST', '/billing-payer-contracts', {
             body: {
                 contractCode,
@@ -1838,10 +2251,12 @@ async function createContract() {
                 currencyCode,
                 requiresPreAuthorization: createForm.requiresPreAuthorization === 'true',
             },
+            entitlementContext: 'Payer contract create',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
         notifySuccess(`Created ${contractLabel(response.data)}.`);
-        resetCreateContractForm();
-        contractWorkspaceMode.value = 'list';
+        closeContractCreateWorkspace();
         filters.page = 1;
         await refreshPage();
     } catch (error) {
@@ -1866,6 +2281,7 @@ async function saveContractEdit() {
 
     editContractLoading.value = true;
     try {
+        const requestKey = editContractRequestKey.value;
         const response = await apiRequest<ItemResponse<Contract>>('PATCH', `/billing-payer-contracts/${id}`, {
             body: {
                 contractCode,
@@ -1875,10 +2291,13 @@ async function saveContractEdit() {
                 currencyCode,
                 requiresPreAuthorization: editContractForm.requiresPreAuthorization === 'true',
             },
+            entitlementContext: 'Payer contract edit',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
         if (selectedContract.value?.id === id) selectedContract.value = response.data;
         notifySuccess('Contract updated.');
-        editContractOpen.value = false;
+        closeEditContractDialog();
         await refreshPage();
     } catch (error) {
         notifyError(messageFromUnknown(error, 'Unable to update payer contract.'));
@@ -1900,9 +2319,15 @@ async function saveContractStatus() {
     contractStatusLoading.value = true;
     contractStatusError.value = null;
     try {
-        await apiRequest<ItemResponse<Contract>>('PATCH', `/billing-payer-contracts/${id}/status`, { body: { status: contractStatusTarget.value, reason: contractStatusTarget.value === 'active' ? null : reason } });
+        const requestKey = contractStatusRequestKey.value;
+        await apiRequest<ItemResponse<Contract>>('PATCH', `/billing-payer-contracts/${id}/status`, {
+            body: { status: contractStatusTarget.value, reason: contractStatusTarget.value === 'active' ? null : reason },
+            entitlementContext: 'Payer contract status update',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
+        });
         notifySuccess('Contract status updated.');
-        contractStatusOpen.value = false;
+        closeContractStatusDialog();
         await refreshPage();
     } catch (error) {
         contractStatusError.value = messageFromUnknown(error, 'Unable to update contract status.');
@@ -2081,6 +2506,7 @@ async function createPriceOverride() {
 
     createPriceOverrideLoading.value = true;
     try {
+        const requestKey = createPriceOverrideRequestKey.value;
         const response = await apiRequest<ItemResponse<PriceOverride>>('POST', `/billing-payer-contracts/${contractId}/price-overrides`, {
             body: {
                 billingServiceCatalogItemId: nullableTrimmedValue(createPriceOverrideForm.billingServiceCatalogItemId),
@@ -2094,6 +2520,9 @@ async function createPriceOverride() {
                 effectiveTo: nullableTrimmedValue(createPriceOverrideForm.effectiveTo),
                 overrideNotes: nullableTrimmedValue(createPriceOverrideForm.overrideNotes),
             },
+            entitlementContext: 'Payer contract negotiated price create',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
         notifySuccess(`Created negotiated price for ${response.data.serviceCode || serviceCode}.`);
         resetCreatePriceOverrideForm();
@@ -2119,6 +2548,7 @@ async function createRule() {
 
     createRuleLoading.value = true;
     try {
+        const requestKey = createRuleRequestKey.value;
         const response = await apiRequest<ItemResponse<Rule>>('POST', `/billing-payer-contracts/${contractId}/authorization-rules`, {
             body: {
                 billingServiceCatalogItemId: nullableTrimmedValue(createRuleForm.billingServiceCatalogItemId),
@@ -2147,6 +2577,9 @@ async function createRule() {
                 ruleNotes: nullableTrimmedValue(createRuleForm.ruleNotes),
                 ruleExpression: buildRuleExpression(createRuleForm),
             },
+            entitlementContext: 'Payer contract policy create',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
         notifySuccess(`Created ${ruleLabel(response.data)}.`);
         resetCreateRuleForm();
@@ -2173,6 +2606,7 @@ async function savePriceOverrideEdit() {
 
     editPriceOverrideLoading.value = true;
     try {
+        const requestKey = editPriceOverrideRequestKey.value;
         await apiRequest<ItemResponse<PriceOverride>>('PATCH', `/billing-payer-contracts/${contractId}/price-overrides/${overrideId}`, {
             body: {
                 billingServiceCatalogItemId: nullableTrimmedValue(editPriceOverrideForm.billingServiceCatalogItemId),
@@ -2186,9 +2620,12 @@ async function savePriceOverrideEdit() {
                 effectiveTo: nullableTrimmedValue(editPriceOverrideForm.effectiveTo),
                 overrideNotes: nullableTrimmedValue(editPriceOverrideForm.overrideNotes),
             },
+            entitlementContext: 'Payer contract negotiated price edit',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
         notifySuccess('Negotiated price updated.');
-        editPriceOverrideOpen.value = false;
+        closeEditPriceOverrideDialog();
         await loadPriceOverrides();
     } catch (error) {
         notifyError(messageFromUnknown(error, 'Unable to update contract price override.'));
@@ -2211,6 +2648,7 @@ async function saveRuleEdit() {
 
     editRuleLoading.value = true;
     try {
+        const requestKey = editRuleRequestKey.value;
         await apiRequest<ItemResponse<Rule>>('PATCH', `/billing-payer-contracts/${contractId}/authorization-rules/${ruleId}`, {
             body: {
                 billingServiceCatalogItemId: nullableTrimmedValue(editRuleForm.billingServiceCatalogItemId),
@@ -2239,9 +2677,12 @@ async function saveRuleEdit() {
                 ruleNotes: editRuleForm.ruleNotes.trim() || null,
                 ruleExpression: buildRuleExpression(editRuleForm),
             },
+            entitlementContext: 'Payer contract policy edit',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
         notifySuccess('Contract policy updated.');
-        editRuleOpen.value = false;
+        closeEditRuleDialog();
         await Promise.all([loadRules(), loadPolicySummary()]);
     } catch (error) {
         notifyError(messageFromUnknown(error, 'Unable to update contract policy.'));
@@ -2264,11 +2705,15 @@ async function saveRuleStatus() {
     ruleStatusLoading.value = true;
     ruleStatusError.value = null;
     try {
+        const requestKey = ruleStatusRequestKey.value;
         await apiRequest<ItemResponse<Rule>>('PATCH', `/billing-payer-contracts/${contractId}/authorization-rules/${ruleId}/status`, {
             body: { status: ruleStatusTarget.value, reason: ruleStatusTarget.value === 'active' ? null : reason },
+            entitlementContext: 'Payer contract policy status update',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
         notifySuccess('Policy status updated.');
-        ruleStatusOpen.value = false;
+        closeRuleStatusDialog();
         await Promise.all([loadRules(), loadPolicySummary()]);
     } catch (error) {
         ruleStatusError.value = messageFromUnknown(error, 'Unable to update contract policy status.');
@@ -2292,11 +2737,15 @@ async function savePriceOverrideStatus() {
     priceOverrideStatusLoading.value = true;
     priceOverrideStatusError.value = null;
     try {
+        const requestKey = priceOverrideStatusRequestKey.value;
         await apiRequest<ItemResponse<PriceOverride>>('PATCH', `/billing-payer-contracts/${contractId}/price-overrides/${overrideId}/status`, {
             body: { status: priceOverrideStatusTarget.value, reason: priceOverrideStatusTarget.value === 'active' ? null : reason },
+            entitlementContext: 'Payer contract negotiated price status update',
+            idempotencyKey: requestKey,
+            requestId: requestKey,
         });
         notifySuccess('Negotiated price status updated.');
-        priceOverrideStatusOpen.value = false;
+        closePriceOverrideStatusDialog();
         await loadPriceOverrides();
     } catch (error) {
         priceOverrideStatusError.value = messageFromUnknown(error, 'Unable to update negotiated price status.');
@@ -2442,10 +2891,10 @@ onMounted(refreshPage);
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <div class="flex items-center gap-1 rounded-lg border bg-muted/10 p-1">
-                        <Button size="sm" class="h-8 px-3" :variant="contractWorkspaceMode === 'list' ? 'default' : 'ghost'" @click="openContractListWorkspace">
+                        <Button size="sm" class="h-8 px-3" :variant="contractWorkspaceMode === 'list' ? 'default' : 'ghost'" @click="requestContractWorkspaceModeChange('list')">
                             Contract List
                         </Button>
-                        <Button v-if="canManage" size="sm" class="h-8 px-3" :variant="contractWorkspaceMode === 'create' ? 'default' : 'ghost'" @click="openContractCreateWorkspace">
+                        <Button v-if="canManage" size="sm" class="h-8 px-3" :variant="contractWorkspaceMode === 'create' ? 'default' : 'ghost'" @click="requestContractWorkspaceModeChange('create')">
                             Add Contract
                         </Button>
                     </div>
@@ -2537,7 +2986,7 @@ onMounted(refreshPage);
                                 </div>
                                 <Button variant="outline" size="sm" class="h-9 gap-1.5" @click="searchContracts"><AppIcon name="search" class="size-3.5" />{{ listLoading ? 'Searching...' : 'Search' }}</Button>
                                 <Button v-if="contractActiveFilterChips.length > 0" variant="ghost" size="sm" class="h-9 gap-1.5" @click="resetContracts">Clear</Button>
-                                <Button v-if="canManage" size="sm" class="h-9 gap-1.5" @click="openContractCreateWorkspace"><AppIcon name="plus" class="size-3.5" />Add Contract</Button>
+                                <Button v-if="canManage" size="sm" class="h-9 gap-1.5" @click="requestContractWorkspaceModeChange('create')"><AppIcon name="plus" class="size-3.5" />Add Contract</Button>
                             </div>
                         </div>
                         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-muted/10 px-3 py-2.5 text-sm">
@@ -2658,7 +3107,7 @@ onMounted(refreshPage);
                         <div class="flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
                             <p class="text-xs text-muted-foreground">Use consistent contract codes so pricing, claims, and billing can reference the same payer record.</p>
                             <div class="flex items-center gap-2">
-                                <Button variant="outline" @click="openContractListWorkspace">Back to list</Button>
+                                <Button variant="outline" @click="requestContractWorkspaceModeChange('list')">Back to list</Button>
                                 <Button :disabled="createLoading" class="gap-1.5" @click="createContract"><AppIcon name="plus" class="size-3.5" />{{ createLoading ? 'Creating...' : 'Save contract' }}</Button>
                             </div>
                         </div>
@@ -3221,7 +3670,7 @@ onMounted(refreshPage);
                 </CardContent>
             </Card>
 
-            <Dialog :open="editContractOpen" @update:open="(open) => (editContractOpen = open)">
+            <Dialog :open="editContractOpen" @update:open="requestEditContractOpenChange">
                 <DialogContent size="xl">
                     <DialogHeader><DialogTitle>Edit Payer Contract</DialogTitle><DialogDescription>Update payer contract details and terms.</DialogDescription></DialogHeader>
                     <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -3242,19 +3691,19 @@ onMounted(refreshPage);
                             </Select>
                         </FormFieldShell>
                     </div>
-                    <DialogFooter class="gap-2"><Button variant="outline" :disabled="editContractLoading" @click="editContractOpen = false">Cancel</Button><Button class="gap-1.5" :disabled="editContractLoading" @click="saveContractEdit"><AppIcon name="save" class="size-3.5" />{{ editContractLoading ? 'Saving...' : 'Save Changes' }}</Button></DialogFooter>
+                    <DialogFooter class="gap-2"><Button variant="outline" :disabled="editContractLoading" @click="requestEditContractOpenChange(false)">Cancel</Button><Button class="gap-1.5" :disabled="editContractLoading" @click="saveContractEdit"><AppIcon name="save" class="size-3.5" />{{ editContractLoading ? 'Saving...' : 'Save Changes' }}</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            <Dialog :open="contractStatusOpen" @update:open="(open) => (contractStatusOpen = open)">
+            <Dialog :open="contractStatusOpen" @update:open="requestContractStatusOpenChange">
                 <DialogContent variant="action" size="lg">
                     <DialogHeader><DialogTitle>{{ contractStatusTarget === 'active' ? 'Activate Contract' : contractStatusTarget === 'retired' ? 'Retire Contract' : 'Deactivate Contract' }}</DialogTitle><DialogDescription>{{ contractStatusTarget === 'active' ? 'Confirm contract activation.' : 'Reason is required for this status transition.' }}</DialogDescription></DialogHeader>
                     <div class="space-y-3"><Alert v-if="contractStatusError" variant="destructive"><AlertTitle>Status update failed</AlertTitle><AlertDescription>{{ contractStatusError }}</AlertDescription></Alert><FormFieldShell v-if="contractStatusTarget !== 'active'" input-id="contract-status-reason" label="Reason"><Textarea id="contract-status-reason" v-model="contractStatusReason" class="min-h-20" placeholder="Required reason" /></FormFieldShell></div>
-                    <DialogFooter class="gap-2"><Button variant="outline" :disabled="contractStatusLoading" @click="contractStatusOpen = false">Cancel</Button><Button :disabled="contractStatusLoading" @click="saveContractStatus">{{ contractStatusLoading ? 'Saving...' : 'Confirm' }}</Button></DialogFooter>
+                    <DialogFooter class="gap-2"><Button variant="outline" :disabled="contractStatusLoading" @click="requestContractStatusOpenChange(false)">Cancel</Button><Button :disabled="contractStatusLoading" @click="saveContractStatus">{{ contractStatusLoading ? 'Saving...' : 'Confirm' }}</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            <Dialog :open="editPriceOverrideOpen" @update:open="(open) => (editPriceOverrideOpen = open)">
+            <Dialog :open="editPriceOverrideOpen" @update:open="requestEditPriceOverrideOpenChange">
                 <DialogContent size="xl">
                     <DialogHeader><DialogTitle>Edit Negotiated Price</DialogTitle><DialogDescription>Update the insurer-specific price override for this contract.</DialogDescription></DialogHeader>
                     <Alert v-if="serviceCatalogLookupError" variant="destructive">
@@ -3309,19 +3758,19 @@ onMounted(refreshPage);
                             <Textarea id="edit-price-override-notes" v-model="editPriceOverrideForm.overrideNotes" class="min-h-20" />
                         </FormFieldShell>
                     </div>
-                    <DialogFooter class="gap-2"><Button variant="outline" :disabled="editPriceOverrideLoading" @click="editPriceOverrideOpen = false">Cancel</Button><Button class="gap-1.5" :disabled="editPriceOverrideLoading" @click="savePriceOverrideEdit"><AppIcon name="save" class="size-3.5" />{{ editPriceOverrideLoading ? 'Saving...' : 'Save Changes' }}</Button></DialogFooter>
+                    <DialogFooter class="gap-2"><Button variant="outline" :disabled="editPriceOverrideLoading" @click="requestEditPriceOverrideOpenChange(false)">Cancel</Button><Button class="gap-1.5" :disabled="editPriceOverrideLoading" @click="savePriceOverrideEdit"><AppIcon name="save" class="size-3.5" />{{ editPriceOverrideLoading ? 'Saving...' : 'Save Changes' }}</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            <Dialog :open="priceOverrideStatusOpen" @update:open="(open) => (priceOverrideStatusOpen = open)">
+            <Dialog :open="priceOverrideStatusOpen" @update:open="requestPriceOverrideStatusOpenChange">
                 <DialogContent variant="action" size="lg">
                     <DialogHeader><DialogTitle>{{ priceOverrideStatusTarget === 'active' ? 'Activate Negotiated Price' : priceOverrideStatusTarget === 'retired' ? 'Retire Negotiated Price' : 'Deactivate Negotiated Price' }}</DialogTitle><DialogDescription>{{ priceOverrideStatusTarget === 'active' ? 'Confirm negotiated price activation.' : 'Reason is required for this status transition.' }}</DialogDescription></DialogHeader>
                     <div class="space-y-3"><Alert v-if="priceOverrideStatusError" variant="destructive"><AlertTitle>Status update failed</AlertTitle><AlertDescription>{{ priceOverrideStatusError }}</AlertDescription></Alert><FormFieldShell v-if="priceOverrideStatusTarget !== 'active'" input-id="price-override-status-reason" label="Reason"><Textarea id="price-override-status-reason" v-model="priceOverrideStatusReason" class="min-h-20" placeholder="Required reason" /></FormFieldShell></div>
-                    <DialogFooter class="gap-2"><Button variant="outline" :disabled="priceOverrideStatusLoading" @click="priceOverrideStatusOpen = false">Cancel</Button><Button :disabled="priceOverrideStatusLoading" @click="savePriceOverrideStatus">{{ priceOverrideStatusLoading ? 'Saving...' : 'Confirm' }}</Button></DialogFooter>
+                    <DialogFooter class="gap-2"><Button variant="outline" :disabled="priceOverrideStatusLoading" @click="requestPriceOverrideStatusOpenChange(false)">Cancel</Button><Button :disabled="priceOverrideStatusLoading" @click="savePriceOverrideStatus">{{ priceOverrideStatusLoading ? 'Saving...' : 'Confirm' }}</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
 
-                <Dialog :open="editRuleOpen" @update:open="(open) => (editRuleOpen = open)">
+                <Dialog :open="editRuleOpen" @update:open="requestEditRuleOpenChange">
                 <DialogContent size="xl">
                     <DialogHeader><DialogTitle>Edit Coverage Policy</DialogTitle><DialogDescription>Update policy criteria, benefit posture, and claim-routing behavior.</DialogDescription></DialogHeader>
                     <Alert v-if="serviceCatalogLookupError" variant="destructive"><AlertTitle>Service Prices lookup issue</AlertTitle><AlertDescription>{{ serviceCatalogLookupError }}</AlertDescription></Alert>
@@ -3470,17 +3919,97 @@ onMounted(refreshPage);
                             <Textarea id="edit-rule-notes" v-model="editRuleForm.ruleNotes" class="min-h-20" />
                         </FormFieldShell>
                     </div>
-                    <DialogFooter class="gap-2"><Button variant="outline" :disabled="editRuleLoading" @click="editRuleOpen = false">Cancel</Button><Button class="gap-1.5" :disabled="editRuleLoading" @click="saveRuleEdit"><AppIcon name="save" class="size-3.5" />{{ editRuleLoading ? 'Saving...' : 'Save Policy' }}</Button></DialogFooter>
+                    <DialogFooter class="gap-2"><Button variant="outline" :disabled="editRuleLoading" @click="requestEditRuleOpenChange(false)">Cancel</Button><Button class="gap-1.5" :disabled="editRuleLoading" @click="saveRuleEdit"><AppIcon name="save" class="size-3.5" />{{ editRuleLoading ? 'Saving...' : 'Save Policy' }}</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            <Dialog :open="ruleStatusOpen" @update:open="(open) => (ruleStatusOpen = open)">
+            <Dialog :open="ruleStatusOpen" @update:open="requestRuleStatusOpenChange">
                 <DialogContent variant="action" size="lg">
                     <DialogHeader><DialogTitle>{{ ruleStatusTarget === 'active' ? 'Activate Policy' : ruleStatusTarget === 'retired' ? 'Retire Policy' : 'Deactivate Policy' }}</DialogTitle><DialogDescription>{{ ruleStatusTarget === 'active' ? 'Confirm policy activation.' : 'Reason is required for this status transition.' }}</DialogDescription></DialogHeader>
                     <div class="space-y-3"><Alert v-if="ruleStatusError" variant="destructive"><AlertTitle>Status update failed</AlertTitle><AlertDescription>{{ ruleStatusError }}</AlertDescription></Alert><FormFieldShell v-if="ruleStatusTarget !== 'active'" input-id="rule-status-reason" label="Reason"><Textarea id="rule-status-reason" v-model="ruleStatusReason" class="min-h-20" placeholder="Required reason" /></FormFieldShell></div>
-                    <DialogFooter class="gap-2"><Button variant="outline" :disabled="ruleStatusLoading" @click="ruleStatusOpen = false">Cancel</Button><Button :disabled="ruleStatusLoading" @click="saveRuleStatus">{{ ruleStatusLoading ? 'Saving...' : 'Confirm' }}</Button></DialogFooter>
+                    <DialogFooter class="gap-2"><Button variant="outline" :disabled="ruleStatusLoading" @click="requestRuleStatusOpenChange(false)">Cancel</Button><Button :disabled="ruleStatusLoading" @click="saveRuleStatus">{{ ruleStatusLoading ? 'Saving...' : 'Confirm' }}</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <LeaveWorkflowDialog
+                :open="leaveConfirmOpen"
+                title="Leave payer contract workflow?"
+                description="A payer contract form still has unsaved governance changes. Stay here to finish the contract work, or leave this page and discard the unfinished updates."
+                stay-label="Stay on workflow"
+                leave-label="Leave page"
+                @update:open="cancelPendingPayerContractWorkflowLeave"
+                @confirm="confirmPendingPayerContractWorkflowLeave"
+            />
+
+            <LeaveWorkflowDialog
+                :open="createContractDiscardConfirmOpen"
+                title="Discard payer contract draft?"
+                description="This contract setup still has unsaved payer details. Keep editing to finish the billing contract, or discard the draft."
+                stay-label="Keep editing"
+                leave-label="Discard draft"
+                @update:open="createContractDiscardConfirmOpen = false"
+                @confirm="confirmContractCreateDiscard"
+            />
+
+            <LeaveWorkflowDialog
+                :open="editContractDiscardConfirmOpen"
+                title="Discard contract changes?"
+                description="This contract edit still has unsaved changes. Keep editing to preserve the payer update, or discard the form."
+                stay-label="Keep editing"
+                leave-label="Discard changes"
+                @update:open="editContractDiscardConfirmOpen = false"
+                @confirm="confirmEditContractDiscard"
+            />
+
+            <LeaveWorkflowDialog
+                :open="contractStatusDiscardConfirmOpen"
+                title="Discard contract status update?"
+                description="This contract status action still has unsaved notes. Keep editing to complete the governance step, or discard the change."
+                stay-label="Keep editing"
+                leave-label="Discard change"
+                @update:open="contractStatusDiscardConfirmOpen = false"
+                @confirm="confirmContractStatusDiscard"
+            />
+
+            <LeaveWorkflowDialog
+                :open="editPriceOverrideDiscardConfirmOpen"
+                title="Discard negotiated price changes?"
+                description="This negotiated price edit still has unsaved reimbursement changes. Keep editing to finish the payer-specific price, or discard the form."
+                stay-label="Keep editing"
+                leave-label="Discard changes"
+                @update:open="editPriceOverrideDiscardConfirmOpen = false"
+                @confirm="confirmEditPriceOverrideDiscard"
+            />
+
+            <LeaveWorkflowDialog
+                :open="priceOverrideStatusDiscardConfirmOpen"
+                title="Discard negotiated price status update?"
+                description="This negotiated price status action still has unsaved notes. Keep editing to complete the contract control, or discard the change."
+                stay-label="Keep editing"
+                leave-label="Discard change"
+                @update:open="priceOverrideStatusDiscardConfirmOpen = false"
+                @confirm="confirmPriceOverrideStatusDiscard"
+            />
+
+            <LeaveWorkflowDialog
+                :open="editRuleDiscardConfirmOpen"
+                title="Discard policy changes?"
+                description="This coverage policy edit still has unsaved conditions. Keep editing to preserve the payer rule, or discard the form."
+                stay-label="Keep editing"
+                leave-label="Discard changes"
+                @update:open="editRuleDiscardConfirmOpen = false"
+                @confirm="confirmEditRuleDiscard"
+            />
+
+            <LeaveWorkflowDialog
+                :open="ruleStatusDiscardConfirmOpen"
+                title="Discard policy status update?"
+                description="This policy status action still has unsaved notes. Keep editing to complete the authorization control, or discard the change."
+                stay-label="Keep editing"
+                leave-label="Discard change"
+                @update:open="ruleStatusDiscardConfirmOpen = false"
+                @confirm="confirmRuleStatusDiscard"
+            />
         </div>
     </AppLayout>
 </template>

@@ -2,9 +2,13 @@
 
 use App\Models\User;
 use App\Http\Middleware\EnforceTenantIsolationWhenEnabled;
+use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
+use App\Modules\Encounter\Infrastructure\Models\EncounterAuditLogModel;
+use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
 use App\Modules\Admission\Infrastructure\Models\AdmissionModel;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentReferralModel;
+use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\MedicalRecord\Infrastructure\Models\MedicalRecordAuditLogModel;
 use App\Modules\MedicalRecord\Infrastructure\Models\MedicalRecordModel;
 use App\Modules\MedicalRecord\Infrastructure\Models\MedicalRecordSignerAttestationModel;
@@ -643,6 +647,659 @@ it('forbids draft medical record updates without update permission', function ()
         ->assertForbidden();
 });
 
+it('allows draft author autosave updates with create permission', function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+
+    $author = makeMedicalRecordUser();
+    $updatePermissionId = DB::table('permissions')
+        ->where('name', 'medical.records.update')
+        ->value('id');
+    DB::table('permission_user')
+        ->where('user_id', $author->id)
+        ->where('permission_id', $updatePermissionId)
+        ->delete();
+    $patient = makeMedicalRecordPatient();
+    [$tenantId, $facilityId] = seedMedicalRecordPlatformScopeAssignment(
+        userId: $author->id,
+        tenantCode: 'ENC',
+        tenantName: 'Encounter Autosave Network',
+        countryCode: 'TZ',
+        facilityCode: 'ENC-MR',
+        facilityName: 'Encounter Medical Records',
+    );
+
+    $draft = MedicalRecordModel::query()->create([
+        'record_number' => 'MR'.now()->format('Ymd').strtoupper(Str::random(6)),
+        'tenant_id' => $tenantId,
+        'facility_id' => $facilityId,
+        'patient_id' => $patient->id,
+        'author_user_id' => $author->id,
+        'encounter_at' => now()->toDateTimeString(),
+        'record_type' => 'consultation_note',
+        'subjective' => null,
+        'objective' => null,
+        'assessment' => null,
+        'plan' => null,
+        'status' => 'draft',
+    ]);
+
+    $this->actingAs($author)
+        ->withHeaders([
+            'X-Tenant-Code' => 'ENC',
+            'X-Facility-Code' => 'ENC-MR',
+        ])
+        ->patchJson('/api/v1/medical-records/'.$draft->id, [
+            'subjective' => 'Autosaved encounter note text',
+            'assessment' => 'Draft should resume with text',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.subjective', 'Autosaved encounter note text')
+        ->assertJsonPath('data.assessment', 'Draft should resume with text');
+});
+
+it('returns draft conflict when expectedUpdatedAt is stale', function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+
+    $user = makeMedicalRecordUser();
+    $patient = makeMedicalRecordPatient();
+    [$tenantId, $facilityId] = seedMedicalRecordPlatformScopeAssignment(
+        userId: $user->id,
+        tenantCode: 'DRF',
+        tenantName: 'Draft Conflict Network',
+        countryCode: 'TZ',
+        facilityCode: 'DRF-MR',
+        facilityName: 'Draft Conflict Medical Records',
+    );
+
+    $draft = MedicalRecordModel::query()->create([
+        'record_number' => 'MR'.now()->format('Ymd').strtoupper(Str::random(6)),
+        'tenant_id' => $tenantId,
+        'facility_id' => $facilityId,
+        'patient_id' => $patient->id,
+        'author_user_id' => $user->id,
+        'encounter_at' => now()->toDateTimeString(),
+        'record_type' => 'consultation_note',
+        'assessment' => 'Initial draft copy',
+        'status' => 'draft',
+    ]);
+
+    $staleUpdatedAt = now()->subMinutes(5)->toISOString();
+
+    MedicalRecordModel::query()
+        ->whereKey($draft->id)
+        ->update([
+            'assessment' => 'Another tab saved newer copy',
+            'updated_at' => now(),
+        ]);
+
+    $this->actingAs($user)
+        ->withHeaders([
+            'X-Tenant-Code' => 'DRF',
+            'X-Facility-Code' => 'DRF-MR',
+        ])
+        ->patchJson('/api/v1/medical-records/'.$draft->id, [
+            'assessment' => 'Stale autosave attempt',
+            'expectedUpdatedAt' => $staleUpdatedAt,
+        ])
+        ->assertStatus(409)
+        ->assertJsonPath('code', 'MEDICAL_RECORD_DRAFT_CONFLICT')
+        ->assertJsonPath('context.currentRecord.assessment', 'Another tab saved newer copy');
+});
+
+it('allows force draft save to overwrite stale chart copy', function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+
+    $user = makeMedicalRecordUser();
+    $patient = makeMedicalRecordPatient();
+    [$tenantId, $facilityId] = seedMedicalRecordPlatformScopeAssignment(
+        userId: $user->id,
+        tenantCode: 'FRC',
+        tenantName: 'Force Draft Save Network',
+        countryCode: 'TZ',
+        facilityCode: 'FRC-MR',
+        facilityName: 'Force Draft Save Medical Records',
+    );
+
+    $draft = MedicalRecordModel::query()->create([
+        'record_number' => 'MR'.now()->format('Ymd').strtoupper(Str::random(6)),
+        'tenant_id' => $tenantId,
+        'facility_id' => $facilityId,
+        'patient_id' => $patient->id,
+        'author_user_id' => $user->id,
+        'encounter_at' => now()->toDateTimeString(),
+        'record_type' => 'consultation_note',
+        'assessment' => 'Initial draft copy',
+        'status' => 'draft',
+    ]);
+
+    $staleUpdatedAt = $draft->fresh()?->updated_at?->toISOString();
+
+    $this->actingAs($user)
+        ->withHeaders([
+            'X-Tenant-Code' => 'FRC',
+            'X-Facility-Code' => 'FRC-MR',
+        ])
+        ->patchJson('/api/v1/medical-records/'.$draft->id, [
+            'assessment' => 'Current chart copy',
+        ])
+        ->assertOk();
+
+    $this->actingAs($user)
+        ->withHeaders([
+            'X-Tenant-Code' => 'FRC',
+            'X-Facility-Code' => 'FRC-MR',
+        ])
+        ->patchJson('/api/v1/medical-records/'.$draft->id, [
+            'assessment' => 'Forced overwrite from this screen',
+            'expectedUpdatedAt' => $staleUpdatedAt,
+            'forceDraftSave' => true,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.assessment', 'Forced overwrite from this screen');
+});
+
+it('rejects invalid medical record status transitions', function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+
+    $user = makeMedicalRecordUser();
+    $patient = makeMedicalRecordPatient();
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/medical-records', medicalRecordPayload($patient->id))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/medical-records/'.$created['id'].'/status', [
+            'status' => 'amended',
+            'reason' => 'Too early',
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['status']);
+});
+
+it('opens an amendment session by reopening a finalized note as draft', function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+
+    $user = makeMedicalRecordUser();
+    $patient = makeMedicalRecordPatient();
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/medical-records', medicalRecordPayload($patient->id))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/medical-records/'.$created['id'].'/status', [
+            'status' => 'finalized',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'finalized');
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/medical-records/'.$created['id'].'/status', [
+            'status' => 'amended',
+            'reason' => 'Correction required',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'draft')
+        ->assertJsonPath('data.statusReason', 'Correction required');
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/medical-records/'.$created['id'], [
+            'assessment' => 'Corrected assessment',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.assessment', 'Corrected assessment');
+});
+
+it('finalizes an amendment session into amended status', function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+
+    $user = makeMedicalRecordUser();
+    $patient = makeMedicalRecordPatient();
+    seedMedicalRecordPlatformScopeAssignment(
+        userId: $user->id,
+        tenantCode: 'AMD',
+        tenantName: 'Amendment Finalize Network',
+        countryCode: 'TZ',
+        facilityCode: 'AMD-MR',
+        facilityName: 'Amendment Medical Records',
+    );
+
+    $created = $this->actingAs($user)
+        ->withHeaders([
+            'X-Tenant-Code' => 'AMD',
+            'X-Facility-Code' => 'AMD-MR',
+        ])
+        ->postJson('/api/v1/medical-records', medicalRecordPayload($patient->id))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($user)
+        ->withHeaders([
+            'X-Tenant-Code' => 'AMD',
+            'X-Facility-Code' => 'AMD-MR',
+        ])
+        ->patchJson('/api/v1/medical-records/'.$created['id'].'/status', [
+            'status' => 'finalized',
+        ])
+        ->assertOk();
+
+    $this->actingAs($user)
+        ->withHeaders([
+            'X-Tenant-Code' => 'AMD',
+            'X-Facility-Code' => 'AMD-MR',
+        ])
+        ->patchJson('/api/v1/medical-records/'.$created['id'].'/status', [
+            'status' => 'amended',
+            'reason' => 'Correction required',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'draft');
+
+    $this->actingAs($user)
+        ->withHeaders([
+            'X-Tenant-Code' => 'AMD',
+            'X-Facility-Code' => 'AMD-MR',
+        ])
+        ->patchJson('/api/v1/medical-records/'.$created['id'].'/status', [
+            'status' => 'finalized',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'amended');
+});
+
+it('syncs encounter lifecycle when consultation note is finalized and closed', function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+
+    $user = makeMedicalRecordUser();
+    $patient = makeMedicalRecordPatient();
+    $appointment = makeMedicalRecordAppointment($patient->id);
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/medical-records', medicalRecordPayload($patient->id, [
+            'appointmentId' => $appointment->id,
+            'recordType' => 'consultation_note',
+        ]))
+        ->assertCreated()
+        ->json('data');
+
+    expect($created['encounterId'])->not->toBeNull();
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/medical-records/'.$created['id'].'/status', [
+            'status' => 'finalized',
+        ])
+        ->assertOk();
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/encounters/'.$created['encounterId'])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'signed');
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/encounters/'.$created['encounterId'].'/status', [
+            'status' => 'closed',
+            'acknowledgeCloseGaps' => true,
+            'reason' => 'Visit complete',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'closed')
+        ->assertJsonPath('data.statusReason', 'Visit complete');
+});
+
+it('creates an encounter identity for appointment medical record drafts', function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+
+    $user = makeMedicalRecordUser();
+    $patient = makeMedicalRecordPatient();
+    $appointment = makeMedicalRecordAppointment($patient->id);
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/medical-records', medicalRecordPayload($patient->id, [
+            'appointmentId' => $appointment->id,
+            'recordType' => 'consultation_note',
+        ]))
+        ->assertCreated()
+        ->assertJsonPath('data.appointmentId', $appointment->id)
+        ->json('data');
+
+    expect($created['encounterId'])->not->toBeNull();
+
+    $encounter = EncounterModel::query()->findOrFail($created['encounterId']);
+    expect($encounter->patient_id)->toBe($patient->id);
+    expect($encounter->appointment_id)->toBe($appointment->id);
+    expect($encounter->status)->toBe('opened');
+});
+
+it('resolves an appointment encounter and returns a workspace bundle', function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+
+    $user = makeMedicalRecordUser();
+    $patient = makeMedicalRecordPatient();
+    $appointment = makeMedicalRecordAppointment($patient->id);
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/medical-records', medicalRecordPayload($patient->id, [
+            'appointmentId' => $appointment->id,
+            'recordType' => 'consultation_note',
+            'assessment' => 'Workspace bundle seed note',
+        ]))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/appointments/'.$appointment->id.'/encounter')
+        ->assertOk()
+        ->assertJsonPath('data.appointmentId', $appointment->id)
+        ->assertJsonPath('data.patientId', $patient->id);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/appointments/'.$appointment->id.'/encounter?view=workspace')
+        ->assertOk()
+        ->assertJsonPath('data.encounter.id', $created['encounterId'])
+        ->assertJsonPath('data.appointment.id', $appointment->id)
+        ->assertJsonPath('data.primaryMedicalRecord.id', $created['id'])
+        ->assertJsonPath('data.primaryMedicalRecord.assessment', 'Workspace bundle seed note');
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/encounters/'.$created['encounterId'].'?view=workspace')
+        ->assertOk()
+        ->assertJsonPath('data.encounter.id', $created['encounterId'])
+        ->assertJsonPath('data.primaryMedicalRecord.id', $created['id']);
+});
+
+it('loads encounter workspace theatre procedures without invalid timestamp filters', function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+
+    $user = makeMedicalRecordUser();
+    $patient = makeMedicalRecordPatient();
+    $appointment = makeMedicalRecordAppointment($patient->id);
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/medical-records', medicalRecordPayload($patient->id, [
+            'appointmentId' => $appointment->id,
+            'recordType' => 'consultation_note',
+            'assessment' => 'Workspace theatre linkage note',
+        ]))
+        ->assertCreated()
+        ->json('data');
+
+    makeMedicalRecordTheatreProcedure($patient->id, [
+        'encounter_id' => $created['encounterId'],
+        'appointment_id' => $appointment->id,
+        'entered_in_error_at' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/encounters/'.$created['encounterId'].'?view=workspace')
+        ->assertOk()
+        ->assertJsonPath('data.encounter.id', $created['encounterId'])
+        ->assertJsonCount(1, 'data.theatreProcedures');
+});
+
+it('returns encounter close readiness in the workspace bundle', function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+
+    $user = makeMedicalRecordUser();
+    $patient = makeMedicalRecordPatient();
+    $appointment = makeMedicalRecordAppointment($patient->id);
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/medical-records', medicalRecordPayload($patient->id, [
+            'appointmentId' => $appointment->id,
+            'recordType' => 'consultation_note',
+            'assessment' => 'Acute upper respiratory infection',
+            'diagnosisCode' => 'J06.9',
+        ]))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/encounters/'.$created['encounterId'].'?view=workspace')
+        ->assertOk()
+        ->assertJsonPath('data.closeReadiness.items.0.id', 'note_signed')
+        ->assertJsonPath('data.closeReadiness.items.0.status', 'fail')
+        ->assertJsonPath('data.closeReadiness.billingSummary.pendingCandidates', 1);
+});
+
+it('blocks encounter close when the consultation note is unsigned', function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+
+    $user = makeMedicalRecordUser();
+    $patient = makeMedicalRecordPatient();
+    $appointment = makeMedicalRecordAppointment($patient->id);
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/medical-records', medicalRecordPayload($patient->id, [
+            'appointmentId' => $appointment->id,
+            'recordType' => 'consultation_note',
+        ]))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/encounters/'.$created['encounterId'].'/status', [
+            'status' => 'closed',
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'ENCOUNTER_CLOSE_BLOCKED')
+        ->assertJsonPath('data.closeReadiness.items.0.id', 'note_signed')
+        ->assertJsonPath('data.closeReadiness.items.0.status', 'fail');
+});
+
+it('requires acknowledgement when closing with documentation or billing warnings', function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+
+    $user = makeMedicalRecordUser();
+    $patient = makeMedicalRecordPatient();
+    $appointment = makeMedicalRecordAppointment($patient->id);
+    $catalogItem = ClinicalCatalogItemModel::query()->firstOrCreate(
+        [
+            'tenant_id' => null,
+            'facility_id' => null,
+            'catalog_type' => 'lab_test',
+            'code' => 'LOINC:58410-2',
+        ],
+        [
+            'name' => 'Basic metabolic panel',
+            'department_id' => null,
+            'category' => 'chemistry',
+            'unit' => null,
+            'description' => 'Close readiness lab fixture',
+            'metadata' => null,
+            'status' => 'active',
+            'status_reason' => null,
+        ],
+    );
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/medical-records', medicalRecordPayload($patient->id, [
+            'appointmentId' => $appointment->id,
+            'recordType' => 'consultation_note',
+            'assessment' => '',
+            'diagnosisCode' => null,
+        ]))
+        ->assertCreated()
+        ->json('data');
+
+    LaboratoryOrderModel::query()->create([
+        'order_number' => 'LAB'.now()->format('Ymd').strtoupper(Str::random(6)),
+        'patient_id' => $patient->id,
+        'encounter_id' => $created['encounterId'],
+        'appointment_id' => $appointment->id,
+        'lab_test_catalog_item_id' => $catalogItem->id,
+        'test_code' => $catalogItem->code,
+        'test_name' => $catalogItem->name,
+        'priority' => 'routine',
+        'ordered_at' => now(),
+        'status' => 'ordered',
+        'entry_state' => 'active',
+    ]);
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/medical-records/'.$created['id'].'/status', [
+            'status' => 'finalized',
+        ])
+        ->assertOk();
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/encounters/'.$created['encounterId'].'/status', [
+            'status' => 'closed',
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'ENCOUNTER_CLOSE_BLOCKED')
+        ->assertJsonPath('data.closeReadiness.requiresAcknowledgement', true);
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/encounters/'.$created['encounterId'].'/status', [
+            'status' => 'closed',
+            'acknowledgeCloseGaps' => true,
+            'reason' => 'Patient left before billing capture completed',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'closed')
+        ->assertJsonPath('data.statusReason', 'Patient left before billing capture completed');
+});
+
+it('writes encounter audit logs for open close and reopen lifecycle events', function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+
+    $user = makeMedicalRecordUser();
+    $patient = makeMedicalRecordPatient();
+    $appointment = makeMedicalRecordAppointment($patient->id);
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/medical-records', medicalRecordPayload($patient->id, [
+            'appointmentId' => $appointment->id,
+            'recordType' => 'consultation_note',
+        ]))
+        ->assertCreated()
+        ->json('data');
+
+    $encounterId = $created['encounterId'];
+    expect($encounterId)->not->toBeNull();
+
+    expect(
+        EncounterAuditLogModel::query()
+            ->where('encounter_id', $encounterId)
+            ->where('action', 'encounter.opened')
+            ->exists(),
+    )->toBeTrue();
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/medical-records/'.$created['id'].'/status', [
+            'status' => 'finalized',
+        ])
+        ->assertOk();
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/encounters/'.$encounterId.'/status', [
+            'status' => 'closed',
+            'acknowledgeCloseGaps' => true,
+            'reason' => 'Visit complete',
+        ])
+        ->assertOk();
+
+    expect(
+        EncounterAuditLogModel::query()
+            ->where('encounter_id', $encounterId)
+            ->where('action', 'encounter.closed')
+            ->exists(),
+    )->toBeTrue();
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/encounters/'.$encounterId.'/status', [
+            'status' => 'reopened',
+            'reason' => 'Billing correction required',
+        ])
+        ->assertOk();
+
+    expect(
+        EncounterAuditLogModel::query()
+            ->where('encounter_id', $encounterId)
+            ->where('action', 'encounter.reopened')
+            ->exists(),
+    )->toBeTrue();
+});
+
+it('lists encounter audit logs when authorized', function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+
+    $user = makeMedicalRecordUser();
+    $user->givePermissionTo('medical-records.view-audit-logs');
+    $patient = makeMedicalRecordPatient();
+    $appointment = makeMedicalRecordAppointment($patient->id);
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/medical-records', medicalRecordPayload($patient->id, [
+            'appointmentId' => $appointment->id,
+            'recordType' => 'consultation_note',
+        ]))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/encounters/'.$created['encounterId'].'/audit-logs?perPage=5')
+        ->assertOk()
+        ->assertJsonStructure([
+            'data' => [
+                [
+                    'id',
+                    'encounterId',
+                    'action',
+                    'actionLabel',
+                    'createdAt',
+                ],
+            ],
+            'meta' => [
+                'currentPage',
+                'lastPage',
+                'perPage',
+                'total',
+            ],
+        ])
+        ->assertJsonPath('data.0.action', 'encounter.opened');
+});
+
+it('forbids encounter audit log access without permission', function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+
+    $author = makeMedicalRecordUser();
+    $readOnlyUser = makeMedicalRecordReadOnlyUser();
+    $patient = makeMedicalRecordPatient();
+    $appointment = makeMedicalRecordAppointment($patient->id);
+
+    $created = $this->actingAs($author)
+        ->postJson('/api/v1/medical-records', medicalRecordPayload($patient->id, [
+            'appointmentId' => $appointment->id,
+            'recordType' => 'consultation_note',
+        ]))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($readOnlyUser)
+        ->getJson('/api/v1/encounters/'.$created['encounterId'].'/audit-logs')
+        ->assertForbidden();
+});
+
 it('forbids medical record finalization without finalize permission', function (): void {
     $author = makeMedicalRecordUser();
     $readOnlyUser = makeMedicalRecordReadOnlyUser();
@@ -1148,18 +1805,54 @@ it('enforces reason for archived status and writes transition metadata', functio
 });
 
 it('writes medical record audit logs for create update and status change', function (): void {
+    $this->withoutMiddleware(EnsureMappedFacilitySubscriptionEntitlement::class);
+    config()->set('feature_flags.flags.platform.multi_tenant_isolation.enabled', false);
+
     $user = makeMedicalRecordUser();
     $patient = makeMedicalRecordPatient();
+    seedMedicalRecordPlatformScopeAssignment(
+        userId: $user->id,
+        tenantCode: 'AUD',
+        tenantName: 'Audit Lifecycle Network',
+        countryCode: 'TZ',
+        facilityCode: 'AUD-MR',
+        facilityName: 'Audit Medical Records',
+    );
 
     $created = $this->actingAs($user)
+        ->withHeaders([
+            'X-Tenant-Code' => 'AUD',
+            'X-Facility-Code' => 'AUD-MR',
+        ])
         ->postJson('/api/v1/medical-records', medicalRecordPayload($patient->id))
+        ->assertCreated()
         ->json('data');
 
-    $this->actingAs($user)->patchJson('/api/v1/medical-records/'.$created['id'], [
+    $this->actingAs($user)
+        ->withHeaders([
+            'X-Tenant-Code' => 'AUD',
+            'X-Facility-Code' => 'AUD-MR',
+        ])
+        ->patchJson('/api/v1/medical-records/'.$created['id'], [
         'assessment' => 'audit log update check',
     ])->assertOk();
 
-    $this->actingAs($user)->patchJson('/api/v1/medical-records/'.$created['id'].'/status', [
+    $this->actingAs($user)
+        ->withHeaders([
+            'X-Tenant-Code' => 'AUD',
+            'X-Facility-Code' => 'AUD-MR',
+        ])
+        ->patchJson('/api/v1/medical-records/'.$created['id'].'/status', [
+        'status' => 'finalized',
+        'reason' => null,
+    ])->assertOk();
+
+    $this->actingAs($user)
+        ->withHeaders([
+            'X-Tenant-Code' => 'AUD',
+            'X-Facility-Code' => 'AUD-MR',
+        ])
+        ->patchJson('/api/v1/medical-records/'.$created['id'].'/status', [
         'status' => 'amended',
         'reason' => 'correction',
     ])->assertOk();
@@ -1169,7 +1862,7 @@ it('writes medical record audit logs for create update and status change', funct
         ->orderBy('created_at')
         ->get();
 
-    expect($logs)->toHaveCount(3);
+    expect($logs)->toHaveCount(4);
     expect($logs->pluck('action')->all())->toContain(
         'medical-record.created',
         'medical-record.updated',

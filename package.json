@@ -12,15 +12,22 @@
         "format": "prettier --write resources/",
         "format:check": "prettier --check resources/",
         "lint": "eslint . --fix",
-        "ship": "node scripts/ship.mjs"
+        "ship": "node scripts/ship.mjs",
+        "test:e2e": "playwright test",
+        "test:e2e:install": "playwright install chromium",
+        "test:e2e:list": "playwright test --list",
+        "test:e2e:smoke": "playwright test tests/e2e/auth tests/e2e/security",
+        "test:e2e:ui": "playwright test --ui"
     },
     "devDependencies": {
         "@eslint/js": "^9.19.0",
         "@laravel/vite-plugin-wayfinder": "^0.1.3",
+        "@playwright/test": "^1.60.0",
         "@tailwindcss/vite": "^4.1.11",
         "@types/node": "^22.13.5",
         "@vitejs/plugin-vue": "^6.0.0",
         "@vue/eslint-config-typescript": "^14.3.0",
+        "axe-core": "^4.11.4",
         "concurrently": "^9.0.1",
         "eslint": "^9.17.0",
         "eslint-config-prettier": "^10.0.1",

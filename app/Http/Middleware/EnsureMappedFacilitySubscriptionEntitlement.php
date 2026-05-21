@@ -33,6 +33,10 @@ class EnsureMappedFacilitySubscriptionEntitlement
         'medical-records.audit-logs' => ['medical_records.governance'],
         'medical-records.' => ['medical_records.core'],
 
+        'encounters.audit-logs.' => ['medical_records.governance'],
+        'encounters.audit-logs' => ['medical_records.governance'],
+        'encounters.' => ['medical_records.core'],
+
         'emergency-triage-cases.' => ['emergency.triage'],
         'laboratory-orders.' => ['laboratory.orders'],
         'pharmacy-orders.' => ['pharmacy.orders'],
