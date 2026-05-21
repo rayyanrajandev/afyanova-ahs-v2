@@ -26,7 +26,6 @@ import LinkedContextLookupField from '@/components/context/LinkedContextLookupFi
 import EncounterBillingPanel from '@/components/domain/clinical/EncounterBillingPanel.vue';
 import EncounterCloseChecklistDialog from '@/components/domain/clinical/EncounterCloseChecklistDialog.vue';
 import EncounterGovernancePanel from '@/components/domain/clinical/EncounterGovernancePanel.vue';
-import EncounterMedicationSafetyPanel from '@/components/domain/clinical/EncounterMedicationSafetyPanel.vue';
 import EncounterOrderProgress from '@/components/domain/clinical/EncounterOrderProgress.vue';
 import EncounterTriageVitalsPanel from '@/components/domain/clinical/EncounterTriageVitalsPanel.vue';
 import EncounterInlineOrderPanel from '@/components/domain/clinical/encounter-orders/EncounterInlineOrderPanel.vue';
@@ -9087,13 +9086,6 @@ onMounted(() => {
                                         :triage-category="createAppointmentSummary?.triageCategory"
                                         :triaged-at="createAppointmentSummary?.triagedAt"
                                         :format-date-time="formatDateTime"
-                                    />
-
-                                    <EncounterMedicationSafetyPanel
-                                        v-if="createForm.patientId.trim()"
-                                        :patient-id="createForm.patientId"
-                                        :appointment-id="createForm.appointmentId"
-                                        :admission-id="createForm.admissionId"
                                     />
 
                                     <section class="space-y-4">

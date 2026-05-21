@@ -149,7 +149,11 @@ class GetPatientMedicationSafetySummaryUseCase
             );
         }
 
-        if ($clinicalIndication === '') {
+        $hasMedicationTarget = $medicationCode !== ''
+            || $medicationName !== ''
+            || $approvedMedicineCatalogItemId !== '';
+
+        if ($hasMedicationTarget && $clinicalIndication === '') {
             $rules[] = MedicationSafetyRuleCatalog::makeRule(
                 code: 'missing_clinical_indication',
                 severity: 'warning',

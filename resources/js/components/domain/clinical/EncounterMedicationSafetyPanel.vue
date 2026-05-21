@@ -14,7 +14,20 @@ const props = defineProps<{
     patientId?: string | null;
     appointmentId?: string | null;
     admissionId?: string | null;
+    approvedMedicineCatalogItemId?: string | null;
+    medicationCode?: string | null;
+    medicationName?: string | null;
+    dosageInstruction?: string | null;
+    clinicalIndication?: string | null;
+    quantityPrescribed?: string | number | null;
 }>();
+
+const hasMedicationTarget = computed(
+    () =>
+        Boolean((props.approvedMedicineCatalogItemId ?? '').trim()) ||
+        Boolean((props.medicationCode ?? '').trim()) ||
+        Boolean((props.medicationName ?? '').trim()),
+);
 
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -28,12 +41,13 @@ const hasSafetySignals = computed(
 const isVisible = computed(
     () =>
         Boolean((props.patientId ?? '').trim()) &&
+        hasMedicationTarget.value &&
         (loading.value || error.value || hasSafetySignals.value),
 );
 
 async function loadSummary() {
     const patientId = (props.patientId ?? '').trim();
-    if (!patientId) {
+    if (!patientId || !hasMedicationTarget.value) {
         summary.value = null;
         error.value = null;
         loading.value = false;
@@ -48,6 +62,12 @@ async function loadSummary() {
             patientId,
             appointmentId: props.appointmentId,
             admissionId: props.admissionId,
+            approvedMedicineCatalogItemId: props.approvedMedicineCatalogItemId,
+            medicationCode: props.medicationCode,
+            medicationName: props.medicationName,
+            dosageInstruction: props.dosageInstruction,
+            clinicalIndication: props.clinicalIndication,
+            quantityPrescribed: props.quantityPrescribed,
         });
     } catch (loadError) {
         summary.value = null;
@@ -70,6 +90,12 @@ watch(
             props.patientId,
             props.appointmentId,
             props.admissionId,
+            props.approvedMedicineCatalogItemId,
+            props.medicationCode,
+            props.medicationName,
+            props.dosageInstruction,
+            props.clinicalIndication,
+            props.quantityPrescribed,
         ] as const,
     () => {
         void loadSummary();

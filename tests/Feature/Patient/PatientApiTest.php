@@ -704,6 +704,18 @@ it('returns patient medication safety summary and reconciliation workspace', fun
         ->assertJsonPath('data.counts.unreconciledDispensedOrders', 1);
 });
 
+it('does not require clinical indication when no medicine is being evaluated', function (): void {
+    $user = makePatientSafetyUser();
+    $patient = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/patients/'.$patient['id'].'/medication-safety-summary')
+        ->assertOk();
+
+    expect(collect($response->json('data.rules'))->pluck('code')->all())
+        ->not->toContain('missing_clinical_indication');
+});
+
 it('returns medication dosing sanity rules when instruction or quantity looks unsafe', function (): void {
     $user = makePatientSafetyUser();
     $patient = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
