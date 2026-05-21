@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\EnsureFacilitySubscriptionEntitlement;
+use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
 use App\Models\Permission;
 use App\Models\User;
 use App\Modules\Platform\Infrastructure\Models\FacilityModel;
@@ -144,6 +146,11 @@ it('keeps facility admins out of platform-wide facility and subscription adminis
 
 
 it('blocks unsubscribed operational workspaces even when the role has module permission', function (): void {
+    $this->withMiddleware([
+        EnsureMappedFacilitySubscriptionEntitlement::class,
+        EnsureFacilitySubscriptionEntitlement::class,
+    ]);
+
     $context = facilityAdminSmokeContext();
 
     $this->actingAs($context['user'])
@@ -175,6 +182,11 @@ it('blocks unsubscribed operational workspaces even when the role has module per
 });
 
 it('blocks unsubscribed operational apis even when the role has module permission', function (): void {
+    $this->withMiddleware([
+        EnsureMappedFacilitySubscriptionEntitlement::class,
+        EnsureFacilitySubscriptionEntitlement::class,
+    ]);
+
     $context = facilityAdminSmokeContext();
 
     $this->actingAs($context['user'])

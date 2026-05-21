@@ -2,6 +2,7 @@
 
 use App\Models\User;
 use App\Http\Middleware\EnforceTenantIsolationWhenEnabled;
+use App\Http\Middleware\EnsureFacilitySubscriptionEntitlement;
 use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
 use App\Modules\Encounter\Infrastructure\Models\EncounterAuditLogModel;
 use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
@@ -22,6 +23,13 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function (): void {
+    $this->withoutMiddleware([
+        EnsureMappedFacilitySubscriptionEntitlement::class,
+        EnsureFacilitySubscriptionEntitlement::class,
+    ]);
+});
 
 function makeMedicalRecordPatient(array $overrides = []): PatientModel
 {

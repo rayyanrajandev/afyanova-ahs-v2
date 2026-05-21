@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Middleware\EnsureFacilitySubscriptionEntitlement;
+use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
+
 /*
 |--------------------------------------------------------------------------
 | Test Case
@@ -13,6 +16,12 @@
 
 pest()->extend(Tests\TestCase::class)
     ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
+    ->beforeEach(function (): void {
+        $this->withoutMiddleware([
+            EnsureMappedFacilitySubscriptionEntitlement::class,
+            EnsureFacilitySubscriptionEntitlement::class,
+        ]);
+    })
     ->in('Feature');
 
 /*
