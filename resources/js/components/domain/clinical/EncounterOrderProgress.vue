@@ -5,12 +5,13 @@ import {
     buildLaboratoryOrderProgressSteps,
     buildPharmacyOrderProgressSteps,
     buildRadiologyOrderProgressSteps,
+    buildTheatreProcedureProgressSteps,
     encounterOrderResultPreview,
     type EncounterOrderProgressStep,
 } from '@/lib/encounterOrderProgress';
 
 const props = defineProps<{
-    orderType: 'laboratory' | 'pharmacy' | 'radiology';
+    orderType: 'laboratory' | 'pharmacy' | 'radiology' | 'theatre';
     order: Record<string, unknown>;
     formatDateTime: (value: string | null | undefined) => string;
 }>();
@@ -42,6 +43,19 @@ const steps = computed<EncounterOrderProgressStep[]>(() => {
             return buildPharmacyOrderProgressSteps(order, props.formatDateTime);
         case 'radiology':
             return buildRadiologyOrderProgressSteps(order, props.formatDateTime);
+        case 'theatre':
+            return buildTheatreProcedureProgressSteps(
+                props.order as {
+                    status?: string | null;
+                    scheduledAt?: string | null;
+                    startedAt?: string | null;
+                    completedAt?: string | null;
+                    enteredInErrorAt?: string | null;
+                    theatreRoomName?: string | null;
+                    notes?: string | null;
+                },
+                props.formatDateTime,
+            );
     }
 });
 

@@ -21,6 +21,7 @@ use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryExte
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryProcurementController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventorySupplierController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryWarehouseController;
+use App\Modules\Encounter\Presentation\Http\Controllers\EncounterClinicalAttachmentController;
 use App\Modules\Encounter\Presentation\Http\Controllers\EncounterController;
 use App\Modules\Laboratory\Presentation\Http\Controllers\LaboratoryOrderController;
 use App\Modules\MedicalRecord\Presentation\Http\Controllers\MedicalRecordController;
@@ -726,6 +727,24 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('encounters/{id}/audit-logs', [EncounterController::class, 'auditLogs'])
         ->middleware('can:medical-records.view-audit-logs')
         ->name('encounters.audit-logs');
+    Route::get('encounters/{id}/clinical-documents', [EncounterClinicalAttachmentController::class, 'index'])
+        ->middleware('can:medical.records.read')
+        ->name('encounters.clinical-documents.index');
+    Route::post('encounters/{id}/clinical-documents', [EncounterClinicalAttachmentController::class, 'store'])
+        ->middleware('can:medical.records.create')
+        ->name('encounters.clinical-documents.store');
+    Route::get('encounters/{id}/clinical-documents/{documentId}', [EncounterClinicalAttachmentController::class, 'show'])
+        ->middleware('can:medical.records.read')
+        ->name('encounters.clinical-documents.show');
+    Route::patch('encounters/{id}/clinical-documents/{documentId}', [EncounterClinicalAttachmentController::class, 'update'])
+        ->middleware('can:medical.records.update')
+        ->name('encounters.clinical-documents.update');
+    Route::patch('encounters/{id}/clinical-documents/{documentId}/status', [EncounterClinicalAttachmentController::class, 'updateStatus'])
+        ->middleware('can:medical.records.update')
+        ->name('encounters.clinical-documents.update-status');
+    Route::get('encounters/{id}/clinical-documents/{documentId}/download', [EncounterClinicalAttachmentController::class, 'download'])
+        ->middleware('can:medical.records.read')
+        ->name('encounters.clinical-documents.download');
 
     Route::get('laboratory-orders', [LaboratoryOrderController::class, 'index'])
         ->middleware('can:laboratory.orders.read')

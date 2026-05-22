@@ -143,15 +143,9 @@ watch(
 
 <template>
     <div class="space-y-4">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-            <div class="space-y-1">
-                <p class="text-sm font-medium">Audit, compliance, and chart packet</p>
-                <p class="text-xs text-muted-foreground">
-                    Review encounter lifecycle events and export a signed chart packet for
-                    {{ encounterLabel }}.
-                </p>
-            </div>
-            <Badge variant="outline" class="text-[11px]">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <p class="text-sm font-medium">Governance</p>
+            <Badge variant="outline" class="text-xs">
                 {{ auditEventCount }} audit events
             </Badge>
         </div>

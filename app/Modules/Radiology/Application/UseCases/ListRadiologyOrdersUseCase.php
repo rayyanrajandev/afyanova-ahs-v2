@@ -4,6 +4,7 @@ namespace App\Modules\Radiology\Application\UseCases;
 
 use App\Modules\Radiology\Domain\Repositories\RadiologyOrderRepositoryInterface;
 use App\Modules\Radiology\Domain\ValueObjects\RadiologyOrderStatus;
+use Illuminate\Support\Str;
 
 class ListRadiologyOrdersUseCase
 {

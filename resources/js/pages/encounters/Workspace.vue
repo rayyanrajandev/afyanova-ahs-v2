@@ -25,15 +25,20 @@ import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
 import LinkedContextLookupField from '@/components/context/LinkedContextLookupField.vue';
 import EncounterBillingPanel from '@/components/domain/clinical/EncounterBillingPanel.vue';
 import EncounterCloseChecklistDialog from '@/components/domain/clinical/EncounterCloseChecklistDialog.vue';
+import EncounterDocumentsPanel from '@/components/domain/clinical/EncounterDocumentsPanel.vue';
 import EncounterGovernancePanel from '@/components/domain/clinical/EncounterGovernancePanel.vue';
-import EncounterOrderProgress from '@/components/domain/clinical/EncounterOrderProgress.vue';
+import EncounterLifecycleDialog from '@/components/domain/clinical/EncounterLifecycleDialog.vue';
+import EncounterNoteComposerShell from '@/components/domain/clinical/EncounterNoteComposerShell.vue';
+import EncounterWorkspaceHeader from '@/components/domain/clinical/EncounterWorkspaceHeader.vue';
+import EncounterWorkspaceNavBar from '@/components/domain/clinical/EncounterWorkspaceNavBar.vue';
+import EncounterWorkspacePaneHeader from '@/components/domain/clinical/EncounterWorkspacePaneHeader.vue';
+import EncounterWorkflowCareStreams from '@/components/domain/clinical/EncounterWorkflowCareStreams.vue';
 import EncounterTriageVitalsPanel from '@/components/domain/clinical/EncounterTriageVitalsPanel.vue';
 import EncounterInlineOrderPanel from '@/components/domain/clinical/encounter-orders/EncounterInlineOrderPanel.vue';
 import RichTextEditorField from '@/components/editor/RichTextEditorField.vue';
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -43,6 +48,11 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
     Dialog,
     DialogContent,
@@ -59,13 +69,6 @@ import {
     DrawerHeader,
     DrawerTitle,
 } from '@/components/ui/drawer';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -85,8 +88,7 @@ import {
     SheetHeader,
     SheetTitle,
 } from '@/components/ui/sheet';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
@@ -106,8 +108,25 @@ import {
 } from '@/lib/encounterWorkspace';
 import type { EncounterInlineOrderType } from '@/lib/encounterInlineOrders';
 import type { EncounterCloseReadiness } from '@/lib/encounterCloseReadiness';
+import {
+    encounterCareState,
+    theatreProcedureStatusVariant,
+    theatreProcedureSummaryText as formatTheatreProcedureSummary,
+    type CreateEncounterCareSectionId,
+    type CreateEncounterCareSummary,
+    type EncounterCareState,
+} from '@/lib/encounterWorkspaceCare';
+import {
+encounterLifecycleActionLabel,
+    encounterLifecycleActionPath,
+    encounterLifecycleActionSuccessMessage,
+    isEncounterOrderEnteredInError,
+    type EncounterLifecycleAction,
+    type EncounterLifecycleTargetKind,
+} from '@/lib/encounterWorkspaceLifecycle';
 import { patientChartHref } from '@/lib/patientChart';
 import { type BreadcrumbItem } from '@/types';
+import type { EncounterWorkspacePaneFocus } from '@/types/encounterWorkspace';
 import {
     MEDICAL_RECORD_NOTE_TYPE_OPTIONS,
     medicalRecordNoteTypeHelperText,
@@ -117,7 +136,6 @@ import {
     medicalRecordNoteTypeSectionUi,
     sanitizeMedicalRecordNoteType,
 } from '@/pages/medical-records/noteTypes';
-
 type ScopeData = {
     resolvedFrom: string;
     tenant: { code: string; name: string } | null;
@@ -437,6 +455,7 @@ type TheatreProcedure = {
     procedureName: string | null;
     theatreRoomName: string | null;
     scheduledAt: string | null;
+    startedAt: string | null;
     completedAt: string | null;
     status: string | null;
     statusReason: string | null;
@@ -454,28 +473,6 @@ type EncounterWorkspaceBundle = {
     radiologyOrders: RadiologyOrder[];
     theatreProcedures: TheatreProcedure[];
     closeReadiness: EncounterCloseReadiness | null;
-};
-
-type EncounterLifecycleTargetKind = 'laboratory' | 'pharmacy' | 'radiology' | 'theatre';
-type EncounterLifecycleAction = 'cancel' | 'discontinue' | 'entered_in_error';
-
-type CreateEncounterCareSectionId =
-    | 'laboratory-orders'
-    | 'pharmacy-orders'
-    | 'radiology-orders'
-    | 'theatre-procedures';
-
-type EncounterCareState = 'loading' | 'active' | 'issue' | 'empty';
-
-type CreateEncounterCareSummary = {
-    id: CreateEncounterCareSectionId;
-    label: string;
-    singularLabel: string;
-    pluralLabel: string;
-    description: string;
-    icon: string;
-    count: number;
-    state: EncounterCareState;
 };
 
 type LinkedContextListResponse<T> = {
@@ -586,6 +583,8 @@ const page = usePage<{
 const pageLoading = ref(true);
 const listLoading = ref(false);
 const createLoading = ref(false);
+const encounterWorkspaceBootstrapping = ref(true);
+let encounterWorkspaceBootstrapInFlight: Promise<void> | null = null;
 const createSubmitIntent = ref<CreateSubmitIntent>('save');
 const createProviderSessionSubmitting = ref(false);
 const createConsultationTakeoverDialogOpen = ref(false);
@@ -601,8 +600,25 @@ const medicalRecordStatusCounts = ref<MedicalRecordStatusCounts | null>(null);
 const recordsLoaded = ref(false);
 const listErrors = ref<string[]>([]);
 const actionMessage = ref<string | null>(null);
-const createMessage = ref<string | null>(null);
 const createErrors = ref<Record<string, string[]>>({});
+
+type CreateSuccessFeedbackTone =
+    | 'saved'
+    | 'finalized'
+    | 'completed'
+    | 'resumed'
+    | 'checklist'
+    | 'partial';
+
+type CreateSuccessFeedback = {
+    tone: CreateSuccessFeedbackTone;
+    title: string;
+    detail: string | null;
+    recordNumber: string | null;
+};
+
+const createSuccessFeedback = ref<CreateSuccessFeedback | null>(null);
+let createSuccessFeedbackTimer: number | null = null;
 
 const createDraftRecoveryAvailable = ref(false);
 const createDraftRecovered = ref(false);
@@ -691,6 +707,7 @@ const createContextAutoLinkSuppressed = reactive({
 });
 const canReadMedicalRecords = ref(false);
 const canCreateMedicalRecords = ref(false);
+const canUpdateMedicalRecords = ref(false);
 const canFinalizeMedicalRecords = ref(false);
 const canAmendMedicalRecords = ref(false);
 const canArchiveMedicalRecords = ref(false);
@@ -1930,7 +1947,15 @@ async function initializeMedicalRecordCreateDraftRecovery() {
         createDraftRecovered.value = true;
         createDraftRecoverySavedAt.value =
             existingDraft.updatedAt ?? existingDraft.createdAt ?? null;
-        createMessage.value = `Resumed ${existingDraft.recordNumber ?? 'saved draft'} from the chart.`;
+        showCreateSuccessFeedback(
+            {
+                tone: 'resumed',
+                recordNumber: existingDraft.recordNumber ?? null,
+                title: 'Draft restored',
+                detail: `Continuing ${recordNumberLabel(existingDraft.recordNumber)} from the patient chart.`,
+            },
+            { autoDismissMs: 8000 },
+        );
         if (existingDraft.encounterId) {
             await loadCreateEncounterSummary(existingDraft.encounterId);
         }
@@ -2256,7 +2281,27 @@ function openCreateAmendDialog(): void {
 }
 
 async function bootstrapEncounterWorkspace(): Promise<void> {
-    if (!isEncounterWorkspaceMode.value) return;
+    if (encounterWorkspaceBootstrapInFlight) {
+        await encounterWorkspaceBootstrapInFlight;
+        return;
+    }
+
+    encounterWorkspaceBootstrapInFlight = bootstrapEncounterWorkspaceOnce();
+
+    try {
+        await encounterWorkspaceBootstrapInFlight;
+    } finally {
+        encounterWorkspaceBootstrapInFlight = null;
+    }
+}
+
+async function bootstrapEncounterWorkspaceOnce(): Promise<void> {
+    if (!isEncounterWorkspaceMode.value) {
+        encounterWorkspaceBootstrapping.value = false;
+        return;
+    }
+
+    encounterWorkspaceBootstrapping.value = true;
 
     const encounterId = props.encounterId.trim();
     const legacyAppointmentId =
@@ -2279,11 +2324,16 @@ async function bootstrapEncounterWorkspace(): Promise<void> {
     }
 
     if (encounterId) {
-        await loadEncounterWorkspaceBundle(encounterId);
+        try {
+            await loadEncounterWorkspaceBundle(encounterId);
+        } finally {
+            encounterWorkspaceBootstrapping.value = false;
+        }
         return;
     }
 
     if (!legacyAppointmentId) {
+        encounterWorkspaceBootstrapping.value = false;
         return;
     }
 
@@ -2329,6 +2379,7 @@ async function bootstrapEncounterWorkspace(): Promise<void> {
     } finally {
         createEncounterSummaryLoading.value = false;
         createAppointmentSummaryLoading.value = false;
+        encounterWorkspaceBootstrapping.value = false;
     }
 }
 
@@ -2723,147 +2774,6 @@ function createFieldError(key: string): string | null {
     return createErrors.value[key]?.[0] ?? null;
 }
 
-function laboratoryOrderStatusVariant(status: string | null | undefined) {
-    switch ((status ?? '').toLowerCase()) {
-        case 'ordered':
-        case 'collected':
-        case 'in_progress':
-            return 'default';
-        case 'completed':
-            return 'secondary';
-        case 'cancelled':
-            return 'destructive';
-        default:
-            return 'outline';
-    }
-}
-
-function pharmacyOrderStatusVariant(status: string | null | undefined) {
-    switch ((status ?? '').toLowerCase()) {
-        case 'pending':
-        case 'in_preparation':
-        case 'partially_dispensed':
-            return 'default';
-        case 'dispensed':
-        case 'reconciliation_completed':
-            return 'secondary';
-        case 'cancelled':
-        case 'reconciliation_exception':
-            return 'destructive';
-        default:
-            return 'outline';
-    }
-}
-
-function laboratoryOrderSummaryText(order: LaboratoryOrder): string {
-    if ((order.resultSummary ?? '').trim() !== '') {
-        const resultedAt = (order.resultedAt ?? '').trim();
-        if (resultedAt !== '') {
-            return `${order.resultSummary} · Resulted ${formatDateTime(resultedAt)}`;
-        }
-
-        return order.resultSummary as string;
-    }
-
-    if ((order.priority ?? '').trim() !== '') {
-        return `Priority: ${formatEnumLabel(order.priority)}`;
-    }
-
-    return 'Awaiting collection or processing.';
-}
-
-function pharmacyOrderSummaryText(order: PharmacyOrder): string {
-    if ((order.dosageInstruction ?? '').trim() !== '') {
-        return order.dosageInstruction as string;
-    }
-
-    if ((order.dispensedAt ?? '').trim() !== '') {
-        return `Dispensed ${formatDateTime(order.dispensedAt)}`;
-    }
-
-    return 'Awaiting pharmacy preparation.';
-}
-
-function pharmacyOrderQuantityLabel(
-    quantity: string | number | null | undefined,
-): string | null {
-    if (quantity === null || quantity === undefined) return null;
-
-    const normalized = String(quantity).trim();
-    if (normalized === '') return null;
-
-    const parsed = Number(normalized);
-    if (!Number.isFinite(parsed)) return `Qty ${normalized}`;
-
-    return `Qty ${Number.isInteger(parsed) ? parsed.toString() : parsed.toString()}`;
-}
-
-function radiologyOrderStatusVariant(status: string | null | undefined) {
-    switch ((status ?? '').toLowerCase()) {
-        case 'ordered':
-        case 'scheduled':
-        case 'in_progress':
-            return 'default';
-        case 'completed':
-            return 'secondary';
-        case 'cancelled':
-            return 'destructive';
-        default:
-            return 'outline';
-    }
-}
-
-function radiologyOrderSummaryText(order: RadiologyOrder): string {
-    if ((order.reportSummary ?? '').trim() !== '') {
-        return order.reportSummary as string;
-    }
-
-    if ((order.modality ?? '').trim() !== '') {
-        return `Modality: ${formatEnumLabel(order.modality)}`;
-    }
-
-    if ((order.completedAt ?? '').trim() !== '') {
-        return `Reported ${formatDateTime(order.completedAt)}`;
-    }
-
-    return 'Awaiting imaging scheduling or execution.';
-}
-
-function theatreProcedureStatusVariant(status: string | null | undefined) {
-    switch ((status ?? '').toLowerCase()) {
-        case 'planned':
-        case 'in_preop':
-        case 'in_progress':
-            return 'default';
-        case 'completed':
-            return 'secondary';
-        case 'cancelled':
-            return 'destructive';
-        default:
-            return 'outline';
-    }
-}
-
-function theatreProcedureSummaryText(procedure: TheatreProcedure): string {
-    if ((procedure.statusReason ?? '').trim() !== '') {
-        return procedure.statusReason as string;
-    }
-
-    if ((procedure.notes ?? '').trim() !== '') {
-        return procedure.notes as string;
-    }
-
-    if ((procedure.theatreRoomName ?? '').trim() !== '') {
-        return `Room: ${procedure.theatreRoomName}`;
-    }
-
-    if ((procedure.completedAt ?? '').trim() !== '') {
-        return `Completed ${formatDateTime(procedure.completedAt)}`;
-    }
-
-    return 'Awaiting theatre scheduling and procedure progression.';
-}
-
 function appointmentReferralStatusVariant(status: string | null | undefined) {
     switch ((status ?? '').toLowerCase()) {
         case 'requested':
@@ -3170,8 +3080,46 @@ async function requestEncounterTheatreProcedures(filters: {
     return response.data ?? [];
 }
 
+function clearCreateSuccessFeedbackTimer(): void {
+    if (createSuccessFeedbackTimer !== null) {
+        window.clearTimeout(createSuccessFeedbackTimer);
+        createSuccessFeedbackTimer = null;
+    }
+}
+
+function dismissCreateSuccessFeedback(): void {
+    clearCreateSuccessFeedbackTimer();
+    createSuccessFeedback.value = null;
+}
+
+function showCreateSuccessFeedback(
+    feedback: CreateSuccessFeedback,
+    options?: { autoDismissMs?: number; toastMessage?: string | null },
+): void {
+    clearCreateSuccessFeedbackTimer();
+    createSuccessFeedback.value = feedback;
+
+    const toastMessage = options?.toastMessage;
+    if (toastMessage) {
+        notifySuccess(toastMessage);
+    }
+
+    const autoDismissMs = options?.autoDismissMs ?? 0;
+    if (autoDismissMs > 0) {
+        createSuccessFeedbackTimer = window.setTimeout(() => {
+            createSuccessFeedback.value = null;
+            createSuccessFeedbackTimer = null;
+        }, autoDismissMs);
+    }
+}
+
+function recordNumberLabel(recordNumber: string | null | undefined): string {
+    const normalized = recordNumber?.trim() ?? '';
+    return normalized !== '' ? normalized : 'Consultation note';
+}
+
 function resetCreateMessages() {
-    createMessage.value = null;
+    dismissCreateSuccessFeedback();
     createErrors.value = {};
 }
 
@@ -3841,6 +3789,7 @@ async function loadMedicalRecordPermissions() {
         );
         canReadMedicalRecords.value = names.has('medical.records.read');
         canCreateMedicalRecords.value = names.has('medical.records.create');
+        canUpdateMedicalRecords.value = names.has('medical.records.update');
         canFinalizeMedicalRecords.value = names.has('medical.records.finalize');
         canAmendMedicalRecords.value = names.has('medical.records.amend');
         canArchiveMedicalRecords.value = names.has('medical.records.archive');
@@ -3866,6 +3815,7 @@ async function loadMedicalRecordPermissions() {
     } catch {
         canReadMedicalRecords.value = false;
         canCreateMedicalRecords.value = false;
+        canUpdateMedicalRecords.value = false;
         canFinalizeMedicalRecords.value = false;
         canAmendMedicalRecords.value = false;
         canArchiveMedicalRecords.value = false;
@@ -4307,10 +4257,17 @@ async function createRecord(intent: CreateSubmitIntent = 'save') {
         let visitCompleted = false;
 
         if (intent === 'save') {
-            const successMessage = `Saved ${latestRecord.recordNumber ?? 'medical record'} to the chart.`;
-            createMessage.value = successMessage;
-            actionMessage.value = successMessage;
-            notifySuccess(successMessage);
+            const recordLabel = recordNumberLabel(latestRecord.recordNumber);
+            actionMessage.value = `${recordLabel} saved to chart.`;
+            showCreateSuccessFeedback(
+                {
+                    tone: 'saved',
+                    recordNumber: latestRecord.recordNumber ?? null,
+                    title: 'Note saved',
+                    detail: 'You can keep charting or finalize when ready.',
+                },
+                { autoDismissMs: 6000 },
+            );
 
             if (canReadMedicalRecords.value) {
                 upsertRecordIntoList(latestRecord);
@@ -4329,13 +4286,23 @@ async function createRecord(intent: CreateSubmitIntent = 'save') {
             );
 
             if (!finalizedRecord) {
-                const draftSavedMessage =
+                const recordLabel = recordNumberLabel(latestRecord.recordNumber);
+                const detail =
                     intent === 'finalize_complete'
-                        ? `Saved ${latestRecord.recordNumber ?? 'medical record'} as a draft. Finalize the note before closing the visit.`
-                        : `Saved ${latestRecord.recordNumber ?? 'medical record'} as a draft. Review the note and try finalizing again.`;
-                createMessage.value = draftSavedMessage;
-                actionMessage.value = draftSavedMessage;
-                notifySuccess(draftSavedMessage);
+                        ? `${recordLabel} was saved, but the note still needs to be finalized before the visit can close.`
+                        : `${recordLabel} was saved. Review the note and try finalizing again.`;
+                actionMessage.value = detail;
+                showCreateSuccessFeedback(
+                    {
+                        tone: 'partial',
+                        recordNumber: latestRecord.recordNumber ?? null,
+                        title: 'Draft saved — finalize still needed',
+                        detail,
+                    },
+                    {
+                        toastMessage: detail,
+                    },
+                );
                 return;
             }
 
@@ -4355,10 +4322,19 @@ async function createRecord(intent: CreateSubmitIntent = 'save') {
                 ) {
                     openEncounterCloseDialog();
                     const checklistMessage =
-                        'Consultation note finalized. Review the close checklist to finish the visit.';
-                    createMessage.value = checklistMessage;
+                        'Review the close checklist to finish the visit.';
                     actionMessage.value = checklistMessage;
-                    notifySuccess(checklistMessage);
+                    showCreateSuccessFeedback(
+                        {
+                            tone: 'checklist',
+                            recordNumber: latestRecord.recordNumber ?? null,
+                            title: 'Note finalized',
+                            detail: checklistMessage,
+                        },
+                        {
+                            toastMessage: `Note finalized. ${checklistMessage}`,
+                        },
+                    );
                     return;
                 }
 
@@ -4395,14 +4371,35 @@ async function createRecord(intent: CreateSubmitIntent = 'save') {
             }
         }
 
-        const successMessage = visitCompleted
-            ? `Saved ${latestRecord.recordNumber ?? 'medical record'}, finalized the note, and completed the visit.`
+        const recordLabel = recordNumberLabel(latestRecord.recordNumber);
+        const successFeedback: CreateSuccessFeedback = visitCompleted
+            ? {
+                  tone: 'completed',
+                  recordNumber: latestRecord.recordNumber ?? null,
+                  title: 'Visit completed',
+                  detail: `${recordLabel} is finalized and the encounter is closed.`,
+              }
             : noteFinalized
-              ? `Saved ${latestRecord.recordNumber ?? 'medical record'} and finalized the note.`
-              : `Saved ${latestRecord.recordNumber ?? 'medical record'} to the chart.`;
-        createMessage.value = successMessage;
-        actionMessage.value = successMessage;
-        notifySuccess(successMessage);
+              ? {
+                    tone: 'finalized',
+                    recordNumber: latestRecord.recordNumber ?? null,
+                    title: 'Note finalized',
+                    detail: `${recordLabel} is signed and locked for editing.`,
+                }
+              : {
+                    tone: 'saved',
+                    recordNumber: latestRecord.recordNumber ?? null,
+                    title: 'Note saved',
+                    detail: 'You can keep charting or finalize when ready.',
+                };
+        actionMessage.value = successFeedback.detail;
+        showCreateSuccessFeedback(successFeedback, {
+            autoDismissMs: successFeedback.tone === 'saved' ? 6000 : 0,
+            toastMessage:
+                successFeedback.tone === 'saved'
+                    ? null
+                    : `${successFeedback.title}. ${successFeedback.detail ?? ''}`.trim(),
+        });
 
         const savedPatientId =
             latestRecord.patientId ?? createForm.patientId.trim();
@@ -4737,123 +4734,6 @@ function toggleListRow(id: string) {
 function shortId(value: string | null): string {
     if (!value) return 'N/A';
     return value.length > 10 ? `${value.slice(0, 8)}...` : value;
-}
-
-function lifecycleLinkageText(
-    entry: { replacesOrderId?: string | null; addOnToOrderId?: string | null },
-    label: string,
-): string | null {
-    const replacesOrderId = String(entry.replacesOrderId ?? '').trim();
-    if (replacesOrderId !== '') {
-        return `Replacement for ${label} ${shortId(replacesOrderId)}.`;
-    }
-
-    const addOnToOrderId = String(entry.addOnToOrderId ?? '').trim();
-    if (addOnToOrderId !== '') {
-        return `Linked follow-up to ${label} ${shortId(addOnToOrderId)}.`;
-    }
-
-    return null;
-}
-
-function isEncounterOrderEnteredInError(
-    entry: { enteredInErrorAt?: string | null; lifecycleReasonCode?: string | null } | null,
-): boolean {
-    if (!entry) return false;
-
-    return Boolean(
-        String(entry.enteredInErrorAt ?? '').trim()
-        || String(entry.lifecycleReasonCode ?? '').trim().toLowerCase() === 'entered_in_error',
-    );
-}
-
-function canApplyLaboratoryEncounterLifecycleAction(
-    order: LaboratoryOrder | null,
-    action: 'cancel' | 'entered_in_error',
-): boolean {
-    if (!order || !canCreateLaboratoryOrders.value || isEncounterOrderEnteredInError(order)) {
-        return false;
-    }
-
-    if (action === 'cancel') {
-        return order.status !== 'cancelled' && order.status !== 'completed';
-    }
-
-    return true;
-}
-
-function canApplyPharmacyEncounterLifecycleAction(
-    order: PharmacyOrder | null,
-    action: 'cancel' | 'discontinue' | 'entered_in_error',
-): boolean {
-    if (!order || !canCreatePharmacyOrders.value || isEncounterOrderEnteredInError(order)) {
-        return false;
-    }
-
-    const quantityDispensed = Number(order.quantityDispensed ?? 0);
-    if (action === 'cancel') {
-        return order.status !== 'cancelled' && order.status !== 'dispensed' && quantityDispensed <= 0;
-    }
-
-    if (action === 'discontinue') {
-        return order.status !== 'cancelled' && order.status !== 'dispensed';
-    }
-
-    return true;
-}
-
-function canApplyRadiologyEncounterLifecycleAction(
-    order: RadiologyOrder | null,
-    action: 'cancel' | 'entered_in_error',
-): boolean {
-    if (!order || !canCreateRadiologyOrders.value || isEncounterOrderEnteredInError(order)) {
-        return false;
-    }
-
-    if (action === 'cancel') {
-        return order.status !== 'cancelled' && order.status !== 'completed';
-    }
-
-    return true;
-}
-
-function canApplyTheatreEncounterLifecycleAction(
-    procedure: TheatreProcedure | null,
-    action: 'cancel' | 'entered_in_error',
-): boolean {
-    if (!procedure || !canCreateTheatreProcedures.value || isEncounterOrderEnteredInError(procedure)) {
-        return false;
-    }
-
-    if (action === 'cancel') {
-        return procedure.status !== 'cancelled' && procedure.status !== 'completed';
-    }
-
-    return true;
-}
-
-function encounterLifecycleActionLabel(action: EncounterLifecycleAction | null): string {
-    if (action === 'cancel') return 'Cancel';
-    if (action === 'discontinue') return 'Discontinue';
-    if (action === 'entered_in_error') return 'Mark Entered In Error';
-    return 'Apply';
-}
-
-function encounterLifecycleActionSuccessMessage(action: EncounterLifecycleAction | null): string {
-    if (action === 'cancel') return 'Order cancelled.';
-    if (action === 'discontinue') return 'Order discontinued.';
-    if (action === 'entered_in_error') return 'Order marked entered in error.';
-    return 'Lifecycle action applied.';
-}
-
-function encounterLifecycleActionPath(
-    kind: EncounterLifecycleTargetKind,
-    id: string,
-): string {
-    if (kind === 'laboratory') return `/laboratory-orders/${id}/lifecycle`;
-    if (kind === 'pharmacy') return `/pharmacy-orders/${id}/lifecycle`;
-    if (kind === 'radiology') return `/radiology-orders/${id}/lifecycle`;
-    return `/theatre-procedures/${id}/lifecycle`;
 }
 
 function openEncounterLifecycleDialog(
@@ -7418,27 +7298,12 @@ const createProviderSessionSummary = computed(() => {
 const createFooterWorkflowHint = computed(() => {
     const completed = createComposerCompletedSectionCount.value;
     const total = createComposerSectionItems.value.length;
-    const saveContext = createDraftRecord.value
-        ? 'Autosave keeps this draft updating in the chart while you keep charting.'
-        : 'Save note keeps the chart draft current while you continue documenting.';
 
-    if (canFinalizeAndCompleteVisit.value) {
-        return `${completed} of ${total} note sections documented. ${saveContext} Finalize note signs the document. Close encounter completes the visit after signing. Finalize & close visit does both in one step.`;
+    if (completed >= total) {
+        return null;
     }
 
-    if (canCloseEncounter.value) {
-        return `${completed} of ${total} note sections documented. ${saveContext} The note is signed. Close encounter when the visit is ready to leave the active workspace.`;
-    }
-
-    if (canFinalizeCreateNote.value) {
-        return `${completed} of ${total} note sections documented. ${saveContext} Finalize note signs the document and locks it for normal editing.`;
-    }
-
-    if (canSaveAndReturnToAppointments.value) {
-        return `${completed} of ${total} note sections documented. ${saveContext} Save & return takes you back to Appointments.`;
-    }
-
-    return `${completed} of ${total} note sections documented. ${saveContext}`;
+    return `${completed}/${total} sections ready`;
 });
 
 function createConsultationOwnerDisplay(): string {
@@ -7448,45 +7313,6 @@ function createConsultationOwnerDisplay(): string {
     }
 
     return `clinician #${ownerUserId}`;
-}
-
-function encounterCareState(
-    count: number,
-    loading: boolean,
-    error?: string | null,
-): EncounterCareState {
-    if (loading) return 'loading';
-    if (error) return 'issue';
-    if (count > 0) return 'active';
-    return 'empty';
-}
-
-function encounterCareStateLabel(state: EncounterCareState): string {
-    switch (state) {
-        case 'loading':
-            return 'Loading';
-        case 'active':
-            return 'Has records';
-        case 'issue':
-            return 'Issue';
-        default:
-            return 'Empty';
-    }
-}
-
-function encounterCareStateVariant(
-    state: EncounterCareState,
-): 'default' | 'secondary' | 'outline' | 'destructive' {
-    switch (state) {
-        case 'active':
-            return 'secondary';
-        case 'issue':
-            return 'destructive';
-        case 'loading':
-            return 'outline';
-        default:
-            return 'outline';
-    }
 }
 
 const createEncounterCareSummaries = computed<CreateEncounterCareSummary[]>(() => {
@@ -7596,6 +7422,19 @@ const createEncounterCareTotalCount = computed(() =>
         (total, summary) => total + summary.count,
         0,
     ),
+);
+const createEncounterCareCountLabel = computed(() => {
+    const total = createEncounterCareTotalCount.value;
+    return `${total} ${total === 1 ? 'linked item' : 'linked items'}`;
+});
+const createEncounterCareHeaderContext = computed(() =>
+    [
+        createEncounterSourceLabel.value,
+        createAppointmentContextStatusLabel.value,
+        createAdmissionContextStatusLabel.value,
+    ]
+        .filter(Boolean)
+        .join(' · '),
 );
 
 const createEncounterCareActiveCount = computed(
@@ -7734,7 +7573,6 @@ const createComposerCompletedSectionCount = computed(
         createComposerSectionItems.value.filter((section) => section.complete)
             .length,
 );
-
 function scrollCreateComposerToSection(sectionId: string) {
     document
         .getElementById(sectionId)
@@ -7793,9 +7631,54 @@ const createErrorSummary = computed(() =>
     ),
 );
 
-const hasCreateFeedback = computed(
-    () => Boolean(createMessage.value) || createErrorSummary.value.length > 0,
-);
+const createSuccessFeedbackIcon = computed(() => {
+    switch (createSuccessFeedback.value?.tone) {
+        case 'finalized':
+        case 'completed':
+            return 'shield-check';
+        case 'resumed':
+            return 'history';
+        case 'checklist':
+            return 'clipboard-list';
+        case 'partial':
+            return 'alert-circle';
+        case 'saved':
+        default:
+            return 'check-circle';
+    }
+});
+
+const createSuccessFeedbackToneClass = computed(() => {
+    switch (createSuccessFeedback.value?.tone) {
+        case 'partial':
+            return 'border-amber-500/25 bg-amber-50/90 text-amber-950 ring-amber-500/15 dark:border-amber-800/50 dark:bg-amber-950/25 dark:text-amber-100 dark:ring-amber-900/40';
+        case 'finalized':
+        case 'completed':
+            return 'border-primary/20 bg-primary/5 text-foreground ring-primary/10 dark:border-primary/30 dark:bg-primary/10';
+        case 'resumed':
+        case 'checklist':
+            return 'border-sky-500/25 bg-sky-50/90 text-sky-950 ring-sky-500/15 dark:border-sky-800/50 dark:bg-sky-950/25 dark:text-sky-100 dark:ring-sky-900/40';
+        case 'saved':
+        default:
+            return 'border-emerald-500/25 bg-emerald-50/90 text-emerald-950 ring-emerald-500/15 dark:border-emerald-800/50 dark:bg-emerald-950/25 dark:text-emerald-100 dark:ring-emerald-900/40';
+    }
+});
+
+const createSuccessFeedbackIconClass = computed(() => {
+    switch (createSuccessFeedback.value?.tone) {
+        case 'partial':
+            return 'bg-amber-500/15 text-amber-700 dark:text-amber-300';
+        case 'finalized':
+        case 'completed':
+            return 'bg-primary/15 text-primary';
+        case 'resumed':
+        case 'checklist':
+            return 'bg-sky-500/15 text-sky-700 dark:text-sky-300';
+        case 'saved':
+        default:
+            return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300';
+    }
+});
 
 
 const hasUnsavedCreateClinicalContent = computed(() =>
@@ -7924,49 +7807,6 @@ const createLeaveConfirmBody = computed(() => {
     return 'Stay here to keep charting, or leave now and discard this unsaved note.';
 });
 
-const createDraftStatusDescription = computed(() => {
-    const savedAtLabel = createDraftLastSavedLabel.value;
-
-    if (createDraftHydratingExisting.value) {
-        return `Loading the saved ${createDraftNoteTypeLabel.value} draft from the chart.`;
-    }
-
-    if (!createDraftOnline.value) {
-        return createDraftHasPendingChanges.value
-            ? `You are offline. Keep this page open; the latest ${createDraftNoteTypeLabel.value} changes will retry when connection returns.`
-            : `You are offline. This ${createDraftNoteTypeLabel.value} will keep showing the last chart copy until connection returns.`;
-    }
-
-    if (createDraftSyncState.value === 'error') {
-        return createDraftRecord.value
-            ? `The latest ${createDraftNoteTypeLabel.value} changes are not saved yet. Keep this page open and use Save note to push them back to the chart.`
-            : `This ${createDraftNoteTypeLabel.value} is not saved in the chart yet. Keep this page open and use Save note now to avoid losing the unsaved text.`;
-    }
-
-    if (createDraftSyncState.value === 'conflict') {
-        return `Another save updated this ${createDraftNoteTypeLabel.value} while you were charting. Choose the chart copy or keep your version on this screen.`;
-    }
-
-    if (createDraftSyncState.value === 'saving') {
-        return savedAtLabel
-            ? `Saving the latest ${createDraftNoteTypeLabel.value} changes to the chart. Last saved copy was ${savedAtLabel}.`
-            : `Saving the latest ${createDraftNoteTypeLabel.value} changes to the chart.`;
-    }
-
-    if (createDraftRecord.value && !createDraftHasPendingChanges.value) {
-        return savedAtLabel
-            ? `This ${createDraftNoteTypeLabel.value} is saved in the chart. Last saved at ${savedAtLabel}.`
-            : `This ${createDraftNoteTypeLabel.value} is saved in the chart.`;
-    }
-
-    if (createDraftRecord.value) {
-        return savedAtLabel
-            ? `This ${createDraftNoteTypeLabel.value} has changes since the last chart save at ${savedAtLabel}. Autosave will keep updating the chart while you keep charting, and Save note pushes the latest version immediately.`
-            : `This ${createDraftNoteTypeLabel.value} has changes that are not saved in the chart yet. Autosave will keep updating the chart while you keep charting, and Save note pushes the latest version immediately.`;
-    }
-
-    return `This ${createDraftNoteTypeLabel.value} is not saved in the chart yet. A chart draft will be created after a short pause while you keep charting, or you can use Save note now. If this page closes too early, the unsaved text can still be lost.`;
-});
 const createDraftIndicatorLabel = computed(() => {
     if (createDraftHydratingExisting.value) {
         return 'Loading draft';
@@ -8043,10 +7883,17 @@ const encounterWorkspaceNoteStatusVariant = computed<
 });
 
 const encounterWorkspaceHeaderLoading = computed(
-    () =>
-        createAppointmentSummaryLoading.value ||
-        createDraftHydratingExisting.value ||
-        createEncounterSummaryLoading.value,
+    () => {
+        if (createPatientSummary.value) {
+            return false;
+        }
+
+        return (
+            encounterWorkspaceBootstrapping.value ||
+            createAppointmentSummaryLoading.value ||
+            createEncounterSummaryLoading.value
+        );
+    },
 );
 
 const encounterWorkspaceHasPatient = computed(
@@ -8061,31 +7908,59 @@ const encounterWorkspacePageTitle = computed(() => {
     return 'Encounter workspace';
 });
 
+const encounterWorkspaceMetaSeparator = ' \u00B7 ';
+const encounterWorkspacePaneFocusStorageKey = 'encounterWorkspace.paneFocus.v3';
+const workspacePaneFocus = ref<EncounterWorkspacePaneFocus>('note');
+const encounterAttachmentsOpen = ref(true);
+const encounterGovernanceOpen = ref(false);
+
+function sanitizeEncounterWorkspacePaneFocus(
+    value: string | null,
+): EncounterWorkspacePaneFocus {
+    if (value === 'both' || value === 'note' || value === 'care') return value;
+    return 'note';
+}
+
+function isEditableEventTarget(target: EventTarget | null): boolean {
+    const element = target instanceof HTMLElement ? target : null;
+    if (!element) return false;
+    if (element.isContentEditable) return true;
+    const tag = element.tagName.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+    return Boolean(element.closest('[contenteditable="true"]'));
+}
+
+function handleEncounterWorkspaceGlobalKeydown(event: KeyboardEvent): void {
+    if (!isEncounterWorkspaceMode.value) return;
+    if (!event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.defaultPrevented) return;
+    if (isEditableEventTarget(event.target)) return;
+
+    if (event.key === '1') {
+        workspacePaneFocus.value = 'note';
+        event.preventDefault();
+        return;
+    }
+
+    if (event.key === '2') {
+        if (!canShowCreateWorkflowWorkspace.value) return;
+        workspacePaneFocus.value = 'care';
+        event.preventDefault();
+        return;
+    }
+
+    if (event.key === '3') {
+        workspacePaneFocus.value = 'both';
+        event.preventDefault();
+    }
+}
+
 const encounterWorkspaceIntroText = computed(() => {
     if (!encounterWorkspaceHasPatient.value) {
         return 'Open from Appointments or Medical records to chart this encounter with orders and billing in one place.';
     }
 
-    return 'Chart, orders, and billing for this encounter—visit status and draft sync stay visible while you work.';
-});
-
-const encounterWorkspaceHandoffLabel = computed(() =>
-    openedFromAppointments ? 'Appointment handoff' : 'Medical records workflow',
-);
-
-const encounterWorkspaceContextLabel = computed(() => {
-    if (hasCreateAppointmentContext.value) {
-        return createAppointmentContextLabel.value;
-    }
-
-    if (createForm.encounterId.trim()) {
-        return (
-            createEncounterSummary.value?.encounterNumber?.trim() ||
-            'Active encounter'
-        );
-    }
-
-    return 'Encounter context';
+    return 'Chart, orders, and billing for this encounter\u2014visit status and draft sync stay visible while you work.';
 });
 
 const encounterWorkspaceOwnerLabel = computed(() => {
@@ -8102,7 +7977,7 @@ const encounterWorkspaceContextMeta = computed(() => {
     if (hasCreateAppointmentContext.value) {
         return [createAppointmentContextMeta.value, encounterWorkspaceOwnerLabel.value]
             .filter(Boolean)
-            .join(' · ');
+            .join(encounterWorkspaceMetaSeparator);
     }
 
     if (createEncounterStatusLabel.value) {
@@ -8135,28 +8010,172 @@ const createPatientChartHref = computed(() => {
 
 const encounterWorkspaceHeaderContextLine = computed(() => {
     const parts = [
-        encounterWorkspaceVisitStatusLabel.value,
-        encounterWorkspaceContextMeta.value,
+        createAppointmentSummary.value?.appointmentNumber?.trim()
+            ? `Appointment ${createAppointmentSummary.value.appointmentNumber.trim()}`
+            : null,
+        createEncounterSummary.value?.encounterNumber?.trim()
+            ? `Encounter ${createEncounterSummary.value.encounterNumber.trim()}`
+            : null,
+        createAppointmentSummary.value?.scheduledAt
+            ? formatDateTime(createAppointmentSummary.value.scheduledAt)
+            : null,
+        createAppointmentSummary.value?.department?.trim() || null,
+        [createAdmissionSummary.value?.ward?.trim(), createAdmissionSummary.value?.bed?.trim()]
+            .filter(Boolean)
+            .join(' · ') || null,
+        encounterWorkspaceOwnerLabel.value,
     ].filter(Boolean);
 
-    return parts.join(' · ');
+    if (parts.length > 0) {
+        return parts.join(' · ');
+    }
+
+    const workflowMeta = createMedicalRecordWorkflowContextMeta.value.trim();
+    return workflowMeta || null;
 });
 
 const encounterWorkspaceDraftHeaderAlert = computed(() => {
     const label = createDraftIndicatorLabel.value;
-    if (!label || label === 'Saved to chart') {
+    if (
+        !label ||
+        label === 'Saved to chart' ||
+        label === 'Saving to chart' ||
+        label === 'Loading draft'
+    ) {
+        return null;
+    }
+
+    if (
+        createDraftConflictAlertVisible.value
+        || createDraftFailureAlertVisible.value
+    ) {
         return null;
     }
 
     return {
         label,
-        detail: createDraftIndicatorDetail.value,
-        tone:
-            label === 'Saving to chart' || label === 'Loading draft'
-                ? 'info'
-                : 'warning',
+        detail: null,
+        tone: 'warning' as const,
     };
 });
+
+const encounterWorkspaceStatusPrimaryLabel = computed(() => {
+    const syncLabel = createDraftIndicatorLabel.value;
+    if (
+        syncLabel &&
+        syncLabel !== 'Saved to chart' &&
+        (createDraftSyncState.value === 'error' ||
+            createDraftSyncState.value === 'conflict' ||
+            syncLabel === 'Save needs attention' ||
+            syncLabel === 'Draft conflict')
+    ) {
+        return syncLabel;
+    }
+
+    if (syncLabel === 'Saving to chart' || syncLabel === 'Loading draft') {
+        return syncLabel;
+    }
+
+    return encounterWorkspaceNoteStatusLabel.value;
+});
+
+const encounterWorkspaceStatusPrimaryVariant = computed<
+    'default' | 'secondary' | 'outline' | 'destructive'
+>(() => {
+    const syncLabel = createDraftIndicatorLabel.value;
+    if (
+        createDraftSyncState.value === 'error' ||
+        createDraftSyncState.value === 'conflict' ||
+        syncLabel === 'Save needs attention' ||
+        syncLabel === 'Draft conflict'
+    ) {
+        return 'destructive';
+    }
+
+    if (syncLabel === 'Saving to chart' || syncLabel === 'Loading draft') {
+        return 'secondary';
+    }
+
+    return encounterWorkspaceNoteStatusVariant.value;
+});
+
+const encounterWorkspaceGridClass = computed(() => {
+    if (!isEncounterWorkspaceMode.value) {
+        return 'contents';
+    }
+
+    return [
+        'min-h-0 flex-1 overflow-hidden',
+        canShowCreateWorkflowWorkspace.value &&
+            'lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:divide-x lg:divide-border/40',
+    ]
+        .filter(Boolean)
+        .join(' ');
+});
+
+const encounterWorkspaceTabsClass = computed(() => [
+    'flex min-h-0 flex-1 flex-col overflow-hidden',
+    isEncounterWorkspaceMode.value && 'encounter-workspace-tabs',
+    isEncounterWorkspaceMode.value &&
+        workspacePaneFocus.value === 'note' &&
+        'encounter-workspace-tabs--focus-note',
+    isEncounterWorkspaceMode.value &&
+        workspacePaneFocus.value === 'care' &&
+        'encounter-workspace-tabs--focus-care',
+]);
+
+const encounterWorkspaceCarePaneClass = computed(() => [
+    'order-2 mt-0 flex min-h-0 flex-col overflow-hidden lg:order-2',
+    isEncounterWorkspaceMode.value &&
+        'encounter-workspace-pane encounter-workspace-pane--care',
+    isEncounterWorkspaceMode.value &&
+        workspacePaneFocus.value === 'note' &&
+        'lg:hidden',
+    isEncounterWorkspaceMode.value &&
+        workspacePaneFocus.value === 'care' &&
+        'lg:col-span-2',
+]);
+
+const encounterWorkspaceNotePaneClass = computed(() => [
+    'order-1 mt-0 flex min-h-0 flex-col overflow-hidden lg:order-1',
+    isEncounterWorkspaceMode.value &&
+        'encounter-workspace-pane encounter-workspace-pane--note',
+    isEncounterWorkspaceMode.value &&
+        workspacePaneFocus.value === 'care' &&
+        'lg:hidden',
+    isEncounterWorkspaceMode.value &&
+        workspacePaneFocus.value === 'note' &&
+        'lg:col-span-2',
+]);
+
+watch(
+    () => workspacePaneFocus.value,
+    (value) => {
+        if (!isEncounterWorkspaceMode.value) return;
+
+        if (value === 'care' && !canShowCreateWorkflowWorkspace.value) {
+            workspacePaneFocus.value = 'note';
+            return;
+        }
+
+        if (value === 'note') {
+            createComposerWorkspaceTab.value = 'note';
+        } else if (value === 'care') {
+            createComposerWorkspaceTab.value = 'workflow';
+        }
+
+        if (typeof window === 'undefined') return;
+        try {
+            window.localStorage.setItem(
+                encounterWorkspacePaneFocusStorageKey,
+                value,
+            );
+        } catch {
+            // Ignore storage failures (private mode / quotas).
+        }
+    },
+);
+
 const detailsAgainstVersionOptions = computed(() =>
     detailsVersions.value.filter(
         (version) => version.id !== detailsSelectedVersionId.value,
@@ -8426,6 +8445,17 @@ watch(
         ) {
             void flushCreateDraftAutosave();
         }
+
+        if (!isEncounterWorkspaceMode.value) return;
+
+        if (value === 'note' && workspacePaneFocus.value !== 'note') {
+            workspacePaneFocus.value = 'note';
+        } else if (
+            value === 'workflow' &&
+            workspacePaneFocus.value !== 'care'
+        ) {
+            workspacePaneFocus.value = 'care';
+        }
     },
 );
 
@@ -8474,6 +8504,7 @@ watch(
 
 onBeforeUnmount(() => {
     void flushCreateDraftAutosave({ keepalive: true });
+    clearCreateSuccessFeedbackTimer();
     clearSearchDebounce();
     clearMedicalRecordCreateDraftAutosaveTimers();
     teardownCreateDraftBroadcastChannel();
@@ -8488,6 +8519,7 @@ onBeforeUnmount(() => {
         window.removeEventListener('blur', handleCreateDraftWindowBlur);
         window.removeEventListener('online', handleCreateDraftOnline);
         window.removeEventListener('offline', handleCreateDraftOffline);
+        window.removeEventListener('keydown', handleEncounterWorkspaceGlobalKeydown);
     }
     removeMedicalRecordsNavigationGuard?.();
     removeMedicalRecordsNavigationGuard = null;
@@ -8503,10 +8535,18 @@ onMounted(() => {
     if (typeof window !== 'undefined') {
         createDraftOnline.value = navigator.onLine;
         initializeCreateDraftBroadcastChannel();
+        try {
+            workspacePaneFocus.value = sanitizeEncounterWorkspacePaneFocus(
+                window.localStorage.getItem(encounterWorkspacePaneFocusStorageKey),
+            );
+        } catch {
+            // Ignore storage failures (private mode / quotas).
+        }
         window.addEventListener('pagehide', handleCreateDraftPageHide);
         window.addEventListener('blur', handleCreateDraftWindowBlur);
         window.addEventListener('online', handleCreateDraftOnline);
         window.addEventListener('offline', handleCreateDraftOffline);
+        window.addEventListener('keydown', handleEncounterWorkspaceGlobalKeydown);
     }
     removeMedicalRecordsNavigationGuard = router.on('before', (event) => {
         if (shouldBypassMedicalRecordsLeaveGuardForVisit(event.detail.visit)) {
@@ -8535,288 +8575,55 @@ onMounted(() => {
 <template>
     <Head :title="encounterWorkspacePageTitle" />
     <AppLayout :breadcrumbs="breadcrumbs">
+        <div class="shrink-0 bg-background px-4 pb-4 pt-3 md:px-6 md:pt-5">
+            <EncounterWorkspaceHeader
+                :loading="encounterWorkspaceHeaderLoading"
+                :has-patient="encounterWorkspaceHasPatient"
+                :patient-summary="createPatientSummary"
+                :patient-name="createPatientSummary ? patientName(createPatientSummary) : ''"
+                :patient-initials="createPatientSummary ? patientInitials(createPatientSummary) : ''"
+                :header-context-line="encounterWorkspaceHeaderContextLine"
+                :patient-context-meta="createPatientContextMeta"
+                :patient-chart-href="createPatientChartHref"
+                :back-label="encounterWorkspaceBackLabel"
+                :back-icon="encounterWorkspaceBackIcon"
+                intro-title="Encounter workspace"
+                :intro-text="encounterWorkspaceIntroText"
+                :note-type-label="createRecordTypeLabel"
+                :workflow-label="createMedicalRecordWorkflowContextLabel"
+                :workflow-status-label="createMedicalRecordContextStatusLabel"
+                :workflow-status-variant="createMedicalRecordContextStatusVariant"
+                :status-primary-label="encounterWorkspaceStatusPrimaryLabel"
+                :status-primary-variant="encounterWorkspaceStatusPrimaryVariant"
+                :draft-header-alert="encounterWorkspaceDraftHeaderAlert"
+                @back="encounterWorkspaceBack()"
+            />
+        </div>
+
         <div
-            class="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
+            class="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 md:px-6 md:pb-5"
         >
-            <div class="shrink-0 px-3 pb-4 pt-3 md:px-5 md:pt-5 lg:px-6 lg:pt-6">
-            <section
-                class="rounded-lg border border-border bg-card shadow-sm"
-            >
-                <div
-                    v-if="encounterWorkspaceHeaderLoading && encounterWorkspaceHasPatient"
-                    class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6"
-                >
-                    <div class="flex min-w-0 items-center gap-3">
-                        <Skeleton class="size-10 rounded-lg" />
-                        <div class="min-w-0 space-y-2">
-                            <Skeleton class="h-5 w-44 rounded-lg" />
-                            <Skeleton class="h-3 w-72 rounded-lg" />
-                        </div>
-                    </div>
-                    <div class="flex flex-wrap gap-2">
-                        <Skeleton class="h-8 w-28 rounded-lg" />
-                        <Skeleton class="h-8 w-32 rounded-lg" />
-                    </div>
-                </div>
-
-                <div
-                    v-else-if="createPatientSummary"
-                    class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6"
-                >
-                    <div class="flex min-w-0 items-center gap-3">
-                        <Avatar
-                            class="size-10 shrink-0 rounded-lg bg-primary/10 text-primary"
-                        >
-                            <AvatarFallback
-                                class="rounded-lg bg-primary/10 text-sm font-semibold text-primary"
-                            >
-                                {{ patientInitials(createPatientSummary) }}
-                            </AvatarFallback>
-                        </Avatar>
-                        <div class="min-w-0 space-y-0.5">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <h1
-                                    class="truncate text-base font-semibold tracking-tight md:text-lg"
-                                >
-                                    {{ patientName(createPatientSummary) }}
-                                </h1>
-                                <Badge
-                                    v-if="createPatientSummary.patientNumber"
-                                    variant="secondary"
-                                    class="h-5 px-1.5 text-[11px]"
-                                >
-                                    {{ createPatientSummary.patientNumber }}
-                                </Badge>
-                                <Badge
-                                    v-if="encounterWorkspaceNoteStatusLabel"
-                                    :variant="encounterWorkspaceNoteStatusVariant"
-                                    class="h-5 px-1.5 text-[11px]"
-                                >
-                                    {{ encounterWorkspaceNoteStatusLabel }}
-                                </Badge>
-                                <span
-                                    v-if="
-                                        createDraftIndicatorLabel ===
-                                        'Saved to chart'
-                                    "
-                                    class="inline-flex items-center gap-1 text-[11px] text-muted-foreground"
-                                    :title="
-                                        createDraftIndicatorDetail ||
-                                        'Draft synced to chart'
-                                    "
-                                >
-                                    <AppIcon
-                                        name="check"
-                                        class="size-3 text-emerald-600"
-                                    />
-                                    Saved
-                                </span>
-                            </div>
-                            <p
-                                v-if="encounterWorkspaceHeaderContextLine"
-                                class="truncate text-xs text-muted-foreground"
-                            >
-                                {{ encounterWorkspaceHeaderContextLine }}
-                            </p>
-                            <p
-                                v-else
-                                class="truncate text-xs text-muted-foreground"
-                            >
-                                {{ createPatientContextMeta }}
-                            </p>
-                            <div
-                                class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground"
-                            >
-                                <span class="inline-flex items-center gap-1">
-                                    <AppIcon
-                                        name="building-2"
-                                        class="size-3 opacity-75"
-                                        aria-hidden="true"
-                                    />
-                                    <span class="font-medium text-foreground">{{
-                                        scope?.facility?.name || 'No facility'
-                                    }}</span>
-                                </span>
-                                <span
-                                    class="select-none text-border"
-                                    aria-hidden="true"
-                                    >·</span
-                                >
-                                <span>{{ encounterWorkspaceHandoffLabel }}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
-                        <Button
-                            v-if="createPatientChartHref"
-                            size="sm"
-                            variant="outline"
-                            class="h-8 gap-1.5"
-                            as-child
-                        >
-                            <Link :href="createPatientChartHref">
-                                <AppIcon name="user" class="size-3.5" />
-                                Patient chart
-                            </Link>
-                        </Button>
-                        <Button
-                            v-if="openedFromAppointments && canReturnToAppointments"
-                            size="sm"
-                            variant="outline"
-                            class="h-8 gap-1.5"
-                            as-child
-                        >
-                            <Link
-                                :href="
-                                    appointmentReturnHref(createForm.appointmentId)
-                                "
-                            >
-                                <AppIcon name="calendar-clock" class="size-3.5" />
-                                Appointments
-                            </Link>
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            class="h-8 gap-1.5"
-                            @click="encounterWorkspaceBack()"
-                        >
-                            <AppIcon
-                                :name="encounterWorkspaceBackIcon"
-                                class="size-3.5"
-                            />
-                            {{ encounterWorkspaceBackLabel }}
-                        </Button>
-                    </div>
-                </div>
-
-                <div
-                    v-else
-                    class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6"
-                >
-                    <div class="flex min-w-0 items-center gap-3">
-                        <div
-                            class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20"
-                            aria-hidden="true"
-                        >
-                            <AppIcon name="stethoscope" class="size-5" />
-                        </div>
-                        <div class="min-w-0 space-y-0.5">
-                            <h1
-                                class="text-base font-semibold tracking-tight md:text-lg"
-                            >
-                                Encounter workspace
-                            </h1>
-                            <p class="truncate text-xs text-muted-foreground">
-                                {{ encounterWorkspaceIntroText }}
-                            </p>
-                            <div
-                                class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground"
-                            >
-                                <span class="inline-flex items-center gap-1">
-                                    <AppIcon
-                                        name="building-2"
-                                        class="size-3 opacity-75"
-                                        aria-hidden="true"
-                                    />
-                                    <span class="font-medium text-foreground">{{
-                                        scope?.facility?.name || 'No facility'
-                                    }}</span>
-                                </span>
-                                <span
-                                    class="select-none text-border"
-                                    aria-hidden="true"
-                                    >·</span
-                                >
-                                <span>{{
-                                    scope?.tenant?.name || 'No tenant'
-                                }}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
-                        <Button
-                            v-if="openedFromAppointments && canReturnToAppointments"
-                            size="sm"
-                            variant="outline"
-                            class="h-8 gap-1.5"
-                            as-child
-                        >
-                            <Link
-                                :href="
-                                    appointmentReturnHref(createForm.appointmentId)
-                                "
-                            >
-                                <AppIcon name="calendar-clock" class="size-3.5" />
-                                Appointments
-                            </Link>
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            class="h-8 gap-1.5"
-                            @click="encounterWorkspaceBack()"
-                        >
-                            <AppIcon
-                                :name="encounterWorkspaceBackIcon"
-                                class="size-3.5"
-                            />
-                            {{ encounterWorkspaceBackLabel }}
-                        </Button>
-                    </div>
-                </div>
-
-                <div
-                    v-if="encounterWorkspaceDraftHeaderAlert"
-                    class="flex flex-wrap items-center gap-2 px-4 pb-4 pt-0 text-xs"
-                    role="status"
-                >
-                    <AppIcon
-                        v-if="
-                            encounterWorkspaceDraftHeaderAlert.tone === 'info'
-                        "
-                        name="loader-circle"
-                        class="size-3.5 shrink-0 animate-spin text-primary"
-                    />
-                    <AppIcon
-                        v-else
-                        name="alert-triangle"
-                        class="size-3.5 shrink-0 text-amber-600"
-                    />
-                    <span class="font-medium text-foreground">{{
-                        encounterWorkspaceDraftHeaderAlert.label
-                    }}</span>
-                    <span
-                        v-if="encounterWorkspaceDraftHeaderAlert.detail"
-                        class="text-muted-foreground"
-                    >
-                        · {{ encounterWorkspaceDraftHeaderAlert.detail }}
-                    </span>
-                </div>
-            </section>
-            </div>
-
             <div
-                class="mx-3 mb-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm md:mx-5 md:mb-5 lg:mx-6 lg:mb-6"
+                class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
             >
-            <!-- Consultation composer -->
-                <Sheet
-                    :open="canUseMedicalRecordComposer"
-                    :modal="false"
-                >
-                    <SheetContent
-                        side="right"
-                        variant="workspace"
-                        :size="null"
-                        :embedded="true"
-                        class="flex h-full min-h-0 flex-col"
-                    >
+        <!-- Consultation composer -->
+        <Sheet
+            :open="canUseMedicalRecordComposer"
+            :modal="false"
+        >
+            <SheetContent
+                side="right"
+                variant="workspace"
+                :size="null"
+                :embedded="true"
+                class="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background pb-3 md:pb-5"
+            >
                         <div
                             v-if="canTakeOverCreateConsultationSession || canStartCreateConsultationSession"
-                            class="shrink-0 border-b border-border/40 bg-background px-4 py-3 md:px-6"
+                            class="shrink-0 px-4 pt-4 md:px-6"
                         >
                             <div
-                                class="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/30"
+                                class="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 shadow-sm ring-1 ring-amber-200/70 dark:bg-amber-950/30 dark:ring-amber-800/70"
                             >
                                 <AppIcon name="shield-alert" class="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
                                 <p class="mr-auto text-xs text-amber-800 dark:text-amber-300">
@@ -8845,292 +8652,252 @@ onMounted(() => {
                         <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
                             <Tabs
                                 v-model="createComposerWorkspaceTab"
-                                :class="[
-                                    'flex min-h-0 flex-1 flex-col overflow-hidden',
-                                    isEncounterWorkspaceMode && 'encounter-workspace-tabs',
-                                ]"
+                                :class="encounterWorkspaceTabsClass"
                             >
-                                <TabsList
-                                    v-if="canShowCreateWorkflowWorkspace"
-                                    class="grid h-auto shrink-0 grid-cols-2 gap-1 border-b border-border/40 bg-muted/20 p-2 lg:hidden"
-                                >
-                                    <TabsTrigger
-                                        value="note"
-                                        class="h-8 w-full gap-1.5 px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm"
-                                    >
-                                        Clinical note
-                                        <span
-                                            class="rounded-full bg-background/80 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground"
-                                        >
-                                            {{ createComposerCompletedSectionCount }}/{{ createComposerSectionItems.length }}
-                                        </span>
-                                    </TabsTrigger>
-                                    <TabsTrigger
-                                        value="workflow"
-                                        class="h-8 w-full gap-1.5 px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm"
-                                    >
-                                        Orders &amp; care
-                                        <span
-                                            class="rounded-full bg-background/80 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground"
-                                        >
-                                            {{ createEncounterCareTotalCount }}
-                                        </span>
-                                    </TabsTrigger>
-                                </TabsList>
-
                                 <div id="mr-create-composer-top" class="shrink-0">
-                                <div v-if="createMessage || createErrorSummary.length" class="border-b px-4 py-4 space-y-3 md:px-6">
-                                <Alert
-                                    v-if="createMessage"
-                                    class="flex items-center gap-2"
+                                <div
+                                    v-if="
+                                        createSuccessFeedback ||
+                                        createErrorSummary.length ||
+                                        createDraftConflictAlertVisible ||
+                                        createDraftRecoveryBannerVisible ||
+                                        isCreateComposerReadOnly ||
+                                        createDraftFailureAlertVisible
+                                    "
+                                    class="space-y-3 border-b border-border/40 px-4 py-3 md:px-6"
                                 >
-                                    <AlertTitle
-                                        ><AppIcon
-                                            name="check-circle"
-                                            class="size-4"
-                                        />Clinical record saved</AlertTitle
-                                    >
-                                    <AlertDescription>{{
-                                        createMessage
-                                    }}</AlertDescription>
+                                <Alert
+                                    v-if="createSuccessFeedback"
+                                    :class="[
+                                        'border-0 shadow-sm ring-1',
+                                        createSuccessFeedbackToneClass,
+                                    ]"
+                                    role="status"
+                                    data-test="encounter-workspace-success-feedback"
+                                >
+                                    <div class="flex items-start gap-3">
+                                        <div
+                                            :class="[
+                                                'flex size-8 shrink-0 items-center justify-center rounded-full',
+                                                createSuccessFeedbackIconClass,
+                                            ]"
+                                            aria-hidden="true"
+                                        >
+                                            <AppIcon
+                                                :name="createSuccessFeedbackIcon"
+                                                class="size-4"
+                                            />
+                                        </div>
+                                        <div class="min-w-0 flex-1 space-y-1">
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <AlertTitle class="text-sm font-semibold leading-5">
+                                                    {{ createSuccessFeedback.title }}
+                                                </AlertTitle>
+                                                <Badge
+                                                    v-if="createSuccessFeedback.recordNumber"
+                                                    variant="secondary"
+                                                    class="h-5 font-mono text-[11px]"
+                                                >
+                                                    {{ createSuccessFeedback.recordNumber }}
+                                                </Badge>
+                                            </div>
+                                            <AlertDescription
+                                                v-if="createSuccessFeedback.detail"
+                                                class="text-xs leading-5 opacity-90"
+                                            >
+                                                {{ createSuccessFeedback.detail }}
+                                            </AlertDescription>
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            class="size-7 shrink-0 text-current/70 hover:text-current"
+                                            aria-label="Dismiss success message"
+                                            @click="dismissCreateSuccessFeedback()"
+                                        >
+                                            <AppIcon name="x" class="size-3.5" />
+                                        </Button>
+                                    </div>
                                 </Alert>
 
                                 <Alert
                                     v-if="createErrorSummary.length"
                                     variant="destructive"
+                                    class="border-0 bg-destructive/5 shadow-sm ring-1 ring-destructive/20"
                                 >
-                                    <AlertTitle class="flex items-center gap-2">
-                                        <AppIcon name="circle-x" class="size-4" />
-                                        Clinical record entry needs attention
-                                    </AlertTitle>
-                                    <AlertDescription>
-                                        <ul class="space-y-1 text-xs">
-                                            <li
-                                                v-for="errorItem in createErrorSummary"
-                                                :key="errorItem.key"
-                                            >
-                                                {{ errorItem.message }}
-                                            </li>
-                                        </ul>
-                                    </AlertDescription>
+                                    <div class="flex items-start gap-3">
+                                        <div
+                                            class="flex size-8 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive"
+                                            aria-hidden="true"
+                                        >
+                                            <AppIcon name="circle-x" class="size-4" />
+                                        </div>
+                                        <div class="min-w-0 flex-1 space-y-1">
+                                            <AlertTitle class="text-sm font-semibold leading-5">
+                                                Could not save the note
+                                            </AlertTitle>
+                                            <AlertDescription>
+                                                <ul class="space-y-1 text-xs leading-5">
+                                                    <li
+                                                        v-for="errorItem in createErrorSummary"
+                                                        :key="errorItem.key"
+                                                    >
+                                                        {{ errorItem.message }}
+                                                    </li>
+                                                </ul>
+                                            </AlertDescription>
+                                        </div>
+                                    </div>
                                 </Alert>
-                                </div>
-                                <div
-                                    v-if="createDraftRecoveryBannerVisible"
-                                    class="border-b px-4 py-4 md:px-6"
+
+                                <Alert
+                                    v-if="createDraftConflictAlertVisible"
+                                    class="border-0 bg-card text-amber-950 shadow-sm ring-1 ring-amber-200/70 dark:bg-card dark:text-amber-100 dark:ring-amber-900/60"
                                 >
-                                    <Alert class="border-sky-200 bg-sky-50 text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100">
-                                        <AlertTitle class="flex items-center gap-2 text-sky-900 dark:text-sky-100">
-                                            <AppIcon name="history" class="size-4" />
-                                            Draft recovered from chart
-                                        </AlertTitle>
-                                        <AlertDescription class="mt-2 flex flex-wrap items-center justify-between gap-3 text-sky-900/90 dark:text-sky-100/90">
-                                            <p class="text-xs leading-5">
-                                                {{ createDraftRecoveryBannerLabel }}
-                                            </p>
+                                    <AlertDescription class="flex flex-col gap-2 text-amber-900/90 dark:text-amber-100/90 md:flex-row md:items-center md:justify-between">
+                                        <div class="flex min-w-0 items-start gap-2">
+                                            <AppIcon name="history" class="mt-0.5 size-3.5 shrink-0" />
+                                            <div class="min-w-0 space-y-0.5">
+                                                <p class="text-xs font-medium text-amber-950 dark:text-amber-100">
+                                                    Newer chart copy available
+                                                </p>
+                                                <p class="text-xs leading-5">
+                                                    {{ createDraftSyncError }}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div class="flex shrink-0 flex-wrap items-center gap-2">
+                                            <Button
+                                                size="sm"
+                                                class="h-7 gap-1 px-2.5 text-xs"
+                                                :disabled="createLoading || createDraftHydratingExisting"
+                                                @click="void applyCreateDraftConflictServerVersion()"
+                                            >
+                                                <AppIcon name="download" class="size-3.5" />
+                                                Load chart copy
+                                            </Button>
                                             <Button
                                                 type="button"
                                                 variant="outline"
                                                 size="sm"
-                                                class="h-7 px-2.5 text-xs border-sky-300 bg-transparent text-sky-950 hover:bg-sky-100 dark:border-sky-800 dark:text-sky-100 dark:hover:bg-sky-900/30"
-                                                @click="dismissCreateDraftRecoveryBanner"
+                                                class="h-7 gap-1 px-2.5 text-xs border-amber-300 bg-transparent text-amber-950 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-100 dark:hover:bg-amber-900/30"
+                                                :disabled="createLoading || createDraftHydratingExisting"
+                                                @click="void overwriteCreateDraftConflictWithLocalChanges()"
                                             >
-                                                Dismiss
+                                                <AppIcon name="upload" class="size-3.5" />
+                                                Keep my changes
                                             </Button>
-                                        </AlertDescription>
-                                    </Alert>
-                                </div>
-                                <div
+                                        </div>
+                                    </AlertDescription>
+                                </Alert>
+
+                                <Alert
+                                    v-if="createDraftRecoveryBannerVisible"
+                                    class="border-0 bg-card text-sky-950 shadow-sm ring-1 ring-sky-200/70 dark:bg-card dark:text-sky-100 dark:ring-sky-900/60"
+                                >
+                                    <AlertTitle class="flex items-center gap-2 text-sky-900 dark:text-sky-100">
+                                        <AppIcon name="history" class="size-4" />
+                                        Draft recovered from chart
+                                    </AlertTitle>
+                                    <AlertDescription class="mt-2 flex flex-wrap items-center justify-between gap-3 text-sky-900/90 dark:text-sky-100/90">
+                                        <p class="text-xs leading-5">
+                                            {{ createDraftRecoveryBannerLabel }}
+                                        </p>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            class="h-7 px-2.5 text-xs border-sky-300 bg-transparent text-sky-950 hover:bg-sky-100 dark:border-sky-800 dark:text-sky-100 dark:hover:bg-sky-900/30"
+                                            @click="dismissCreateDraftRecoveryBanner"
+                                        >
+                                            Dismiss
+                                        </Button>
+                                    </AlertDescription>
+                                </Alert>
+
+                                <Alert
                                     v-if="isCreateComposerReadOnly"
-                                    class="border-b px-4 py-4 md:px-6"
+                                    class="border-0 bg-card shadow-sm ring-1 ring-border/40"
                                 >
-                                    <Alert>
-                                        <AlertTitle class="flex items-center gap-2">
-                                            <AppIcon name="shield-check" class="size-4" />
-                                            Signed note is read-only
-                                        </AlertTitle>
-                                        <AlertDescription class="mt-2 text-sm leading-6">
-                                            This note is signed and locked for normal editing. Use
-                                            <span class="font-medium">Amend note</span>
-                                            to reopen a controlled correction draft, or
-                                            <span class="font-medium">Close encounter</span>
-                                            when the visit is complete.
-                                        </AlertDescription>
-                                    </Alert>
-                                </div>
-                                <div
-                                    v-if="createDraftConflictAlertVisible"
-                                    class="border-b px-4 py-4 md:px-6"
-                                >
-                                    <Alert class="border-rose-200 bg-rose-50 text-rose-950 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-100">
-                                        <AlertTitle class="flex items-center gap-2 text-rose-900 dark:text-rose-100">
-                                            <AppIcon name="triangle-alert" class="size-4" />
-                                            Draft conflict detected
-                                        </AlertTitle>
-                                        <AlertDescription class="mt-2 space-y-3 text-rose-900/90 dark:text-rose-100/90">
-                                            <p>{{ createDraftSyncError }}</p>
-                                            <p class="text-xs leading-5">
-                                                Another save changed this draft before your latest changes could be written. Choose which version to keep so nothing is silently overwritten.
-                                            </p>
-                                            <div class="flex flex-wrap items-center gap-2">
-                                                <Button
-                                                    size="sm"
-                                                    class="h-7 gap-1 px-2.5 text-xs"
-                                                    :disabled="createLoading || createDraftHydratingExisting"
-                                                    @click="void applyCreateDraftConflictServerVersion()"
-                                                >
-                                                    <AppIcon name="download" class="size-3.5" />
-                                                    Use chart version
-                                                </Button>
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    class="h-7 gap-1 px-2.5 text-xs border-rose-300 bg-transparent text-rose-950 hover:bg-rose-100 dark:border-rose-800 dark:text-rose-100 dark:hover:bg-rose-900/30"
-                                                    :disabled="createLoading || createDraftHydratingExisting"
-                                                    @click="void overwriteCreateDraftConflictWithLocalChanges()"
-                                                >
-                                                    <AppIcon name="upload" class="size-3.5" />
-                                                    Keep my changes
-                                                </Button>
-                                            </div>
-                                        </AlertDescription>
-                                    </Alert>
-                                </div>
-                                <div
+                                    <AlertTitle class="flex items-center gap-2">
+                                        <AppIcon name="shield-check" class="size-4" />
+                                        Signed note is read-only
+                                    </AlertTitle>
+                                    <AlertDescription class="mt-2 text-sm leading-6">
+                                        Signed notes are read-only. Amend or close the encounter when ready.
+                                    </AlertDescription>
+                                </Alert>
+
+                                <Alert
                                     v-if="createDraftFailureAlertVisible"
-                                    class="border-b px-4 py-4 md:px-6"
+                                    class="border-0 bg-card text-amber-950 shadow-sm ring-1 ring-amber-200/70 dark:bg-card dark:text-amber-100 dark:ring-amber-900/60"
                                 >
-                                    <Alert class="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
-                                        <AlertTitle class="flex items-center gap-2 text-amber-900 dark:text-amber-100">
-                                            <AppIcon name="triangle-alert" class="size-4" />
-                                            Chart save needs attention
-                                        </AlertTitle>
-                                        <AlertDescription class="mt-2 space-y-3 text-amber-900/90 dark:text-amber-100/90">
-                                            <p>{{ createDraftSyncError }}</p>
-                                            <p v-if="createDraftFailureDetail" class="text-xs leading-5">
-                                                {{ createDraftFailureDetail }}
-                                            </p>
-                                            <div class="flex flex-wrap items-center gap-2">
-                                                <Button
-                                                    size="sm"
-                                                    class="h-7 gap-1 px-2.5 text-xs"
-                                                    :disabled="createLoading || createDraftHydratingExisting"
-                                                    @click="void retryCreateDraftSave()"
-                                                >
-                                                    <AppIcon name="refresh-cw" class="size-3.5" />
-                                                    Retry save
-                                                </Button>
-                                                <Button
-                                                    v-if="createDraftRecord && createDraftHasPendingChanges"
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    class="h-7 gap-1 px-2.5 text-xs border-amber-300 bg-transparent text-amber-950 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-100 dark:hover:bg-amber-900/30"
-                                                    @click="restoreStoredMedicalRecordCreateDraft"
-                                                >
-                                                    Revert to last saved
-                                                </Button>
-                                            </div>
-                                        </AlertDescription>
-                                    </Alert>
+                                    <AlertTitle class="flex items-center gap-2 text-amber-900 dark:text-amber-100">
+                                        <AppIcon name="triangle-alert" class="size-4" />
+                                        Chart save needs attention
+                                    </AlertTitle>
+                                    <AlertDescription class="mt-2 space-y-3 text-amber-900/90 dark:text-amber-100/90">
+                                        <p>{{ createDraftSyncError }}</p>
+                                        <p v-if="createDraftFailureDetail" class="text-xs leading-5">
+                                            {{ createDraftFailureDetail }}
+                                        </p>
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <Button
+                                                size="sm"
+                                                class="h-7 gap-1 px-2.5 text-xs"
+                                                :disabled="createLoading || createDraftHydratingExisting"
+                                                @click="void retryCreateDraftSave()"
+                                            >
+                                                <AppIcon name="refresh-cw" class="size-3.5" />
+                                                Retry save
+                                            </Button>
+                                            <Button
+                                                v-if="createDraftRecord && createDraftHasPendingChanges"
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                class="h-7 gap-1 px-2.5 text-xs border-amber-300 bg-transparent text-amber-950 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-100 dark:hover:bg-amber-900/30"
+                                                @click="restoreStoredMedicalRecordCreateDraft"
+                                            >
+                                                Revert to last saved
+                                            </Button>
+                                        </div>
+                                    </AlertDescription>
+                                </Alert>
                                 </div>
 
-                                <div
-                                    :class="
-                                        isEncounterWorkspaceMode
-                                            ? 'grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)] lg:divide-x lg:divide-border/50'
-                                            : 'contents'
-                                    "
-                                >
+                                <EncounterWorkspaceNavBar
+                                    v-model="workspacePaneFocus"
+                                    :show-workflow-workspace="canShowCreateWorkflowWorkspace"
+                                    :completed-sections="createComposerCompletedSectionCount"
+                                    :total-sections="createComposerSectionItems.length"
+                                    :care-total-count="createEncounterCareTotalCount"
+                                />
+
+                                <div :class="encounterWorkspaceGridClass">
                                 <TabsContent
                                     v-if="canShowCreateWorkflowWorkspace"
                                     value="workflow"
                                     :force-mount="isEncounterWorkspaceMode"
-                                    :class="[
-                                        'mt-0 flex flex-col min-h-0 overflow-hidden max-lg:data-[state=inactive]:hidden',
-                                        isEncounterWorkspaceMode &&
-                                            'encounter-workspace-pane encounter-workspace-pane--care lg:order-2',
-                                    ]"
+                                    :class="encounterWorkspaceCarePaneClass"
+                                    data-test="encounter-workspace-pane-care-panel"
                                 >
-                                    <div
-                                        class="hidden shrink-0 border-b border-border/40 bg-muted/20 px-4 py-3 md:px-5 lg:block"
-                                    >
-                                        <div
-                                            class="flex items-center justify-between gap-2"
-                                        >
-                                            <h2
-                                                class="text-sm font-semibold text-foreground"
-                                            >
-                                                Orders &amp; care
-                                            </h2>
-                                            <span
-                                                class="text-xs tabular-nums text-muted-foreground"
-                                            >
-                                                {{ createEncounterCareTotalCount }}
-                                                linked
-                                            </span>
-                                        </div>
-                                        <p class="mt-0.5 text-xs text-muted-foreground">
-                                            {{ createWorkflowNextStepDescription }}
-                                        </p>
-                                    </div>
-                                    <ScrollArea class="min-h-0 flex-1">
-                                    <div class="space-y-5 px-4 py-4 md:px-5 md:py-5">
-                                    <EncounterTriageVitalsPanel
-                                        v-if="hasCreateAppointmentContext"
-                                        :loading="createAppointmentSummaryLoading"
-                                        :error="createAppointmentSummaryError"
-                                        :triage-vitals-summary="createAppointmentSummary?.triageVitalsSummary"
-                                        :triage-notes="createAppointmentSummary?.triageNotes"
-                                        :triage-category="createAppointmentSummary?.triageCategory"
-                                        :triaged-at="createAppointmentSummary?.triagedAt"
-                                        :format-date-time="formatDateTime"
+                                    <EncounterWorkspacePaneHeader
+                                        title="Orders &amp; results"
+                                        :description="createWorkflowNextStepDescription"
+                                        :badge-label="createEncounterCareCountLabel"
                                     />
-
-                                    <section class="space-y-4">
-                                        <div class="space-y-3">
-                                            <div
-                                                class="flex flex-wrap items-center gap-2"
-                                            >
-                                                <Badge :variant="createConsultationFromAppointments ? 'default' : hasCreateAppointmentContext ? 'secondary' : hasCreateAdmissionContext ? 'secondary' : 'outline'">
-                                                    {{ createEncounterSourceLabel }}
-                                                </Badge>
-                                                <Badge
-                                                    v-if="createAppointmentContextStatusLabel"
-                                                    :variant="createAppointmentContextStatusVariant"
-                                                    class="text-[10px]"
-                                                >
-                                                    {{ createAppointmentContextStatusLabel }}
-                                                </Badge>
-                                                <Badge
-                                                    v-if="createAdmissionContextStatusLabel"
-                                                    :variant="createAdmissionContextStatusVariant"
-                                                    class="text-[10px]"
-                                                >
-                                                    {{ createAdmissionContextStatusLabel }}
-                                                </Badge>
-                                            </div>
-
-                                            <div class="space-y-1 lg:hidden">
-                                                <p
-                                                    class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground"
-                                                >
-                                                    Quick actions
-                                                </p>
-                                                <p
-                                                    v-if="showCreateProviderSessionCard"
-                                                    class="text-xs leading-5 text-muted-foreground"
-                                                >
-                                                    {{ createProviderSessionSummary }}
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <div
-                                            v-if="createForm.patientId && hasCreateContextWorkflowActions"
-                                            class="space-y-3"
-                                        >
+                                    <ScrollArea class="min-h-0 flex-1">
+                                    <div class="space-y-4 px-4 pb-5 pt-4 md:px-6 md:pb-6">
+                                    <section
+                                        v-if="createForm.patientId && hasCreateContextWorkflowActions"
+                                        class="space-y-3 rounded-lg border bg-card p-4 shadow-sm"
+                                    >
+                                        <div class="space-y-2">
+                                            <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                                Quick actions
+                                            </p>
                                             <EncounterInlineOrderPanel
                                                 v-if="encounterInlineOrderType && canUseEncounterInlineOrders()"
                                                 :order-type="encounterInlineOrderType"
@@ -9138,78 +8905,106 @@ onMounted(() => {
                                                 @close="closeEncounterInlineOrder()"
                                                 @created="void handleEncounterInlineOrderCreated($event)"
                                             />
-                                            <DropdownMenu v-if="!encounterInlineOrderType">
-                                                <DropdownMenuTrigger as-child>
-                                                    <Button variant="outline" size="sm" class="gap-1.5">
-                                                        <AppIcon name="plus" class="size-3.5" />
-                                                        New order
-                                                        <AppIcon name="chevron-down" class="size-3 text-muted-foreground" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="start">
-                                                    <DropdownMenuItem
-                                                        v-if="canOpenLaboratoryWorkflow && canUseEncounterInlineOrders()"
-                                                        @select.prevent="openEncounterInlineOrder('laboratory')"
-                                                    >
-                                                        <AppIcon name="flask-conical" class="size-3.5 text-muted-foreground" />
+                                            <div
+                                                v-if="!encounterInlineOrderType"
+                                                class="flex flex-wrap gap-2"
+                                            >
+                                                <Button
+                                                    v-if="canOpenLaboratoryWorkflow && canUseEncounterInlineOrders()"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    class="justify-start gap-2"
+                                                    data-test="encounter-workspace-new-order"
+                                                    @click="openEncounterInlineOrder('laboratory')"
+                                                >
+                                                    <AppIcon name="flask-conical" class="size-3.5" />
+                                                    Lab order
+                                                </Button>
+                                                <Button
+                                                    v-else-if="canOpenLaboratoryWorkflow"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    class="justify-start gap-2"
+                                                    as-child
+                                                >
+                                                    <Link :href="contextCreateHref('/laboratory-orders', { includeTabNew: true })">
+                                                        <AppIcon name="flask-conical" class="size-3.5" />
                                                         Lab order
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        v-else-if="canOpenLaboratoryWorkflow"
-                                                        as-child
-                                                    >
-                                                        <Link :href="contextCreateHref('/laboratory-orders', { includeTabNew: true })" class="flex items-center gap-2">
-                                                            <AppIcon name="flask-conical" class="size-3.5 text-muted-foreground" />
-                                                            Lab order
-                                                        </Link>
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        v-if="canOpenPharmacyWorkflow && canUseEncounterInlineOrders()"
-                                                        @select.prevent="openEncounterInlineOrder('pharmacy')"
-                                                    >
-                                                        <AppIcon name="pill" class="size-3.5 text-muted-foreground" />
+                                                    </Link>
+                                                </Button>
+
+                                                <Button
+                                                    v-if="canOpenPharmacyWorkflow && canUseEncounterInlineOrders()"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    class="justify-start gap-2"
+                                                    @click="openEncounterInlineOrder('pharmacy')"
+                                                >
+                                                    <AppIcon name="pill" class="size-3.5" />
+                                                    Pharmacy order
+                                                </Button>
+                                                <Button
+                                                    v-else-if="canOpenPharmacyWorkflow"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    class="justify-start gap-2"
+                                                    as-child
+                                                >
+                                                    <Link :href="contextCreateHref('/pharmacy-orders', { includeTabNew: true })">
+                                                        <AppIcon name="pill" class="size-3.5" />
                                                         Pharmacy order
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        v-else-if="canOpenPharmacyWorkflow"
-                                                        as-child
-                                                    >
-                                                        <Link :href="contextCreateHref('/pharmacy-orders', { includeTabNew: true })" class="flex items-center gap-2">
-                                                            <AppIcon name="pill" class="size-3.5 text-muted-foreground" />
-                                                            Pharmacy order
-                                                        </Link>
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        v-if="canOpenRadiologyWorkflow && canUseEncounterInlineOrders()"
-                                                        @select.prevent="openEncounterInlineOrder('radiology')"
-                                                    >
-                                                        <AppIcon name="activity" class="size-3.5 text-muted-foreground" />
+                                                    </Link>
+                                                </Button>
+
+                                                <Button
+                                                    v-if="canOpenRadiologyWorkflow && canUseEncounterInlineOrders()"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    class="justify-start gap-2"
+                                                    @click="openEncounterInlineOrder('radiology')"
+                                                >
+                                                    <AppIcon name="activity" class="size-3.5" />
+                                                    Imaging order
+                                                </Button>
+                                                <Button
+                                                    v-else-if="canOpenRadiologyWorkflow"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    class="justify-start gap-2"
+                                                    as-child
+                                                >
+                                                    <Link :href="contextCreateHref('/radiology-orders', { includeTabNew: true })">
+                                                        <AppIcon name="activity" class="size-3.5" />
                                                         Imaging order
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        v-else-if="canOpenRadiologyWorkflow"
-                                                        as-child
-                                                    >
-                                                        <Link :href="contextCreateHref('/radiology-orders', { includeTabNew: true })" class="flex items-center gap-2">
-                                                            <AppIcon name="activity" class="size-3.5 text-muted-foreground" />
-                                                            Imaging order
-                                                        </Link>
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem v-if="canOpenTheatreWorkflow" as-child>
-                                                        <Link :href="contextCreateHref('/theatre-procedures', { includeTabNew: true })" class="flex items-center gap-2">
-                                                            <AppIcon name="scissors" class="size-3.5 text-muted-foreground" />
-                                                            Theatre procedure
-                                                        </Link>
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuSeparator v-if="canOpenBillingWorkflow" />
-                                                    <DropdownMenuItem v-if="canOpenBillingWorkflow" as-child>
-                                                        <Link :href="contextCreateHref('/billing-invoices', { includeTabNew: true })" class="flex items-center gap-2">
-                                                            <AppIcon name="receipt" class="size-3.5 text-muted-foreground" />
-                                                            Billing invoice
-                                                        </Link>
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
+                                                    </Link>
+                                                </Button>
+
+                                                <Button
+                                                    v-if="canOpenTheatreWorkflow"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    class="justify-start gap-2"
+                                                    as-child
+                                                >
+                                                    <Link :href="contextCreateHref('/theatre-procedures', { includeTabNew: true })">
+                                                        <AppIcon name="scissors" class="size-3.5" />
+                                                        Theatre procedure
+                                                    </Link>
+                                                </Button>
+
+                                                <Button
+                                                    v-if="canOpenBillingWorkflow"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    class="justify-start gap-2"
+                                                    as-child
+                                                >
+                                                    <Link :href="contextCreateHref('/billing-invoices', { includeTabNew: true })">
+                                                        <AppIcon name="receipt" class="size-3.5" />
+                                                        Billing invoice
+                                                    </Link>
+                                                </Button>
+                                            </div>
                                             <p
                                                 v-if="canUseEncounterInlineOrders()"
                                                 class="text-[11px] leading-5 text-muted-foreground"
@@ -9221,633 +9016,66 @@ onMounted(() => {
 
                                     <section
                                         v-if="canShowCreateEncounterCare"
-                                        class="space-y-4 rounded-lg border bg-background p-5"
+                                        class="space-y-3 rounded-lg border bg-card p-4 shadow-sm"
                                     >
-                                        <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                            <div class="space-y-1">
-                                                <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                                                    Encounter-linked care
-                                                </p>
-                                                <p class="text-sm text-muted-foreground">
-                                                    {{
-                                                        hasCreateEncounterCareContext
-                                                            ? 'Review encounter-linked orders and procedures here without losing your place in the current note.'
-                                                            : 'Link this note to an appointment or admission to review encounter-linked orders and procedures here.'
-                                                    }}
-                                                </p>
-                                            </div>
-                                            <Badge
-                                                :variant="hasCreateEncounterCareContext ? 'secondary' : 'outline'"
-                                                class="w-fit shrink-0 text-[10px]"
-                                            >
+                                        <div class="space-y-1">
+                                            <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                                Linked care streams
+                                            </p>
+                                            <p class="text-xs leading-5 text-muted-foreground">
                                                 {{
                                                     hasCreateEncounterCareContext
-                                                        ? `${createEncounterCareVisibleSummaries.length} visible stream${createEncounterCareVisibleSummaries.length === 1 ? '' : 's'}`
-                                                        : 'No encounter linked'
+                                                        ? 'Review encounter-linked orders and procedures without leaving the note.'
+                                                        : 'Link an appointment or admission to see orders here.'
                                                 }}
-                                            </Badge>
+                                            </p>
                                         </div>
-
-                                        <section class="pt-4">
                                             <div
                                                 v-if="!hasCreateEncounterCareContext"
-                                                class="rounded-md border border-dashed border-border/60 bg-muted/20 px-4 py-4"
-                                            >
-                                                <p class="text-sm font-medium text-foreground">
-                                                    Encounter context is not linked yet
-                                                </p>
-                                                <p class="mt-1 text-sm text-muted-foreground">
-                                                    Keep or choose the linked appointment or admission in the setup area. When encounter context exists, only the order streams with activity will appear here as tabs.
-                                                </p>
+                                            class="rounded-lg bg-muted/25 px-4 py-3 text-sm text-muted-foreground ring-1 ring-border/30"
+                                        >
+                                            Link an appointment or admission to see orders here.
                                             </div>
                                             <div
                                                 v-else-if="!hasVisibleCreateEncounterCare"
-                                                class="rounded-md border border-dashed border-border/60 bg-muted/20 px-4 py-4"
-                                            >
-                                                <p class="text-sm font-medium text-foreground">
-                                                    No linked orders or procedures yet
-                                                </p>
-                                                <p class="mt-1 text-sm text-muted-foreground">
-                                                    Use the workflow actions above when this note needs lab, pharmacy, imaging, or procedure follow-up.
-                                                </p>
+                                            class="rounded-lg bg-muted/25 px-4 py-3 text-sm text-muted-foreground ring-1 ring-border/30"
+                                        >
+                                            No orders linked yet.
                                             </div>
-                                            <Tabs
+                                            <EncounterWorkflowCareStreams
                                                 v-else
                                                 v-model="createEncounterCareTab"
-                                                class="space-y-4"
-                                            >
-                                                <TabsList class="!inline-flex !h-auto min-h-9 w-full flex-wrap justify-start gap-1 rounded-lg bg-muted/20 p-1">
-                                                    <TabsTrigger
-                                                        v-for="summary in createEncounterCareVisibleSummaries"
-                                                        :key="`mr-create-encounter-tab-${summary.id}`"
-                                                        :value="summary.id"
-                                                        class="!h-8 shrink-0 gap-2 px-3"
-                                                    >
-                                                        <span>{{ summary.label }}</span>
-                                                        <Badge variant="secondary" class="text-[10px]">
-                                                            {{ summary.count }}
-                                                        </Badge>
-                                                    </TabsTrigger>
-                                                </TabsList>
-                                                <TabsContent
-                                                    v-if="createEncounterCareVisibleSummaries.some((summary) => summary.id === 'laboratory-orders')"
-                                                    value="laboratory-orders"
-                                                    class="mt-0"
-                                                >
-                                                    <div class="space-y-3">
-                                                        <div class="mb-3 flex items-start justify-between gap-3">
-                                                            <p class="text-sm text-muted-foreground">
-                                                                Tests, specimen workflow, and result progression for this encounter.
-                                                            </p>
-                                                            <Badge
-                                                                :variant="encounterCareStateVariant(encounterCareState(createEncounterLaboratoryOrders.length, createEncounterLaboratoryOrdersLoading, createEncounterLaboratoryOrdersError))"
-                                                                class="shrink-0 text-[10px]"
-                                                            >
-                                                                {{
-                                                                    encounterCareStateLabel(
-                                                                        encounterCareState(
-                                                                            createEncounterLaboratoryOrders.length,
-                                                                            createEncounterLaboratoryOrdersLoading,
-                                                                            createEncounterLaboratoryOrdersError,
-                                                                        ),
-                                                                    )
-                                                                }}
-                                                            </Badge>
-                                                        </div>
-                                                        <div
-                                                            v-if="createEncounterLaboratoryOrdersLoading"
-                                                            class="space-y-2"
-                                                        >
-                                                            <Skeleton class="h-14 w-full rounded-lg" />
-                                                            <Skeleton class="h-14 w-full rounded-lg" />
-                                                        </div>
-                                                        <p
-                                                            v-else-if="createEncounterLaboratoryOrdersError"
-                                                            class="text-sm text-destructive"
-                                                        >
-                                                            {{ createEncounterLaboratoryOrdersError }}
-                                                        </p>
-                                                        <p
-                                                            v-else-if="createEncounterLaboratoryOrders.length === 0"
-                                                            class="text-sm text-muted-foreground"
-                                                        >
-                                                            No laboratory orders have been linked to this encounter yet.
-                                                        </p>
-                                                        <div
-                                                            v-else
-                                                            :class="[
-                                                                'rounded-md border border-border/50 bg-background',
-                                                                createEncounterLaboratoryOrders.length > 5
-                                                                    ? 'max-h-[30rem] overflow-y-auto'
-                                                                    : 'overflow-visible',
-                                                            ]"
-                                                        >
-                                                            <div
-                                                                v-for="order in createEncounterLaboratoryOrders"
-                                                                :key="`mr-create-lab-order-${order.id}`"
-                                                                class="space-y-1 border-b border-border/50 px-3 py-2.5 last:border-b-0"
-                                                            >
-                                                                <div class="flex items-start justify-between gap-3">
-                                                                    <div class="min-w-0">
-                                                                        <p class="truncate text-sm font-medium text-foreground">
-                                                                            {{ order.testName || 'Laboratory order' }}
-                                                                        </p>
-                                                                        <p class="mt-1 text-xs text-muted-foreground">
-                                                                            {{ order.orderNumber || 'Order number pending' }}
-                                                                            |
-                                                                            Ordered {{ formatDateTime(order.orderedAt) }}
-                                                                        </p>
-                                                                    </div>
-                                                                    <Badge :variant="laboratoryOrderStatusVariant(order.status)">
-                                                                        {{ formatEnumLabel(order.status || 'ordered') }}
-                                                                    </Badge>
-                                                                </div>
-                                                                <p class="mt-1 text-xs text-muted-foreground">
-                                                                    {{ laboratoryOrderSummaryText(order) }}
-                                                                </p>
-                                                                <EncounterOrderProgress
-                                                                    class="mt-2"
-                                                                    order-type="laboratory"
-                                                                    :order="order"
-                                                                    :format-date-time="formatDateTime"
-                                                                />
-                                                                <p
-                                                                    v-if="lifecycleLinkageText(order, 'laboratory order')"
-                                                                    class="mt-1 text-[11px] text-muted-foreground"
-                                                                >
-                                                                    {{ lifecycleLinkageText(order, 'laboratory order') }}
-                                                                </p>
-                                                                <div
-                                                                    v-if="canOpenLaboratoryWorkflow"
-                                                                    class="mt-2 flex flex-wrap gap-1.5"
-                                                                >
-                                                                    <Button size="sm" variant="outline" as-child class="h-6 gap-1 px-2 text-[10px]">
-                                                                        <Link
-                                                                            :href="contextCreateHref('/laboratory-orders', {
-                                                                                includeTabNew: true,
-                                                                                reorderOfId: order.id,
-                                                                            })"
-                                                                        >
-                                                                            Reorder
-                                                                        </Link>
-                                                                    </Button>
-                                                                    <Button size="sm" variant="outline" as-child class="h-6 gap-1 px-2 text-[10px]">
-                                                                        <Link
-                                                                            :href="contextCreateHref('/laboratory-orders', {
-                                                                                includeTabNew: true,
-                                                                                addOnToOrderId: order.id,
-                                                                            })"
-                                                                        >
-                                                                            Add Linked Test
-                                                                        </Link>
-                                                                    </Button>
-                                                                    <Button
-                                                                        v-if="canApplyLaboratoryEncounterLifecycleAction(order, 'cancel')"
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        class="h-6 gap-1 px-2 text-[10px]"
-                                                                        @click="openEncounterLifecycleDialog('laboratory', order.id, 'cancel', order.statusReason)"
-                                                                    >
-                                                                        Cancel
-                                                                    </Button>
-                                                                    <Button
-                                                                        v-if="canApplyLaboratoryEncounterLifecycleAction(order, 'entered_in_error')"
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        class="h-6 gap-1 px-2 text-[10px]"
-                                                                        @click="openEncounterLifecycleDialog('laboratory', order.id, 'entered_in_error')"
-                                                                    >
-                                                                        Entered in error
-                                                                    </Button>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </TabsContent>
-
-                                                <TabsContent
-                                                    v-if="createEncounterCareVisibleSummaries.some((summary) => summary.id === 'pharmacy-orders')"
-                                                    value="pharmacy-orders"
-                                                    class="mt-0"
-                                                >
-                                                    <div class="space-y-3">
-                                                        <div class="mb-3 flex items-start justify-between gap-3">
-                                                            <p class="text-sm text-muted-foreground">
-                                                                Medication requests, dispensing status, and supply follow-up.
-                                                            </p>
-                                                            <Badge
-                                                                :variant="encounterCareStateVariant(encounterCareState(createEncounterPharmacyOrders.length, createEncounterPharmacyOrdersLoading, createEncounterPharmacyOrdersError))"
-                                                                class="shrink-0 text-[10px]"
-                                                            >
-                                                                {{
-                                                                    encounterCareStateLabel(
-                                                                        encounterCareState(
-                                                                            createEncounterPharmacyOrders.length,
-                                                                            createEncounterPharmacyOrdersLoading,
-                                                                            createEncounterPharmacyOrdersError,
-                                                                        ),
-                                                                    )
-                                                                }}
-                                                            </Badge>
-                                                        </div>
-                                                        <div
-                                                            v-if="createEncounterPharmacyOrdersLoading"
-                                                            class="space-y-2"
-                                                        >
-                                                            <Skeleton class="h-14 w-full rounded-lg" />
-                                                            <Skeleton class="h-14 w-full rounded-lg" />
-                                                        </div>
-                                                        <p
-                                                            v-else-if="createEncounterPharmacyOrdersError"
-                                                            class="text-sm text-destructive"
-                                                        >
-                                                            {{ createEncounterPharmacyOrdersError }}
-                                                        </p>
-                                                        <p
-                                                            v-else-if="createEncounterPharmacyOrders.length === 0"
-                                                            class="text-sm text-muted-foreground"
-                                                        >
-                                                            No pharmacy orders have been linked to this encounter yet.
-                                                        </p>
-                                                        <div
-                                                            v-else
-                                                            :class="[
-                                                                'rounded-md border border-border/50 bg-background',
-                                                                createEncounterPharmacyOrders.length > 5
-                                                                    ? 'max-h-[30rem] overflow-y-auto'
-                                                                    : 'overflow-visible',
-                                                            ]"
-                                                        >
-                                                            <div
-                                                                v-for="order in createEncounterPharmacyOrders"
-                                                                :key="`mr-create-pharmacy-order-${order.id}`"
-                                                                class="space-y-1 border-b border-border/50 px-3 py-2.5 last:border-b-0"
-                                                            >
-                                                                <div class="flex items-start justify-between gap-3">
-                                                                    <div class="min-w-0">
-                                                                        <p class="truncate text-sm font-medium text-foreground">
-                                                                            {{ order.medicationName || 'Pharmacy order' }}
-                                                                        </p>
-                                                                        <p class="mt-1 text-xs text-muted-foreground">
-                                                                            {{ order.orderNumber || 'Order number pending' }}
-                                                                            <span
-                                                                                v-if="pharmacyOrderQuantityLabel(order.quantityPrescribed)"
-                                                                            >
-                                                                                |
-                                                                                {{ pharmacyOrderQuantityLabel(order.quantityPrescribed) }}
-                                                                            </span>
-                                                                            |
-                                                                            Ordered {{ formatDateTime(order.orderedAt) }}
-                                                                        </p>
-                                                                    </div>
-                                                                    <Badge :variant="pharmacyOrderStatusVariant(order.status)">
-                                                                        {{ formatEnumLabel(order.status || 'pending') }}
-                                                                    </Badge>
-                                                                </div>
-                                                                <p class="mt-1 text-xs text-muted-foreground">
-                                                                    {{ pharmacyOrderSummaryText(order) }}
-                                                                </p>
-                                                                <EncounterOrderProgress
-                                                                    class="mt-2"
-                                                                    order-type="pharmacy"
-                                                                    :order="order"
-                                                                    :format-date-time="formatDateTime"
-                                                                />
-                                                                <p
-                                                                    v-if="lifecycleLinkageText(order, 'medication order')"
-                                                                    class="mt-1 text-[11px] text-muted-foreground"
-                                                                >
-                                                                    {{ lifecycleLinkageText(order, 'medication order') }}
-                                                                </p>
-                                                                <div
-                                                                    v-if="canOpenPharmacyWorkflow"
-                                                                    class="mt-2 flex flex-wrap gap-1.5"
-                                                                >
-                                                                    <Button size="sm" variant="outline" as-child class="h-6 gap-1 px-2 text-[10px]">
-                                                                        <Link
-                                                                            :href="contextCreateHref('/pharmacy-orders', {
-                                                                                includeTabNew: true,
-                                                                                reorderOfId: order.id,
-                                                                            })"
-                                                                        >
-                                                                            Reorder
-                                                                        </Link>
-                                                                    </Button>
-                                                                    <Button size="sm" variant="outline" as-child class="h-6 gap-1 px-2 text-[10px]">
-                                                                        <Link
-                                                                            :href="contextCreateHref('/pharmacy-orders', {
-                                                                                includeTabNew: true,
-                                                                                addOnToOrderId: order.id,
-                                                                            })"
-                                                                        >
-                                                                            Add Linked Medication
-                                                                        </Link>
-                                                                    </Button>
-                                                                    <Button
-                                                                        v-if="canApplyPharmacyEncounterLifecycleAction(order, 'cancel')"
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        class="h-6 gap-1 px-2 text-[10px]"
-                                                                        @click="openEncounterLifecycleDialog('pharmacy', order.id, 'cancel', order.statusReason)"
-                                                                    >
-                                                                        Cancel
-                                                                    </Button>
-                                                                    <Button
-                                                                        v-if="canApplyPharmacyEncounterLifecycleAction(order, 'discontinue')"
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        class="h-6 gap-1 px-2 text-[10px]"
-                                                                        @click="openEncounterLifecycleDialog('pharmacy', order.id, 'discontinue')"
-                                                                    >
-                                                                        Discontinue
-                                                                    </Button>
-                                                                    <Button
-                                                                        v-if="canApplyPharmacyEncounterLifecycleAction(order, 'entered_in_error')"
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        class="h-6 gap-1 px-2 text-[10px]"
-                                                                        @click="openEncounterLifecycleDialog('pharmacy', order.id, 'entered_in_error')"
-                                                                    >
-                                                                        Entered in error
-                                                                    </Button>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </TabsContent>
-
-                                                <TabsContent
-                                                    v-if="createEncounterCareVisibleSummaries.some((summary) => summary.id === 'radiology-orders')"
-                                                    value="radiology-orders"
-                                                    class="mt-0"
-                                                >
-                                                    <div class="space-y-3">
-                                                        <div class="mb-3 flex items-start justify-between gap-3">
-                                                            <p class="text-sm text-muted-foreground">
-                                                                Scheduling, study execution, and reporting status for this encounter.
-                                                            </p>
-                                                            <Badge
-                                                                :variant="encounterCareStateVariant(encounterCareState(createEncounterRadiologyOrders.length, createEncounterRadiologyOrdersLoading, createEncounterRadiologyOrdersError))"
-                                                                class="shrink-0 text-[10px]"
-                                                            >
-                                                                {{
-                                                                    encounterCareStateLabel(
-                                                                        encounterCareState(
-                                                                            createEncounterRadiologyOrders.length,
-                                                                            createEncounterRadiologyOrdersLoading,
-                                                                            createEncounterRadiologyOrdersError,
-                                                                        ),
-                                                                    )
-                                                                }}
-                                                            </Badge>
-                                                        </div>
-                                                        <div
-                                                            v-if="createEncounterRadiologyOrdersLoading"
-                                                            class="space-y-2"
-                                                        >
-                                                            <Skeleton class="h-14 w-full rounded-lg" />
-                                                            <Skeleton class="h-14 w-full rounded-lg" />
-                                                        </div>
-                                                        <p
-                                                            v-else-if="createEncounterRadiologyOrdersError"
-                                                            class="text-sm text-destructive"
-                                                        >
-                                                            {{ createEncounterRadiologyOrdersError }}
-                                                        </p>
-                                                        <p
-                                                            v-else-if="createEncounterRadiologyOrders.length === 0"
-                                                            class="text-sm text-muted-foreground"
-                                                        >
-                                                            No imaging orders have been linked to this encounter yet.
-                                                        </p>
-                                                        <div
-                                                            v-else
-                                                            :class="[
-                                                                'rounded-md border border-border/50 bg-background',
-                                                                createEncounterRadiologyOrders.length > 5
-                                                                    ? 'max-h-[30rem] overflow-y-auto'
-                                                                    : 'overflow-visible',
-                                                            ]"
-                                                        >
-                                                            <div
-                                                                v-for="order in createEncounterRadiologyOrders"
-                                                                :key="`mr-create-radiology-order-${order.id}`"
-                                                                class="space-y-1 border-b border-border/50 px-3 py-2.5 last:border-b-0"
-                                                            >
-                                                                <div class="flex items-start justify-between gap-3">
-                                                                    <div class="min-w-0">
-                                                                        <p class="truncate text-sm font-medium text-foreground">
-                                                                            {{ order.studyDescription || 'Imaging order' }}
-                                                                        </p>
-                                                                        <p class="mt-1 text-xs text-muted-foreground">
-                                                                            {{ order.orderNumber || 'Order number pending' }}
-                                                                            |
-                                                                            Ordered {{ formatDateTime(order.orderedAt) }}
-                                                                        </p>
-                                                                    </div>
-                                                                    <Badge :variant="radiologyOrderStatusVariant(order.status)">
-                                                                        {{ formatEnumLabel(order.status || 'ordered') }}
-                                                                    </Badge>
-                                                                </div>
-                                                                <p class="mt-1 text-xs text-muted-foreground">
-                                                                    {{ radiologyOrderSummaryText(order) }}
-                                                                </p>
-                                                                <EncounterOrderProgress
-                                                                    class="mt-2"
-                                                                    order-type="radiology"
-                                                                    :order="order"
-                                                                    :format-date-time="formatDateTime"
-                                                                />
-                                                                <p
-                                                                    v-if="lifecycleLinkageText(order, 'imaging order')"
-                                                                    class="mt-1 text-[11px] text-muted-foreground"
-                                                                >
-                                                                    {{ lifecycleLinkageText(order, 'imaging order') }}
-                                                                </p>
-                                                                <div
-                                                                    v-if="canOpenRadiologyWorkflow"
-                                                                    class="mt-2 flex flex-wrap gap-1.5"
-                                                                >
-                                                                    <Button size="sm" variant="outline" as-child class="h-6 gap-1 px-2 text-[10px]">
-                                                                        <Link
-                                                                            :href="contextCreateHref('/radiology-orders', {
-                                                                                includeTabNew: true,
-                                                                                reorderOfId: order.id,
-                                                                            })"
-                                                                        >
-                                                                            Reorder
-                                                                        </Link>
-                                                                    </Button>
-                                                                    <Button size="sm" variant="outline" as-child class="h-6 gap-1 px-2 text-[10px]">
-                                                                        <Link
-                                                                            :href="contextCreateHref('/radiology-orders', {
-                                                                                includeTabNew: true,
-                                                                                addOnToOrderId: order.id,
-                                                                            })"
-                                                                        >
-                                                                            Add Linked Study
-                                                                        </Link>
-                                                                    </Button>
-                                                                    <Button
-                                                                        v-if="canApplyRadiologyEncounterLifecycleAction(order, 'cancel')"
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        class="h-6 gap-1 px-2 text-[10px]"
-                                                                        @click="openEncounterLifecycleDialog('radiology', order.id, 'cancel', order.statusReason)"
-                                                                    >
-                                                                        Cancel
-                                                                    </Button>
-                                                                    <Button
-                                                                        v-if="canApplyRadiologyEncounterLifecycleAction(order, 'entered_in_error')"
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        class="h-6 gap-1 px-2 text-[10px]"
-                                                                        @click="openEncounterLifecycleDialog('radiology', order.id, 'entered_in_error')"
-                                                                    >
-                                                                        Entered in error
-                                                                    </Button>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </TabsContent>
-
-                                                <TabsContent
-                                                    v-if="createEncounterCareVisibleSummaries.some((summary) => summary.id === 'theatre-procedures')"
-                                                    value="theatre-procedures"
-                                                    class="mt-0"
-                                                >
-                                                    <div class="space-y-3">
-                                                        <div class="mb-3 flex items-start justify-between gap-3">
-                                                            <p class="text-sm text-muted-foreground">
-                                                                Bookings, pre-op readiness, and theatre progression for this encounter.
-                                                            </p>
-                                                            <Badge
-                                                                :variant="encounterCareStateVariant(encounterCareState(createEncounterTheatreProcedures.length, createEncounterTheatreProceduresLoading, createEncounterTheatreProceduresError))"
-                                                                class="shrink-0 text-[10px]"
-                                                            >
-                                                                {{
-                                                                    encounterCareStateLabel(
-                                                                        encounterCareState(
-                                                                            createEncounterTheatreProcedures.length,
-                                                                            createEncounterTheatreProceduresLoading,
-                                                                            createEncounterTheatreProceduresError,
-                                                                        ),
-                                                                    )
-                                                                }}
-                                                            </Badge>
-                                                        </div>
-                                                        <div
-                                                            v-if="createEncounterTheatreProceduresLoading"
-                                                            class="space-y-2"
-                                                        >
-                                                            <Skeleton class="h-14 w-full rounded-lg" />
-                                                            <Skeleton class="h-14 w-full rounded-lg" />
-                                                        </div>
-                                                        <p
-                                                            v-else-if="createEncounterTheatreProceduresError"
-                                                            class="text-sm text-destructive"
-                                                        >
-                                                            {{ createEncounterTheatreProceduresError }}
-                                                        </p>
-                                                        <p
-                                                            v-else-if="createEncounterTheatreProcedures.length === 0"
-                                                            class="text-sm text-muted-foreground"
-                                                        >
-                                                            No theatre procedures have been linked to this encounter yet.
-                                                        </p>
-                                                        <div
-                                                            v-else
-                                                            :class="[
-                                                                'rounded-md border border-border/50 bg-background',
-                                                                createEncounterTheatreProcedures.length > 5
-                                                                    ? 'max-h-[30rem] overflow-y-auto'
-                                                                    : 'overflow-visible',
-                                                            ]"
-                                                        >
-                                                            <div
-                                                                v-for="procedure in createEncounterTheatreProcedures"
-                                                                :key="`mr-create-theatre-procedure-${procedure.id}`"
-                                                                class="space-y-1 border-b border-border/50 px-3 py-2.5 last:border-b-0"
-                                                            >
-                                                                <div class="flex items-start justify-between gap-3">
-                                                                    <div class="min-w-0">
-                                                                        <p class="truncate text-sm font-medium text-foreground">
-                                                                            {{ procedure.procedureName || procedure.procedureType || 'Theatre procedure' }}
-                                                                        </p>
-                                                                        <p class="mt-1 text-xs text-muted-foreground">
-                                                                            {{ procedure.procedureNumber || 'Procedure number pending' }}
-                                                                            |
-                                                                            Scheduled {{ formatDateTime(procedure.scheduledAt) }}
-                                                                        </p>
-                                                                    </div>
-                                                                    <Badge :variant="theatreProcedureStatusVariant(procedure.status)">
-                                                                        {{ formatEnumLabel(procedure.status || 'planned') }}
-                                                                    </Badge>
-                                                                </div>
-                                                                <p class="mt-1 text-xs text-muted-foreground">
-                                                                    {{ theatreProcedureSummaryText(procedure) }}
-                                                                </p>
-                                                                <p
-                                                                    v-if="lifecycleLinkageText(procedure, 'procedure booking')"
-                                                                    class="mt-1 text-[11px] text-muted-foreground"
-                                                                >
-                                                                    {{ lifecycleLinkageText(procedure, 'procedure booking') }}
-                                                                </p>
-                                                                <div
-                                                                    v-if="canOpenTheatreWorkflow"
-                                                                    class="mt-2 flex flex-wrap gap-1.5"
-                                                                >
-                                                                    <Button size="sm" variant="outline" as-child class="h-6 gap-1 px-2 text-[10px]">
-                                                                        <Link
-                                                                            :href="contextCreateHref('/theatre-procedures', {
-                                                                                includeTabNew: true,
-                                                                                reorderOfId: procedure.id,
-                                                                            })"
-                                                                        >
-                                                                            Reorder
-                                                                        </Link>
-                                                                    </Button>
-                                                                    <Button size="sm" variant="outline" as-child class="h-6 gap-1 px-2 text-[10px]">
-                                                                        <Link
-                                                                            :href="contextCreateHref('/theatre-procedures', {
-                                                                                includeTabNew: true,
-                                                                                addOnToOrderId: procedure.id,
-                                                                            })"
-                                                                        >
-                                                                            Add Linked Procedure
-                                                                        </Link>
-                                                                    </Button>
-                                                                    <Button
-                                                                        v-if="canApplyTheatreEncounterLifecycleAction(procedure, 'cancel')"
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        class="h-6 gap-1 px-2 text-[10px]"
-                                                                        @click="openEncounterLifecycleDialog('theatre', procedure.id, 'cancel', procedure.statusReason)"
-                                                                    >
-                                                                        Cancel
-                                                                    </Button>
-                                                                    <Button
-                                                                        v-if="canApplyTheatreEncounterLifecycleAction(procedure, 'entered_in_error')"
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        class="h-6 gap-1 px-2 text-[10px]"
-                                                                        @click="openEncounterLifecycleDialog('theatre', procedure.id, 'entered_in_error')"
-                                                                    >
-                                                                        Entered in error
-                                                                    </Button>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </TabsContent>
-                                            </Tabs>
-                                        </section>
+                                                :visible-summaries="createEncounterCareVisibleSummaries"
+                                                :laboratory-orders="createEncounterLaboratoryOrders"
+                                                :pharmacy-orders="createEncounterPharmacyOrders"
+                                                :radiology-orders="createEncounterRadiologyOrders"
+                                                :theatre-procedures="createEncounterTheatreProcedures"
+                                                :laboratory-loading="createEncounterLaboratoryOrdersLoading"
+                                                :pharmacy-loading="createEncounterPharmacyOrdersLoading"
+                                                :radiology-loading="createEncounterRadiologyOrdersLoading"
+                                                :theatre-loading="createEncounterTheatreProceduresLoading"
+                                                :laboratory-error="createEncounterLaboratoryOrdersError"
+                                                :pharmacy-error="createEncounterPharmacyOrdersError"
+                                                :radiology-error="createEncounterRadiologyOrdersError"
+                                                :theatre-error="createEncounterTheatreProceduresError"
+                                                :can-open-laboratory-workflow="canOpenLaboratoryWorkflow"
+                                                :can-open-pharmacy-workflow="canOpenPharmacyWorkflow"
+                                                :can-open-radiology-workflow="canOpenRadiologyWorkflow"
+                                                :can-open-theatre-workflow="canOpenTheatreWorkflow"
+                                                :can-create-laboratory-orders="canCreateLaboratoryOrders"
+                                                :can-create-pharmacy-orders="canCreatePharmacyOrders"
+                                                :can-create-radiology-orders="canCreateRadiologyOrders"
+                                                :can-create-theatre-procedures="canCreateTheatreProcedures"
+                                                :context-create-href="contextCreateHref"
+                                                :format-date-time="formatDateTime"
+                                                @lifecycle="openEncounterLifecycleDialog($event.kind, $event.id, $event.action, $event.defaultReason)"
+                                            />
                                     </section>
 
                                     <section
                                         v-if="isEncounterWorkspaceMode && canOpenBillingWorkflow"
-                                        class="space-y-4 rounded-lg border bg-background p-5"
+                                        id="encounter-workspace-close-readiness"
+                                        class="space-y-3 rounded-lg border bg-card p-4 shadow-sm"
                                     >
                                         <EncounterBillingPanel
                                             :readiness="createEncounterCloseReadiness"
@@ -9858,16 +9086,80 @@ onMounted(() => {
 
                                     <section
                                         v-if="isEncounterWorkspaceMode"
-                                        class="space-y-4 rounded-lg border bg-background p-5"
+                                        class="space-y-3"
                                     >
-                                        <EncounterGovernancePanel
-                                            :encounter-id="createForm.encounterId"
-                                            :encounter-number="createEncounterSummary?.encounterNumber ?? null"
-                                            :can-view-audit="canViewMedicalRecordAudit"
-                                            :can-open-chart-packet="encounterWorkspaceChartPacketReady"
-                                            :print-href="encounterWorkspacePrintHref"
-                                            :pdf-href="encounterWorkspacePdfHref"
-                                        />
+                                    <Collapsible
+                                        v-if="canReadMedicalRecords"
+                                        v-model:open="encounterAttachmentsOpen"
+                                        class="rounded-lg bg-card shadow-sm ring-1 ring-border/40"
+                                    >
+                                        <CollapsibleTrigger as-child>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                class="flex h-auto w-full justify-between gap-3 px-4 py-3 text-left hover:bg-muted/40"
+                                            >
+                                                <span class="min-w-0 space-y-0.5">
+                                                    <span class="block text-sm font-semibold text-foreground">
+                                                        Attachments
+                                                    </span>
+                                                    <span class="block text-xs font-normal text-muted-foreground">
+                                                        Clinical documents and uploaded encounter files.
+                                                    </span>
+                                                </span>
+                                                <AppIcon
+                                                    :name="encounterAttachmentsOpen ? 'chevron-up' : 'chevron-down'"
+                                                    class="mt-1 size-4 shrink-0 text-muted-foreground"
+                                                    aria-hidden="true"
+                                                />
+                                            </Button>
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent class="px-4 pb-4">
+                                            <EncounterDocumentsPanel
+                                                :encounter-id="createForm.encounterId"
+                                                :can-read="canReadMedicalRecords"
+                                                :can-create="canCreateMedicalRecords"
+                                                :can-update="canUpdateMedicalRecords"
+                                            />
+                                        </CollapsibleContent>
+                                    </Collapsible>
+
+                                    <Collapsible
+                                        v-model:open="encounterGovernanceOpen"
+                                        class="rounded-lg bg-card shadow-sm ring-1 ring-border/40"
+                                    >
+                                        <CollapsibleTrigger as-child>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                class="flex h-auto w-full justify-between gap-3 px-4 py-3 text-left hover:bg-muted/40"
+                                            >
+                                                <span class="min-w-0 space-y-0.5">
+                                                    <span class="block text-sm font-semibold text-foreground">
+                                                        Governance
+                                                    </span>
+                                                    <span class="block text-xs font-normal text-muted-foreground">
+                                                        Audit trail, printable chart packet, and encounter controls.
+                                                    </span>
+                                                </span>
+                                                <AppIcon
+                                                    :name="encounterGovernanceOpen ? 'chevron-up' : 'chevron-down'"
+                                                    class="mt-1 size-4 shrink-0 text-muted-foreground"
+                                                    aria-hidden="true"
+                                                />
+                                            </Button>
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent class="px-4 pb-4">
+                                            <EncounterGovernancePanel
+                                                :encounter-id="createForm.encounterId"
+                                                :encounter-number="createEncounterSummary?.encounterNumber ?? null"
+                                                :can-view-audit="canViewMedicalRecordAudit"
+                                                :can-open-chart-packet="encounterWorkspaceChartPacketReady"
+                                                :print-href="encounterWorkspacePrintHref"
+                                                :pdf-href="encounterWorkspacePdfHref"
+                                            />
+                                        </CollapsibleContent>
+                                    </Collapsible>
                                     </section>
 
                                     </div>
@@ -9877,97 +9169,33 @@ onMounted(() => {
                                 <TabsContent
                                     value="note"
                                     :force-mount="isEncounterWorkspaceMode"
-                                    :class="[
-                                        'mt-0 flex flex-col min-h-0 overflow-hidden max-lg:data-[state=inactive]:hidden',
-                                        isEncounterWorkspaceMode &&
-                                            'encounter-workspace-pane encounter-workspace-pane--note lg:order-1',
-                                    ]"
+                                    :class="encounterWorkspaceNotePaneClass"
                                 >
+                                    <EncounterWorkspacePaneHeader
+                                        title="Clinical note"
+                                        :description="createWorkflowNextStepDescription"
+                                        :badge-label="encounterWorkspaceDisplayStatusLabel"
+                                        :badge-variant="encounterWorkspaceDisplayStatusVariant"
+                                    />
+                                    <EncounterNoteComposerShell>
                                     <div
-                                        class="shrink-0 border-b border-border/40 bg-muted/20 px-4 py-3 md:px-5"
-                                    >
-                                        <div
-                                            class="flex flex-wrap items-start justify-between gap-2"
-                                        >
-                                            <div class="min-w-0">
-                                                <h2
-                                                    class="text-sm font-semibold text-foreground"
-                                                >
-                                                    Clinical note
-                                                </h2>
-                                                <p
-                                                    class="text-xs text-muted-foreground"
-                                                >
-                                                    {{ createDraftNoteTypeLabel }}
-                                                    ·
-                                                    {{ createComposerCompletedSectionCount }}/{{ createComposerSectionItems.length }}
-                                                    sections
-                                                </p>
-                                            </div>
-                                            <span
-                                                v-if="
-                                                    encounterWorkspaceDraftHeaderAlert
-                                                "
-                                                class="shrink-0 text-[11px] font-medium text-amber-700 dark:text-amber-400"
-                                            >
-                                                {{
-                                                    encounterWorkspaceDraftHeaderAlert.label
-                                                }}
-                                            </span>
-                                        </div>
-                                        <div
-                                            class="mt-2 flex w-full min-w-0 items-center gap-1.5 overflow-x-auto pb-0.5"
-                                        >
-                                            <Button
-                                                v-for="section in createComposerSectionItems"
-                                                :key="`note-nav-${section.id}`"
-                                                size="sm"
-                                                :variant="
-                                                    section.complete
-                                                        ? 'secondary'
-                                                        : 'outline'
-                                                "
-                                                class="h-8 shrink-0 gap-1.5 px-3 text-xs"
-                                                @click="
-                                                    scrollCreateComposerToSection(
-                                                        section.id,
-                                                    )
-                                                "
-                                            >
-                                                <AppIcon
-                                                    :name="
-                                                        section.complete
-                                                            ? 'circle-check-big'
-                                                            : 'circle'
-                                                    "
-                                                    class="size-3"
-                                                />
-                                                {{ section.label }}
-                                            </Button>
-                                        </div>
-                                    </div>
-                                    <ScrollArea class="min-h-0 flex-1">
-                                    <div
-                                        class="space-y-6 px-4 py-4 md:px-5 md:py-5"
-                                    >
-                                    <section
                                         id="mr-create-note-setup"
-                                        class="scroll-mt-24 space-y-4"
+                                        class="scroll-mt-32 space-y-3 rounded-lg border bg-card p-4 shadow-sm"
                                     >
-                                        <div class="space-y-1">
-                                            <h3
-                                                class="text-sm font-medium text-foreground"
-                                            >
-                                                Note setup
-                                            </h3>
-                                            <p class="text-xs text-muted-foreground">
-                                                Record type and diagnosis for this encounter.
-                                            </p>
-                                        </div>
-                                        <div class="space-y-4">
-                                        <div class="grid gap-4 lg:grid-cols-2">
+                                        <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                            Note setup
+                                        </p>
+                                        <p class="text-xs text-muted-foreground">
+                                            {{ createRecordTypeLabel }}
+                                        </p>
+                                        <div class="grid gap-3 lg:grid-cols-2">
                                             <div class="grid min-w-0 gap-2">
-                                                <Label for="mr-create-record-type-trigger">Record type</Label>
+                                                <Label
+                                                    for="mr-create-record-type-trigger"
+                                                    class="text-xs font-medium text-muted-foreground"
+                                                >
+                                                    Record type
+                                                </Label>
                                                 <Select v-model="createForm.recordType">
                                                     <SelectTrigger
                                                         id="mr-create-record-type-trigger"
@@ -9986,9 +9214,6 @@ onMounted(() => {
                                                         </SelectItem>
                                                     </SelectContent>
                                                 </Select>
-                                                <p class="text-xs text-muted-foreground">
-                                                    {{ createRecordTypeHelperText }}
-                                                </p>
                                                 <p
                                                     v-if="createFieldError('recordType')"
                                                     class="text-xs text-destructive"
@@ -9997,15 +9222,18 @@ onMounted(() => {
                                                 </p>
                                             </div>
                                             <div id="mr-create-diagnosis-section" class="grid min-w-0 gap-2">
+                                                <Label
+                                                    for="mr-create-diagnosis-code"
+                                                    class="text-xs font-medium text-muted-foreground"
+                                                >
+                                                    Diagnosis / ICD-10
+                                                </Label>
                                                 <Input
                                                     id="mr-create-diagnosis-code"
                                                     v-model="createForm.diagnosisCode"
                                                     placeholder="Optional, for example R52 or J11.1"
                                                     class="w-full min-w-0 bg-background"
                                                 />
-                                                <p class="text-xs text-muted-foreground">
-                                                    {{ createDiagnosisCodeHelperText }}
-                                                </p>
                                                 <p
                                                     v-if="createFieldError('diagnosisCode')"
                                                     class="text-xs text-destructive"
@@ -10014,9 +9242,32 @@ onMounted(() => {
                                                 </p>
                                             </div>
                                         </div>
+                                        <details
+                                            v-if="
+                                                (createIsProgressNote && hasCreateAdmissionContext) ||
+                                                (createIsDischargeNote && hasCreateAdmissionContext) ||
+                                                createForm.appointmentReferralId.trim() ||
+                                                createForm.theatreProcedureId.trim()
+                                            "
+                                            class="rounded-lg bg-muted/10 shadow-sm ring-1 ring-border/35"
+                                        >
+                                            <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                                                <div class="space-y-1">
+                                                    <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                                        Linked workflow context
+                                                    </p>
+                                                    <p class="text-xs leading-5 text-muted-foreground">
+                                                        Open admission, referral, or theatre continuity only when you need it.
+                                                    </p>
+                                                </div>
+                                                <Badge variant="outline" class="text-[10px]">
+                                                    Optional
+                                                </Badge>
+                                            </summary>
+                                            <div class="space-y-3 px-4 py-3 shadow-[0_-1px_0_0_hsl(var(--border)/0.45)]">
                                         <div
                                             v-if="createIsProgressNote && hasCreateAdmissionContext"
-                                            class="rounded-lg border bg-muted/20 p-4"
+                                            class="rounded-lg bg-muted/20 p-4 ring-1 ring-border/30"
                                         >
                                             <div class="flex flex-wrap items-start justify-between gap-3">
                                                 <div class="min-w-0 space-y-1">
@@ -10073,7 +9324,7 @@ onMounted(() => {
                                         </div>
                                         <div
                                             v-if="createIsDischargeNote && hasCreateAdmissionContext"
-                                            class="rounded-lg border bg-muted/20 p-4"
+                                            class="rounded-lg bg-muted/20 p-4 ring-1 ring-border/30"
                                         >
                                             <div class="flex flex-wrap items-start justify-between gap-3">
                                                 <div class="min-w-0 space-y-1">
@@ -10130,7 +9381,7 @@ onMounted(() => {
                                         </div>
                                         <div
                                             v-if="createForm.appointmentReferralId.trim()"
-                                            class="rounded-lg border bg-muted/20 p-4"
+                                            class="rounded-lg bg-muted/20 p-4 ring-1 ring-border/30"
                                         >
                                             <div class="flex flex-wrap items-start justify-between gap-3">
                                                 <div class="min-w-0 space-y-1">
@@ -10201,7 +9452,7 @@ onMounted(() => {
                                         </div>
                                         <div
                                             v-if="createForm.theatreProcedureId.trim()"
-                                            class="rounded-lg border bg-muted/20 p-4"
+                                            class="rounded-lg bg-muted/20 p-4 ring-1 ring-border/30"
                                         >
                                             <div class="flex flex-wrap items-start justify-between gap-3">
                                                 <div class="min-w-0 space-y-1">
@@ -10230,7 +9481,7 @@ onMounted(() => {
                                                     <p class="text-xs text-muted-foreground">
                                                         {{
                                                             createLinkedTheatreProcedure
-                                                                ? theatreProcedureSummaryText(createLinkedTheatreProcedure)
+                                                                ? formatTheatreProcedureSummary(createLinkedTheatreProcedure, formatDateTime)
                                                                 : createEncounterTheatreProceduresLoading
                                                                     ? 'Loading theatre workflow context...'
                                                                     : (createEncounterTheatreProceduresError || 'This note remains linked to the selected theatre case.')
@@ -10251,197 +9502,113 @@ onMounted(() => {
                                                 </Button>
                                             </div>
                                         </div>
-                                        <div class="rounded-lg border border-dashed px-4 py-3">
-                                            <p class="text-sm font-medium text-foreground">
-                                                {{ createNarrativeHeading.title }}
-                                            </p>
-                                            <p class="mt-1 text-xs leading-5 text-muted-foreground">
-                                                {{ createNarrativeHeading.subtitle }}
-                                            </p>
                                         </div>
-                                        </div>
-                                    </section>
-                                    <section
-                                        id="mr-create-subjective-section"
-                                        class="scroll-mt-24 space-y-3 border-t border-border/40 pt-6"
-                                    >
-                                        <div
-                                            class="flex flex-wrap items-start justify-between gap-2"
-                                        >
-                                            <div class="min-w-0">
-                                                <h3
-                                                    class="text-sm font-medium text-foreground"
-                                                >
-                                                    {{ createSubjectiveLabel }}
-                                                </h3>
-                                                <p
-                                                    class="text-xs text-muted-foreground"
-                                                >
-                                                    {{ createSubjectiveUi.description }}
-                                                </p>
-                                            </div>
-                                            <Badge
-                                                :variant="createForm.subjective.trim() ? 'secondary' : 'outline'"
-                                                class="text-[11px]"
-                                            >
-                                                {{
-                                                    createForm.subjective.trim()
-                                                        ? 'Done'
-                                                        : 'Pending'
-                                                }}
-                                            </Badge>
-                                        </div>
-                                        <RichTextEditorField
-                                            input-id="mr-create-subjective"
-                                            v-model="createForm.subjective"
-                                            :label="createSubjectiveLabel"
-                                            :placeholder="createSubjectiveUi.placeholder"
-                                            :helper-text="createSubjectiveUi.helperText"
-                                            :error-message="createFieldError('subjective')"
-                                            min-height-class="min-h-[220px]"
-                                        />
-                                    </section>
-                                    <section
-                                        id="mr-create-objective-section"
-                                        class="scroll-mt-24 space-y-3 border-t border-border/40 pt-6"
-                                    >
-                                        <div
-                                            class="flex flex-wrap items-start justify-between gap-2"
-                                        >
-                                            <div class="min-w-0">
-                                                <h3
-                                                    class="text-sm font-medium text-foreground"
-                                                >
-                                                    {{ createObjectiveLabel }}
-                                                </h3>
-                                                <p
-                                                    class="text-xs text-muted-foreground"
-                                                >
-                                                    {{ createObjectiveUi.description }}
-                                                </p>
-                                            </div>
-                                            <Badge
-                                                :variant="createForm.objective.trim() ? 'secondary' : 'outline'"
-                                                class="text-[11px]"
-                                            >
-                                                {{
-                                                    createForm.objective.trim()
-                                                        ? 'Done'
-                                                        : 'Pending'
-                                                }}
-                                            </Badge>
-                                        </div>
-                                        <RichTextEditorField
-                                            input-id="mr-create-objective"
-                                            v-model="createForm.objective"
-                                            :label="createObjectiveLabel"
-                                            :placeholder="createObjectiveUi.placeholder"
-                                            :helper-text="createObjectiveUi.helperText"
-                                            :error-message="createFieldError('objective')"
-                                            min-height-class="min-h-[220px]"
-                                        />
-                                    </section>
-                                    <section
-                                        id="mr-create-assessment-section"
-                                        class="scroll-mt-24 space-y-3 border-t border-border/40 pt-6"
-                                    >
-                                        <div
-                                            class="flex flex-wrap items-start justify-between gap-2"
-                                        >
-                                            <div class="min-w-0">
-                                                <h3
-                                                    class="text-sm font-medium text-foreground"
-                                                >
-                                                    {{ createAssessmentLabel }}
-                                                </h3>
-                                                <p
-                                                    class="text-xs text-muted-foreground"
-                                                >
-                                                    {{ createAssessmentUi.description }}
-                                                </p>
-                                            </div>
-                                            <Badge
-                                                :variant="createForm.assessment.trim() ? 'secondary' : 'outline'"
-                                                class="text-[11px]"
-                                            >
-                                                {{
-                                                    createForm.assessment.trim()
-                                                        ? 'Done'
-                                                        : 'Pending'
-                                                }}
-                                            </Badge>
-                                        </div>
-                                        <RichTextEditorField
-                                            input-id="mr-create-assessment"
-                                            v-model="createForm.assessment"
-                                            :label="createAssessmentLabel"
-                                            :placeholder="createAssessmentUi.placeholder"
-                                            :helper-text="createAssessmentUi.helperText"
-                                            :error-message="createFieldError('assessment')"
-                                            min-height-class="min-h-[220px]"
-                                        />
-                                    </section>
-                                    <section
-                                        id="mr-create-plan-section"
-                                        class="scroll-mt-24 space-y-3 border-t border-border/40 pt-6"
-                                    >
-                                        <div
-                                            class="flex flex-wrap items-start justify-between gap-2"
-                                        >
-                                            <div class="min-w-0">
-                                                <h3
-                                                    class="text-sm font-medium text-foreground"
-                                                >
-                                                    {{ createPlanLabel }}
-                                                </h3>
-                                                <p
-                                                    class="text-xs text-muted-foreground"
-                                                >
-                                                    {{ createPlanUi.description }}
-                                                </p>
-                                            </div>
-                                            <Badge
-                                                :variant="createForm.plan.trim() ? 'secondary' : 'outline'"
-                                                class="text-[11px]"
-                                            >
-                                                {{
-                                                    createForm.plan.trim()
-                                                        ? 'Done'
-                                                        : 'Pending'
-                                                }}
-                                            </Badge>
-                                        </div>
-                                        <RichTextEditorField
-                                            input-id="mr-create-plan"
-                                            v-model="createForm.plan"
-                                            :label="createPlanLabel"
-                                            :placeholder="createPlanUi.placeholder"
-                                            :helper-text="createPlanUi.helperText"
-                                            :error-message="createFieldError('plan')"
-                                            min-height-class="min-h-[220px]"
-                                        />
-                                    </section>
+                                        </details>
                                     </div>
-                                    </ScrollArea>
+                                    <div
+                                        id="mr-create-clinical-note"
+                                        class="scroll-mt-32 space-y-3 rounded-lg border bg-card p-4 shadow-sm"
+                                    >
+                                        <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                            Documentation
+                                        </p>
+                                        <div class="space-y-5">
+                                            <div
+                                                id="mr-create-subjective-section"
+                                                class="scroll-mt-32 space-y-3"
+                                            >
+                                                <RichTextEditorField
+                                                    input-id="mr-create-subjective"
+                                                    v-model="createForm.subjective"
+                                                    :label="createSubjectiveLabel"
+                                                    :placeholder="createSubjectiveUi.placeholder"
+                                                    helper-text=""
+                                                    :error-message="createFieldError('subjective')"
+                                                    min-height-class="min-h-[160px]"
+                                                />
+                                            </div>
+                                            <EncounterTriageVitalsPanel
+                                                v-if="hasCreateAppointmentContext"
+                                                variant="compact"
+                                                :loading="createAppointmentSummaryLoading"
+                                                :error="createAppointmentSummaryError"
+                                                :triage-vitals-summary="createAppointmentSummary?.triageVitalsSummary"
+                                                :triage-notes="createAppointmentSummary?.triageNotes"
+                                                :triage-category="createAppointmentSummary?.triageCategory"
+                                                :triaged-at="createAppointmentSummary?.triagedAt"
+                                                :format-date-time="formatDateTime"
+                                            />
+                                            <div
+                                                id="mr-create-objective-section"
+                                                class="scroll-mt-32 space-y-3"
+                                            >
+                                                <RichTextEditorField
+                                                    input-id="mr-create-objective"
+                                                    v-model="createForm.objective"
+                                                    :label="createObjectiveLabel"
+                                                    :placeholder="createObjectiveUi.placeholder"
+                                                    helper-text=""
+                                                    :error-message="createFieldError('objective')"
+                                                    min-height-class="min-h-[160px]"
+                                                />
+                                            </div>
+                                            <div
+                                                id="mr-create-assessment-section"
+                                                class="scroll-mt-32 space-y-3"
+                                            >
+                                                <RichTextEditorField
+                                                    input-id="mr-create-assessment"
+                                                    v-model="createForm.assessment"
+                                                    :label="createAssessmentLabel"
+                                                    :placeholder="createAssessmentUi.placeholder"
+                                                    helper-text=""
+                                                    :error-message="createFieldError('assessment')"
+                                                    min-height-class="min-h-[160px]"
+                                                />
+                                            </div>
+                                            <div
+                                                id="mr-create-plan-section"
+                                                class="scroll-mt-32 space-y-3"
+                                            >
+                                                <RichTextEditorField
+                                                    input-id="mr-create-plan"
+                                                    v-model="createForm.plan"
+                                                    :label="createPlanLabel"
+                                                    :placeholder="createPlanUi.placeholder"
+                                                    helper-text=""
+                                                    :error-message="createFieldError('plan')"
+                                                    min-height-class="min-h-[160px]"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    </EncounterNoteComposerShell>
                                 </TabsContent>
                                 </div>
                             </div>
                             </Tabs>
                         </div>
                         <SheetFooter
-                            class="shrink-0 w-full bg-background px-4 py-4 shadow-[0_-1px_0_0_hsl(var(--border)/0.5)] md:px-6"
+                            class="sticky bottom-0 z-20 shrink-0 w-full bg-background/95 px-4 py-4 shadow-[0_-1px_0_0_hsl(var(--border)/0.45),0_-8px_24px_-18px_hsl(var(--foreground)/0.35)] backdrop-blur supports-[backdrop-filter]:bg-background/90 md:px-6"
                         >
                             <div class="flex w-full flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                                 <p
-                                    class="min-w-0 flex-1 text-[11px] leading-5 text-muted-foreground"
+                                    v-if="createFooterWorkflowHint"
+                                    class="min-w-0 flex-1 text-xs text-muted-foreground"
                                 >
                                     {{ createFooterWorkflowHint }}
                                 </p>
-                                <div class="flex shrink-0 flex-wrap items-center gap-2 lg:ml-auto lg:justify-end">
+                                <div
+                                    :class="[
+                                        'flex shrink-0 flex-wrap items-center gap-2 lg:ml-auto lg:justify-end',
+                                        !createFooterWorkflowHint && 'w-full',
+                                    ]"
+                                >
                                     <Button
                                         variant="ghost"
                                         size="sm"
                                         class="gap-1.5 text-muted-foreground"
+                                        data-test="encounter-workspace-close-panel"
                                         @click="encounterWorkspaceBack()"
                                     >
                                         Close
@@ -10450,6 +9617,7 @@ onMounted(() => {
                                         :variant="canFinalizeAndCompleteVisit || canSaveAndReturnToAppointments ? 'outline' : 'default'"
                                         size="sm"
                                         class="gap-1.5"
+                                        data-test="encounter-workspace-save-note"
                                         :disabled="createLoading || !createForm.patientId.trim() || isCreateComposerReadOnly"
                                         @click="createRecord('save')"
                                     >
@@ -10461,11 +9629,10 @@ onMounted(() => {
                                         }}
                                     </Button>
                                     <Button
-                                        v-if="canSaveAndReturnToAppointments"
                                         variant="outline"
                                         size="sm"
                                         class="gap-1.5"
-                                        :disabled="createLoading || !createForm.patientId.trim()"
+                                        :disabled="createLoading || !createForm.patientId.trim() || !canSaveAndReturnToAppointments"
                                         @click="createRecord('return')"
                                     >
                                         <AppIcon name="save" class="size-3.5" />
@@ -10477,44 +9644,11 @@ onMounted(() => {
                                         }}
                                     </Button>
                                     <Button
-                                        v-if="canAmendEncounterNote"
                                         variant="outline"
                                         size="sm"
                                         class="gap-1.5"
-                                        :disabled="createLoading"
-                                        @click="openCreateAmendDialog()"
-                                    >
-                                        <AppIcon name="pencil" class="size-3.5" />
-                                        Amend note
-                                    </Button>
-                                    <Button
-                                        v-if="canCloseEncounter"
-                                        variant="outline"
-                                        size="sm"
-                                        class="gap-1.5"
-                                        :disabled="createLoading"
-                                        @click="void closeEncounterWorkspaceAction()"
-                                    >
-                                        <AppIcon name="circle-check-big" class="size-3.5" />
-                                        Close encounter
-                                    </Button>
-                                    <Button
-                                        v-if="canReopenEncounter"
-                                        variant="outline"
-                                        size="sm"
-                                        class="gap-1.5"
-                                        :disabled="createEncounterReopenSubmitting"
-                                        @click="openCreateEncounterReopenDialog()"
-                                    >
-                                        <AppIcon name="rotate-ccw" class="size-3.5" />
-                                        Reopen encounter
-                                    </Button>
-                                    <Button
-                                        v-if="canFinalizeCreateNote"
-                                        variant="outline"
-                                        size="sm"
-                                        class="gap-1.5"
-                                        :disabled="createLoading || !createForm.patientId.trim()"
+                                        data-test="encounter-workspace-finalize-note"
+                                        :disabled="createLoading || !createForm.patientId.trim() || !canFinalizeCreateNote"
                                         @click="openCreateFinalizeConfirmDialog()"
                                     >
                                         <AppIcon name="shield-check" class="size-3.5" />
@@ -10526,10 +9660,9 @@ onMounted(() => {
                                         }}
                                     </Button>
                                     <Button
-                                        v-if="canFinalizeAndCompleteVisit"
                                         size="sm"
                                         class="gap-1.5"
-                                        :disabled="createLoading || !createForm.patientId.trim()"
+                                        :disabled="createLoading || !createForm.patientId.trim() || !canFinalizeAndCompleteVisit"
                                         @click="openCreateFinalizeAndCompleteConfirmDialog()"
                                     >
                                         <AppIcon name="circle-check-big" class="size-3.5" />
@@ -10543,14 +9676,15 @@ onMounted(() => {
                                 </div>
                             </div>
                         </SheetFooter>
-                    </SheetContent>
-                </Sheet>
+            </SheetContent>
+        </Sheet>
             </div>
+        </div>
 
-            <Dialog
-                :open="createConsultationTakeoverDialogOpen"
-                @update:open="(open) => (open ? (createConsultationTakeoverDialogOpen = true) : closeCreateConsultationTakeoverDialog())"
-            >
+        <Dialog
+            :open="createConsultationTakeoverDialogOpen"
+            @update:open="(open) => (open ? (createConsultationTakeoverDialogOpen = true) : closeCreateConsultationTakeoverDialog())"
+        >
                 <DialogContent variant="action">
                     <DialogHeader>
                         <DialogTitle>Take over active consultation?</DialogTitle>
@@ -10698,7 +9832,6 @@ onMounted(() => {
                                         : 'The outpatient encounter will stay active until it is closed separately.'
                                 }}
                             </p>
-                            <p>{{ createComposerCompletedSectionCount }} of {{ createComposerSectionItems.length }} sections are currently documented.</p>
                         </div>
                     </div>
                     <DialogFooter class="gap-2">
@@ -10711,6 +9844,7 @@ onMounted(() => {
                         </Button>
                         <Button
                             :disabled="createLoading && (createSubmitIntent === 'finalize' || createSubmitIntent === 'finalize_complete')"
+                            data-test="encounter-workspace-finalize-confirm"
                             @click="confirmCreateFinalizeAction"
                         >
                             {{
@@ -10753,44 +9887,16 @@ onMounted(() => {
                 </DialogContent>
             </Dialog>
 
-            <Dialog
-                :open="encounterLifecycleDialogOpen"
-                @update:open="(open) => (open ? (encounterLifecycleDialogOpen = true) : closeEncounterLifecycleDialog())"
-            >
-                <DialogContent variant="action">
-                    <DialogHeader>
-                        <DialogTitle>{{ encounterLifecycleActionLabel(encounterLifecycleAction) }}</DialogTitle>
-                        <DialogDescription>
-                            Apply this lifecycle action to <span class="font-medium text-foreground">{{ encounterLifecycleTargetName() }}</span>.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div class="grid gap-2">
-                        <Label for="medical-record-encounter-lifecycle-reason">
-                            Clinical reason
-                        </Label>
-                        <Input
-                            id="medical-record-encounter-lifecycle-reason"
-                            v-model="encounterLifecycleReason"
-                            placeholder="Document the clinical reason for this lifecycle action."
-                        />
-                        <p v-if="encounterLifecycleError" class="text-sm text-destructive">
-                            {{ encounterLifecycleError }}
-                        </p>
-                    </div>
-                    <DialogFooter class="gap-2">
-                        <Button variant="outline" @click="closeEncounterLifecycleDialog">
-                            Keep current order
-                        </Button>
-                        <Button :disabled="encounterLifecycleSubmitting" @click="submitEncounterLifecycleDialog">
-                            {{
-                                encounterLifecycleSubmitting
-                                    ? 'Applying...'
-                                    : encounterLifecycleActionLabel(encounterLifecycleAction)
-                            }}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <EncounterLifecycleDialog
+                v-model:open="encounterLifecycleDialogOpen"
+                v-model:reason="encounterLifecycleReason"
+                :action="encounterLifecycleAction"
+                :target-name="encounterLifecycleTargetName()"
+                :error="encounterLifecycleError"
+                :submitting="encounterLifecycleSubmitting"
+                @close="closeEncounterLifecycleDialog()"
+                @submit="void submitEncounterLifecycleDialog()"
+            />
 
         <EncounterCloseChecklistDialog
             :open="createEncounterCloseDialogOpen"
@@ -10918,6 +10024,5 @@ onMounted(() => {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
     </AppLayout>
 </template>

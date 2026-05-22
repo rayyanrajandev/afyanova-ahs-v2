@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import EncounterMedicationSafetyPanel from '@/components/domain/clinical/EncounterMedicationSafetyPanel.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import ConfirmationDialog from '@/components/workflow/ConfirmationDialog.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -161,6 +162,16 @@ const catalogFieldLabel = computed(() => {
 });
 
 const panelTitle = computed(() => encounterInlineOrderTypeLabel(props.orderType));
+
+const pharmacySafetyCatalogItemId = computed(() =>
+    props.orderType === 'pharmacy' ? pharmacyForm.catalogItemId.trim() : '',
+);
+const pharmacySafetyMedicationCode = computed(
+    () => selectedCatalogItem.value?.code?.trim() ?? '',
+);
+const pharmacySafetyMedicationName = computed(
+    () => selectedCatalogItem.value?.name?.trim() ?? '',
+);
 
 function fieldError(field: string): string | null {
     return fieldErrors.value[field]?.[0] ?? null;
@@ -636,6 +647,17 @@ async function submitOrder() {
                         {{ fieldError('clinicalIndication') }}
                     </p>
                 </div>
+                <EncounterMedicationSafetyPanel
+                    :patient-id="context.patientId"
+                    :appointment-id="context.appointmentId"
+                    :admission-id="context.admissionId"
+                    :approved-medicine-catalog-item-id="pharmacySafetyCatalogItemId"
+                    :medication-code="pharmacySafetyMedicationCode"
+                    :medication-name="pharmacySafetyMedicationName"
+                    :dosage-instruction="pharmacyForm.dosageInstruction"
+                    :clinical-indication="pharmacyForm.clinicalIndication"
+                    :quantity-prescribed="pharmacyForm.quantityPrescribed"
+                />
                 <div class="grid gap-2">
                     <Label for="encounter-inline-pharm-notes">Dispensing notes</Label>
                     <Textarea

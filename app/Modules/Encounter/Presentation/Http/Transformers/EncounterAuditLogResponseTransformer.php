@@ -22,6 +22,10 @@ class EncounterAuditLogResponseTransformer
             'encounter.closed' => 'Encounter Closed',
             'encounter.reopened' => 'Encounter Reopened',
             'encounter.document.pdf.downloaded' => 'Chart Packet PDF Downloaded',
+            'encounter.clinical-document.uploaded' => 'Clinical Attachment Uploaded',
+            'encounter.clinical-document.updated' => 'Clinical Attachment Updated',
+            'encounter.clinical-document.status.updated' => 'Clinical Attachment Status Updated',
+            'encounter.clinical-document.downloaded' => 'Clinical Attachment Downloaded',
         ]);
     }
 }

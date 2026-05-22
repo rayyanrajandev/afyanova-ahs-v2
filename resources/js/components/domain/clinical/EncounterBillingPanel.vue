@@ -20,14 +20,9 @@ const invoicedCount = computed(() => billingSummary.value?.alreadyInvoiced ?? 0)
 
 <template>
     <div class="space-y-3 rounded-lg border bg-muted/10 p-4">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-            <div class="space-y-1">
-                <p class="text-sm font-medium">Billing and charge capture</p>
-                <p class="text-xs text-muted-foreground">
-                    Completed encounter services that still need invoice capture appear here.
-                </p>
-            </div>
-            <Badge variant="outline" class="text-[11px]">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <p class="text-sm font-medium">Billing</p>
+            <Badge variant="outline" class="text-xs">
                 {{ pendingCount }} pending
             </Badge>
         </div>

@@ -1750,13 +1750,8 @@
 
 @media (min-width: 1024px) {
     .encounter-workspace-tabs .encounter-workspace-pane {
-        display: flex !important;
         flex-direction: column;
         min-height: 0;
         overflow: hidden;
-    }
-
-    .encounter-workspace-tabs .encounter-workspace-pane[data-state='inactive'] {
-        display: flex !important;
     }
 }
