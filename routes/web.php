@@ -10,12 +10,21 @@ use App\Modules\Platform\Presentation\Http\Controllers\PlatformBrandingControlle
 use App\Modules\Pos\Presentation\Http\Controllers\PosRegisterSessionDocumentController;
 use App\Modules\Pos\Presentation\Http\Controllers\PosSaleDocumentController;
 use App\Support\Branding\SystemBrandingManager;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
 
 Route::get('branding/logo', [PlatformBrandingController::class, 'logo'])->name('branding.logo');
 Route::get('branding/icon', [PlatformBrandingController::class, 'icon'])->name('branding.icon');
+
+Route::get('auth/csrf-token', function (Request $request) {
+    $request->session()->regenerateToken();
+
+    return response()->json([
+        'token' => csrf_token(),
+    ]);
+})->middleware('throttle:30,1')->name('auth.csrf-token.web');
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [

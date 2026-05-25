@@ -24,6 +24,7 @@ import {
 } from '@/config/dashboardPresets';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiGet } from '@/lib/apiClient';
+import { encounterWorkspaceLegacyAppointmentHref } from '@/lib/encounterWorkspace';
 import type { AppIconName } from '@/lib/icons';
 import { formatEnumLabel } from '@/lib/labels';
 import type { BreadcrumbItem } from '@/types';
@@ -107,6 +108,12 @@ function clinicianQueueHref(
     }
 
     return `/appointments?${params.toString()}`;
+}
+
+function activeConsultationWorkspaceHref(appointmentId: string): string {
+    return encounterWorkspaceLegacyAppointmentHref(appointmentId, {
+        from: 'dashboard',
+    });
 }
 
 function departmentQueueHref(
@@ -265,7 +272,7 @@ function dashboardAppointmentHref(item: any): string {
 
     if (activePresetKey.value === 'clinician') {
         if (status === 'in_consultation' && assignedToMe) {
-            return clinicianQueueHref('in_consultation', appointmentId);
+            return activeConsultationWorkspaceHref(appointmentId);
         }
 
         if (status === 'waiting_provider') {
@@ -1458,7 +1465,7 @@ const queueRows = computed<QueueRow[]>(() => {
                 ? `Updated ${formatDateTime(item.updatedAt ?? item.checkedInAt ?? item.scheduledAt)} · ${triageCategory}`
                 : `Updated ${formatDateTime(item.updatedAt ?? item.checkedInAt ?? item.scheduledAt)}`,
             status: formatEnumLabel(String(item.status ?? 'in_consultation')),
-            href: clinicianQueueHref('in_consultation', String(item.id ?? '')),
+            href: activeConsultationWorkspaceHref(String(item.id ?? '')),
             actionLabel: 'Resume consultation',
             group: 'My queue — in consultation',
             searchHaystack: appointmentQueueSearchHaystack(item),

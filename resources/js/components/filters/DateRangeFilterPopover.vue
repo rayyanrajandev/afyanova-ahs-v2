@@ -25,6 +25,8 @@ type Props = {
     inline?: boolean;
     /** Number of calendar months side by side. Default 1; override with 2 only when a wider layout is intentional. */
     numberOfMonths?: number;
+    /** When false, hide native browser date inputs and rely on shadcn-vue calendar + presets only. */
+    showManualInputs?: boolean;
 };
 
 const props = withDefaults(defineProps<Props>(), {
@@ -34,6 +36,7 @@ const props = withDefaults(defineProps<Props>(), {
     toLabel: 'To',
     inline: false,
     numberOfMonths: undefined,
+    showManualInputs: true,
 });
 
 const numberOfMonthsComputed = computed(() => props.numberOfMonths ?? 1);
@@ -110,7 +113,18 @@ function toIsoDateString(value: { toString(): string } | undefined): string {
 }
 
 function formatDate(date: Date): string {
-    return date.toISOString().slice(0, 10);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+}
+
+function addDays(date: Date, days: number): Date {
+    const nextDate = new Date(date);
+    nextDate.setDate(nextDate.getDate() + days);
+
+    return nextDate;
 }
 
 function applyToday() {
@@ -122,8 +136,21 @@ function applyToday() {
 
 function applyNext7Days() {
     const start = new Date();
+    const end = addDays(start, 6);
+    emit('update:from', formatDate(start));
+    emit('update:to', formatDate(end));
+}
+
+function applyPrevious7Days() {
     const end = new Date();
-    end.setDate(end.getDate() + 6);
+    const start = addDays(end, -6);
+    emit('update:from', formatDate(start));
+    emit('update:to', formatDate(end));
+}
+
+function applyPrevious30Days() {
+    const end = new Date();
+    const start = addDays(end, -29);
     emit('update:from', formatDate(start));
     emit('update:to', formatDate(end));
 }
@@ -173,7 +200,7 @@ function clearAll() {
                         class="w-full p-2 [&_[data-slot=range-calendar-header]]:pt-0 [&_[data-slot=range-calendar-grid]]:w-full [&_[data-slot=range-calendar-grid-row]]:justify-between [&_[data-slot=range-calendar-grid-row]]:mt-1 [&_[data-slot=range-calendar-head-cell]]:h-7 [&_[data-slot=range-calendar-head-cell]]:w-7 [&_[data-slot=range-calendar-head-cell]]:text-[11px] [&_[data-slot=range-calendar-trigger]]:h-7 [&_[data-slot=range-calendar-trigger]]:w-7 [&_[data-slot=range-calendar-trigger]]:text-xs"
                     />
                 </div>
-                <div class="grid gap-2.5">
+                <div v-if="showManualInputs" class="grid gap-2.5">
                     <div class="grid gap-2">
                         <Label :for="`${inputBaseId}-from`">{{ fromLabel }}</Label>
                         <Input
@@ -193,14 +220,23 @@ function clearAll() {
                         />
                     </div>
                 </div>
-                <div class="grid grid-cols-2 gap-2">
-                    <Button type="button" size="sm" variant="outline" @click="applyToday">
+                <div
+                    class="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,8.75rem),1fr))]"
+                >
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        class="w-full justify-center whitespace-nowrap px-2"
+                        @click="applyToday"
+                    >
                         Today onward
                     </Button>
                     <Button
                         type="button"
                         size="sm"
                         variant="outline"
+                        class="w-full justify-center whitespace-nowrap px-2"
                         @click="applyNext7Days"
                     >
                         Next 7 days
@@ -209,6 +245,25 @@ function clearAll() {
                         type="button"
                         size="sm"
                         variant="outline"
+                        class="w-full justify-center whitespace-nowrap px-2"
+                        @click="applyPrevious7Days"
+                    >
+                        Previous 7 days
+                    </Button>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        class="w-full justify-center whitespace-nowrap px-2"
+                        @click="applyPrevious30Days"
+                    >
+                        Previous 30 days
+                    </Button>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        class="w-full justify-center whitespace-nowrap px-2"
                         :disabled="!props.to"
                         @click="clearEndDate"
                     >
@@ -218,6 +273,7 @@ function clearAll() {
                         type="button"
                         size="sm"
                         variant="ghost"
+                        class="w-full justify-center whitespace-nowrap px-2"
                         :disabled="!props.from && !props.to"
                         @click="clearAll"
                     >
@@ -246,7 +302,7 @@ function clearAll() {
                     class="w-full [&_[data-slot=range-calendar-grid-row]]:w-full [&_[data-slot=range-calendar-grid-row]]:justify-between"
                 />
             </div>
-            <div class="grid gap-3 sm:grid-cols-2">
+            <div v-if="showManualInputs" class="grid gap-3 sm:grid-cols-2">
                 <div class="grid gap-2">
                     <Label :for="`${inputBaseId}-from`">{{ fromLabel }}</Label>
                     <Input
@@ -266,14 +322,23 @@ function clearAll() {
                     />
                 </div>
             </div>
-            <div class="flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant="outline" @click="applyToday">
+            <div
+                class="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,8.75rem),1fr))]"
+            >
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    class="w-full justify-center whitespace-nowrap px-2"
+                    @click="applyToday"
+                >
                     Today onward
                 </Button>
                 <Button
                     type="button"
                     size="sm"
                     variant="outline"
+                    class="w-full justify-center whitespace-nowrap px-2"
                     @click="applyNext7Days"
                 >
                     Next 7 days
@@ -282,6 +347,25 @@ function clearAll() {
                     type="button"
                     size="sm"
                     variant="outline"
+                    class="w-full justify-center whitespace-nowrap px-2"
+                    @click="applyPrevious7Days"
+                >
+                    Previous 7 days
+                </Button>
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    class="w-full justify-center whitespace-nowrap px-2"
+                    @click="applyPrevious30Days"
+                >
+                    Previous 30 days
+                </Button>
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    class="w-full justify-center whitespace-nowrap px-2"
                     :disabled="!props.to"
                     @click="clearEndDate"
                 >
@@ -291,6 +375,7 @@ function clearAll() {
                     type="button"
                     size="sm"
                     variant="ghost"
+                    class="w-full justify-center whitespace-nowrap px-2"
                     :disabled="!props.from && !props.to"
                     @click="clearAll"
                 >

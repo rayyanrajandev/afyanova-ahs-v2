@@ -34,9 +34,16 @@ class ListAppointmentStatusCountsUseCase
         $status = isset($filters['status']) ? trim((string) $filters['status']) : null;
         if ($status === '') {
             $status = null;
+        } elseif ($status === 'checked_in') {
+            $status = AppointmentStatus::WAITING_TRIAGE->value;
         } elseif ($status !== 'exceptions' && ! in_array($status, AppointmentStatus::values(), true)) {
             $status = null;
         }
+
+        $triageCategory = isset($filters['triageCategory']) ? trim((string) $filters['triageCategory']) : null;
+        $triageCategory = ($triageCategory === '' || ! in_array(strtoupper($triageCategory), ['P1', 'P2', 'P3', 'P4', 'P5'], true))
+            ? null
+            : strtoupper($triageCategory);
 
         $fromDateTime = isset($filters['from']) ? trim((string) $filters['from']) : null;
         $fromDateTime = $fromDateTime === '' ? null : $fromDateTime;
@@ -51,6 +58,7 @@ class ListAppointmentStatusCountsUseCase
             department: $department,
             unassignedClinicianOnly: $unassignedClinicianOnly,
             status: $status,
+            triageCategory: $triageCategory,
             fromDateTime: $fromDateTime,
             toDateTime: $toDateTime,
         );

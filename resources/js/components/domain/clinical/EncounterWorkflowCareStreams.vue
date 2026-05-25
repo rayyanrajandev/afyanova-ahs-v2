@@ -61,6 +61,7 @@ const props = defineProps<{
     canCreateTheatreProcedures: boolean;
     contextCreateHref: (path: string, options?: Record<string, unknown>) => string;
     formatDateTime: (value: string | null | undefined) => string;
+    compact?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -93,14 +94,24 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
         v-model="careTab"
         class="space-y-4"
     >
-        <TabsList class="!inline-flex !h-auto min-h-9 w-full flex-wrap justify-start gap-1 rounded-lg bg-muted/20 p-1">
+        <TabsList
+            :class="[
+                '!h-auto min-h-9 w-full gap-1 rounded-lg border bg-muted/20 p-1',
+                compact
+                    ? '!grid grid-cols-2'
+                    : '!inline-flex flex-wrap justify-start',
+            ]"
+        >
             <TabsTrigger
                 v-for="summary in visibleSummaries"
                 :key="`mr-create-encounter-tab-${summary.id}`"
                 :value="summary.id"
-                class="!h-8 shrink-0 gap-2 px-3"
+                :class="[
+                    '!h-8 gap-2 px-3 data-[state=active]:bg-background data-[state=active]:shadow-sm',
+                    compact ? 'min-w-0 justify-center' : 'shrink-0',
+                ]"
             >
-                <span>{{ summary.label }}</span>
+                <span class="truncate">{{ summary.label }}</span>
                 <Badge variant="secondary" class="text-[10px]">
                     {{ summary.count }}
                 </Badge>
@@ -135,7 +146,7 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                 <div
                     v-else
                     :class="[
-                        'rounded-md border border-border/50 bg-background',
+                        'space-y-2',
                         laboratoryOrders.length > 5
                             ? 'max-h-[30rem] overflow-y-auto'
                             : 'overflow-visible',
@@ -144,9 +155,19 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                     <div
                         v-for="order in laboratoryOrders"
                         :key="`mr-create-lab-order-${order.id}`"
-                        class="space-y-1 border-b border-border/50 px-3 py-2.5 last:border-b-0"
+                        :class="[
+                            'space-y-2 rounded-lg border bg-background shadow-sm',
+                            compact ? 'px-2.5 py-2.5' : 'px-3 py-3',
+                        ]"
                     >
-                        <div class="flex items-start justify-between gap-3">
+                        <div
+                            :class="[
+                                'flex gap-3',
+                                compact
+                                    ? 'flex-col items-start'
+                                    : 'items-start justify-between',
+                            ]"
+                        >
                             <div class="min-w-0">
                                 <p class="truncate text-sm font-medium text-foreground">
                                     {{ order.testName || 'Laboratory order' }}
@@ -165,6 +186,7 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                             {{ laboratoryOrderSummaryText(order, formatDateTime) }}
                         </p>
                         <EncounterOrderProgress
+                            v-if="!compact"
                             class="mt-2"
                             order-type="laboratory"
                             :order="order"
@@ -246,7 +268,7 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                 <div
                     v-else
                     :class="[
-                        'rounded-md border border-border/50 bg-background',
+                        'space-y-2',
                         pharmacyOrders.length > 5
                             ? 'max-h-[30rem] overflow-y-auto'
                             : 'overflow-visible',
@@ -255,9 +277,19 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                     <div
                         v-for="order in pharmacyOrders"
                         :key="`mr-create-pharmacy-order-${order.id}`"
-                        class="space-y-1 border-b border-border/50 px-3 py-2.5 last:border-b-0"
+                        :class="[
+                            'space-y-2 rounded-lg border bg-background shadow-sm',
+                            compact ? 'px-2.5 py-2.5' : 'px-3 py-3',
+                        ]"
                     >
-                        <div class="flex items-start justify-between gap-3">
+                        <div
+                            :class="[
+                                'flex gap-3',
+                                compact
+                                    ? 'flex-col items-start'
+                                    : 'items-start justify-between',
+                            ]"
+                        >
                             <div class="min-w-0">
                                 <p class="truncate text-sm font-medium text-foreground">
                                     {{ order.medicationName || 'Pharmacy order' }}
@@ -282,6 +314,7 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                             {{ pharmacyOrderSummaryText(order, formatDateTime) }}
                         </p>
                         <EncounterOrderProgress
+                            v-if="!compact"
                             class="mt-2"
                             order-type="pharmacy"
                             :order="order"
@@ -372,7 +405,7 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                 <div
                     v-else
                     :class="[
-                        'rounded-md border border-border/50 bg-background',
+                        'space-y-2',
                         radiologyOrders.length > 5
                             ? 'max-h-[30rem] overflow-y-auto'
                             : 'overflow-visible',
@@ -381,9 +414,19 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                     <div
                         v-for="order in radiologyOrders"
                         :key="`mr-create-radiology-order-${order.id}`"
-                        class="space-y-1 border-b border-border/50 px-3 py-2.5 last:border-b-0"
+                        :class="[
+                            'space-y-2 rounded-lg border bg-background shadow-sm',
+                            compact ? 'px-2.5 py-2.5' : 'px-3 py-3',
+                        ]"
                     >
-                        <div class="flex items-start justify-between gap-3">
+                        <div
+                            :class="[
+                                'flex gap-3',
+                                compact
+                                    ? 'flex-col items-start'
+                                    : 'items-start justify-between',
+                            ]"
+                        >
                             <div class="min-w-0">
                                 <p class="truncate text-sm font-medium text-foreground">
                                     {{ order.studyDescription || 'Imaging order' }}
@@ -402,6 +445,7 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                             {{ radiologyOrderSummaryText(order, formatDateTime) }}
                         </p>
                         <EncounterOrderProgress
+                            v-if="!compact"
                             class="mt-2"
                             order-type="radiology"
                             :order="order"
@@ -483,7 +527,7 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                 <div
                     v-else
                     :class="[
-                        'rounded-md border border-border/50 bg-background',
+                        'space-y-2',
                         theatreProcedures.length > 5
                             ? 'max-h-[30rem] overflow-y-auto'
                             : 'overflow-visible',
@@ -492,9 +536,19 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                     <div
                         v-for="procedure in theatreProcedures"
                         :key="`mr-create-theatre-procedure-${procedure.id}`"
-                        class="space-y-1 border-b border-border/50 px-3 py-2.5 last:border-b-0"
+                        :class="[
+                            'space-y-2 rounded-lg border bg-background shadow-sm',
+                            compact ? 'px-2.5 py-2.5' : 'px-3 py-3',
+                        ]"
                     >
-                        <div class="flex items-start justify-between gap-3">
+                        <div
+                            :class="[
+                                'flex gap-3',
+                                compact
+                                    ? 'flex-col items-start'
+                                    : 'items-start justify-between',
+                            ]"
+                        >
                             <div class="min-w-0">
                                 <p class="truncate text-sm font-medium text-foreground">
                                     {{ procedure.procedureName || procedure.procedureType || 'Theatre procedure' }}
@@ -513,6 +567,7 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                             {{ theatreProcedureSummaryText(procedure, formatDateTime) }}
                         </p>
                         <EncounterOrderProgress
+                            v-if="!compact"
                             class="mt-2"
                             order-type="theatre"
                             :order="procedure"

@@ -1,4 +1,4 @@
-import { csrfRequestHeaders } from '@/lib/csrf';
+import { csrfRequestHeaders, refreshCsrfToken } from '@/lib/csrf';
 import { notifyFacilityEntitlementDenied } from '@/lib/facilityEntitlementNotify';
 
 /** Laravel JSON API base (session + Sanctum-style web stack). */
@@ -135,13 +135,26 @@ export async function apiRequestJson<T>(
         }
     }
 
-    const response = await fetch(url.toString(), {
-        method,
-        credentials: 'same-origin',
-        headers,
-        body,
-        keepalive: options?.keepalive === true,
-    });
+    const sendRequest = () =>
+        fetch(url.toString(), {
+            method,
+            credentials: 'same-origin',
+            headers,
+            body,
+            keepalive: options?.keepalive === true,
+        });
+
+    let response = await sendRequest();
+
+    if (
+        response.status === 419 &&
+        method !== 'GET' &&
+        options?.keepalive !== true
+    ) {
+        await refreshCsrfToken();
+        Object.assign(headers, csrfRequestHeaders());
+        response = await sendRequest();
+    }
 
     const payload = await parseJsonBody(response);
 

@@ -46,21 +46,50 @@ const emit = defineEmits<{
         class="rounded-lg border border-border bg-card shadow-sm"
         data-test="encounter-workspace-header"
         aria-label="Encounter workspace header"
+        :aria-busy="loading"
     >
         <div
-            v-if="loading && hasPatient"
+            v-if="loading"
             class="flex flex-col gap-4 px-6 py-4 md:flex-row md:items-center md:justify-between md:gap-6"
         >
             <div class="flex min-w-0 items-center gap-3">
                 <Skeleton class="size-10 rounded-lg" />
-                <div class="min-w-0 space-y-2">
-                    <Skeleton class="h-5 w-44 rounded-lg" />
-                    <Skeleton class="h-3 w-72 rounded-lg" />
+                <div class="min-w-0 space-y-2.5">
+                    <Skeleton class="h-3 w-32 rounded-lg" />
+                    <div class="flex flex-wrap items-center gap-2">
+                        <Skeleton class="h-5 w-40 rounded-lg" />
+                        <Skeleton class="h-5 w-28 rounded-full" />
+                    </div>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <Skeleton class="h-5 w-16 rounded-full" />
+                        <Skeleton class="h-5 w-24 rounded-full" />
+                        <Skeleton class="h-5 w-32 rounded-full" />
+                        <Skeleton class="h-5 w-28 rounded-full" />
+                    </div>
+                    <Skeleton class="h-3 w-80 max-w-full rounded-lg" />
                 </div>
             </div>
-            <div class="flex flex-wrap gap-2">
-                <Skeleton class="h-8 w-28 rounded-lg" />
-                <Skeleton class="h-8 w-32 rounded-lg" />
+            <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                <Button
+                    v-if="hasPatient"
+                    size="sm"
+                    variant="outline"
+                    class="h-8 gap-1.5"
+                    disabled
+                >
+                    <AppIcon name="user" class="size-3.5" />
+                    Patient chart
+                </Button>
+                <Button
+                    size="sm"
+                    variant="outline"
+                    class="h-8 gap-1.5"
+                    data-test="encounter-workspace-back"
+                    @click="emit('back')"
+                >
+                    <AppIcon :name="backIcon" class="size-3.5" />
+                    {{ backLabel }}
+                </Button>
             </div>
         </div>
 

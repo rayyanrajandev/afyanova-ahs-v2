@@ -43,7 +43,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { apiGet, apiPatch, apiRequestJson, isApiClientError } from '@/lib/apiClient';
+import { apiPatch, apiRequestJson, isApiClientError } from '@/lib/apiClient';
 import { encounterWorkspaceHref, encounterWorkspaceLegacyAppointmentHref } from '@/lib/encounterWorkspace';
 import {
     FINANCIAL_CLASS_OPTIONS,
@@ -461,6 +461,7 @@ const advancedFiltersDraft = reactive({
 
 const listLoading = ref(false);
 const pageLoading = ref(true);
+const countsReady = ref(false);
 const queueError = ref<string | null>(null);
 const appointments = ref<Appointment[]>([]);
 
@@ -888,7 +889,7 @@ const queueSummary = computed(() => {
     return `${total} appointments in scope`;
 });
 const workspaceIntroText = computed(() => isMyClinicalQueue.value
-    ? 'Clinician queue for your patients who are waiting for provider review, already in consultation, or recently closed.'
+    ? 'Clinician queue for your patients who are waiting for provider review or already in consultation.'
     : (isTriageQueue.value
         ? 'Nurse triage workspace for vitals, intake notes, and provider handoff.'
         : 'Front-desk scheduling, arrival handling, nurse triage handoff, and provider routing.')
@@ -896,24 +897,6 @@ const workspaceIntroText = computed(() => isMyClinicalQueue.value
 const showClinicalQueueSuggestion = computed(() => canUseMyClinicalQueue.value && !isMyClinicalQueue.value && !isTriageQueue.value && !hasExplicitQueueIntent);
 const showTriageQueueSuggestion = computed(() => canUseTriageQueue.value && !isTriageQueue.value && !isMyClinicalQueue.value && !hasExplicitQueueIntent);
 const currentViewSummary = computed(() => `${queueModeLabel.value} -> ${quickPresetLabel(statusPreset.value)}`);
-
-// Consultation type analytics (30-day summary strip)
-type ConsultationTypeAnalytics = {
-    totals: { new: number; review: number; total: number; reviewRatePct: number };
-} | null;
-const consultTypeAnalytics = ref<ConsultationTypeAnalytics>(null);
-async function loadConsultTypeAnalytics(): Promise<void> {
-    try {
-        const response = await apiGet<ApiItemResponse<NonNullable<ConsultationTypeAnalytics>>>(
-            '/appointments/analytics/consultation-type-summary',
-            undefined,
-            { entitlementContext: 'Appointment consultation type analytics' },
-        );
-        consultTypeAnalytics.value = response.data;
-    } catch {
-        // non-critical - fail silently
-    }
-}
 
 const activeAdvancedFilterCount = computed(() =>
     Number(Boolean(searchForm.patientId))
@@ -2752,6 +2735,14 @@ function appointmentQuickCount(preset: WorkspacePreset): number {
     return counts.value[preset] || 0;
 }
 
+function appointmentCountText(value: number): string {
+    return countsReady.value ? String(value || 0) : '—';
+}
+
+function appointmentQuickCountText(preset: WorkspacePreset): string {
+    return countsReady.value ? String(appointmentQuickCount(preset)) : '—';
+}
+
 function quickPresetLabel(preset: WorkspacePreset): string {
     switch (preset) {
         case 'waiting_triage':
@@ -2843,14 +2834,10 @@ function appointmentListQueryFilters(): Record<string, string | number | null> {
 }
 
 async function loadCounts(): Promise<void> {
-    const statusFilter = statusPreset.value === 'all' || statusPreset.value === 'exceptions'
-        ? null
-        : statusPreset.value;
-
     const response = await apiRequest<ApiItemResponse<Record<string, number>>>('GET', '/appointments/status-counts', {
         query: {
             ...appointmentListQueryFilters(),
-            status: statusFilter,
+            triageCategory: triageCategoryFilter.value || null,
         },
     });
     counts.value = {
@@ -2863,6 +2850,7 @@ async function loadCounts(): Promise<void> {
         no_show: Number(response.data.no_show ?? 0),
         total: Number(response.data.total ?? 0),
     };
+    countsReady.value = true;
 }
 
 async function loadQueue(): Promise<void> {
@@ -4919,6 +4907,41 @@ function openMyClinicalQueue(): void {
     void loadQueue();
 }
 
+function applyDefaultQueueForSignedInUser(): void {
+    if (hasExplicitQueueIntent) return;
+
+    if (canUseMyClinicalQueue.value && currentUserId.value !== null) {
+        queueMode.value = 'clinical';
+        searchForm.q = '';
+        searchForm.patientId = '';
+        searchForm.clinicianUserId = String(currentUserId.value);
+        searchForm.department = '';
+        searchForm.unassignedClinician = false;
+        searchForm.from = '';
+        searchForm.to = '';
+        searchForm.page = 1;
+        statusPreset.value = 'waiting_provider';
+        triageCategoryFilter.value = null;
+        syncAdvancedFiltersDraftFromSearch();
+        return;
+    }
+
+    if (canUseTriageQueue.value) {
+        queueMode.value = 'triage';
+        searchForm.q = '';
+        searchForm.patientId = '';
+        searchForm.clinicianUserId = '';
+        searchForm.department = '';
+        searchForm.unassignedClinician = false;
+        searchForm.from = '';
+        searchForm.to = '';
+        searchForm.page = 1;
+        statusPreset.value = 'waiting_triage';
+        triageCategoryFilter.value = null;
+        syncAdvancedFiltersDraftFromSearch();
+    }
+}
+
 function leaveMyClinicalQueue(): void {
     openAllAppointmentsQueue();
 }
@@ -5101,12 +5124,12 @@ onMounted(async () => {
         return false;
     });
     await Promise.all([
-        loadQueue(),
         loadDepartmentOptions(),
         loadClinicianDirectory(),
         initialPatientId ? hydratePatientSummary(initialPatientId) : Promise.resolve(),
-        loadConsultTypeAnalytics(),
     ]);
+    applyDefaultQueueForSignedInUser();
+    await loadQueue();
     if (initialCreateIntent && canCreate.value && !createPrefillApplied.value) {
         createPrefillApplied.value = true;
         openCreateSheet({ prefillFromQuery: true });
@@ -5251,8 +5274,17 @@ watchDebounced(
 
             <div class="rounded-lg border bg-muted/30 px-3 py-2.5">
                 <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                    <!-- Queue mode switcher -->
-                    <div class="flex flex-wrap items-center gap-2">
+                    <template v-if="pageLoading">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <Skeleton class="h-8 w-32 rounded-md" />
+                            <Skeleton class="h-8 w-28 rounded-md" />
+                            <Skeleton class="h-8 w-28 rounded-md" />
+                        </div>
+                        <div class="flex flex-wrap items-center gap-1.5">
+                            <Skeleton v-for="index in 7" :key="`preset-skeleton-${index}`" class="h-7 w-24 rounded-full" />
+                        </div>
+                    </template>
+                    <div v-else class="flex flex-wrap items-center gap-2">
                         <Button
                             size="sm"
                             :variant="!isMyClinicalQueue && !isTriageQueue ? 'default' : 'outline'"
@@ -5283,8 +5315,7 @@ watchDebounced(
                             My patients
                         </Button>
                     </div>
-                    <!-- Status preset filter chips -->
-                    <div class="flex flex-wrap items-center gap-1.5">
+                    <div v-if="!pageLoading" class="flex flex-wrap items-center gap-1.5">
                         <button
                             v-for="preset in ['all', 'scheduled', 'waiting_triage', 'waiting_provider', 'in_consultation', 'completed', 'exceptions'] as WorkspacePreset[]"
                             :key="preset"
@@ -5300,15 +5331,38 @@ watchDebounced(
                                 class="size-1.5 rounded-full"
                                 :class="matchesAppointmentPreset(preset) ? 'bg-background/70' : presetDotClass(preset)"
                             />
-                            <span class="font-semibold tabular-nums">{{ appointmentQuickCount(preset) }}</span>
+                            <span class="font-semibold tabular-nums">{{ appointmentQuickCountText(preset) }}</span>
                             <span>{{ quickPresetLabel(preset) }}</span>
                         </button>
                     </div>
                 </div>
             </div>
 
+            <section v-if="pageLoading" class="rounded-lg border border-border bg-card px-3 py-3 shadow-sm">
+                <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                    <div class="min-w-0 space-y-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <Skeleton class="h-5 w-32 rounded-full" />
+                            <Skeleton class="h-4 w-72 max-w-full" />
+                        </div>
+                        <Skeleton class="h-3 w-96 max-w-full" />
+                    </div>
+                    <Skeleton class="h-8 w-36 rounded-md" />
+                </div>
+                <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                    <div class="rounded-lg border bg-background/90 px-3 py-2.5">
+                        <Skeleton class="h-3 w-32" />
+                        <Skeleton class="mt-2 h-6 w-12" />
+                    </div>
+                    <div class="rounded-lg border bg-background/90 px-3 py-2.5">
+                        <Skeleton class="h-3 w-36" />
+                        <Skeleton class="mt-2 h-6 w-12" />
+                    </div>
+                </div>
+            </section>
+
             <div
-                v-if="showClinicalQueueSuggestion"
+                v-if="!pageLoading && showClinicalQueueSuggestion"
                 class="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3"
             >
                 <div class="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
@@ -5327,7 +5381,7 @@ watchDebounced(
             </div>
 
             <div
-                v-if="showTriageQueueSuggestion"
+                v-if="!pageLoading && showTriageQueueSuggestion"
                 class="flex items-start gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 dark:border-emerald-700/30 dark:bg-emerald-500/10"
             >
                 <div class="flex size-7 shrink-0 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
@@ -5345,7 +5399,7 @@ watchDebounced(
                 </div>
             </div>
 
-            <section v-if="isTriageQueue" class="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-3">
+            <section v-if="!pageLoading && isTriageQueue" class="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-3">
                 <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                     <div class="min-w-0">
                         <div class="flex flex-wrap items-center gap-2">
@@ -5361,23 +5415,19 @@ watchDebounced(
                         Back to all appointments
                     </Button>
                 </div>
-                <div class="mt-3 grid gap-2 sm:grid-cols-3">
+                <div class="mt-3 grid gap-2 sm:grid-cols-2">
                     <div class="rounded-lg border bg-background/90 px-3 py-2.5">
                         <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Waiting triage</p>
-                        <p class="mt-1 text-lg font-semibold text-foreground">{{ counts.waiting_triage }}</p>
+                        <p class="mt-1 text-lg font-semibold text-foreground">{{ appointmentCountText(counts.waiting_triage) }}</p>
                     </div>
                     <div class="rounded-lg border bg-background/90 px-3 py-2.5">
                         <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Ready for provider</p>
-                        <p class="mt-1 text-lg font-semibold text-foreground">{{ counts.waiting_provider }}</p>
-                    </div>
-                    <div class="rounded-lg border bg-background/90 px-3 py-2.5">
-                        <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Closed</p>
-                        <p class="mt-1 text-lg font-semibold text-foreground">{{ counts.completed }}</p>
+                        <p class="mt-1 text-lg font-semibold text-foreground">{{ appointmentCountText(counts.waiting_provider) }}</p>
                     </div>
                 </div>
             </section>
 
-            <section v-if="isMyClinicalQueue" class="rounded-lg border border-primary/20 bg-primary/5 px-3 py-3">
+            <section v-if="!pageLoading && isMyClinicalQueue" class="rounded-lg border border-primary/20 bg-primary/5 px-3 py-3">
                 <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                     <div class="min-w-0">
                         <div class="flex flex-wrap items-center gap-2">
@@ -5385,7 +5435,7 @@ watchDebounced(
                             <p class="text-sm font-medium text-foreground">{{ currentUserName || 'Your' }} queue is filtered and ready for consultation handoff.</p>
                         </div>
                         <p class="mt-1 text-xs text-muted-foreground">
-                            We are showing provider-ready visits assigned to you by default, with active consultation and scheduled workload still visible for quick awareness.
+                            We are showing provider-ready visits assigned to you by default, with active consultations still visible for quick awareness.
                         </p>
                     </div>
                     <Button size="sm" variant="outline" class="h-8 gap-1.5 self-start" @click="leaveMyClinicalQueue()">
@@ -5393,45 +5443,33 @@ watchDebounced(
                         Back to all appointments
                     </Button>
                 </div>
-                <div class="mt-3 grid gap-2 sm:grid-cols-3">
+                <div class="mt-3 grid gap-2 sm:grid-cols-2">
                     <div class="rounded-lg border bg-background/90 px-3 py-2.5">
                         <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Ready for provider</p>
-                        <p class="mt-1 text-lg font-semibold text-foreground">{{ counts.waiting_provider }}</p>
+                        <p class="mt-1 text-lg font-semibold text-foreground">{{ appointmentCountText(counts.waiting_provider) }}</p>
                     </div>
                     <div class="rounded-lg border bg-background/90 px-3 py-2.5">
                         <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">In consultation</p>
-                        <p class="mt-1 text-lg font-semibold text-foreground">{{ counts.in_consultation }}</p>
+                        <p class="mt-1 text-lg font-semibold text-foreground">{{ appointmentCountText(counts.in_consultation) }}</p>
                     </div>
-                    <div class="rounded-lg border bg-background/90 px-3 py-2.5">
-                        <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Closed</p>
-                        <p class="mt-1 text-lg font-semibold text-foreground">{{ counts.completed }}</p>
-                    </div>
-                </div>
-            </section>
-
-            <!-- 30-day consultation type analytics strip -->
-            <section v-if="consultTypeAnalytics && consultTypeAnalytics.totals.total > 0" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div class="rounded-lg border bg-background px-4 py-3">
-                    <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">New (30 d)</p>
-                    <p class="mt-1 text-lg font-semibold text-foreground">{{ consultTypeAnalytics.totals.new }}</p>
-                </div>
-                <div class="rounded-lg border bg-background px-4 py-3">
-                    <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Review (30 d)</p>
-                    <p class="mt-1 text-lg font-semibold text-foreground">{{ consultTypeAnalytics.totals.review }}</p>
-                </div>
-                <div class="rounded-lg border bg-background px-4 py-3">
-                    <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Total visits</p>
-                    <p class="mt-1 text-lg font-semibold text-foreground">{{ consultTypeAnalytics.totals.total }}</p>
-                </div>
-                <div class="rounded-lg border bg-background px-4 py-3">
-                    <p class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Review rate</p>
-                    <p class="mt-1 text-lg font-semibold text-foreground">{{ consultTypeAnalytics.totals.reviewRatePct }}%</p>
                 </div>
             </section>
 
             <Card id="appointments-queue" class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col">
                 <CardHeader class="shrink-0 gap-3 pb-3">
-                    <div class="min-w-0 space-y-1">
+                    <div v-if="pageLoading" class="min-w-0 space-y-2">
+                        <div class="flex items-center gap-2">
+                            <Skeleton class="size-5 rounded-md" />
+                            <Skeleton class="h-5 w-44" />
+                        </div>
+                        <Skeleton class="h-4 w-80 max-w-full" />
+                        <div class="mt-2 flex flex-wrap items-center gap-2">
+                            <Skeleton class="h-5 w-24 rounded-full" />
+                            <Skeleton class="h-5 w-24 rounded-full" />
+                        </div>
+                        <Skeleton class="h-3 w-96 max-w-full" />
+                    </div>
+                    <div v-else class="min-w-0 space-y-1">
                         <CardTitle class="flex items-center gap-2">
                             <AppIcon name="layout-list" class="size-5 text-muted-foreground" />
                             {{ queueTitle }}
@@ -5453,7 +5491,17 @@ watchDebounced(
                         </p>
                     </div>
 
-                    <div class="flex w-full flex-col gap-2">
+                    <div v-if="pageLoading" class="flex w-full flex-col gap-2">
+                        <div class="flex w-full flex-col gap-2 xl:flex-row xl:items-center">
+                            <Skeleton class="h-9 min-w-0 flex-1 rounded-md" />
+                            <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:flex-nowrap">
+                                <Skeleton class="h-9 w-full rounded-md sm:w-44" />
+                                <Skeleton class="h-9 w-28 rounded-md" />
+                                <Skeleton class="h-9 w-20 rounded-md" />
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="flex w-full flex-col gap-2">
                         <div class="flex w-full flex-col gap-2 xl:flex-row xl:items-center">
                             <div class="relative min-w-0 flex-1">
                                 <AppIcon
@@ -5576,9 +5624,34 @@ watchDebounced(
                     <ScrollArea class="min-h-0 flex-1">
                         <div class="min-h-[12rem] p-4" :class="compactQueueRows ? 'space-y-2' : 'space-y-3'">
                             <div v-if="pageLoading || listLoading" class="space-y-2">
-                                <Skeleton class="h-24 w-full" />
-                                <Skeleton class="h-24 w-full" />
-                                <Skeleton class="h-24 w-full" />
+                                <div
+                                    v-for="index in 3"
+                                    :key="`appointment-row-skeleton-${index}`"
+                                    class="rounded-lg border border-l-[3px] border-l-muted bg-card p-3"
+                                >
+                                    <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                        <div class="min-w-0 flex-1 space-y-2">
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <Skeleton class="h-4 w-36" />
+                                                <Skeleton class="h-5 w-24 rounded-full" />
+                                                <Skeleton class="h-5 w-14 rounded-full" />
+                                            </div>
+                                            <Skeleton class="h-4 w-48" />
+                                            <div class="flex flex-wrap items-center gap-3">
+                                                <Skeleton class="h-3 w-24" />
+                                                <Skeleton class="h-3 w-28" />
+                                                <Skeleton class="h-3 w-32" />
+                                            </div>
+                                            <Skeleton class="h-3 w-72 max-w-full" />
+                                            <Skeleton class="h-8 w-full rounded-md" />
+                                        </div>
+                                        <div class="flex shrink-0 flex-wrap items-start justify-end gap-1.5">
+                                            <Skeleton class="h-8 w-28 rounded-md" />
+                                            <Skeleton class="h-8 w-20 rounded-md" />
+                                            <Skeleton class="h-8 w-8 rounded-md" />
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             <Alert v-else-if="queueError" variant="destructive">
                                 <AlertTitle>Queue unavailable</AlertTitle>
@@ -5849,6 +5922,7 @@ watchDebounced(
                             to-label="To"
                             inline
                             :number-of-months="1"
+                            :show-manual-inputs="false"
                             v-model:from="advancedFiltersDraft.from"
                             v-model:to="advancedFiltersDraft.to"
                         />
@@ -5895,6 +5969,7 @@ watchDebounced(
                                     to-label="To"
                                     inline
                                     :number-of-months="1"
+                                    :show-manual-inputs="false"
                                     v-model:from="advancedFiltersDraft.from"
                                     v-model:to="advancedFiltersDraft.to"
                                 />

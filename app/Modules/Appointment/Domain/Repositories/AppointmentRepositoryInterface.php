@@ -41,6 +41,7 @@ interface AppointmentRepositoryInterface
         ?string $department,
         bool $unassignedClinicianOnly,
         ?string $status,
+        ?string $triageCategory,
         ?string $fromDateTime,
         ?string $toDateTime
     ): array;

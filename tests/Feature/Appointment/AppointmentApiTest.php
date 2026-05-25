@@ -1436,6 +1436,65 @@ it('lists department pool appointments without an assigned clinician', function 
         ->assertJsonPath('data.total', 1);
 });
 
+it('scopes appointment status counts by triage priority without losing status buckets', function (): void {
+    $user = makeAppointmentUser();
+    $patient = makePatient();
+
+    AppointmentModel::query()->create([
+        'appointment_number' => 'APT20260521P1TRIAGE',
+        'patient_id' => $patient->id,
+        'clinician_user_id' => null,
+        'department' => 'General OPD',
+        'scheduled_at' => now()->toDateTimeString(),
+        'checked_in_at' => now()->subMinutes(15)->toDateTimeString(),
+        'duration_minutes' => 30,
+        'reason' => 'High priority triage',
+        'notes' => null,
+        'status' => 'waiting_triage',
+        'status_reason' => null,
+        'triage_category' => 'P1',
+    ]);
+
+    AppointmentModel::query()->create([
+        'appointment_number' => 'APT20260521P1PROVIDER',
+        'patient_id' => $patient->id,
+        'clinician_user_id' => null,
+        'department' => 'General OPD',
+        'scheduled_at' => now()->toDateTimeString(),
+        'checked_in_at' => now()->subMinutes(10)->toDateTimeString(),
+        'duration_minutes' => 30,
+        'reason' => 'High priority provider handoff',
+        'notes' => null,
+        'status' => 'waiting_provider',
+        'status_reason' => null,
+        'triage_category' => 'P1',
+    ]);
+
+    AppointmentModel::query()->create([
+        'appointment_number' => 'APT20260521P3PROVIDER',
+        'patient_id' => $patient->id,
+        'clinician_user_id' => null,
+        'department' => 'General OPD',
+        'scheduled_at' => now()->toDateTimeString(),
+        'checked_in_at' => now()->subMinutes(5)->toDateTimeString(),
+        'duration_minutes' => 30,
+        'reason' => 'Routine provider handoff',
+        'notes' => null,
+        'status' => 'waiting_provider',
+        'status_reason' => null,
+        'triage_category' => 'P3',
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/appointments/status-counts?triageCategory=P1')
+        ->assertOk()
+        ->assertJsonPath('data.waiting_triage', 1)
+        ->assertJsonPath('data.waiting_provider', 1)
+        ->assertJsonPath('data.triage_categories.P1', 2)
+        ->assertJsonPath('data.triage_categories.P3', 0)
+        ->assertJsonPath('data.total', 2);
+});
+
 it('stamps appointment tenant and facility scope when created under resolved platform scope', function (): void {
     $user = makeAppointmentUser();
     $patient = makePatient();

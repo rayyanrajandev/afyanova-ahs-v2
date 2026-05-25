@@ -30,7 +30,7 @@ export function setCsrfMetaToken(token: string | null | undefined): void {
 }
 
 export async function refreshCsrfToken(): Promise<void> {
-    const response = await fetch('/api/v1/auth/csrf-token', {
+    const response = await fetch('/auth/csrf-token', {
         method: 'GET',
         credentials: 'same-origin',
         headers: {

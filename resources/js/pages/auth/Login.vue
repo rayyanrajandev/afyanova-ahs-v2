@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Form, Head } from '@inertiajs/vue3';
+import { onMounted, ref } from 'vue';
 import InputError from '@/components/InputError.vue';
 import TextLink from '@/components/TextLink.vue';
 import { Button } from '@/components/ui/button';
@@ -8,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import AuthBase from '@/layouts/AuthLayout.vue';
+import { refreshCsrfToken } from '@/lib/csrf';
 import { register } from '@/routes';
 import { store } from '@/routes/login';
 import { request } from '@/routes/password';
@@ -17,6 +19,23 @@ defineProps<{
     canResetPassword: boolean;
     canRegister: boolean;
 }>();
+
+const csrfReady = ref(false);
+const csrfToken = ref(
+    document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ??
+        '',
+);
+
+onMounted(async () => {
+    try {
+        await refreshCsrfToken();
+        csrfToken.value =
+            document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
+                ?.content ?? csrfToken.value;
+    } finally {
+        csrfReady.value = true;
+    }
+});
 </script>
 
 <template>
@@ -40,6 +59,8 @@ defineProps<{
             class="flex flex-col gap-6"
         >
             <div class="grid gap-6">
+                <input type="hidden" name="_token" :value="csrfToken" />
+
                 <div class="grid gap-2">
                     <Label for="email">Email address</Label>
                     <Input
@@ -90,11 +111,11 @@ defineProps<{
                     type="submit"
                     class="mt-4 w-full"
                     :tabindex="4"
-                    :disabled="processing"
+                    :disabled="processing || !csrfReady"
                     data-test="login-button"
                 >
-                    <Spinner v-if="processing" />
-                    Log in
+                    <Spinner v-if="processing || !csrfReady" />
+                    {{ csrfReady ? 'Log in' : 'Preparing secure login' }}
                 </Button>
             </div>
 

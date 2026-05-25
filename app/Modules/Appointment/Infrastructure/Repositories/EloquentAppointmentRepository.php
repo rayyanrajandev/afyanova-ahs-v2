@@ -140,6 +140,7 @@ class EloquentAppointmentRepository implements AppointmentRepositoryInterface
         ?string $department,
         bool $unassignedClinicianOnly,
         ?string $status,
+        ?string $triageCategory,
         ?string $fromDateTime,
         ?string $toDateTime
     ): array {
@@ -161,6 +162,7 @@ class EloquentAppointmentRepository implements AppointmentRepositoryInterface
 
                 $builder->where('status', $requestedStatus);
             })
+            ->when($triageCategory, fn (Builder $builder, string $cat) => $builder->where('triage_category', strtoupper($cat)))
             ->when($fromDateTime, fn (Builder $builder, string $startDateTime) => $builder->where('scheduled_at', '>=', $startDateTime))
             ->when($toDateTime, fn (Builder $builder, string $endDateTime) => $builder->where('scheduled_at', '<=', $endDateTime));
 
