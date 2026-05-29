@@ -21,7 +21,7 @@ defineProps<{
         </div>
         <Button variant="outline" size="sm" class="h-8 shrink-0 gap-1.5" as-child>
             <Link :href="returnTo">
-                <AppIcon name="arrow-left" class="size-3.5" />
+                <AppIcon name="stethoscope" class="size-3.5" />
                 {{ encounterReturnLabel(returnTo) }}
             </Link>
         </Button>

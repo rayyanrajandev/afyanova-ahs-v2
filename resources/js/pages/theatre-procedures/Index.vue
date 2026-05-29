@@ -3,7 +3,6 @@ import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import LinkedContextLookupField from '@/components/context/LinkedContextLookupField.vue';
-import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
 import ClinicianPicker from '@/components/domain/clinical/ClinicianPicker.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
@@ -11,14 +10,10 @@ import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycle
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import WalkInServiceRequestsPanel from '@/components/service-requests/WalkInServiceRequestsPanel.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-    Collapsible,
-    CollapsibleContent,
-    CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
     Drawer,
@@ -53,6 +48,7 @@ import { useConfirmationDialog } from '@/composables/useConfirmationDialog';
 import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
 import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersistence';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { encounterReturnLabel, parseEncounterReturnTo } from '@/lib/encounterWorkspace';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { patientChartHref } from '@/lib/patientChart';
@@ -67,7 +63,6 @@ import { type BreadcrumbItem } from '@/types';
 type ApiError = Error & { status?: number; payload?: { errors?: Record<string, string[]>; message?: string } };
 type TheatreWorkspaceView = 'queue' | 'board' | 'create';
 type CreateContextLinkSource = 'none' | 'route' | 'auto' | 'manual';
-type CreateContextEditorTab = 'patient' | 'appointment' | 'admission';
 type TheatreDetailsTab = 'overview' | 'workflows' | 'audit';
 type PatientSummary = {
     id: string;
@@ -279,7 +274,9 @@ const canReadTheatreRoomRegistry = ref(false);
 const canReadTheatreClinicianDirectory = ref(false);
 const canUpdateServiceRequestStatus = ref(false);
 const pageLoading = ref(true);
-const theatreWorkspaceView = ref<TheatreWorkspaceView>('queue');
+const initialTheatreWorkspaceView: TheatreWorkspaceView =
+    queryParam('tab').toLowerCase() === 'new' ? 'create' : 'queue';
+const theatreWorkspaceView = ref<TheatreWorkspaceView>(initialTheatreWorkspaceView);
 const theatreWalkInPanelRef = ref<InstanceType<typeof WalkInServiceRequestsPanel> | null>(null);
 
 const queueLoading = ref(false);
@@ -325,18 +322,6 @@ const openedFromClinicalContext = computed(
         (createForm.appointmentId.trim() !== '' || createForm.admissionId.trim() !== ''),
 );
 const createPatientContextLocked = ref(openedFromClinicalContext.value);
-const createContextEditorTab = ref<CreateContextEditorTab>(
-    !createForm.patientId.trim()
-        ? 'patient'
-        : createForm.admissionId.trim()
-          ? 'admission'
-          : createForm.appointmentId.trim()
-            ? 'appointment'
-            : 'patient',
-);
-const createContextEditorOpen = ref(
-    !openedFromClinicalContext.value || !createForm.patientId.trim(),
-);
 const createAppointmentSummary = ref<AppointmentSummary | null>(null);
 const createAppointmentSummaryLoading = ref(false);
 const createAppointmentSummaryError = ref<string | null>(null);
@@ -660,6 +645,47 @@ const theatreToolbarStateLabel = computed(() => {
     return 'All procedures';
 });
 
+const theatreHeaderMetaPrimary = computed(() => {
+    if (theatreWorkspaceView.value === 'create') {
+        return createWorkflowContextLabel.value;
+    }
+
+    return theatreToolbarStateLabel.value;
+});
+
+const theatreHeaderMetaSecondary = computed(() => {
+    if (encounterReturnTo.value) {
+        return 'Opened from encounter workspace';
+    }
+
+    return null;
+});
+
+const theatreCreateShowsPatientPicker = computed(
+    () => !createForm.patientId.trim() || !createPatientContextLocked.value,
+);
+
+const theatreCreateShowsAppointmentPicker = computed(
+    () =>
+        createForm.patientId.trim() !== '' &&
+        !createPatientContextLocked.value &&
+        !createForm.appointmentId.trim(),
+);
+
+const theatreCreateShowsAdmissionPicker = computed(
+    () =>
+        createForm.patientId.trim() !== '' &&
+        !createPatientContextLocked.value &&
+        !createForm.admissionId.trim(),
+);
+
+const theatreCreateShowsClinicalLinks = computed(
+    () =>
+        theatreCreateShowsPatientPicker.value ||
+        theatreCreateShowsAppointmentPicker.value ||
+        theatreCreateShowsAdmissionPicker.value,
+);
+
 const hasCreateAppointmentContext = computed(() => createForm.appointmentId.trim() !== '');
 const hasCreateAdmissionContext = computed(() => createForm.admissionId.trim() !== '');
 const showClinicalHandoffBanner = computed(
@@ -696,32 +722,6 @@ const createContextModeVariant = computed<
     }
 
     return 'outline';
-});
-const createContextSummary = computed(() => {
-    if (!createForm.patientId.trim()) {
-        return 'Select the patient first, then confirm the appointment or admission link when theatre work comes from an active encounter.';
-    }
-
-    const linkedContexts: string[] = [];
-    if (hasCreateAppointmentContext.value) linkedContexts.push('Appointment linked');
-    if (hasCreateAdmissionContext.value) linkedContexts.push('Admission linked');
-
-    return linkedContexts.length > 0
-        ? `Schedule theatre work for the selected patient. ${linkedContexts.join(' · ')}.`
-        : 'Schedule theatre work for the selected patient. Add the appointment or admission link when this case is tied to an active encounter.';
-});
-const createContextActionLabel = computed(() => {
-    if (createContextEditorOpen.value) return 'Hide context';
-    if (!createForm.patientId.trim()) return 'Set context';
-    if (
-        createPatientContextLocked.value ||
-        hasCreateAppointmentContext.value ||
-        hasCreateAdmissionContext.value
-    ) {
-        return 'Review context';
-    }
-
-    return 'Update context';
 });
 const createWorkflowContextLabel = computed(() => {
     if (!createForm.patientId.trim()) return 'Select patient and encounter';
@@ -769,6 +769,39 @@ function patientName(summary: PatientSummary): string {
         summary.patientNumber ||
         `Patient ${summary.id}`
     );
+}
+
+function patientInitials(summary: PatientSummary): string {
+    const first = summary.firstName?.trim()?.[0] ?? '';
+    const last = summary.lastName?.trim()?.[0] ?? '';
+    const initials = `${first}${last}`.trim();
+
+    if (initials) {
+        return initials.toUpperCase();
+    }
+
+    const patientNumber = summary.patientNumber?.trim();
+    if (patientNumber) {
+        return patientNumber.slice(0, 2).toUpperCase();
+    }
+
+    return 'PT';
+}
+
+function appointmentStatusVariant(
+    status: string | null | undefined,
+): 'default' | 'secondary' | 'outline' | 'destructive' {
+    switch (status) {
+        case 'in_consultation':
+            return 'default';
+        case 'waiting_provider':
+            return 'secondary';
+        case 'cancelled':
+        case 'no_show':
+            return 'destructive';
+        default:
+            return 'outline';
+    }
 }
 
 const createPatientContextMeta = computed(() => {
@@ -856,35 +889,10 @@ const createAdmissionContextStatusLabel = computed(() => {
     return status ? formatEnumLabel(status) : '';
 });
 
-const createAppointmentContextSourceLabel = computed(() => {
-    if (createAppointmentLinkSource.value === 'route') return 'Route context';
-    if (createAppointmentLinkSource.value === 'auto') return 'Auto-linked';
-    if (createAppointmentLinkSource.value === 'manual') return 'Selected';
-    return '';
-});
-
-const createAdmissionContextSourceLabel = computed(() => {
-    if (createAdmissionLinkSource.value === 'route') return 'Route context';
-    if (createAdmissionLinkSource.value === 'auto') return 'Auto-linked';
-    if (createAdmissionLinkSource.value === 'manual') return 'Selected';
-    return '';
-});
-
-const createContextEditorDescription = computed(() => {
-    switch (createContextEditorTab.value) {
-        case 'appointment':
-            return 'Search checked-in appointments for the selected patient.';
-        case 'admission':
-            return 'Search active admissions for the selected patient.';
-        case 'patient':
-        default:
-            return createPatientContextLocked.value
-                ? 'Patient is locked from the carried-forward clinical handoff. Use Change Patient to unlock.'
-                : 'Search by patient number, name, phone, or national ID.';
-    }
-});
-
 const openedFromPatientChart = queryParam('from') === 'patient-chart';
+const encounterReturnTo = computed(() =>
+    parseEncounterReturnTo(queryParam('returnTo')),
+);
 const patientChartQueueRouteContext = Object.freeze({
     patientId: initialCreateRouteContext.patientId.trim(),
     appointmentId: initialCreateRouteContext.appointmentId.trim(),
@@ -936,6 +944,7 @@ function contextCreateHref(path: string, options?: { includeTabNew?: boolean }) 
     if (admissionId) params.set('admissionId', admissionId);
     if (recordId && path !== '/medical-records') params.set('recordId', recordId);
     if (openedFromPatientChart) params.set('from', 'patient-chart');
+    if (encounterReturnTo.value) params.set('returnTo', encounterReturnTo.value);
 
     const queryString = params.toString();
     return queryString ? `${path}?${queryString}` : path;
@@ -1033,6 +1042,7 @@ function procedureWorkflowHref(
 
     if (recordId && path !== '/medical-records') params.set('recordId', recordId);
     if (openedFromPatientChart) params.set('from', 'patient-chart');
+    if (encounterReturnTo.value) params.set('returnTo', encounterReturnTo.value);
 
     const queryString = params.toString();
     return queryString ? `${path}?${queryString}` : path;
@@ -1070,6 +1080,7 @@ function procedureMedicalRecordHref(
     if (options?.editRecordId?.trim()) {
         params.set('editRecordId', options.editRecordId.trim());
     }
+    if (encounterReturnTo.value) params.set('returnTo', encounterReturnTo.value);
 
     return `/medical-records?${params.toString()}`;
 }
@@ -2527,9 +2538,6 @@ function clearCreateAppointmentLink(options?: { suppressAuto?: boolean; focusEdi
     createAppointmentSummaryLoading.value = false;
     setCreateAppointmentLink('', 'none');
 
-    if (options?.focusEditor ?? true) {
-        createContextEditorTab.value = 'appointment';
-    }
 }
 
 function clearCreateAdmissionLink(options?: { suppressAuto?: boolean; focusEditor?: boolean }) {
@@ -2544,20 +2552,11 @@ function clearCreateAdmissionLink(options?: { suppressAuto?: boolean; focusEdito
     createAdmissionSummaryLoading.value = false;
     setCreateAdmissionLink('', 'none');
 
-    if (options?.focusEditor ?? true) {
-        createContextEditorTab.value = 'admission';
-    }
 }
 
 function clearCreateClinicalLinks() {
     clearCreateAppointmentLink({ suppressAuto: false, focusEditor: false });
     clearCreateAdmissionLink({ suppressAuto: false, focusEditor: false });
-}
-
-function unlockCreatePatientContext() {
-    createPatientContextLocked.value = false;
-    clearCreateClinicalLinks();
-    createContextEditorTab.value = 'patient';
 }
 
 function selectSuggestedAppointment(
@@ -2573,9 +2572,6 @@ function selectSuggestedAppointment(
         createContextAutoLinkSuppressed.appointment = false;
     }
 
-    if (options?.focusEditor) {
-        createContextEditorTab.value = 'appointment';
-    }
 }
 
 function selectSuggestedAdmission(
@@ -2591,9 +2587,6 @@ function selectSuggestedAdmission(
         createContextAutoLinkSuppressed.admission = false;
     }
 
-    if (options?.focusEditor) {
-        createContextEditorTab.value = 'admission';
-    }
 }
 
 function maybeAutoLinkCreateContextSuggestions() {
@@ -4172,8 +4165,6 @@ watch(
             createPatientContextLocked.value = false;
             clearCreateClinicalLinks();
             resetCreateContextSuggestions();
-            createContextEditorTab.value = 'patient';
-            createContextEditorOpen.value = true;
             return;
         }
 
@@ -4181,7 +4172,6 @@ watch(
             createContextAutoLinkSuppressed.appointment = false;
             createContextAutoLinkSuppressed.admission = false;
             clearCreateClinicalLinks();
-            createContextEditorTab.value = 'patient';
         }
 
         void hydratePatientSummary(patientId);
@@ -4236,8 +4226,8 @@ onMounted(async () => {
     try {
         await loadPermissions();
         await loadQueue();
-        if (queryParam('tab') === 'new' && canCreate.value) {
-            theatreWorkspaceView.value = 'create';
+        if (queryParam('tab') === 'new') {
+            theatreWorkspaceView.value = canCreate.value ? 'create' : 'queue';
         }
         if (canCreate.value) {
             await Promise.all([
@@ -4261,70 +4251,279 @@ onMounted(async () => {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
-            <!-- Page header -->
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div class="min-w-0">
-                    <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <AppIcon name="scissors" class="size-7 text-primary" />
-                        Theatre & Procedures
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        {{ theatreWorkspaceDescription }}
-                    </p>
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div
+                    v-if="theatreWorkspaceView === 'create'"
+                    class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6"
+                >
+                    <div class="flex min-w-0 items-center gap-3">
+                        <Avatar
+                            v-if="createPatientSummary"
+                            class="size-10 shrink-0 rounded-lg border border-primary/20 bg-primary/10 text-primary"
+                        >
+                            <AvatarFallback class="rounded-lg bg-primary/10 text-sm font-semibold text-primary">
+                                {{ patientInitials(createPatientSummary) }}
+                            </AvatarFallback>
+                        </Avatar>
+                        <div
+                            v-else
+                            class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20"
+                            aria-hidden="true"
+                        >
+                            <AppIcon name="scissors" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h1 class="truncate text-base font-semibold tracking-tight md:text-lg">
+                                    {{
+                                        createForm.patientId.trim()
+                                            ? createPatientContextLabel
+                                            : 'Schedule procedure'
+                                    }}
+                                </h1>
+                                <Badge
+                                    v-if="createPatientSummary?.patientNumber"
+                                    variant="secondary"
+                                    class="h-5 px-1.5 text-[11px]"
+                                >
+                                    {{ createPatientSummary.patientNumber }}
+                                </Badge>
+                                <Badge
+                                    v-if="createForm.patientId.trim()"
+                                    :variant="createContextStatusVariant"
+                                    class="h-5 px-1.5 text-[11px]"
+                                >
+                                    {{ createContextStatusLabel }}
+                                </Badge>
+                                <Badge
+                                    v-if="createAppointmentContextStatusLabel"
+                                    :variant="appointmentStatusVariant(createAppointmentSummary?.status)"
+                                    class="h-5 px-1.5 text-[11px]"
+                                >
+                                    {{ createAppointmentContextStatusLabel }}
+                                </Badge>
+                                <Badge
+                                    v-if="createAdmissionContextStatusLabel"
+                                    variant="outline"
+                                    class="h-5 px-1.5 text-[11px]"
+                                >
+                                    {{ createAdmissionContextStatusLabel }}
+                                </Badge>
+                            </div>
+                            <p class="truncate text-xs text-muted-foreground">
+                                {{
+                                    createForm.patientId.trim()
+                                        ? createPatientContextMeta
+                                        : theatreWorkspaceDescription
+                                }}
+                            </p>
+                            <div
+                                v-if="hasCreateAppointmentContext"
+                                class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground"
+                            >
+                                <span class="inline-flex min-w-0 items-center gap-1">
+                                    <AppIcon name="calendar-clock" class="size-3 shrink-0 opacity-75" aria-hidden="true" />
+                                    <span class="font-medium text-foreground">{{ createAppointmentContextLabel }}</span>
+                                </span>
+                                <span class="select-none text-border" aria-hidden="true">·</span>
+                                <span class="truncate">{{ createAppointmentContextMeta }}</span>
+                                <template v-if="createAppointmentContextReason">
+                                    <span class="select-none text-border" aria-hidden="true">·</span>
+                                    <span class="truncate">{{ createAppointmentContextReason }}</span>
+                                </template>
+                            </div>
+                            <div
+                                v-if="hasCreateAdmissionContext"
+                                class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground"
+                            >
+                                <span class="inline-flex min-w-0 items-center gap-1">
+                                    <AppIcon name="bed-double" class="size-3 shrink-0 opacity-75" aria-hidden="true" />
+                                    <span class="font-medium text-foreground">{{ createAdmissionContextLabel }}</span>
+                                </span>
+                                <span class="select-none text-border" aria-hidden="true">·</span>
+                                <span class="truncate">{{ createAdmissionContextMeta }}</span>
+                            </div>
+                            <div
+                                v-if="encounterReturnTo || createWorkflowContextLabel"
+                                class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground"
+                            >
+                                <span
+                                    v-if="createWorkflowContextLabel"
+                                    class="inline-flex items-center gap-1"
+                                >
+                                    <AppIcon name="clipboard-list" class="size-3 opacity-75" aria-hidden="true" />
+                                    <span>{{ createWorkflowContextLabel }}</span>
+                                </span>
+                                <template v-if="encounterReturnTo">
+                                    <span
+                                        v-if="createWorkflowContextLabel"
+                                        class="select-none text-border"
+                                        aria-hidden="true"
+                                    >·</span>
+                                    <span class="inline-flex items-center gap-1">
+                                        <AppIcon name="stethoscope" class="size-3 opacity-75" aria-hidden="true" />
+                                        <span>Opened from encounter workspace</span>
+                                    </span>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button
+                            v-if="encounterReturnTo"
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            as-child
+                        >
+                            <Link :href="encounterReturnTo">
+                                <AppIcon name="stethoscope" class="size-3.5" />
+                                {{ encounterReturnLabel(encounterReturnTo) }}
+                            </Link>
+                        </Button>
+                        <Button
+                            v-if="!createPatientContextLocked && (createForm.appointmentId || createForm.admissionId)"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            @click="clearCreateClinicalLinks"
+                        >
+                            Unlink context
+                        </Button>
+                        <Button
+                            v-if="openedFromPatientChart && createForm.patientId"
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            as-child
+                        >
+                            <Link :href="createPatientChartHref">
+                                <AppIcon name="book-open" class="size-3.5" />
+                                Patient chart
+                            </Link>
+                        </Button>
+                        <Button
+                            v-if="
+                                canReadMedicalRecords &&
+                                createForm.patientId &&
+                                (
+                                    createForm.appointmentId ||
+                                    createForm.admissionId ||
+                                    hasCreateMedicalRecordContext
+                                )
+                            "
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            as-child
+                        >
+                            <Link :href="consultationContextHref">
+                                <AppIcon name="stethoscope" class="size-3.5" />
+                                {{ consultationReturnLabel }}
+                            </Link>
+                        </Button>
+                        <Button
+                            v-if="canRead && theatreWorkspaceView === 'create'"
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            @click="setTheatreWorkspaceView('queue')"
+                        >
+                            <AppIcon name="layout-list" class="size-3.5" />
+                            Theatre queue
+                        </Button>
+                    </div>
                 </div>
-                <div class="flex flex-shrink-0 items-center gap-2">
-                    <Button
-                        v-if="(theatreWorkspaceView === 'queue' || theatreWorkspaceView === 'board') && canRead"
-                        variant="outline"
-                        size="sm"
-                        :disabled="queueLoading"
-                        class="gap-1.5"
-                        @click="loadQueue"
-                    >
-                        <AppIcon name="activity" class="size-3.5" />
-                        {{ queueLoading ? 'Refreshing...' : 'Refresh' }}
-                    </Button>
-                    <Button
-                        v-if="canRead && theatreWorkspaceView === 'queue'"
-                        variant="outline"
-                        size="sm"
-                        class="h-8 gap-1.5"
-                        @click="setTheatreWorkspaceView('board')"
-                    >
-                        <AppIcon name="layout-grid" class="size-3.5" />
-                        Theatre Board
-                    </Button>
-                    <Button
-                        v-else-if="canRead && theatreWorkspaceView === 'board'"
-                        variant="outline"
-                        size="sm"
-                        class="h-8 gap-1.5"
-                        @click="setTheatreWorkspaceView('queue')"
-                    >
-                        <AppIcon name="layout-list" class="size-3.5" />
-                        Theatre Queue
-                    </Button>
-                    <Button
-                        v-if="theatreWorkspaceView !== 'create' && canCreate"
-                        size="sm"
-                        class="h-8 gap-1.5"
-                        @click="openTheatreCreateWorkspace"
-                    >
-                        <AppIcon name="plus" class="size-3.5" />
-                        Schedule Procedure
-                    </Button>
-                    <Button
-                        v-else-if="theatreWorkspaceView === 'create' && canRead"
-                        variant="outline"
-                        size="sm"
-                        class="h-8 gap-1.5"
-                        @click="setTheatreWorkspaceView('queue')"
-                    >
-                        <AppIcon name="layout-list" class="size-3.5" />
-                        Theatre Queue
-                    </Button>
+
+                <div
+                    v-else
+                    class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6"
+                >
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20" aria-hidden="true">
+                            <AppIcon name="scissors" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <h1 class="text-base font-semibold tracking-tight md:text-lg">Theatre & Procedures</h1>
+                            <p class="truncate text-xs text-muted-foreground">{{ theatreWorkspaceDescription }}</p>
+                            <div
+                                v-if="theatreHeaderMetaPrimary || theatreHeaderMetaSecondary"
+                                class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground"
+                            >
+                                <span
+                                    v-if="theatreHeaderMetaPrimary"
+                                    class="inline-flex items-center gap-1"
+                                >
+                                    <AppIcon name="layout-list" class="size-3 opacity-75" aria-hidden="true" />
+                                    <span class="font-medium text-foreground">{{ theatreHeaderMetaPrimary }}</span>
+                                </span>
+                                <template v-if="theatreHeaderMetaSecondary">
+                                    <span class="select-none text-border" aria-hidden="true">·</span>
+                                    <span class="inline-flex items-center gap-1">
+                                        <AppIcon name="stethoscope" class="size-3 shrink-0 opacity-75" aria-hidden="true" />
+                                        {{ theatreHeaderMetaSecondary }}
+                                    </span>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button
+                            v-if="encounterReturnTo"
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            as-child
+                        >
+                            <Link :href="encounterReturnTo">
+                                <AppIcon name="stethoscope" class="size-3.5" />
+                                {{ encounterReturnLabel(encounterReturnTo) }}
+                            </Link>
+                        </Button>
+                        <Button
+                            v-if="(theatreWorkspaceView === 'queue' || theatreWorkspaceView === 'board') && canRead"
+                            variant="outline"
+                            size="sm"
+                            :disabled="queueLoading"
+                            class="h-8 gap-1.5"
+                            @click="loadQueue"
+                        >
+                            <AppIcon name="refresh-cw" class="size-3.5" />
+                            {{ queueLoading ? 'Refreshing...' : 'Refresh' }}
+                        </Button>
+                        <Button
+                            v-if="canRead && theatreWorkspaceView === 'queue'"
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            @click="setTheatreWorkspaceView('board')"
+                        >
+                            <AppIcon name="layout-grid" class="size-3.5" />
+                            Theatre board
+                        </Button>
+                        <Button
+                            v-else-if="canRead && theatreWorkspaceView === 'board'"
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            @click="setTheatreWorkspaceView('queue')"
+                        >
+                            <AppIcon name="layout-list" class="size-3.5" />
+                            Theatre queue
+                        </Button>
+                        <Button
+                            v-if="canCreate"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            @click="openTheatreCreateWorkspace"
+                        >
+                            <AppIcon name="plus" class="size-3.5" />
+                            Schedule procedure
+                        </Button>
+                    </div>
                 </div>
-            </div>
+            </section>
 
             <Alert v-if="theatreWorkspaceView !== 'create' && queueError" variant="destructive">
                 <AlertTitle class="flex items-center gap-2">
@@ -4877,344 +5076,58 @@ onMounted(async () => {
                             <AlertTitle>Draft restored</AlertTitle>
                             <AlertDescription>{{ createDraftNotice }}</AlertDescription>
                         </Alert>
-                        <Collapsible
-                            v-model:open="createContextEditorOpen"
-                            class="rounded-lg border bg-muted/20 p-3"
+                        <div
+                            v-if="theatreCreateShowsClinicalLinks"
+                            class="space-y-3 rounded-lg border bg-muted/10 p-4"
                         >
-                            <ClinicalContextBanner
-                                title="Theatre procedure context"
-                                description="Confirm the patient, outpatient handoff, and inpatient stay before entering procedure details."
-                                :patient-name="createForm.patientId.trim() ? createPatientContextLabel : null"
-                                :patient-meta="createForm.patientId.trim() ? createPatientContextMeta : null"
-                                :patient-number="createPatientSummary?.patientNumber || null"
-                                :context-label="createWorkflowContextLabel"
-                                :context-meta="createContextSummary"
-                                :status-label="createContextStatusLabel"
-                                :status-variant="createContextStatusVariant"
-                                :locked="createPatientContextLocked"
-                                tone="muted"
+                            <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                                Clinical links
+                            </p>
+                            <Alert
+                                v-if="showClinicalHandoffBanner && createPatientContextLocked"
+                                class="border-primary/20 bg-primary/5 px-3 py-2"
                             >
-                                <template #actions>
-                                    <Button
-                                        v-if="openedFromPatientChart && createForm.patientId"
-                                        variant="outline"
-                                        size="sm"
-                                        as-child
-                                    >
-                                        <Link :href="createPatientChartHref">
-                                            Back to Patient Chart
-                                        </Link>
-                                    </Button>
-                                    <Button
-                                        v-if="
-                                            canReadMedicalRecords &&
-                                            createForm.patientId &&
-                                            (
-                                                createForm.appointmentId ||
-                                                createForm.admissionId ||
-                                                hasCreateMedicalRecordContext
-                                            )
-                                        "
-                                        variant="outline"
-                                        size="sm"
-                                        as-child
-                                    >
-                                        <Link :href="consultationContextHref">
-                                            {{ consultationReturnLabel }}
-                                        </Link>
-                                    </Button>
-                                    <Button
-                                        v-if="canReadAppointments && createForm.appointmentId"
-                                        variant="outline"
-                                        size="sm"
-                                        as-child
-                                    >
-                                        <Link :href="appointmentContextHref(createForm.appointmentId)">
-                                            Back to Appointments
-                                        </Link>
-                                    </Button>
-                                    <Button
-                                        v-if="canReadAdmissions && createForm.admissionId"
-                                        variant="outline"
-                                        size="sm"
-                                        as-child
-                                    >
-                                        <Link :href="contextCreateHref('/admissions')">
-                                            Back to Admissions
-                                        </Link>
-                                    </Button>
-                                    <CollapsibleTrigger as-child>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            class="gap-1.5"
-                                            @click="
-                                                createContextEditorTab =
-                                                    createPatientContextLocked
-                                                        ? 'patient'
-                                                        : hasCreateAppointmentContext
-                                                          ? 'appointment'
-                                                          : hasCreateAdmissionContext
-                                                            ? 'admission'
-                                                            : 'patient'
-                                            "
-                                        >
-                                            <AppIcon
-                                                :name="
-                                                    createContextEditorOpen
-                                                        ? 'chevron-up'
-                                                        : 'sliders-horizontal'
-                                                "
-                                                class="size-3.5"
-                                            />
-                                            {{ createContextActionLabel }}
-                                        </Button>
-                                    </CollapsibleTrigger>
-                                </template>
-
-                                <div
-                                    v-if="showClinicalHandoffBanner"
-                                    class="flex flex-col gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3"
-                                >
-                                    <div class="space-y-1">
-                                        <p class="text-sm font-medium">Clinical handoff</p>
-                                        <p class="text-xs text-muted-foreground">
-                                            {{
-                                                createPatientContextLocked
-                                                    ? 'This procedure opened from a carried-forward clinical workflow. Patient stays locked until you choose a different patient.'
-                                                    : 'Review or remove the carried-forward appointment or admission context before scheduling theatre work.'
-                                            }}
-                                        </p>
-                                    </div>
-                                    <div class="flex flex-wrap gap-2">
-                                        <Button
-                                            v-if="createPatientContextLocked"
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            @click="unlockCreatePatientContext"
-                                        >
-                                            Change Patient
-                                        </Button>
-                                        <Button
-                                            v-else-if="createForm.appointmentId || createForm.admissionId"
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            @click="clearCreateClinicalLinks"
-                                        >
-                                            Unlink Clinical Context
-                                        </Button>
-                                    </div>
-                                </div>
-
-                                <div
-                                    v-if="hasCreateAppointmentContext || hasCreateAdmissionContext"
-                                    class="grid gap-2 lg:grid-cols-2"
-                                >
-                                    <div
-                                        v-if="hasCreateAppointmentContext"
-                                        class="flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2"
-                                        :class="hasCreateAppointmentContext ? 'border-primary/30 bg-primary/5' : 'bg-background/80'"
-                                    >
-                                        <AppIcon
-                                            name="calendar-clock"
-                                            class="size-3.5 shrink-0 text-muted-foreground"
-                                        />
-                                        <div class="min-w-0 flex-1">
-                                            <div class="flex min-w-0 items-center gap-2">
-                                                <span class="shrink-0 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                                                    Appointment
-                                                </span>
-                                                <span
-                                                    class="truncate text-sm font-medium"
-                                                    :title="[createAppointmentContextLabel, createAppointmentContextMeta, createAppointmentContextReason].filter(Boolean).join(' | ')"
-                                                >
-                                                    {{ createAppointmentContextLabel }}
-                                                </span>
-                                            </div>
-                                            <p class="truncate text-xs text-muted-foreground">
-                                                {{ createAppointmentContextMeta }}
-                                            </p>
-                                        </div>
-                                        <div class="flex shrink-0 flex-wrap gap-1">
-                                            <Badge
-                                                v-if="createAppointmentContextSourceLabel"
-                                                variant="outline"
-                                                class="text-[10px]"
-                                            >
-                                                {{ createAppointmentContextSourceLabel }}
-                                            </Badge>
-                                            <Badge
-                                                v-if="createAppointmentContextStatusLabel"
-                                                variant="secondary"
-                                                class="text-[10px]"
-                                            >
-                                                {{ createAppointmentContextStatusLabel }}
-                                            </Badge>
-                                        </div>
-                                    </div>
-                                    <div
-                                        v-if="hasCreateAdmissionContext"
-                                        class="flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2"
-                                        :class="hasCreateAdmissionContext ? 'border-primary/30 bg-primary/5' : 'bg-background/80'"
-                                    >
-                                        <AppIcon
-                                            name="bed-double"
-                                            class="size-3.5 shrink-0 text-muted-foreground"
-                                        />
-                                        <div class="min-w-0 flex-1">
-                                            <div class="flex min-w-0 items-center gap-2">
-                                                <span class="shrink-0 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                                                    Admission
-                                                </span>
-                                                <span
-                                                    class="truncate text-sm font-medium"
-                                                    :title="[createAdmissionContextLabel, createAdmissionContextMeta, createAdmissionContextReason].filter(Boolean).join(' | ')"
-                                                >
-                                                    {{ createAdmissionContextLabel }}
-                                                </span>
-                                            </div>
-                                            <p class="truncate text-xs text-muted-foreground">
-                                                {{ createAdmissionContextMeta }}
-                                            </p>
-                                        </div>
-                                        <div class="flex shrink-0 flex-wrap gap-1">
-                                            <Badge
-                                                v-if="createAdmissionContextSourceLabel"
-                                                variant="outline"
-                                                class="text-[10px]"
-                                            >
-                                                {{ createAdmissionContextSourceLabel }}
-                                            </Badge>
-                                            <Badge
-                                                v-if="createAdmissionContextStatusLabel"
-                                                variant="secondary"
-                                                class="text-[10px]"
-                                            >
-                                                {{ createAdmissionContextStatusLabel }}
-                                            </Badge>
-                                        </div>
-                                    </div>
-                                </div>
-                            </ClinicalContextBanner>
-                            <CollapsibleContent class="pt-3">
-                                <div class="rounded-lg border bg-background p-4">
-                                    <div class="space-y-3">
-                                        <div class="space-y-1">
-                                            <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                                Context editor
-                                            </p>
-                                            <p class="text-xs text-muted-foreground">
-                                                {{ createContextEditorDescription }}
-                                            </p>
-                                        </div>
-                                        <Tabs v-model="createContextEditorTab" class="w-full">
-                                            <TabsList class="grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-3">
-                                                <TabsTrigger
-                                                    value="patient"
-                                                    class="inline-flex min-h-10 items-center gap-1.5 text-xs sm:text-sm"
-                                                >
-                                                    <AppIcon name="user" class="size-3.5" />
-                                                    Patient
-                                                </TabsTrigger>
-                                                <TabsTrigger
-                                                    value="appointment"
-                                                    :disabled="!createForm.patientId.trim()"
-                                                    class="inline-flex min-h-10 items-center gap-1.5 text-xs sm:text-sm"
-                                                >
-                                                    <AppIcon name="calendar-clock" class="size-3.5" />
-                                                    Appointment
-                                                </TabsTrigger>
-                                                <TabsTrigger
-                                                    value="admission"
-                                                    :disabled="!createForm.patientId.trim()"
-                                                    class="inline-flex min-h-10 items-center gap-1.5 text-xs sm:text-sm"
-                                                >
-                                                    <AppIcon name="bed-double" class="size-3.5" />
-                                                    Admission
-                                                </TabsTrigger>
-                                            </TabsList>
-                                        </Tabs>
-                                        <div class="rounded-lg border bg-muted/20 p-4">
-                                            <div v-show="createContextEditorTab === 'patient'" class="grid gap-3">
-                                                <PatientLookupField
-                                                    input-id="theatre-create-patient"
-                                                    v-model="createForm.patientId"
-                                                    label="Patient"
-                                                    patient-status="active"
-                                                    :helper-text="
-                                                        createPatientContextLocked
-                                                            ? 'Patient is locked from the clinical handoff. Use Change Patient to unlock.'
-                                                            : 'Search by patient number, name, phone, email, or national ID.'
-                                                    "
-                                                    :disabled="createPatientContextLocked"
-                                                    :error-message="createFieldError('patientId')"
-                                                />
-                                            </div>
-
-                                            <div v-show="createContextEditorTab === 'appointment'" class="grid gap-3">
-                                                <LinkedContextLookupField
-                                                    input-id="theatre-create-appointment"
-                                                    v-model="createForm.appointmentId"
-                                                    :patient-id="createForm.patientId"
-                                                    label="Appointment link"
-                                                    resource="appointments"
-                                                    status="checked_in"
-                                                    :helper-text="
-                                                        createForm.patientId.trim()
-                                                            ? 'Search checked-in appointments for the selected patient.'
-                                                            : 'Select a patient first to search appointments.'
-                                                    "
-                                                    :disabled="!createForm.patientId.trim()"
-                                                    :error-message="createFieldError('appointmentId')"
-                                                />
-                                                <div v-if="createForm.appointmentId.trim()" class="flex justify-end">
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        variant="outline"
-                                                        class="gap-1.5"
-                                                        @click="clearCreateAppointmentLink()"
-                                                    >
-                                                        Remove appointment link
-                                                    </Button>
-                                                </div>
-                                            </div>
-
-                                            <div v-show="createContextEditorTab === 'admission'" class="grid gap-3">
-                                                <LinkedContextLookupField
-                                                    input-id="theatre-create-admission"
-                                                    v-model="createForm.admissionId"
-                                                    :patient-id="createForm.patientId"
-                                                    label="Admission link"
-                                                    resource="admissions"
-                                                    status="admitted"
-                                                    :helper-text="
-                                                        createForm.patientId.trim()
-                                                            ? 'Search active admissions for the selected patient.'
-                                                            : 'Select a patient first to search admissions.'
-                                                    "
-                                                    :disabled="!createForm.patientId.trim()"
-                                                    :error-message="createFieldError('admissionId')"
-                                                />
-                                                <div v-if="createForm.admissionId.trim()" class="flex justify-end">
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        variant="outline"
-                                                        class="gap-1.5"
-                                                        @click="clearCreateAdmissionLink()"
-                                                    >
-                                                        Remove admission link
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </CollapsibleContent>
-                        </Collapsible>
+                                <AlertDescription class="text-xs text-muted-foreground">
+                                    Patient is locked from the clinical handoff. Return to the encounter if the patient context is incorrect.
+                                </AlertDescription>
+                            </Alert>
+                            <PatientLookupField
+                                v-if="theatreCreateShowsPatientPicker"
+                                input-id="theatre-create-patient"
+                                v-model="createForm.patientId"
+                                label="Patient"
+                                patient-status="active"
+                                helper-text="Search by patient number, name, phone, email, or national ID."
+                                :error-message="createFieldError('patientId')"
+                            />
+                            <div
+                                v-if="theatreCreateShowsAppointmentPicker || theatreCreateShowsAdmissionPicker"
+                                class="grid gap-3 lg:grid-cols-2"
+                            >
+                                <LinkedContextLookupField
+                                    v-if="theatreCreateShowsAppointmentPicker"
+                                    input-id="theatre-create-appointment"
+                                    v-model="createForm.appointmentId"
+                                    :patient-id="createForm.patientId"
+                                    label="Appointment link"
+                                    resource="appointments"
+                                    status="checked_in"
+                                    helper-text="Search checked-in appointments for the selected patient."
+                                    :error-message="createFieldError('appointmentId')"
+                                />
+                                <LinkedContextLookupField
+                                    v-if="theatreCreateShowsAdmissionPicker"
+                                    input-id="theatre-create-admission"
+                                    v-model="createForm.admissionId"
+                                    :patient-id="createForm.patientId"
+                                    label="Admission link"
+                                    resource="admissions"
+                                    status="admitted"
+                                    helper-text="Search active admissions for the selected patient."
+                                    :error-message="createFieldError('admissionId')"
+                                />
+                            </div>
+                        </div>
                         <div class="space-y-3">
                             <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Procedure details</p>
                             <div class="space-y-4 rounded-lg border bg-muted/10 p-4">
