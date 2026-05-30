@@ -403,6 +403,9 @@ const detailsSpecialtiesLoading = ref(false);
 const detailsSpecialtiesError = ref<string | null>(null);
 const detailsSpecialties = ref<StaffSpecialtyAssignment[]>([]);
 const detailsAuditFiltersOpen = ref(false);
+const detailsDocumentFiltersOpen = ref(false);
+const detailsDocumentUploadDialogOpen = ref(false);
+const detailsDocumentUploadFileInputRef = ref<HTMLInputElement | null>(null);
 const detailsAuditFilters = reactive({
     q: '',
     action: '',
@@ -1739,6 +1742,11 @@ function detailsDocumentQuery() {
     };
 }
 
+function filenameWithoutExtension(name: string): string {
+    const lastDot = name.lastIndexOf('.');
+    return lastDot > 0 ? name.slice(0, lastDot) : name;
+}
+
 function resetDetailsDocumentUploadForm() {
     detailsDocumentUploadForm.documentType = 'cv';
     detailsDocumentUploadForm.title = '';
@@ -1748,6 +1756,44 @@ function resetDetailsDocumentUploadForm() {
     detailsDocumentUploadFile.value = null;
     detailsDocumentUploadInputKey.value += 1;
 }
+
+function openDetailsDocumentUploadDialog() {
+    resetDetailsDocumentUploadForm();
+    detailsDocumentUploadErrors.value = {};
+    detailsDocumentUploadDialogOpen.value = true;
+}
+
+function closeDetailsDocumentUploadDialog() {
+    if (detailsDocumentUploadLoading.value) return;
+    detailsDocumentUploadDialogOpen.value = false;
+}
+
+function triggerDetailsDocumentFilePicker() {
+    detailsDocumentUploadFileInputRef.value?.click();
+}
+
+function clearDetailsDocumentUploadFile() {
+    detailsDocumentUploadFile.value = null;
+    detailsDocumentUploadInputKey.value += 1;
+}
+
+function assignDetailsDocumentUploadFile(file: File | null) {
+    detailsDocumentUploadFile.value = file;
+    if (file && !detailsDocumentUploadForm.title.trim()) {
+        detailsDocumentUploadForm.title = filenameWithoutExtension(file.name);
+    }
+}
+
+const detailsDocumentActiveFilterCount = computed(() => {
+    let count = 0;
+    if (detailsDocumentFilters.q.trim()) count += 1;
+    if (detailsDocumentFilters.documentType) count += 1;
+    if (detailsDocumentFilters.status) count += 1;
+    if (detailsDocumentFilters.verificationStatus) count += 1;
+    if (detailsDocumentFilters.expiresFrom) count += 1;
+    if (detailsDocumentFilters.expiresTo) count += 1;
+    return count;
+});
 
 function resetDetailsDocumentAuditState() {
     detailsDocumentAuditDocument.value = null;
@@ -1826,7 +1872,11 @@ function goToDetailsDocumentPage(page: number) {
 
 function onDetailsDocumentFileChange(event: Event) {
     const target = event.target as HTMLInputElement | null;
-    detailsDocumentUploadFile.value = target?.files?.[0] ?? null;
+    assignDetailsDocumentUploadFile(target?.files?.[0] ?? null);
+}
+
+function onDetailsDocumentFileDrop(event: DragEvent) {
+    assignDetailsDocumentUploadFile(event.dataTransfer?.files?.[0] ?? null);
 }
 
 async function submitDetailsDocumentUpload() {
@@ -1869,6 +1919,7 @@ async function submitDetailsDocumentUpload() {
         detailsSheetActionMessage.value = `Uploaded ${response.data.title || 'document'} successfully.`;
         notifySuccess(detailsSheetActionMessage.value);
         resetDetailsDocumentUploadForm();
+        detailsDocumentUploadDialogOpen.value = false;
         await loadDetailsDocuments(detailsSheetStaff.value.id);
     } catch (error) {
         const apiError = error as Error & { status?: number; payload?: ValidationErrorResponse };
@@ -2200,6 +2251,8 @@ function openStaffDetailsSheet(profile: StaffProfile) {
     detailsSpecialtiesError.value = null;
     detailsSpecialties.value = [];
     detailsAuditFiltersOpen.value = false;
+    detailsDocumentFiltersOpen.value = false;
+    detailsDocumentUploadDialogOpen.value = false;
     detailsAuditLogs.value = [];
     detailsAuditMeta.value = null;
     detailsAuditError.value = null;
@@ -2228,6 +2281,7 @@ function openStaffDetailsSheet(profile: StaffProfile) {
     detailsDocumentUploadLoading.value = false;
     detailsDocumentUploadErrors.value = {};
     resetDetailsDocumentUploadForm();
+    detailsDocumentUploadDialogOpen.value = false;
     closeDocumentMetadataDialog();
     closeDocumentVerificationDialog();
     closeDocumentStatusDialog();
@@ -2260,6 +2314,8 @@ function closeStaffDetailsSheet() {
     detailsDocumentUploadErrors.value = {};
     detailsSheetActionMessage.value = null;
     resetDetailsDocumentUploadForm();
+    detailsDocumentUploadDialogOpen.value = false;
+    detailsDocumentFiltersOpen.value = false;
     closeDocumentMetadataDialog();
     closeDocumentVerificationDialog();
     closeDocumentStatusDialog();
@@ -2954,6 +3010,128 @@ onMounted(refreshPage);
             />
 
             <Dialog
+                :open="detailsDocumentUploadDialogOpen"
+                @update:open="(open) => (open ? (detailsDocumentUploadDialogOpen = true) : closeDetailsDocumentUploadDialog())"
+            >
+                <DialogContent size="lg" class="max-h-[90vh] gap-0 overflow-hidden p-0">
+                    <DialogHeader class="border-b px-6 py-4 text-left">
+                        <DialogTitle class="flex items-center gap-2">
+                            <AppIcon name="upload" class="size-4 text-muted-foreground" />
+                            Upload document
+                        </DialogTitle>
+                        <DialogDescription>
+                            Choose a file, then add type and optional validity dates for this staff member.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div class="space-y-4 overflow-y-auto px-6 py-4">
+                        <div
+                            role="button"
+                            tabindex="0"
+                            class="relative cursor-pointer rounded-lg border-2 border-dashed p-5 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            :class="detailsDocumentUploadFile ? 'border-primary/40 bg-primary/5' : 'border-border hover:border-primary/30 hover:bg-muted/20'"
+                            @click="triggerDetailsDocumentFilePicker"
+                            @keydown.enter.prevent="triggerDetailsDocumentFilePicker"
+                            @keydown.space.prevent="triggerDetailsDocumentFilePicker"
+                            @dragover.prevent
+                            @drop.prevent="onDetailsDocumentFileDrop"
+                        >
+                            <input
+                                :key="`staff-doc-upload-input-${detailsDocumentUploadInputKey}`"
+                                ref="detailsDocumentUploadFileInputRef"
+                                type="file"
+                                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.txt,application/pdf,image/jpeg,image/png"
+                                class="sr-only"
+                                @change="onDetailsDocumentFileChange"
+                            />
+                            <div v-if="detailsDocumentUploadFile" class="flex flex-col items-center gap-2">
+                                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                                    <AppIcon name="file-text" class="size-5 text-primary" />
+                                </div>
+                                <p class="text-sm font-medium">{{ detailsDocumentUploadFile.name }}</p>
+                                <p class="text-xs text-muted-foreground">{{ formatFileSize(detailsDocumentUploadFile.size) }}</p>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    class="mt-1 h-7 gap-1.5 text-xs"
+                                    @click.stop="clearDetailsDocumentUploadFile"
+                                >
+                                    <AppIcon name="x" class="size-3" />
+                                    Remove file
+                                </Button>
+                            </div>
+                            <div v-else class="flex flex-col items-center gap-2 py-2">
+                                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                                    <AppIcon name="upload" class="size-5 text-muted-foreground" />
+                                </div>
+                                <p class="text-sm font-medium">Drop a file here or click to browse</p>
+                                <p class="text-xs text-muted-foreground">
+                                    PDF, JPG, PNG, DOC, DOCX, or TXT · max {{ documentUploadMaxLabel }}
+                                </p>
+                            </div>
+                            <p v-if="detailsDocumentUploadErrors.file" class="mt-2 text-xs text-destructive">
+                                {{ detailsDocumentUploadErrors.file[0] }}
+                            </p>
+                        </div>
+
+                        <fieldset class="grid gap-3 rounded-lg border p-3 sm:grid-cols-2">
+                            <legend class="px-2 text-sm font-medium text-muted-foreground">Document details</legend>
+                            <div class="grid gap-2">
+                                <Label for="staff-doc-upload-type">Type</Label>
+                                <Select v-model="detailsDocumentUploadForm.documentType">
+                                    <SelectTrigger id="staff-doc-upload-type" class="w-full">
+                                        <SelectValue placeholder="Choose type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem v-for="type in staffDocumentTypes" :key="`staff-doc-type-${type}`" :value="type">
+                                            {{ documentTypeLabel(type) }}
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div class="grid gap-2">
+                                <Label for="staff-doc-upload-title">Title</Label>
+                                <Input id="staff-doc-upload-title" v-model="detailsDocumentUploadForm.title" placeholder="e.g. Medical license copy" />
+                                <p v-if="detailsDocumentUploadErrors.title" class="text-xs text-destructive">
+                                    {{ detailsDocumentUploadErrors.title[0] }}
+                                </p>
+                            </div>
+                            <div class="grid gap-2 sm:col-span-2">
+                                <Label for="staff-doc-upload-description">Description <span class="font-normal text-muted-foreground">(optional)</span></Label>
+                                <Textarea
+                                    id="staff-doc-upload-description"
+                                    v-model="detailsDocumentUploadForm.description"
+                                    rows="2"
+                                    placeholder="Brief context for reviewers"
+                                />
+                            </div>
+                        </fieldset>
+
+                        <fieldset class="grid gap-3 rounded-lg border p-3 sm:grid-cols-2">
+                            <legend class="px-2 text-sm font-medium text-muted-foreground">Validity dates <span class="font-normal normal-case">(optional)</span></legend>
+                            <div class="grid gap-2">
+                                <Label for="staff-doc-upload-issued-at">Issued</Label>
+                                <Input id="staff-doc-upload-issued-at" v-model="detailsDocumentUploadForm.issuedAt" type="date" />
+                            </div>
+                            <div class="grid gap-2">
+                                <Label for="staff-doc-upload-expires-at">Expires</Label>
+                                <Input id="staff-doc-upload-expires-at" v-model="detailsDocumentUploadForm.expiresAt" type="date" />
+                            </div>
+                        </fieldset>
+                    </div>
+                    <DialogFooter class="gap-2 border-t px-6 py-4">
+                        <Button variant="outline" :disabled="detailsDocumentUploadLoading" @click="closeDetailsDocumentUploadDialog">
+                            Cancel
+                        </Button>
+                        <Button class="gap-1.5" :disabled="detailsDocumentUploadLoading" @click="submitDetailsDocumentUpload">
+                            <AppIcon name="upload" class="size-3.5" />
+                            {{ detailsDocumentUploadLoading ? 'Uploading…' : 'Upload document' }}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
                 :open="documentMetadataDialogOpen"
                 @update:open="(open) => (open ? (documentMetadataDialogOpen = true) : closeDocumentMetadataDialog())"
             >
@@ -3499,203 +3677,267 @@ onMounted(refreshPage);
                                         <AlertDescription>Request <code>staff.documents.read</code> permission.</AlertDescription>
                                     </Alert>
                                     <div v-else class="space-y-3">
-                                        <!-- Upload card -->
-                                        <Card v-if="canCreateStaffDocuments" class="rounded-lg">
-                                            <CardHeader class="px-4 pb-2 pt-4">
-                                                <CardTitle class="flex items-center gap-2 text-sm">
-                                                    <AppIcon name="upload" class="size-4 text-muted-foreground" />
-                                                    Upload Document
+                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                            <SearchInput
+                                                id="staff-doc-filter-q-toolbar"
+                                                v-model="detailsDocumentFilters.q"
+                                                placeholder="Search title, filename, or type…"
+                                                class="sm:flex-1"
+                                                @keyup.enter="applyDetailsDocumentFilters"
+                                            />
+                                            <div class="flex shrink-0 items-center gap-2">
+                                                <Button
+                                                    v-if="canCreateStaffDocuments"
+                                                    size="sm"
+                                                    class="h-8 gap-1.5"
+                                                    @click="openDetailsDocumentUploadDialog"
+                                                >
+                                                    <AppIcon name="upload" class="size-3.5" />
+                                                    Upload
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    class="h-8 gap-1.5"
+                                                    :disabled="detailsDocumentsLoading"
+                                                    @click="detailsSheetStaff && loadDetailsDocuments(detailsSheetStaff.id)"
+                                                >
+                                                    <AppIcon name="refresh-cw" class="size-3.5" />
+                                                    Refresh
+                                                </Button>
+                                            </div>
+                                        </div>
+
+                                        <Collapsible v-model:open="detailsDocumentFiltersOpen">
+                                            <Card class="!gap-0 overflow-hidden rounded-md border-border/50 bg-card/70 !py-0 shadow-none">
+                                                <CollapsibleTrigger as-child>
+                                                    <CardHeader class="cursor-pointer px-3 py-2.5 hover:bg-muted/30">
+                                                        <CardTitle class="flex items-center justify-between text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                                                            <span class="flex items-center gap-2">
+                                                                <AppIcon name="sliders-horizontal" class="size-3.5" />
+                                                                Filters
+                                                                <Badge v-if="detailsDocumentActiveFilterCount > 0" variant="secondary" class="normal-case tracking-normal">
+                                                                    {{ detailsDocumentActiveFilterCount }}
+                                                                </Badge>
+                                                            </span>
+                                                            <AppIcon :name="detailsDocumentFiltersOpen ? 'chevron-up' : 'chevron-down'" class="size-4" />
+                                                        </CardTitle>
+                                                    </CardHeader>
+                                                </CollapsibleTrigger>
+                                                <CollapsibleContent>
+                                                    <CardContent class="space-y-3 border-t border-border/40 px-3 pb-3 pt-0">
+                                                        <div class="grid gap-3 pt-3 sm:grid-cols-2 lg:grid-cols-3">
+                                                            <div class="grid gap-1.5">
+                                                                <Label for="staff-doc-filter-type" class="text-xs">Type</Label>
+                                                                <Select v-model="detailsDocumentFilters.documentType">
+                                                                    <SelectTrigger id="staff-doc-filter-type" class="h-8 text-xs">
+                                                                        <SelectValue placeholder="All types" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="">All types</SelectItem>
+                                                                        <SelectItem v-for="type in staffDocumentTypes" :key="`staff-doc-filter-type-${type}`" :value="type">
+                                                                            {{ documentTypeLabel(type) }}
+                                                                        </SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+                                                            <div class="grid gap-1.5">
+                                                                <Label for="staff-doc-filter-status" class="text-xs">Status</Label>
+                                                                <Select v-model="detailsDocumentFilters.status">
+                                                                    <SelectTrigger id="staff-doc-filter-status" class="h-8 text-xs">
+                                                                        <SelectValue placeholder="All status" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="">All status</SelectItem>
+                                                                        <SelectItem value="active">Active</SelectItem>
+                                                                        <SelectItem value="archived">Archived</SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+                                                            <div class="grid gap-1.5">
+                                                                <Label for="staff-doc-filter-verification" class="text-xs">Verification</Label>
+                                                                <Select v-model="detailsDocumentFilters.verificationStatus">
+                                                                    <SelectTrigger id="staff-doc-filter-verification" class="h-8 text-xs">
+                                                                        <SelectValue placeholder="All verification" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="">All verification</SelectItem>
+                                                                        <SelectItem value="pending">Pending</SelectItem>
+                                                                        <SelectItem value="verified">Verified</SelectItem>
+                                                                        <SelectItem value="rejected">Rejected</SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+                                                            <div class="grid gap-1.5">
+                                                                <Label for="staff-doc-filter-expires-from" class="text-xs">Expires from</Label>
+                                                                <Input id="staff-doc-filter-expires-from" v-model="detailsDocumentFilters.expiresFrom" type="date" class="h-8 text-xs" />
+                                                            </div>
+                                                            <div class="grid gap-1.5">
+                                                                <Label for="staff-doc-filter-expires-to" class="text-xs">Expires to</Label>
+                                                                <Input id="staff-doc-filter-expires-to" v-model="detailsDocumentFilters.expiresTo" type="date" class="h-8 text-xs" />
+                                                            </div>
+                                                            <div class="grid gap-1.5">
+                                                                <Label for="staff-doc-filter-per-page" class="text-xs">Per page</Label>
+                                                                <Select :model-value="String(detailsDocumentFilters.perPage)" @update:model-value="detailsDocumentFilters.perPage = Number($event)">
+                                                                    <SelectTrigger id="staff-doc-filter-per-page" class="h-8 text-xs">
+                                                                        <SelectValue />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="10">10</SelectItem>
+                                                                        <SelectItem value="20">20</SelectItem>
+                                                                        <SelectItem value="50">50</SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+                                                        </div>
+                                                        <div class="flex flex-wrap items-center gap-2">
+                                                            <Button size="sm" class="h-7 gap-1.5 text-xs" :disabled="detailsDocumentsLoading" @click="applyDetailsDocumentFilters">
+                                                                <AppIcon name="search" class="size-3" />
+                                                                {{ detailsDocumentsLoading ? 'Applying…' : 'Apply filters' }}
+                                                            </Button>
+                                                            <Button size="sm" variant="outline" class="h-7 gap-1.5 text-xs" :disabled="detailsDocumentsLoading" @click="resetDetailsDocumentFilters">
+                                                                <AppIcon name="rotate-ccw" class="size-3" />
+                                                                Reset
+                                                            </Button>
+                                                        </div>
+                                                    </CardContent>
+                                                </CollapsibleContent>
+                                            </Card>
+                                        </Collapsible>
+
+                                        <Card class="!gap-0 overflow-hidden rounded-md border-border/50 bg-card/70 !py-0 shadow-none">
+                                            <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
+                                                <CardTitle class="flex items-center gap-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                                                    <AppIcon name="file-text" class="size-3.5" />
+                                                    Documents
+                                                    <span class="font-normal normal-case tracking-normal">({{ detailsDocumentMeta?.total ?? detailsDocuments.length }})</span>
                                                 </CardTitle>
                                             </CardHeader>
-                                            <CardContent class="space-y-3 px-4 pb-4">
-                                                <div class="grid gap-3 sm:grid-cols-2">
-                                                    <div class="grid gap-2">
-                                                        <Label for="staff-doc-upload-type">Type</Label>
-                                                        <Select v-model="detailsDocumentUploadForm.documentType">
-                                                            <SelectTrigger>
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                            <SelectItem v-for="type in staffDocumentTypes" :key="`staff-doc-type-${type}`" :value="type">
-                                                                {{ documentTypeLabel(type) }}
-                                                            </SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div class="grid gap-2">
-                                                        <Label for="staff-doc-upload-title">Title</Label>
-                                                        <Input id="staff-doc-upload-title" v-model="detailsDocumentUploadForm.title" />
-                                                        <p v-if="detailsDocumentUploadErrors.title" class="text-xs text-destructive">
-                                                            {{ detailsDocumentUploadErrors.title[0] }}
-                                                        </p>
-                                                    </div>
-                                                    <div class="grid gap-2 sm:col-span-2">
-                                                        <Label for="staff-doc-upload-description">Description</Label>
-                                                        <Textarea id="staff-doc-upload-description" v-model="detailsDocumentUploadForm.description" class="min-h-20" />
-                                                    </div>
-                                                    <div class="grid gap-2">
-                                                        <Label for="staff-doc-upload-issued-at">Issued At</Label>
-                                                        <Input id="staff-doc-upload-issued-at" v-model="detailsDocumentUploadForm.issuedAt" type="date" />
-                                                    </div>
-                                                    <div class="grid gap-2">
-                                                        <Label for="staff-doc-upload-expires-at">Expires At</Label>
-                                                        <Input id="staff-doc-upload-expires-at" v-model="detailsDocumentUploadForm.expiresAt" type="date" />
-                                                    </div>
-                                                    <div class="grid gap-2 sm:col-span-2">
-                                                        <Label :for="`staff-doc-upload-file-${detailsDocumentUploadInputKey}`">File</Label>
-                                                        <Input
-                                                            :id="`staff-doc-upload-file-${detailsDocumentUploadInputKey}`"
-                                                            :key="`staff-doc-upload-input-${detailsDocumentUploadInputKey}`"
-                                                            type="file"
-                                                            @change="onDetailsDocumentFileChange"
-                                                        />
-                                                        <p class="text-xs text-muted-foreground">Allowed: PDF/JPG/PNG/DOC/DOCX/TXT (max {{ documentUploadMaxLabel }} in this environment).</p>
-                                                        <p v-if="detailsDocumentUploadErrors.file" class="text-xs text-destructive">
-                                                            {{ detailsDocumentUploadErrors.file[0] }}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <div class="flex flex-wrap justify-end gap-2">
-                                                    <Button variant="outline" size="sm" class="gap-1.5" :disabled="detailsDocumentUploadLoading" @click="resetDetailsDocumentUploadForm">
-                                                        <AppIcon name="rotate-ccw" class="size-3.5" />
-                                                        Reset
-                                                    </Button>
-                                                    <Button size="sm" class="gap-1.5" :disabled="detailsDocumentUploadLoading" @click="submitDetailsDocumentUpload">
-                                                        <AppIcon name="upload" class="size-3.5" />
-                                                        {{ detailsDocumentUploadLoading ? 'Uploading...' : 'Upload' }}
-                                                    </Button>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-
-                                        <!-- Document list card -->
-                                        <Card class="rounded-lg">
-                                            <CardHeader class="px-4 pb-2 pt-4">
-                                                <div class="flex items-center justify-between gap-2">
-                                                    <CardTitle class="flex items-center gap-2 text-sm">
-                                                        <AppIcon name="file-text" class="size-4 text-muted-foreground" />
-                                                        Documents
-                                                        <span class="text-xs font-normal text-muted-foreground">({{ detailsDocumentMeta?.total ?? detailsDocuments.length }})</span>
-                                                    </CardTitle>
-                                                    <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs" :disabled="detailsDocumentsLoading" @click="detailsSheetStaff && loadDetailsDocuments(detailsSheetStaff.id)">
-                                                        <AppIcon name="refresh-cw" class="size-3" />
-                                                        Refresh
-                                                    </Button>
-                                                </div>
-                                            </CardHeader>
-                                            <CardContent class="space-y-3 px-4 pb-4">
-                                                <!-- Filters -->
-                                                <div class="grid gap-3 rounded-lg border p-3 sm:grid-cols-2">
-                                                    <div class="grid gap-1.5">
-                                                        <Label for="staff-doc-filter-q" class="text-xs">Search</Label>
-                                                        <Input id="staff-doc-filter-q" v-model="detailsDocumentFilters.q" placeholder="title, filename, type..." class="h-8 text-xs" />
-                                                    </div>
-                                                    <div class="grid gap-1.5">
-                                                        <Label for="staff-doc-filter-status" class="text-xs">Status</Label>
-                                                        <Select v-model="detailsDocumentFilters.status">
-                                                            <SelectTrigger class="h-8 text-xs">
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                            <SelectItem value="">All status</SelectItem>
-                                                            <SelectItem value="active">Active</SelectItem>
-                                                            <SelectItem value="archived">Archived</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div class="grid gap-1.5">
-                                                        <Label for="staff-doc-filter-verification" class="text-xs">Verification</Label>
-                                                        <Select v-model="detailsDocumentFilters.verificationStatus">
-                                                            <SelectTrigger class="h-8 text-xs">
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                            <SelectItem value="">All verification</SelectItem>
-                                                            <SelectItem value="pending">Pending</SelectItem>
-                                                            <SelectItem value="verified">Verified</SelectItem>
-                                                            <SelectItem value="rejected">Rejected</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div class="grid gap-1.5">
-                                                        <Label for="staff-doc-filter-per-page" class="text-xs">Per Page</Label>
-                                                        <Select :model-value="String(detailsDocumentFilters.perPage)" @update:model-value="detailsDocumentFilters.perPage = Number($event)">
-                                                            <SelectTrigger class="h-8 text-xs">
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                            <SelectItem value="10">10</SelectItem>
-                                                            <SelectItem value="20">20</SelectItem>
-                                                            <SelectItem value="50">50</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div class="flex flex-wrap items-center gap-2 sm:col-span-2">
-                                                        <Button size="sm" class="h-7 gap-1.5 text-xs" :disabled="detailsDocumentsLoading" @click="applyDetailsDocumentFilters">
-                                                            <AppIcon name="search" class="size-3" />
-                                                            {{ detailsDocumentsLoading ? 'Applying...' : 'Apply' }}
-                                                        </Button>
-                                                        <Button size="sm" variant="outline" class="h-7 gap-1.5 text-xs" :disabled="detailsDocumentsLoading" @click="resetDetailsDocumentFilters">
-                                                            <AppIcon name="rotate-ccw" class="size-3" />
-                                                            Reset
-                                                        </Button>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Document list -->
-                                                <Alert v-if="detailsDocumentsError" variant="destructive">
-                                                    <AlertTitle>Document Load Issue</AlertTitle>
+                                            <CardContent class="px-0 pb-0 pt-0">
+                                                <Alert v-if="detailsDocumentsError" class="mx-3 mt-3">
+                                                    <AlertTitle>Document load issue</AlertTitle>
                                                     <AlertDescription>{{ detailsDocumentsError }}</AlertDescription>
                                                 </Alert>
-                                                <div v-else-if="detailsDocumentsLoading" class="space-y-2">
-                                                    <Skeleton class="h-16 w-full" />
-                                                    <Skeleton class="h-16 w-full" />
+                                                <div v-else-if="detailsDocumentsLoading" class="space-y-2 px-3 py-3">
+                                                    <Skeleton class="h-12 w-full" />
+                                                    <Skeleton class="h-12 w-full" />
+                                                    <Skeleton class="h-12 w-full" />
                                                 </div>
-                                                <div v-else-if="detailsDocuments.length === 0" class="flex flex-col items-center gap-2 py-8 text-center">
+                                                <div v-else-if="detailsDocuments.length === 0" class="flex flex-col items-center gap-2 px-3 py-10 text-center">
                                                     <div class="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
                                                         <AppIcon name="file-text" class="size-5 text-muted-foreground" />
                                                     </div>
-                                                    <p class="text-sm text-muted-foreground">No documents found for current filters.</p>
+                                                    <p class="text-sm font-medium">No documents found</p>
+                                                    <p class="max-w-xs text-xs text-muted-foreground">
+                                                        {{
+                                                            detailsDocumentActiveFilterCount > 0
+                                                                ? 'Try adjusting filters or upload a new document.'
+                                                                : canCreateStaffDocuments
+                                                                  ? 'Upload the first document for this staff member.'
+                                                                  : 'No documents have been uploaded yet.'
+                                                        }}
+                                                    </p>
+                                                    <Button
+                                                        v-if="canCreateStaffDocuments && detailsDocumentActiveFilterCount === 0"
+                                                        size="sm"
+                                                        class="mt-1 h-8 gap-1.5"
+                                                        @click="openDetailsDocumentUploadDialog"
+                                                    >
+                                                        <AppIcon name="upload" class="size-3.5" />
+                                                        Upload document
+                                                    </Button>
                                                 </div>
-                                                <div v-else class="space-y-2">
-                                                    <div v-for="document in detailsDocuments" :key="document.id" class="rounded-lg border p-3 text-sm">
-                                                        <div class="flex flex-wrap items-start justify-between gap-2">
-                                                            <div class="min-w-0">
-                                                                <p class="truncate font-medium">{{ document.title || 'Untitled document' }}</p>
-                                                                <p class="mt-0.5 text-xs text-muted-foreground">
-                                                                    {{ documentTypeLabel(document.documentType) }} ·
-                                                                    {{ document.originalFilename || 'N/A' }} ·
-                                                                    {{ formatFileSize(document.fileSizeBytes) }}
-                                                                </p>
-                                                            </div>
-                                                            <div class="flex flex-wrap items-center gap-1.5">
-                                                                <Badge :variant="documentStatusVariant(document.status)">{{ document.status || 'unknown' }}</Badge>
-                                                                <Badge :variant="documentVerificationVariant(document.verificationStatus)">{{ document.verificationStatus || 'pending' }}</Badge>
-                                                            </div>
+                                                <div v-else class="divide-y divide-border/50">
+                                                    <div
+                                                        v-for="document in detailsDocuments"
+                                                        :key="document.id"
+                                                        class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/20"
+                                                    >
+                                                        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                                                            <AppIcon name="file-text" class="size-3.5 text-muted-foreground" />
                                                         </div>
-                                                        <div class="mt-2 flex flex-wrap items-center gap-1.5">
-                                                            <Button size="sm" variant="outline" class="h-7 gap-1.5 text-xs" @click="downloadStaffDocument(document)">
-                                                                <AppIcon name="download" class="size-3" />
-                                                                Download
-                                                            </Button>
-                                                            <Button v-if="canUpdateStaffDocuments" size="sm" variant="outline" class="h-7 text-xs" @click="openDocumentMetadataDialog(document)">Edit</Button>
-                                                            <Button v-if="canVerifyStaffDocuments" size="sm" variant="outline" class="h-7 text-xs" @click="openDocumentVerificationDialog(document)">Verify</Button>
+                                                        <div class="min-w-0 flex-1">
+                                                            <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                                                <p class="truncate text-sm font-medium">
+                                                                    {{ document.title || 'Untitled document' }}
+                                                                </p>
+                                                                <Badge :variant="documentStatusVariant(document.status)" class="h-5 capitalize">
+                                                                    {{ document.status || 'unknown' }}
+                                                                </Badge>
+                                                                <Badge :variant="documentVerificationVariant(document.verificationStatus)" class="h-5 capitalize">
+                                                                    {{ document.verificationStatus || 'pending' }}
+                                                                </Badge>
+                                                            </div>
+                                                            <p class="truncate text-xs text-muted-foreground">
+                                                                {{ documentTypeLabel(document.documentType) }}
+                                                                <span class="text-border"> · </span>
+                                                                {{ document.originalFilename || 'N/A' }}
+                                                                <span class="text-border"> · </span>
+                                                                {{ formatFileSize(document.fileSizeBytes) }}
+                                                            </p>
+                                                        </div>
+                                                        <div class="flex shrink-0 items-center gap-1.5">
                                                             <Button
-                                                                v-if="canUpdateStaffDocumentStatus"
                                                                 size="sm"
                                                                 variant="outline"
-                                                                class="h-7 text-xs"
-                                                                @click="openDocumentStatusDialog(document, document.status === 'archived' ? 'active' : 'archived')"
+                                                                class="h-8 gap-1.5 text-xs"
+                                                                @click="downloadStaffDocument(document)"
                                                             >
-                                                                {{ document.status === 'archived' ? 'Activate' : 'Archive' }}
+                                                                <AppIcon name="download" class="size-3.5" />
+                                                                <span class="hidden sm:inline">Download</span>
                                                             </Button>
-                                                            <Button v-if="canViewStaffDocumentAudit" size="sm" variant="outline" class="h-7 text-xs" @click="openDetailsDocumentAudit(document)">Audit</Button>
+                                                            <DropdownMenu
+                                                                v-if="canUpdateStaffDocuments || canVerifyStaffDocuments || canUpdateStaffDocumentStatus || canViewStaffDocumentAudit"
+                                                            >
+                                                                <DropdownMenuTrigger as-child>
+                                                                    <Button variant="outline" size="icon" class="size-8 shrink-0">
+                                                                        <AppIcon name="ellipsis-vertical" class="size-4" />
+                                                                        <span class="sr-only">Document actions</span>
+                                                                    </Button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="end" class="w-44 rounded-lg">
+                                                                    <DropdownMenuItem
+                                                                        v-if="canUpdateStaffDocuments"
+                                                                        class="gap-2"
+                                                                        @select="openDocumentMetadataDialog(document)"
+                                                                    >
+                                                                        <AppIcon name="pencil" class="size-4" />
+                                                                        Edit metadata
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem
+                                                                        v-if="canVerifyStaffDocuments"
+                                                                        class="gap-2"
+                                                                        @select="openDocumentVerificationDialog(document)"
+                                                                    >
+                                                                        <AppIcon name="shield-check" class="size-4" />
+                                                                        Verify
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem
+                                                                        v-if="canUpdateStaffDocumentStatus"
+                                                                        class="gap-2"
+                                                                        @select="openDocumentStatusDialog(document, document.status === 'archived' ? 'active' : 'archived')"
+                                                                    >
+                                                                        <AppIcon :name="document.status === 'archived' ? 'circle-check-big' : 'folder'" class="size-4" />
+                                                                        {{ document.status === 'archived' ? 'Activate' : 'Archive' }}
+                                                                    </DropdownMenuItem>
+                                                                    <DropdownMenuItem
+                                                                        v-if="canViewStaffDocumentAudit"
+                                                                        class="gap-2"
+                                                                        @select="openDetailsDocumentAudit(document)"
+                                                                    >
+                                                                        <AppIcon name="activity" class="size-4" />
+                                                                        View audit
+                                                                    </DropdownMenuItem>
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
                                                         </div>
                                                     </div>
                                                 </div>
 
-                                                <!-- Document pagination -->
-                                                <div class="flex items-center justify-between pt-1">
+                                                <div
+                                                    v-if="!detailsDocumentsLoading && detailsDocuments.length > 0"
+                                                    class="flex items-center justify-between border-t border-border/40 px-3 py-2"
+                                                >
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
@@ -3707,7 +3949,7 @@ onMounted(refreshPage);
                                                         Prev
                                                     </Button>
                                                     <p class="text-xs text-muted-foreground">
-                                                        Page {{ detailsDocumentMeta?.currentPage ?? 1 }} of {{ detailsDocumentMeta?.lastPage ?? 1 }} · {{ detailsDocumentMeta?.total ?? detailsDocuments.length }} docs
+                                                        Page {{ detailsDocumentMeta?.currentPage ?? 1 }} of {{ detailsDocumentMeta?.lastPage ?? 1 }}
                                                     </p>
                                                     <Button
                                                         variant="outline"
@@ -3720,37 +3962,52 @@ onMounted(refreshPage);
                                                         <AppIcon name="chevron-right" class="size-3" />
                                                     </Button>
                                                 </div>
+                                            </CardContent>
+                                        </Card>
 
-                                                <!-- Document Audit inline -->
-                                                <div v-if="detailsDocumentAuditDocument" class="rounded-lg border p-3">
-                                                    <p class="text-sm font-medium">
-                                                        Audit: {{ detailsDocumentAuditDocument.title || detailsDocumentAuditDocument.originalFilename || detailsDocumentAuditDocument.id }}
-                                                    </p>
-                                                    <div class="mt-3 space-y-2">
-                                                        <Alert v-if="detailsDocumentAuditError" variant="destructive">
-                                                            <AlertTitle>Audit Load Issue</AlertTitle>
-                                                            <AlertDescription>{{ detailsDocumentAuditError }}</AlertDescription>
-                                                        </Alert>
-                                                        <div v-else-if="detailsDocumentAuditLoading" class="space-y-2">
-                                                            <Skeleton class="h-10 w-full" />
-                                                            <Skeleton class="h-10 w-full" />
+                                        <Card
+                                            v-if="detailsDocumentAuditDocument"
+                                            class="!gap-0 overflow-hidden rounded-md border-border/50 bg-card/70 !py-0 shadow-none"
+                                        >
+                                            <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
+                                                <div class="flex items-center justify-between gap-2">
+                                                    <CardTitle class="flex min-w-0 items-center gap-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                                                        <AppIcon name="activity" class="size-3.5 shrink-0" />
+                                                        <span class="truncate normal-case tracking-normal">
+                                                            Audit · {{ detailsDocumentAuditDocument.title || detailsDocumentAuditDocument.originalFilename || detailsDocumentAuditDocument.id }}
+                                                        </span>
+                                                    </CardTitle>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        class="size-7 shrink-0"
+                                                        @click="resetDetailsDocumentAuditState()"
+                                                    >
+                                                        <AppIcon name="x" class="size-3.5" />
+                                                        <span class="sr-only">Close audit</span>
+                                                    </Button>
+                                                </div>
+                                            </CardHeader>
+                                            <CardContent class="space-y-2 px-3 py-3">
+                                                <Alert v-if="detailsDocumentAuditError" variant="destructive">
+                                                    <AlertTitle>Audit load issue</AlertTitle>
+                                                    <AlertDescription>{{ detailsDocumentAuditError }}</AlertDescription>
+                                                </Alert>
+                                                <div v-else-if="detailsDocumentAuditLoading" class="space-y-2">
+                                                    <Skeleton class="h-10 w-full" />
+                                                    <Skeleton class="h-10 w-full" />
+                                                </div>
+                                                <div v-else-if="detailsDocumentAuditLogs.length === 0" class="flex flex-col items-center gap-2 py-4 text-center">
+                                                    <p class="text-xs text-muted-foreground">No audit logs for this document.</p>
+                                                </div>
+                                                <div v-else class="divide-y divide-border/50">
+                                                    <div v-for="log in detailsDocumentAuditLogs" :key="log.id" class="flex items-start gap-3 py-2 first:pt-0 last:pb-0">
+                                                        <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
+                                                            <AppIcon name="activity" class="size-3 text-muted-foreground" />
                                                         </div>
-                                                        <div v-else-if="detailsDocumentAuditLogs.length === 0" class="flex flex-col items-center gap-2 py-4 text-center">
-                                                            <div class="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-                                                                <AppIcon name="activity" class="size-4 text-muted-foreground" />
-                                                            </div>
-                                                            <p class="text-xs text-muted-foreground">No audit logs for this document.</p>
-                                                        </div>
-                                                        <div v-else class="space-y-2">
-                                                            <div v-for="log in detailsDocumentAuditLogs" :key="log.id" class="flex items-start gap-3">
-                                                                <div class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-muted">
-                                                                    <AppIcon name="activity" class="size-3 text-muted-foreground" />
-                                                                </div>
-                                                                <div class="min-w-0 flex-1">
-                                                                    <p class="text-xs font-medium">{{ auditActionDisplay(log) }}</p>
-                                                                    <p class="text-xs text-muted-foreground">{{ log.createdAt || 'N/A' }} · {{ auditActorDisplay(log) }}</p>
-                                                                </div>
-                                                            </div>
+                                                        <div class="min-w-0 flex-1">
+                                                            <p class="text-xs font-medium">{{ auditActionDisplay(log) }}</p>
+                                                            <p class="text-xs text-muted-foreground">{{ log.createdAt || 'N/A' }} · {{ auditActorDisplay(log) }}</p>
                                                         </div>
                                                     </div>
                                                 </div>
