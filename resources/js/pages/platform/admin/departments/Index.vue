@@ -139,7 +139,7 @@ const serviceTypeOptions: SearchableSelectOption[] = [
     },
 ];
 
-const { permissionState } = usePlatformAccess();
+const { permissionState, scope } = usePlatformAccess();
 const canRead = computed(() => permissionState('departments.read') === 'allowed');
 const canCreate = computed(() => permissionState('departments.create') === 'allowed');
 const canUpdate = computed(() => permissionState('departments.update') === 'allowed');
@@ -149,6 +149,13 @@ const canReadStaff = computed(() => permissionState('staff.read') === 'allowed')
 const departmentRegistryReadOnly = computed(
     () => canRead.value && !canCreate.value && !canUpdate.value && !canUpdateStatus.value,
 );
+const workspaceIntroText = computed(() => {
+    const base = `${counts.value.total} departments in facility scope`;
+
+    return departmentRegistryReadOnly.value
+        ? `${base} · browse department master data for routing and staff lookup`
+        : `${base} · configure routing, appointments, staff teams, and service points`;
+});
 
 const loading = ref(true);
 const listLoading = ref(false);
@@ -158,7 +165,6 @@ const pagination = ref<Pagination | null>(null);
 const counts = ref<StatusCounts>({ active: 0, inactive: 0, other: 0, total: 0 });
 const filters = reactive({ q: '', status: '', serviceType: '', managerUserId: '', page: 1, perPage: 20 });
 const departmentFiltersOpen = ref(false);
-const compactRows = ref(false);
 const managerOptionsLoading = ref(false);
 const managerOptionsError = ref<string | null>(null);
 const managerProfiles = ref<DepartmentStaffProfile[]>([]);
@@ -251,6 +257,32 @@ const departmentFilterChips = computed(() => {
     }
 
     return chips;
+});
+
+const canPrev = computed(() => (pagination.value?.currentPage ?? 1) > 1);
+const canNext = computed(() => {
+    if (!pagination.value) return false;
+    return pagination.value.currentPage < pagination.value.lastPage;
+});
+
+const paginationPageNumbers = computed((): (number | '...')[] => {
+    const total = pagination.value?.lastPage ?? 1;
+    const current = pagination.value?.currentPage ?? 1;
+    if (total <= 7) {
+        return Array.from({ length: total }, (_, index) => index + 1);
+    }
+
+    const pages: (number | '...')[] = [1];
+    if (current > 3) pages.push('...');
+
+    for (let page = Math.max(2, current - 1); page <= Math.min(total - 1, current + 1); page += 1) {
+        pages.push(page);
+    }
+
+    if (current < total - 2) pages.push('...');
+    pages.push(total);
+
+    return pages;
 });
 
 const createOpen = ref(false);
@@ -817,8 +849,20 @@ function reset() { filters.q = ''; filters.status = ''; filters.serviceType = ''
 function applyFiltersFromSheet() { departmentFiltersOpen.value = false; search(); }
 function resetFiltersFromSheet() { departmentFiltersOpen.value = false; reset(); }
 function setStatus(status: '' | 'active' | 'inactive') { filters.status = status; filters.page = 1; void refreshPage(); }
-function prevPage() { if ((pagination.value?.currentPage ?? 1) > 1) { filters.page -= 1; void loadItems(); } }
-function nextPage() { if (pagination.value && pagination.value.currentPage < pagination.value.lastPage) { filters.page += 1; void loadItems(); } }
+function prevPage() {
+    if (!canPrev.value) return;
+    filters.page -= 1;
+    void loadItems();
+}
+function nextPage() {
+    if (!canNext.value) return;
+    filters.page += 1;
+    void loadItems();
+}
+function goToPage(page: number) {
+    filters.page = page;
+    void loadItems();
+}
 
 onMounted(() => {
     void refreshPage();
@@ -832,32 +876,66 @@ onMounted(() => {
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
 
             <!-- Page header -->
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div class="min-w-0">
-                    <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <AppIcon name="building-2" class="size-7 text-primary" />
-                        Department Registry
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">Department queue, status management, and audit visibility for facility operations.</p>
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div
+                            class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20"
+                            aria-hidden="true"
+                        >
+                            <AppIcon name="building-2" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h1 class="text-base font-semibold tracking-tight md:text-lg">
+                                    Department Registry
+                                </h1>
+                                <Badge
+                                    v-if="departmentRegistryReadOnly"
+                                    variant="outline"
+                                    class="h-5 px-1.5 text-[10px] font-medium"
+                                >
+                                    View only
+                                </Badge>
+                            </div>
+                            <p class="truncate text-xs text-muted-foreground">
+                                {{ workspaceIntroText }}
+                            </p>
+                            <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
+                                <span class="inline-flex items-center gap-1">
+                                    <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
+                                    <span class="font-medium text-foreground">
+                                        {{ scope?.facility?.name || 'No facility' }}
+                                    </span>
+                                </span>
+                                <span class="select-none text-border" aria-hidden="true">·</span>
+                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            :disabled="listLoading"
+                            @click="refreshPage"
+                        >
+                            <AppIcon name="refresh-cw" class="size-3.5" />
+                            {{ listLoading ? 'Refreshing...' : 'Refresh' }}
+                        </Button>
+                        <Button
+                            v-if="canCreate"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            @click="openCreateDialog"
+                        >
+                            <AppIcon name="plus" class="size-3.5" />
+                            Create department
+                        </Button>
+                    </div>
                 </div>
-                <div class="flex flex-shrink-0 items-center gap-2">
-                    <Button variant="outline" size="sm" :disabled="listLoading" class="gap-1.5" @click="refreshPage">
-                        <AppIcon name="activity" class="size-3.5" />
-                        {{ listLoading ? 'Refreshing...' : 'Refresh' }}
-                    </Button>
-                    <Button v-if="canCreate" size="sm" class="gap-1.5" @click="openCreateDialog">
-                        <AppIcon name="plus" class="size-3.5" />
-                        Create Department
-                    </Button>
-                </div>
-            </div>
-
-            <Alert v-if="departmentRegistryReadOnly" variant="default">
-                <AlertTitle>Read-only access</AlertTitle>
-                <AlertDescription>
-                    This registry is available in read-only mode for your role. Create and status-change actions stay hidden until department management permissions are granted.
-                </AlertDescription>
-            </Alert>
+            </section>
 
             <!-- Alerts -->
             <Alert v-if="errors.length" variant="destructive">
@@ -929,23 +1007,15 @@ onMounted(() => {
                                 id="dept-search-q"
                                 v-model="filters.q"
                                 placeholder="Search code, name, or description"
-                                class="min-w-0 flex-1 text-xs"
+                                class="min-w-0 flex-1 text-xs [&_input]:h-8"
                                 @keyup.enter="search"
                             />
-                            <Button variant="outline" size="sm" class="h-9 gap-1.5 rounded-lg text-xs" @click="departmentFiltersOpen = true">
+                            <Button variant="outline" size="sm" class="h-8 gap-1.5 rounded-lg text-xs" @click="departmentFiltersOpen = true">
                                 <AppIcon name="sliders-horizontal" class="size-3.5" />
                                 Filters
                                 <Badge v-if="departmentFilterCount > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">
                                     {{ departmentFilterCount }}
                                 </Badge>
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                class="hidden h-9 rounded-lg text-xs sm:inline-flex"
-                                @click="compactRows = !compactRows"
-                            >
-                                {{ compactRows ? 'Comfortable Rows' : 'Compact Rows' }}
                             </Button>
                         </div>
                     </div>
@@ -967,134 +1037,175 @@ onMounted(() => {
                     </div>
                     <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
                         <ScrollArea class="min-h-0 flex-1">
-                            <div class="min-h-[12rem] p-4" :class="compactRows ? 'space-y-2' : 'space-y-3'">
-                                <div v-if="loading || listLoading" class="space-y-2">
-                                    <div v-for="index in 6" :key="`department-skeleton-${index}`" class="rounded-lg border p-3">
-                                        <div class="flex items-center gap-3">
-                                            <Skeleton class="h-9 w-9 rounded-lg" />
-                                            <div class="min-w-0 flex-1 space-y-2">
-                                                <Skeleton class="h-4 w-48" />
-                                                <Skeleton class="h-3 w-72 max-w-full" />
-                                            </div>
-                                            <Skeleton class="h-8 w-20 rounded-md" />
+                            <div class="min-h-[12rem]">
+                                <div v-if="loading || listLoading" class="divide-y px-4">
+                                    <div
+                                        v-for="index in 6"
+                                        :key="`department-skeleton-${index}`"
+                                        class="flex items-center gap-3 py-3"
+                                    >
+                                        <Skeleton class="size-2 shrink-0 rounded-full" />
+                                        <div class="min-w-0 flex-1 space-y-2">
+                                            <Skeleton class="h-4 w-48" />
+                                            <Skeleton class="h-3.5 w-64 max-w-full" />
                                         </div>
+                                        <Skeleton class="hidden h-5 w-14 shrink-0 rounded-full sm:block" />
+                                        <Skeleton class="h-8 w-16 shrink-0 rounded-md" />
+                                        <Skeleton class="hidden h-8 w-12 shrink-0 rounded-md sm:block" />
                                     </div>
                                 </div>
-                                <div v-else-if="items.length === 0" class="flex flex-col items-center gap-3 rounded-lg border border-dashed p-8 text-center">
-                                    <div class="flex h-11 w-11 items-center justify-center rounded-lg bg-muted">
-                                        <AppIcon name="building-2" class="size-5 text-muted-foreground" />
+                                <div v-else-if="items.length === 0" class="flex flex-col items-center gap-3 px-4 py-10 text-center">
+                                    <div class="flex size-10 items-center justify-center rounded-lg bg-muted">
+                                        <AppIcon name="building-2" class="size-4 text-muted-foreground" />
                                     </div>
                                     <div class="space-y-1">
                                         <p class="text-sm font-medium">No departments found</p>
-                                        <p class="text-sm text-muted-foreground">
+                                        <p class="text-xs text-muted-foreground">
                                             {{ departmentFilterCount > 0 ? 'Adjust or clear filters to widen the registry.' : 'Create the first department before configuring service points and staff teams.' }}
                                         </p>
                                     </div>
                                     <div class="flex flex-wrap justify-center gap-2">
-                                        <Button v-if="departmentFilterCount > 0" variant="outline" size="sm" class="gap-1.5" @click="reset">
+                                        <Button v-if="departmentFilterCount > 0" variant="outline" size="sm" class="h-8 gap-1.5" @click="reset">
                                             <AppIcon name="x" class="size-3.5" />
                                             Clear filters
                                         </Button>
-                                        <Button v-if="canCreate" size="sm" class="gap-1.5" @click="openCreateDialog">
+                                        <Button v-if="canCreate" size="sm" class="h-8 gap-1.5" @click="openCreateDialog">
                                             <AppIcon name="plus" class="size-3.5" />
                                             Create first department
                                         </Button>
                                     </div>
                                 </div>
-                                <div v-else :class="compactRows ? 'space-y-2' : 'space-y-3'">
+                                <div v-else class="divide-y px-4">
                                     <div
                                         v-for="item in items"
                                         :key="item.id || item.code || item.name"
-                                        class="relative rounded-lg border bg-background transition-colors hover:bg-muted/30"
-                                        :class="compactRows ? 'p-2.5' : 'p-3'"
+                                        class="flex items-center gap-3 py-3 transition-colors hover:bg-muted/30"
                                     >
-                                        <div
-                                            class="absolute inset-y-0 left-0 w-[3px] rounded-l-lg"
+                                        <span
+                                            class="size-2 shrink-0 rounded-full"
                                             :class="(item.status ?? '').toLowerCase() === 'active' ? 'bg-emerald-500' : 'bg-rose-500'"
+                                            :title="(item.status ?? 'unknown').toString()"
                                         />
-                                        <div class="flex flex-col gap-3 pl-2">
-                                            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                                <button type="button" class="min-w-0 text-left" @click="openDepartmentDetails(item)">
-                                                    <p class="truncate text-sm font-semibold transition-colors hover:text-primary hover:underline">
-                                                        {{ item.name || labelOf(item) }}
-                                                    </p>
-                                                    <p class="mt-1 text-xs text-muted-foreground">
-                                                        {{ item.code || 'No code' }} · {{ item.serviceType || 'Uncategorized' }}
-                                                    </p>
-                                                </button>
-                                                <div class="flex flex-wrap items-center gap-1.5">
-                                                    <Badge :variant="statusVariant(item.status)">{{ item.status || 'unknown' }}</Badge>
-                                                    <Badge v-if="item.isPatientFacing" variant="secondary">Patient-facing</Badge>
-                                                    <Badge v-if="item.isAppointmentable" variant="outline">Appointmentable</Badge>
-                                                </div>
+                                        <button
+                                            type="button"
+                                            class="min-w-0 flex-1 space-y-0.5 text-left"
+                                            @click="openDepartmentDetails(item)"
+                                        >
+                                            <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                                <span class="truncate text-sm font-medium transition-colors hover:text-primary">
+                                                    {{ item.name || labelOf(item) }}
+                                                </span>
+                                                <span class="shrink-0 text-xs text-muted-foreground">
+                                                    {{ item.code || 'No code' }}
+                                                </span>
                                             </div>
-                                            <div class="grid gap-2 text-xs text-muted-foreground lg:grid-cols-[1.4fr_1fr_auto] lg:items-center">
-                                                <p class="line-clamp-2">{{ item.description || 'No operating note recorded for this department.' }}</p>
+                                            <p class="truncate text-xs text-muted-foreground">
+                                                {{ item.serviceType || 'Uncategorized' }}
+                                                <span class="text-border"> · </span>
                                                 <TooltipProvider :delay-duration="100">
                                                     <Tooltip>
                                                         <TooltipTrigger as-child>
                                                             <Link
                                                                 v-if="departmentManagerStaffHref(item)"
                                                                 :href="departmentManagerStaffHref(item)!"
-                                                                class="inline-flex min-w-0 items-center gap-2 rounded-md hover:text-primary hover:underline"
+                                                                class="hover:text-primary hover:underline"
+                                                                @click.stop
                                                             >
-                                                                <Avatar class="h-7 w-7 border border-border/70">
-                                                                    <AvatarFallback class="bg-primary/10 text-[10px] font-semibold text-primary">
-                                                                        {{ departmentManagerInitials(item.manager, item.managerUserId) }}
-                                                                    </AvatarFallback>
-                                                                </Avatar>
-                                                                <span class="truncate">{{ departmentManagerDisplayName(item.manager, item.managerUserId) }}</span>
+                                                                {{ departmentManagerDisplayName(item.manager, item.managerUserId) }}
                                                             </Link>
-                                                            <span v-else class="inline-flex min-w-0 items-center gap-2">
-                                                                <Avatar class="h-7 w-7 border border-border/70">
-                                                                    <AvatarFallback class="bg-muted text-[10px] font-semibold text-muted-foreground">
-                                                                        {{ departmentManagerInitials(item.manager, item.managerUserId) }}
-                                                                    </AvatarFallback>
-                                                                </Avatar>
-                                                                <span class="truncate">{{ departmentManagerDisplayName(item.manager, item.managerUserId) }}</span>
+                                                            <span v-else>
+                                                                {{ departmentManagerDisplayName(item.manager, item.managerUserId) }}
                                                             </span>
                                                         </TooltipTrigger>
                                                         <TooltipContent side="top" class="space-y-0.5">
                                                             <p class="text-sm font-medium">{{ departmentManagerDisplayName(item.manager, item.managerUserId) }}</p>
                                                             <p v-if="item.manager?.email" class="text-xs text-muted-foreground">{{ item.manager.email }}</p>
-                                                            <p v-if="departmentManagerStaffHref(item)" class="text-xs text-muted-foreground">Open in Staff</p>
                                                         </TooltipContent>
                                                     </Tooltip>
                                                 </TooltipProvider>
-                                                <div class="flex flex-wrap gap-2 lg:justify-end">
-                                                    <Button size="sm" variant="outline" class="h-8 rounded-lg text-xs" @click="openDepartmentDetails(item)">Details</Button>
-                                                    <Button v-if="canUpdate" size="sm" variant="secondary" class="h-8 rounded-lg text-xs" @click="openEdit(item)">Edit</Button>
-                                                </div>
-                                            </div>
+                                            </p>
+                                        </button>
+                                        <div class="hidden shrink-0 flex-wrap items-center gap-1.5 sm:flex">
+                                            <Badge :variant="statusVariant(item.status)">
+                                                {{ item.status || 'unknown' }}
+                                            </Badge>
+                                            <Badge v-if="item.isPatientFacing" variant="secondary">
+                                                Patient-facing
+                                            </Badge>
+                                            <Badge v-if="item.isAppointmentable" variant="outline">
+                                                Appointmentable
+                                            </Badge>
+                                        </div>
+                                        <div class="flex shrink-0 items-center gap-1.5">
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                class="h-8 rounded-lg text-xs"
+                                                @click="openDepartmentDetails(item)"
+                                            >
+                                                Details
+                                            </Button>
+                                            <Button
+                                                v-if="canUpdate"
+                                                size="sm"
+                                                variant="secondary"
+                                                class="hidden h-8 rounded-lg text-xs sm:inline-flex"
+                                                @click="openEdit(item)"
+                                            >
+                                                Edit
+                                            </Button>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </ScrollArea>
-                        <footer class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-4 py-2">
+                        <footer class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
                             <p class="text-xs text-muted-foreground">
-                                Showing {{ items.length }} of {{ pagination?.total ?? 0 }} results &middot; Page {{ pagination?.currentPage ?? 1 }} of {{ pagination?.lastPage ?? 1 }}
+                                <template v-if="pagination">
+                                    Showing {{ items.length }} of
+                                    {{ pagination.total }} · Page
+                                    {{ pagination.currentPage }} of
+                                    {{ pagination.lastPage }}
+                                </template>
+                                <template v-else>No pagination data</template>
                             </p>
-                            <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-1">
                                 <Button
                                     variant="outline"
-                                    size="sm"
-                                    class="gap-1.5"
-                                    :disabled="listLoading || (pagination?.currentPage ?? 1) <= 1"
+                                    size="icon"
+                                    class="size-8"
+                                    :disabled="!canPrev || listLoading"
                                     @click="prevPage"
                                 >
-                                    <AppIcon name="chevron-left" class="size-3.5" />
-                                    Previous
+                                    <AppIcon name="chevron-left" class="size-4" />
                                 </Button>
+                                <template
+                                    v-for="page in paginationPageNumbers"
+                                    :key="String(page)"
+                                >
+                                    <span
+                                        v-if="page === '...'"
+                                        class="px-1 text-xs text-muted-foreground"
+                                    >…</span>
+                                    <Button
+                                        v-else
+                                        :variant="page === pagination?.currentPage ? 'default' : 'ghost'"
+                                        size="icon"
+                                        class="size-8 text-xs"
+                                        :disabled="listLoading"
+                                        @click="goToPage(page as number)"
+                                    >
+                                        {{ page }}
+                                    </Button>
+                                </template>
                                 <Button
                                     variant="outline"
-                                    size="sm"
-                                    class="gap-1.5"
-                                    :disabled="listLoading || !pagination || pagination.currentPage >= pagination.lastPage"
+                                    size="icon"
+                                    class="size-8"
+                                    :disabled="!canNext || listLoading"
                                     @click="nextPage"
                                 >
-                                    Next
-                                    <AppIcon name="chevron-right" class="size-3.5" />
+                                    <AppIcon name="chevron-right" class="size-4" />
                                 </Button>
                             </div>
                         </footer>
