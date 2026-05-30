@@ -15,10 +15,18 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetFooter,
+    SheetHeader,
+    SheetTitle,
+} from '@/components/ui/sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -99,7 +107,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Clinical Specialties', href: '/platform/admin/specialties' },
 ];
 
-const { permissionState } = usePlatformAccess();
+const { permissionState, scope } = usePlatformAccess();
 const canRead = computed(() => permissionState('specialties.read') === 'allowed');
 const canCreate = computed(() => permissionState('specialties.create') === 'allowed');
 const canUpdate = computed(() => permissionState('specialties.update') === 'allowed');
@@ -111,19 +119,23 @@ const canReadStaffDirectory = computed(() => permissionState('staff.read') === '
 const specialtyCatalogReadOnly = computed(
     () => canRead.value && !canCreate.value && !canUpdate.value && !canUpdateStatus.value,
 );
-const staffAssignmentReadOnly = computed(
-    () => canReadStaffSpecialties.value && !canManageStaffSpecialties.value,
-);
+const workspaceIntroText = computed(() => {
+    const base = `${specialtyQueueTotalCount.value} specialties in facility scope`;
 
-const loading = ref(true);
+    return specialtyCatalogReadOnly.value
+        ? `${base} · browse specialty master data for staffing and privileges`
+        : `${base} · maintain catalog records, staff assignments, and audit history`;
+});
+
 const listLoading = ref(false);
 const queueReady = ref(false);
+const workspaceSyncLoading = ref(false);
 const errors = ref<string[]>([]);
 const specialties = ref<ClinicalSpecialty[]>([]);
 const pagination = ref<Pagination | null>(null);
 const actionMessage = ref<string | null>(null);
 const createDialogOpen = ref(false);
-const assignmentDialogOpen = ref(false);
+const assignmentSheetOpen = ref(false);
 const selectedSpecialtyId = ref<string | null>(null);
 
 const filters = reactive({
@@ -202,6 +214,8 @@ const visibleStatusCounts = computed(() => {
     }
     return counts;
 });
+const showRegistryWorkspaceLoading = computed(() => !queueReady.value || workspaceSyncLoading.value);
+const specialtyQueueTotalCount = computed(() => pagination.value?.total ?? specialties.value.length);
 const specialtyListSummaryText = computed(() => {
     const segments = [`${visibleStatusCounts.value.active} active`, `${visibleStatusCounts.value.inactive} inactive`];
 
@@ -273,6 +287,19 @@ function statusVariant(status: string | null): 'outline' | 'secondary' | 'destru
     return 'outline';
 }
 
+function specialtyStatusDotClass(status: string | null): string {
+    const normalized = (status ?? '').toLowerCase();
+    if (normalized === 'active') return 'bg-emerald-500';
+    if (normalized === 'inactive') return 'bg-rose-500';
+    return 'bg-slate-400';
+}
+
+function updateSpecialtyQueueStatus(value: unknown) {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    filters.status = normalized === 'all' ? '' : normalized;
+    void search();
+}
+
 function staffStatusVariant(status: string | null): 'outline' | 'secondary' | 'destructive' {
     const normalized = (status ?? '').toLowerCase();
     if (normalized === 'active') return 'secondary';
@@ -339,16 +366,44 @@ function auditLabel(log: SpecialtyAuditLog): string {
     return log.actionLabel?.trim() || log.action || 'event';
 }
 
+function clearDetailPane() {
+    auditSpecialty.value = null;
+    auditLogs.value = [];
+    auditError.value = null;
+    auditLoading.value = false;
+    resetAssignedStaffPane();
+}
+
+async function loadSelectedSpecialtyDetails(specialty: ClinicalSpecialty): Promise<void> {
+    assignedStaffPage.value = 1;
+
+    if (canReadStaffSpecialties.value) {
+        await loadAssignedStaff(specialty, 1);
+    } else {
+        resetAssignedStaffPane();
+    }
+
+    if (canViewAudit.value) {
+        await loadAudit(specialty);
+    } else {
+        auditSpecialty.value = specialty;
+        auditLogs.value = [];
+        auditError.value = null;
+        auditLoading.value = false;
+    }
+}
+
 async function loadSpecialties() {
     if (!canRead.value) {
         specialties.value = [];
         pagination.value = null;
         listLoading.value = false;
-        loading.value = false;
         queueReady.value = true;
+        workspaceSyncLoading.value = false;
         return;
     }
 
+    workspaceSyncLoading.value = true;
     listLoading.value = true;
     errors.value = [];
     try {
@@ -364,14 +419,29 @@ async function loadSpecialties() {
         });
         specialties.value = response.data ?? [];
         pagination.value = response.meta ?? null;
+
+        if (specialties.value.length === 0) {
+            selectedSpecialtyId.value = null;
+            clearDetailPane();
+        } else {
+            const previousKey = selectedSpecialtyId.value;
+            const retained = previousKey
+                ? specialties.value.find((row) => specialtyKey(row) === previousKey)
+                : null;
+            const target = retained ?? specialties.value[0];
+            selectedSpecialtyId.value = specialtyKey(target);
+            await loadSelectedSpecialtyDetails(target);
+        }
     } catch (error) {
         specialties.value = [];
         pagination.value = null;
+        selectedSpecialtyId.value = null;
+        clearDetailPane();
         errors.value.push(messageFromUnknown(error, 'Unable to load specialties.'));
     } finally {
         listLoading.value = false;
-        loading.value = false;
         queueReady.value = true;
+        workspaceSyncLoading.value = false;
     }
 }
 
@@ -624,20 +694,15 @@ function nextAssignedStaffPage() {
     void loadAssignedStaff(selectedSpecialty.value, targetPage);
 }
 
-function selectSpecialty(specialty: ClinicalSpecialty) {
-    selectedSpecialtyId.value = specialtyKey(specialty);
-    assignedStaffPage.value = 1;
-    if (canReadStaffSpecialties.value) {
-        void loadAssignedStaff(specialty, 1);
-    } else {
-        resetAssignedStaffPane();
-    }
-    if (canViewAudit.value) {
-        void loadAudit(specialty);
-    } else {
-        auditSpecialty.value = specialty;
-        auditLogs.value = [];
-        auditError.value = null;
+async function selectSpecialty(specialty: ClinicalSpecialty) {
+    if (workspaceSyncLoading.value) return;
+
+    workspaceSyncLoading.value = true;
+    try {
+        selectedSpecialtyId.value = specialtyKey(specialty);
+        await loadSelectedSpecialtyDetails(specialty);
+    } finally {
+        workspaceSyncLoading.value = false;
     }
 }
 
@@ -702,6 +767,15 @@ const assignmentPrimaryOptions = computed(() => {
     return assignmentCatalog.value.filter((specialty) => selected.has(String(specialty.id ?? '')));
 });
 
+/** Radix Select reserves empty string for clearing; use sentinel for "no primary". */
+const ASSIGNMENT_NO_PRIMARY = '__none__';
+const assignmentPrimarySelect = computed({
+    get: () => assignmentPrimaryId.value || ASSIGNMENT_NO_PRIMARY,
+    set: (value: string) => {
+        assignmentPrimaryId.value = value === ASSIGNMENT_NO_PRIMARY ? '' : value;
+    },
+});
+
 async function saveStaffAssignments() {
     const profileId = staffProfileId.value.trim();
     if (!profileId) {
@@ -764,40 +838,7 @@ const selectedSpecialty = computed(() => {
     return specialties.value.find((specialty) => specialtyKey(specialty) === key) ?? null;
 });
 
-watch(
-    specialties,
-    (rows) => {
-        if (rows.length === 0) {
-            selectedSpecialtyId.value = null;
-            auditSpecialty.value = null;
-            auditLogs.value = [];
-            auditError.value = null;
-            resetAssignedStaffPane();
-            return;
-        }
-
-        if (!selectedSpecialty.value) {
-            selectSpecialty(rows[0]);
-            return;
-        }
-
-        if (canReadStaffSpecialties.value) {
-            assignedStaffPage.value = 1;
-            void loadAssignedStaff(selectedSpecialty.value, 1);
-        } else {
-            resetAssignedStaffPane();
-        }
-
-        if (canViewAudit.value && specialtyKey(auditSpecialty.value) !== specialtyKey(selectedSpecialty.value)) {
-            void loadAudit(selectedSpecialty.value);
-        } else if (selectedSpecialty.value) {
-            auditSpecialty.value = selectedSpecialty.value;
-        }
-    },
-    { immediate: true },
-);
-
-watch(assignmentDialogOpen, (open) => {
+watch(assignmentSheetOpen, (open) => {
     if (open) {
         assignmentError.value = null;
         assignmentStaffError.value = null;
@@ -820,41 +861,79 @@ onMounted(refreshPage);
 </script>
 
 <template>
-    <Head title="Clinical Specialties" />
+    <Head title="Clinical Specialty Registry" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
 
-            <!-- Page header -->
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div class="min-w-0">
-                    <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <AppIcon name="activity" class="size-7 text-primary" />
-                        Clinical Specialty Registry
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">Review specialty catalog records and supporting audit activity.</p>
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div
+                            class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20"
+                            aria-hidden="true"
+                        >
+                            <AppIcon name="activity" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h1 class="text-base font-semibold tracking-tight md:text-lg">
+                                    Clinical Specialty Registry
+                                </h1>
+                                <Badge
+                                    v-if="specialtyCatalogReadOnly"
+                                    variant="outline"
+                                    class="h-5 px-1.5 text-[10px] font-medium"
+                                >
+                                    View only
+                                </Badge>
+                            </div>
+                            <p class="truncate text-xs text-muted-foreground">
+                                {{ workspaceIntroText }}
+                            </p>
+                            <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
+                                <span class="inline-flex items-center gap-1">
+                                    <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
+                                    <span class="font-medium text-foreground">
+                                        {{ scope?.facility?.name || 'No facility' }}
+                                    </span>
+                                </span>
+                                <span class="select-none text-border" aria-hidden="true">·</span>
+                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
+                                <template v-if="selectedSpecialty">
+                                    <span class="select-none text-border" aria-hidden="true">·</span>
+                                    <span>Viewing {{ specialtyLabel(selectedSpecialty) }}</span>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            :disabled="showRegistryWorkspaceLoading || assignmentCatalogLoading"
+                            @click="refreshPage"
+                        >
+                            <AppIcon name="refresh-cw" class="size-3.5" />
+                            Refresh
+                        </Button>
+                        <Button
+                            v-if="canReadStaffSpecialties || canManageStaffSpecialties"
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            @click="assignmentSheetOpen = true"
+                        >
+                            <AppIcon name="users" class="size-3.5" />
+                            Staff assignments
+                        </Button>
+                        <Button v-if="canCreate" size="sm" class="h-8 gap-1.5" @click="createDialogOpen = true">
+                            <AppIcon name="plus" class="size-3.5" />
+                            Create specialty
+                        </Button>
+                    </div>
                 </div>
-                <div class="flex flex-shrink-0 items-center gap-2">
-                    <Button variant="outline" size="sm" :disabled="listLoading || assignmentCatalogLoading" class="gap-1.5" @click="refreshPage">
-                        <AppIcon name="activity" class="size-3.5" />
-                        {{ listLoading || assignmentCatalogLoading ? 'Refreshing...' : 'Refresh' }}
-                    </Button>
-                    <Button v-if="canReadStaffSpecialties || canManageStaffSpecialties" variant="outline" size="sm" class="gap-1.5" @click="assignmentDialogOpen = true">
-                        <AppIcon name="users" class="size-3.5" />
-                        Staff assignments
-                    </Button>
-                    <Button v-if="canCreate" size="sm" class="gap-1.5" @click="createDialogOpen = true">
-                        <AppIcon name="plus" class="size-3.5" />
-                        Create specialty
-                    </Button>
-                </div>
-            </div>
-
-            <Alert v-if="specialtyCatalogReadOnly || staffAssignmentReadOnly" variant="default">
-                <AlertTitle>Read-only access</AlertTitle>
-                <AlertDescription>
-                    This registry is available in read-only mode for your role. Create, update, status, or assignment changes remain hidden until the matching manage permissions are granted.
-                </AlertDescription>
-            </Alert>
+            </section>
 
             <Alert v-if="actionMessage">
                 <AlertTitle>Recent action</AlertTitle>
@@ -868,184 +947,281 @@ onMounted(refreshPage);
                 </AlertDescription>
             </Alert>
 
-            <div class="flex min-w-0 flex-col gap-4">
+            <div class="min-w-0 space-y-3">
                 <template v-if="canRead">
-                    <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sidebar-border/70 bg-card px-4 py-3 shadow-sm">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <Button size="sm" :variant="!filters.status ? 'default' : 'outline'" @click="filters.status = ''; search()">All</Button>
-                            <Button size="sm" :variant="filters.status === 'active' ? 'default' : 'outline'" @click="filters.status = 'active'; search()">Active</Button>
-                            <Button size="sm" :variant="filters.status === 'inactive' ? 'default' : 'outline'" @click="filters.status = 'inactive'; search()">Inactive</Button>
-                        </div>
-                        <div class="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                            <span>{{ pagination?.total ?? specialties.length }} specialties</span>
-                            <span>{{ specialtyListSummaryText }}</span>
-                            <Button v-if="specialtyFilterCount > 0" variant="ghost" size="sm" class="gap-1.5" @click="clearSearch">Reset</Button>
-                        </div>
-                    </div>
-
-                    <div class="grid min-w-0 gap-4 xl:grid-cols-[minmax(20rem,26rem)_minmax(0,1fr)] xl:items-stretch">
-                        <Card class="flex h-full min-h-0 flex-col rounded-lg border-sidebar-border/70">
-                            <CardHeader class="gap-3 border-b pb-3">
+                    <div class="grid gap-4 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,34rem)_minmax(0,1fr)] lg:items-stretch">
+                        <Card class="flex h-full min-h-0 flex-1 flex-col gap-0 rounded-lg border-sidebar-border/70 py-0 lg:self-stretch">
+                            <CardHeader class="shrink-0 border-b bg-card px-4 py-3">
                                 <div class="flex flex-col gap-3">
-                                    <div class="min-w-0 space-y-1">
-                                        <CardTitle class="flex items-center gap-2 text-base">
-                                            <AppIcon name="layout-list" class="size-4.5 text-muted-foreground" />
-                                            Select specialty
-                                        </CardTitle>
-                                        <CardDescription>
-                                            {{ specialties.length }} records on this page | Page {{ pagination?.currentPage ?? 1 }} of {{ pagination?.lastPage ?? 1 }}
-                                        </CardDescription>
-                                    </div>
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                        <div class="relative min-w-0 flex-1">
-                                            <AppIcon name="search" class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                                            <Input
-                                                v-model="filters.q"
-                                                placeholder="Search code, name, or description"
-                                                class="h-9 pl-9"
-                                                @keyup.enter="search"
-                                            />
+                                    <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                                        <div class="min-w-0 space-y-1">
+                                            <CardTitle class="flex items-center gap-2 text-sm">
+                                                <AppIcon name="layout-list" class="size-4 text-muted-foreground" />
+                                                Specialty queue
+                                            </CardTitle>
+                                            <Skeleton v-if="showRegistryWorkspaceLoading" class="h-3 w-52 max-w-full" />
+                                            <p v-else class="text-xs text-muted-foreground">
+                                                {{ specialtyListSummaryText }}
+                                            </p>
                                         </div>
-                                        <Popover>
-                                            <PopoverTrigger as-child>
-                                                <Button variant="outline" size="sm" class="gap-1.5">
-                                                    <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                                    Queue options
-                                                    <Badge v-if="specialtyFilterCount > 0" variant="secondary" class="ml-1 text-[10px]">{{ specialtyFilterCount }}</Badge>
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent align="end" class="w-[16rem] rounded-lg p-0">
-                                                <div class="space-y-3 border-b px-4 py-3">
-                                                    <p class="flex items-center gap-2 text-sm font-medium">
-                                                        <AppIcon name="sliders-horizontal" class="size-4 text-muted-foreground" />
-                                                        Queue options
-                                                    </p>
-                                                    <div class="grid gap-2">
-                                                        <Label for="specialty-status-popover">Status</Label>
-                                                        <Select v-model="filters.status">
-                                                            <SelectTrigger class="w-full">
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                            <SelectItem value="">All</SelectItem>
-                                                            <SelectItem value="active">Active</SelectItem>
-                                                            <SelectItem value="inactive">Inactive</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div class="grid gap-2">
-                                                        <Label for="specialty-per-page-popover">Per page</Label>
-                                                        <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event)">
-                                                            <SelectTrigger class="w-full">
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                            <SelectItem value="20">20</SelectItem>
-                                                            <SelectItem value="50">50</SelectItem>
-                                                            <SelectItem value="100">100</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                </div>
-                                                <div class="flex flex-wrap items-center justify-between gap-2 bg-muted/30 px-4 py-3">
-                                                    <Button variant="outline" size="sm" @click="clearSearch">Reset</Button>
-                                                    <Button size="sm" class="gap-1.5" :disabled="listLoading" @click="search">
-                                                        <AppIcon name="search" class="size-3.5" />
-                                                        Search
+                                        <Skeleton v-if="showRegistryWorkspaceLoading" class="h-5 w-14 rounded-lg" />
+                                        <Badge v-else variant="outline" class="w-fit rounded-lg text-[10px]">
+                                            {{ specialtyQueueTotalCount }} total
+                                        </Badge>
+                                    </div>
+
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                        <SearchInput
+                                            id="specialty-registry-search"
+                                            v-model="filters.q"
+                                            placeholder="Search code, name, or description…"
+                                            class="sm:flex-1"
+                                            @keyup.enter="search"
+                                        />
+                                        <div class="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
+                                            <Select
+                                                :model-value="filters.status || 'all'"
+                                                @update:model-value="(value) => updateSpecialtyQueueStatus(value)"
+                                            >
+                                                <SelectTrigger class="h-9 w-full sm:w-36">
+                                                    <SelectValue placeholder="All status" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="active">Active</SelectItem>
+                                                    <SelectItem value="inactive">Inactive</SelectItem>
+                                                    <SelectItem value="all">All status</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <Popover>
+                                                <PopoverTrigger as-child>
+                                                    <Button variant="outline" size="sm" class="h-9 gap-1.5">
+                                                        <AppIcon name="sliders-horizontal" class="size-3.5" />
+                                                        Options
                                                     </Button>
-                                                </div>
-                                            </PopoverContent>
-                                        </Popover>
+                                                </PopoverTrigger>
+                                                <PopoverContent align="end" class="w-72">
+                                                    <div class="grid gap-3">
+                                                        <p class="flex items-center gap-2 text-sm font-medium">
+                                                            <AppIcon name="sliders-horizontal" class="size-4 text-muted-foreground" />
+                                                            Queue options
+                                                        </p>
+                                                        <p class="text-xs text-muted-foreground">
+                                                            Filter the specialty catalog and adjust how the queue reads during review.
+                                                        </p>
+                                                        <div class="grid gap-2">
+                                                            <Label for="specialty-per-page-popover">Rows per page</Label>
+                                                            <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event)">
+                                                                <SelectTrigger class="w-full">
+                                                                    <SelectValue />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    <SelectItem value="20">20</SelectItem>
+                                                                    <SelectItem value="50">50</SelectItem>
+                                                                    <SelectItem value="100">100</SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                        <div class="flex items-center justify-between gap-2">
+                                                            <Button size="sm" variant="outline" @click="clearSearch">Reset</Button>
+                                                            <Button size="sm" :disabled="listLoading" @click="search">Apply</Button>
+                                                        </div>
+                                                    </div>
+                                                </PopoverContent>
+                                            </Popover>
+                                            <Button
+                                                v-if="specialtyFilterCount > 0"
+                                                variant="ghost"
+                                                size="sm"
+                                                class="text-xs"
+                                                @click="clearSearch"
+                                            >
+                                                Reset
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        v-if="showRegistryWorkspaceLoading"
+                                        class="grid grid-cols-3 gap-2 rounded-lg border bg-muted/15 p-2"
+                                    >
+                                        <div v-for="index in 3" :key="`specialty-queue-stat-skeleton-${index}`" class="space-y-1.5 text-center">
+                                            <Skeleton class="mx-auto h-5 w-8" />
+                                            <Skeleton class="mx-auto h-2.5 w-12" />
+                                        </div>
+                                    </div>
+                                    <div v-else class="grid grid-cols-3 gap-2 rounded-lg border bg-muted/15 p-2 text-center">
+                                        <div>
+                                            <p class="text-sm font-semibold tabular-nums">{{ visibleStatusCounts.active }}</p>
+                                            <p class="text-[10px] uppercase tracking-wide text-muted-foreground">Active</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-sm font-semibold tabular-nums text-rose-600">{{ visibleStatusCounts.inactive }}</p>
+                                            <p class="text-[10px] uppercase tracking-wide text-muted-foreground">Inactive</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-sm font-semibold tabular-nums text-muted-foreground">{{ visibleStatusCounts.other }}</p>
+                                            <p class="text-[10px] uppercase tracking-wide text-muted-foreground">Other</p>
+                                        </div>
                                     </div>
                                 </div>
                             </CardHeader>
-                            <CardContent class="flex flex-1 flex-col p-0">
-                                <div v-if="!queueReady || specialties.length > 0" class="hidden border-b bg-muted/30 px-4 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground md:grid md:grid-cols-[minmax(0,2.2fr)_minmax(0,0.85fr)_minmax(0,auto)] md:items-center md:gap-2.5">
-                                    <span>Specialty</span>
-                                    <span>Status</span>
-                                    <span class="text-right">Actions</span>
-                                </div>
-                                <div v-if="!queueReady" class="divide-y">
-                                    <div v-for="index in 6" :key="'specialty-skeleton-' + index" class="grid items-center gap-2.5 px-4 py-2 md:grid-cols-[minmax(0,2.2fr)_minmax(0,0.85fr)_minmax(0,auto)]">
-                                        <div class="min-w-0">
-                                            <Skeleton class="h-4 w-full max-w-[18rem]" />
-                                        </div>
-                                        <div class="hidden md:flex items-center gap-2">
-                                            <Skeleton class="h-5 w-16 rounded-full" />
-                                        </div>
-                                        <div class="flex items-center justify-end gap-2">
-                                            <Skeleton class="hidden h-8 w-16 rounded-md lg:block" />
-                                            <Skeleton class="h-8 w-8 rounded-md lg:hidden" />
-                                        </div>
-                                        <div class="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground md:hidden">
-                                            <Skeleton class="h-5 w-16 rounded-full" />
-                                        </div>
-                                    </div>
-                                </div>
-                                <div v-else-if="specialties.length === 0" class="px-4 py-6">
-                                    <div class="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                                        No specialties found for the current queue options.
-                                    </div>
-                                </div>
-                                <div v-else class="divide-y">
+
+                            <CardContent class="flex flex-1 flex-col px-3 pb-0 pt-3">
+                                <div v-if="showRegistryWorkspaceLoading" class="space-y-2 pb-3">
                                     <div
+                                        v-for="index in 6"
+                                        :key="`specialty-queue-skeleton-${index}`"
+                                        class="flex w-full items-center gap-3 rounded-lg border border-border/70 bg-background px-3 py-2.5"
+                                    >
+                                        <Skeleton class="size-2 shrink-0 rounded-full" />
+                                        <div class="min-w-0 flex-1 space-y-1.5">
+                                            <Skeleton class="h-3.5 w-44 max-w-[90%]" />
+                                            <Skeleton class="h-3 w-full max-w-[22rem]" />
+                                        </div>
+                                        <Skeleton class="size-4 shrink-0 rounded-sm" />
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-else-if="queueReady && specialties.length === 0"
+                                    class="flex min-h-[12rem] flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center"
+                                >
+                                    <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                                        <AppIcon name="activity" class="size-6 text-muted-foreground" />
+                                    </div>
+                                    <p class="text-sm font-medium">No specialties found</p>
+                                    <p class="mt-1 max-w-sm text-xs text-muted-foreground">
+                                        Try adjusting your search or filters to find a specialty record.
+                                    </p>
+                                </div>
+
+                                <div v-else class="space-y-2 pb-3">
+                                    <button
                                         v-for="specialty in specialties"
                                         :key="specialtyKey(specialty)"
-                                        class="group grid items-center gap-2.5 border-l-2 px-4 py-2 transition-colors hover:bg-muted/30 md:grid-cols-[minmax(0,2.2fr)_minmax(0,0.85fr)_minmax(0,auto)]"
-                                        :class="specialtyKey(selectedSpecialty) === specialtyKey(specialty) ? 'border-primary bg-primary/5' : 'border-transparent'"
+                                        type="button"
+                                        class="group flex w-full items-center gap-3 rounded-lg border border-border/70 bg-background px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-muted/30"
+                                        :class="specialtyKey(selectedSpecialty) === specialtyKey(specialty) ? 'border-primary/50 bg-primary/5 shadow-sm' : ''"
+                                        @click="selectSpecialty(specialty)"
                                     >
-                                        <div class="min-w-0">
-                                            <button class="truncate text-left text-sm font-medium hover:text-primary hover:underline" @click="selectSpecialty(specialty)">
-                                                {{ specialtyLabel(specialty) }}
-                                            </button>
+                                        <span
+                                            class="size-2 shrink-0 rounded-full"
+                                            :class="specialtyStatusDotClass(specialty.status)"
+                                            :title="specialty.status || 'unknown'"
+                                        />
+                                        <div class="min-w-0 flex-1 space-y-0.5">
+                                            <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                                <span class="truncate text-sm font-medium transition-colors group-hover:text-primary">
+                                                    {{ specialtyLabel(specialty) }}
+                                                </span>
+                                                <Badge
+                                                    :variant="statusVariant(specialty.status)"
+                                                    class="h-5 px-1.5 text-[10px] leading-none"
+                                                >
+                                                    {{ specialty.status || 'unknown' }}
+                                                </Badge>
+                                            </div>
+                                            <p class="truncate text-xs text-muted-foreground">
+                                                {{ specialty.description || 'No description recorded' }}
+                                            </p>
                                         </div>
-                                        <div class="hidden items-center gap-2 md:flex">
-                                            <Badge :variant="statusVariant(specialty.status)" class="text-[10px] leading-none">{{ specialty.status || 'unknown' }}</Badge>
-                                        </div>
-                                        <div class="flex items-center justify-end gap-2">
-                                            <Button variant="ghost" size="sm" class="hidden lg:inline-flex" @click="selectSpecialty(specialty)">
-                                                <AppIcon name="eye" class="size-3.5" />
-                                                Open
-                                            </Button>
-                                            <Button variant="ghost" size="icon-sm" class="lg:hidden" @click="selectSpecialty(specialty)">
-                                                <AppIcon name="eye" class="size-4" />
-                                                <span class="sr-only">Open specialty details</span>
-                                            </Button>
-                                        </div>
-                                        <div class="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground md:hidden">
-                                            <Badge :variant="statusVariant(specialty.status)" class="text-[10px] leading-none">{{ specialty.status || 'unknown' }}</Badge>
-                                        </div>
-                                    </div>
+                                        <AppIcon
+                                            name="chevron-right"
+                                            class="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
+                                        />
+                                    </button>
                                 </div>
-                                <footer class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-4 py-3">
+
+                                <footer v-if="pagination && !showRegistryWorkspaceLoading" class="flex shrink-0 flex-col gap-2 border-t bg-muted/20 px-3 py-3">
                                     <p class="text-xs text-muted-foreground">
-                                        Showing {{ specialties.length }} of {{ pagination?.total ?? specialties.length }} results | Page {{ pagination?.currentPage ?? 1 }} of {{ pagination?.lastPage ?? 1 }}
+                                        Showing {{ specialties.length }} on page · {{ specialtyQueueTotalCount }} total · Page {{ pagination.currentPage }} of {{ pagination.lastPage }}
                                     </p>
-                                    <div v-if="(pagination?.lastPage ?? 1) > 1" class="flex items-center gap-2">
-                                        <Button variant="outline" size="sm" :disabled="listLoading || (pagination?.currentPage ?? 1) <= 1" @click="prevPage">Previous</Button>
-                                        <Button variant="outline" size="sm" :disabled="listLoading || !pagination || pagination.currentPage >= pagination.lastPage" @click="nextPage">Next</Button>
+                                    <div v-if="pagination.lastPage > 1" class="flex flex-wrap items-center justify-between gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            class="h-7 gap-1.5 text-xs"
+                                            :disabled="listLoading || pagination.currentPage <= 1"
+                                            @click="prevPage"
+                                        >
+                                            <AppIcon name="chevron-left" class="size-3" />
+                                            Prev
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            class="h-7 gap-1.5 text-xs"
+                                            :disabled="listLoading || pagination.currentPage >= pagination.lastPage"
+                                            @click="nextPage"
+                                        >
+                                            Next
+                                            <AppIcon name="chevron-right" class="size-3" />
+                                        </Button>
                                     </div>
                                 </footer>
                             </CardContent>
                         </Card>
 
-                        <Card class="flex h-full min-h-0 flex-col rounded-lg border-sidebar-border/70">
-                            <template v-if="!queueReady">
-                                <CardHeader class="gap-3 border-b pb-3">
-                                    <Skeleton class="h-5 w-40" />
-                                    <Skeleton class="h-4 w-60" />
-                                </CardHeader>
-                                <CardContent class="space-y-4 p-4">
-                                    <div class="grid gap-3 sm:grid-cols-3">
-                                        <Skeleton class="h-20 rounded-lg" />
-                                        <Skeleton class="h-20 rounded-lg" />
-                                        <Skeleton class="h-20 rounded-lg" />
-                                    </div>
-                                    <Skeleton class="h-24 rounded-lg" />
-                                    <Skeleton class="h-36 rounded-lg" />
-                                </CardContent>
+                        <div class="flex min-h-0 flex-col gap-3 lg:h-full">
+                            <template v-if="showRegistryWorkspaceLoading">
+                                <Card class="overflow-hidden rounded-lg border-sidebar-border/70">
+                                    <CardHeader class="gap-3 border-b pb-4 pt-4">
+                                        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                            <div class="min-w-0 flex-1 space-y-2">
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <Skeleton class="h-5 w-24 rounded-full" />
+                                                    <Skeleton class="h-5 w-28 rounded-full" />
+                                                </div>
+                                                <Skeleton class="h-7 w-64 max-w-full" />
+                                                <Skeleton class="h-4 w-80 max-w-full" />
+                                                <Skeleton class="h-4 w-52 max-w-[85%]" />
+                                            </div>
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <Skeleton class="h-8 w-24 rounded-md" />
+                                                <Skeleton class="h-8 w-28 rounded-md" />
+                                                <Skeleton class="h-8 w-20 rounded-md" />
+                                            </div>
+                                        </div>
+                                        <div class="grid gap-2 sm:grid-cols-3">
+                                            <div
+                                                v-for="index in 3"
+                                                :key="`specialty-detail-metric-skeleton-${index}`"
+                                                class="rounded-lg border bg-muted/15 px-3 py-2"
+                                            >
+                                                <Skeleton class="h-3 w-20" />
+                                                <Skeleton class="mt-2 h-5 w-24" />
+                                            </div>
+                                        </div>
+                                    </CardHeader>
+                                </Card>
+                                <Card class="rounded-lg border-sidebar-border/70">
+                                    <CardContent class="space-y-4 p-4">
+                                        <Skeleton class="h-24 w-full rounded-lg" />
+                                        <div class="space-y-3">
+                                            <div
+                                                v-for="index in 2"
+                                                :key="`specialty-assigned-skeleton-${index}`"
+                                                class="flex items-start gap-3 rounded-lg border px-3 py-3"
+                                            >
+                                                <Skeleton class="h-8 w-8 rounded-full" />
+                                                <div class="min-w-0 flex-1 space-y-2">
+                                                    <Skeleton class="h-3.5 w-36" />
+                                                    <Skeleton class="h-3 w-48" />
+                                                    <Skeleton class="h-3 w-40" />
+                                                </div>
+                                                <Skeleton class="h-5 w-14 rounded-full" />
+                                            </div>
+                                        </div>
+                                        <div class="space-y-2">
+                                            <Skeleton v-for="index in 3" :key="`specialty-audit-skeleton-${index}`" class="h-10 w-full rounded-lg" />
+                                        </div>
+                                    </CardContent>
+                                </Card>
                             </template>
-                            <template v-else-if="selectedSpecialty">
+
+                            <template v-else>
+                        <Card class="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border-sidebar-border/70">
+                            <template v-if="selectedSpecialty">
                                 <CardHeader class="gap-4 border-b pb-4">
                                     <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                                         <div class="min-w-0 space-y-1">
@@ -1120,7 +1296,7 @@ onMounted(refreshPage);
                                                     variant="outline"
                                                     size="sm"
                                                     class="gap-1.5"
-                                                    @click="assignmentDialogOpen = true"
+                                                    @click="assignmentSheetOpen = true"
                                                 >
                                                     <AppIcon name="users" class="size-3.5" />
                                                     Manage assignments
@@ -1130,7 +1306,7 @@ onMounted(refreshPage);
                                         <div v-if="!canReadStaffSpecialties" class="mt-4 rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
                                             Request <code>staff.specialties.read</code> permission to review assigned staff.
                                         </div>
-                                        <div v-else-if="assignedStaffLoading" class="mt-4 space-y-2">
+                                        <div v-else-if="assignedStaffLoading && !showRegistryWorkspaceLoading" class="mt-4 space-y-2">
                                             <div class="flex items-start gap-3 rounded-lg border bg-muted/10 px-3 py-3">
                                                 <Skeleton class="h-8 w-8 rounded-full" />
                                                 <div class="min-w-0 flex-1 space-y-2">
@@ -1199,7 +1375,7 @@ onMounted(refreshPage);
                                         <div v-if="!canViewAudit" class="mt-4 rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
                                             Audit history is hidden for your role.
                                         </div>
-                                        <div v-else-if="auditLoading && specialtyKey(auditSpecialty) === specialtyKey(selectedSpecialty)" class="mt-4 space-y-2">
+                                        <div v-else-if="auditLoading && !showRegistryWorkspaceLoading && specialtyKey(auditSpecialty) === specialtyKey(selectedSpecialty)" class="mt-4 space-y-2">
                                             <Skeleton class="h-10 w-full" />
                                             <Skeleton class="h-10 w-full" />
                                             <Skeleton class="h-10 w-full" />
@@ -1233,6 +1409,8 @@ onMounted(refreshPage);
                                 </CardContent>
                             </template>
                         </Card>
+                            </template>
+                        </div>
                     </div>
                 </template>
                 <Card v-else class="rounded-lg border-sidebar-border/70">
@@ -1286,221 +1464,278 @@ onMounted(refreshPage);
                     </DialogContent>
                 </Dialog>
 
-                <Dialog :open="assignmentDialogOpen" @update:open="(open) => (assignmentDialogOpen = open)">
-                    <DialogContent variant="workspace" size="6xl" class="max-h-[88vh]">
-                        <DialogHeader class="border-b px-6 py-4">
-                            <DialogTitle>Staff Specialty Assignment</DialogTitle>
-                            <DialogDescription>Search staff, review their specialty assignments, and update the primary specialty from one focused workspace.</DialogDescription>
-                        </DialogHeader>
-                        <div class="grid min-h-0 min-w-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                            <div class="flex min-h-0 flex-col border-b lg:border-b-0 lg:border-r">
-                                <div class="space-y-3 border-b px-4 py-4">
-                                    <div class="space-y-1">
-                                        <h3 class="text-sm font-medium">Select staff</h3>
-                                        <p class="text-xs text-muted-foreground">Find the staff profile you want to review or update.</p>
+                <Sheet :open="assignmentSheetOpen" @update:open="(open) => (assignmentSheetOpen = open)">
+                    <SheetContent side="right" variant="workspace" size="5xl" class="flex h-full min-h-0 flex-col">
+                        <SheetHeader class="shrink-0 border-b bg-background px-4 py-3 text-left pr-12">
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div class="min-w-0 space-y-1">
+                                    <SheetTitle class="flex min-w-0 items-center gap-2 text-lg">
+                                        <AppIcon name="users" class="size-5 shrink-0 text-primary" />
+                                        Staff Specialty Assignment
+                                    </SheetTitle>
+                                    <SheetDescription class="text-sm">
+                                        Search staff, review specialty coverage, and set the primary specialty for the selected profile.
+                                    </SheetDescription>
+                                </div>
+                                <div v-if="assignmentSelectedStaff" class="flex flex-wrap items-center gap-2 sm:justify-end">
+                                    <Badge :variant="staffStatusVariant(assignmentSelectedStaff.status)" class="rounded-md capitalize">
+                                        {{ assignmentSelectedStaff.status || 'unknown' }}
+                                    </Badge>
+                                    <Badge :variant="staffVerificationVariant(assignmentSelectedStaff)" class="rounded-md">
+                                        {{ staffProfileVerificationLabel(assignmentSelectedStaff) }}
+                                    </Badge>
+                                </div>
+                            </div>
+                        </SheetHeader>
+
+                        <div v-if="assignmentSelectedStaff" class="shrink-0 border-b bg-muted/5 px-4 py-3">
+                            <div class="grid gap-2 md:grid-cols-2">
+                                <div class="min-w-0 rounded-lg border bg-background/70 px-3 py-2">
+                                    <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Staff</p>
+                                    <p class="mt-0.5 truncate text-sm font-semibold leading-4">
+                                        {{ staffProfileLabel(assignmentSelectedStaff) }}
+                                    </p>
+                                    <p class="truncate text-xs leading-4 text-muted-foreground">
+                                        {{ staffProfileMeta(assignmentSelectedStaff) }}
+                                    </p>
+                                </div>
+                                <div class="min-w-0 rounded-lg border bg-background/70 px-3 py-2">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Assignments</p>
+                                        <Badge variant="secondary">{{ assignmentSelectedIds.length }} selected</Badge>
                                     </div>
-                                    <div class="flex gap-2">
-                                        <div class="relative min-w-0 flex-1">
-                                            <AppIcon name="search" class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                                            <Input
+                                    <p class="mt-0.5 truncate text-sm font-semibold leading-4">
+                                        {{ assignmentPrimaryId ? specialtyLabel(assignmentPrimaryOptions.find((row) => String(row.id) === assignmentPrimaryId) ?? null) : 'No primary specialty' }}
+                                    </p>
+                                    <p class="truncate text-xs leading-4 text-muted-foreground">
+                                        {{ assignmentCatalog.length }} active specialties in catalog
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex min-h-0 flex-1 overflow-hidden">
+                            <div class="grid h-full min-h-0 w-full grid-cols-1 lg:grid-cols-2">
+                                <div class="flex min-h-0 flex-col border-b lg:border-b-0 lg:border-r">
+                                    <div class="shrink-0 space-y-3 border-b bg-muted/10 px-4 py-3">
+                                        <div class="space-y-1">
+                                            <p class="text-sm font-medium">Select staff</p>
+                                            <p class="text-xs text-muted-foreground">Find the staff profile you want to review or update.</p>
+                                        </div>
+                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                            <SearchInput
+                                                id="assignment-staff-search"
                                                 v-model="assignmentStaffQuery"
-                                                class="h-9 pl-9"
-                                                placeholder="Search name, email, title, or department"
+                                                placeholder="Search name, email, title, or department…"
+                                                class="sm:flex-1"
                                                 @keyup.enter="loadAssignmentStaffProfiles"
                                             />
-                                        </div>
-                                        <Button size="sm" class="gap-1.5" :disabled="assignmentStaffLoading || !canReadStaffDirectory" @click="loadAssignmentStaffProfiles">
-                                            <AppIcon name="search" class="size-3.5" />
-                                            {{ assignmentStaffLoading ? 'Searching...' : 'Search' }}
-                                        </Button>
-                                    </div>
-                                </div>
-                                <div class="min-h-0 flex-1">
-                                    <div v-if="assignmentStaffLoading && !assignmentStaffReady" class="space-y-2 px-4 py-4">
-                                        <div v-for="index in 5" :key="'assignment-staff-skeleton-' + index" class="rounded-lg border px-3 py-3">
-                                            <Skeleton class="h-4 w-32" />
-                                            <Skeleton class="mt-2 h-3 w-full max-w-[12rem]" />
-                                            <div class="mt-3 flex items-center gap-2">
-                                                <Skeleton class="h-5 w-16 rounded-full" />
-                                                <Skeleton class="h-5 w-20 rounded-full" />
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <ScrollArea v-else class="h-full">
-                                        <div class="space-y-2 px-4 py-4">
-                                            <Alert v-if="assignmentStaffError" variant="destructive">
-                                                <AlertTitle>Staff lookup issue</AlertTitle>
-                                                <AlertDescription>{{ assignmentStaffError }}</AlertDescription>
-                                            </Alert>
-                                            <div v-else-if="!canReadStaffDirectory" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                                                Request <code>staff.read</code> permission to search staff profiles here.
-                                            </div>
-                                            <div v-else-if="assignmentStaffReady && assignmentStaffResults.length === 0" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                                                No staff profiles matched the current search.
-                                            </div>
-                                            <button
-                                                v-for="profile in assignmentStaffResults"
-                                                :key="profile.id"
-                                                type="button"
-                                                class="w-full rounded-lg border px-3 py-3 text-left transition-colors hover:bg-muted/40"
-                                                :class="assignmentSelectedStaff?.id === profile.id ? 'border-primary bg-primary/5' : 'border-border'"
-                                                @click="selectAssignmentStaff(profile)"
+                                            <Button
+                                                size="sm"
+                                                class="gap-1.5 sm:shrink-0"
+                                                :disabled="assignmentStaffLoading || !canReadStaffDirectory"
+                                                @click="loadAssignmentStaffProfiles"
                                             >
-                                                <div class="flex items-start gap-3">
-                                                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+                                                <AppIcon name="search" class="size-3.5" />
+                                                {{ assignmentStaffLoading ? 'Searching...' : 'Search' }}
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    <ScrollArea class="min-h-0 flex-1" viewport-class="pb-4">
+                                        <div class="space-y-2 px-4 py-4">
+                                            <div v-if="assignmentStaffLoading && !assignmentStaffReady" class="space-y-2">
+                                                <div
+                                                    v-for="index in 5"
+                                                    :key="`assignment-staff-skeleton-${index}`"
+                                                    class="rounded-lg border bg-background px-3 py-3"
+                                                >
+                                                    <Skeleton class="h-4 w-32" />
+                                                    <Skeleton class="mt-2 h-3 w-full max-w-[12rem]" />
+                                                    <div class="mt-3 flex items-center gap-2">
+                                                        <Skeleton class="h-5 w-16 rounded-full" />
+                                                        <Skeleton class="h-5 w-20 rounded-full" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <template v-else>
+                                                <Alert v-if="assignmentStaffError" variant="destructive">
+                                                    <AlertTitle>Staff lookup issue</AlertTitle>
+                                                    <AlertDescription>{{ assignmentStaffError }}</AlertDescription>
+                                                </Alert>
+                                                <div
+                                                    v-else-if="!canReadStaffDirectory"
+                                                    class="rounded-lg border border-dashed bg-muted/10 p-4 text-sm text-muted-foreground"
+                                                >
+                                                    Request <code>staff.read</code> permission to search staff profiles here.
+                                                </div>
+                                                <div
+                                                    v-else-if="assignmentStaffReady && assignmentStaffResults.length === 0"
+                                                    class="rounded-lg border border-dashed bg-muted/10 p-4 text-sm text-muted-foreground"
+                                                >
+                                                    No staff profiles matched the current search.
+                                                </div>
+                                                <button
+                                                    v-for="profile in assignmentStaffResults"
+                                                    :key="profile.id"
+                                                    type="button"
+                                                    class="flex w-full items-center gap-3 rounded-lg border border-border/70 bg-background px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-muted/30"
+                                                    :class="assignmentSelectedStaff?.id === profile.id ? 'border-primary/50 bg-primary/5 shadow-sm' : ''"
+                                                    @click="selectAssignmentStaff(profile)"
+                                                >
+                                                    <div
+                                                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary"
+                                                    >
                                                         {{ staffProfileInitials(profile) }}
                                                     </div>
-                                                    <div class="min-w-0 flex-1">
-                                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                                            <div class="min-w-0">
-                                                                <p class="truncate text-sm font-medium">{{ staffProfileLabel(profile) }}</p>
-                                                                <p class="truncate text-xs text-muted-foreground">{{ staffProfileMeta(profile) }}</p>
-                                                            </div>
-                                                            <Badge :variant="staffStatusVariant(profile.status)" class="text-[10px] leading-none">
+                                                    <div class="min-w-0 flex-1 space-y-0.5">
+                                                        <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                                            <span class="truncate text-sm font-medium">{{ staffProfileLabel(profile) }}</span>
+                                                            <Badge
+                                                                :variant="staffStatusVariant(profile.status)"
+                                                                class="h-5 px-1.5 text-[10px] leading-none"
+                                                            >
                                                                 {{ profile.status || 'unknown' }}
                                                             </Badge>
                                                         </div>
-                                                        <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                                                            <span class="truncate">{{ staffProfileContact(profile) }}</span>
-                                                            <Badge :variant="staffVerificationVariant(profile)" class="text-[10px] leading-none">
-                                                                {{ staffProfileVerificationLabel(profile) }}
-                                                            </Badge>
-                                                        </div>
+                                                        <p class="truncate text-xs text-muted-foreground">{{ staffProfileMeta(profile) }}</p>
+                                                        <p class="truncate text-xs text-muted-foreground">{{ staffProfileContact(profile) }}</p>
                                                     </div>
-                                                </div>
-                                            </button>
+                                                    <AppIcon name="chevron-right" class="size-4 shrink-0 text-muted-foreground" />
+                                                </button>
+                                            </template>
                                         </div>
                                     </ScrollArea>
                                 </div>
-                            </div>
 
-                            <div class="flex min-h-0 min-w-0 flex-col">
-                                <div class="space-y-3 border-b px-4 py-4">
-                                    <div v-if="assignmentSelectedStaff" class="flex items-start gap-3">
-                                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                                            {{ staffProfileInitials(assignmentSelectedStaff) }}
-                                        </div>
-                                        <div class="min-w-0 flex-1 space-y-1">
-                                            <div class="flex flex-wrap items-center gap-2">
-                                                <h3 class="truncate text-sm font-medium">{{ staffProfileLabel(assignmentSelectedStaff) }}</h3>
-                                                <Badge :variant="staffStatusVariant(assignmentSelectedStaff.status)" class="text-[10px] leading-none">
-                                                    {{ assignmentSelectedStaff.status || 'unknown' }}
-                                                </Badge>
-                                                <Badge :variant="staffVerificationVariant(assignmentSelectedStaff)" class="text-[10px] leading-none">
-                                                    {{ staffProfileVerificationLabel(assignmentSelectedStaff) }}
-                                                </Badge>
-                                            </div>
-                                            <p class="text-xs text-muted-foreground">{{ staffProfileMeta(assignmentSelectedStaff) }}</p>
-                                            <p class="text-xs text-muted-foreground">{{ staffProfileContact(assignmentSelectedStaff) }}</p>
-                                        </div>
-                                    </div>
-                                    <div v-else class="space-y-1">
-                                        <h3 class="text-sm font-medium">Specialty assignments</h3>
-                                        <p class="text-xs text-muted-foreground">Choose a staff profile from the left to review and update specialty coverage.</p>
-                                    </div>
-
-                                    <Alert v-if="staffAssignmentReadOnly" variant="default">
-                                        <AlertTitle>Assignment view only</AlertTitle>
-                                        <AlertDescription>
-                                            You can review staff specialty assignments here, but editing stays hidden until <code>staff.specialties.manage</code> is granted.
-                                        </AlertDescription>
-                                    </Alert>
-                                    <Alert v-if="assignmentCatalogError" variant="destructive">
-                                        <AlertTitle>Catalog issue</AlertTitle>
-                                        <AlertDescription>{{ assignmentCatalogError }}</AlertDescription>
-                                    </Alert>
-                                    <Alert v-if="assignmentError" variant="destructive">
-                                        <AlertTitle>Assignment issue</AlertTitle>
-                                        <AlertDescription>{{ assignmentError }}</AlertDescription>
-                                    </Alert>
-                                </div>
-
-                                <template v-if="assignmentSelectedStaff">
-                                    <div class="min-h-0 flex-1">
-                                        <div v-if="assignmentCatalogLoading || assignmentLoading" class="space-y-3 px-4 py-4">
-                                            <Skeleton class="h-5 w-40" />
-                                            <div v-for="index in 6" :key="'assignment-specialty-skeleton-' + index" class="rounded-lg border px-3 py-3">
-                                                <div class="flex items-center gap-3">
-                                                    <Skeleton class="h-4 w-4 rounded" />
-                                                    <div class="min-w-0 flex-1 space-y-2">
-                                                        <Skeleton class="h-4 w-40" />
-                                                        <Skeleton class="h-3 w-full max-w-[18rem]" />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <ScrollArea v-else class="h-full">
-                                            <div class="space-y-2 px-4 py-4">
-                                                <div v-if="assignmentCatalog.length === 0" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                                                    No active specialties are available for assignment right now.
-                                                </div>
-                                                <label
-                                                    v-for="specialty in assignmentCatalog"
-                                                    :key="`assign-${specialty.id}`"
-                                                    class="flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-3 transition-colors hover:bg-muted/40"
-                                                    :class="assignmentSelectedIds.includes(String(specialty.id ?? '')) ? 'border-primary/60 bg-primary/5' : 'border-border'"
-                                                >
-                                                    <Checkbox
-                                                        :model-value="assignmentSelectedIds.includes(String(specialty.id ?? ''))"
-                                                        :disabled="!canManageStaffSpecialties"
-                                                        class="mt-0.5"
-                                                        @update:model-value="toggleAssignmentSpecialty(String(specialty.id ?? ''), $event === true)"
-                                                    />
-                                                    <div class="min-w-0 flex-1">
-                                                        <p class="text-sm font-medium">{{ specialtyLabel(specialty) }}</p>
-                                                        <p class="mt-1 text-xs text-muted-foreground">{{ specialty.description || 'No specialty description recorded.' }}</p>
-                                                    </div>
-                                                </label>
-                                            </div>
-                                        </ScrollArea>
-                                    </div>
-
-                                    <div class="border-t px-4 py-4">
-                                        <div class="grid gap-2">
-                                            <Label for="primary-specialty-dialog">Primary Specialty</Label>
-                                            <Select v-model="assignmentPrimaryId">
-                                                <SelectTrigger :disabled="!canManageStaffSpecialties || assignmentSelectedIds.length === 0">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                <SelectItem value="">No primary</SelectItem>
-                                                <SelectItem
-                                                    v-for="specialty in assignmentPrimaryOptions"
-                                                    :key="`primary-${specialty.id}`"
-                                                    :value="String(specialty.id ?? '')"
-                                                >
-                                                    {{ specialtyLabel(specialty) }}
-                                                </SelectItem>
-                                                </SelectContent>
-                                            </Select>
+                                <div class="flex min-h-0 flex-col">
+                                    <div class="shrink-0 space-y-3 border-b bg-muted/10 px-4 py-3">
+                                        <div class="space-y-1">
+                                            <p class="text-sm font-medium">Specialty assignments</p>
                                             <p class="text-xs text-muted-foreground">
-                                                {{ assignmentSelectedIds.length }} specialties selected
-                                                <span v-if="assignmentPrimaryId"> | Primary set</span>
+                                                {{
+                                                    assignmentSelectedStaff
+                                                        ? 'Toggle specialties and choose the primary role for this staff member.'
+                                                        : 'Choose a staff profile from the left to review and update specialty coverage.'
+                                                }}
                                             </p>
                                         </div>
+                                        <Alert v-if="assignmentCatalogError" variant="destructive">
+                                            <AlertTitle>Catalog issue</AlertTitle>
+                                            <AlertDescription>{{ assignmentCatalogError }}</AlertDescription>
+                                        </Alert>
+                                        <Alert v-if="assignmentError" variant="destructive">
+                                            <AlertTitle>Assignment issue</AlertTitle>
+                                            <AlertDescription>{{ assignmentError }}</AlertDescription>
+                                        </Alert>
                                     </div>
-                                </template>
-                                <div v-else class="flex min-h-0 flex-1 items-center justify-center px-6 py-8">
-                                    <div class="max-w-sm text-center text-sm text-muted-foreground">
-                                        Search and select a staff profile to review specialty assignments and choose a primary specialty.
+
+                                    <template v-if="assignmentSelectedStaff">
+                                        <ScrollArea class="min-h-0 flex-1" viewport-class="pb-4">
+                                            <div class="space-y-2 px-4 py-4">
+                                                <div v-if="assignmentCatalogLoading || assignmentLoading" class="space-y-2">
+                                                    <Skeleton class="h-5 w-40" />
+                                                    <div
+                                                        v-for="index in 6"
+                                                        :key="`assignment-specialty-skeleton-${index}`"
+                                                        class="rounded-lg border bg-background px-3 py-3"
+                                                    >
+                                                        <div class="flex items-center gap-3">
+                                                            <Skeleton class="h-4 w-4 rounded" />
+                                                            <div class="min-w-0 flex-1 space-y-2">
+                                                                <Skeleton class="h-4 w-40" />
+                                                                <Skeleton class="h-3 w-full max-w-[18rem]" />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <template v-else>
+                                                    <div
+                                                        v-if="assignmentCatalog.length === 0"
+                                                        class="rounded-lg border border-dashed bg-muted/10 p-4 text-sm text-muted-foreground"
+                                                    >
+                                                        No active specialties are available for assignment right now.
+                                                    </div>
+                                                    <label
+                                                        v-for="specialty in assignmentCatalog"
+                                                        :key="`assign-${specialty.id}`"
+                                                        class="flex cursor-pointer items-start gap-3 rounded-lg border border-border/70 bg-background px-3 py-3 transition-colors hover:bg-muted/30"
+                                                        :class="assignmentSelectedIds.includes(String(specialty.id ?? '')) ? 'border-primary/50 bg-primary/5' : ''"
+                                                    >
+                                                        <Checkbox
+                                                            :model-value="assignmentSelectedIds.includes(String(specialty.id ?? ''))"
+                                                            :disabled="!canManageStaffSpecialties"
+                                                            class="mt-0.5"
+                                                            @update:model-value="toggleAssignmentSpecialty(String(specialty.id ?? ''), $event === true)"
+                                                        />
+                                                        <div class="min-w-0 flex-1">
+                                                            <p class="text-sm font-medium">{{ specialtyLabel(specialty) }}</p>
+                                                            <p class="mt-1 text-xs text-muted-foreground">
+                                                                {{ specialty.description || 'No specialty description recorded.' }}
+                                                            </p>
+                                                        </div>
+                                                    </label>
+                                                </template>
+                                            </div>
+                                        </ScrollArea>
+
+                                        <div class="shrink-0 border-t bg-background px-4 py-3">
+                                            <div class="grid gap-2">
+                                                <Label for="primary-specialty-sheet">Primary specialty</Label>
+                                                <Select v-model="assignmentPrimarySelect">
+                                                    <SelectTrigger
+                                                        class="w-full"
+                                                        :disabled="!canManageStaffSpecialties || assignmentSelectedIds.length === 0"
+                                                    >
+                                                        <SelectValue placeholder="Choose primary specialty" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem :value="ASSIGNMENT_NO_PRIMARY">No primary</SelectItem>
+                                                        <SelectItem
+                                                            v-for="specialty in assignmentPrimaryOptions"
+                                                            :key="`primary-${specialty.id}`"
+                                                            :value="String(specialty.id ?? '')"
+                                                        >
+                                                            {{ specialtyLabel(specialty) }}
+                                                        </SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                                <p class="text-xs text-muted-foreground">
+                                                    {{ assignmentSelectedIds.length }} specialties selected
+                                                    <span v-if="assignmentPrimaryId"> · Primary set</span>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <div
+                                        v-else
+                                        class="flex min-h-0 flex-1 items-center justify-center px-6 py-10"
+                                    >
+                                        <p class="max-w-sm text-center text-sm text-muted-foreground">
+                                            Search and select a staff profile to review specialty assignments and choose a primary specialty.
+                                        </p>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        <DialogFooter class="border-t px-6 py-4">
-                            <Button variant="outline" @click="assignmentDialogOpen = false">Close</Button>
+
+                        <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
+                            <Button type="button" variant="outline" :disabled="assignmentSaving" @click="assignmentSheetOpen = false">
+                                Cancel
+                            </Button>
                             <Button
                                 v-if="canManageStaffSpecialties"
+                                type="button"
                                 class="gap-1.5"
-                                :disabled="assignmentSaving || !canManageStaffSpecialties || !assignmentSelectedStaff"
+                                :disabled="assignmentSaving || !assignmentSelectedStaff"
                                 @click="saveStaffAssignments"
                             >
                                 <AppIcon name="check-circle" class="size-3.5" />
-                                {{ assignmentSaving ? 'Saving...' : 'Save Assignments' }}
+                                {{ assignmentSaving ? 'Saving...' : 'Save assignments' }}
                             </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                        </SheetFooter>
+                    </SheetContent>
+                </Sheet>
 
             <!-- Edit Specialty dialog -->
             <Dialog :open="editDialogOpen" @update:open="(open) => (open ? (editDialogOpen = true) : closeEdit())">

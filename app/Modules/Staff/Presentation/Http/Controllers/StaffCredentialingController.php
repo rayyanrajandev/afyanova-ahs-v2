@@ -13,13 +13,14 @@ use App\Modules\Staff\Application\UseCases\CreateStaffProfessionalRegistrationUs
 use App\Modules\Staff\Application\UseCases\CreateStaffRegulatoryProfileUseCase;
 use App\Modules\Staff\Application\UseCases\GetStaffCredentialingSummaryUseCase;
 use App\Modules\Staff\Application\UseCases\GetStaffProfessionalRegistrationUseCase;
-use App\Modules\Staff\Application\UseCases\GetStaffRegulatoryProfileUseCase;
 use App\Modules\Staff\Application\UseCases\ListStaffCredentialingAlertsUseCase;
 use App\Modules\Staff\Application\UseCases\ListStaffCredentialingAuditLogsUseCase;
 use App\Modules\Staff\Application\UseCases\ListStaffProfessionalRegistrationsUseCase;
 use App\Modules\Staff\Application\UseCases\UpdateStaffProfessionalRegistrationUseCase;
 use App\Modules\Staff\Application\UseCases\UpdateStaffProfessionalRegistrationVerificationUseCase;
 use App\Modules\Staff\Application\UseCases\UpdateStaffRegulatoryProfileUseCase;
+use App\Modules\Staff\Domain\Repositories\StaffProfileRepositoryInterface;
+use App\Modules\Staff\Domain\Repositories\StaffRegulatoryProfileRepositoryInterface;
 use App\Modules\Staff\Presentation\Http\Requests\StoreStaffProfessionalRegistrationRequest;
 use App\Modules\Staff\Presentation\Http\Requests\StoreStaffRegulatoryProfileRequest;
 use App\Modules\Staff\Presentation\Http\Requests\UpdateStaffProfessionalRegistrationRequest;
@@ -57,13 +58,18 @@ class StaffCredentialingController extends Controller
         ]);
     }
 
-    public function showRegulatoryProfile(string $id, GetStaffRegulatoryProfileUseCase $useCase): JsonResponse
+    public function showRegulatoryProfile(
+        string $id,
+        StaffProfileRepositoryInterface $staffProfileRepository,
+        StaffRegulatoryProfileRepositoryInterface $staffRegulatoryProfileRepository
+    ): JsonResponse
     {
-        $profile = $useCase->execute($id);
-        abort_if($profile === null, 404, 'Staff regulatory profile not found.');
+        abort_if($staffProfileRepository->findById($id) === null, 404, 'Staff profile not found.');
+
+        $profile = $staffRegulatoryProfileRepository->findByStaffProfileId($id);
 
         return response()->json([
-            'data' => StaffRegulatoryProfileResponseTransformer::transform($profile),
+            'data' => $profile === null ? null : StaffRegulatoryProfileResponseTransformer::transform($profile),
         ]);
     }
 

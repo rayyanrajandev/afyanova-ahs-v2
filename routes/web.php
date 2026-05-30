@@ -6,6 +6,7 @@ use App\Modules\InpatientWard\Presentation\Http\Controllers\InpatientWardDischar
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryWarehouseTransferDocumentController;
 use App\Modules\Encounter\Presentation\Http\Controllers\EncounterDocumentController;
 use App\Modules\MedicalRecord\Presentation\Http\Controllers\MedicalRecordDocumentController;
+use App\Modules\Platform\Application\UseCases\GetDashboardContextUseCase;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformBrandingController;
 use App\Modules\Pos\Presentation\Http\Controllers\PosRegisterSessionDocumentController;
 use App\Modules\Pos\Presentation\Http\Controllers\PosSaleDocumentController;
@@ -32,8 +33,10 @@ Route::get('/', function () {
     ]);
 })->name('home');
 
-Route::get('dashboard', function () {
-    return Inertia::render('Dashboard');
+Route::get('dashboard', function (GetDashboardContextUseCase $dashboardContext) {
+    return Inertia::render('Dashboard', [
+        'dashboardContext' => $dashboardContext->execute(request()->user()),
+    ]);
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::get('patients', function () {

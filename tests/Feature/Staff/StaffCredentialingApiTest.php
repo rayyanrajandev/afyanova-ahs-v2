@@ -360,6 +360,22 @@ it('treats clinical roles as credentialing-required even when license type inclu
         ->assertJsonPath('data.blockingReasons.0', 'No regulatory profile is recorded.');
 });
 
+it('returns an empty regulatory profile payload before the profile is created', function (): void {
+    $actor = makeStaffCredentialingActor([
+        'staff.credentialing.read',
+    ]);
+    $profile = makeStaffCredentialingProfile();
+
+    $this->actingAs($actor)
+        ->getJson('/api/v1/staff/'.$profile->id.'/credentialing/regulatory-profile')
+        ->assertOk()
+        ->assertJsonPath('data', null);
+
+    $this->actingAs($actor)
+        ->getJson('/api/v1/staff/'.Str::uuid()->toString().'/credentialing/regulatory-profile')
+        ->assertNotFound();
+});
+
 it('creates and updates regulatory profiles and writes audit logs', function (): void {
     $actor = makeStaffCredentialingActor([
         'staff.credentialing.read',

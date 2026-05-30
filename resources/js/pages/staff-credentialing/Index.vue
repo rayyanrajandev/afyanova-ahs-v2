@@ -2,15 +2,18 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import StaffGovernanceSetupChecklist from '@/components/staff/StaffGovernanceSetupChecklist.vue';
 import StaffProfileEditDialog from '@/components/staff/StaffProfileEditDialog.vue';
 import StaffProfileStatusDialog from '@/components/staff/StaffProfileStatusDialog.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import { Input, SearchInput } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -18,6 +21,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
+import {
+    credentialingStateFriendlyLabel,
+    credentialingStateFriendlyVariant,
+    useStaffGovernanceSetupSteps,
+} from '@/composables/useStaffGovernanceSetupSteps';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { csrfRequestHeaders } from '@/lib/csrf';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
@@ -27,14 +35,6 @@ type Pagination = { currentPage: number; perPage: number; total: number; lastPag
 type ValidationErrorResponse = { message?: string; errors?: Record<string, string[]> };
 type StaffQueuePosition = { page: number; position: number };
 type WorkspaceTab = 'summary' | 'regulatory' | 'registrations' | 'alerts' | 'audit';
-type WorkflowGuidanceAction = 'regulatory' | 'registration' | 'verify' | 'privileging' | null;
-type WorkflowGuidance = {
-    title: string;
-    description: string;
-    variant: 'default' | 'destructive';
-    action: WorkflowGuidanceAction;
-    actionLabel?: string | null;
-};
 
 type StaffProfile = {
     id: string;
@@ -139,12 +139,20 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Staff Credentialing', href: '/staff-credentialing' },
 ];
 
-const tabOptions: Array<{ value: WorkspaceTab; label: string }> = [
-    { value: 'summary', label: 'Summary' },
-    { value: 'regulatory', label: 'Regulatory Profile' },
-    { value: 'registrations', label: 'Registrations' },
-    { value: 'alerts', label: 'Alerts' },
-    { value: 'audit', label: 'Audit' },
+const tabHints: Record<WorkspaceTab, string> = {
+    summary: 'Overview and readiness',
+    regulatory: 'Council and cadre details',
+    registrations: 'Licenses and verification',
+    alerts: 'Watch items for this staff',
+    audit: 'Who changed what',
+};
+
+const tabOptions: Array<{ value: WorkspaceTab; label: string; shortLabel: string; icon: 'clipboard-list' | 'shield-check' | 'file-text' | 'alert-triangle' | 'activity' }> = [
+    { value: 'summary', label: 'Summary', shortLabel: 'Summary', icon: 'clipboard-list' },
+    { value: 'regulatory', label: 'Regulatory Profile', shortLabel: 'Regulatory', icon: 'shield-check' },
+    { value: 'registrations', label: 'Registrations', shortLabel: 'Registrations', icon: 'file-text' },
+    { value: 'alerts', label: 'Alerts', shortLabel: 'Alerts', icon: 'alert-triangle' },
+    { value: 'audit', label: 'Audit', shortLabel: 'Audit', icon: 'activity' },
 ];
 
 const regulatorOptions = ['mct', 'tnmc', 'hlpc', 'pc', 'other'];
@@ -163,6 +171,7 @@ const licenseStatusOptions = ['active', 'expired', 'suspended', 'revoked', 'pend
 const verificationStatusOptions = ['pending', 'verified', 'rejected'];
 const alertTypeOptions = ['missing_regulatory_profile', 'good_standing_risk', 'expired_license', 'expired_registration', 'verification_pending', 'due_soon'];
 const alertStateOptions = ['blocked', 'pending_verification', 'watch'];
+const ALL_SELECT_VALUE = '__all__';
 const clinicalRoleKeywords = [
     'doctor',
     'surgeon',
@@ -240,8 +249,6 @@ const canViewAudit = computed(() => auditPermission.value === 'allowed');
 const staffReadDenied = computed(() => staffReadPermission.value === 'denied');
 const credentialingReadDenied = computed(() => credentialingReadPermission.value === 'denied');
 const auditDenied = computed(() => auditPermission.value === 'denied');
-const showWorkspaceBootstrapSkeleton = computed(() => initialPageLoading.value && canReadStaff.value);
-
 function queryParam(name: string): string {
     if (typeof window === 'undefined') return '';
     return new URLSearchParams(window.location.search).get(name)?.trim() ?? '';
@@ -252,13 +259,13 @@ const requestedStaffId = queryParam('staffId');
 const activeTab = ref<WorkspaceTab>(tabOptions.some((tab) => tab.value === requestedTab) ? (requestedTab as WorkspaceTab) : 'summary');
 
 const staffQueueReady = ref(false);
+const workspaceSyncLoading = ref(false);
 const staffLoading = ref(true);
 const summaryLoading = ref(false);
 const profileLoading = ref(false);
 const registrationsLoading = ref(false);
 const alertsLoading = ref(false);
 const auditLoading = ref(false);
-const initialPageLoading = ref(true);
 const profileSaving = ref(false);
 const registrationSaving = ref(false);
 const verificationSaving = ref(false);
@@ -370,13 +377,87 @@ const staffFilterBadgeCount = computed(
         + Number(Boolean(staffFilters.perPage !== 12)),
 );
 const hasActiveStaffQueueFilters = computed(() => staffFilterBadgeCount.value > 0);
+const workspaceIntroText = computed(() => {
+    const total = staffQueueTotalCount.value;
+    return `${total} staff profiles for credentialing review · regulatory profiles, registrations, alerts, and audit evidence`;
+});
+const staffQueuePaginationPageNumbers = computed((): (number | '...')[] => {
+    const total = staffMeta.value?.lastPage ?? 1;
+    const current = staffMeta.value?.currentPage ?? 1;
+    if (total <= 7) {
+        return Array.from({ length: total }, (_, index) => index + 1);
+    }
+
+    const pages: (number | '...')[] = [1];
+    if (current > 3) pages.push('...');
+
+    for (let page = Math.max(2, current - 1); page <= Math.min(total - 1, current + 1); page += 1) {
+        pages.push(page);
+    }
+
+    if (current < total - 2) pages.push('...');
+    pages.push(total);
+    return pages;
+});
+const staffQueueFilterChips = computed(() => {
+    const chips: Array<{ key: string; label: string; clear: () => void }> = [];
+    const query = staffFilters.q.trim();
+
+    if (query) {
+        chips.push({
+            key: 'q',
+            label: `Search: ${query}`,
+            clear: () => {
+                staffFilters.q = '';
+                staffFilters.page = 1;
+                void loadStaff();
+            },
+        });
+    }
+
+    if (staffFilters.clinicalOnly) {
+        chips.push({
+            key: 'clinical',
+            label: 'Clinical roles only',
+            clear: () => {
+                void updateQueueClinicalOnly(false);
+            },
+        });
+    }
+
+    if (queueDensityValue.value === 'compact') {
+        chips.push({
+            key: 'density',
+            label: 'Compact rows',
+            clear: () => {
+                queueDensityValue.value = 'comfortable';
+            },
+        });
+    }
+
+    if (staffFilters.perPage !== 12) {
+        chips.push({
+            key: 'perPage',
+            label: `${staffFilters.perPage} per page`,
+            clear: () => {
+                staffFilters.perPage = 12;
+                staffFilters.page = 1;
+                void loadStaff();
+            },
+        });
+    }
+
+    return chips;
+});
 const queueDensityValue = computed({
     get: () => (compactQueueRows.value ? 'compact' : 'comfortable'),
     set: (value: string) => {
         compactQueueRows.value = value === 'compact';
     },
 });
-const showStaffQueueSkeleton = computed(() => staffLoading.value || !staffQueueReady.value);
+const showCredentialingWorkspaceLoading = computed(
+    () => !staffQueueReady.value || workspaceSyncLoading.value,
+);
 
 const scopeLabel = computed(() => {
     if (!scope.value) return 'Scope Unavailable';
@@ -401,7 +482,7 @@ const workspaceHeaderMetaText = computed(() => {
         parts.push(`Viewing ${staffDisplayName(selectedStaff.value)}`);
     }
     if (summary.value?.credentialingState) {
-        parts.push(credentialingStateLabel(summary.value.credentialingState));
+        parts.push(credentialingStateLabel(summary.value.credentialingState, summary.value.blockingReasons));
     }
 
     return parts.join(' | ');
@@ -416,7 +497,7 @@ const selectedStaffStatusLine = computed(() => {
         parts.push(formatLabel(selectedStaff.value.status));
     }
     if (summary.value?.credentialingState) {
-        parts.push(credentialingStateLabel(summary.value.credentialingState));
+        parts.push(credentialingStateLabel(summary.value.credentialingState, summary.value.blockingReasons));
     }
     parts.push(selectedStaffHasVerifiedLinkedUser.value ? 'Email verified' : 'Email unverified');
 
@@ -470,102 +551,269 @@ const selectedStaffGovernanceBlockerMessage = computed(() => {
 
     return 'Linked user email is still unverified. Finish the invite or reset flow before continuing with sensitive credentialing actions.';
 });
+const selectedStaffSetupSteps = useStaffGovernanceSetupSteps({
+    selectedStaff,
+    summary,
+    hasRegulatoryProfile: computed(() => Boolean(regulatoryProfile.value) || Boolean(summary.value?.regulatoryProfile)),
+    registrationCount: computed(() => registrations.value.length),
+    emailBlockerMessage: selectedStaffGovernanceBlockerMessage,
+});
 const canSaveSelectedRegulatoryProfile = computed(() => canManageProfile.value && selectedStaffHasVerifiedLinkedUser.value);
 const canManageSelectedRegistrations = computed(() => canManageRegistrations.value && selectedStaffHasVerifiedLinkedUser.value);
 const canVerifySelectedRegistration = computed(() => canVerify.value && selectedStaffHasVerifiedLinkedUser.value);
-const selectedStaffWorkflowGuidance = computed<WorkflowGuidance | null>(() => {
-    if (!selectedStaff.value) return null;
+
+const selectedStaffCredentialingState = computed(() =>
+    String(summary.value?.credentialingState ?? '').trim().toLowerCase(),
+);
+const selectedStaffCredentialingComplete = computed(() =>
+    ['ready', 'watch'].includes(selectedStaffCredentialingState.value),
+);
+const selectedStaffHasRegulatoryProfile = computed(
+    () => Boolean(regulatoryProfile.value) || Boolean(summary.value?.regulatoryProfile),
+);
+const selectedStaffRegistrationTotal = computed(
+    () => summary.value?.registrationSummary.total ?? registrations.value.length,
+);
+const selectedStaffPendingVerification = computed(
+    () => summary.value?.registrationSummary.pendingVerification ?? 0,
+);
+const showWorkspaceTabRecommendation = computed(() => {
+    if (!selectedStaff.value || summaryLoading.value || !summary.value) return false;
+
+    const state = selectedStaffCredentialingState.value;
+    return !['ready', 'watch', 'not_required'].includes(state);
+});
+
+const recommendedWorkspaceTab = computed((): WorkspaceTab => {
+    if (!selectedStaff.value || summaryLoading.value || !summary.value) return 'summary';
+
+    if (!selectedStaffHasVerifiedLinkedUser.value) return 'summary';
+
+    const state = selectedStaffCredentialingState.value;
+    if (state === 'not_required' || state === 'ready' || state === 'watch') return 'summary';
+
+    if (!selectedStaffHasRegulatoryProfile.value) return 'regulatory';
+
+    if (
+        selectedStaffRegistrationTotal.value === 0
+        || selectedStaffPendingVerification.value > 0
+        || state === 'blocked'
+        || state === 'pending_verification'
+    ) {
+        return 'registrations';
+    }
+
+    return 'summary';
+});
+
+const workspaceTabs = computed(() => {
+    const clinicalRequired = selectedStaff.value && !credentialingStateNotApplicable(summary.value?.credentialingState ?? null);
+    const regTotal = selectedStaffRegistrationTotal.value;
+    const pendingVerification = selectedStaffPendingVerification.value;
+    const alertCount = selectedStaffAlerts.value.length;
+    const recommended = recommendedWorkspaceTab.value;
+    const state = summary.value?.credentialingState;
+    const stateLabel = state ? credentialingStateLabel(state, summary.value?.blockingReasons ?? []) : null;
+    const isComplete = selectedStaffCredentialingComplete.value;
+    const workspaceReady = Boolean(selectedStaff.value) && !summaryLoading.value && summary.value !== null;
+
+    return tabOptions.map((tab) => {
+        let badge: string | null = null;
+        let badgeVariant: 'default' | 'secondary' | 'destructive' | 'outline' = 'secondary';
+
+        if (tab.value === 'summary' && stateLabel && workspaceReady) {
+            badge =
+                state === 'blocked'
+                    ? 'Incomplete'
+                    : state === 'not_required'
+                      ? 'N/A'
+                      : state === 'ready'
+                        ? 'Ready'
+                        : state === 'watch'
+                          ? 'Watch'
+                          : state === 'pending_verification'
+                            ? 'Pending'
+                            : stateLabel;
+            badgeVariant =
+                state === 'ready' || state === 'watch'
+                    ? 'secondary'
+                    : 'outline';
+        } else if (
+            tab.value === 'regulatory'
+            && workspaceReady
+            && clinicalRequired
+            && !isComplete
+            && !selectedStaffHasRegulatoryProfile.value
+            && selectedStaffHasVerifiedLinkedUser.value
+        ) {
+            badge = 'Setup';
+            badgeVariant = 'default';
+        } else if (tab.value === 'registrations' && workspaceReady) {
+            if (pendingVerification > 0) {
+                badge = String(pendingVerification);
+                badgeVariant = 'destructive';
+            } else if (regTotal === 0 && clinicalRequired && selectedStaffHasRegulatoryProfile.value && !isComplete) {
+                badge = 'Add';
+                badgeVariant = 'default';
+            } else if (regTotal > 0) {
+                badge = String(regTotal);
+                badgeVariant = 'outline';
+            }
+        } else if (tab.value === 'alerts' && alertCount > 0) {
+            badge = String(alertCount);
+            badgeVariant = 'destructive';
+        }
+
+        return {
+            ...tab,
+            hint: tabHints[tab.value],
+            badge,
+            badgeVariant,
+            isRecommended:
+                showWorkspaceTabRecommendation.value
+                && recommended === tab.value
+                && tab.value !== 'summary',
+        };
+    });
+});
+
+const summaryChecklistOpen = ref(false);
+
+const summaryStatusHeadline = computed(() => {
+    if (!summary.value) return '';
+
+    const state = selectedStaffCredentialingState.value;
+    if (state === 'ready') {
+        return 'Clinical credentialing is complete.';
+    }
+    if (state === 'watch') {
+        return summary.value.nextExpiryAt
+            ? `Active registration expires ${formatDate(summary.value.nextExpiryAt)}.`
+            : 'Review renewal dates on the active registration.';
+    }
+    if (state === 'not_required') {
+        return 'This role is treated as non-clinical.';
+    }
+    if (!selectedStaffHasVerifiedLinkedUser.value) {
+        return selectedStaffGovernanceBlockerMessage.value || 'Verify the linked user email before editing credentialing records.';
+    }
+    if (selectedStaffPendingVerification.value > 0) {
+        return `${selectedStaffPendingVerification.value} registration${selectedStaffPendingVerification.value === 1 ? '' : 's'} awaiting verification.`;
+    }
+
+    const reason = summary.value.blockingReasons.find((value) => String(value ?? '').trim());
+    return reason || 'Finish regulatory profile and registration records.';
+});
+
+const selectedStaffSnapshotCards = computed(() => {
+    if (!selectedStaff.value || !summary.value) return [];
+
+    return [
+        {
+            label: 'Readiness',
+            value: credentialingStateLabel(summary.value.credentialingState, summary.value.blockingReasons),
+            tone: selectedStaffCredentialingComplete.value ? 'text-emerald-600' : 'text-amber-600',
+        },
+        {
+            label: 'Verified',
+            value: String(summary.value.registrationSummary.verified),
+            tone: 'text-foreground',
+        },
+        {
+            label: 'Pending',
+            value: String(summary.value.registrationSummary.pendingVerification),
+            tone: summary.value.registrationSummary.pendingVerification > 0 ? 'text-amber-600' : 'text-muted-foreground',
+        },
+        {
+            label: 'Next expiry',
+            value: formatDate(summary.value.nextExpiryAt),
+            tone: summary.value.nextExpiryAt ? 'text-foreground' : 'text-muted-foreground',
+        },
+    ];
+});
+
+const summaryShowSetupChecklist = computed(() => {
+    if (!summary.value || !selectedStaff.value) return false;
+
+    const state = selectedStaffCredentialingState.value;
+    return !['ready', 'watch', 'not_required'].includes(state);
+});
+
+const summaryActionableBlockers = computed(() => {
+    if (!summary.value) return [];
+
+    const state = selectedStaffCredentialingState.value;
+    if (['ready', 'watch', 'not_required'].includes(state)) return [];
+
+    return summary.value.blockingReasons.filter((reason) => String(reason ?? '').trim());
+});
+
+type SummaryQuickAction = {
+    label: string;
+    tab?: WorkspaceTab;
+    href?: string;
+};
+
+const summaryQuickActions = computed((): SummaryQuickAction[] => {
+    if (!summary.value || !selectedStaff.value) return [];
+
+    const state = selectedStaffCredentialingState.value;
+    const actions: SummaryQuickAction[] = [];
+
+    if (state === 'ready' || state === 'watch') {
+        if (canReadPrivileging.value && !selectedStaffCredentialingNotApplicable.value) {
+            actions.push({
+                label: 'Open privileging',
+                href: workspaceStaffHref('/staff-privileges', selectedStaff.value),
+            });
+        }
+        actions.push({ label: 'View registrations', tab: 'registrations' });
+        return actions;
+    }
+
+    if (state === 'not_required') {
+        return [];
+    }
 
     if (!selectedStaffHasVerifiedLinkedUser.value) {
-        return {
-            title: 'Resolve linked user verification',
-            description:
-                selectedStaffGovernanceBlockerMessage.value
-                || 'Finish the invite or password setup flow before changing regulatory or registration data.',
-            variant: 'destructive',
-            action: null,
-        };
+        actions.push({ label: 'Staff directory', href: '/staff' });
+        return actions;
     }
 
-    const state = String(summary.value?.credentialingState ?? '').trim().toLowerCase();
-    if (state === 'not_required') {
-        return {
-            title: 'Clinical credentialing not applicable',
-            description: 'This staff role is non-clinical. Keep the staff profile current, but clinical credentialing and privileging do not apply unless the role becomes clinically governed.',
-            variant: 'default',
-            action: null,
-        };
+    if (!selectedStaffHasRegulatoryProfile.value) {
+        actions.push({ label: 'Regulatory profile', tab: 'regulatory' });
+    } else if (selectedStaffRegistrationTotal.value === 0) {
+        actions.push({ label: 'Add registration', tab: 'registrations' });
+    } else if (selectedStaffPendingVerification.value > 0) {
+        actions.push({ label: 'Verify registration', tab: 'registrations' });
     }
 
-    if (!regulatoryProfile.value) {
-        return {
-            title: 'Create regulatory profile',
-            description: 'Record the regulator, cadre, practice authority, supervision level, and good standing before adding registration evidence.',
-            variant: 'default',
-            action: 'regulatory',
-            actionLabel: 'Open Regulatory Profile',
-        };
+    if (selectedStaffAlerts.value.length > 0) {
+        actions.push({ label: 'View alerts', tab: 'alerts' });
     }
 
-    if ((summary.value?.registrationSummary.total ?? registrations.value.length) === 0) {
-        return {
-            title: 'Add registration evidence',
-            description: 'This clinical staff member still needs a professional registration or license record before credentialing can become ready.',
-            variant: 'default',
-            action: 'registration',
-            actionLabel: 'Open Registrations',
-        };
-    }
-
-    if ((summary.value?.registrationSummary.pendingVerification ?? 0) > 0) {
-        return {
-            title: 'Verify pending registrations',
-            description: 'At least one registration is recorded but still awaiting verification. Finish verification so the staff member can progress to privileging.',
-            variant: 'default',
-            action: canVerifySelectedRegistration.value ? 'verify' : 'registration',
-            actionLabel: canVerifySelectedRegistration.value ? 'Review Verification' : 'Open Registrations',
-        };
-    }
-
-    if (state === 'blocked') {
-        return {
-            title: 'Resolve blocking credentialing issues',
-            description:
-                summary.value?.blockingReasons.find((value) => value?.trim())
-                || 'Credentialing is not ready yet. Review the summary and registration state before moving to privileging.',
-            variant: 'destructive',
-            action: 'registration',
-            actionLabel: 'Open Registrations',
-        };
-    }
-
-    if (state === 'watch') {
-        return {
-            title: 'Watch expiry pressure',
-            description:
-                summary.value?.nextExpiryAt
-                ? `Credentialing is usable, but the next active registration expires ${summary.value.nextExpiryAt}. Review renewal dates and verification evidence.`
-                : 'Credentialing is in a watch state. Review the active registration and upcoming renewal pressure.',
-            variant: 'default',
-            action: 'registration',
-            actionLabel: 'Review Registrations',
-        };
-    }
-
-    if (state === 'ready') {
-        return {
-            title: 'Ready for privileging',
-            description: canReadPrivileging.value
-                ? 'Credentialing is complete. Continue to Staff Privileging when you are ready to request or review clinical privileges.'
-                : 'Credentialing is complete. A privileging user can now continue the workflow for this staff member.',
-            variant: 'default',
-            action: canReadPrivileging.value ? 'privileging' : null,
-            actionLabel: canReadPrivileging.value ? 'Open Privileging' : null,
-        };
-    }
-
-    return null;
+    return actions;
 });
+
+function summaryStatusDotClass(state: string | null | undefined): string {
+    const normalized = String(state ?? '').trim().toLowerCase();
+    if (normalized === 'ready') return 'bg-emerald-500';
+    if (normalized === 'watch') return 'bg-amber-500';
+    if (normalized === 'not_required') return 'bg-muted-foreground/40';
+    if (normalized === 'pending_verification') return 'bg-amber-500';
+    return 'bg-orange-500';
+}
+
+async function runSummaryQuickAction(action: SummaryQuickAction): Promise<void> {
+    if (action.tab) {
+        await setActiveTab(action.tab);
+        return;
+    }
+
+    if (action.href) {
+        window.location.assign(action.href);
+    }
+}
 
 function syncTabToUrl(): void {
     if (typeof window === 'undefined') return;
@@ -586,25 +834,6 @@ async function setActiveTab(tab: WorkspaceTab): Promise<void> {
     if (tab === 'audit') await loadAudit();
 }
 
-async function runSelectedStaffWorkflowGuidance(): Promise<void> {
-    switch (selectedStaffWorkflowGuidance.value?.action) {
-        case 'regulatory':
-            await setActiveTab('regulatory');
-            break;
-        case 'registration':
-        case 'verify':
-            await setActiveTab('registrations');
-            break;
-        case 'privileging':
-            if (selectedStaff.value) {
-                window.location.href = workspaceStaffHref('/staff-privileges', selectedStaff.value);
-            }
-            break;
-        default:
-            break;
-    }
-}
-
 function workspaceStaffHref(path: string, staff: StaffProfile | null): string {
     const staffId = String(staff?.id ?? '').trim();
     if (staffId === '') return path;
@@ -615,6 +844,16 @@ function workspaceStaffHref(path: string, staff: StaffProfile | null): string {
 function normalizeStaffQueueStatus(status: string | null | undefined): string {
     const normalized = String(status ?? '').trim().toLowerCase();
     return ['active', 'suspended', 'inactive'].includes(normalized) ? normalized : '';
+}
+
+function toOptionalSelectValue(value: string | number | null | undefined): string {
+    const normalized = String(value ?? '').trim();
+    return normalized === '' ? ALL_SELECT_VALUE : normalized;
+}
+
+function fromOptionalSelectValue(value: string | number | null | undefined): string {
+    const normalized = String(value ?? '').trim();
+    return normalized === ALL_SELECT_VALUE ? '' : normalized;
 }
 
 async function api<T>(
@@ -658,11 +897,12 @@ function formatLabel(value: string | null): string {
         .replace(/\b\w/g, (match) => match.toUpperCase()) || 'N/A';
 }
 
-function credentialingStateLabel(value: string | null): string {
-    const normalized = String(value ?? '').trim().toLowerCase();
-    if (normalized === 'not_required') return 'Not applicable';
-    if (normalized === 'pending_verification') return 'Pending verification';
-    return formatLabel(value);
+function credentialingStateLabel(value: string | null, blockingReasons: string[] = []): string {
+    return credentialingStateFriendlyLabel(value, blockingReasons);
+}
+
+function credentialingStateVariant(value: string | null, blockingReasons: string[] = []): 'outline' | 'secondary' | 'destructive' {
+    return credentialingStateFriendlyVariant(value, blockingReasons);
 }
 
 function credentialingStateNotApplicable(value: string | null): boolean {
@@ -760,6 +1000,20 @@ function formatDate(value: string | null): string {
 
 function toDateValue(value: string | null): string {
     return value ? String(value).slice(0, 10) : '';
+}
+
+function staffStatusDotClass(status: string | null): string {
+    const normalized = (status ?? '').toLowerCase();
+    if (normalized === 'active') return 'bg-emerald-500';
+    if (normalized === 'suspended') return 'bg-amber-500';
+    if (normalized === 'inactive') return 'bg-rose-500';
+    return 'bg-slate-400';
+}
+
+function goToStaffQueuePage(page: number) {
+    if (!staffMeta.value) return;
+    staffFilters.page = Math.max(1, Math.min(page, staffMeta.value.lastPage));
+    void loadStaff();
 }
 
 function statusVariant(value: string | null): 'outline' | 'secondary' | 'destructive' {
@@ -870,9 +1124,11 @@ async function loadStaff(targetId?: string | null): Promise<void> {
     if (!canReadStaff.value) {
         staffLoading.value = false;
         staffQueueReady.value = true;
+        workspaceSyncLoading.value = false;
         return;
     }
     clearStaffSearchDebounce();
+    workspaceSyncLoading.value = true;
     staffLoading.value = true;
     staffError.value = null;
     try {
@@ -907,6 +1163,7 @@ async function loadStaff(targetId?: string | null): Promise<void> {
     } finally {
         staffLoading.value = false;
         staffQueueReady.value = true;
+        workspaceSyncLoading.value = false;
     }
 }
 
@@ -968,46 +1225,59 @@ async function openStaffInQueue(targetId: string, options?: { preserveSearch?: b
 
 async function loadSummary(): Promise<void> {
     if (!canReadCredentialing.value || !selectedStaff.value?.id) return;
+    const staffId = selectedStaff.value.id;
     summaryLoading.value = true;
     summaryError.value = null;
     try {
-        const response = await api<{ data: CredentialingSummary }>('GET', `/staff/${selectedStaff.value.id}/credentialing/summary`);
+        const response = await api<{ data: CredentialingSummary }>('GET', `/staff/${staffId}/credentialing/summary`);
+        if (selectedStaff.value?.id !== staffId) return;
         summary.value = response.data ?? null;
     } catch (error) {
+        if (selectedStaff.value?.id !== staffId) return;
         summaryError.value = messageFromUnknown(error, 'Unable to load credentialing summary.');
         summary.value = null;
     } finally {
-        summaryLoading.value = false;
+        if (selectedStaff.value?.id === staffId) {
+            summaryLoading.value = false;
+        }
     }
 }
 
 async function loadRegulatoryProfile(): Promise<void> {
     if (!canReadCredentialing.value || !selectedStaff.value?.id) return;
+    const staffId = selectedStaff.value.id;
     profileLoading.value = true;
     profileError.value = null;
     try {
-        const response = await api<{ data: RegulatoryProfile }>('GET', `/staff/${selectedStaff.value.id}/credentialing/regulatory-profile`);
+        const response = await api<{ data: RegulatoryProfile | null }>('GET', `/staff/${staffId}/credentialing/regulatory-profile`);
+        if (selectedStaff.value?.id !== staffId) return;
         regulatoryProfile.value = response.data ?? null;
         fillProfileForm(regulatoryProfile.value);
     } catch (error) {
+        if (selectedStaff.value?.id !== staffId) return;
         const typed = error as Error & { status?: number };
         if (typed.status === 404) {
             regulatoryProfile.value = null;
             fillProfileForm(null);
         } else {
             profileError.value = messageFromUnknown(error, 'Unable to load regulatory profile.');
+            regulatoryProfile.value = null;
+            fillProfileForm(null);
         }
     } finally {
-        profileLoading.value = false;
+        if (selectedStaff.value?.id === staffId) {
+            profileLoading.value = false;
+        }
     }
 }
 
 async function loadRegistrations(): Promise<void> {
     if (!canReadCredentialing.value || !selectedStaff.value?.id) return;
+    const staffId = selectedStaff.value.id;
     registrationsLoading.value = true;
     registrationsError.value = null;
     try {
-        const response = await api<{ data: Registration[]; meta: Pagination }>('GET', `/staff/${selectedStaff.value.id}/credentialing/registrations`, {
+        const response = await api<{ data: Registration[]; meta: Pagination }>('GET', `/staff/${staffId}/credentialing/registrations`, {
             query: {
                 regulatorCode: registrationFilters.regulatorCode || null,
                 verificationStatus: registrationFilters.verificationStatus || null,
@@ -1018,14 +1288,18 @@ async function loadRegistrations(): Promise<void> {
                 sortDir: 'asc',
             },
         });
+        if (selectedStaff.value?.id !== staffId) return;
         registrations.value = response.data ?? [];
         registrationsMeta.value = response.meta ?? null;
     } catch (error) {
+        if (selectedStaff.value?.id !== staffId) return;
         registrationsError.value = messageFromUnknown(error, 'Unable to load professional registrations.');
         registrations.value = [];
         registrationsMeta.value = null;
     } finally {
-        registrationsLoading.value = false;
+        if (selectedStaff.value?.id === staffId) {
+            registrationsLoading.value = false;
+        }
     }
 }
 
@@ -1083,6 +1357,7 @@ async function loadAudit(): Promise<void> {
 }
 
 async function refreshSelectedStaffWorkspace(): Promise<void> {
+    clearSelectedWorkspace();
     await Promise.all([loadSummary(), loadRegulatoryProfile(), loadRegistrations()]);
     if (activeTab.value === 'audit') await loadAudit();
 }
@@ -1096,15 +1371,10 @@ async function refreshPage(): Promise<void> {
 }
 
 async function bootstrapWorkspace(): Promise<void> {
-    initialPageLoading.value = true;
-    try {
-        await Promise.all([
-            requestedStaffId ? openStaffInQueue(requestedStaffId) : loadStaff(),
-            loadAlerts(),
-        ]);
-    } finally {
-        initialPageLoading.value = false;
-    }
+    await Promise.all([
+        requestedStaffId ? openStaffInQueue(requestedStaffId) : loadStaff(),
+        loadAlerts(),
+    ]);
 }
 
 function resetStaffQueueFilters(): void {
@@ -1125,12 +1395,19 @@ function clearStaffSearchDebounce(): void {
 }
 
 async function selectStaff(row: StaffProfile): Promise<void> {
-    selectedStaff.value = row;
-    clearWorkspaceActionMessage();
-    syncTabToUrl();
-    registrationFilters.page = 1;
-    auditFilters.page = 1;
-    await refreshSelectedStaffWorkspace();
+    workspaceSyncLoading.value = true;
+    staffLoading.value = true;
+    try {
+        selectedStaff.value = row;
+        clearWorkspaceActionMessage();
+        syncTabToUrl();
+        registrationFilters.page = 1;
+        auditFilters.page = 1;
+        await refreshSelectedStaffWorkspace();
+    } finally {
+        staffLoading.value = false;
+        workspaceSyncLoading.value = false;
+    }
 }
 
 function openStaffEditDialog(profile: StaffProfile): void {
@@ -1295,6 +1572,13 @@ async function updateQueueClinicalOnly(checked: boolean | 'indeterminate'): Prom
     await loadStaff(selectedStaff.value?.id ?? null);
 }
 
+async function updateStaffQueueStatus(value: string | number | null | undefined): Promise<void> {
+    const normalized = String(value ?? '');
+    staffFilters.status = normalized === 'all' ? '' : normalized;
+    staffFilters.page = 1;
+    await loadStaff(selectedStaff.value?.id ?? null);
+}
+
 function updateAlertClinicalOnly(checked: boolean | 'indeterminate'): void {
     alertFilters.clinicalOnly = checked === true;
 }
@@ -1325,51 +1609,75 @@ onBeforeUnmount(() => {
     <Head title="Staff Credentialing" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div class="min-w-0">
-                    <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <AppIcon name="shield-check" class="size-7 text-primary" />
-                        Staff Credentialing
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Review regulatory profile, registrations, alerts, and audit for clinically governed staff.
-                    </p>
-                </div>
-                <div class="flex flex-shrink-0 items-center gap-2">
-                    <Badge variant="outline" class="hidden sm:inline-flex">Credentialing Registry</Badge>
-                    <Popover>
-                        <PopoverTrigger as-child>
-                            <Button variant="outline" size="sm" class="px-2.5">
-                                <Badge :variant="scope?.resolvedFrom === 'none' ? 'destructive' : 'secondary'">
-                                    {{ scopeLabel }}
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div
+                            class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20"
+                            aria-hidden="true"
+                        >
+                            <AppIcon name="shield-check" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h1 class="text-base font-semibold tracking-tight md:text-lg">
+                                    Staff Credentialing
+                                </h1>
+                                <Badge variant="outline" class="h-5 px-1.5 text-[10px] font-medium">
+                                    Credentialing registry
                                 </Badge>
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent align="end" class="w-72 space-y-1 text-xs">
-                            <p v-if="scope?.tenant">Tenant: {{ scope.tenant.name }} ({{ scope.tenant.code }})</p>
-                            <p v-if="scope?.facility">Facility: {{ scope.facility.name }} ({{ scope.facility.code }})</p>
-                            <p>Accessible facilities: {{ scope?.userAccess?.accessibleFacilityCount ?? 'N/A' }}</p>
-                            <p class="text-muted-foreground">{{ workspaceHeaderMetaText }}</p>
-                            <p v-if="scope?.resolvedFrom === 'none'" class="text-destructive">Select a valid tenant or facility scope before managing credentialing records.</p>
-                        </PopoverContent>
-                    </Popover>
-                    <Button variant="outline" size="sm" as-child>
-                        <Link href="/staff">Open Staff Profiles</Link>
-                    </Button>
-                    <Button v-if="canReadPrivileging && selectedStaff && summary && !selectedStaffCredentialingNotApplicable" variant="outline" size="sm" as-child>
-                        <Link :href="workspaceStaffHref('/staff-privileges', selectedStaff)">Open Privileging</Link>
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        :disabled="staffLoading || alertsLoading || summaryLoading || profileLoading || registrationsLoading || auditLoading"
-                        @click="refreshPage"
-                    >
-                        <AppIcon name="activity" class="size-3.5" />
-                        Refresh
-                    </Button>
+                            </div>
+                            <p class="truncate text-xs text-muted-foreground">
+                                Review readiness, expiry risk, verification blockers, and audit evidence.
+                            </p>
+                            <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
+                                <span class="inline-flex items-center gap-1">
+                                    <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
+                                    <span class="font-medium text-foreground">
+                                        {{ scope?.facility?.name || 'No facility' }}
+                                    </span>
+                                </span>
+                                <span class="select-none text-border" aria-hidden="true">·</span>
+                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
+                                <template v-if="selectedStaff">
+                                    <span class="select-none text-border" aria-hidden="true">·</span>
+                                    <span>Viewing {{ staffDisplayName(selectedStaff) }}</span>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button variant="outline" size="sm" class="h-8 gap-1.5" as-child>
+                            <Link href="/staff">
+                                <AppIcon name="users" class="size-3.5" />
+                                Staff directory
+                            </Link>
+                        </Button>
+                        <Button
+                            v-if="canReadPrivileging && selectedStaff && summary && !selectedStaffCredentialingNotApplicable"
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            as-child
+                        >
+                            <Link :href="workspaceStaffHref('/staff-privileges', selectedStaff)">
+                                <AppIcon name="shield-check" class="size-3.5" />
+                                Privileging
+                            </Link>
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            :disabled="staffLoading || alertsLoading || summaryLoading || profileLoading || registrationsLoading || auditLoading"
+                            @click="refreshPage"
+                        >
+                            <AppIcon name="refresh-cw" class="size-3.5" />
+                            Refresh
+                        </Button>
+                    </div>
                 </div>
-            </div>
+            </section>
 
             <Alert v-if="scope?.resolvedFrom === 'none'" variant="destructive">
                 <AlertTitle>Scope warning</AlertTitle>
@@ -1381,107 +1689,55 @@ onBeforeUnmount(() => {
             </Alert>
 
             <div class="min-w-0 space-y-3">
-                <div
-                    v-if="canReadStaff"
-                    class="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-4 py-3"
-                >
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        class="gap-2 bg-background"
-                        :class="{ 'border-primary bg-primary/5 hover:bg-primary/10': staffFilters.status === 'active' }"
-                        @click="staffFilters.status = 'active'; staffFilters.page = 1; loadStaff()"
-                    >
-                        <span class="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-                        <span class="font-medium">{{ queueStatusCounts.active }}</span>
-                        <span class="text-muted-foreground">Active</span>
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        class="gap-2 bg-background"
-                        :class="{ 'border-primary bg-primary/5 hover:bg-primary/10': staffFilters.status === 'suspended' }"
-                        @click="staffFilters.status = 'suspended'; staffFilters.page = 1; loadStaff()"
-                    >
-                        <span class="inline-block h-2 w-2 rounded-full bg-amber-500" />
-                        <span class="font-medium">{{ queueStatusCounts.suspended }}</span>
-                        <span class="text-muted-foreground">Suspended</span>
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        class="gap-2 bg-background"
-                        :class="{ 'border-primary bg-primary/5 hover:bg-primary/10': staffFilters.status === 'inactive' }"
-                        @click="staffFilters.status = 'inactive'; staffFilters.page = 1; loadStaff()"
-                    >
-                        <span class="inline-block h-2 w-2 rounded-full bg-rose-500" />
-                        <span class="font-medium">{{ queueStatusCounts.inactive }}</span>
-                        <span class="text-muted-foreground">Inactive</span>
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        class="gap-2 bg-background"
-                        :class="{ 'border-primary bg-primary/5 hover:bg-primary/10': !staffFilters.status }"
-                        @click="staffFilters.status = ''; staffFilters.page = 1; loadStaff()"
-                    >
-                        <span class="inline-block h-2 w-2 rounded-full bg-slate-400" />
-                        <span class="font-medium">{{ staffQueueTotalCount }}</span>
-                        <span class="text-muted-foreground">All</span>
-                    </Button>
-                    <div class="ml-auto flex items-center gap-2">
-                        <p class="hidden text-xs text-muted-foreground sm:block">{{ credentialingQueueSummaryText }} | {{ credentialingQueueSnapshotText }}</p>
-                        <Button
-                            v-if="hasActiveStaffQueueFilters"
-                            variant="ghost"
-                            size="sm"
-                            class="text-xs"
-                            @click="resetStaffQueueFilters"
-                        >
-                            <AppIcon name="sliders-horizontal" class="size-3" />
-                            Reset
-                        </Button>
-                    </div>
-                </div>
-
-                <div class="grid gap-4 lg:grid-cols-[minmax(0,23rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,25rem)_minmax(0,1fr)] lg:items-stretch">
+                <div class="grid gap-4 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,34rem)_minmax(0,1fr)] lg:items-stretch">
                     <Card class="flex h-full min-h-0 flex-1 flex-col gap-0 rounded-lg border-sidebar-border/70 py-0 lg:self-stretch">
-                    <CardHeader class="shrink-0 border-b bg-muted/10 px-4 py-3">
+                    <CardHeader class="shrink-0 border-b bg-card px-4 py-3">
                         <div class="flex flex-col gap-3">
                             <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                                 <div class="min-w-0 space-y-1">
                                     <CardTitle class="flex items-center gap-2 text-sm">
                                         <AppIcon name="layout-list" class="size-4 text-muted-foreground" />
-                                        Select staff
+                                        Credentialing queue
                                     </CardTitle>
-                                    <p class="text-xs text-muted-foreground">
+                                    <Skeleton v-if="showCredentialingWorkspaceLoading" class="h-3 w-52 max-w-full" />
+                                    <p v-else class="text-xs text-muted-foreground">
                                         {{ credentialingQueueSummaryText }}
                                     </p>
                                 </div>
-                                <p class="text-xs text-muted-foreground sm:max-w-[12rem] sm:text-right">
-                                    {{ credentialingQueueSnapshotText }}
-                                </p>
+                                <Skeleton v-if="showCredentialingWorkspaceLoading" class="h-5 w-14 rounded-lg" />
+                                <Badge v-else variant="outline" class="w-fit rounded-lg text-[10px]">
+                                    {{ staffQueueTotalCount }} total
+                                </Badge>
                             </div>
 
                             <div v-if="canReadStaff" class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                <div class="relative min-w-0 flex-1">
-                                    <AppIcon
-                                        name="search"
-                                        class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                                    />
-                                    <Input
-                                        v-model="staffFilters.q"
-                                        placeholder="Search staff by name, employee number, title, or department"
-                                        class="h-9 pl-9"
-                                        @keyup.enter="staffFilters.page = 1; loadStaff()"
-                                    />
-                                </div>
-                                <div class="flex items-center gap-2">
+                                <SearchInput
+                                    id="credentialing-staff-search"
+                                    v-model="staffFilters.q"
+                                    placeholder="Search name, employee #, title, department…"
+                                    class="sm:flex-1"
+                                    @keyup.enter="staffFilters.page = 1; loadStaff()"
+                                />
+                                <div class="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
+                                    <Select
+                                        :model-value="staffFilters.status || 'all'"
+                                        @update:model-value="(value) => updateStaffQueueStatus(value)"
+                                    >
+                                        <SelectTrigger class="h-9 w-full sm:w-36">
+                                            <SelectValue placeholder="All status" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="active">Active</SelectItem>
+                                            <SelectItem value="suspended">Suspended</SelectItem>
+                                            <SelectItem value="inactive">Inactive</SelectItem>
+                                            <SelectItem value="all">All status</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                     <Popover>
                                         <PopoverTrigger as-child>
-                                            <Button variant="outline" size="sm">
+                                            <Button variant="outline" size="sm" class="h-9 gap-1.5">
                                                 <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                                Queue options
+                                                Options
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent class="w-72" align="end">
@@ -1545,34 +1801,65 @@ onBeforeUnmount(() => {
                                 </div>
                             </div>
 
-                            <div v-if="canReadStaff && (staffFilters.clinicalOnly || queueDensityValue === 'compact')" class="flex flex-wrap items-center gap-2">
-                                <Badge v-if="staffFilters.clinicalOnly" variant="outline" class="text-[10px] leading-none">Clinical roles only</Badge>
-                                <Badge v-if="queueDensityValue === 'compact'" variant="outline" class="text-[10px] leading-none">Compact rows</Badge>
+                            <div
+                                v-if="showCredentialingWorkspaceLoading"
+                                class="grid grid-cols-3 gap-2 rounded-lg border bg-muted/15 p-2"
+                            >
+                                <div v-for="index in 3" :key="`credentialing-queue-stat-skeleton-${index}`" class="space-y-1.5 text-center">
+                                    <Skeleton class="mx-auto h-5 w-8" />
+                                    <Skeleton class="mx-auto h-2.5 w-12" />
+                                </div>
+                            </div>
+                            <div v-else class="grid grid-cols-3 gap-2 rounded-lg border bg-muted/15 p-2 text-center">
+                                <div>
+                                    <p class="text-sm font-semibold tabular-nums">{{ queueStatusCounts.active }}</p>
+                                    <p class="text-[10px] uppercase tracking-wide text-muted-foreground">Active</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-semibold tabular-nums text-amber-600">{{ queueStatusCounts.suspended }}</p>
+                                    <p class="text-[10px] uppercase tracking-wide text-muted-foreground">Suspended</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-semibold tabular-nums text-rose-600">{{ queueStatusCounts.inactive }}</p>
+                                    <p class="text-[10px] uppercase tracking-wide text-muted-foreground">Inactive</p>
+                                </div>
+                            </div>
+
+                            <div v-if="canReadStaff && !showCredentialingWorkspaceLoading && staffQueueFilterChips.length > 0" class="flex flex-wrap items-center gap-2">
+                                <Badge
+                                    v-for="chip in staffQueueFilterChips"
+                                    :key="`credentialing-filter-chip-${chip.key}`"
+                                    variant="secondary"
+                                    class="gap-1 pr-1 text-[10px] leading-none"
+                                >
+                                    {{ chip.label }}
+                                    <button
+                                        type="button"
+                                        class="rounded-sm p-0.5 hover:bg-background/80"
+                                        @click="chip.clear()"
+                                    >
+                                        <AppIcon name="x" class="size-3" />
+                                        <span class="sr-only">Remove filter</span>
+                                    </button>
+                                </Badge>
                             </div>
                         </div>
                     </CardHeader>
 
                     <CardContent class="flex flex-1 flex-col px-3 pb-0 pt-3">
-                        <div v-if="showStaffQueueSkeleton" class="space-y-2 pb-3">
+                        <div v-if="showCredentialingWorkspaceLoading" class="space-y-2 pb-3">
                             <div
                                 v-for="index in 6"
                                 :key="`credentialing-staff-skeleton-${index}`"
-                                class="rounded-lg border border-border/70 bg-background/80"
-                                :class="compactQueueRows ? 'p-2.5' : 'p-3'"
+                                class="flex w-full items-center gap-3 rounded-lg border border-border/70 bg-background px-3"
+                                :class="compactQueueRows ? 'py-2' : 'py-2.5'"
                             >
-                                <div class="flex items-start gap-3">
-                                    <Skeleton class="h-8 w-8 shrink-0 rounded-full" />
-                                    <div class="min-w-0 flex-1 space-y-1.5">
-                                        <Skeleton class="h-3.5 w-32 max-w-[70%]" />
-                                        <Skeleton class="h-3 w-full max-w-[16rem]" />
-                                    </div>
-                                    <Skeleton class="h-7 w-7 shrink-0 rounded-md" />
+                                <Skeleton class="size-2 shrink-0 rounded-full" />
+                                <div class="min-w-0 flex-1 space-y-1.5">
+                                    <Skeleton class="h-3.5 w-44 max-w-[90%]" />
+                                    <Skeleton class="h-3 w-full max-w-[22rem]" />
                                 </div>
-                                <div class="mt-3 flex flex-wrap items-center gap-2">
-                                    <Skeleton class="h-5 w-16 rounded-full" />
-                                    <Skeleton class="h-5 w-16 rounded-full" />
-                                    <Skeleton class="h-5 w-24 rounded-full" />
-                                </div>
+                                <Skeleton class="size-4 shrink-0 rounded-sm" />
                             </div>
                         </div>
 
@@ -1598,171 +1885,265 @@ onBeforeUnmount(() => {
                                 v-for="row in visibleStaffRows"
                                 :key="`credentialing-row-${row.id}`"
                                 type="button"
-                                class="group w-full rounded-lg border text-left transition-colors"
-                                :class="[
-                                    selectedStaff?.id === row.id
-                                        ? 'border-primary bg-primary/5 shadow-sm'
-                                        : 'border-border/70 bg-background hover:bg-muted/30',
-                                    compactQueueRows ? 'p-2.5' : 'p-3',
-                                ]"
+                                class="group flex w-full items-center gap-3 rounded-lg border border-border/70 bg-background px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-muted/30"
+                                :class="selectedStaff?.id === row.id ? 'border-primary/50 bg-primary/5 shadow-sm' : ''"
                                 @click="selectStaff(row)"
                             >
-                                <div class="flex items-start gap-3">
-                                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
-                                        {{ (staffDisplayName(row).match(/\b\w/g) || []).slice(0, 2).join('').toUpperCase() || 'ST' }}
+                                <span
+                                    class="size-2 shrink-0 rounded-full"
+                                    :class="staffStatusDotClass(row.status)"
+                                    :title="formatLabel(row.status)"
+                                />
+                                <div class="min-w-0 flex-1 space-y-0.5">
+                                    <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                        <span class="truncate text-sm font-medium transition-colors group-hover:text-primary">
+                                            {{ staffDisplayName(row) }}
+                                        </span>
+                                        <span class="shrink-0 text-xs text-muted-foreground">
+                                            {{ row.employeeNumber || 'No employee #' }}
+                                        </span>
+                                        <Badge
+                                            v-if="alertCountForStaff(row.id) > 0"
+                                            variant="destructive"
+                                            class="h-5 px-1.5 text-[10px] leading-none"
+                                        >
+                                            {{ alertCountForStaff(row.id) }} alert{{ alertCountForStaff(row.id) === 1 ? '' : 's' }}
+                                        </Badge>
                                     </div>
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <p class="truncate text-sm font-medium text-foreground group-hover:text-primary">
-                                                {{ staffDisplayName(row) }}
-                                            </p>
-                                            <Badge :variant="statusVariant(row.status)" class="text-[10px] leading-none">
-                                                {{ formatLabel(row.status) }}
-                                            </Badge>
-                                        </div>
-                                        <p class="mt-1 truncate text-xs text-muted-foreground">
-                                            {{ row.employeeNumber || 'No employee number' }} / {{ row.jobTitle || 'No title' }} / {{ row.department || 'No department' }}
-                                        </p>
-                                    </div>
-                                    <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border/70 bg-background/80 text-muted-foreground transition-colors group-hover:border-primary/40 group-hover:text-primary">
-                                        <AppIcon name="chevron-right" class="size-3.5" />
-                                    </span>
+                                    <p class="truncate text-xs text-muted-foreground">
+                                        {{ row.jobTitle || 'No title' }}
+                                        <span class="text-border"> · </span>
+                                        {{ row.department || 'No department' }}
+                                    </p>
                                 </div>
-
-                                <div class="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                                    <Badge :variant="alertCountForStaff(row.id) > 0 ? 'destructive' : 'outline'" class="text-[10px] leading-none">
-                                        Alerts {{ alertCountForStaff(row.id) }}
-                                    </Badge>
-                                    <Badge variant="outline" class="text-[10px] leading-none">
-                                        {{ row.userEmailVerifiedAt ? 'Email verified' : 'Email unverified' }}
-                                    </Badge>
-                                </div>
+                                <AppIcon
+                                    name="chevron-right"
+                                    class="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
+                                />
                             </button>
                         </div>
 
-                        <footer v-if="staffMeta" class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-muted/20 px-3 py-3">
+                        <footer v-if="staffMeta && !showCredentialingWorkspaceLoading" class="flex shrink-0 flex-col gap-2 border-t bg-muted/20 px-3 py-3">
                             <p class="text-xs text-muted-foreground">
-                                Showing {{ visibleStaffRows.length }} of {{ staffQueueTotalCount }} results &middot; Page {{ staffMeta.currentPage }} of {{ staffMeta.lastPage }}
+                                Showing {{ visibleStaffRows.length }} on page · {{ staffQueueTotalCount }} total · Page {{ staffMeta.currentPage }} of {{ staffMeta.lastPage }}
                             </p>
-                            <div v-if="staffMeta.lastPage > 1" class="flex items-center gap-2">
-                                <Button size="sm" variant="outline" :disabled="staffLoading || staffMeta.currentPage <= 1" @click="staffFilters.page -= 1; loadStaff()">Previous</Button>
-                                <Button size="sm" variant="outline" :disabled="staffLoading || staffMeta.currentPage >= staffMeta.lastPage" @click="staffFilters.page += 1; loadStaff()">Next</Button>
+                            <div v-if="staffMeta.lastPage > 1" class="flex flex-wrap items-center justify-between gap-2">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    class="h-7 gap-1.5 text-xs"
+                                    :disabled="staffLoading || staffMeta.currentPage <= 1"
+                                    @click="goToStaffQueuePage(staffMeta.currentPage - 1)"
+                                >
+                                    <AppIcon name="chevron-left" class="size-3" />
+                                    Prev
+                                </Button>
+                                <div class="flex flex-wrap items-center gap-1">
+                                    <template v-for="pageNumber in staffQueuePaginationPageNumbers" :key="`credentialing-page-${String(pageNumber)}`">
+                                        <span v-if="pageNumber === '...'" class="px-1 text-xs text-muted-foreground">…</span>
+                                        <Button
+                                            v-else
+                                            :variant="pageNumber === staffMeta.currentPage ? 'default' : 'ghost'"
+                                            size="icon"
+                                            class="size-8 text-xs"
+                                            :disabled="staffLoading"
+                                            @click="goToStaffQueuePage(pageNumber as number)"
+                                        >
+                                            {{ pageNumber }}
+                                        </Button>
+                                    </template>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    class="h-7 gap-1.5 text-xs"
+                                    :disabled="staffLoading || staffMeta.currentPage >= staffMeta.lastPage"
+                                    @click="goToStaffQueuePage(staffMeta.currentPage + 1)"
+                                >
+                                    Next
+                                    <AppIcon name="chevron-right" class="size-3" />
+                                </Button>
                             </div>
                         </footer>
                     </CardContent>
                 </Card>
 
                 <div class="flex min-h-0 flex-col gap-3 lg:h-full">
-                    <template v-if="showWorkspaceBootstrapSkeleton">
+                    <template v-if="showCredentialingWorkspaceLoading">
                         <Card class="overflow-hidden rounded-lg border-sidebar-border/70">
-                            <CardHeader class="gap-3 pb-3 pt-4">
+                            <CardHeader class="gap-3 pb-4 pt-4">
                                 <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                    <div class="min-w-0 space-y-2">
-                                        <Skeleton class="h-3 w-24" />
-                                        <Skeleton class="h-7 w-56 max-w-full" />
-                                        <Skeleton class="h-4 w-72 max-w-full" />
-                                        <Skeleton class="h-4 w-48 max-w-[80%]" />
+                                    <div class="min-w-0 flex-1 space-y-2">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <Skeleton class="h-5 w-24 rounded-full" />
+                                            <Skeleton class="h-5 w-28 rounded-full" />
+                                        </div>
+                                        <Skeleton class="h-7 w-64 max-w-full" />
+                                        <Skeleton class="h-4 w-80 max-w-full" />
+                                        <Skeleton class="h-4 w-52 max-w-[85%]" />
                                     </div>
                                     <div class="flex flex-wrap items-center gap-2">
+                                        <Skeleton class="h-8 w-20 rounded-md" />
                                         <Skeleton class="h-8 w-24 rounded-md" />
-                                        <Skeleton class="h-8 w-28 rounded-md" />
-                                        <Skeleton class="h-8 w-24 rounded-md" />
+                                        <Skeleton class="h-8 w-16 rounded-md" />
                                     </div>
                                 </div>
-                                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                                    <div v-for="index in 4" :key="`credentialing-header-skeleton-${index}`" class="space-y-2 rounded-lg border bg-muted/20 p-3">
-                                        <Skeleton class="h-3 w-24" />
-                                        <Skeleton class="h-5 w-20" />
+                                <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                                    <div
+                                        v-for="index in 4"
+                                        :key="`credentialing-workspace-snapshot-skeleton-${index}`"
+                                        class="rounded-lg border bg-muted/15 px-3 py-2"
+                                    >
+                                        <Skeleton class="h-3 w-20" />
+                                        <Skeleton class="mt-2 h-5 w-24" />
                                     </div>
                                 </div>
-                                <div class="flex flex-wrap items-center gap-2 border-t pt-3">
-                                    <Skeleton v-for="index in 5" :key="`credentialing-tab-skeleton-${index}`" class="h-8 w-24 rounded-md" />
+                                <div class="grid h-auto w-full grid-cols-2 gap-1 rounded-lg bg-muted/40 p-1 sm:grid-cols-3 lg:grid-cols-5">
+                                    <Skeleton
+                                        v-for="index in 5"
+                                        :key="`credentialing-workspace-tab-skeleton-${index}`"
+                                        class="h-8 w-full rounded-md"
+                                    />
                                 </div>
                             </CardHeader>
                         </Card>
 
-                        <Card class="rounded-lg border-sidebar-border/70">
-                            <CardContent class="space-y-4 p-6">
-                                <Skeleton class="h-5 w-40" />
-                                <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                    <Skeleton v-for="index in 4" :key="`credentialing-body-card-skeleton-${index}`" class="h-24 w-full rounded-lg" />
+                        <Card class="overflow-hidden rounded-lg border-sidebar-border/70">
+                            <CardContent class="divide-y p-0">
+                                <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between">
+                                    <div class="min-w-0 flex-1 space-y-2">
+                                        <div class="flex items-center gap-2.5">
+                                            <Skeleton class="size-2.5 shrink-0 rounded-full" />
+                                            <Skeleton class="h-5 w-52 max-w-full" />
+                                        </div>
+                                        <Skeleton class="h-4 w-full max-w-2xl" />
+                                        <Skeleton class="h-4 w-4/5 max-w-xl" />
+                                    </div>
+                                    <div class="flex flex-wrap gap-2 sm:justify-end">
+                                        <Skeleton class="h-8 w-28 rounded-md" />
+                                        <Skeleton class="h-8 w-32 rounded-md" />
+                                    </div>
                                 </div>
-                                <Skeleton class="h-28 w-full rounded-lg" />
-                                <Skeleton class="h-36 w-full rounded-lg" />
+                                <div class="space-y-2 px-4 py-3">
+                                    <Skeleton class="h-3 w-36" />
+                                    <Skeleton class="h-4 w-full max-w-lg" />
+                                    <Skeleton class="h-4 w-2/3 max-w-md" />
+                                </div>
                             </CardContent>
                         </Card>
                     </template>
+
                     <template v-else>
                     <Card class="overflow-hidden rounded-lg border-sidebar-border/70">
-                        <CardHeader class="gap-3 pb-3 pt-4">
+                        <CardHeader class="gap-3 pb-4 pt-4">
                             <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                 <div class="min-w-0 space-y-1">
-                                    <p class="text-xs text-muted-foreground">{{ selectedStaffStatusLine }}</p>
-                                    <CardTitle class="text-lg">{{ staffDisplayName(selectedStaff) }}</CardTitle>
-                                    <CardDescription>{{ selectedStaffContextLabel }}</CardDescription>
-                                    <p v-if="selectedStaff" class="text-xs text-muted-foreground">
-                                        {{ selectedStaff.userEmail || 'No linked user email recorded' }}
+                                    <div v-if="selectedStaff" class="flex flex-wrap items-center gap-2">
+                                        <Badge v-if="summary?.credentialingState" :variant="credentialingStateVariant(summary.credentialingState, summary.blockingReasons)">
+                                            {{ credentialingStateLabel(summary.credentialingState, summary.blockingReasons) }}
+                                        </Badge>
+                                        <Badge :variant="selectedStaffHasVerifiedLinkedUser ? 'secondary' : 'outline'">
+                                            {{ selectedStaffHasVerifiedLinkedUser ? 'Email verified' : 'Email pending' }}
+                                        </Badge>
+                                    </div>
+                                    <CardTitle class="text-lg">
+                                        {{ selectedStaff ? staffDisplayName(selectedStaff) : 'Select a staff member' }}
+                                    </CardTitle>
+                                    <CardDescription>
+                                        {{ selectedStaff ? selectedStaffContextLabel : 'Choose someone from the queue to review credentialing and see the next step.' }}
+                                    </CardDescription>
+                                    <p v-if="selectedStaff?.userEmail" class="text-xs text-muted-foreground">
+                                        {{ selectedStaff.userEmail }}
                                     </p>
                                 </div>
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <Button variant="outline" size="sm" as-child>
-                                        <Link href="/staff">Open Staff</Link>
+                                <div v-if="selectedStaff" class="flex flex-wrap items-center gap-2">
+                                    <Button variant="outline" size="sm" class="gap-1.5" as-child>
+                                        <Link href="/staff">
+                                            <AppIcon name="users" class="size-3.5" />
+                                            Staff
+                                        </Link>
                                     </Button>
-                                    <Button v-if="canReadPrivileging && selectedStaff && summary && !selectedStaffCredentialingNotApplicable" variant="outline" size="sm" as-child>
-                                        <Link :href="workspaceStaffHref('/staff-privileges', selectedStaff)">Open Privileging</Link>
-                                    </Button>
-                                    <Button v-if="selectedStaff && canUpdateStaff" variant="outline" size="sm" @click="openStaffEditDialog(selectedStaff)">
-                                        Edit Staff
-                                    </Button>
-                                    <Button v-if="selectedStaff && canUpdateStaffStatus" size="sm" @click="openStaffStatusDialog(selectedStaff)">
-                                        Change Status
-                                    </Button>
-                                </div>
-                            </div>
-                            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                                <div class="rounded-lg border bg-muted/20 p-3">
-                                    <p class="text-[11px] uppercase tracking-wide text-muted-foreground">Credentialing state</p>
-                                    <p class="mt-2 text-sm font-medium">
-                                        {{
-                                            summaryLoading
-                                                ? 'Loading'
-                                                : summary?.credentialingState
-                                                  ? credentialingStateLabel(summary.credentialingState)
-                                                  : selectedStaff
-                                                    ? 'Not recorded'
-                                                    : 'No staff'
-                                        }}
-                                    </p>
-                                </div>
-                                <div class="rounded-lg border bg-muted/20 p-3">
-                                    <p class="text-[11px] uppercase tracking-wide text-muted-foreground">Registrations</p>
-                                    <p class="mt-2 text-sm font-medium">{{ summary?.registrationSummary.total ?? 0 }}</p>
-                                </div>
-                                <div class="rounded-lg border bg-muted/20 p-3">
-                                    <p class="text-[11px] uppercase tracking-wide text-muted-foreground">Selected staff alerts</p>
-                                    <p class="mt-2 text-sm font-medium">{{ selectedStaffAlerts.length }}</p>
-                                </div>
-                                <div class="rounded-lg border bg-muted/20 p-3">
-                                    <p class="text-[11px] uppercase tracking-wide text-muted-foreground">Next expiry</p>
-                                    <p class="mt-2 text-sm font-medium">{{ formatDate(summary?.nextExpiryAt ?? null) }}</p>
-                                </div>
-                            </div>
-                            <div class="flex flex-col gap-3 border-t pt-3 lg:flex-row lg:items-center lg:justify-between">
-                                <div class="flex flex-wrap items-center gap-2">
                                     <Button
-                                        v-for="tab in tabOptions"
-                                        :key="tab.value"
+                                        v-if="canReadPrivileging && summary && !selectedStaffCredentialingNotApplicable"
+                                        variant="outline"
                                         size="sm"
-                                       
-                                        :variant="activeTab === tab.value ? 'default' : 'outline'"
-                                        :disabled="tab.value !== 'alerts' && !selectedStaff"
-                                        @click="setActiveTab(tab.value)"
+                                        class="gap-1.5"
+                                        as-child
                                     >
-                                        {{ tab.label }}
+                                        <Link :href="workspaceStaffHref('/staff-privileges', selectedStaff)">
+                                            <AppIcon name="shield-check" class="size-3.5" />
+                                            Privileging
+                                        </Link>
+                                    </Button>
+                                    <Button v-if="canUpdateStaff" variant="outline" size="sm" class="gap-1.5" @click="openStaffEditDialog(selectedStaff)">
+                                        <AppIcon name="pencil" class="size-3.5" />
+                                        Edit
                                     </Button>
                                 </div>
-                                <p class="text-xs text-muted-foreground">{{ activeTabMeta.description }}</p>
                             </div>
+
+                            <div
+                                v-if="selectedStaff && summaryLoading"
+                                class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"
+                            >
+                                <div
+                                    v-for="index in 4"
+                                    :key="`credentialing-snapshot-skeleton-${index}`"
+                                    class="rounded-lg border bg-muted/15 px-3 py-2"
+                                >
+                                    <Skeleton class="h-3 w-20" />
+                                    <Skeleton class="mt-2 h-5 w-24" />
+                                </div>
+                            </div>
+                            <div
+                                v-else-if="selectedStaffSnapshotCards.length > 0"
+                                class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"
+                            >
+                                <div
+                                    v-for="card in selectedStaffSnapshotCards"
+                                    :key="card.label"
+                                    class="rounded-lg border bg-muted/15 px-3 py-2"
+                                >
+                                    <p class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                        {{ card.label }}
+                                    </p>
+                                    <p class="mt-1 truncate text-sm font-semibold" :class="card.tone">
+                                        {{ card.value }}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <Tabs
+                                :model-value="activeTab"
+                                class="w-full"
+                                @update:model-value="(value) => setActiveTab(value as WorkspaceTab)"
+                            >
+                                <TabsList class="grid h-auto w-full grid-cols-2 gap-1 bg-muted/40 p-1 sm:grid-cols-3 lg:grid-cols-5">
+                                    <TabsTrigger
+                                        v-for="tab in workspaceTabs"
+                                        :key="tab.value"
+                                        :value="tab.value"
+                                        :disabled="tab.value !== 'alerts' && !selectedStaff"
+                                        class="relative flex h-8 items-center justify-start gap-1.5 rounded-md px-2.5 text-left data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                                        :class="tab.isRecommended ? 'ring-1 ring-primary/40 ring-offset-1 ring-offset-background' : ''"
+                                    >
+                                        <AppIcon :name="tab.icon" class="size-3.5 shrink-0 text-muted-foreground" />
+                                        <span class="truncate text-xs font-medium">{{ tab.shortLabel }}</span>
+                                        <span
+                                            v-if="tab.isRecommended"
+                                            class="ml-auto size-1.5 rounded-full bg-primary"
+                                            aria-label="Recommended next step"
+                                        />
+                                        <Badge
+                                            v-else-if="tab.badge"
+                                            :variant="tab.badgeVariant"
+                                            class="ml-auto h-5 shrink-0 px-1.5 text-[10px] leading-none"
+                                        >
+                                            {{ tab.badge }}
+                                        </Badge>
+                                    </TabsTrigger>
+                                </TabsList>
+                            </Tabs>
                         </CardHeader>
                     </Card>
 
@@ -1771,78 +2152,119 @@ onBeforeUnmount(() => {
                         <AlertDescription>{{ workspaceActionMessage }}</AlertDescription>
                     </Alert>
 
-                    <Alert v-if="selectedStaffWorkflowGuidance" :variant="selectedStaffWorkflowGuidance.variant">
-                        <AlertTitle>{{ selectedStaffWorkflowGuidance.title }}</AlertTitle>
-                        <AlertDescription class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                            <span>{{ selectedStaffWorkflowGuidance.description }}</span>
-                            <Button
-                                v-if="selectedStaffWorkflowGuidance.actionLabel"
-                                size="sm"
-                                variant="outline"
-                                class="gap-1.5 self-start lg:self-center"
-                                @click="runSelectedStaffWorkflowGuidance"
-                            >
-                                <AppIcon name="chevron-right" class="size-3.5" />
-                                {{ selectedStaffWorkflowGuidance.actionLabel }}
-                            </Button>
-                        </AlertDescription>
-                    </Alert>
-
-                    <Card v-if="activeTab === 'summary'" class="rounded-lg border-sidebar-border/70">
-                        <CardHeader>
-                            <CardTitle>Credentialing Summary</CardTitle>
-                            <CardDescription>Current readiness, blockers, and the best available active registration.</CardDescription>
-                        </CardHeader>
-                        <CardContent class="space-y-4">
-                            <div v-if="summaryLoading" class="space-y-2">
-                                <Skeleton class="h-20 w-full" />
-                                <Skeleton class="h-20 w-full" />
+                    <Card v-if="activeTab === 'summary'" class="overflow-hidden rounded-lg border-sidebar-border/70">
+                        <CardContent class="p-0">
+                            <div v-if="summaryLoading" class="divide-y">
+                                <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between">
+                                    <div class="min-w-0 flex-1 space-y-2">
+                                        <div class="flex items-center gap-2.5">
+                                            <Skeleton class="size-2.5 shrink-0 rounded-full" />
+                                            <Skeleton class="h-5 w-52 max-w-full" />
+                                        </div>
+                                        <Skeleton class="h-4 w-full max-w-2xl" />
+                                        <Skeleton class="h-4 w-4/5 max-w-xl" />
+                                    </div>
+                                    <div class="flex flex-wrap gap-2 sm:justify-end">
+                                        <Skeleton class="h-8 w-28 rounded-md" />
+                                        <Skeleton class="h-8 w-32 rounded-md" />
+                                    </div>
+                                </div>
+                                <div class="space-y-2 px-4 py-3">
+                                    <Skeleton class="h-3 w-36" />
+                                    <Skeleton class="h-4 w-full max-w-lg" />
+                                    <Skeleton class="h-4 w-2/3 max-w-md" />
+                                </div>
                             </div>
-                            <Alert v-else-if="summaryError" variant="destructive">
+                            <Alert v-else-if="summaryError" variant="destructive" class="m-4">
                                 <AlertTitle>Summary issue</AlertTitle>
                                 <AlertDescription>{{ summaryError }}</AlertDescription>
                             </Alert>
-                            <div v-else-if="!selectedStaff" class="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                                Select a staff profile to load the credentialing summary.
+                            <div v-else-if="!selectedStaff" class="p-6 text-sm text-muted-foreground">
+                                Select a staff member from the queue.
                             </div>
-                            <div v-else-if="summary" class="space-y-4">
-                                <div class="grid gap-3 md:grid-cols-4">
-                                    <div class="rounded-lg border p-3">
-                                        <p class="text-xs uppercase text-muted-foreground">State</p>
-                                        <p class="mt-2 text-sm font-medium">{{ credentialingStateLabel(summary.credentialingState) }}</p>
+                            <div v-else-if="summary" class="divide-y">
+                                <div class="flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between">
+                                    <div class="min-w-0 space-y-2">
+                                        <div class="flex items-center gap-2.5">
+                                            <span
+                                                class="size-2.5 shrink-0 rounded-full"
+                                                :class="summaryStatusDotClass(summary.credentialingState)"
+                                            />
+                                            <p class="text-base font-semibold text-foreground">
+                                                {{ credentialingStateLabel(summary.credentialingState, summary.blockingReasons) }}
+                                            </p>
+                                        </div>
+                                        <p class="text-sm leading-relaxed text-muted-foreground">
+                                            {{ summaryStatusHeadline }}
+                                        </p>
                                     </div>
-                                    <div class="rounded-lg border p-3">
-                                        <p class="text-xs uppercase text-muted-foreground">Verified</p>
-                                        <p class="mt-2 text-sm font-medium">{{ summary.registrationSummary.verified }}</p>
-                                    </div>
-                                    <div class="rounded-lg border p-3">
-                                        <p class="text-xs uppercase text-muted-foreground">Pending Verification</p>
-                                        <p class="mt-2 text-sm font-medium">{{ summary.registrationSummary.pendingVerification }}</p>
-                                    </div>
-                                    <div class="rounded-lg border p-3">
-                                        <p class="text-xs uppercase text-muted-foreground">Expired</p>
-                                        <p class="mt-2 text-sm font-medium">{{ summary.registrationSummary.expired }}</p>
+                                    <div v-if="summaryQuickActions.length > 0" class="flex flex-wrap gap-2 sm:justify-end">
+                                        <Button
+                                            v-for="(action, actionIndex) in summaryQuickActions"
+                                            :key="action.label"
+                                            size="sm"
+                                            :variant="actionIndex === 0 ? 'default' : 'outline'"
+                                            class="gap-1.5"
+                                            @click="runSummaryQuickAction(action)"
+                                        >
+                                            {{ action.label }}
+                                            <AppIcon name="chevron-right" class="size-3.5" />
+                                        </Button>
                                     </div>
                                 </div>
 
-                                <div class="rounded-lg border p-4">
-                                    <p class="text-sm font-medium">{{ summary.credentialingState === 'not_required' ? 'Status Notes' : 'Blocking Reasons' }}</p>
-                                    <ul v-if="summary.blockingReasons.length > 0" class="mt-2 space-y-1 text-sm text-muted-foreground">
-                                        <li v-for="reason in summary.blockingReasons" :key="reason">- {{ reason }}</li>
-                                    </ul>
-                                    <p v-else class="mt-2 text-sm text-muted-foreground">No blocking reasons are currently recorded.</p>
+                                <div
+                                    v-if="summary.activeRegistration"
+                                    class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                                >
+                                    <div class="min-w-0">
+                                        <p class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                                            Active registration
+                                        </p>
+                                        <p class="mt-1 truncate text-sm font-medium text-foreground">
+                                            {{ formatRegulatorLabel(summary.activeRegistration.regulatorCode) }}
+                                            <span v-if="summary.activeRegistration.registrationNumber" class="text-muted-foreground">
+                                                · {{ summary.activeRegistration.registrationNumber }}
+                                            </span>
+                                        </p>
+                                    </div>
+                                    <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                        <span v-if="summary.activeRegistration.licenseNumber">
+                                            License {{ summary.activeRegistration.licenseNumber }}
+                                        </span>
+                                        <span>Expires {{ formatDate(summary.activeRegistration.expiresAt) }}</span>
+                                    </div>
                                 </div>
 
-                                <div class="rounded-lg border p-4">
-                                    <p class="text-sm font-medium">Active Registration</p>
-                                    <div v-if="summary.activeRegistration" class="mt-2 grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
-                                        <p>Regulator: <span class="font-medium text-foreground">{{ formatRegulatorLabel(summary.activeRegistration.regulatorCode) }}</span></p>
-                                        <p>Registration #: <span class="font-medium text-foreground">{{ summary.activeRegistration.registrationNumber || 'N/A' }}</span></p>
-                                        <p>License #: <span class="font-medium text-foreground">{{ summary.activeRegistration.licenseNumber || 'N/A' }}</span></p>
-                                        <p>Expires: <span class="font-medium text-foreground">{{ formatDate(summary.activeRegistration.expiresAt) }}</span></p>
-                                    </div>
-                                    <p v-else class="mt-2 text-sm text-muted-foreground">No active registration is currently available.</p>
-                                </div>
+                                <ul
+                                    v-else-if="summaryActionableBlockers.length > 0 && !summaryShowSetupChecklist"
+                                    class="space-y-1.5 px-4 py-3 text-sm text-muted-foreground"
+                                >
+                                    <li v-for="reason in summaryActionableBlockers" :key="reason" class="flex gap-2">
+                                        <span class="text-muted-foreground/60">·</span>
+                                        <span>{{ reason }}</span>
+                                    </li>
+                                </ul>
+
+                                <Collapsible
+                                    v-if="summaryShowSetupChecklist && selectedStaffSetupSteps.length > 0"
+                                    v-model:open="summaryChecklistOpen"
+                                    class="px-4 py-3"
+                                >
+                                    <CollapsibleTrigger as-child>
+                                        <Button variant="ghost" size="sm" class="h-8 w-full justify-between gap-2 px-0 hover:bg-transparent">
+                                            <span class="text-sm font-medium text-muted-foreground">Setup progress</span>
+                                            <AppIcon :name="summaryChecklistOpen ? 'chevron-up' : 'chevron-down'" class="size-4 text-muted-foreground" />
+                                        </Button>
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent class="pt-2">
+                                        <StaffGovernanceSetupChecklist
+                                            :steps="selectedStaffSetupSteps"
+                                            compact
+                                            description=""
+                                        />
+                                    </CollapsibleContent>
+                                </Collapsible>
                             </div>
                         </CardContent>
                     </Card>
@@ -1853,9 +2275,16 @@ onBeforeUnmount(() => {
                             <CardDescription>Tanzania regulator, practice authority, supervision level, and good standing state.</CardDescription>
                         </CardHeader>
                         <CardContent class="space-y-4">
-                            <div v-if="profileLoading" class="space-y-2">
-                                <Skeleton class="h-20 w-full" />
-                                <Skeleton class="h-40 w-full" />
+                            <div v-if="profileLoading" class="space-y-4">
+                                <fieldset class="grid gap-3 rounded-lg border p-3 md:grid-cols-2">
+                                    <Skeleton class="col-span-full h-4 w-40" />
+                                    <Skeleton v-for="index in 4" :key="`credentialing-profile-field-skeleton-${index}`" class="h-9 w-full rounded-md" />
+                                </fieldset>
+                                <fieldset class="grid gap-3 rounded-lg border p-3 md:grid-cols-2">
+                                    <Skeleton class="col-span-full h-4 w-40" />
+                                    <Skeleton v-for="index in 4" :key="`credentialing-profile-governance-skeleton-${index}`" class="h-9 w-full rounded-md" />
+                                </fieldset>
+                                <Skeleton class="h-24 w-full rounded-lg" />
                             </div>
                             <Alert v-else-if="profileError" variant="destructive">
                                 <AlertTitle>Profile issue</AlertTitle>
@@ -1870,81 +2299,91 @@ onBeforeUnmount(() => {
                                     <AlertDescription>Create the Tanzania-facing regulatory profile before relying on privileging or coverage.</AlertDescription>
                                 </Alert>
 
-                                <div class="grid gap-4 md:grid-cols-2">
-                                    <div class="space-y-2">
-                                        <Label for="profile-regulator">Primary regulator</Label>
-                                        <Select v-model="profileForm.primaryRegulatorCode">
-                                            <SelectTrigger :disabled="!canSaveSelectedRegulatoryProfile">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                            <SelectItem v-for="option in regulatorOptions" :key="option" :value="option">{{ formatRegulatorLabel(option) }}</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <p v-if="profileErrors.primaryRegulatorCode" class="text-xs text-destructive">{{ profileErrors.primaryRegulatorCode[0] }}</p>
-                                    </div>
-                                    <div class="space-y-2">
-                                        <Label for="profile-cadre">Cadre code</Label>
-                                        <Input id="profile-cadre" v-model="profileForm.cadreCode" :disabled="!canSaveSelectedRegulatoryProfile" placeholder="medical_officer, rn, lab_scientist" />
-                                        <p v-if="profileErrors.cadreCode" class="text-xs text-destructive">{{ profileErrors.cadreCode[0] }}</p>
-                                    </div>
-                                    <div class="space-y-2">
-                                        <Label for="profile-title">Professional title</Label>
-                                        <Input id="profile-title" v-model="profileForm.professionalTitle" :disabled="!canSaveSelectedRegulatoryProfile" placeholder="Medical Officer" />
-                                        <p v-if="profileErrors.professionalTitle" class="text-xs text-destructive">{{ profileErrors.professionalTitle[0] }}</p>
-                                    </div>
-                                    <div class="space-y-2">
-                                        <Label for="profile-registration-type">Registration type</Label>
-                                        <Input id="profile-registration-type" v-model="profileForm.registrationType" :disabled="!canSaveSelectedRegulatoryProfile" placeholder="full, provisional, limited" />
-                                        <p v-if="profileErrors.registrationType" class="text-xs text-destructive">{{ profileErrors.registrationType[0] }}</p>
-                                    </div>
-                                    <div class="space-y-2">
-                                        <Label for="profile-authority">Practice authority</Label>
-                                        <Select v-model="profileForm.practiceAuthorityLevel">
-                                            <SelectTrigger :disabled="!canSaveSelectedRegulatoryProfile">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                            <SelectItem v-for="option in practiceAuthorityOptions" :key="option" :value="option">{{ formatLabel(option) }}</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <p v-if="profileErrors.practiceAuthorityLevel" class="text-xs text-destructive">{{ profileErrors.practiceAuthorityLevel[0] }}</p>
-                                    </div>
-                                    <div class="space-y-2">
-                                        <Label for="profile-supervision">Supervision level</Label>
-                                        <Select v-model="profileForm.supervisionLevel">
-                                            <SelectTrigger :disabled="!canSaveSelectedRegulatoryProfile">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                            <SelectItem v-for="option in supervisionOptions" :key="option" :value="option">{{ formatLabel(option) }}</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <p v-if="profileErrors.supervisionLevel" class="text-xs text-destructive">{{ profileErrors.supervisionLevel[0] }}</p>
-                                    </div>
-                                    <div class="space-y-2">
-                                        <Label for="profile-good-standing">Good standing</Label>
-                                        <Select v-model="profileForm.goodStandingStatus">
-                                            <SelectTrigger :disabled="!canSaveSelectedRegulatoryProfile">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                            <SelectItem v-for="option in goodStandingOptions" :key="option" :value="option">{{ formatLabel(option) }}</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <p v-if="profileErrors.goodStandingStatus" class="text-xs text-destructive">{{ profileErrors.goodStandingStatus[0] }}</p>
-                                    </div>
-                                    <div class="space-y-2">
-                                        <Label for="profile-good-standing-date">Good standing checked</Label>
-                                        <Input id="profile-good-standing-date" v-model="profileForm.goodStandingCheckedAt" :disabled="!canSaveSelectedRegulatoryProfile" type="date" />
-                                        <p v-if="profileErrors.goodStandingCheckedAt" class="text-xs text-destructive">{{ profileErrors.goodStandingCheckedAt[0] }}</p>
-                                    </div>
-                                </div>
+                                <div class="grid gap-4">
+                                    <fieldset class="grid gap-3 rounded-lg border p-3 md:grid-cols-2">
+                                        <legend class="px-2 text-sm font-medium text-muted-foreground">Professional identity</legend>
+                                        <div class="grid gap-2">
+                                            <Label for="profile-regulator">Primary regulator</Label>
+                                            <Select v-model="profileForm.primaryRegulatorCode">
+                                                <SelectTrigger class="w-full" :disabled="!canSaveSelectedRegulatoryProfile">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                <SelectItem v-for="option in regulatorOptions" :key="option" :value="option">{{ formatRegulatorLabel(option) }}</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <p v-if="profileErrors.primaryRegulatorCode" class="text-xs text-destructive">{{ profileErrors.primaryRegulatorCode[0] }}</p>
+                                        </div>
+                                        <div class="grid gap-2">
+                                            <Label for="profile-cadre">Cadre code</Label>
+                                            <Input id="profile-cadre" v-model="profileForm.cadreCode" :disabled="!canSaveSelectedRegulatoryProfile" placeholder="medical_officer, rn, lab_scientist" />
+                                            <p v-if="profileErrors.cadreCode" class="text-xs text-destructive">{{ profileErrors.cadreCode[0] }}</p>
+                                        </div>
+                                        <div class="grid gap-2">
+                                            <Label for="profile-title">Professional title</Label>
+                                            <Input id="profile-title" v-model="profileForm.professionalTitle" :disabled="!canSaveSelectedRegulatoryProfile" placeholder="Medical Officer" />
+                                            <p v-if="profileErrors.professionalTitle" class="text-xs text-destructive">{{ profileErrors.professionalTitle[0] }}</p>
+                                        </div>
+                                        <div class="grid gap-2">
+                                            <Label for="profile-registration-type">Registration type</Label>
+                                            <Input id="profile-registration-type" v-model="profileForm.registrationType" :disabled="!canSaveSelectedRegulatoryProfile" placeholder="full, provisional, limited" />
+                                            <p v-if="profileErrors.registrationType" class="text-xs text-destructive">{{ profileErrors.registrationType[0] }}</p>
+                                        </div>
+                                    </fieldset>
 
-                                <div class="space-y-2">
-                                    <Label for="profile-notes">Notes</Label>
-                                    <Textarea id="profile-notes" v-model="profileForm.notes" :disabled="!canSaveSelectedRegulatoryProfile" rows="4" placeholder="Council references, supervision restrictions, local remarks" />
-                                    <p v-if="profileErrors.notes" class="text-xs text-destructive">{{ profileErrors.notes[0] }}</p>
+                                    <fieldset class="grid gap-3 rounded-lg border p-3 md:grid-cols-2">
+                                        <legend class="px-2 text-sm font-medium text-muted-foreground">Practice governance</legend>
+                                        <div class="grid gap-2">
+                                            <Label for="profile-authority">Practice authority</Label>
+                                            <Select v-model="profileForm.practiceAuthorityLevel">
+                                                <SelectTrigger class="w-full" :disabled="!canSaveSelectedRegulatoryProfile">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                <SelectItem v-for="option in practiceAuthorityOptions" :key="option" :value="option">{{ formatLabel(option) }}</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <p v-if="profileErrors.practiceAuthorityLevel" class="text-xs text-destructive">{{ profileErrors.practiceAuthorityLevel[0] }}</p>
+                                        </div>
+                                        <div class="grid gap-2">
+                                            <Label for="profile-supervision">Supervision level</Label>
+                                            <Select v-model="profileForm.supervisionLevel">
+                                                <SelectTrigger class="w-full" :disabled="!canSaveSelectedRegulatoryProfile">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                <SelectItem v-for="option in supervisionOptions" :key="option" :value="option">{{ formatLabel(option) }}</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <p v-if="profileErrors.supervisionLevel" class="text-xs text-destructive">{{ profileErrors.supervisionLevel[0] }}</p>
+                                        </div>
+                                        <div class="grid gap-2">
+                                            <Label for="profile-good-standing">Good standing</Label>
+                                            <Select v-model="profileForm.goodStandingStatus">
+                                                <SelectTrigger class="w-full" :disabled="!canSaveSelectedRegulatoryProfile">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                <SelectItem v-for="option in goodStandingOptions" :key="option" :value="option">{{ formatLabel(option) }}</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <p v-if="profileErrors.goodStandingStatus" class="text-xs text-destructive">{{ profileErrors.goodStandingStatus[0] }}</p>
+                                        </div>
+                                        <div class="grid gap-2">
+                                            <Label for="profile-good-standing-date">Good standing checked</Label>
+                                            <Input id="profile-good-standing-date" v-model="profileForm.goodStandingCheckedAt" :disabled="!canSaveSelectedRegulatoryProfile" type="date" />
+                                            <p v-if="profileErrors.goodStandingCheckedAt" class="text-xs text-destructive">{{ profileErrors.goodStandingCheckedAt[0] }}</p>
+                                        </div>
+                                    </fieldset>
+
+                                    <fieldset class="grid gap-3 rounded-lg border p-3">
+                                        <legend class="px-2 text-sm font-medium text-muted-foreground">Notes</legend>
+                                        <div class="grid gap-2">
+                                            <Label for="profile-notes">Regulatory notes</Label>
+                                            <Textarea id="profile-notes" v-model="profileForm.notes" :disabled="!canSaveSelectedRegulatoryProfile" class="min-h-24" placeholder="Council references, supervision restrictions, local remarks" />
+                                            <p v-if="profileErrors.notes" class="text-xs text-destructive">{{ profileErrors.notes[0] }}</p>
+                                        </div>
+                                    </fieldset>
                                 </div>
 
                                 <div class="flex justify-end">
@@ -1975,30 +2414,39 @@ onBeforeUnmount(() => {
                             </div>
                             <template v-else>
                                 <div class="grid gap-3 md:grid-cols-4">
-                                    <Select v-model="registrationFilters.regulatorCode">
-                                        <SelectTrigger>
+                                    <Select
+                                        :model-value="toOptionalSelectValue(registrationFilters.regulatorCode)"
+                                        @update:model-value="(value) => (registrationFilters.regulatorCode = fromOptionalSelectValue(value))"
+                                    >
+                                        <SelectTrigger class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                        <SelectItem value="">All regulators</SelectItem>
+                                        <SelectItem :value="ALL_SELECT_VALUE">All regulators</SelectItem>
                                         <SelectItem v-for="option in regulatorOptions" :key="option" :value="option">{{ formatRegulatorLabel(option) }}</SelectItem>
                                         </SelectContent>
                                     </Select>
-                                    <Select v-model="registrationFilters.registrationStatus">
-                                        <SelectTrigger>
+                                    <Select
+                                        :model-value="toOptionalSelectValue(registrationFilters.registrationStatus)"
+                                        @update:model-value="(value) => (registrationFilters.registrationStatus = fromOptionalSelectValue(value))"
+                                    >
+                                        <SelectTrigger class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                        <SelectItem value="">All registration states</SelectItem>
+                                        <SelectItem :value="ALL_SELECT_VALUE">All registration states</SelectItem>
                                         <SelectItem v-for="option in registrationStatusOptions" :key="option" :value="option">{{ formatLabel(option) }}</SelectItem>
                                         </SelectContent>
                                     </Select>
-                                    <Select v-model="registrationFilters.verificationStatus">
-                                        <SelectTrigger>
+                                    <Select
+                                        :model-value="toOptionalSelectValue(registrationFilters.verificationStatus)"
+                                        @update:model-value="(value) => (registrationFilters.verificationStatus = fromOptionalSelectValue(value))"
+                                    >
+                                        <SelectTrigger class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                        <SelectItem value="">All verification states</SelectItem>
+                                        <SelectItem :value="ALL_SELECT_VALUE">All verification states</SelectItem>
                                         <SelectItem v-for="option in verificationStatusOptions" :key="option" :value="option">{{ formatLabel(option) }}</SelectItem>
                                         </SelectContent>
                                     </Select>
@@ -2009,9 +2457,28 @@ onBeforeUnmount(() => {
                                     <AlertTitle>Registration issue</AlertTitle>
                                     <AlertDescription>{{ registrationsError }}</AlertDescription>
                                 </Alert>
-                                <div v-else-if="registrationsLoading" class="space-y-2">
-                                    <Skeleton class="h-24 w-full" />
-                                    <Skeleton class="h-24 w-full" />
+                                <div v-else-if="registrationsLoading" class="space-y-3">
+                                    <div
+                                        v-for="index in 3"
+                                        :key="`credentialing-registration-skeleton-${index}`"
+                                        class="space-y-3 rounded-lg border p-4"
+                                    >
+                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div class="min-w-0 flex-1 space-y-2">
+                                                <Skeleton class="h-4 w-64 max-w-full" />
+                                                <Skeleton class="h-3 w-full max-w-xl" />
+                                            </div>
+                                            <div class="flex flex-wrap gap-2">
+                                                <Skeleton class="h-5 w-16 rounded-full" />
+                                                <Skeleton class="h-5 w-16 rounded-full" />
+                                                <Skeleton class="h-5 w-20 rounded-full" />
+                                            </div>
+                                        </div>
+                                        <div class="grid gap-2 md:grid-cols-2">
+                                            <Skeleton class="h-4 w-40" />
+                                            <Skeleton class="h-4 w-32" />
+                                        </div>
+                                    </div>
                                 </div>
                                 <div v-else-if="registrations.length === 0" class="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
                                     No registrations match the current filters.
@@ -2061,30 +2528,39 @@ onBeforeUnmount(() => {
                         <CardContent class="space-y-4">
                             <div class="grid gap-3 md:grid-cols-4">
                                 <Input v-model="alertFilters.q" placeholder="Name, employee number, title, department" @keyup.enter="alertFilters.page = 1; loadAlerts()" />
-                                <Select v-model="alertFilters.regulatorCode">
-                                    <SelectTrigger>
+                                <Select
+                                    :model-value="toOptionalSelectValue(alertFilters.regulatorCode)"
+                                    @update:model-value="(value) => (alertFilters.regulatorCode = fromOptionalSelectValue(value))"
+                                >
+                                    <SelectTrigger class="w-full">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                    <SelectItem value="">All regulators</SelectItem>
+                                    <SelectItem :value="ALL_SELECT_VALUE">All regulators</SelectItem>
                                     <SelectItem v-for="option in regulatorOptions" :key="option" :value="option">{{ formatRegulatorLabel(option) }}</SelectItem>
                                     </SelectContent>
                                 </Select>
-                                <Select v-model="alertFilters.alertType">
-                                    <SelectTrigger>
+                                <Select
+                                    :model-value="toOptionalSelectValue(alertFilters.alertType)"
+                                    @update:model-value="(value) => (alertFilters.alertType = fromOptionalSelectValue(value))"
+                                >
+                                    <SelectTrigger class="w-full">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                    <SelectItem value="">All alert types</SelectItem>
+                                    <SelectItem :value="ALL_SELECT_VALUE">All alert types</SelectItem>
                                     <SelectItem v-for="option in alertTypeOptions" :key="option" :value="option">{{ formatLabel(option) }}</SelectItem>
                                     </SelectContent>
                                 </Select>
-                                <Select v-model="alertFilters.alertState">
-                                    <SelectTrigger>
+                                <Select
+                                    :model-value="toOptionalSelectValue(alertFilters.alertState)"
+                                    @update:model-value="(value) => (alertFilters.alertState = fromOptionalSelectValue(value))"
+                                >
+                                    <SelectTrigger class="w-full">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                    <SelectItem value="">All alert states</SelectItem>
+                                    <SelectItem :value="ALL_SELECT_VALUE">All alert states</SelectItem>
                                     <SelectItem v-for="option in alertStateOptions" :key="option" :value="option">{{ formatLabel(option) }}</SelectItem>
                                     </SelectContent>
                                 </Select>
@@ -2099,9 +2575,25 @@ onBeforeUnmount(() => {
                                 <AlertTitle>Alert issue</AlertTitle>
                                 <AlertDescription>{{ alertsError }}</AlertDescription>
                             </Alert>
-                            <div v-else-if="alertsLoading" class="space-y-2">
-                                <Skeleton class="h-24 w-full" />
-                                <Skeleton class="h-24 w-full" />
+                            <div v-else-if="alertsLoading" class="space-y-3">
+                                <div
+                                    v-for="index in 3"
+                                    :key="`credentialing-alert-skeleton-${index}`"
+                                    class="space-y-3 rounded-lg border p-4"
+                                >
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                        <div class="min-w-0 flex-1 space-y-2">
+                                            <Skeleton class="h-4 w-72 max-w-full" />
+                                            <Skeleton class="h-3 w-56 max-w-full" />
+                                            <Skeleton class="h-4 w-full max-w-2xl" />
+                                        </div>
+                                        <div class="flex flex-wrap gap-2">
+                                            <Skeleton class="h-5 w-16 rounded-full" />
+                                            <Skeleton class="h-5 w-24 rounded-full" />
+                                        </div>
+                                    </div>
+                                    <Skeleton class="h-8 w-24 rounded-md" />
+                                </div>
                             </div>
                             <div v-else-if="visibleAlerts.length === 0" class="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
                                 {{
@@ -2164,12 +2656,15 @@ onBeforeUnmount(() => {
                                     <div class="grid gap-3 md:grid-cols-4">
                                         <Input v-model="auditFilters.q" placeholder="Search action or payload" @keyup.enter="auditFilters.page = 1; loadAudit()" />
                                         <Input v-model="auditFilters.action" placeholder="Action code" @keyup.enter="auditFilters.page = 1; loadAudit()" />
-                                        <Select v-model="auditFilters.actorType">
-                                            <SelectTrigger>
+                                        <Select
+                                            :model-value="toOptionalSelectValue(auditFilters.actorType)"
+                                            @update:model-value="(value) => (auditFilters.actorType = fromOptionalSelectValue(value))"
+                                        >
+                                            <SelectTrigger class="w-full">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
-                                            <SelectItem value="">All actor types</SelectItem>
+                                            <SelectItem :value="ALL_SELECT_VALUE">All actor types</SelectItem>
                                             <SelectItem value="user">User</SelectItem>
                                             <SelectItem value="system">System</SelectItem>
                                             </SelectContent>
@@ -2181,9 +2676,18 @@ onBeforeUnmount(() => {
                                         <AlertTitle>Audit issue</AlertTitle>
                                         <AlertDescription>{{ auditError }}</AlertDescription>
                                     </Alert>
-                                    <div v-else-if="auditLoading" class="space-y-2">
-                                        <Skeleton class="h-20 w-full" />
-                                        <Skeleton class="h-20 w-full" />
+                                    <div v-else-if="auditLoading" class="space-y-3">
+                                        <div
+                                            v-for="index in 4"
+                                            :key="`credentialing-audit-skeleton-${index}`"
+                                            class="flex flex-col gap-2 rounded-lg border p-4 sm:flex-row sm:items-start sm:justify-between"
+                                        >
+                                            <div class="min-w-0 flex-1 space-y-2">
+                                                <Skeleton class="h-4 w-56 max-w-full" />
+                                                <Skeleton class="h-3 w-72 max-w-full" />
+                                            </div>
+                                            <Skeleton class="h-5 w-16 rounded-full" />
+                                        </div>
                                     </div>
                                     <div v-else-if="auditRows.length === 0" class="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
                                         No credentialing audit logs match the current filters.
@@ -2214,34 +2718,8 @@ onBeforeUnmount(() => {
                         </CardContent>
                     </Card>
                     </template>
-                    </div>
                 </div>
             </div>
-
-            <div class="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-4 py-2.5">
-                <span class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                    <AppIcon name="activity" class="size-3.5" />
-                    Care workflow:
-                </span>
-                <Button size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="workspaceStaffHref('/staff', selectedStaff)">
-                        <AppIcon name="users" class="size-3.5" />
-                        Staff Directory
-                    </Link>
-                </Button>
-                <Button size="sm" class="gap-1.5">
-                    <AppIcon name="badge-check" class="size-3.5" />
-                    Credentialing
-                </Button>
-                <Button v-if="canReadPrivileging" size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="workspaceStaffHref('/staff-privileges', selectedStaff)">
-                        <AppIcon name="shield-check" class="size-3.5" />
-                        Privileging &amp; Coverage
-                    </Link>
-                </Button>
-                <span v-if="selectedStaff" class="text-xs text-muted-foreground">
-                    Viewing {{ staffDisplayName(selectedStaff) }}
-                </span>
             </div>
         </div>
         <StaffProfileEditDialog
@@ -2264,98 +2742,113 @@ onBeforeUnmount(() => {
                     <DialogTitle>{{ registrationDialogTitle }}</DialogTitle>
                     <DialogDescription>Registration, license, CPD, and evidence source for the selected staff member.</DialogDescription>
                 </DialogHeader>
-                <div class="grid gap-4 py-2 md:grid-cols-2">
-                    <div class="space-y-2">
-                        <Label for="registration-regulator">Regulator</Label>
-                        <Select v-model="registrationForm.regulatorCode">
-                            <SelectTrigger>
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                            <SelectItem v-for="option in regulatorOptions" :key="option" :value="option">{{ formatRegulatorLabel(option) }}</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <p v-if="registrationErrors.regulatorCode" class="text-xs text-destructive">{{ registrationErrors.regulatorCode[0] }}</p>
-                    </div>
-                    <div class="space-y-2">
-                        <Label for="registration-category">Registration category</Label>
-                        <Input id="registration-category" v-model="registrationForm.registrationCategory" placeholder="full, provisional, limited" />
-                        <p v-if="registrationErrors.registrationCategory" class="text-xs text-destructive">{{ registrationErrors.registrationCategory[0] }}</p>
-                    </div>
-                    <div class="space-y-2">
-                        <Label for="registration-number">Registration number</Label>
-                        <Input id="registration-number" v-model="registrationForm.registrationNumber" />
-                        <p v-if="registrationErrors.registrationNumber" class="text-xs text-destructive">{{ registrationErrors.registrationNumber[0] }}</p>
-                    </div>
-                    <div class="space-y-2">
-                        <Label for="license-number">License number</Label>
-                        <Input id="license-number" v-model="registrationForm.licenseNumber" />
-                        <p v-if="registrationErrors.licenseNumber" class="text-xs text-destructive">{{ registrationErrors.licenseNumber[0] }}</p>
-                    </div>
-                    <div class="space-y-2">
-                        <Label for="registration-status">Registration status</Label>
-                        <Select v-model="registrationForm.registrationStatus">
-                            <SelectTrigger>
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                            <SelectItem v-for="option in registrationStatusOptions" :key="option" :value="option">{{ formatLabel(option) }}</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div class="space-y-2">
-                        <Label for="license-status">License status</Label>
-                        <Select v-model="registrationForm.licenseStatus">
-                            <SelectTrigger>
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                            <SelectItem v-for="option in licenseStatusOptions" :key="option" :value="option">{{ formatLabel(option) }}</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div class="space-y-2">
-                        <Label for="issued-at">Issued at</Label>
-                        <Input id="issued-at" v-model="registrationForm.issuedAt" type="date" />
-                    </div>
-                    <div class="space-y-2">
-                        <Label for="expires-at">Expires at</Label>
-                        <Input id="expires-at" v-model="registrationForm.expiresAt" type="date" />
-                        <p v-if="registrationErrors.expiresAt" class="text-xs text-destructive">{{ registrationErrors.expiresAt[0] }}</p>
-                    </div>
-                    <div class="space-y-2">
-                        <Label for="renewal-due-at">Renewal due</Label>
-                        <Input id="renewal-due-at" v-model="registrationForm.renewalDueAt" type="date" />
-                    </div>
-                    <div class="space-y-2">
-                        <Label for="source-system">Source system</Label>
-                        <Input id="source-system" v-model="registrationForm.sourceSystem" placeholder="manual, council portal import" />
-                    </div>
-                    <div class="space-y-2">
-                        <Label for="cpd-cycle-start">CPD cycle start</Label>
-                        <Input id="cpd-cycle-start" v-model="registrationForm.cpdCycleStartAt" type="date" />
-                    </div>
-                    <div class="space-y-2">
-                        <Label for="cpd-cycle-end">CPD cycle end</Label>
-                        <Input id="cpd-cycle-end" v-model="registrationForm.cpdCycleEndAt" type="date" />
-                    </div>
-                    <div class="space-y-2">
-                        <Label for="cpd-required">CPD points required</Label>
-                        <Input id="cpd-required" v-model="registrationForm.cpdPointsRequired" type="number" min="0" />
-                    </div>
-                    <div class="space-y-2">
-                        <Label for="cpd-earned">CPD points earned</Label>
-                        <Input id="cpd-earned" v-model="registrationForm.cpdPointsEarned" type="number" min="0" />
-                    </div>
-                    <div class="space-y-2 md:col-span-2">
-                        <Label for="source-document-id">Source document ID</Label>
-                        <Input id="source-document-id" v-model="registrationForm.sourceDocumentId" placeholder="Optional staff document UUID" />
-                        <p v-if="registrationErrors.sourceDocumentId" class="text-xs text-destructive">{{ registrationErrors.sourceDocumentId[0] }}</p>
-                    </div>
-                    <div class="space-y-2 md:col-span-2">
-                        <Label for="registration-notes">Notes</Label>
-                        <Textarea id="registration-notes" v-model="registrationForm.notes" rows="4" placeholder="Renewal notes, council remarks, local exceptions" />
-                    </div>
+                <div class="grid gap-4 py-2">
+                    <fieldset class="grid gap-3 rounded-lg border p-3 md:grid-cols-2">
+                        <legend class="px-2 text-sm font-medium text-muted-foreground">Registration identity</legend>
+                        <div class="grid gap-2">
+                            <Label for="registration-regulator">Regulator</Label>
+                            <Select v-model="registrationForm.regulatorCode">
+                                <SelectTrigger class="w-full">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                <SelectItem v-for="option in regulatorOptions" :key="option" :value="option">{{ formatRegulatorLabel(option) }}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <p v-if="registrationErrors.regulatorCode" class="text-xs text-destructive">{{ registrationErrors.regulatorCode[0] }}</p>
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="registration-category">Registration category</Label>
+                            <Input id="registration-category" v-model="registrationForm.registrationCategory" placeholder="full, provisional, limited" />
+                            <p v-if="registrationErrors.registrationCategory" class="text-xs text-destructive">{{ registrationErrors.registrationCategory[0] }}</p>
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="registration-number">Registration number</Label>
+                            <Input id="registration-number" v-model="registrationForm.registrationNumber" />
+                            <p v-if="registrationErrors.registrationNumber" class="text-xs text-destructive">{{ registrationErrors.registrationNumber[0] }}</p>
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="license-number">License number</Label>
+                            <Input id="license-number" v-model="registrationForm.licenseNumber" />
+                            <p v-if="registrationErrors.licenseNumber" class="text-xs text-destructive">{{ registrationErrors.licenseNumber[0] }}</p>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="grid gap-3 rounded-lg border p-3 md:grid-cols-2">
+                        <legend class="px-2 text-sm font-medium text-muted-foreground">Status and validity</legend>
+                        <div class="grid gap-2">
+                            <Label for="registration-status">Registration status</Label>
+                            <Select v-model="registrationForm.registrationStatus">
+                                <SelectTrigger class="w-full">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                <SelectItem v-for="option in registrationStatusOptions" :key="option" :value="option">{{ formatLabel(option) }}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="license-status">License status</Label>
+                            <Select v-model="registrationForm.licenseStatus">
+                                <SelectTrigger class="w-full">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                <SelectItem v-for="option in licenseStatusOptions" :key="option" :value="option">{{ formatLabel(option) }}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="issued-at">Issued at</Label>
+                            <Input id="issued-at" v-model="registrationForm.issuedAt" type="date" />
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="expires-at">Expires at</Label>
+                            <Input id="expires-at" v-model="registrationForm.expiresAt" type="date" />
+                            <p v-if="registrationErrors.expiresAt" class="text-xs text-destructive">{{ registrationErrors.expiresAt[0] }}</p>
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="renewal-due-at">Renewal due</Label>
+                            <Input id="renewal-due-at" v-model="registrationForm.renewalDueAt" type="date" />
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="source-system">Source system</Label>
+                            <Input id="source-system" v-model="registrationForm.sourceSystem" placeholder="manual, council portal import" />
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="grid gap-3 rounded-lg border p-3 md:grid-cols-2">
+                        <legend class="px-2 text-sm font-medium text-muted-foreground">CPD and evidence</legend>
+                        <div class="grid gap-2">
+                            <Label for="cpd-cycle-start">CPD cycle start</Label>
+                            <Input id="cpd-cycle-start" v-model="registrationForm.cpdCycleStartAt" type="date" />
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="cpd-cycle-end">CPD cycle end</Label>
+                            <Input id="cpd-cycle-end" v-model="registrationForm.cpdCycleEndAt" type="date" />
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="cpd-required">CPD points required</Label>
+                            <Input id="cpd-required" v-model="registrationForm.cpdPointsRequired" type="number" min="0" />
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="cpd-earned">CPD points earned</Label>
+                            <Input id="cpd-earned" v-model="registrationForm.cpdPointsEarned" type="number" min="0" />
+                        </div>
+                        <div class="grid gap-2 md:col-span-2">
+                            <Label for="source-document-id">Source document ID</Label>
+                            <Input id="source-document-id" v-model="registrationForm.sourceDocumentId" placeholder="Optional staff document UUID" />
+                            <p v-if="registrationErrors.sourceDocumentId" class="text-xs text-destructive">{{ registrationErrors.sourceDocumentId[0] }}</p>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="grid gap-3 rounded-lg border p-3">
+                        <legend class="px-2 text-sm font-medium text-muted-foreground">Notes</legend>
+                        <div class="grid gap-2">
+                            <Label for="registration-notes">Registration notes</Label>
+                            <Textarea id="registration-notes" v-model="registrationForm.notes" class="min-h-24" placeholder="Renewal notes, council remarks, local exceptions" />
+                        </div>
+                    </fieldset>
                 </div>
                 <DialogFooter>
                     <Button variant="outline" @click="registrationDialogOpen = false">Cancel</Button>
@@ -2371,10 +2864,10 @@ onBeforeUnmount(() => {
                     <DialogDescription>Mark the registration as verified, pending, or rejected.</DialogDescription>
                 </DialogHeader>
                 <div class="space-y-4 py-2">
-                    <div class="space-y-2">
+                    <div class="grid gap-2">
                         <Label for="verification-status">Verification status</Label>
                         <Select v-model="verificationForm.verificationStatus">
-                            <SelectTrigger>
+                            <SelectTrigger class="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>

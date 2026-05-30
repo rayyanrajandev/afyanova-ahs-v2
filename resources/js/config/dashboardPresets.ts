@@ -1,16 +1,14 @@
 /**
- * Central dashboard preset metadata and primary-role inference (HIS-style workflow landing).
- * Layout and module lists stay here; business logic lives in page composables and APIs.
+ * Dashboard workflow metadata and client-side fallback eligibility.
+ *
+ * @deprecated Role-code eligibility mirrors PHP for offline/fallback only.
+ * Prefer `useDashboardContext()` and server `GET /api/v1/dashboard/context`.
+ * Client role lists will be removed once dashboard context is guaranteed on all routes.
  */
 
-export type DashboardPresetKey =
-    | 'front_desk'
-    | 'clinician'
-    | 'nursing'
-    | 'emergency'
-    | 'direct_service'
-    | 'cashier'
-    | 'admin';
+import type { DashboardContextPayload, DashboardWorkflowKey } from '@/types/dashboard';
+
+export type DashboardPresetKey = DashboardWorkflowKey;
 
 export type DashboardPresetDefinition = {
     readonly key: DashboardPresetKey;
@@ -22,6 +20,7 @@ export type DashboardPresetDefinition = {
 export const DASHBOARD_ADMIN_ROLE_CODES: readonly string[] = [
     'PLATFORM.USER.ADMIN',
     'PLATFORM.RBAC.ADMIN',
+    'PLATFORM.SUBSCRIPTION.ADMIN',
     'HOSPITAL.FACILITY.ADMIN',
     'HOSPITAL.DEPARTMENT.HEAD',
 ];
@@ -52,6 +51,19 @@ export const DASHBOARD_EMERGENCY_ROLE_CODES: readonly string[] = [
 ];
 
 export const DASHBOARD_FRONT_DESK_ROLE_CODES: readonly string[] = ['HOSPITAL.REGISTRATION.CLERK'];
+
+export const DASHBOARD_OPERATIONS_ROLE_CODES: readonly string[] = [
+    'HOSPITAL.STAFF.ADMIN',
+    'HOSPITAL.CREDENTIALING.OFFICER',
+    'HOSPITAL.PRIVILEGING.REVIEWER',
+    'HOSPITAL.PRIVILEGING.APPROVER',
+];
+
+export const DASHBOARD_RECORDS_ROLE_CODES: readonly string[] = ['HOSPITAL.MEDICAL.RECORDS.OFFICER'];
+
+export const DASHBOARD_SUPPLY_ROLE_CODES: readonly string[] = ['HOSPITAL.INVENTORY.STOREKEEPER'];
+
+export const DASHBOARD_THEATRE_ROLE_CODES: readonly string[] = ['HOSPITAL.THEATRE.USER'];
 
 export const DASHBOARD_PRESETS = [
     {
@@ -101,16 +113,44 @@ export const DASHBOARD_PRESETS = [
         description: 'Monitor platform health, scope coverage, and operational controls across modules.',
         modules: ['Audit Export', 'Users', 'Facility Config'],
     },
+    {
+        key: 'operations',
+        label: 'Operations',
+        description: 'Staff directory, credentialing compliance, and privileging queues for HR and quality teams.',
+        modules: ['Staff', 'Credentialing', 'Privileges'],
+    },
+    {
+        key: 'records',
+        label: 'Medical Records',
+        description: 'Health information workflows focused on chart completeness, release, and record governance.',
+        modules: ['Medical Records', 'Patients', 'Audit'],
+    },
+    {
+        key: 'supply',
+        label: 'Supply Chain',
+        description: 'Inventory alerts, stock movement, and procurement requests for storekeepers.',
+        modules: ['Inventory', 'Procurement', 'Suppliers'],
+    },
+    {
+        key: 'theatre',
+        label: 'Theatre',
+        description: 'Procedure scheduling, OR resource allocation, and perioperative status at a glance.',
+        modules: ['Theatre Procedures', 'Resource Allocation'],
+    },
 ] as const satisfies readonly DashboardPresetDefinition[];
 
-/** First match wins for Auto landing when multiple roles qualify. */
+/** First match wins for Auto landing when multiple workflows qualify (mirrors server). */
 export const DASHBOARD_PRESET_PRIORITY: readonly DashboardPresetKey[] = [
     'admin',
     'emergency',
+    'operations',
     'cashier',
     'clinician',
+    'records',
     'nursing',
+    'theatre',
     'direct_service',
+    'supply',
     'front_desk',
 ] as const;
 
@@ -125,8 +165,41 @@ export type InferDashboardPresetInput = {
     hasPermission: (name: string) => boolean;
 };
 
+function isOperationsEligible(input: InferDashboardPresetInput): boolean {
+    const { roleCodesUpper, hasPermission } = input;
+    if (presetMatchesRole(roleCodesUpper, DASHBOARD_OPERATIONS_ROLE_CODES)) {
+        return true;
+    }
+    if (!hasPermission('staff.read')) {
+        return false;
+    }
+
+    return hasPermission('staff.credentialing.read') || hasPermission('staff.privileges.read');
+}
+
+function isRecordsEligible(input: InferDashboardPresetInput): boolean {
+    const { roleCodesUpper, hasPermission } = input;
+    if (presetMatchesRole(roleCodesUpper, DASHBOARD_RECORDS_ROLE_CODES)) {
+        return true;
+    }
+    if (!hasPermission('medical.records.read')) {
+        return false;
+    }
+    if (presetMatchesRole(roleCodesUpper, DASHBOARD_NURSING_ROLE_CODES)) {
+        return false;
+    }
+    if (presetMatchesRole(roleCodesUpper, DASHBOARD_EMERGENCY_ROLE_CODES)) {
+        return false;
+    }
+    if (presetMatchesRole(roleCodesUpper, DASHBOARD_CLINICIAN_ROLE_CODES)) {
+        return false;
+    }
+
+    return true;
+}
+
 /**
- * Workflow presets this session may legitimately operate in (roles + effective permissions union).
+ * Client fallback when /dashboard/context is unavailable.
  */
 export function eligibleDashboardPresets(input: InferDashboardPresetInput): DashboardPresetKey[] {
     const { roleCodesUpper, isFacilitySuperAdmin, isPlatformSuperAdmin, hasPermission } = input;
@@ -141,38 +214,37 @@ export function eligibleDashboardPresets(input: InferDashboardPresetInput): Dash
     if (hasPermission('billing.invoices.read') || hasPermission('claims.insurance.read')) {
         allow.add('cashier');
     }
+
+    const holdsRecordsRole = presetMatchesRole(roleCodesUpper, DASHBOARD_RECORDS_ROLE_CODES);
+
     if (presetMatchesRole(roleCodesUpper, DASHBOARD_CLINICIAN_ROLE_CODES)) {
         allow.add('clinician');
     }
-    /*
-     * Nurses often carry medical.records.read for bedside chart viewing, but that is not the same workflow
-     * as the Clinician (OPD) dashboard. Showing the Clinician preset here triggers medical-record KPI fetches that
-     * may not match the facility's subscribed MR bundle — and it hides Nursing as Auto when priority lists
-     * clinician ahead of nursing. Only derive Clinician from this permission when the user is not a nursing-role holder.
-     */
     const holdsNursingRole = presetMatchesRole(roleCodesUpper, DASHBOARD_NURSING_ROLE_CODES);
-    if (hasPermission('medical.records.read') && !holdsNursingRole) {
+    if (hasPermission('medical.records.read') && !holdsNursingRole && !holdsRecordsRole) {
         allow.add('clinician');
     }
     if (holdsNursingRole) {
         allow.add('nursing');
     }
-    /*
-     * Emergency/triage users take the Emergency preset. They share inpatient.ward.read with nursing but
-     * must land on Emergency by default — the priority list handles auto-landing; the guard below prevents
-     * inpatient.ward.read alone from silently adding 'nursing' for emergency staff in the switcher.
-     */
     const holdsEmergencyRole = presetMatchesRole(roleCodesUpper, DASHBOARD_EMERGENCY_ROLE_CODES);
     if (holdsEmergencyRole) {
         allow.add('emergency');
     }
-    /*
-     * Omit admissions.read alone: clerks/registrars need it for workflows but must not inherit the Nursing
-     * dashboard (preset priority would also put nursing ahead of front_desk). Ward context is required.
-     * Also exclude emergency-role holders — they use the Emergency preset, not Nursing, as their home.
-     */
     if (hasPermission('inpatient.ward.read') && !holdsEmergencyRole) {
         allow.add('nursing');
+    }
+    if (isOperationsEligible(input)) {
+        allow.add('operations');
+    }
+    if (isRecordsEligible(input)) {
+        allow.add('records');
+    }
+    if (presetMatchesRole(roleCodesUpper, DASHBOARD_SUPPLY_ROLE_CODES) || hasPermission('inventory.procurement.read')) {
+        allow.add('supply');
+    }
+    if (presetMatchesRole(roleCodesUpper, DASHBOARD_THEATRE_ROLE_CODES) || hasPermission('theatre.procedures.read')) {
+        allow.add('theatre');
     }
     if (presetMatchesRole(roleCodesUpper, DASHBOARD_DIRECT_SERVICE_ROLE_CODES)) {
         allow.add('direct_service');
@@ -195,13 +267,21 @@ export function eligibleDashboardPresets(input: InferDashboardPresetInput): Dash
     return ordered.length > 0 ? ordered : ['front_desk'];
 }
 
-/** Default landing preset when Override is Auto: highest-precedence stripe among eligible. */
 export function inferDashboardPreset(input: InferDashboardPresetInput): DashboardPresetKey {
     const ordered = eligibleDashboardPresets(input);
-    /*
-     * Natural priority order (admin > cashier > clinician > nursing > direct_service > front_desk).
-     * A Nurse+Clerk combo lands on Nursing by default — the clinically higher-stakes workflow.
-     * Users can switch to Front Desk in one click via the preset switcher.
-     */
     return ordered[0] ?? 'front_desk';
+}
+
+export function workflowDefinitionForKey(key: DashboardPresetKey): DashboardPresetDefinition | undefined {
+    return DASHBOARD_PRESETS.find((preset) => preset.key === key);
+}
+
+export function resolveDashboardContextFromPayload(
+    payload: DashboardContextPayload | null | undefined,
+): DashboardContextPayload | null {
+    if (!payload?.eligibleWorkflowKeys?.length) {
+        return null;
+    }
+
+    return payload;
 }

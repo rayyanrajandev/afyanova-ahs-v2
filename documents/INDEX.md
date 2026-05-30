@@ -37,6 +37,7 @@ This documentation is organized for Tanzania hospital operations and regulatory 
 - `03-OPERATIONS_STAFF_ONBOARDING.md` - User provisioning & offboarding
 
 ### 5. **EXECUTION & TRACKING**
+- `DASHBOARD_WORKFLOW_CONTEXT_2026.md` - Server-driven dashboard workflows (context API, Operations stripe, feature review)
 - `CURRENT_STATUS_2026.md` - Project status and milestones
 - `09-ONLINE_PRODUCTION_COMPLETION_PLAN_2026.md` - Principal architect execution plan to reach strong online production standard
 - `10-FRONTEND_UX_PRODUCT_COMPLETION_PLAN_2026.md` - Frontend UX and product-flow completion plan for modern hospital workflows

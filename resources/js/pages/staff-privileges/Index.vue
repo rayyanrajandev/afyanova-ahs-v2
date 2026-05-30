@@ -2,12 +2,14 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import StaffGovernanceSetupChecklist from '@/components/staff/StaffGovernanceSetupChecklist.vue';
 import StaffProfileEditDialog from '@/components/staff/StaffProfileEditDialog.vue';
 import StaffProfileStatusDialog from '@/components/staff/StaffProfileStatusDialog.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,6 +22,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
+import {
+    credentialingStateFriendlyLabel,
+    credentialingStateFriendlyVariant,
+    useStaffGovernanceSetupSteps,
+} from '@/composables/useStaffGovernanceSetupSteps';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { csrfRequestHeaders } from '@/lib/csrf';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
@@ -448,6 +455,20 @@ async function api<T>(
     return payload as T;
 }
 
+function staffStatusDotClass(status: string | null): string {
+    const normalized = (status ?? '').toLowerCase();
+    if (normalized === 'active') return 'bg-emerald-500';
+    if (normalized === 'suspended') return 'bg-amber-500';
+    if (normalized === 'inactive') return 'bg-rose-500';
+    return 'bg-slate-400';
+}
+
+function goToStaffQueuePage(page: number) {
+    if (!staffMeta.value) return;
+    staffFilters.page = Math.max(1, Math.min(page, staffMeta.value.lastPage));
+    void loadStaff();
+}
+
 function statusVariant(status: string | null): 'outline' | 'secondary' | 'destructive' {
     const s = (status ?? '').toLowerCase();
     if (s === 'active') return 'secondary';
@@ -569,10 +590,11 @@ function workflowActionHint(status: string | null): string | null {
 }
 
 function credentialingStateVariant(state: string | null): 'outline' | 'secondary' | 'destructive' {
-    const normalized = (state ?? '').toLowerCase();
-    if (normalized === 'ready') return 'secondary';
-    if (normalized === 'blocked') return 'destructive';
-    return 'outline';
+    return credentialingStateFriendlyVariant(state, selectedStaffCredentialingSummary.value?.blockingReasons ?? []);
+}
+
+function credentialingStateLabel(state: string | null): string {
+    return credentialingStateFriendlyLabel(state, selectedStaffCredentialingSummary.value?.blockingReasons ?? []);
 }
 
 function loadLabel(map: Map<string, string>, key: string | null): string {
@@ -1134,7 +1156,7 @@ function runSelectedStaffWorkflowGuidance(): void {
     switch (selectedStaffWorkflowGuidance.value?.action) {
         case 'credentialing':
             if (selectedStaff.value) {
-                window.location.href = workspaceStaffHref('/staff-credentialing', selectedStaff.value);
+                window.location.assign(workspaceStaffHref('/staff-credentialing', selectedStaff.value));
             }
             break;
         case 'grant':
@@ -1306,6 +1328,74 @@ const privilegingStaffQueueSummaryText = computed(() => {
     return `Showing ${staffQueueTotalCount.value} ${status} staff${filterText}`;
 });
 const hasActiveStaffQueueFilters = computed(() => staffFilterBadgeCount.value > 0);
+const workspaceIntroText = computed(() => {
+    const total = staffQueueTotalCount.value;
+    if (workspaceView.value === 'board') {
+        return `${total} staff in scope · monitor credential expiry, coverage gaps, and active privileging pressure`;
+    }
+    if (workspaceView.value === 'grant') {
+        return `${total} staff in scope · submit privilege requests and move them into review`;
+    }
+    return `${total} staff in scope · review privilege grants, workflow state, and audit evidence`;
+});
+const staffQueuePaginationPageNumbers = computed((): (number | '...')[] => {
+    const total = staffMeta.value?.lastPage ?? 1;
+    const current = staffMeta.value?.currentPage ?? 1;
+    if (total <= 7) {
+        return Array.from({ length: total }, (_, index) => index + 1);
+    }
+
+    const pages: (number | '...')[] = [1];
+    if (current > 3) pages.push('...');
+
+    for (let page = Math.max(2, current - 1); page <= Math.min(total - 1, current + 1); page += 1) {
+        pages.push(page);
+    }
+
+    if (current < total - 2) pages.push('...');
+    pages.push(total);
+    return pages;
+});
+const staffQueueFilterChips = computed(() => {
+    const chips: Array<{ key: string; label: string; clear: () => void }> = [];
+    const query = staffFilters.q.trim();
+
+    if (query) {
+        chips.push({
+            key: 'q',
+            label: `Search: ${query}`,
+            clear: () => {
+                staffFilters.q = '';
+                staffFilters.page = 1;
+                void loadStaff();
+            },
+        });
+    }
+
+    if (queueDensityValue.value === 'compact') {
+        chips.push({
+            key: 'density',
+            label: 'Compact rows',
+            clear: () => {
+                queueDensityValue.value = 'comfortable';
+            },
+        });
+    }
+
+    if (staffFilters.perPage !== 12) {
+        chips.push({
+            key: 'perPage',
+            label: `${staffFilters.perPage} per page`,
+            clear: () => {
+                staffFilters.perPage = 12;
+                staffFilters.page = 1;
+                void loadStaff();
+            },
+        });
+    }
+
+    return chips;
+});
 const queueDensityValue = computed({
     get: () => (compactQueueRows.value ? 'compact' : 'comfortable'),
     set: (value: string) => {
@@ -1486,6 +1576,19 @@ const selectedStaffPrivilegeSummary = computed(() => {
     };
 });
 
+const selectedStaffSetupSteps = useStaffGovernanceSetupSteps({
+    selectedStaff,
+    summary: selectedStaffCredentialingSummary,
+    hasRegulatoryProfile: computed(() => {
+        const summary = selectedStaffCredentialingSummary.value;
+        return Boolean(summary?.regulatoryProfile?.cadreCode || summary?.regulatoryProfile?.professionalTitle);
+    }),
+    registrationCount: computed(() => selectedStaffCredentialingSummary.value?.registrationSummary.total ?? 0),
+    emailBlockerMessage: selectedStaffGovernanceBlockerMessage,
+    privilegeSummary: selectedStaffPrivilegeSummary,
+    includePrivilegingStep: true,
+});
+
 const selectedStaffWorkflowQueueCount = computed(
     () => selectedStaffPrivilegeSummary.value.requested + selectedStaffPrivilegeSummary.value.underReview + selectedStaffPrivilegeSummary.value.approved,
 );
@@ -1494,11 +1597,11 @@ const selectedStaffWorkflowGuidance = computed<PrivilegingWorkflowGuidance | nul
 
     if (!selectedStaffHasVerifiedLinkedUser.value) {
         return {
-            title: 'Resolve linked user verification',
+            title: 'Step 1: Verify linked user email',
             description:
                 selectedStaffGovernanceBlockerMessage.value
-                || 'Finish the invite or password setup flow before requesting or changing privileging data.',
-            variant: 'destructive',
+                || 'Link the staff profile to a platform user in Staff Directory, then wait for email verification before privileging.',
+            variant: 'default',
             action: null,
         };
     }
@@ -1532,11 +1635,13 @@ const selectedStaffWorkflowGuidance = computed<PrivilegingWorkflowGuidance | nul
             };
         }
 
-        if (credentialingState !== '' && credentialingState !== 'ready') {
+        if (credentialingState !== '' && credentialingState !== 'ready' && credentialingState !== 'watch') {
             return {
-                title: 'Resolve credentialing before privileging',
-                description: selectedStaffCredentialingPreview.value || 'Credentialing must be ready before a privilege can be requested or activated.',
-                variant: 'destructive',
+                title: 'Complete credentialing first',
+                description:
+                    selectedStaffCredentialingPreview.value
+                    || 'Clinical staff need regulatory profile and verified registration before privilege requests can proceed. This is normal for newly created profiles.',
+                variant: 'default',
                 action: canReadCredentialing.value ? 'credentialing' : null,
                 actionLabel: canReadCredentialing.value ? 'Open Credentialing' : null,
             };
@@ -1632,6 +1737,57 @@ const selectedStaffWorkflowGuidance = computed<PrivilegingWorkflowGuidance | nul
 
     return null;
 });
+
+const recommendedWorkspaceView = computed((): StaffPrivilegeWorkspaceView => {
+    const action = selectedStaffWorkflowGuidance.value?.action;
+    if (action === 'board') return 'board';
+    return 'queue';
+});
+
+const workspaceViewTabs = computed(() => {
+    const workflowQueue = selectedStaffWorkflowQueueCount.value;
+    const active = selectedStaffPrivilegeSummary.value.active;
+    const total = selectedStaffPrivilegeSummary.value.total;
+    const recommended = recommendedWorkspaceView.value;
+
+    return [
+        {
+            value: 'queue' as const,
+            shortLabel: 'Privilege queue',
+            hint: 'Requests, review, and activation',
+            icon: 'layout-list' as const,
+            badge:
+                selectedStaffPrivilegeSummary.value.requested > 0
+                    ? String(selectedStaffPrivilegeSummary.value.requested)
+                    : workflowQueue > 0
+                      ? String(workflowQueue)
+                      : total > 0
+                        ? String(total)
+                        : selectedStaff.value && selectedStaffHasVerifiedLinkedUser.value && total === 0
+                          ? 'New'
+                          : null,
+            badgeVariant:
+                selectedStaffPrivilegeSummary.value.requested > 0 || selectedStaffPrivilegeSummary.value.underReview > 0
+                    ? ('destructive' as const)
+                    : total > 0
+                      ? ('outline' as const)
+                      : ('default' as const),
+        },
+        {
+            value: 'board' as const,
+            shortLabel: 'Coverage board',
+            hint: 'Department mix and expiry pressure',
+            icon: 'layout-grid' as const,
+            badge: active > 0 ? String(active) : null,
+            badgeVariant: 'secondary' as const,
+        },
+    ].map((tab) => ({
+        ...tab,
+        isRecommended: recommended === tab.value && selectedStaff.value !== null,
+    }));
+});
+
+const setupChecklistOpen = ref(false);
 
 const coverageRows = computed(() => {
     const byDepartment = new Map<string, { staffIds: Set<string>; activePrivilegeCount: number; specialties: Set<string>; excludedActiveStaffCount: number }>();
@@ -1814,28 +1970,80 @@ onBeforeUnmount(() => {
     <Head title="Staff Privileging" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
-            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div class="min-w-0">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <Badge variant="outline">{{ scopeLabel }}</Badge>
-                        <Badge v-if="selectedStaff?.status" :variant="statusVariant(selectedStaff.status)">
-                            {{ formatStatusLabel(selectedStaff.status) || 'Unknown' }}
-                        </Badge>
-                        <Badge
-                            v-if="canReadCredentialing && selectedStaffCredentialingSummary?.credentialingState"
-                            :variant="credentialingStateVariant(selectedStaffCredentialingSummary.credentialingState)"
-                            class="capitalize"
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div
+                            class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20"
+                            aria-hidden="true"
                         >
-                            {{ formatStatusLabel(selectedStaffCredentialingSummary.credentialingState) || 'Unknown' }}
-                        </Badge>
+                            <AppIcon name="shield-check" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h1 class="text-base font-semibold tracking-tight md:text-lg">
+                                    Staff Privileging
+                                </h1>
+                                <Badge
+                                    v-if="selectedStaff?.status"
+                                    :variant="statusVariant(selectedStaff.status)"
+                                    class="h-5 px-1.5 text-[10px] font-medium capitalize"
+                                >
+                                    {{ formatStatusLabel(selectedStaff.status) }}
+                                </Badge>
+                                <Badge
+                                    v-if="canReadCredentialing && selectedStaffCredentialingSummary?.credentialingState"
+                                    :variant="credentialingStateVariant(selectedStaffCredentialingSummary.credentialingState)"
+                                    class="h-5 px-1.5 text-[10px] font-medium capitalize"
+                                >
+                                    {{ credentialingStateLabel(selectedStaffCredentialingSummary.credentialingState) }}
+                                </Badge>
+                            </div>
+                            <p class="truncate text-xs text-muted-foreground">
+                                {{ workspaceIntroText }}
+                            </p>
+                            <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
+                                <span class="inline-flex items-center gap-1">
+                                    <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
+                                    <span class="font-medium text-foreground">
+                                        {{ scope?.facility?.name || 'No facility' }}
+                                    </span>
+                                </span>
+                                <span class="select-none text-border" aria-hidden="true">·</span>
+                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
+                                <template v-if="selectedStaff">
+                                    <span class="select-none text-border" aria-hidden="true">·</span>
+                                    <span>Viewing {{ staffDisplayName(selectedStaff) }}</span>
+                                </template>
+                            </div>
+                        </div>
                     </div>
-                    <h1 class="mt-3 flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <AppIcon name="shield-check" class="size-7 text-primary" />
-                        Staff Privileging & Coverage
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">{{ workspaceDescription }}</p>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button variant="outline" size="sm" class="h-8 gap-1.5" as-child>
+                            <Link href="/staff">
+                                <AppIcon name="users" class="size-3.5" />
+                                Staff directory
+                            </Link>
+                        </Button>
+                        <Button v-if="canReadCredentialing" variant="outline" size="sm" class="h-8 gap-1.5" as-child>
+                            <Link :href="workspaceStaffHref('/staff-credentialing', selectedStaff)">
+                                <AppIcon name="shield-check" class="size-3.5" />
+                                Credentialing
+                            </Link>
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            :disabled="staffLoading || grantLoading || specialtyLoading || boardLoading"
+                            @click="refreshPage"
+                        >
+                            <AppIcon name="refresh-cw" class="size-3.5" />
+                            Refresh
+                        </Button>
+                    </div>
                 </div>
-            </div>
+            </section>
 
             <Alert v-if="scope?.resolvedFrom === 'none'" variant="destructive">
                 <AlertTitle>Scope Warning</AlertTitle>
@@ -1928,19 +2136,13 @@ onBeforeUnmount(() => {
                             </div>
 
                             <div v-if="canReadStaff" class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                <div class="relative min-w-0 flex-1">
-                                    <AppIcon
-                                        name="search"
-                                        class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                                    />
-                                    <Input
-                                        id="staff-q"
-                                        v-model="staffFilters.q"
-                                        placeholder="Search staff by name, employee number, title, or department"
-                                        class="h-9 pl-9"
-                                        @keyup.enter="staffFilters.page = 1; loadStaff()"
-                                    />
-                                </div>
+                                <SearchInput
+                                    id="privileging-staff-search"
+                                    v-model="staffFilters.q"
+                                    placeholder="Search name, employee #, title, department…"
+                                    class="sm:flex-1"
+                                    @keyup.enter="staffFilters.page = 1; loadStaff()"
+                                />
                                 <div class="flex items-center gap-2">
                                     <Popover>
                                         <PopoverTrigger as-child>
@@ -2001,6 +2203,25 @@ onBeforeUnmount(() => {
                                     </Button>
                                 </div>
                             </div>
+
+                            <div v-if="canReadStaff && staffQueueFilterChips.length > 0" class="flex flex-wrap items-center gap-2">
+                                <Badge
+                                    v-for="chip in staffQueueFilterChips"
+                                    :key="`privileging-filter-chip-${chip.key}`"
+                                    variant="secondary"
+                                    class="gap-1 pr-1 text-[10px] leading-none"
+                                >
+                                    {{ chip.label }}
+                                    <button
+                                        type="button"
+                                        class="rounded-sm p-0.5 hover:bg-background/80"
+                                        @click="chip.clear()"
+                                    >
+                                        <AppIcon name="x" class="size-3" />
+                                        <span class="sr-only">Remove filter</span>
+                                    </button>
+                                </Badge>
+                            </div>
                         </div>
                     </CardHeader>
                     <CardContent class="flex flex-1 flex-col px-3 pb-0 pt-3">
@@ -2039,55 +2260,83 @@ onBeforeUnmount(() => {
                                     Try adjusting your search or queue options to find a staff profile for privileging review.
                                 </p>
                             </div>
-                            <div v-else class="space-y-1.5 pb-3">
+                            <div v-else class="divide-y divide-border/50 pb-3">
                                 <button
                                     v-for="row in staffRows"
                                     :key="row.id"
                                     type="button"
-                                    class="group w-full rounded-lg border text-left transition-colors"
-                                    :class="[
-                                        selectedStaff?.id === row.id
-                                            ? 'border-primary bg-primary/5 shadow-sm'
-                                            : 'border-border/70 bg-background hover:bg-muted/30',
-                                        compactQueueRows ? 'p-2' : 'p-2.5',
-                                    ]"
+                                    class="group flex w-full items-center gap-3 px-1 py-2.5 text-left transition-colors hover:bg-muted/30"
+                                    :class="selectedStaff?.id === row.id ? 'bg-primary/5' : ''"
                                     @click="selectStaff(row)"
                                 >
-                                    <div class="flex items-center gap-2.5">
-                                        <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
-                                            {{ (staffDisplayName(row).match(/\b\w/g) || []).slice(0, 2).join('').toUpperCase() || 'ST' }}
+                                    <span
+                                        class="size-2 shrink-0 rounded-full"
+                                        :class="staffStatusDotClass(row.status)"
+                                        :title="formatStatusLabel(row.status)"
+                                    />
+                                    <div class="min-w-0 flex-1 space-y-0.5">
+                                        <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                            <span class="truncate text-sm font-medium transition-colors group-hover:text-primary">
+                                                {{ staffDisplayName(row) }}
+                                            </span>
+                                            <span class="shrink-0 text-xs text-muted-foreground">
+                                                {{ row.employeeNumber || 'No employee #' }}
+                                            </span>
                                         </div>
-                                        <div class="min-w-0 flex-1">
-                                            <div class="flex min-w-0 items-center gap-2">
-                                                <p class="truncate text-sm font-medium text-foreground group-hover:text-primary">
-                                                    {{ staffDisplayName(row) }}
-                                                </p>
-                                                <Badge :variant="statusVariant(row.status)" class="shrink-0 text-[10px] leading-none">
-                                                    {{ formatStatusLabel(row.status) || 'Unknown' }}
-                                                </Badge>
-                                                <Badge v-if="selectedStaff?.id === row.id" variant="secondary" class="hidden shrink-0 text-[10px] leading-none sm:inline-flex">
-                                                    Selected
-                                                </Badge>
-                                            </div>
-                                            <p class="truncate text-[11px] text-muted-foreground">
-                                                {{ row.employeeNumber || 'No employee number' }} / {{ row.jobTitle || 'No title' }} / {{ row.department || 'No department' }}
-                                            </p>
-                                        </div>
-                                        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border/70 bg-background/80 text-muted-foreground transition-colors group-hover:border-primary/40 group-hover:text-primary">
-                                            <AppIcon name="chevron-right" class="size-3.5" />
-                                        </span>
+                                        <p class="truncate text-xs text-muted-foreground">
+                                            {{ row.jobTitle || 'No title' }}
+                                            <span class="text-border"> · </span>
+                                            {{ row.department || 'No department' }}
+                                        </p>
                                     </div>
+                                    <AppIcon
+                                        name="chevron-right"
+                                        class="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
+                                    />
                                 </button>
                             </div>
                         </template>
 
-                        <footer v-if="staffMeta" class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-muted/20 px-3 py-3">
+                        <footer v-if="staffMeta" class="flex shrink-0 flex-col gap-2 border-t bg-muted/20 px-3 py-3">
                             <p class="text-xs text-muted-foreground">
-                                Showing {{ staffRows.length }} of {{ staffQueueTotalCount }} results &middot; Page {{ staffMeta.currentPage }} of {{ staffMeta.lastPage }}
+                                Showing {{ staffRows.length }} on page · {{ staffQueueTotalCount }} total · Page {{ staffMeta.currentPage }} of {{ staffMeta.lastPage }}
                             </p>
-                            <div v-if="staffMeta.lastPage > 1" class="flex items-center gap-2">
-                                <Button size="sm" variant="outline" :disabled="staffLoading || staffMeta.currentPage <= 1" @click="staffFilters.page -= 1; loadStaff()">Previous</Button>
-                                <Button size="sm" variant="outline" :disabled="staffLoading || staffMeta.currentPage >= staffMeta.lastPage" @click="staffFilters.page += 1; loadStaff()">Next</Button>
+                            <div v-if="staffMeta.lastPage > 1" class="flex flex-wrap items-center justify-between gap-2">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    class="h-7 gap-1.5 text-xs"
+                                    :disabled="staffLoading || staffMeta.currentPage <= 1"
+                                    @click="goToStaffQueuePage(staffMeta.currentPage - 1)"
+                                >
+                                    <AppIcon name="chevron-left" class="size-3" />
+                                    Prev
+                                </Button>
+                                <div class="flex flex-wrap items-center gap-1">
+                                    <template v-for="pageNumber in staffQueuePaginationPageNumbers" :key="`privileging-page-${String(pageNumber)}`">
+                                        <span v-if="pageNumber === '...'" class="px-1 text-xs text-muted-foreground">…</span>
+                                        <Button
+                                            v-else
+                                            :variant="pageNumber === staffMeta.currentPage ? 'default' : 'ghost'"
+                                            size="icon"
+                                            class="size-8 text-xs"
+                                            :disabled="staffLoading"
+                                            @click="goToStaffQueuePage(pageNumber as number)"
+                                        >
+                                            {{ pageNumber }}
+                                        </Button>
+                                    </template>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    class="h-7 gap-1.5 text-xs"
+                                    :disabled="staffLoading || staffMeta.currentPage >= staffMeta.lastPage"
+                                    @click="goToStaffQueuePage(staffMeta.currentPage + 1)"
+                                >
+                                    Next
+                                    <AppIcon name="chevron-right" class="size-3" />
+                                </Button>
                             </div>
                         </footer>
                     </CardContent>
@@ -2251,7 +2500,7 @@ onBeforeUnmount(() => {
                                             :variant="credentialingStateVariant(selectedStaffCredentialingSummary.credentialingState)"
                                             class="capitalize"
                                         >
-                                            {{ formatStatusLabel(selectedStaffCredentialingSummary.credentialingState) || 'Unknown' }}
+                                            {{ credentialingStateLabel(selectedStaffCredentialingSummary.credentialingState) || 'Unknown' }}
                                         </Badge>
                                         <Badge v-else-if="canReadCredentialing && selectedStaffCredentialingLoading" variant="outline">Checking credentialing</Badge>
                                         <Badge v-else-if="canReadCredentialing && selectedStaffCredentialingError" variant="outline">Credentialing unavailable</Badge>
@@ -2275,11 +2524,11 @@ onBeforeUnmount(() => {
                                     <Button
                                         size="sm"
                                         variant="outline"
-                                        class="gap-1.5"
+                                        class="h-8 gap-1.5"
                                         :disabled="staffLoading || grantLoading || specialtyLoading || boardLoading"
                                         @click="refreshPage"
                                     >
-                                        <AppIcon name="activity" class="size-3.5" />
+                                        <AppIcon name="refresh-cw" class="size-3.5" />
                                         Refresh
                                     </Button>
                                     <Button v-if="selectedStaff && canUpdateStaff" variant="outline" size="sm" @click="openStaffEditDialog(selectedStaff)">
@@ -2290,47 +2539,100 @@ onBeforeUnmount(() => {
                                     </Button>
                                 </div>
                             </div>
-                            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                                <div class="rounded-lg border bg-muted/20 p-3">
-                                    <p class="text-[11px] uppercase tracking-wide text-muted-foreground">Privileges</p>
-                                    <p class="mt-2 text-sm font-medium">{{ selectedStaffPrivilegeSummary.total }}</p>
-                                </div>
-                                <div class="rounded-lg border bg-muted/20 p-3">
-                                    <p class="text-[11px] uppercase tracking-wide text-muted-foreground">Workflow queue</p>
-                                    <p class="mt-2 text-sm font-medium">{{ selectedStaffWorkflowQueueCount }}</p>
-                                </div>
-                                <div class="rounded-lg border bg-muted/20 p-3">
-                                    <p class="text-[11px] uppercase tracking-wide text-muted-foreground">Active coverage</p>
-                                    <p class="mt-2 text-sm font-medium">{{ selectedStaffPrivilegeSummary.active }}</p>
-                                </div>
-                                <div class="rounded-lg border bg-muted/20 p-3">
-                                    <p class="text-[11px] uppercase tracking-wide text-muted-foreground">Next review</p>
-                                    <p class="mt-2 text-sm font-medium">{{ formatDateLabel(selectedStaffPrivilegeSummary.nextReviewDueAt) }}</p>
+
+                            <div
+                                v-if="selectedStaff && selectedStaffWorkflowGuidance"
+                                class="rounded-lg border border-primary/30 bg-primary/5 p-4"
+                            >
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div class="min-w-0">
+                                        <p class="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                                            Next step
+                                        </p>
+                                        <p class="mt-1 text-sm font-semibold text-foreground">
+                                            {{ selectedStaffWorkflowGuidance.title }}
+                                        </p>
+                                        <p class="mt-1 text-xs leading-relaxed text-muted-foreground">
+                                            {{ selectedStaffWorkflowGuidance.description }}
+                                        </p>
+                                    </div>
+                                    <Button
+                                        v-if="selectedStaffWorkflowGuidance.actionLabel"
+                                        size="sm"
+                                        class="shrink-0 gap-1.5"
+                                        @click="runSelectedStaffWorkflowGuidance"
+                                    >
+                                        {{ selectedStaffWorkflowGuidance.actionLabel }}
+                                        <AppIcon name="chevron-right" class="size-3.5" />
+                                    </Button>
                                 </div>
                             </div>
-                            <div class="flex flex-col gap-3 border-t pt-3 lg:flex-row lg:items-center lg:justify-between">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <Button size="sm" class="h-8 gap-1.5" :variant="workspaceView === 'queue' ? 'default' : 'outline'" @click="setWorkspaceView('queue')">
-                                        <AppIcon name="layout-list" class="size-3.5" />
-                                        Privilege Queue
+
+                            <Collapsible v-if="selectedStaff && selectedStaffSetupSteps.length > 0" v-model:open="setupChecklistOpen">
+                                <CollapsibleTrigger as-child>
+                                    <Button variant="outline" size="sm" class="w-full justify-between gap-2">
+                                        <span class="flex items-center gap-2">
+                                            <AppIcon name="clipboard-list" class="size-3.5" />
+                                            Setup checklist
+                                        </span>
+                                        <AppIcon :name="setupChecklistOpen ? 'chevron-up' : 'chevron-down'" class="size-4" />
                                     </Button>
-                                    <Button size="sm" class="h-8 gap-1.5" :variant="workspaceView === 'board' ? 'default' : 'outline'" @click="setWorkspaceView('board')">
-                                        <AppIcon name="layout-dashboard" class="size-3.5" />
-                                        Coverage Board
-                                    </Button>
-                                    <Button
-                                        v-if="canCreate"
-                                        size="sm"
-                                        class="h-8 gap-1.5"
-                                        :variant="workspaceView === 'grant' ? 'default' : 'outline'"
-                                        :disabled="!selectedStaff || !selectedStaffHasVerifiedLinkedUser"
-                                        @click="openCreate"
+                                </CollapsibleTrigger>
+                                <CollapsibleContent class="pt-3">
+                                    <StaffGovernanceSetupChecklist
+                                        :steps="selectedStaffSetupSteps"
+                                        compact
+                                        description=""
+                                    />
+                                </CollapsibleContent>
+                            </Collapsible>
+
+                            <Tabs
+                                :model-value="workspaceView === 'grant' ? 'queue' : workspaceView"
+                                class="w-full"
+                                @update:model-value="(value) => setWorkspaceView(value as StaffPrivilegeWorkspaceView)"
+                            >
+                                <TabsList class="grid h-auto w-full grid-cols-2 gap-1.5 bg-muted/40 p-1">
+                                    <TabsTrigger
+                                        v-for="tab in workspaceViewTabs"
+                                        :key="tab.value"
+                                        :value="tab.value"
+                                        :disabled="!selectedStaff"
+                                        class="relative flex h-auto min-h-14 flex-col items-start gap-1 rounded-md px-3 py-2 text-left data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                                        :class="tab.isRecommended ? 'ring-2 ring-primary/40 ring-offset-1 ring-offset-background' : ''"
                                     >
-                                        <AppIcon name="plus" class="size-3.5" />
-                                        New Request
-                                    </Button>
-                                </div>
-                                <p class="text-xs text-muted-foreground">{{ workspaceViewMeta.description }}</p>
+                                        <span class="flex w-full items-center gap-1.5">
+                                            <AppIcon :name="tab.icon" class="size-3.5 shrink-0 text-muted-foreground" />
+                                            <span class="truncate text-xs font-medium sm:text-sm">{{ tab.shortLabel }}</span>
+                                            <Badge
+                                                v-if="tab.badge"
+                                                :variant="tab.badgeVariant"
+                                                class="ml-auto h-5 shrink-0 px-1.5 text-[10px] leading-none"
+                                            >
+                                                {{ tab.badge }}
+                                            </Badge>
+                                        </span>
+                                        <span v-if="tab.isRecommended" class="text-[10px] font-medium text-primary">
+                                            Go here next
+                                        </span>
+                                        <span v-else class="line-clamp-1 text-[10px] text-muted-foreground">
+                                            {{ tab.hint }}
+                                        </span>
+                                    </TabsTrigger>
+                                </TabsList>
+                            </Tabs>
+
+                            <div v-if="selectedStaff" class="flex flex-wrap items-center gap-2">
+                                <Button
+                                    v-if="canCreate"
+                                    size="sm"
+                                    class="gap-1.5"
+                                    :disabled="!selectedStaffHasVerifiedLinkedUser"
+                                    @click="openCreate"
+                                >
+                                    <AppIcon name="plus" class="size-3.5" />
+                                    New privilege request
+                                </Button>
                             </div>
                         </CardHeader>
                     </Card>
@@ -2338,23 +2640,6 @@ onBeforeUnmount(() => {
             <Alert v-if="workspaceActionMessage">
                 <AlertTitle>Recent action</AlertTitle>
                 <AlertDescription>{{ workspaceActionMessage }}</AlertDescription>
-            </Alert>
-
-            <Alert v-if="selectedStaffWorkflowGuidance" :variant="selectedStaffWorkflowGuidance.variant">
-                <AlertTitle>{{ selectedStaffWorkflowGuidance.title }}</AlertTitle>
-                <AlertDescription class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <span>{{ selectedStaffWorkflowGuidance.description }}</span>
-                    <Button
-                        v-if="selectedStaffWorkflowGuidance.actionLabel"
-                        size="sm"
-                        variant="outline"
-                        class="gap-1.5 self-start lg:self-center"
-                        @click="runSelectedStaffWorkflowGuidance"
-                    >
-                        <AppIcon name="chevron-right" class="size-3.5" />
-                        {{ selectedStaffWorkflowGuidance.actionLabel }}
-                    </Button>
-                </AlertDescription>
             </Alert>
 
             <div v-if="workspaceView === 'queue'">
@@ -2473,11 +2758,11 @@ onBeforeUnmount(() => {
                                 <AlertTitle>Credentialing summary issue</AlertTitle>
                                 <AlertDescription>{{ selectedStaffCredentialingError }}</AlertDescription>
                             </Alert>
-                            <Alert v-else-if="canReadCredentialing && selectedStaffCredentialingSummary" :variant="(selectedStaffCredentialingSummary.credentialingState ?? '').toLowerCase() === 'blocked' ? 'destructive' : 'default'">
+                            <Alert v-else-if="canReadCredentialing && selectedStaffCredentialingSummary" :variant="credentialingStateFriendlyVariant(selectedStaffCredentialingSummary.credentialingState, selectedStaffCredentialingSummary.blockingReasons) === 'destructive' ? 'destructive' : 'default'">
                                 <AlertTitle class="flex flex-wrap items-center gap-2">
                                     Credentialing status
                                     <Badge :variant="credentialingStateVariant(selectedStaffCredentialingSummary.credentialingState)" class="capitalize">
-                                        {{ formatStatusLabel(selectedStaffCredentialingSummary.credentialingState) || 'Unknown' }}
+                                        {{ credentialingStateLabel(selectedStaffCredentialingSummary.credentialingState) || 'Unknown' }}
                                     </Badge>
                                 </AlertTitle>
                                 <AlertDescription class="space-y-2">
@@ -2669,11 +2954,11 @@ onBeforeUnmount(() => {
                         <AlertTitle>Credentialing summary issue</AlertTitle>
                         <AlertDescription>{{ selectedStaffCredentialingError }}</AlertDescription>
                     </Alert>
-                    <Alert v-else-if="canReadCredentialing && selectedStaffCredentialingSummary" :variant="(selectedStaffCredentialingSummary.credentialingState ?? '').toLowerCase() === 'blocked' ? 'destructive' : 'default'">
+                    <Alert v-else-if="canReadCredentialing && selectedStaffCredentialingSummary" :variant="credentialingStateFriendlyVariant(selectedStaffCredentialingSummary.credentialingState, selectedStaffCredentialingSummary.blockingReasons) === 'destructive' ? 'destructive' : 'default'">
                         <AlertTitle class="flex flex-wrap items-center gap-2">
                             Privileging eligibility
                             <Badge :variant="credentialingStateVariant(selectedStaffCredentialingSummary.credentialingState)" class="capitalize">
-                                {{ formatStatusLabel(selectedStaffCredentialingSummary.credentialingState) || 'Unknown' }}
+                                {{ credentialingStateLabel(selectedStaffCredentialingSummary.credentialingState) || 'Unknown' }}
                             </Badge>
                         </AlertTitle>
                         <AlertDescription>{{ selectedStaffCredentialingPreview }}</AlertDescription>
@@ -2750,32 +3035,6 @@ onBeforeUnmount(() => {
             </Card>
                     </template>
                 </div>
-            </div>
-
-            <div class="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-4 py-2.5">
-                <span class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                    <AppIcon name="activity" class="size-3.5" />
-                    Care workflow:
-                </span>
-                <Button size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="workspaceStaffHref('/staff', selectedStaff)">
-                        <AppIcon name="users" class="size-3.5" />
-                        Staff Directory
-                    </Link>
-                </Button>
-                <Button v-if="canReadCredentialing" size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="workspaceStaffHref('/staff-credentialing', selectedStaff)">
-                        <AppIcon name="badge-check" class="size-3.5" />
-                        Credentialing
-                    </Link>
-                </Button>
-                <Button size="sm" class="gap-1.5">
-                    <AppIcon name="shield-check" class="size-3.5" />
-                    Privileging &amp; Coverage
-                </Button>
-                <span v-if="selectedStaff" class="text-xs text-muted-foreground">
-                    Viewing {{ staffDisplayName(selectedStaff) }}
-                </span>
             </div>
 
             <StaffProfileEditDialog

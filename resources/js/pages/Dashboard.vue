@@ -11,19 +11,16 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useDashboardContext } from '@/composables/useDashboardContext';
 import { useDashboardWorkflowPresetStorage } from '@/composables/useDashboardWorkflowPreset';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
-import {
-    DASHBOARD_ADMIN_ROLE_CODES,
-    DASHBOARD_PRESETS,
-    eligibleDashboardPresets,
-    inferDashboardPreset,
-    presetMatchesRole,
-    type DashboardPresetKey,
-} from '@/config/dashboardPresets';
+import { DASHBOARD_PRESETS, type DashboardPresetKey } from '@/config/dashboardPresets';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiGet } from '@/lib/apiClient';
+import { buildOperationsPrivilegeQueueRows } from '@/lib/dashboardOperationsQueue';
+import { appendWorkflowBatchEntries } from '@/workflows/appendWorkflowBatch';
+import { buildWorkflowSurface } from '@/workflows/buildWorkflowSurface';
 import {
     directServicePatientWorklistHref,
     groupDirectServiceOrdersByPatient,
@@ -33,6 +30,7 @@ import { encounterWorkspaceLegacyAppointmentHref } from '@/lib/encounterWorkspac
 import type { AppIconName } from '@/lib/icons';
 import { formatEnumLabel } from '@/lib/labels';
 import type { BreadcrumbItem } from '@/types';
+import type { DashboardContextPayload } from '@/types/dashboard';
 
 type TabKey = 'overview' | 'handoff' | 'status' | 'resources';
 
@@ -54,10 +52,17 @@ type QueueRow = {
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/dashboard' }];
 const today = new Date(Date.now() - (new Date().getTimezoneOffset() * 60 * 1000)).toISOString().slice(0, 10);
-const page = usePage();
+const page = usePage<{ dashboardContext?: DashboardContextPayload | null }>();
 
 const { hasPermission, isFacilitySuperAdmin, isPlatformSuperAdmin, multiTenantIsolationEnabled, sessionRoleCodes, scope: platformScope } =
     usePlatformAccess();
+
+const {
+    eligibleWorkflowKeys: eligiblePresets,
+    defaultWorkflowKey,
+    workflowDefinitions,
+    canSwitchWorkflow: canSwitchPreset,
+} = useDashboardContext(page.props.dashboardContext);
 
 const loading = ref(true);
 const refreshing = ref(false);
@@ -460,6 +465,10 @@ const nursingHandoffOpen = useLocalStorageBoolean('dashboard.nursing-handoff.ope
 const emergencyHandoffOpen = useLocalStorageBoolean('dashboard.emergency-handoff.open', true);
 const cashierHandoffOpen = useLocalStorageBoolean('dashboard.cashier-handoff.open', false);
 const adminHandoffOpen = useLocalStorageBoolean('dashboard.admin-handoff.open', false);
+const operationsHandoffOpen = useLocalStorageBoolean('dashboard.operations-handoff.open', true);
+const recordsHandoffOpen = useLocalStorageBoolean('dashboard.records-handoff.open', true);
+const supplyHandoffOpen = useLocalStorageBoolean('dashboard.supply-handoff.open', true);
+const theatreHandoffOpen = useLocalStorageBoolean('dashboard.theatre-handoff.open', true);
 
 const roleCodes = computed(() => {
     const fromApi = (authMe.value?.roles ?? [])
@@ -472,34 +481,18 @@ const roleCodes = computed(() => {
     return sessionRoleCodes.value;
 });
 
-const presetContextInput = computed(() => ({
-    roleCodesUpper: roleCodes.value,
-    isFacilitySuperAdmin: isFacilitySuperAdmin.value,
-    isPlatformSuperAdmin: isPlatformSuperAdmin.value,
-    hasPermission,
-}));
-
 const rolesResolved = computed(
     () =>
         sessionRoleCodes.value.length > 0 ||
-        (Array.isArray(authMe.value?.roles) && authMe.value.roles.length > 0),
+        (Array.isArray(authMe.value?.roles) && authMe.value.roles.length > 0) ||
+        eligiblePresets.value.length > 0,
 );
 
-const eligiblePresets = computed(() => eligibleDashboardPresets(presetContextInput.value));
-
-const canSwitchPreset = computed(
-    () =>
-        isFacilitySuperAdmin.value ||
-        isPlatformSuperAdmin.value ||
-        presetMatchesRole(roleCodes.value, DASHBOARD_ADMIN_ROLE_CODES) ||
-        eligiblePresets.value.length > 1,
-);
-
-const inferredPreset = computed<DashboardPresetKey>(() => inferDashboardPreset(presetContextInput.value));
+const inferredPreset = computed<DashboardPresetKey>(() => defaultWorkflowKey.value);
 
 const activePresetKey = computed<DashboardPresetKey>(() => {
     const eligible = eligiblePresets.value;
-    const fallback = eligible[0] ?? 'front_desk';
+    const fallback = defaultWorkflowKey.value;
     if (presetOverride.value === 'auto') {
         return fallback;
     }
@@ -509,9 +502,30 @@ const activePresetKey = computed<DashboardPresetKey>(() => {
     return fallback;
 });
 
-const activePreset = computed(
-    () => DASHBOARD_PRESETS.find((preset) => preset.key === activePresetKey.value) ?? DASHBOARD_PRESETS[0],
+const activeWorkflowWidgets = computed(() =>
+    workflowDefinitions.value.find((workflow) => workflow.key === activePresetKey.value)?.widgets ?? [],
 );
+
+const activeWorkflowSurface = computed(() =>
+    buildWorkflowSurface(
+        activePresetKey.value,
+        counts.value,
+        lists.value,
+        { numberValue, metric },
+        activeWorkflowWidgets.value,
+        dashboardSurfaceRuntime.value,
+    ),
+);
+
+
+const activePreset = computed(() => {
+    const fromContext = workflowDefinitions.value.find((workflow) => workflow.key === activePresetKey.value);
+    if (fromContext) {
+        return fromContext;
+    }
+
+    return DASHBOARD_PRESETS.find((preset) => preset.key === activePresetKey.value) ?? DASHBOARD_PRESETS[0];
+});
 
 const singleDirectServiceModule = computed(() =>
     activePresetKey.value === 'direct_service' && directServiceModules.value.length === 1
@@ -528,9 +542,13 @@ const dashboardPresetDescription = computed(() => {
     return `${module.label} queue focused on active orders, status movement, and safe handoff.`;
 });
 
-const visiblePresetOptions = computed(() =>
-    DASHBOARD_PRESETS.filter((preset) => eligiblePresets.value.includes(preset.key)),
-);
+const visiblePresetOptions = computed(() => {
+    if (workflowDefinitions.value.length > 0) {
+        return workflowDefinitions.value;
+    }
+
+    return DASHBOARD_PRESETS.filter((preset) => eligiblePresets.value.includes(preset.key));
+});
 
 const presetSelectValue = computed({
     get: () => presetOverride.value,
@@ -955,6 +973,10 @@ const handoffOpen = computed({
         if (activePresetKey.value === 'nursing' || activePresetKey.value === 'direct_service') return nursingHandoffOpen.value;
         if (activePresetKey.value === 'cashier') return cashierHandoffOpen.value;
         if (activePresetKey.value === 'emergency') return emergencyHandoffOpen.value;
+        if (activePresetKey.value === 'operations') return operationsHandoffOpen.value;
+        if (activePresetKey.value === 'records') return recordsHandoffOpen.value;
+        if (activePresetKey.value === 'supply') return supplyHandoffOpen.value;
+        if (activePresetKey.value === 'theatre') return theatreHandoffOpen.value;
         return adminHandoffOpen.value;
     },
     set: (value: boolean) => {
@@ -963,6 +985,10 @@ const handoffOpen = computed({
         else if (activePresetKey.value === 'nursing' || activePresetKey.value === 'direct_service') nursingHandoffOpen.value = value;
         else if (activePresetKey.value === 'cashier') cashierHandoffOpen.value = value;
         else if (activePresetKey.value === 'emergency') emergencyHandoffOpen.value = value;
+        else if (activePresetKey.value === 'operations') operationsHandoffOpen.value = value;
+        else if (activePresetKey.value === 'records') recordsHandoffOpen.value = value;
+        else if (activePresetKey.value === 'supply') supplyHandoffOpen.value = value;
+        else if (activePresetKey.value === 'theatre') theatreHandoffOpen.value = value;
         else adminHandoffOpen.value = value;
     },
 });
@@ -1200,6 +1226,11 @@ async function loadDashboard(depth = 0): Promise<void> {
         pharmacyOrders: [],
         admissions: [],
         draftInvoices: [],
+        operationsCredentialingAlerts: [],
+        operationsPrivilegeQueue: [],
+        theatreProcedures: [],
+        draftMedicalRecords: [],
+        procurementRequests: [],
     };
     clinicianClinicalDepartment.value = null;
 
@@ -1210,288 +1241,17 @@ async function loadDashboard(depth = 0): Promise<void> {
 
     type BatchEntry = readonly [string, () => Promise<unknown>];
 
-    const clinicianAppointmentQuery = currentUserId.value !== null
-        ? { clinicianUserId: currentUserId.value }
-        : {};
-
     const batch: BatchEntry[] = [
         ['scope', () => safeRequest<ApiEnvelope<any>>('Scope', () => apiGet('/platform/access-scope'))],
         ['authMe', () => safeRequest<ApiEnvelope<any>>('Auth user', () => apiGet('/auth/me'))],
         ['securityStatus', () => safeRequest<ApiEnvelope<any>>('Security status', () => apiGet('/auth/me/security-status'))],
     ];
 
-    switch (preset) {
-        case 'front_desk':
-            batch.push(
-                ['patientCounts', () => guardedRequest<ApiEnvelope<any>>('Patient counts', 'patients.read', () => apiGet('/patients/status-counts'))],
-                ['appointmentCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Appointment counts', 'appointments.read', () => apiGet('/appointments/status-counts')),
-                ],
-                ['admissionCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Admission counts', 'admissions.read', () => apiGet('/admissions/status-counts')),
-                ],
-                [
-                    'scheduledAppointments',
-                    () =>
-                        guardedRequest<ApiEnvelope<any>>('Scheduled appointments', 'appointments.read', () =>
-                            apiGet('/appointments', { status: 'scheduled', perPage: 8, sortBy: 'scheduledAt', sortDir: 'asc' }),
-                        ),
-                ],
-                [
-                    'checkedInAppointments',
-                    () =>
-                        guardedRequest<ApiEnvelope<any>>('Checked-in appointments', 'appointments.read', () =>
-                            apiGet('/appointments', { status: 'checked_in', perPage: 5, sortBy: 'checkedInAt', sortDir: 'asc' }),
-                        ),
-                ],
-            );
-            break;
-        case 'clinician':
-            batch.push(
-                ['appointmentCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Appointment counts', 'appointments.read', () =>
-                        apiGet('/appointments/status-counts', clinicianAppointmentQuery),
-                    ),
-                ],
-                ['medicalRecordCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Medical record counts', 'medical.records.read', () => apiGet('/medical-records/status-counts')),
-                ],
-                ['admissionCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Admission counts', 'admissions.read', () => apiGet('/admissions/status-counts')),
-                ],
-                ['laboratoryCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Laboratory counts', 'laboratory.orders.read', () => apiGet('/laboratory-orders/status-counts')),
-                ],
-                [
-                    'waitingProviderAppointments',
-                    () =>
-                        guardedRequest<ApiEnvelope<any>>('Waiting provider appointments', 'appointments.read', () =>
-                            apiGet('/appointments', {
-                                ...clinicianAppointmentQuery,
-                                status: 'waiting_provider',
-                                perPage: 5,
-                                sortBy: 'checkedInAt',
-                                sortDir: 'asc',
-                            }),
-                        ),
-                ],
-                [
-                    'inConsultationAppointments',
-                    () =>
-                        guardedRequest<ApiEnvelope<any>>('In-consultation appointments', 'appointments.read', () =>
-                            apiGet('/appointments', {
-                                ...clinicianAppointmentQuery,
-                                status: 'in_consultation',
-                                perPage: 3,
-                                sortBy: 'updatedAt',
-                                sortDir: 'desc',
-                            }),
-                        ),
-                ],
-                [
-                    'clinicalDirectory',
-                    () =>
-                        guardedRequest<ApiEnvelope<any>>('Clinical directory', 'staff.clinical-directory.read', () =>
-                            apiGet('/staff/clinical-directory', {
-                                status: 'active',
-                                clinicalOnly: 'true',
-                                page: 1,
-                                perPage: 200,
-                            }),
-                        ),
-                ],
-            );
-            break;
-        case 'direct_service':
-            batch.push(
-                ['laboratoryCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Laboratory counts', 'laboratory.orders.read', () => apiGet('/laboratory-orders/status-counts')),
-                ],
-                ['pharmacyCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Pharmacy counts', 'pharmacy.orders.read', () => apiGet('/pharmacy-orders/status-counts')),
-                ],
-                ['radiologyCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Radiology counts', 'radiology.orders.read', () => apiGet('/radiology-orders/status-counts')),
-                ],
-                ['radiologyOpenOrders', () =>
-                    guardedRequest<ApiEnvelope<any>>('Radiology open worklist', 'radiology.orders.read', () =>
-                        apiGet('/radiology-orders', { worklistScope: 'open', perPage: 40, sortBy: 'orderedAt', sortDir: 'asc' }),
-                    ),
-                ],
-                ['radiologyOrderedOrders', () =>
-                    guardedRequest<ApiEnvelope<any>>('Radiology ordered worklist', 'radiology.orders.read', () =>
-                        apiGet('/radiology-orders', { status: 'ordered', perPage: 4, sortBy: 'orderedAt', sortDir: 'asc' }),
-                    ),
-                ],
-                ['radiologyScheduledOrders', () =>
-                    guardedRequest<ApiEnvelope<any>>('Radiology scheduled worklist', 'radiology.orders.read', () =>
-                        apiGet('/radiology-orders', { status: 'scheduled', perPage: 4, sortBy: 'scheduledFor', sortDir: 'asc' }),
-                    ),
-                ],
-                ['radiologyInProgressOrders', () =>
-                    guardedRequest<ApiEnvelope<any>>('Radiology active worklist', 'radiology.orders.read', () =>
-                        apiGet('/radiology-orders', { status: 'in_progress', perPage: 4, sortBy: 'updatedAt', sortDir: 'asc' }),
-                    ),
-                ],
-                ['laboratoryOrderedOrders', () =>
-                    guardedRequest<ApiEnvelope<any>>('Laboratory ordered worklist', 'laboratory.orders.read', () =>
-                        apiGet('/laboratory-orders', { status: 'ordered', perPage: 4, sortBy: 'orderedAt', sortDir: 'asc' }),
-                    ),
-                ],
-                ['laboratoryOpenOrders', () =>
-                    guardedRequest<ApiEnvelope<any>>('Laboratory open worklist', 'laboratory.orders.read', () =>
-                        apiGet('/laboratory-orders', { worklistScope: 'open', perPage: 40, sortBy: 'orderedAt', sortDir: 'asc' }),
-                    ),
-                ],
-                ['laboratoryCollectedOrders', () =>
-                    guardedRequest<ApiEnvelope<any>>('Laboratory collected worklist', 'laboratory.orders.read', () =>
-                        apiGet('/laboratory-orders', { status: 'collected', perPage: 4, sortBy: 'orderedAt', sortDir: 'asc' }),
-                    ),
-                ],
-                ['laboratoryInProgressOrders', () =>
-                    guardedRequest<ApiEnvelope<any>>('Laboratory active worklist', 'laboratory.orders.read', () =>
-                        apiGet('/laboratory-orders', { status: 'in_progress', perPage: 4, sortBy: 'updatedAt', sortDir: 'asc' }),
-                    ),
-                ],
-                ['pharmacyPendingOrders', () =>
-                    guardedRequest<ApiEnvelope<any>>('Pharmacy pending worklist', 'pharmacy.orders.read', () =>
-                        apiGet('/pharmacy-orders', { status: 'pending', perPage: 4, sortBy: 'orderedAt', sortDir: 'asc' }),
-                    ),
-                ],
-                ['pharmacyOpenOrders', () =>
-                    guardedRequest<ApiEnvelope<any>>('Pharmacy open worklist', 'pharmacy.orders.read', () =>
-                        apiGet('/pharmacy-orders', { worklistScope: 'open', perPage: 40, sortBy: 'orderedAt', sortDir: 'asc' }),
-                    ),
-                ],
-                ['pharmacyInPreparationOrders', () =>
-                    guardedRequest<ApiEnvelope<any>>('Pharmacy preparation worklist', 'pharmacy.orders.read', () =>
-                        apiGet('/pharmacy-orders', { status: 'in_preparation', perPage: 4, sortBy: 'orderedAt', sortDir: 'asc' }),
-                    ),
-                ],
-                ['pharmacyPartiallyDispensedOrders', () =>
-                    guardedRequest<ApiEnvelope<any>>('Pharmacy partial dispense worklist', 'pharmacy.orders.read', () =>
-                        apiGet('/pharmacy-orders', { status: 'partially_dispensed', perPage: 4, sortBy: 'updatedAt', sortDir: 'asc' }),
-                    ),
-                ],
-            );
-            break;
-        case 'nursing':
-            batch.push(
-                ['admissionCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Admission counts', 'admissions.read', () => apiGet('/admissions/status-counts')),
-                ],
-                ['laboratoryCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Laboratory counts', 'laboratory.orders.read', () => apiGet('/laboratory-orders/status-counts')),
-                ],
-                ['pharmacyCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Pharmacy counts', 'pharmacy.orders.read', () => apiGet('/pharmacy-orders/status-counts')),
-                ],
-                ['wardTaskCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Ward task counts', 'inpatient.ward.read', () => apiGet('/inpatient-ward/task-status-counts')),
-                ],
-                ['wardCarePlanCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Ward care plan counts', 'inpatient.ward.read', () => apiGet('/inpatient-ward/care-plan-status-counts')),
-                ],
-                ['wardDischargeChecklistCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>(
-                        'Ward discharge checklist counts',
-                        'inpatient.ward.read',
-                        () => apiGet('/inpatient-ward/discharge-checklist-status-counts'),
-                    ),
-                ],
-                ['vitalsOverdueCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Vitals overdue summary', 'inpatient.ward.read', () => apiGet('/patient-vitals/overdue-summary')),
-                ],
-                [
-                    'admissions',
-                    () =>
-                        guardedRequest<ApiEnvelope<any>>('Admissions', 'admissions.read', () =>
-                            apiGet('/admissions', { status: 'admitted', perPage: 2, sortBy: 'admittedAt', sortDir: 'desc' }),
-                        ),
-                ],
-                ['appointmentCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Appointment counts', 'appointments.read', () => apiGet('/appointments/status-counts')),
-                ],
-                [
-                    'checkedInAppointments',
-                    () =>
-                        guardedRequest<ApiEnvelope<any>>('Checked-in appointments', 'appointments.read', () =>
-                            apiGet('/appointments', { status: 'checked_in', perPage: 5, sortBy: 'checkedInAt', sortDir: 'asc' }),
-                        ),
-                ],
-            );
-            break;
-        case 'emergency':
-            batch.push(
-                ['patientCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Patient counts', 'patients.read', () => apiGet('/patients/status-counts')),
-                ],
-                ['appointmentCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Appointment counts', 'appointments.read', () => apiGet('/appointments/status-counts')),
-                ],
-                ['admissionCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Admission counts', 'admissions.read', () => apiGet('/admissions/status-counts')),
-                ],
-                ['laboratoryCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Laboratory counts', 'laboratory.orders.read', () => apiGet('/laboratory-orders/status-counts')),
-                ],
-                ['pharmacyCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Pharmacy counts', 'pharmacy.orders.read', () => apiGet('/pharmacy-orders/status-counts')),
-                ],
-                ['emergencyTriageCaseCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Emergency triage case counts', 'emergency.triage.read', () => apiGet('/emergency-triage-cases/status-counts')),
-                ],
-                ['wardBedCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Ward bed counts', 'platform.resources.view-ward-beds', () => apiGet('/platform/admin/ward-beds/status-counts')),
-                ],
-                ['operationalFlagsCounts', () =>
-                    safeRequest<ApiEnvelope<any>>('Operational flags', () => apiGet('/platform/operational-flags')),
-                ],
-                [
-                    'checkedInAppointments',
-                    () =>
-                        guardedRequest<ApiEnvelope<any>>('Triage queue', 'appointments.read', () =>
-                            apiGet('/appointments', { status: 'checked_in', perPage: 10, sortBy: 'checkedInAt', sortDir: 'asc' }),
-                        ),
-                ],
-            );
-            break;
-        case 'cashier':
-            batch.push(
-                ['billingCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Billing counts', 'billing.invoices.read', () => apiGet('/billing-invoices/status-counts')),
-                ],
-                [
-                    'claimOpenCounts',
-                    () =>
-                        guardedRequest<ApiEnvelope<any>>('Open claim exceptions', 'claims.insurance.read', () =>
-                            apiGet('/claims-insurance/status-counts', { reconciliationExceptionStatus: 'open' }),
-                        ),
-                ],
-                [
-                    'claimResolvedCounts',
-                    () =>
-                        guardedRequest<ApiEnvelope<any>>('Resolved claim exceptions', 'claims.insurance.read', () =>
-                            apiGet('/claims-insurance/status-counts', { reconciliationExceptionStatus: 'resolved' }),
-                        ),
-                ],
-                [
-                    'draftInvoices',
-                    () =>
-                        guardedRequest<ApiEnvelope<any>>('Draft invoices', 'billing.invoices.read', () =>
-                            apiGet('/billing-invoices', { status: 'draft', perPage: 3 }),
-                        ),
-                ],
-            );
-            break;
-        case 'admin':
-            batch.push(
-                ['wardTaskCounts', () =>
-                    guardedRequest<ApiEnvelope<any>>('Ward task counts', 'inpatient.ward.read', () => apiGet('/inpatient-ward/task-status-counts')),
-                ],
-            );
-            break;
-    }
+    appendWorkflowBatchEntries(preset, batch, {
+        guardedRequest,
+        apiGet,
+        currentUserId: currentUserId.value,
+    });
 
     if (preset === 'admin' || sharedOpsTelemetryLoaded.value) {
         batch.push(
@@ -1531,6 +1291,15 @@ async function loadDashboard(depth = 0): Promise<void> {
         wardBeds: bag.wardBedCounts?.data ?? null,
         operationalFlags: bag.operationalFlagsCounts?.data ?? null,
         vitalsOverdue: bag.vitalsOverdueCounts?.data ?? null,
+        staffProfiles: bag.staffStatusCounts?.data ?? null,
+        credentialingAlertTotal:
+            typeof bag.credentialingAlerts?.meta?.total === 'number'
+                ? bag.credentialingAlerts.meta.total
+                : Array.isArray(bag.credentialingAlerts?.data)
+                  ? bag.credentialingAlerts.data.length
+                  : null,
+        inventoryStockAlerts: bag.inventoryStockAlerts?.data ?? null,
+        theatreProcedureCounts: bag.theatreProcedureCounts?.data ?? null,
     };
 
     lists.value = {
@@ -1556,6 +1325,11 @@ async function loadDashboard(depth = 0): Promise<void> {
         )).slice(0, 40),
         admissions: Array.isArray(bag.admissions?.data) ? bag.admissions.data : [],
         draftInvoices: Array.isArray(bag.draftInvoices?.data) ? bag.draftInvoices.data : [],
+        operationsCredentialingAlerts: Array.isArray(bag.credentialingAlerts?.data) ? bag.credentialingAlerts.data : [],
+        operationsPrivilegeQueue: buildOperationsPrivilegeQueueRows(bag.privilegeCoverageBoard?.data),
+        theatreProcedures: Array.isArray(bag.theatreProcedures?.data) ? bag.theatreProcedures.data : [],
+        draftMedicalRecords: Array.isArray(bag.draftMedicalRecords?.data) ? bag.draftMedicalRecords.data : [],
+        procurementRequests: Array.isArray(bag.procurementRequests?.data) ? bag.procurementRequests.data : [],
     };
 
     registerDashboardPatientsFromOrders([
@@ -1677,151 +1451,7 @@ async function refreshDashboard() {
     }
 }
 
-const kpis = computed(() => {
-    if (activePresetKey.value === 'front_desk') {
-        return [
-            metric('Active patients', 'Patients currently active in the shared queue scope.', 'users', numberValue(counts.value.patients, 'active')),
-            metric('Scheduled appointments', 'Appointments still scheduled for arrival.', 'calendar', numberValue(counts.value.appointments, 'scheduled')),
-            metric('Checked-in handoff', 'Patients ready for upstream handoff.', 'calendar-clock', numberValue(counts.value.appointments, 'checked_in')),
-            metric('OPD walk-ins today', 'Unscheduled OPD arrivals registered through appointments.', 'log-in', numberValue(counts.value.appointments, 'walk_in')),
-        ];
-    }
-    if (activePresetKey.value === 'clinician') {
-        const departmentPoolMetric = clinicianClinicalDepartment.value
-            ? metric(
-                'Department pool',
-                `Patients waiting for any provider in ${clinicianClinicalDepartment.value}.`,
-                'users',
-                numberValue(counts.value.departmentPoolAppointments, 'waiting_provider'),
-            )
-            : metric('Pending lab orders', 'Laboratory orders still active downstream.', 'flask-conical', numberValue(counts.value.laboratory, ['ordered', 'collected', 'in_progress']));
-
-        return [
-            metric('Ready for provider', 'Assigned encounters ready for consultation pickup.', 'calendar-clock', numberValue(counts.value.appointments, 'waiting_provider')),
-            departmentPoolMetric,
-            metric('Draft records', 'Documentation still open or unfinished.', 'clipboard-list', numberValue(counts.value.medicalRecords, 'draft')),
-            metric('Admitted follow-ups', 'Patients still admitted and likely needing review.', 'bed-double', numberValue(counts.value.admissions, 'admitted')),
-        ];
-    }
-    if (activePresetKey.value === 'direct_service') {
-        const singleModule = singleDirectServiceModule.value;
-        if (singleModule) {
-            if (singleModule.key === 'laboratory') {
-                const labCounts = counts.value.laboratory;
-                const tatRiskCount = (lists.value.laboratoryOrders ?? []).filter((order: any) => {
-                    const orderedAt = order?.orderedAt ? new Date(order.orderedAt).getTime() : NaN;
-                    if (!Number.isFinite(orderedAt)) return false;
-
-                    const priority = String(order?.priority ?? '').trim().toLowerCase();
-                    const thresholdMinutes = priority === 'stat' ? 60 : priority === 'urgent' ? 120 : 240;
-
-                    return nowTick.value - orderedAt > thresholdMinutes * 60_000;
-                }).length;
-
-                return [
-                    metric(
-                        'Active lab orders',
-                        'All open lab orders still moving through collection, processing, or release.',
-                        'flask-conical',
-                        numberValue(labCounts, ['ordered', 'collected', 'in_progress']),
-                    ),
-                    metric(
-                        'Awaiting collection',
-                        'Orders placed but specimen collection is not yet recorded.',
-                        'calendar-clock',
-                        numberValue(labCounts, 'ordered'),
-                    ),
-                    metric(
-                        'Collected / processing',
-                        'Specimens collected or actively being processed by the laboratory.',
-                        'activity',
-                        numberValue(labCounts, ['collected', 'in_progress']),
-                    ),
-                    metric(
-                        'TAT risk',
-                        'Open orders exceeding priority-aware dashboard turnaround thresholds.',
-                        'alert-triangle',
-                        tatRiskCount,
-                    ),
-                ];
-            }
-
-            return [
-                metric(
-                    `Pending ${singleModule.label.toLowerCase()} orders`,
-                    singleModule.subtitle,
-                    singleModule.icon,
-                    singleModule.active,
-                ),
-                metric(
-                    singleModule.key === 'pharmacy' ? 'Dispensed orders' : 'Completed orders',
-                    `${singleModule.label} work already completed in the current queue scope.`,
-                    singleModule.key === 'pharmacy' ? 'pill' : 'check-circle',
-                    singleModule.completed,
-                ),
-            ];
-        }
-
-        return [
-            ...directServiceModules.value.map((module) =>
-                metric(
-                    `Pending ${module.label.toLowerCase()} orders`,
-                    module.subtitle,
-                    module.icon,
-                    module.active,
-                ),
-            ),
-            metric('Service queues in scope', 'Direct-service modules available in this session.', 'building-2', directServiceModules.value.length),
-        ];
-    }
-    if (activePresetKey.value === 'nursing') {
-        return [
-            metric('Waiting for triage', 'Checked-in patients pending nurse assessment.', 'users', numberValue(counts.value.appointments, 'checked_in')),
-            metric('Admitted now', 'Current admitted census in scope.', 'bed-double', numberValue(counts.value.admissions, 'admitted')),
-            metric('Vitals overdue', 'Admitted patients with no vitals recorded in the last 4 hours.', 'activity', vitalsOverdueCount.value),
-            metric('Escalated ward tasks', 'Ward follow-up items marked escalated.', 'alert-triangle', numberValue(counts.value.wardTasks, 'escalated')),
-        ];
-    }
-    if (activePresetKey.value === 'emergency') {
-        const triageRows = lists.value.checkedInAppointments ?? [];
-        const now = nowTick.value;
-        const avgWaitMins = (() => {
-            if (triageRows.length === 0) return 0;
-            const total = triageRows.reduce((acc: number, item: any) => {
-                const t = item.checkedInAt ?? item.scheduledAt;
-                return t ? acc + Math.max(0, now - new Date(t).getTime()) : acc;
-            }, 0);
-            return Math.floor(total / triageRows.length / 60_000);
-        })();
-        const longestWaitMins = (() => {
-            if (triageRows.length === 0) return 0;
-            // rows are sorted by checkedInAt asc — first row = longest wait
-            const earliest = triageRows[0];
-            const t = earliest?.checkedInAt ?? earliest?.scheduledAt;
-            return t ? Math.max(0, Math.floor((now - new Date(t).getTime()) / 60_000)) : 0;
-        })();
-        return [
-            metric('Awaiting triage', 'Checked-in patients not yet assessed by clinical staff.', 'heart-pulse', numberValue(counts.value.appointments, 'checked_in')),
-            metric('Avg triage wait', 'Average time since check-in across all patients currently in the triage queue.', 'calendar-clock', avgWaitMins, 'm'),
-            metric('Longest wait', 'Time since the earliest unassessed patient checked in. Exceeds 30 min = critical.', 'alert-triangle', longestWaitMins, 'm'),
-            metric('In treatment', 'Emergency triage cases currently in active treatment.', 'stethoscope', numberValue(counts.value.emergencyTriageCases, 'in_treatment')),
-        ];
-    }
-    if (activePresetKey.value === 'cashier') {
-        return [
-            metric('Draft invoices', 'Invoices still waiting for billing action.', 'receipt', numberValue(counts.value.billing, 'draft')),
-            metric('Open claim exceptions', 'Claims still carrying active reconciliation exceptions.', 'alert-triangle', numberValue(counts.value.claimOpen, 'total')),
-            metric('Resolved claim exceptions', 'Claims already closed out from exception follow-up.', 'check-circle', numberValue(counts.value.claimResolved, 'total')),
-            metric('Partial payments', 'Invoices that still carry a remaining balance.', 'receipt', numberValue(counts.value.billing, 'partially_paid')),
-        ];
-    }
-    return [
-        metric('Audit export backlog', 'Queued or processing export jobs across accessible modules.', 'activity', numberValue(auditExportHealth.value?.aggregate, 'currentBacklog')),
-        metric('Recent export failures', 'Failed export jobs from the recent health window.', 'alert-triangle', numberValue(auditExportHealth.value?.aggregate, 'recentFailed')),
-        metric('Accessible facilities', 'Facilities currently visible in this workstation scope.', 'building-2', Number(scopeData.value?.userAccess?.accessibleFacilityCount ?? 0)),
-        metric('Ward escalations', 'Escalated inpatient tasks still visible in scope.', 'bed-double', numberValue(counts.value.wardTasks, 'escalated')),
-    ];
-});
+const kpis = computed(() => activeWorkflowSurface.value?.kpis ?? []);
 
 const orderedKpis = computed(() => {
     return kpis.value
@@ -1858,349 +1488,9 @@ const activityFeed = computed<ActivityEntry[]>(() => {
     return items;
 });
 
-const actions = computed(() => {
-    if (activePresetKey.value === 'front_desk') {
-        return [
-            { label: 'Register Patient', icon: 'user', variant: 'default', href: '/patients' },
-            { label: 'Appointment queue', icon: 'calendar-clock', variant: 'outline', href: `/appointments?view=queue&from=${today}` },
-            { label: 'Register OPD walk-in', icon: 'log-in', variant: 'outline', href: `/appointments?open=schedule&type=walkin&view=queue&from=${today}` },
-        ];
-    }
-    if (activePresetKey.value === 'clinician') {
-        const departmentPoolWaiting = Number(numberValue(counts.value.departmentPoolAppointments, 'waiting_provider') ?? 0);
-        const departmentAction = clinicianClinicalDepartment.value
-            ? {
-                label: 'Open department pool',
-                icon: 'users' as AppIconName,
-                variant: (departmentPoolWaiting > 0 ? 'default' : 'outline') as 'default' | 'outline',
-                href: departmentQueueHref(clinicianClinicalDepartment.value, 'waiting_provider'),
-            }
-            : null;
+const actions = computed(() => activeWorkflowSurface.value?.actions ?? []);
 
-        return [
-            departmentAction ?? { label: 'Open clinician queue', icon: 'calendar-clock', variant: 'default', href: clinicianQueueHref('waiting_provider') },
-            departmentAction
-                ? { label: 'Open my queue', icon: 'calendar-clock', variant: 'outline', href: clinicianQueueHref('waiting_provider') }
-                : { label: 'Open medical records', icon: 'clipboard-list', variant: 'outline', href: '/medical-records' },
-            departmentAction
-                ? { label: 'Open medical records', icon: 'clipboard-list', variant: 'outline', href: '/medical-records' }
-                : { label: 'Admissions', icon: 'bed-double', variant: 'outline', href: '/admissions?view=queue' },
-        ];
-    }
-    if (activePresetKey.value === 'direct_service') {
-        return directServiceModules.value.map((module, index) => ({
-            label: singleDirectServiceModule.value ? `${module.label} queue` : module.label,
-            icon: module.icon,
-            variant: index === 0 ? 'default' : 'outline',
-            href: module.href,
-        }));
-    }
-    if (activePresetKey.value === 'nursing') {
-        return [
-            { label: 'Triage queue', icon: 'users', variant: 'default', href: `/appointments?view=queue&status=checked_in&from=${today}` },
-            { label: 'Admission queue', icon: 'layout-list', variant: 'outline', href: '/admissions?view=queue' },
-            { label: 'Inpatient ward', icon: 'bed-double', variant: 'outline', href: '/inpatient-ward' },
-        ];
-    }
-    if (activePresetKey.value === 'emergency') {
-        return [
-            { label: 'Register emergency walk-in', icon: 'calendar-plus-2', variant: 'default', href: `/appointments?open=schedule&type=walkin&view=queue&from=${today}` },
-            { label: 'Triage queue', icon: 'heart-pulse', variant: 'outline', href: `/appointments?view=queue&status=checked_in&from=${today}` },
-            { label: 'Admit patient', icon: 'bed-double', variant: 'outline', href: '/admissions' },
-        ];
-    }
-    if (activePresetKey.value === 'cashier') {
-        return [
-            { label: 'Billing drafts', icon: 'receipt', variant: 'default', href: '/billing-invoices?status=draft' },
-            { label: 'Claim exceptions', icon: 'alert-triangle', variant: 'outline', href: '/claims-insurance?reconciliationExceptionStatus=open' },
-            { label: 'All invoices', icon: 'receipt', variant: 'outline', href: '/billing-invoices' },
-        ];
-    }
-    return [
-        { label: 'Audit export', icon: 'activity', variant: 'outline', onClick: () => { activeTab.value = 'resources'; } },
-        { label: 'Platform users', icon: 'users', variant: 'outline', href: '/platform/admin/users' },
-    ];
-});
-
-const queueRows = computed<QueueRow[]>(() => {
-    if (activePresetKey.value === 'front_desk') {
-        const now = Date.now();
-        const sortByArrival = (a: any, b: any) => {
-            const ta = a.checkedInAt ?? a.scheduledAt;
-            const tb = b.checkedInAt ?? b.scheduledAt;
-            if (!ta && !tb) return 0;
-            if (!ta) return 1;
-            if (!tb) return -1;
-            return new Date(ta).getTime() - new Date(tb).getTime();
-        };
-        const checkedInRows = [...(lists.value.checkedInAppointments ?? [])]
-            .sort(sortByArrival)
-            .slice(0, 5)
-            .map((item: any) => {
-            const triageCategory = appointmentTriageCategory(item);
-
-            return {
-            id: `checkedin-${String(item.id ?? item.appointmentNumber ?? Math.random())}`,
-            title: String(item.appointmentNumber ?? 'Checked-in patient'),
-            subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Checked-in and waiting for clinical handoff.',
-            meta: triageCategory
-                ? `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)} · ${triageCategory}`
-                : `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)}`,
-            status: formatEnumLabel(String(item.status ?? 'checked_in')),
-            href: `/appointments?view=queue&status=checked_in&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${today}`,
-            actionLabel: 'Open checked-in queue',
-            isOverdue: false,
-            group: 'Checked-in',
-            searchHaystack: appointmentQueueSearchHaystack(item),
-            triageCategory,
-        };
-        });
-        const scheduledRows = (lists.value.scheduledAppointments ?? []).slice(0, 8).map((item: any) => {
-            const scheduledAt = item.scheduledAt ? new Date(item.scheduledAt).getTime() : null;
-            const isOverdue = scheduledAt !== null && scheduledAt < now && String(item.status ?? '').toLowerCase() === 'scheduled';
-            const triageCategory = appointmentTriageCategory(item);
-
-            return {
-                id: String(item.id ?? item.appointmentNumber ?? Math.random()),
-                title: String(item.appointmentNumber ?? 'Scheduled appointment'),
-                subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Arrival still needs front-desk handling.',
-                meta: triageCategory
-                    ? `Scheduled ${formatDateTime(item.scheduledAt)} · ${triageCategory}`
-                    : `Scheduled ${formatDateTime(item.scheduledAt)}`,
-                status: formatEnumLabel(String(item.status ?? 'scheduled')),
-                href: `/appointments?view=queue&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${today}`,
-                actionLabel: 'Open queue',
-                isOverdue,
-                group: 'Scheduled',
-                searchHaystack: appointmentQueueSearchHaystack(item),
-                triageCategory,
-            };
-        });
-        return [...checkedInRows, ...scheduledRows];
-    }
-    if (activePresetKey.value === 'clinician') {
-        const departmentLabel = clinicianClinicalDepartment.value;
-        const waitingProviderRows = (lists.value.waitingProviderAppointments ?? []).map((item: any) => {
-            const triageCategory = appointmentTriageCategory(item);
-
-            return {
-            id: `waiting-provider-${String(item.id ?? item.appointmentNumber ?? Math.random())}`,
-            title: dashboardPatientLabel(item.patientId)
-                ? `${dashboardPatientLabel(item.patientId)} · ${String(item.appointmentNumber ?? 'Provider-ready')}`
-                : String(item.appointmentNumber ?? 'Provider-ready appointment'),
-            subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Encounter is ready for consultation pickup.',
-            meta: triageCategory
-                ? `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)} · ${triageCategory}`
-                : `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)}`,
-            status: formatEnumLabel(String(item.status ?? 'waiting_provider')),
-            href: clinicianQueueHref('waiting_provider', String(item.id ?? '')),
-            actionLabel: 'Open consultation',
-            group: 'My queue — waiting for provider',
-            searchHaystack: appointmentQueueSearchHaystack(item),
-            triageCategory,
-        };
-        });
-        const inConsultationRows = (lists.value.inConsultationAppointments ?? []).map((item: any) => {
-            const triageCategory = appointmentTriageCategory(item);
-
-            return {
-            id: `in-consultation-${String(item.id ?? item.appointmentNumber ?? Math.random())}`,
-            title: dashboardPatientLabel(item.patientId)
-                ? `${dashboardPatientLabel(item.patientId)} · ${String(item.appointmentNumber ?? 'In consultation')}`
-                : String(item.appointmentNumber ?? 'Active consultation'),
-            subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Consultation is already in progress for your assigned patient.',
-            meta: triageCategory
-                ? `Updated ${formatDateTime(item.updatedAt ?? item.checkedInAt ?? item.scheduledAt)} · ${triageCategory}`
-                : `Updated ${formatDateTime(item.updatedAt ?? item.checkedInAt ?? item.scheduledAt)}`,
-            status: formatEnumLabel(String(item.status ?? 'in_consultation')),
-            href: activeConsultationWorkspaceHref(String(item.id ?? '')),
-            actionLabel: 'Resume consultation',
-            group: 'My queue — in consultation',
-            searchHaystack: appointmentQueueSearchHaystack(item),
-            triageCategory,
-        };
-        });
-        const departmentPoolRows = departmentLabel
-            ? (lists.value.departmentPoolWaitingAppointments ?? []).map((item: any) => {
-                const triageCategory = appointmentTriageCategory(item);
-
-                return {
-                id: `department-pool-${String(item.id ?? item.appointmentNumber ?? Math.random())}`,
-                title: dashboardPatientLabel(item.patientId)
-                    ? `${dashboardPatientLabel(item.patientId)} · ${String(item.appointmentNumber ?? 'Department pool')}`
-                    : String(item.appointmentNumber ?? 'Department pool visit'),
-                subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || `Waiting in the ${departmentLabel} provider pool.`,
-                meta: triageCategory
-                    ? `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)} · ${triageCategory}`
-                    : `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)}`,
-                status: formatEnumLabel(String(item.status ?? 'waiting_provider')),
-                href: departmentQueueHref(departmentLabel, 'waiting_provider', String(item.id ?? '')),
-                actionLabel: 'Pick up consultation',
-                group: `Department pool — ${departmentLabel}`,
-                searchHaystack: appointmentQueueSearchHaystack(item),
-                triageCategory,
-            };
-            })
-            : [];
-
-        return [...waitingProviderRows, ...departmentPoolRows, ...inConsultationRows];
-    }
-    if (activePresetKey.value === 'direct_service') {
-        void dashboardPatientDirectory.value;
-
-        const focusedModule = singleDirectServiceModule.value ?? primaryDirectServiceModule.value;
-        const ordersForModule = (moduleKey: DirectServiceModuleSummary['key']) => {
-            if (moduleKey === 'radiology') return lists.value.radiologyOrders ?? [];
-            if (moduleKey === 'laboratory') return lists.value.laboratoryOrders ?? [];
-            if (moduleKey === 'pharmacy') return lists.value.pharmacyOrders ?? [];
-            return [];
-        };
-
-        if (focusedModule) {
-            const orders = ordersForModule(focusedModule.key);
-            if (orders.length > 0) {
-                const rows = mapDirectServiceOrdersToQueueRows(orders, focusedModule.key);
-                if (rows.length > 0) {
-                    return rows;
-                }
-            }
-
-            const activeInScope = Number(focusedModule.active ?? 0);
-            if (activeInScope > 0) {
-                return [{
-                    id: `direct-service-${focusedModule.key}-details-unavailable`,
-                    title: `${focusedModule.label} queue details`,
-                    subtitle: `${activeInScope} active order${activeInScope === 1 ? '' : 's'} in scope. Open the full queue for patient and requester details.`,
-                    meta: 'Patient-level summary not loaded on dashboard',
-                    status: focusedModule.queueStatus,
-                    href: directServiceModuleHref(focusedModule),
-                    actionLabel: focusedModule.actionLabel,
-                    group: `${focusedModule.label} worklist`,
-                }];
-            }
-
-            return [];
-        }
-
-        return directServiceModules.value.map((module) => ({
-            id: `direct-service-${module.key}`,
-            title: `${module.label} queue`,
-            subtitle: module.subtitle,
-            meta: module.meta,
-            status: module.queueStatus,
-            href: module.href,
-            actionLabel: module.actionLabel,
-        }));
-    }
-    if (activePresetKey.value === 'nursing') {
-        const sortByArrival = (a: any, b: any) => {
-            const ta = a.checkedInAt ?? a.scheduledAt;
-            const tb = b.checkedInAt ?? b.scheduledAt;
-            if (!ta && !tb) return 0;
-            if (!ta) return 1;
-            if (!tb) return -1;
-            return new Date(ta).getTime() - new Date(tb).getTime();
-        };
-        const triageItems = [...(lists.value.checkedInAppointments ?? [])]
-            .sort(sortByArrival)
-            .slice(0, 3)
-            .map((item: any) => {
-            const triageCategory = appointmentTriageCategory(item);
-
-            return {
-            id: `triage-${String(item.id ?? item.appointmentNumber ?? Math.random())}`,
-            title: String(item.appointmentNumber ?? 'Triage patient'),
-            subtitle: [item.department, item.reason].filter(Boolean).join(' | ') || 'Checked-in and waiting for nurse assessment.',
-            meta: triageCategory
-                ? `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)} · ${triageCategory}`
-                : `Checked in ${formatDateTime(item.checkedInAt ?? item.scheduledAt)}`,
-            status: formatEnumLabel(String(item.status ?? 'checked_in')),
-            href: `/appointments?view=queue&status=checked_in&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${today}`,
-            actionLabel: 'Open triage queue',
-            isOverdue: false,
-            group: 'Triage',
-            searchHaystack: appointmentQueueSearchHaystack(item),
-            triageCategory,
-        };
-        });
-        const admissionItems = (lists.value.admissions ?? []).slice(0, 2).map((item: any) => ({
-            id: String(item.id ?? item.admissionNumber ?? Math.random()),
-            title: String(item.admissionNumber ?? 'Active admission'),
-            subtitle: [item.ward, item.bed, item.admissionReason].filter(Boolean).join(' | ') || 'Admission needs ward or bed-flow review.',
-            meta: `Admitted ${formatDateTime(item.admittedAt)}`,
-            status: formatEnumLabel(String(item.status ?? 'admitted')),
-            href: '/admissions?view=queue',
-            actionLabel: 'Open admissions',
-            isOverdue: false,
-            group: 'Admissions',
-        }));
-        return [...triageItems, ...admissionItems];
-    }
-    if (activePresetKey.value === 'emergency') {
-        const now = nowTick.value;
-        const sortByArrival = (a: any, b: any) => {
-            const ta = a.checkedInAt ?? a.scheduledAt;
-            const tb = b.checkedInAt ?? b.scheduledAt;
-            if (!ta && !tb) return 0;
-            if (!ta) return 1;
-            if (!tb) return -1;
-            return new Date(ta).getTime() - new Date(tb).getTime();
-        };
-        return [...(lists.value.checkedInAppointments ?? [])]
-            .sort(sortByArrival)
-            .slice(0, 10)
-            .map((item: any) => {
-            const arrivalTime = item.checkedInAt ?? item.scheduledAt;
-            const waitMs = arrivalTime ? now - new Date(arrivalTime).getTime() : 0;
-            const waitMins = Math.max(0, Math.floor(waitMs / 60_000));
-            const isOverdue = waitMins >= 30;
-            const cat = appointmentTriageCategory(item);
-            const typeLabel = item.appointmentType === 'walk_in' ? 'Walk-in' : null;
-            const subtitleParts = [item.department, item.reason].filter(Boolean);
-            if (typeLabel) subtitleParts.unshift(typeLabel);
-            return {
-                id: String(item.id ?? item.appointmentNumber ?? Math.random()),
-                title: String(item.appointmentNumber ?? 'Walk-in / arrival'),
-                subtitle: subtitleParts.join(' | ') || 'Awaiting triage assessment.',
-                meta: arrivalTime ? `Waiting ${waitMins}m${cat ? ` · ${cat}` : ''}` : (cat ? cat : 'Wait time unknown'),
-                status: formatEnumLabel(String(item.status ?? 'checked_in')),
-                href: `/appointments?view=queue&status=checked_in&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${today}`,
-                actionLabel: 'Open triage',
-                isOverdue,
-                triageCategory: cat,
-                searchHaystack: appointmentQueueSearchHaystack(item),
-            };
-        })
-        .sort((a, b) => {
-            const pa = TRIAGE_P_ORDER[a.triageCategory ?? ''] ?? 5;
-            const pb = TRIAGE_P_ORDER[b.triageCategory ?? ''] ?? 5;
-            if (pa !== pb) return pa - pb;
-            // same category: overdue patients first
-            if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
-            return 0;
-        });
-    }
-    if (activePresetKey.value === 'cashier') {
-        return (lists.value.draftInvoices ?? []).slice(0, 3).map((item: any) => ({
-            id: String(item.id ?? item.invoiceNumber ?? Math.random()),
-            title: String(item.invoiceNumber ?? 'Draft invoice'),
-            subtitle: formatMoney(item.totalAmount, item.currencyCode),
-            meta: item.paymentDueAt ? `Due ${formatDateTime(item.paymentDueAt)}` : `Created ${formatDateTime(item.createdAt)}`,
-            status: formatEnumLabel(String(item.status ?? 'draft')),
-            href: '/billing-invoices?status=draft',
-            actionLabel: 'Open billing',
-        }));
-    }
-    return (auditExportHealth.value?.recentFailures ?? []).slice(0, 3).map((item: any) => ({
-        id: String(item.id ?? Math.random()),
-        title: String(item.targetResourceId ?? 'Failed export job'),
-        subtitle: String(item.errorMessage ?? 'Export failed and needs review.'),
-        meta: `${formatEnumLabel(String(item.moduleKey ?? 'module'))} | ${formatDateTime(item.failedAt ?? item.createdAt)}`,
-        status: 'Failed',
-        href: '#dashboard-resources',
-        actionLabel: 'Open resources',
-    }));
-});
+const queueRows = computed<QueueRow[]>(() => activeWorkflowSurface.value?.queueRows ?? []);
 
 const displayedQueueRows = computed(() => {
     const query = patientSearchQuery.value.trim();
@@ -2231,10 +1521,8 @@ const displayedQueueRows = computed(() => {
 
 const queuePreviewSearchActive = computed(() => patientSearchQuery.value.trim() !== '');
 
-const dashboardSearchPlaceholder = computed(() =>
-    activePresetKey.value === 'direct_service'
-        ? 'Patient name, MRN, phone, order #, or status'
-        : 'Patient name, MRN, phone, or appointment #',
+const dashboardSearchPlaceholder = computed(
+    () => activeWorkflowSurface.value?.searchPlaceholder ?? 'Patient name, MRN, phone, or appointment #',
 );
 
 const queueGroupCounts = computed<Map<string, number>>(() => {
@@ -2247,584 +1535,22 @@ const queueGroupCounts = computed<Map<string, number>>(() => {
     return map;
 });
 
-const queueTitle = computed(() => {
-    if (activePresetKey.value === 'front_desk') return 'Front desk queue';
-    if (activePresetKey.value === 'clinician') {
-        return clinicianClinicalDepartment.value ? 'Clinical queues' : 'Consultation-ready queue';
-    }
-    if (activePresetKey.value === 'direct_service') {
-        return singleDirectServiceModule.value ? `${singleDirectServiceModule.value.label} queue` : 'Service queues';
-    }
-    if (activePresetKey.value === 'nursing') return 'Triage & admissions queue';
-    if (activePresetKey.value === 'emergency') return 'Emergency triage queue';
-    if (activePresetKey.value === 'cashier') return 'Live billing preview';
-    return 'Recent export failures';
+const queueTitle = computed(() => activeWorkflowSurface.value?.queueTitle ?? 'Workflow queue');
+
+const queueDescription = computed(() => activeWorkflowSurface.value?.queueDescription ?? '');
+
+const handoff = computed(() => activeWorkflowSurface.value?.handoff ?? {
+    title: 'Dashboard handoff',
+    note: 'Workflow context',
+    blockerTitle: 'Loading',
+    blockerNote: 'Refresh the dashboard to load workflow context.',
+    nextAction: 'Refresh the dashboard.',
+    primaryAction: { label: 'Refresh', href: '/dashboard' },
+    secondaryAction: { label: 'Open resources', href: '/dashboard#dashboard-resources' },
+    chips: [],
 });
 
-const queueDescription = computed(() => {
-    if (activePresetKey.value === 'front_desk') return 'Checked-in patients awaiting clinical handoff, followed by upcoming scheduled arrivals.';
-    if (activePresetKey.value === 'clinician') {
-        if (clinicianClinicalDepartment.value) {
-            return `Your assigned patients plus the shared ${clinicianClinicalDepartment.value} department pool when visits are routed to the clinic.`;
-        }
-
-        return 'Patients assigned to you who are waiting for provider review, with active consultations shown below.';
-    }
-    if (activePresetKey.value === 'direct_service') {
-        return singleDirectServiceModule.value?.subtitle ?? 'Open orders grouped by patient — select a patient to review their full worklist.';
-    }
-    if (activePresetKey.value === 'nursing') return 'Checked-in patients waiting for triage and active inpatient admissions.';
-    if (activePresetKey.value === 'emergency') return 'All checked-in patients sorted by arrival time — longest wait shown first. Rows overdue at 30 min.';
-    if (activePresetKey.value === 'cashier') return 'Draft billing work that still needs invoice follow-up.';
-    return 'Failures and backlog signals from audit export health.';
-});
-
-const handoff = computed(() => {
-    if (activePresetKey.value === 'front_desk') {
-        const checkedIn = numberValue(counts.value.appointments, 'checked_in');
-        const scheduled = numberValue(counts.value.appointments, 'scheduled');
-        const activePatients = numberValue(counts.value.patients, 'active');
-        const hasCheckedInBlocker = Number(checkedIn ?? 0) > 0;
-        const hasScheduledBlocker = Number(scheduled ?? 0) > 0;
-
-        return {
-            title: 'Front desk handoff',
-            note: 'Reception to clinical queue',
-            blockerTitle: hasCheckedInBlocker
-                ? 'Checked-in patients awaiting pickup'
-                : hasScheduledBlocker
-                    ? 'Scheduled arrivals still open'
-                    : 'No critical front desk blockers',
-            blockerNote: hasCheckedInBlocker
-                ? 'The clinician handoff queue is already forming.'
-                : hasScheduledBlocker
-                    ? 'Upcoming appointments still need check-in coverage.'
-                    : 'Confirm scope before relying on front-desk queue counts.',
-            nextAction: hasCheckedInBlocker
-                ? 'Start from the checked-in queue so no patient handoff is missed.'
-                : 'Review remaining scheduled arrivals and patient search requests.',
-            primaryAction: {
-                label: hasCheckedInBlocker ? 'Open checked-in queue' : 'Open appointments',
-                href: hasCheckedInBlocker ? `/appointments?view=queue&status=checked_in&from=${today}` : `/appointments?view=queue&from=${today}`,
-            },
-            secondaryAction: { label: 'Open patients', href: '/patients' },
-            chips: [
-                { label: 'Active patients', value: activePatients },
-                { label: 'Scheduled', value: scheduled },
-                { label: 'Checked in', value: checkedIn },
-            ],
-        };
-    }
-    if (activePresetKey.value === 'clinician') {
-        const waitingProvider = numberValue(counts.value.appointments, 'waiting_provider');
-        const departmentPoolWaiting = numberValue(counts.value.departmentPoolAppointments, 'waiting_provider');
-        const inConsultation = numberValue(counts.value.appointments, 'in_consultation');
-        const draftRecords = numberValue(counts.value.medicalRecords, 'draft');
-        const admittedFollowUps = numberValue(counts.value.admissions, 'admitted');
-        const hasDraftBlocker = Number(draftRecords ?? 0) > 0;
-        const hasWaitingProviderBlocker = Number(waitingProvider ?? 0) > 0;
-        const hasDepartmentPoolBlocker = Number(departmentPoolWaiting ?? 0) > 0;
-
-        return {
-            title: 'Clinician handoff',
-            note: clinicianClinicalDepartment.value
-                ? `OPD flow for ${clinicianClinicalDepartment.value} and assigned patients`
-                : 'OPD and inpatient clinical flow',
-            blockerTitle: hasDraftBlocker
-                ? 'Draft records still open'
-                : hasWaitingProviderBlocker
-                    ? 'Assigned consultations waiting'
-                    : hasDepartmentPoolBlocker
-                        ? 'Department pool patients waiting'
-                        : Number(admittedFollowUps ?? 0) > 0
-                            ? 'Active inpatient follow-up load'
-                            : 'No critical clinician blockers',
-            blockerNote: hasDraftBlocker
-                ? 'Clinical documentation still needs completion or finalization.'
-                : hasWaitingProviderBlocker
-                    ? 'Assigned patients are waiting in the provider queue for consultation to begin.'
-                    : hasDepartmentPoolBlocker
-                        ? `Patients are waiting in the ${clinicianClinicalDepartment.value} clinic pool for the next available provider.`
-                        : Number(admittedFollowUps ?? 0) > 0
-                            ? 'Current inpatients may still need progress review or discharge decisions.'
-                            : 'Consultation queue and note backlog are stable for the next clinical shift.',
-            nextAction: hasWaitingProviderBlocker
-                ? 'Start the next assigned consultation without leaving the current preset.'
-                : hasDepartmentPoolBlocker
-                    ? 'Pick up the next patient from your department pool.'
-                    : hasDraftBlocker
-                        ? 'Review incomplete notes before new backlog accumulates.'
-                        : 'Review active inpatients for continuation planning.',
-            primaryAction: {
-                label: hasWaitingProviderBlocker
-                    ? 'Open my queue'
-                    : hasDepartmentPoolBlocker && clinicianClinicalDepartment.value
-                        ? 'Open department pool'
-                        : 'Open medical records',
-                href: hasWaitingProviderBlocker
-                    ? clinicianQueueHref('waiting_provider')
-                    : hasDepartmentPoolBlocker && clinicianClinicalDepartment.value
-                        ? departmentQueueHref(clinicianClinicalDepartment.value, 'waiting_provider')
-                        : '/medical-records',
-            },
-            secondaryAction: { label: 'Open admissions', href: '/admissions?view=queue' },
-            chips: [
-                { label: 'Waiting for provider', value: waitingProvider },
-                ...(clinicianClinicalDepartment.value
-                    ? [{ label: 'Department pool', value: departmentPoolWaiting }]
-                    : []),
-                { label: 'In consultation', value: inConsultation },
-                { label: 'Draft notes', value: draftRecords },
-            ],
-        };
-    }
-    if (activePresetKey.value === 'direct_service') {
-        const leadModule = primaryDirectServiceModule.value;
-        const secondaryModule = singleDirectServiceModule.value ? null : directServiceModules.value[1] ?? null;
-        const hasActiveQueue = Number(leadModule?.active ?? 0) > 0;
-        const isSingleModule = Boolean(singleDirectServiceModule.value);
-
-        return {
-            title: leadModule ? `${leadModule.label} handoff` : 'Service handoff',
-            note: leadModule
-                ? isSingleModule
-                    ? `${leadModule.label} queue and status movement`
-                    : 'Laboratory, pharmacy, and radiology flow'
-                : 'Service queue flow',
-            blockerTitle: leadModule
-                ? hasActiveQueue
-                    ? `${leadModule.label} queue still active`
-                    : `${leadModule.label} queue stable`
-                : 'No service modules available',
-            blockerNote: leadModule
-                ? hasActiveQueue
-                    ? leadModule.subtitle
-                    : `${leadModule.label} queue looks stable for this session.`
-                : 'No service modules are available in this session scope.',
-            nextAction: leadModule
-                ? hasActiveQueue
-                    ? `Start from ${leadModule.label.toLowerCase()} so service queue work keeps moving.`
-                    : `Open ${leadModule.label.toLowerCase()} to confirm the queue is still clear.`
-                : 'Refresh scope or permissions before relying on this dashboard.',
-            primaryAction: leadModule
-                ? { label: leadModule.actionLabel, href: leadModule.href }
-                : { label: 'Refresh dashboard', href: '/dashboard' },
-            secondaryAction: secondaryModule
-                ? { label: secondaryModule.actionLabel, href: secondaryModule.href }
-                : { label: 'Open resources', href: '/dashboard#dashboard-resources' },
-            chips: directServiceModules.value.slice(0, 3).map((module) => ({
-                label: module.label,
-                value: module.active,
-            })),
-        };
-    }
-    if (activePresetKey.value === 'nursing') {
-        const escalatedTasks = numberValue(counts.value.wardTasks, 'escalated');
-        const blockedDischarge = numberValue(counts.value.wardDischargeChecklists, ['blocked', 'pending']);
-        const pendingLab = numberValue(counts.value.laboratory, ['ordered', 'collected', 'in_progress']);
-        const pendingPharmacy = numberValue(counts.value.pharmacy, ['pending', 'in_preparation', 'partially_dispensed']);
-        const waitingTriage = numberValue(counts.value.appointments, 'checked_in');
-        const hasEscalated = Number(escalatedTasks ?? 0) > 0;
-        const hasWaitingTriage = Number(waitingTriage ?? 0) > 0;
-
-        return {
-            title: 'Nursing handoff',
-            note: 'Triage and ward operations',
-            blockerTitle: hasWaitingTriage
-                ? 'Patients waiting for triage assessment'
-                : hasEscalated
-                    ? 'Immediate bedside follow-up still needs acknowledgement.'
-                    : Number(blockedDischarge ?? 0) > 0
-                        ? 'Blocked discharge checklists'
-                        : Number(pendingLab ?? 0) > 0
-                            ? 'Pending lab follow-up'
-                            : 'No critical nursing blockers',
-            blockerNote: hasWaitingTriage
-                ? 'Check-in queue has patients waiting for initial nursing assessment.'
-                : hasEscalated
-                ? 'Review task escalation or discharge blockers before closing handoff.'
-                : Number(blockedDischarge ?? 0) > 0
-                    ? 'Bed occupancy and discharge readiness need another pass.'
-                    : Number(pendingLab ?? 0) > 0
-                        ? 'Check which laboratory work is still blocking bedside care.'
-                        : 'Bed occupancy and discharge readiness look stable for the next shift.',
-            nextAction: hasWaitingTriage
-                ? 'Start from the triage queue to clear patients waiting for assessment.'
-                : Number(blockedDischarge ?? 0) > 0
-                ? 'Review current occupancy and placement before the next handoff.'
-                : 'Start from the live admissions view, then step into ward follow-up.',
-            primaryAction: hasWaitingTriage
-                ? { label: 'Open triage queue', href: `/appointments?view=queue&status=checked_in&from=${today}` }
-                : { label: 'Open bed board', href: '/admissions?view=board' },
-            secondaryAction: { label: 'Open inpatient ward', href: '/inpatient-ward' },
-            chips: [
-                { label: 'Waiting triage', value: waitingTriage },
-                { label: 'Admitted now', value: numberValue(counts.value.admissions, 'admitted') },
-                { label: 'Escalated tasks', value: escalatedTasks },
-            ],
-        };
-    }
-    if (activePresetKey.value === 'emergency') {
-        const waitingTriage = numberValue(counts.value.appointments, 'checked_in');
-        const activeAdmissions = numberValue(counts.value.admissions, 'admitted');
-        const inTreatment = numberValue(counts.value.emergencyTriageCases, 'in_treatment');
-        const statLab = numberValue(counts.value.laboratory, ['ordered', 'collected', 'in_progress']);
-        const registeredBeds = numberValue(counts.value.wardBeds, 'active');
-        const hasWaiting = Number(waitingTriage ?? 0) > 0;
-        const hasLab = Number(statLab ?? 0) > 0;
-
-        return {
-            title: 'Emergency handoff',
-            note: 'Triage and emergency care flow',
-            blockerTitle: hasWaiting
-                ? `${(waitingTriage ?? 0).toLocaleString()} patient${Number(waitingTriage) === 1 ? '' : 's'} awaiting triage`
-                : hasLab
-                    ? 'Pending stat lab orders need follow-up'
-                    : 'No critical emergency blockers',
-            blockerNote: hasWaiting
-                ? 'Patients have checked in and are waiting for initial clinical assessment. Prioritise longest-wait patients.'
-                : hasLab
-                    ? 'Stat laboratory orders are pending results — treatment decisions may be blocked.'
-                    : 'Triage queue is clear and admission load looks stable.',
-            nextAction: hasWaiting
-                ? 'Open the triage queue sorted by wait time and begin assessments from the top.'
-                : 'Review current admissions for discharge or escalation decisions.',
-            primaryAction: {
-                label: hasWaiting ? 'Open triage queue' : 'Open admissions',
-                href: hasWaiting ? `/appointments?view=queue&status=checked_in&from=${today}` : '/admissions?view=queue',
-            },
-            secondaryAction: { label: 'Register emergency walk-in', href: `/appointments?open=schedule&type=walkin&view=queue&from=${today}` },
-            chips: [
-                { label: 'Awaiting triage', value: waitingTriage },
-                { label: 'In treatment', value: inTreatment },
-                { label: 'Admitted', value: activeAdmissions },
-                ...(registeredBeds !== null ? [{ label: 'Reg. beds', value: registeredBeds }] : []),
-            ],
-        };
-    }
-    if (activePresetKey.value === 'cashier') {
-        const openClaims = numberValue(counts.value.claimOpen, 'total');
-        const draftInvoices = numberValue(counts.value.billing, 'draft');
-        const partialPayments = numberValue(counts.value.billing, 'partially_paid');
-
-        return {
-            title: 'Cashier shift handoff',
-            note: 'Billing and payer follow-up',
-            blockerTitle: Number(openClaims ?? 0) > 0
-                ? 'Open claims exceptions'
-                : Number(draftInvoices ?? 0) > 0
-                    ? 'Draft invoices awaiting issue'
-                    : Number(partialPayments ?? 0) > 0
-                        ? 'Partially paid invoices'
-                        : 'No critical cashier blockers',
-            blockerNote: Number(openClaims ?? 0) > 0
-                ? 'Payer blockers are still holding reconciliation open.'
-                : Number(draftInvoices ?? 0) > 0
-                    ? 'Revenue still depends on invoice completion or release.'
-                    : Number(partialPayments ?? 0) > 0
-                        ? 'Outstanding balances still need cashier follow-up.'
-                        : 'Billing queues look stable for the next cashier handoff.',
-            nextAction: Number(openClaims ?? 0) > 0
-                ? 'Start with payer exceptions that are still blocking reconciliation.'
-                : 'Review invoice drafts and partially paid balances next.',
-            primaryAction: {
-                label: Number(openClaims ?? 0) > 0 ? 'Open claim queue' : 'Open billing drafts',
-                href: Number(openClaims ?? 0) > 0 ? '/claims-insurance?reconciliationExceptionStatus=open' : '/billing-invoices?status=draft',
-            },
-            secondaryAction: { label: 'Open billing', href: '/billing-invoices' },
-            chips: [
-                { label: 'Open claims', value: openClaims },
-                { label: 'Draft invoices', value: draftInvoices },
-                { label: 'Partially paid', value: partialPayments },
-            ],
-        };
-    }
-
-    const recentExportFailures = numberValue(auditExportHealth.value?.aggregate, 'recentFailed');
-    const exportBacklog = numberValue(auditExportHealth.value?.aggregate, 'currentBacklog');
-    const wardEscalations = numberValue(counts.value.wardTasks, 'escalated');
-    const accessibleFacilities = Number(scopeData.value?.userAccess?.accessibleFacilityCount ?? 0);
-
-    return {
-        title: 'Operations handoff',
-        note: 'Platform and operational oversight',
-        blockerTitle: accessibleFacilities === 0
-            ? 'Scope needs attention'
-            : Number(recentExportFailures ?? 0) > 0
-                ? 'Recent audit export failures'
-                : Number(wardEscalations ?? 0) > 0
-                    ? 'Ward escalations still open'
-                    : 'No critical admin blockers',
-        blockerNote: accessibleFacilities === 0
-            ? 'Confirm tenant/facility scope before trusting any queue metrics.'
-            : Number(recentExportFailures ?? 0) > 0
-                ? 'Recent failed export jobs need review before the next shift.'
-                : Number(wardEscalations ?? 0) > 0
-                    ? 'The next operations lead should review current ward escalations.'
-                    : 'Operational scope and platform queues look stable for the next lead.',
-        nextAction: accessibleFacilities === 0
-            ? 'Review scope selection before moving into operational queues.'
-            : 'Switch to resources for export health, retry-resume telemetry, and workstation context.',
-        primaryAction: {
-            label: accessibleFacilities === 0 ? 'Review scope' : 'Open audit export',
-            href: '/dashboard#dashboard-resources',
-        },
-        secondaryAction: { label: 'Platform users', href: '/platform/admin/users' },
-        chips: [
-            { label: 'Accessible facilities', value: Number.isFinite(accessibleFacilities) ? accessibleFacilities : null },
-            { label: 'Export backlog', value: exportBacklog },
-            { label: 'Recent failures', value: recentExportFailures },
-        ],
-    };
-});
-
-const watchItems = computed(() => {
-    if (activePresetKey.value === 'front_desk') {
-        return [
-            {
-                label: 'Checked-in handoff',
-                note: 'Arrivals already ready for clinician handoff.',
-                value: numberValue(counts.value.appointments, 'checked_in'),
-                href: `/appointments?view=queue&status=checked_in&from=${today}`,
-                actionLabel: 'Open checked-in queue',
-                icon: 'calendar-clock' as AppIconName,
-            },
-            {
-                label: 'Scheduled arrivals still open',
-                note: 'Upcoming appointments still need check-in coverage.',
-                value: numberValue(counts.value.appointments, 'scheduled'),
-                href: `/appointments?view=queue&from=${today}`,
-                actionLabel: 'Open appointments',
-                icon: 'calendar' as AppIconName,
-            },
-            {
-                label: 'Active patient records',
-                note: 'Registration-ready records still need desk attention.',
-                value: numberValue(counts.value.patients, 'active'),
-                href: '/patients',
-                actionLabel: 'Open patients',
-                icon: 'users' as AppIconName,
-            },
-        ];
-    }
-
-    if (activePresetKey.value === 'clinician') {
-        return [
-            {
-                label: 'Pending laboratory decisions',
-                note: 'Outstanding lab work may still be blocking treatment plans.',
-                value: numberValue(counts.value.laboratory, ['ordered', 'collected', 'in_progress']),
-                href: '/laboratory-orders',
-                actionLabel: 'Open laboratory',
-                icon: 'flask-conical' as AppIconName,
-            },
-            {
-                label: 'Draft records still open',
-                note: 'Clinical documentation still needs completion or finalization.',
-                value: numberValue(counts.value.medicalRecords, 'draft'),
-                href: '/medical-records',
-                actionLabel: 'Open medical records',
-                icon: 'clipboard-list' as AppIconName,
-            },
-            {
-                label: 'Active inpatient follow-up load',
-                note: 'Current inpatients may still need progress review or discharge decisions.',
-                value: numberValue(counts.value.admissions, 'admitted'),
-                href: '/admissions?view=queue',
-                actionLabel: 'Open admissions',
-                icon: 'bed-double' as AppIconName,
-            },
-        ];
-    }
-
-    if (activePresetKey.value === 'direct_service') {
-        return directServiceModules.value.map((module) => ({
-            label: `${module.label} active queue`,
-            note: module.subtitle,
-            value: module.active,
-            href: module.href,
-            actionLabel: module.actionLabel,
-            icon: module.icon,
-        }));
-    }
-    if (activePresetKey.value === 'nursing') {
-        return [
-            {
-                label: 'Triage queue',
-                note: 'Checked-in patients waiting for nurse assessment.',
-                value: numberValue(counts.value.appointments, 'checked_in'),
-                href: `/appointments?view=queue&status=checked_in&from=${today}`,
-                actionLabel: 'Open triage',
-                icon: 'users' as AppIconName,
-            },
-            {
-                label: 'Vitals overdue',
-                note: 'Admitted patients with no vitals recorded in the last 4 hours. Record vitals to clear.',
-                value: vitalsOverdueCount.value,
-                href: '/inpatient-ward',
-                actionLabel: 'Open inpatient ward',
-                icon: 'activity' as AppIconName,
-            },
-            {
-                label: 'Blocked discharge checklists',
-                note: 'Patients blocked from discharge — bed occupancy is held until resolved.',
-                value: numberValue(counts.value.wardDischargeChecklists, ['blocked', 'pending']),
-                href: '/inpatient-ward',
-                actionLabel: 'Open inpatient ward',
-                icon: 'circle-x' as AppIconName,
-            },
-            {
-                label: 'Pending medication dispense',
-                note: 'Medication requests are still queued for the ward.',
-                value: numberValue(counts.value.pharmacy, ['pending', 'in_preparation', 'partially_dispensed']),
-                href: '/pharmacy-orders',
-                actionLabel: 'Open pharmacy',
-                icon: 'pill' as AppIconName,
-            },
-            {
-                label: 'Pending care plans',
-                note: 'Care plans not yet finalised or awaiting nurse sign-off.',
-                value: numberValue(counts.value.wardCarePlans, ['draft', 'pending']),
-                href: '/inpatient-ward',
-                actionLabel: 'Open inpatient ward',
-                icon: 'clipboard-list' as AppIconName,
-            },
-        ];
-    }
-
-    if (activePresetKey.value === 'emergency') {
-        return [
-            {
-                label: 'Triage queue',
-                note: 'Patients checked in and waiting for initial clinical assessment.',
-                value: numberValue(counts.value.appointments, 'checked_in'),
-                href: `/appointments?view=queue&status=checked_in&from=${today}`,
-                actionLabel: 'Open triage queue',
-                icon: 'heart-pulse' as AppIconName,
-            },
-            {
-                label: 'P1 — Resuscitation',
-                note: 'Immediately life-threatening patients in triage. Requires instantaneous response.',
-                value: (counts.value.appointments?.triage_categories as any)?.P1 ?? 0,
-                href: `/appointments?view=queue&status=checked_in&triageCategory=P1&from=${today}`,
-                actionLabel: 'View P1 patients',
-                icon: 'alert-triangle' as AppIconName,
-            },
-            {
-                label: 'P2 — Emergent',
-                note: 'Very urgent patients. Clinical assessment target: within 10 minutes of check-in.',
-                value: (counts.value.appointments?.triage_categories as any)?.P2 ?? 0,
-                href: `/appointments?view=queue&status=checked_in&triageCategory=P2&from=${today}`,
-                actionLabel: 'View P2 patients',
-                icon: 'activity' as AppIconName,
-            },
-            {
-                label: 'Active admissions',
-                note: 'Current inpatient census from emergency and ward intake.',
-                value: numberValue(counts.value.admissions, 'admitted'),
-                href: '/admissions?view=queue',
-                actionLabel: 'Open admissions',
-                icon: 'bed-double' as AppIconName,
-            },
-            {
-                label: 'In treatment',
-                note: 'Emergency triage cases currently under active clinical treatment.',
-                value: numberValue(counts.value.emergencyTriageCases, 'in_treatment'),
-                href: '/emergency-triage-cases',
-                actionLabel: 'Open emergency cases',
-                icon: 'stethoscope' as AppIconName,
-            },
-            {
-                label: 'Stat lab orders',
-                note: 'Laboratory orders still pending collection, processing, or results.',
-                value: numberValue(counts.value.laboratory, ['ordered', 'collected', 'in_progress']),
-                href: '/laboratory-orders',
-                actionLabel: 'Open laboratory',
-                icon: 'flask-conical' as AppIconName,
-            },
-            {
-                label: 'Pending medication orders',
-                note: 'Pharmacy orders waiting preparation or dispense for emergency patients.',
-                value: numberValue(counts.value.pharmacy, ['pending', 'in_preparation', 'partially_dispensed']),
-                href: '/pharmacy-orders',
-                actionLabel: 'Open pharmacy',
-                icon: 'pill' as AppIconName,
-            },
-            {
-                label: 'Registered beds',
-                note: 'Active ward beds registered in scope. Compared against admitted census to gauge capacity pressure.',
-                value: numberValue(counts.value.wardBeds, 'active'),
-                href: '/platform/admin/ward-beds',
-                actionLabel: 'Open bed registry',
-                icon: 'bed-double' as AppIconName,
-            },
-            ...(mciModeActive.value ? [{
-                label: 'MCI mode active',
-                note: 'Mass Casualty Incident protocols are active. Surge triage workflows apply — coordinate with the incident commander.',
-                value: null,
-                href: '#',
-                actionLabel: 'Incident active',
-                icon: 'alert-triangle' as AppIconName,
-            }] : []),
-        ];
-    }
-
-    if (activePresetKey.value === 'cashier') {
-        return [
-            {
-                label: 'Open claims exceptions',
-                note: 'Payer exceptions still blocking reconciliation.',
-                value: numberValue(counts.value.claimOpen, 'total'),
-                href: '/claims-insurance?reconciliationExceptionStatus=open',
-                actionLabel: 'Open claims',
-                icon: 'alert-triangle' as AppIconName,
-            },
-            {
-                label: 'Draft invoices awaiting issue',
-                note: 'Revenue still depends on invoice completion or release.',
-                value: numberValue(counts.value.billing, 'draft'),
-                href: '/billing-invoices?status=draft',
-                actionLabel: 'Open billing drafts',
-                icon: 'receipt' as AppIconName,
-            },
-            {
-                label: 'Partially paid invoices',
-                note: 'Outstanding balances still need cashier follow-up.',
-                value: numberValue(counts.value.billing, 'partially_paid'),
-                href: '/billing-invoices',
-                actionLabel: 'Open billing',
-                icon: 'receipt' as AppIconName,
-            },
-        ];
-    }
-
-    return [
-        {
-            label: 'Scope resolution needs review',
-            note: 'Review scope when tenant or facility context looks off.',
-            value: Number(scopeData.value?.userAccess?.accessibleFacilityCount ?? 0),
-            href: '/dashboard#dashboard-resources',
-            actionLabel: 'Review scope',
-            icon: 'building-2' as AppIconName,
-        },
-        {
-            label: 'Recent audit export failures',
-            note: 'Recent failed export jobs need review before the next shift.',
-            value: numberValue(auditExportHealth.value?.aggregate, 'recentFailed'),
-            href: '/dashboard#dashboard-resources',
-            actionLabel: 'Open audit export',
-            icon: 'activity' as AppIconName,
-        },
-        {
-            label: 'Ward escalations still open',
-            note: 'Operational escalations that may need leadership review.',
-            value: numberValue(counts.value.wardTasks, 'escalated'),
-            href: '/inpatient-ward',
-            actionLabel: 'Open inpatient ward',
-            icon: 'bed-double' as AppIconName,
-        },
-    ];
-});
+const watchItems = computed(() => activeWorkflowSurface.value?.watchItems ?? []);
 
 const exportModuleRows = computed(() =>
     firstArray(auditExportHealth.value, ['moduleHealth', 'moduleSlices', 'modules', 'moduleSummaries'])
@@ -2901,6 +1627,34 @@ const escalatedTaskCount = computed(() => Number(counts.value.wardTasks?.escalat
 const mciModeActive = computed(() => Boolean((counts.value.operationalFlags as any)?.mci_mode?.is_active));
 
 const vitalsOverdueCount = computed(() => Number((counts.value.vitalsOverdue as any)?.overdue_count ?? 0));
+
+const dashboardSurfaceRuntime = computed(() => ({
+    today,
+    nowTick: nowTick.value,
+    clinicianClinicalDepartment: clinicianClinicalDepartment.value,
+    vitalsOverdueCount: vitalsOverdueCount.value,
+    mciModeActive: mciModeActive.value,
+    directServiceModules: directServiceModules.value,
+    singleDirectServiceModule: singleDirectServiceModule.value,
+    primaryDirectServiceModule: primaryDirectServiceModule.value,
+    auditExportHealth: auditExportHealth.value,
+    scopeData: scopeData.value,
+    TRIAGE_P_ORDER,
+    formatDateTime,
+    formatMoney,
+    formatEnumLabel,
+    clinicianQueueHref,
+    departmentQueueHref,
+    activeConsultationWorkspaceHref,
+    directServiceModuleHref,
+    dashboardPatientLabel,
+    appointmentTriageCategory,
+    appointmentQueueSearchHaystack,
+    mapDirectServiceOrdersToQueueRows,
+    openResourcesTab: () => {
+        activeTab.value = 'resources';
+    },
+}));
 
 const patientSearchQuery = ref('');
 

@@ -28,6 +28,7 @@ use App\Modules\MedicalRecord\Presentation\Http\Controllers\MedicalRecordControl
 use App\Modules\Patient\Presentation\Http\Controllers\PatientController;
 use App\Modules\Patient\Presentation\Http\Controllers\PatientMedicationSafetyController;
 use App\Modules\Pharmacy\Presentation\Http\Controllers\PharmacyOrderController;
+use App\Modules\Platform\Presentation\Http\Controllers\DashboardContextController;
 use App\Modules\Platform\Presentation\Http\Controllers\FacilityConfigurationController;
 use App\Modules\Platform\Presentation\Http\Controllers\FacilityResourceRegistryController;
 use App\Modules\Platform\Presentation\Http\Controllers\MultiFacilityRolloutController;
@@ -62,6 +63,7 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
             'token' => csrf_token(),
         ]);
     })->middleware('throttle:30,1')->name('auth.csrf-token');
+    Route::get('dashboard/context', [DashboardContextController::class, 'show'])->name('dashboard.context');
     Route::get('auth/me', [AuthenticatedUserController::class, 'me'])->name('auth.me');
     Route::get('auth/me/permissions', [AuthenticatedUserController::class, 'permissions'])->name('auth.me.permissions');
     Route::get('auth/me/security-status', [AuthenticatedUserController::class, 'securityStatus'])->name('auth.me.security-status');
