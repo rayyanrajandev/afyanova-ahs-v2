@@ -198,6 +198,66 @@ function isRecordsEligible(input: InferDashboardPresetInput): boolean {
     return true;
 }
 
+export function resolveDirectServicePresentation(input: InferDashboardPresetInput): {
+    label: string;
+    description: string;
+} {
+    const { roleCodesUpper, hasPermission } = input;
+    const heldRoles = DASHBOARD_DIRECT_SERVICE_ROLE_CODES.filter((code) => roleCodesUpper.includes(code));
+
+    if (heldRoles.length === 1) {
+        switch (heldRoles[0]) {
+            case 'HOSPITAL.LABORATORY.USER':
+                return {
+                    label: 'Laboratory',
+                    description: 'Laboratory order queue, specimen processing, and result verification for bench staff.',
+                };
+            case 'HOSPITAL.PHARMACY.USER':
+                return {
+                    label: 'Pharmacy',
+                    description: 'Pharmacy dispensing queue, order preparation, and verification for dispensary staff.',
+                };
+            case 'HOSPITAL.RADIOLOGY.USER':
+                return {
+                    label: 'Radiology',
+                    description: 'Imaging order queue, scheduling, and reporting for radiology staff.',
+                };
+            default:
+                break;
+        }
+    }
+
+    const modules: string[] = [];
+    if (hasPermission('laboratory.orders.read')) modules.push('laboratory');
+    if (hasPermission('pharmacy.orders.read')) modules.push('pharmacy');
+    if (hasPermission('radiology.orders.read')) modules.push('radiology');
+
+    if (modules.length === 1) {
+        switch (modules[0]) {
+            case 'laboratory':
+                return {
+                    label: 'Laboratory',
+                    description: 'Laboratory order queue, specimen processing, and result verification for bench staff.',
+                };
+            case 'pharmacy':
+                return {
+                    label: 'Pharmacy',
+                    description: 'Pharmacy dispensing queue, order preparation, and verification for dispensary staff.',
+                };
+            case 'radiology':
+                return {
+                    label: 'Radiology',
+                    description: 'Imaging order queue, scheduling, and reporting for radiology staff.',
+                };
+        }
+    }
+
+    return {
+        label: 'Direct Service',
+        description: 'Watch laboratory, pharmacy, and radiology queues without borrowing nursing-only census signals.',
+    };
+}
+
 /**
  * Client fallback when /dashboard/context is unavailable.
  */
@@ -240,7 +300,11 @@ export function eligibleDashboardPresets(input: InferDashboardPresetInput): Dash
     if (isRecordsEligible(input)) {
         allow.add('records');
     }
-    if (presetMatchesRole(roleCodesUpper, DASHBOARD_SUPPLY_ROLE_CODES) || hasPermission('inventory.procurement.read')) {
+    if (
+        presetMatchesRole(roleCodesUpper, DASHBOARD_SUPPLY_ROLE_CODES)
+        || (!presetMatchesRole(roleCodesUpper, DASHBOARD_DIRECT_SERVICE_ROLE_CODES)
+            && hasPermission('inventory.procurement.read'))
+    ) {
         allow.add('supply');
     }
     if (presetMatchesRole(roleCodesUpper, DASHBOARD_THEATRE_ROLE_CODES) || hasPermission('theatre.procedures.read')) {

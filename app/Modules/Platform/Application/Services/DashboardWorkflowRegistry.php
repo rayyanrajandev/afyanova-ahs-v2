@@ -450,16 +450,107 @@ final class DashboardWorkflowRegistry
                 fn (array $widget): bool => $context->hasPermission((string) ($widget['permission'] ?? '')),
             ));
 
-            $definitions[] = [
-                'key' => $workflow['key'],
-                'label' => $workflow['label'],
-                'description' => $workflow['description'],
-                'modules' => $workflow['modules'],
-                'widgets' => $widgets,
-            ];
+            $definitions[] = $this->presentWorkflowDefinition($workflow, $context, $widgets);
         }
 
         return $definitions;
+    }
+
+    /**
+     * @param  array<string, mixed>  $workflow
+     * @param  array<int, array{id: string, label: string, permission: string}>  $widgets
+     * @return array{key: string, label: string, description: string, modules: array<int, string>, widgets: array<int, array{id: string, label: string, permission: string}>}
+     */
+    private function presentWorkflowDefinition(array $workflow, DashboardSessionContext $context, array $widgets): array
+    {
+        $label = (string) $workflow['label'];
+        $description = (string) $workflow['description'];
+
+        if ($workflow['key'] === self::WORKFLOW_DIRECT_SERVICE) {
+            $presentation = $this->resolveDirectServicePresentation($context);
+            $label = $presentation['label'];
+            $description = $presentation['description'];
+        }
+
+        return [
+            'key' => (string) $workflow['key'],
+            'label' => $label,
+            'description' => $description,
+            'modules' => $workflow['modules'],
+            'widgets' => $widgets,
+        ];
+    }
+
+    /**
+     * When the session maps to a single direct-service department, use that label in the UI
+     * (e.g. Laboratory User sees "Laboratory", not generic "Direct Service").
+     *
+     * @return array{label: string, description: string}
+     */
+    private function resolveDirectServicePresentation(DashboardSessionContext $context): array
+    {
+        $heldRoles = array_values(array_filter(
+            self::DIRECT_SERVICE_ROLE_CODES,
+            fn (string $roleCode): bool => $context->matchesAnyRole([$roleCode]),
+        ));
+
+        if (count($heldRoles) === 1) {
+            return match ($heldRoles[0]) {
+                'HOSPITAL.LABORATORY.USER' => [
+                    'label' => 'Laboratory',
+                    'description' => 'Laboratory order queue, specimen processing, and result verification for bench staff.',
+                ],
+                'HOSPITAL.PHARMACY.USER' => [
+                    'label' => 'Pharmacy',
+                    'description' => 'Pharmacy dispensing queue, order preparation, and verification for dispensary staff.',
+                ],
+                'HOSPITAL.RADIOLOGY.USER' => [
+                    'label' => 'Radiology',
+                    'description' => 'Imaging order queue, scheduling, and reporting for radiology staff.',
+                ],
+                default => [
+                    'label' => 'Direct Service',
+                    'description' => 'Watch laboratory, pharmacy, and radiology queues without borrowing nursing-only census signals.',
+                ],
+            };
+        }
+
+        $moduleLabels = [];
+        if ($context->hasPermission('laboratory.orders.read')) {
+            $moduleLabels[] = 'laboratory';
+        }
+        if ($context->hasPermission('pharmacy.orders.read')) {
+            $moduleLabels[] = 'pharmacy';
+        }
+        if ($context->hasPermission('radiology.orders.read')) {
+            $moduleLabels[] = 'radiology';
+        }
+
+        if (count($moduleLabels) === 1) {
+            return match ($moduleLabels[0]) {
+                'laboratory' => [
+                    'label' => 'Laboratory',
+                    'description' => 'Laboratory order queue, specimen processing, and result verification for bench staff.',
+                ],
+                'pharmacy' => [
+                    'label' => 'Pharmacy',
+                    'description' => 'Pharmacy dispensing queue, order preparation, and verification for dispensary staff.',
+                ],
+                'radiology' => [
+                    'label' => 'Radiology',
+                    'description' => 'Imaging order queue, scheduling, and reporting for radiology staff.',
+                ],
+                default => [
+                    'label' => 'Direct Service',
+                    'description' => 'Watch laboratory, pharmacy, and radiology queues without borrowing nursing-only census signals.',
+                ],
+            };
+        }
+
+        return [
+            'label' => 'Direct Service',
+            'description' => 'Watch laboratory, pharmacy, and radiology queues without borrowing nursing-only census signals.',
+        ];
     }
 
     /**
@@ -537,6 +628,11 @@ final class DashboardWorkflowRegistry
     {
         if ($context->matchesAnyRole(self::SUPPLY_ROLE_CODES)) {
             return true;
+        }
+
+        // Lab/pharmacy/radiology roles include procurement.read for requisitions — not storekeeper work.
+        if ($context->matchesAnyRole(self::DIRECT_SERVICE_ROLE_CODES)) {
+            return false;
         }
 
         return $context->hasPermission('inventory.procurement.read');

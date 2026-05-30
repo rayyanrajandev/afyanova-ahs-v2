@@ -99,3 +99,29 @@ it('includes permission-gated widgets in workflow definitions', function (): voi
         ->and($operations['widgets'])->not->toBeEmpty()
         ->and(collect($operations['widgets'])->pluck('id')->all())->toContain('credentialing');
 });
+
+it('prioritizes laboratory dashboard for lab user and excludes supply chain', function (): void {
+    $registry = new DashboardWorkflowRegistry;
+
+    $context = new DashboardSessionContext(
+        roleCodesUpper: ['HOSPITAL.LABORATORY.USER'],
+        permissionNames: [
+            'laboratory.orders.read',
+            'laboratory.orders.update-status',
+            'inventory.procurement.read',
+            'inventory.procurement.create-request',
+        ],
+        isFacilitySuperAdmin: false,
+        isPlatformSuperAdmin: false,
+    );
+
+    expect($registry->eligibleWorkflowKeys($context))->toContain('direct_service')
+        ->and($registry->eligibleWorkflowKeys($context))->not->toContain('supply')
+        ->and($registry->defaultWorkflowKey($context))->toBe('direct_service');
+
+    $directService = collect($registry->eligibleWorkflowDefinitions($context))
+        ->firstWhere('key', 'direct_service');
+
+    expect($directService)->not->toBeNull()
+        ->and($directService['label'])->toBe('Laboratory');
+});

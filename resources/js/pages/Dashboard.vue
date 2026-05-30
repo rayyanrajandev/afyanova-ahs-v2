@@ -1937,7 +1937,7 @@ function switchPreset(key: DashboardPresetKey): void {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="auto">
-                                            Auto — {{ DASHBOARD_PRESETS.find((p) => p.key === inferredPreset)?.label ?? 'Default' }}
+                                            Auto — {{ visiblePresetOptions.find((p) => p.key === inferredPreset)?.label ?? 'Default' }}
                                         </SelectItem>
                                         <SelectItem
                                             v-for="preset in visiblePresetOptions"

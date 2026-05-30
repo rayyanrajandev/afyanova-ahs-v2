@@ -4,6 +4,7 @@ import {
     DASHBOARD_PRESETS,
     eligibleDashboardPresets,
     inferDashboardPreset,
+    resolveDirectServicePresentation,
     type InferDashboardPresetInput,
 } from '@/config/dashboardPresets';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
@@ -63,12 +64,25 @@ export function useDashboardContext(initialContext?: DashboardContextPayload | n
 
         const eligible = new Set(eligibleWorkflowKeys.value);
 
-        return DASHBOARD_PRESETS.filter((preset) => eligible.has(preset.key)).map((preset) => ({
-            key: preset.key,
-            label: preset.label,
-            description: preset.description,
-            modules: [...preset.modules],
-        }));
+        return DASHBOARD_PRESETS.filter((preset) => eligible.has(preset.key)).map((preset) => {
+            if (preset.key === 'direct_service') {
+                const presentation = resolveDirectServicePresentation(presetContextInput.value);
+
+                return {
+                    key: preset.key,
+                    label: presentation.label,
+                    description: presentation.description,
+                    modules: [...preset.modules],
+                };
+            }
+
+            return {
+                key: preset.key,
+                label: preset.label,
+                description: preset.description,
+                modules: [...preset.modules],
+            };
+        });
     });
 
     const canSwitchWorkflow = computed(
