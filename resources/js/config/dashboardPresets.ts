@@ -63,6 +63,14 @@ export const DASHBOARD_RECORDS_ROLE_CODES: readonly string[] = ['HOSPITAL.MEDICA
 
 export const DASHBOARD_SUPPLY_ROLE_CODES: readonly string[] = ['HOSPITAL.INVENTORY.STOREKEEPER'];
 
+/** Roles that may create requisitions but are not supply-chain operators. */
+export const DASHBOARD_PROCUREMENT_REQUISITION_ROLE_CODES: readonly string[] = [
+    ...DASHBOARD_CLINICIAN_ROLE_CODES,
+    ...DASHBOARD_NURSING_ROLE_CODES,
+    ...DASHBOARD_EMERGENCY_ROLE_CODES,
+    ...DASHBOARD_DIRECT_SERVICE_ROLE_CODES,
+];
+
 export const DASHBOARD_THEATRE_ROLE_CODES: readonly string[] = ['HOSPITAL.THEATRE.USER'];
 
 export const DASHBOARD_PRESETS = [
@@ -281,6 +289,9 @@ export function eligibleDashboardPresets(input: InferDashboardPresetInput): Dash
         allow.add('clinician');
     }
     const holdsNursingRole = presetMatchesRole(roleCodesUpper, DASHBOARD_NURSING_ROLE_CODES);
+    const holdsClinicianWorkflowHat =
+        presetMatchesRole(roleCodesUpper, DASHBOARD_CLINICIAN_ROLE_CODES) ||
+        (hasPermission('medical.records.read') && !holdsNursingRole && !holdsRecordsRole);
     if (hasPermission('medical.records.read') && !holdsNursingRole && !holdsRecordsRole) {
         allow.add('clinician');
     }
@@ -301,9 +312,9 @@ export function eligibleDashboardPresets(input: InferDashboardPresetInput): Dash
         allow.add('records');
     }
     if (
-        presetMatchesRole(roleCodesUpper, DASHBOARD_SUPPLY_ROLE_CODES)
-        || (!presetMatchesRole(roleCodesUpper, DASHBOARD_DIRECT_SERVICE_ROLE_CODES)
-            && hasPermission('inventory.procurement.read'))
+        presetMatchesRole(roleCodesUpper, DASHBOARD_SUPPLY_ROLE_CODES) ||
+        (!presetMatchesRole(roleCodesUpper, DASHBOARD_PROCUREMENT_REQUISITION_ROLE_CODES) &&
+            hasPermission('inventory.procurement.read'))
     ) {
         allow.add('supply');
     }
@@ -323,7 +334,7 @@ export function eligibleDashboardPresets(input: InferDashboardPresetInput): Dash
     if (presetMatchesRole(roleCodesUpper, DASHBOARD_FRONT_DESK_ROLE_CODES)) {
         allow.add('front_desk');
     }
-    if (hasPermission('patients.read') && hasPermission('appointments.read')) {
+    if (hasPermission('patients.read') && hasPermission('appointments.read') && !holdsClinicianWorkflowHat) {
         allow.add('front_desk');
     }
 

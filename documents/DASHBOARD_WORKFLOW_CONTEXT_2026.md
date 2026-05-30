@@ -94,7 +94,8 @@ flowchart LR
 - **Admin:** Platform/facility super admin, or admin role codes (`PLATFORM.*.ADMIN`, `HOSPITAL.FACILITY.ADMIN`, `HOSPITAL.DEPARTMENT.HEAD`).
 - **Operations:** Operations role codes **or** `staff.read` + (`staff.credentialing.read` **or** `staff.privileges.read`).
 - **Records:** `HOSPITAL.MEDICAL.RECORDS.OFFICER` **or** `medical.records.read` without nursing/emergency/clinician role hats.
-- **Supply:** `HOSPITAL.INVENTORY.STOREKEEPER` **or** `inventory.procurement.read`.
+- **Supply:** `HOSPITAL.INVENTORY.STOREKEEPER` **or** `inventory.procurement.read` (excluding clinical, nursing, emergency, and direct-service roles that use requisitions only).
+- **Front desk (permission path):** `patients.read` + `appointments.read` unless the session already maps to the **Clinician** workflow hat.
 - **Theatre:** `HOSPITAL.THEATRE.USER` **or** `theatre.procedures.read`.
 - **Clinician / Nursing / Emergency / Direct service / Cashier / Front desk:** Unchanged from prior client rules; now mirrored in PHP.
 

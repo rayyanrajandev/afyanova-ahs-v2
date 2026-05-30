@@ -125,3 +125,71 @@ it('prioritizes laboratory dashboard for lab user and excludes supply chain', fu
     expect($directService)->not->toBeNull()
         ->and($directService['label'])->toBe('Laboratory');
 });
+
+it('prioritizes clinician dashboard and excludes front desk and supply chain noise', function (): void {
+    $registry = new DashboardWorkflowRegistry;
+
+    $clinicalPermissions = [
+        'patients.read',
+        'patients.update',
+        'admissions.read',
+        'appointments.read',
+        'medical.records.read',
+        'medical.records.create',
+        'medical.records.update',
+        'medical.records.finalize',
+        'medical.records.amend',
+        'medical.records.attest',
+        'inpatient.ward.read',
+        'inpatient.ward.create-round-note',
+        'inpatient.ward.view-audit-logs',
+        'inventory.procurement.read',
+        'inventory.procurement.create-request',
+        'staff.clinical-directory.read',
+    ];
+
+    $orderingPermissions = [
+        'laboratory.orders.create',
+        'laboratory.orders.read',
+        'pharmacy.orders.create',
+        'pharmacy.orders.read',
+        'radiology.orders.read',
+        'radiology.orders.create',
+        'theatre.procedures.read',
+        'theatre.procedures.create',
+        'platform.clinical-catalog.read',
+    ];
+
+    $context = new DashboardSessionContext(
+        roleCodesUpper: ['HOSPITAL.CLINICAL.USER', 'HOSPITAL.CLINICIAN.ORDERING'],
+        permissionNames: array_values(array_unique(array_merge($clinicalPermissions, $orderingPermissions))),
+        isFacilitySuperAdmin: false,
+        isPlatformSuperAdmin: false,
+    );
+
+    expect($registry->eligibleWorkflowKeys($context))->toBe([
+        'clinician',
+        'nursing',
+        'theatre',
+        'direct_service',
+    ])
+        ->and($registry->defaultWorkflowKey($context))->toBe('clinician');
+});
+
+it('does not add supply workflow for nursing role with procurement requisition permission', function (): void {
+    $registry = new DashboardWorkflowRegistry;
+
+    $context = new DashboardSessionContext(
+        roleCodesUpper: ['HOSPITAL.NURSING.USER'],
+        permissionNames: [
+            'inpatient.ward.read',
+            'inventory.procurement.read',
+            'inventory.procurement.create-request',
+        ],
+        isFacilitySuperAdmin: false,
+        isPlatformSuperAdmin: false,
+    );
+
+    expect($registry->eligibleWorkflowKeys($context))->toContain('nursing')
+        ->and($registry->eligibleWorkflowKeys($context))->not->toContain('supply');
+});

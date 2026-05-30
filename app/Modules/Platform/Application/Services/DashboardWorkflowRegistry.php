@@ -303,6 +303,23 @@ final class DashboardWorkflowRegistry
     }
 
     /**
+     * Roles that may create inventory requisitions but are not supply-chain operators.
+     *
+     * @var array<int, string>
+     */
+    private const PROCUREMENT_REQUISITION_ROLE_CODES = [
+        'HOSPITAL.CLINICAL.USER',
+        'HOSPITAL.CLINICIAN.ORDERING',
+        'HOSPITAL.NURSING.USER',
+        'HOSPITAL.EMERGENCY.USER',
+        'HOSPITAL.EMERGENCY.NURSE',
+        'HOSPITAL.TRIAGE.USER',
+        'HOSPITAL.LABORATORY.USER',
+        'HOSPITAL.PHARMACY.USER',
+        'HOSPITAL.RADIOLOGY.USER',
+    ];
+
+    /**
      * @return array<int, string>
      */
     public function eligibleWorkflowKeys(DashboardSessionContext $context): array
@@ -335,6 +352,7 @@ final class DashboardWorkflowRegistry
         }
 
         $holdsNursingRole = $context->matchesAnyRole(self::NURSING_ROLE_CODES);
+        $holdsClinicianWorkflowHat = $this->holdsClinicianWorkflowHat($context, $holdsNursingRole, $holdsRecordsRole);
 
         if ($context->hasPermission('medical.records.read') && ! $holdsNursingRole && ! $holdsRecordsRole) {
             $allow[self::WORKFLOW_CLINICIAN] = true;
@@ -389,6 +407,7 @@ final class DashboardWorkflowRegistry
         if (
             $context->hasPermission('patients.read')
             && $context->hasPermission('appointments.read')
+            && ! $holdsClinicianWorkflowHat
         ) {
             $allow[self::WORKFLOW_FRONT_DESK] = true;
         }
@@ -624,14 +643,28 @@ final class DashboardWorkflowRegistry
         return true;
     }
 
+    private function holdsClinicianWorkflowHat(
+        DashboardSessionContext $context,
+        bool $holdsNursingRole,
+        bool $holdsRecordsRole,
+    ): bool {
+        if ($context->matchesAnyRole(self::CLINICIAN_ROLE_CODES)) {
+            return true;
+        }
+
+        return $context->hasPermission('medical.records.read')
+            && ! $holdsNursingRole
+            && ! $holdsRecordsRole;
+    }
+
     private function isSupplyEligible(DashboardSessionContext $context): bool
     {
         if ($context->matchesAnyRole(self::SUPPLY_ROLE_CODES)) {
             return true;
         }
 
-        // Lab/pharmacy/radiology roles include procurement.read for requisitions — not storekeeper work.
-        if ($context->matchesAnyRole(self::DIRECT_SERVICE_ROLE_CODES)) {
+        // Clinical and departmental roles include procurement.read for requisitions — not storekeeper work.
+        if ($context->matchesAnyRole(self::PROCUREMENT_REQUISITION_ROLE_CODES)) {
             return false;
         }
 
