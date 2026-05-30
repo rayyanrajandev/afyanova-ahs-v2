@@ -2059,14 +2059,18 @@ const queueRows = computed<QueueRow[]>(() => {
         if (focusedModule) {
             const orders = ordersForModule(focusedModule.key);
             if (orders.length > 0) {
-                return mapDirectServiceOrdersToQueueRows(orders, focusedModule.key);
+                const rows = mapDirectServiceOrdersToQueueRows(orders, focusedModule.key);
+                if (rows.length > 0) {
+                    return rows;
+                }
             }
 
-            if (Number(focusedModule.active ?? 0) > 0 || singleDirectServiceModule.value) {
+            const activeInScope = Number(focusedModule.active ?? 0);
+            if (activeInScope > 0) {
                 return [{
                     id: `direct-service-${focusedModule.key}-details-unavailable`,
                     title: `${focusedModule.label} queue details`,
-                    subtitle: `${focusedModule.active ?? 0} active order${Number(focusedModule.active ?? 0) === 1 ? '' : 's'} in scope. Open the full queue for patient and requester details.`,
+                    subtitle: `${activeInScope} active order${activeInScope === 1 ? '' : 's'} in scope. Open the full queue for patient and requester details.`,
                     meta: 'Patient-level summary not loaded on dashboard',
                     status: focusedModule.queueStatus,
                     href: directServiceModuleHref(focusedModule),
@@ -2074,6 +2078,8 @@ const queueRows = computed<QueueRow[]>(() => {
                     group: `${focusedModule.label} worklist`,
                 }];
             }
+
+            return [];
         }
 
         return directServiceModules.value.map((module) => ({
