@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref } from 'vue';
+import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -17,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
@@ -324,8 +326,10 @@ const auditTarget = ref<Department | null>(null);
 const auditLoading = ref(false);
 const auditError = ref<string | null>(null);
 const auditLogs = ref<AuditLog[]>([]);
+const auditMeta = ref<Pagination | null>(null);
 const detailsOpen = ref(false);
 const detailsDepartment = ref<Department | null>(null);
+const detailsSheetTab = ref('overview');
 const detailsStaffLoading = ref(false);
 const detailsStaffError = ref<string | null>(null);
 const detailsStaff = ref<DepartmentStaffProfile[]>([]);
@@ -377,6 +381,15 @@ const departmentManagerOptions = computed<SearchableSelectOption[]>(() => {
 
 const createValidationMessages = computed(() => Object.values(createFormErrors.value).flat());
 const editValidationMessages = computed(() => Object.values(editFormErrors.value).flat());
+
+const detailsSheetTabGridClass = computed(() => {
+    const tabCount = 1 + (canReadStaff.value ? 1 : 0) + (canAudit.value ? 1 : 0);
+    if (tabCount >= 3) return 'grid-cols-3';
+    if (tabCount === 2) return 'grid-cols-2';
+    return 'grid-cols-1';
+});
+
+const detailsStaffTotal = computed(() => detailsStaffMeta.value?.total ?? detailsStaff.value.length);
 
 function resetCreateForm() {
     createForm.code = '';
@@ -545,8 +558,31 @@ function validationErrorsFromUnknown(error: unknown): ValidationErrors {
     return ((error as { payload?: ApiError })?.payload?.errors ?? {}) as ValidationErrors;
 }
 
+function departmentExposureLabel(department: Department | null): string {
+    if (!department) return 'Internal only';
+    const parts = [department.isPatientFacing ? 'Patient-facing' : 'Internal only'];
+    if (department.isAppointmentable) {
+        parts.push('Appointmentable');
+    }
+    return parts.join(' · ');
+}
+
+function formatDateTime(value: string | null | undefined): string {
+    if (!value) return 'Not recorded';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+    }).format(date);
+}
+
 function openDepartmentDetails(item: Department) {
     detailsDepartment.value = item;
+    detailsSheetTab.value = 'overview';
     detailsOpen.value = true;
     void loadDepartmentStaff(item);
     if (canAudit.value) {
@@ -554,6 +590,7 @@ function openDepartmentDetails(item: Department) {
     } else {
         auditTarget.value = item;
         auditLogs.value = [];
+        auditMeta.value = null;
         auditError.value = null;
         auditLoading.value = false;
     }
@@ -562,6 +599,7 @@ function openDepartmentDetails(item: Department) {
 function closeDepartmentDetails() {
     detailsOpen.value = false;
     detailsDepartment.value = null;
+    detailsSheetTab.value = 'overview';
     detailsStaffLoading.value = false;
     detailsStaffError.value = null;
     detailsStaff.value = [];
@@ -570,6 +608,7 @@ function closeDepartmentDetails() {
     auditLoading.value = false;
     auditError.value = null;
     auditLogs.value = [];
+    auditMeta.value = null;
 }
 
 async function loadDepartmentStaff(item: Department) {
@@ -836,8 +875,10 @@ async function loadAudit(item: Department) {
     try {
         const response = await apiRequest<AuditResponse>('GET', `/departments/${id}/audit-logs`, { query: { page: 1, perPage: 20 } });
         auditLogs.value = response.data ?? [];
+        auditMeta.value = response.meta ?? null;
     } catch (error) {
         auditLogs.value = [];
+        auditMeta.value = null;
         auditError.value = messageFromUnknown(error, 'Unable to load audit logs.');
     } finally {
         auditLoading.value = false;
@@ -1314,171 +1355,399 @@ onMounted(() => {
                 </Sheet>
 
                 <Sheet :open="detailsOpen" @update:open="(open) => (open ? (detailsOpen = true) : closeDepartmentDetails())">
-                    <SheetContent side="right" variant="workspace" size="3xl">
-                        <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
-                            <SheetTitle class="flex items-center gap-2 text-base">
-                                <AppIcon name="building-2" class="size-5 text-primary" />
-                                {{ detailsDepartment ? labelOf(detailsDepartment) : 'Department details' }}
+                    <SheetContent
+                        side="right"
+                        variant="workspace"
+                        size="5xl"
+                        class="flex h-full min-h-0 flex-col"
+                    >
+                        <SheetHeader
+                            v-if="detailsDepartment"
+                            class="shrink-0 border-b bg-background/95 px-4 py-3 pr-12 text-left sm:px-5"
+                        >
+                            <SheetTitle class="flex min-w-0 flex-wrap items-center gap-2 text-base">
+                                <AppIcon name="building-2" class="size-5 text-muted-foreground" />
+                                <span class="min-w-0 truncate">
+                                    {{ detailsDepartment.name || labelOf(detailsDepartment) }}
+                                </span>
+                                <Badge
+                                    v-if="detailsDepartment.code"
+                                    variant="outline"
+                                    class="shrink-0 font-normal"
+                                >
+                                    {{ detailsDepartment.code }}
+                                </Badge>
+                                <Badge
+                                    :variant="statusVariant(detailsDepartment.status)"
+                                    class="shrink-0 capitalize"
+                                >
+                                    {{ detailsDepartment.status || 'unknown' }}
+                                </Badge>
                             </SheetTitle>
-                            <SheetDescription class="text-sm">Review department metadata, assigned staff, and audit activity.</SheetDescription>
+                            <SheetDescription class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                                <span class="flex items-center gap-1">
+                                    <AppIcon name="layout-list" class="size-3 opacity-50" />
+                                    <span>{{ detailsDepartment.serviceType || 'Uncategorized' }}</span>
+                                </span>
+                                <span class="text-muted-foreground/40">&middot;</span>
+                                <span class="flex items-center gap-1">
+                                    <AppIcon name="users" class="size-3 opacity-50" />
+                                    <span>{{ departmentExposureLabel(detailsDepartment) }}</span>
+                                </span>
+                                <span class="text-muted-foreground/40">&middot;</span>
+                                <span class="flex items-center gap-1">
+                                    <AppIcon name="user" class="size-3 opacity-50" />
+                                    <span>
+                                        {{ departmentManagerDisplayName(detailsDepartment.manager, detailsDepartment.managerUserId) }}
+                                    </span>
+                                </span>
+                            </SheetDescription>
                         </SheetHeader>
-                        <div class="min-h-0 flex-1 overflow-y-auto">
-                            <div class="space-y-4 p-4">
-                                <div v-if="detailsDepartment" class="flex flex-wrap items-center gap-2">
-                                    <Badge :variant="statusVariant(detailsDepartment.status)">{{ detailsDepartment.status || 'unknown' }}</Badge>
-                                    <Badge variant="outline">{{ detailsDepartment.serviceType || 'Uncategorized' }}</Badge>
-                                    <Badge v-if="detailsDepartment.isPatientFacing" variant="secondary">Patient-facing</Badge>
-                                    <Badge v-if="detailsDepartment.isAppointmentable" variant="secondary">Appointmentable</Badge>
-                                    <Button v-if="canUpdate" variant="outline" size="sm" class="gap-1.5" @click="openEdit(detailsDepartment)">
-                                        <AppIcon name="pencil" class="size-3.5" />
-                                        Edit
-                                    </Button>
-                                    <Button
-                                        v-if="canUpdateStatus"
-                                        size="sm"
-                                        class="gap-1.5"
-                                        :variant="(detailsDepartment.status ?? '').toLowerCase() === 'active' ? 'destructive' : 'secondary'"
-                                        @click="openStatus(detailsDepartment, (detailsDepartment.status ?? '').toLowerCase() === 'active' ? 'inactive' : 'active')"
-                                    >
-                                        <AppIcon :name="(detailsDepartment.status ?? '').toLowerCase() === 'active' ? 'ban' : 'circle-check'" class="size-3.5" />
-                                        {{ (detailsDepartment.status ?? '').toLowerCase() === 'active' ? 'Deactivate' : 'Activate' }}
-                                    </Button>
-                                </div>
 
-                                <Card class="rounded-lg border-sidebar-border/70">
-                                    <CardHeader class="pb-3">
-                                        <CardTitle class="text-sm">Department overview</CardTitle>
-                                        <CardDescription>Core metadata and operational ownership for this department.</CardDescription>
-                                    </CardHeader>
-                                    <CardContent class="grid gap-3 sm:grid-cols-2">
-                                        <div class="grid gap-1">
-                                            <span class="text-xs text-muted-foreground">Code</span>
-                                            <span class="text-sm font-medium">{{ detailsDepartment?.code || 'N/A' }}</span>
-                                        </div>
-                                        <div class="grid gap-1">
-                                            <span class="text-xs text-muted-foreground">Name</span>
-                                            <span class="text-sm font-medium">{{ detailsDepartment?.name || 'N/A' }}</span>
-                                        </div>
-                                        <div class="grid gap-1">
-                                            <span class="text-xs text-muted-foreground">Category / Service type</span>
-                                            <span class="text-sm font-medium">{{ detailsDepartment?.serviceType || 'N/A' }}</span>
-                                        </div>
-                                        <div class="grid gap-1">
-                                            <span class="text-xs text-muted-foreground">Patient access</span>
-                                            <span class="text-sm font-medium">{{ detailsDepartment?.isPatientFacing ? 'Patient-facing' : 'Internal only' }}</span>
-                                        </div>
-                                        <div class="grid gap-1">
-                                            <span class="text-xs text-muted-foreground">Appointment scheduling</span>
-                                            <span class="text-sm font-medium">{{ detailsDepartment?.isAppointmentable ? 'Available in Appointments' : 'Hidden from Appointments' }}</span>
-                                        </div>
-                                        <div class="grid gap-1">
-                                            <span class="text-xs text-muted-foreground">Manager</span>
-                                            <div class="flex items-center gap-2">
-                                                <Avatar class="h-7 w-7 border border-border/70">
-                                                    <AvatarFallback class="bg-primary/10 text-[10px] font-semibold text-primary">
-                                                        {{ departmentManagerInitials(detailsDepartment?.manager, detailsDepartment?.managerUserId ?? null) }}
-                                                    </AvatarFallback>
-                                                </Avatar>
-                                                <div class="min-w-0">
-                                                    <p class="truncate text-sm font-medium">{{ departmentManagerDisplayName(detailsDepartment?.manager, detailsDepartment?.managerUserId ?? null) }}</p>
-                                                    <p v-if="detailsDepartment?.manager?.email" class="truncate text-xs text-muted-foreground">{{ detailsDepartment.manager.email }}</p>
-                                                </div>
+                        <div
+                            v-if="detailsDepartment"
+                            class="flex min-h-0 flex-1 flex-col overflow-hidden"
+                        >
+                            <Tabs
+                                v-model="detailsSheetTab"
+                                class="flex h-full min-h-0 flex-col"
+                            >
+                                <div class="shrink-0 border-b bg-background px-4 py-2 sm:px-5">
+                                    <div class="space-y-2.5">
+                                        <div
+                                            class="grid gap-y-2 rounded-md bg-muted/20 px-3 py-2 text-xs sm:grid-cols-3 sm:divide-x sm:divide-border/50"
+                                        >
+                                            <div class="min-w-0 sm:pr-3">
+                                                <p class="font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                                                    Manager
+                                                </p>
+                                                <p class="mt-1 truncate text-sm font-medium text-foreground">
+                                                    {{ departmentManagerDisplayName(detailsDepartment.manager, detailsDepartment.managerUserId) }}
+                                                </p>
+                                                <p class="truncate text-muted-foreground">
+                                                    {{ detailsDepartment.manager?.email || 'No manager email recorded' }}
+                                                </p>
+                                            </div>
+                                            <div class="min-w-0 sm:px-3">
+                                                <p class="font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                                                    Workflow
+                                                </p>
+                                                <p class="mt-1 truncate text-sm font-medium text-foreground">
+                                                    {{ departmentExposureLabel(detailsDepartment) }}
+                                                </p>
+                                                <p class="truncate text-muted-foreground">
+                                                    {{ detailsDepartment.isAppointmentable ? 'Selectable in Appointments' : 'Hidden from Appointments' }}
+                                                </p>
+                                            </div>
+                                            <div class="min-w-0 sm:pl-3">
+                                                <p class="font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                                                    Staff coverage
+                                                </p>
+                                                <p class="mt-1 truncate text-sm font-medium text-foreground">
+                                                    {{ canReadStaff ? `${detailsStaffTotal} assigned profiles` : 'Staff access unavailable' }}
+                                                </p>
+                                                <p class="truncate text-muted-foreground">
+                                                    {{ canAudit ? `${auditMeta?.total ?? auditLogs.length} audit events` : 'Audit access unavailable' }}
+                                                </p>
                                             </div>
                                         </div>
-                                        <div v-if="detailsDepartment?.statusReason" class="grid gap-1 sm:col-span-2">
-                                            <span class="text-xs text-muted-foreground">Status reason</span>
-                                            <span class="text-sm">{{ detailsDepartment.statusReason }}</span>
-                                        </div>
-                                        <div class="grid gap-1 sm:col-span-2">
-                                            <span class="text-xs text-muted-foreground">Description</span>
-                                            <span class="text-sm">{{ detailsDepartment?.description || 'No description recorded.' }}</span>
-                                        </div>
-                                    </CardContent>
-                                </Card>
 
-                                <Card v-if="canReadStaff" class="rounded-lg border-sidebar-border/70">
-                                    <CardHeader class="pb-3">
-                                        <CardTitle class="text-sm">Assigned staff</CardTitle>
-                                        <CardDescription>
-                                            {{ detailsStaffMeta?.total ?? detailsStaff.length }} staff profiles currently mapped to this department.
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent class="space-y-2">
+                                        <div class="w-full">
+                                            <TabsList
+                                                class="grid h-auto w-full gap-1 rounded-md bg-muted p-1"
+                                                :class="detailsSheetTabGridClass"
+                                            >
+                                                <TabsTrigger
+                                                    value="overview"
+                                                    class="h-9 min-w-0 gap-1.5 rounded-md px-2 text-xs sm:px-3 sm:text-sm"
+                                                >
+                                                    <AppIcon name="layout-grid" class="size-3.5" />
+                                                    Overview
+                                                </TabsTrigger>
+                                                <TabsTrigger
+                                                    v-if="canReadStaff"
+                                                    value="staff"
+                                                    class="h-9 min-w-0 gap-1.5 rounded-md px-2 text-xs sm:px-3 sm:text-sm"
+                                                >
+                                                    <AppIcon name="users" class="size-3.5" />
+                                                    Staff
+                                                    <Badge
+                                                        v-if="detailsStaffTotal > 0"
+                                                        variant="secondary"
+                                                        class="h-4 min-w-4 px-1 text-xs"
+                                                    >
+                                                        {{ detailsStaffTotal }}
+                                                    </Badge>
+                                                </TabsTrigger>
+                                                <TabsTrigger
+                                                    v-if="canAudit"
+                                                    value="audit"
+                                                    class="h-9 min-w-0 gap-1.5 rounded-md px-2 text-xs sm:px-3 sm:text-sm"
+                                                >
+                                                    <AppIcon name="file-text" class="size-3.5" />
+                                                    Audit
+                                                    <Badge
+                                                        v-if="auditMeta"
+                                                        variant="secondary"
+                                                        class="h-4 min-w-4 px-1 text-xs"
+                                                    >
+                                                        {{ auditMeta.total }}
+                                                    </Badge>
+                                                </TabsTrigger>
+                                            </TabsList>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <ScrollArea class="min-h-0 flex-1" viewport-class="pb-6">
+                                    <TabsContent value="overview" class="m-0 space-y-3 px-4 py-3 sm:px-5">
+                                        <div
+                                            v-if="
+                                                detailsDepartment.status &&
+                                                detailsDepartment.status.toLowerCase() !== 'active' &&
+                                                detailsDepartment.statusReason
+                                            "
+                                            class="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2.5 text-xs"
+                                        >
+                                            <AppIcon
+                                                name="alert-triangle"
+                                                class="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+                                            />
+                                            <span class="text-amber-700 dark:text-amber-300">
+                                                <span class="font-semibold capitalize">{{ detailsDepartment.status }}</span>:
+                                                {{ detailsDepartment.statusReason }}
+                                            </span>
+                                        </div>
+
+                                        <div class="grid gap-3 sm:grid-cols-2">
+                                            <Card class="!gap-0 overflow-hidden rounded-md border-border/50 bg-card/70 !py-0 shadow-none">
+                                                <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
+                                                    <CardTitle class="flex items-center gap-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                                                        <AppIcon name="building-2" class="size-3.5" />
+                                                        Identity
+                                                    </CardTitle>
+                                                </CardHeader>
+                                                <CardContent class="divide-y divide-border/50 px-3 py-1.5 text-sm">
+                                                    <div class="flex items-center justify-between gap-4 py-2">
+                                                        <span class="text-muted-foreground">Code</span>
+                                                        <span class="font-medium">{{ detailsDepartment.code || 'Not recorded' }}</span>
+                                                    </div>
+                                                    <div class="flex items-center justify-between gap-4 py-2">
+                                                        <span class="text-muted-foreground">Name</span>
+                                                        <span class="max-w-[14rem] truncate text-right font-medium">{{ detailsDepartment.name || 'Not recorded' }}</span>
+                                                    </div>
+                                                    <div class="flex items-center justify-between gap-4 py-2">
+                                                        <span class="text-muted-foreground">Service type</span>
+                                                        <span class="max-w-[14rem] truncate text-right font-medium">{{ detailsDepartment.serviceType || 'Uncategorized' }}</span>
+                                                    </div>
+                                                    <div class="flex items-center justify-between gap-4 py-2">
+                                                        <span class="text-muted-foreground">Status</span>
+                                                        <Badge :variant="statusVariant(detailsDepartment.status)" class="capitalize">
+                                                            {{ detailsDepartment.status || 'unknown' }}
+                                                        </Badge>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+
+                                            <Card class="!gap-0 overflow-hidden rounded-md border-border/50 bg-card/70 !py-0 shadow-none">
+                                                <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
+                                                    <CardTitle class="flex items-center gap-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                                                        <AppIcon name="calendar-plus-2" class="size-3.5" />
+                                                        Workflow exposure
+                                                    </CardTitle>
+                                                </CardHeader>
+                                                <CardContent class="divide-y divide-border/50 px-3 py-1.5 text-sm">
+                                                    <div class="flex items-center justify-between gap-4 py-2">
+                                                        <span class="text-muted-foreground">Patient access</span>
+                                                        <span class="font-medium">
+                                                            {{ detailsDepartment.isPatientFacing ? 'Patient-facing' : 'Internal only' }}
+                                                        </span>
+                                                    </div>
+                                                    <div class="flex items-center justify-between gap-4 py-2">
+                                                        <span class="text-muted-foreground">Appointments</span>
+                                                        <span class="font-medium">
+                                                            {{ detailsDepartment.isAppointmentable ? 'Available in Appointments' : 'Hidden from Appointments' }}
+                                                        </span>
+                                                    </div>
+                                                    <div class="flex items-center justify-between gap-4 py-2">
+                                                        <span class="shrink-0 text-muted-foreground">Manager</span>
+                                                        <div class="min-w-0 text-right">
+                                                            <Link
+                                                                v-if="departmentManagerStaffHref(detailsDepartment)"
+                                                                :href="departmentManagerStaffHref(detailsDepartment)!"
+                                                                class="font-medium hover:text-primary hover:underline"
+                                                            >
+                                                                {{ departmentManagerDisplayName(detailsDepartment.manager, detailsDepartment.managerUserId) }}
+                                                            </Link>
+                                                            <span v-else class="font-medium">
+                                                                {{ departmentManagerDisplayName(detailsDepartment.manager, detailsDepartment.managerUserId) }}
+                                                            </span>
+                                                            <p v-if="detailsDepartment.manager?.email" class="truncate text-xs text-muted-foreground">
+                                                                {{ detailsDepartment.manager.email }}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        </div>
+
+                                        <Card class="!gap-0 overflow-hidden rounded-md border-border/50 bg-card/70 !py-0 shadow-none">
+                                            <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
+                                                <CardTitle class="flex items-center gap-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                                                    <AppIcon name="file-text" class="size-3.5" />
+                                                    Operating notes
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent class="px-3 py-3 text-sm">
+                                                <p class="text-muted-foreground">
+                                                    {{ detailsDepartment.description || 'No description recorded for this department.' }}
+                                                </p>
+                                            </CardContent>
+                                        </Card>
+                                    </TabsContent>
+
+                                    <TabsContent
+                                        v-if="canReadStaff"
+                                        value="staff"
+                                        class="m-0 space-y-3 px-4 py-3 sm:px-5"
+                                    >
                                         <Alert v-if="detailsStaffError" variant="destructive">
                                             <AlertTitle>Staff load issue</AlertTitle>
                                             <AlertDescription>{{ detailsStaffError }}</AlertDescription>
                                         </Alert>
                                         <div v-else-if="detailsStaffLoading" class="space-y-2">
-                                            <Skeleton class="h-12 w-full" />
-                                            <Skeleton class="h-12 w-full" />
-                                            <Skeleton class="h-12 w-full" />
+                                            <Skeleton class="h-14 w-full" />
+                                            <Skeleton class="h-14 w-full" />
+                                            <Skeleton class="h-14 w-full" />
                                         </div>
-                                        <div v-else-if="detailsStaff.length === 0" class="flex flex-col items-center gap-2 py-8 text-center">
-                                            <div class="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                                                <AppIcon name="users" class="size-5 text-muted-foreground" />
-                                            </div>
-                                            <p class="text-sm text-muted-foreground">No staff profiles are currently assigned to this department.</p>
+                                        <div
+                                            v-else-if="detailsStaff.length === 0"
+                                            class="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground"
+                                        >
+                                            No staff profiles are currently assigned to this department.
                                         </div>
-                                        <div v-else class="divide-y rounded-lg border">
-                                            <div v-for="profile in detailsStaff" :key="profile.id" class="flex items-center gap-3 px-3 py-2.5">
-                                                <Avatar class="h-8 w-8 border border-border/70">
-                                                    <AvatarFallback class="bg-primary/10 text-[10px] font-semibold text-primary">
-                                                        {{ staffProfileInitials(profile) }}
-                                                    </AvatarFallback>
-                                                </Avatar>
-                                                <div class="min-w-0 flex-1">
-                                                    <Link
-                                                        v-if="staffProfileHref(profile)"
-                                                        :href="staffProfileHref(profile)!"
-                                                        class="truncate text-sm font-medium hover:text-primary hover:underline"
-                                                    >
-                                                        {{ staffProfileDisplayName(profile) }}
-                                                    </Link>
-                                                    <p v-else class="truncate text-sm font-medium">{{ staffProfileDisplayName(profile) }}</p>
-                                                    <p class="truncate text-xs text-muted-foreground">{{ profile.employeeNumber || 'No employee number' }} | {{ profile.jobTitle || 'No job title' }}</p>
+                                        <Card
+                                            v-else
+                                            class="!gap-0 overflow-hidden rounded-md border-border/50 bg-card/70 !py-0 shadow-none"
+                                        >
+                                            <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
+                                                <CardTitle class="text-sm font-medium">Assigned staff</CardTitle>
+                                                <CardDescription class="text-xs">
+                                                    {{ detailsStaffTotal }} staff profiles mapped to this department.
+                                                </CardDescription>
+                                            </CardHeader>
+                                            <CardContent class="divide-y divide-border/50 px-0 py-0">
+                                                <div
+                                                    v-for="profile in detailsStaff"
+                                                    :key="profile.id"
+                                                    class="flex items-center gap-3 px-3 py-3"
+                                                >
+                                                    <Avatar class="h-9 w-9 border border-border/70">
+                                                        <AvatarFallback class="bg-primary/10 text-xs font-semibold text-primary">
+                                                            {{ staffProfileInitials(profile) }}
+                                                        </AvatarFallback>
+                                                    </Avatar>
+                                                    <div class="min-w-0 flex-1">
+                                                        <Link
+                                                            v-if="staffProfileHref(profile)"
+                                                            :href="staffProfileHref(profile)!"
+                                                            class="truncate text-sm font-medium hover:text-primary hover:underline"
+                                                        >
+                                                            {{ staffProfileDisplayName(profile) }}
+                                                        </Link>
+                                                        <p v-else class="truncate text-sm font-medium">
+                                                            {{ staffProfileDisplayName(profile) }}
+                                                        </p>
+                                                        <p class="truncate text-xs text-muted-foreground">
+                                                            {{ profile.employeeNumber || 'No employee number' }}
+                                                            <span class="text-border"> · </span>
+                                                            {{ profile.jobTitle || 'No job title' }}
+                                                        </p>
+                                                    </div>
+                                                    <Badge :variant="statusVariant(profile.status)" class="capitalize">
+                                                        {{ profile.status || 'unknown' }}
+                                                    </Badge>
                                                 </div>
-                                                <Badge :variant="statusVariant(profile.status)">{{ profile.status || 'unknown' }}</Badge>
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                                            </CardContent>
+                                        </Card>
+                                    </TabsContent>
 
-                                <Card v-if="canAudit" class="rounded-lg border-sidebar-border/70">
-                                    <CardHeader class="pb-3">
-                                        <CardTitle class="text-sm">Audit activity</CardTitle>
-                                        <CardDescription>Recent governance and status events for this department.</CardDescription>
-                                    </CardHeader>
-                                    <CardContent class="space-y-2">
+                                    <TabsContent
+                                        v-if="canAudit"
+                                        value="audit"
+                                        class="m-0 space-y-3 px-4 py-3 sm:px-5"
+                                    >
                                         <Alert v-if="auditError" variant="destructive">
                                             <AlertTitle>Audit load issue</AlertTitle>
                                             <AlertDescription>{{ auditError }}</AlertDescription>
                                         </Alert>
                                         <div v-else-if="auditLoading" class="space-y-2">
-                                            <Skeleton class="h-10 w-full" />
-                                            <Skeleton class="h-10 w-full" />
-                                            <Skeleton class="h-10 w-full" />
+                                            <Skeleton class="h-14 w-full" />
+                                            <Skeleton class="h-14 w-full" />
+                                            <Skeleton class="h-14 w-full" />
                                         </div>
-                                        <div v-else-if="auditLogs.length === 0" class="flex flex-col items-center gap-2 py-8 text-center">
-                                            <div class="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                                                <AppIcon name="activity" class="size-5 text-muted-foreground" />
-                                            </div>
-                                            <p class="text-sm text-muted-foreground">No audit logs found for this department.</p>
-                                        </div>
-                                        <div v-else class="space-y-2">
-                                            <div v-for="log in auditLogs" :key="log.id" class="flex items-start gap-3 rounded-lg border border-border/60 px-3 py-2">
-                                                <div class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-muted">
-                                                    <AppIcon name="activity" class="size-3.5 text-muted-foreground" />
-                                                </div>
-                                                <div class="min-w-0 flex-1 pt-0.5">
-                                                    <p class="text-sm font-medium">{{ log.actionLabel || log.action || 'event' }}</p>
-                                                    <p class="mt-0.5 text-xs text-muted-foreground">{{ log.createdAt || 'N/A' }} | {{ actorLabel(log) }}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            </div>
+                                        <AuditTimelineList
+                                            v-else
+                                            :logs="auditLogs"
+                                            :format-date-time="formatDateTime"
+                                            empty-message="No audit logs found for this department."
+                                            actor-fallback-label="User"
+                                            :metadata-preview-limit="4"
+                                        />
+                                    </TabsContent>
+                                </ScrollArea>
+                            </Tabs>
                         </div>
+
+                        <SheetFooter
+                            class="shrink-0 flex-col-reverse gap-2 border-t bg-background px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-5"
+                        >
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                class="gap-1.5 sm:shrink-0"
+                                @click="closeDepartmentDetails"
+                            >
+                                <AppIcon name="circle-x" class="size-3.5" />
+                                Close
+                            </Button>
+                            <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+                                <Button
+                                    v-if="canUpdateStatus && detailsDepartment"
+                                    size="sm"
+                                    :variant="(detailsDepartment.status ?? '').toLowerCase() === 'active' ? 'outline' : 'secondary'"
+                                    class="gap-1.5"
+                                    @click="openStatus(detailsDepartment, (detailsDepartment.status ?? '').toLowerCase() === 'active' ? 'inactive' : 'active')"
+                                >
+                                    <AppIcon
+                                        :name="(detailsDepartment.status ?? '').toLowerCase() === 'active' ? 'ban' : 'circle-check'"
+                                        class="size-3.5"
+                                    />
+                                    {{ (detailsDepartment.status ?? '').toLowerCase() === 'active' ? 'Deactivate' : 'Activate' }}
+                                </Button>
+                                <Button
+                                    v-if="canUpdate && detailsDepartment"
+                                    size="sm"
+                                    variant="outline"
+                                    class="gap-1.5"
+                                    @click="openEdit(detailsDepartment)"
+                                >
+                                    <AppIcon name="pencil" class="size-3.5" />
+                                    Edit department
+                                </Button>
+                                <Button
+                                    v-if="detailsDepartment && departmentManagerStaffHref(detailsDepartment)"
+                                    size="sm"
+                                    as-child
+                                    class="gap-1.5"
+                                >
+                                    <Link :href="departmentManagerStaffHref(detailsDepartment)!">
+                                        <AppIcon name="user" class="size-3.5" />
+                                        Open manager profile
+                                    </Link>
+                                </Button>
+                            </div>
+                        </SheetFooter>
                     </SheetContent>
                 </Sheet>
 
