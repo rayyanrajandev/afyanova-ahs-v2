@@ -15,6 +15,7 @@ import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextB
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycleActionDialog.vue';
+import PatientOrderGroupList from '@/components/orders/PatientOrderGroupList.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import WalkInServiceRequestsPanel from '@/components/service-requests/WalkInServiceRequestsPanel.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -88,6 +89,7 @@ import ConfirmationDialog from '@/components/workflow/ConfirmationDialog.vue';
 import LeaveWorkflowDialog from '@/components/workflow/LeaveWorkflowDialog.vue';
 import { useConfirmationDialog } from '@/composables/useConfirmationDialog';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
+import { usePatientOrderGroups } from '@/composables/usePatientOrderGroups';
 import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
 import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersistence';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -169,6 +171,7 @@ type PharmacyOrder = {
     enteredInErrorAt: string | null;
     enteredInErrorByUserId: number | null;
     lifecycleLockedAt: string | null;
+    patient?: PatientSummary | null;
     createdAt: string | null;
     updatedAt: string | null;
 };
@@ -605,6 +608,7 @@ type SearchForm = {
     q: string;
     patientId: string;
     status: string;
+    worklistScope: string;
     from: string;
     to: string;
     sortBy: 'orderedAt' | 'orderNumber' | 'status' | 'updatedAt';
@@ -1011,6 +1015,7 @@ const searchForm = reactive<SearchForm>({
     q: queryParam('q'),
     patientId: queryParam('patientId'),
     status: queryParam('status'),
+    worklistScope: queryParam('worklistScope'),
     from: queryDateParam('from', today),
     to: queryDateParam('to'),
     sortBy: 'orderedAt',
@@ -1018,6 +1023,14 @@ const searchForm = reactive<SearchForm>({
     perPage: 10,
     page: 1,
 });
+
+const focusPatientId = computed(() => searchForm.patientId.trim());
+const {
+    patientOrderGroups,
+    useGroupedQueueView,
+    isPatientGroupExpanded,
+    setPatientGroupExpanded,
+} = usePatientOrderGroups(orders, 'pharmacy', focusPatientId);
 
 let queuePollingTimer: ReturnType<typeof setInterval> | null = null;
 const QUEUE_POLL_INTERVAL_MS = 30_000;
@@ -4116,6 +4129,7 @@ async function loadOrders() {
                     q: searchForm.q.trim() || null,
                     patientId: searchForm.patientId.trim() || null,
                     status: searchForm.status || null,
+                    worklistScope: searchForm.worklistScope.trim() || null,
                     from: searchForm.from
                         ? `${searchForm.from} 00:00:00`
                         : null,
@@ -6215,6 +6229,28 @@ function patientName(summary: PatientSummary): string {
 }
 
 function orderPatientSummary(order: PharmacyOrder): PatientSummary | null {
+    const embedded = order.patient;
+    if (embedded) {
+        const hasContent = [
+            embedded.firstName,
+            embedded.middleName,
+            embedded.lastName,
+            embedded.patientNumber,
+            embedded.phone,
+        ].some((value) => String(value ?? '').trim() !== '');
+
+        if (hasContent) {
+            return {
+                id: embedded.id ?? order.patientId ?? '',
+                firstName: embedded.firstName ?? null,
+                middleName: embedded.middleName ?? null,
+                lastName: embedded.lastName ?? null,
+                patientNumber: embedded.patientNumber ?? null,
+                phone: embedded.phone ?? null,
+            };
+        }
+    }
+
     if (!order.patientId) return null;
     return patientDirectory.value[order.patientId] ?? null;
 }
@@ -10174,7 +10210,8 @@ onMounted(async () => {
                 ref="pharmacyWalkInPanelRef"
                 service-type="pharmacy"
                 :enabled="canUpdateServiceRequestStatus"
-                panel-title="Direct-service patients awaiting pharmacy"
+                panel-title="Patients awaiting pharmacy"
+                success-message="Pharmacy handoff accepted. Patient is ready for medication order entry."
                 @acknowledged="onPharmacyWalkInAcknowledged"
             />
 
@@ -10644,9 +10681,16 @@ onMounted(async () => {
                                     </Button>
                                 </div>
                             </div>
-                            <div v-else :class="compactQueueRows ? 'space-y-2' : 'space-y-3'">
+                            <PatientOrderGroupList
+                                v-else-if="useGroupedQueueView"
+                                :groups="patientOrderGroups"
+                                :compact="compactQueueRows"
+                                :is-expanded="isPatientGroupExpanded"
+                                @update:expanded="setPatientGroupExpanded"
+                            >
+                                <template #orders="{ group }">
                                 <div
-                                    v-for="(order, orderIndex) in orders"
+                                    v-for="(order, orderIndex) in group.orders"
                                     :key="order.id"
                                     :data-pharmacy-row-index="orderIndex"
                                     :tabindex="orderIndex === focusedQueueRowIndex ? 0 : -1"
@@ -10883,12 +10927,21 @@ onMounted(async () => {
                                                 </DropdownMenu>
                                             </template>
                                         </div>
+                                    </div>
                                 </div>
-                            </div>
-                        </div>
+                                </template>
+                            </PatientOrderGroupList>
                         <div class="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
                                 <p class="text-xs text-muted-foreground">
-                                    Showing {{ orders.length }} of {{ pagination?.total ?? 0 }} &middot; Page {{ pagination?.currentPage ?? 1 }} of {{ pagination?.lastPage ?? 1 }}
+                                    <template v-if="useGroupedQueueView">
+                                        {{ patientOrderGroups.length }}
+                                        {{ patientOrderGroups.length === 1 ? 'patient' : 'patients' }}
+                                        · Showing {{ orders.length }} of {{ pagination?.total ?? 0 }}
+                                    </template>
+                                    <template v-else>
+                                        Showing {{ orders.length }} of {{ pagination?.total ?? 0 }}
+                                    </template>
+                                    &middot; Page {{ pagination?.currentPage ?? 1 }} of {{ pagination?.lastPage ?? 1 }}
                                 </p>
                                 <div class="flex items-center gap-1">
                                     <Button variant="outline" size="sm" :disabled="!canPrev || listLoading" @click="prevPage">Previous</Button>

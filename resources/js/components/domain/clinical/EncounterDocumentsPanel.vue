@@ -304,8 +304,7 @@ watch(
 
 <template>
     <div class="space-y-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-            <p class="text-sm font-medium">Attachments</p>
+        <div class="flex flex-wrap items-center justify-end gap-3">
             <Badge variant="outline" class="text-xs">
                 {{ activeDocumentCount }} active
             </Badge>

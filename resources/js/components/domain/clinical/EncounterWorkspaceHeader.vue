@@ -54,9 +54,18 @@ const emit = defineEmits<{
             class="flex flex-col gap-4 px-6 py-4 md:flex-row md:items-center md:justify-between md:gap-6"
         >
             <div class="flex min-w-0 items-center gap-3">
-                <Skeleton class="size-10 rounded-lg" />
-                <div class="min-w-0 space-y-2.5">
-                    <Skeleton class="h-3 w-32 rounded-lg" />
+                <div
+                    class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20"
+                    aria-hidden="true"
+                >
+                    <AppIcon name="stethoscope" class="size-5" />
+                </div>
+                <div class="min-w-0 space-y-1">
+                    <p
+                        class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground"
+                    >
+                        {{ introTitle }}
+                    </p>
                     <div class="flex flex-wrap items-center gap-2">
                         <Skeleton class="h-5 w-40 rounded-lg" />
                         <Skeleton class="h-5 w-28 rounded-full" />
@@ -67,7 +76,9 @@ const emit = defineEmits<{
                         <Skeleton class="h-5 w-32 rounded-full" />
                         <Skeleton class="h-5 w-28 rounded-full" />
                     </div>
-                    <Skeleton class="h-3 w-80 max-w-full rounded-lg" />
+                    <p class="truncate text-xs text-muted-foreground">
+                        Loading patient and visit context...
+                    </p>
                 </div>
             </div>
             <div class="flex flex-shrink-0 flex-wrap items-center gap-2">

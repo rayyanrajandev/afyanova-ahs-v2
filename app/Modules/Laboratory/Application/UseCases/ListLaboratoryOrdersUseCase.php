@@ -73,6 +73,12 @@ class ListLaboratoryOrdersUseCase
         $toDateTime = isset($filters['to']) ? trim((string) $filters['to']) : null;
         $toDateTime = $toDateTime === '' ? null : $toDateTime;
 
+        $statuses = null;
+        $worklistScope = strtolower(trim((string) ($filters['worklistScope'] ?? '')));
+        if ($status === null && $worklistScope === 'open') {
+            $statuses = LaboratoryOrderStatus::openWorklistValues();
+        }
+
         return $this->laboratoryOrderRepository->search(
             query: $query,
             patientId: $patientId,
@@ -80,6 +86,7 @@ class ListLaboratoryOrdersUseCase
             appointmentId: $appointmentId,
             admissionId: $admissionId,
             status: $status,
+            statuses: $statuses,
             priority: $priority,
             fromDateTime: $fromDateTime,
             toDateTime: $toDateTime,

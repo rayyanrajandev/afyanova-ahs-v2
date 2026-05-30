@@ -24,6 +24,11 @@ import {
 } from '@/config/dashboardPresets';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiGet } from '@/lib/apiClient';
+import {
+    directServicePatientWorklistHref,
+    groupDirectServiceOrdersByPatient,
+    type DirectServiceModuleKey,
+} from '@/lib/directServicePatientWorklist';
 import { encounterWorkspaceLegacyAppointmentHref } from '@/lib/encounterWorkspace';
 import type { AppIconName } from '@/lib/icons';
 import { formatEnumLabel } from '@/lib/labels';
@@ -178,8 +183,80 @@ type DashboardPatientSummary = {
     phone?: string | null;
 };
 
+function dashboardPatientSummaryFromEmbedded(patient: DashboardPatientSummary | null | undefined): DashboardPatientSummary | null {
+    if (!patient) {
+        return null;
+    }
+
+    const summary = {
+        firstName: patient.firstName ?? null,
+        middleName: patient.middleName ?? null,
+        lastName: patient.lastName ?? null,
+        patientNumber: patient.patientNumber ?? null,
+        phone: patient.phone ?? null,
+    };
+
+    const hasContent = Object.values(summary).some((value) => String(value ?? '').trim() !== '');
+    return hasContent ? summary : null;
+}
+
+function directServiceEmbeddedPatientSummary(item: Record<string, unknown>): DashboardPatientSummary | null {
+    return dashboardPatientSummaryFromEmbedded(item.patient as DashboardPatientSummary | undefined);
+}
+
+function directServicePatientLabel(item: Record<string, unknown>): string {
+    const embedded = directServiceEmbeddedPatientSummary(item);
+    if (embedded) {
+        const fullName = [embedded.firstName, embedded.middleName, embedded.lastName]
+            .filter(Boolean)
+            .join(' ')
+            .trim();
+        if (fullName) {
+            return fullName;
+        }
+        if (embedded.patientNumber) {
+            return String(embedded.patientNumber).trim();
+        }
+    }
+
+    return dashboardPatientLabel(String(item.patientId ?? '').trim());
+}
+
+function directServicePatientMeta(item: Record<string, unknown>): string {
+    const embedded = directServiceEmbeddedPatientSummary(item);
+    if (embedded) {
+        return [embedded.patientNumber, embedded.phone].filter(Boolean).join(' | ');
+    }
+
+    return dashboardPatientMeta(String(item.patientId ?? '').trim());
+}
+
+function registerDashboardPatientsFromOrders(items: any[]): void {
+    const nextEntries: Record<string, DashboardPatientSummary> = {};
+
+    for (const item of items) {
+        const patientId = String(item?.patientId ?? item?.patient?.id ?? '').trim();
+        const embedded = dashboardPatientSummaryFromEmbedded(item?.patient);
+        if (!patientId || !embedded || dashboardPatientDirectory.value[patientId]) {
+            continue;
+        }
+
+        nextEntries[patientId] = embedded;
+    }
+
+    if (Object.keys(nextEntries).length === 0) {
+        return;
+    }
+
+    dashboardPatientDirectory.value = {
+        ...dashboardPatientDirectory.value,
+        ...nextEntries,
+    };
+}
+
 const dashboardPatientDirectory = ref<Record<string, DashboardPatientSummary>>({});
 const dashboardSearchAppointments = ref<any[]>([]);
+const dashboardSearchDirectServiceOrders = ref<any[]>([]);
 const dashboardSearchLoading = ref(false);
 const pendingDashboardPatientIds = new Set<string>();
 
@@ -436,6 +513,21 @@ const activePreset = computed(
     () => DASHBOARD_PRESETS.find((preset) => preset.key === activePresetKey.value) ?? DASHBOARD_PRESETS[0],
 );
 
+const singleDirectServiceModule = computed(() =>
+    activePresetKey.value === 'direct_service' && directServiceModules.value.length === 1
+        ? directServiceModules.value[0]
+        : null,
+);
+
+const dashboardPresetLabel = computed(() => singleDirectServiceModule.value?.label ?? activePreset.value.label);
+
+const dashboardPresetDescription = computed(() => {
+    const module = singleDirectServiceModule.value;
+    if (!module) return activePreset.value.description;
+
+    return `${module.label} queue focused on active orders, status movement, and safe handoff.`;
+});
+
 const visiblePresetOptions = computed(() =>
     DASHBOARD_PRESETS.filter((preset) => eligiblePresets.value.includes(preset.key)),
 );
@@ -482,6 +574,299 @@ type DirectServiceModuleSummary = {
     meta: string;
     queueStatus: string;
 };
+
+function directServiceModuleHref(module: DirectServiceModuleSummary | null, query?: string): string {
+    if (!module) return '/dashboard';
+
+    const normalizedQuery = query?.trim() ?? '';
+    if (normalizedQuery === '') {
+        return module.href;
+    }
+
+    const params = new URLSearchParams({ q: normalizedQuery, worklistScope: 'open' });
+    return `${module.href}?${params.toString()}`;
+}
+
+function radiologyWorklistHref(status?: string | null, focusOrderId?: string | null): string {
+    const params = new URLSearchParams();
+    const normalizedStatus = String(status ?? '').trim();
+    const normalizedOrderId = String(focusOrderId ?? '').trim();
+
+    if (normalizedStatus !== '') {
+        params.set('status', normalizedStatus);
+    }
+
+    if (normalizedOrderId !== '') {
+        params.set('focusOrderId', normalizedOrderId);
+    }
+
+    const queryString = params.toString();
+    return queryString ? `/radiology-orders?${queryString}` : '/radiology-orders';
+}
+
+function radiologyOrderActionLabel(status: string | null | undefined): string {
+    switch (String(status ?? '').trim()) {
+        case 'ordered':
+            return 'Schedule study';
+        case 'scheduled':
+            return 'Start study';
+        case 'in_progress':
+            return 'Complete report';
+        default:
+            return 'Open order';
+    }
+}
+
+async function hydrateDashboardPatientsForOrders(items: any[]): Promise<void> {
+    const uniqueIds = [...new Set(items.map((item) => String(item.patientId ?? '').trim()).filter(Boolean))];
+    await Promise.all(uniqueIds.map((patientId) => hydrateDashboardPatient(patientId)));
+}
+
+function directServiceOrderSearchHaystack(item: Record<string, unknown>): string {
+    const patientId = String(item.patientId ?? '').trim();
+    const orderedBy = item.orderedBy as { name?: string | null } | null | undefined;
+
+    return [
+        directServicePatientLabel(item),
+        directServicePatientMeta(item),
+        orderedBy?.name,
+        item.orderNumber,
+        item.testCode,
+        item.testName,
+        item.medicationCode,
+        item.medicationName,
+        item.procedureCode,
+        item.studyDescription,
+        item.modality,
+        item.clinicalIndication,
+        item.status,
+        item.orderedByUserId,
+        item.patientId,
+    ]
+        .map((value) => String(value ?? '').trim())
+        .filter(Boolean)
+        .join(' ');
+}
+
+function laboratoryWorklistHref(status?: string | null, focusOrderId?: string | null): string {
+    const params = new URLSearchParams();
+    const normalizedStatus = String(status ?? '').trim();
+    const normalizedOrderId = String(focusOrderId ?? '').trim();
+
+    if (normalizedStatus !== '') {
+        params.set('status', normalizedStatus);
+    }
+
+    if (normalizedOrderId !== '') {
+        params.set('focusOrderId', normalizedOrderId);
+    }
+
+    const queryString = params.toString();
+    return queryString ? `/laboratory-orders?${queryString}` : '/laboratory-orders';
+}
+
+function pharmacyWorklistHref(status?: string | null, focusOrderId?: string | null): string {
+    const params = new URLSearchParams();
+    const normalizedStatus = String(status ?? '').trim();
+    const normalizedOrderId = String(focusOrderId ?? '').trim();
+
+    if (normalizedStatus !== '') {
+        params.set('status', normalizedStatus);
+    }
+
+    if (normalizedOrderId !== '') {
+        params.set('focusOrderId', normalizedOrderId);
+    }
+
+    const queryString = params.toString();
+    return queryString ? `/pharmacy-orders?${queryString}` : '/pharmacy-orders';
+}
+
+function laboratoryOrderActionLabel(status: string | null | undefined): string {
+    switch (String(status ?? '').trim()) {
+        case 'ordered':
+            return 'Collect specimen';
+        case 'collected':
+            return 'Start processing';
+        case 'in_progress':
+            return 'Release result';
+        default:
+            return 'Open order';
+    }
+}
+
+function pharmacyOrderActionLabel(status: string | null | undefined): string {
+    switch (String(status ?? '').trim()) {
+        case 'pending':
+            return 'Prepare medication';
+        case 'in_preparation':
+            return 'Dispense order';
+        case 'partially_dispensed':
+            return 'Complete dispense';
+        default:
+            return 'Open order';
+    }
+}
+
+function directServiceOrderedByLabel(item: Record<string, unknown>): string {
+    const orderedBy = item.orderedBy as { name?: string | null; id?: number | string | null } | null | undefined;
+    const orderedByName = String(orderedBy?.name ?? '').trim();
+    if (orderedByName !== '') {
+        return `Ordered by ${orderedByName}`;
+    }
+
+    const orderedByUserId = Number(item.orderedByUserId ?? 0);
+    return Number.isFinite(orderedByUserId) && orderedByUserId > 0
+        ? `Ordered by user #${orderedByUserId}`
+        : 'Ordering clinician not recorded';
+}
+
+function directServiceOrderTitle(item: any, detail: string): string {
+    const patientName = directServicePatientLabel(item);
+    const orderNumber = String(item.orderNumber ?? '').trim();
+    const orderLabel = orderNumber !== '' ? orderNumber : 'Order';
+
+    if (patientName) {
+        return `${patientName} · ${orderLabel}`;
+    }
+
+    return detail || orderLabel;
+}
+
+function mapRadiologyOrderToQueueRow(item: any): QueueRow {
+    const status = String(item.status ?? 'ordered');
+    const study = String(item.studyDescription ?? item.procedureCode ?? 'Imaging order');
+    const modality = formatEnumLabel(String(item.modality ?? 'radiology'));
+    const patientMeta = directServicePatientMeta(item);
+    const scheduledFor = item.scheduledFor ? `Scheduled ${formatDateTime(item.scheduledFor)}` : null;
+    const orderedAt = item.orderedAt ? `Ordered ${formatDateTime(item.orderedAt)}` : null;
+    const orderedBy = directServiceOrderedByLabel(item);
+
+    return {
+        id: `radiology-order-${String(item.id ?? item.orderNumber ?? Math.random())}`,
+        title: directServiceOrderTitle(item, study),
+        subtitle: [patientMeta, modality, item.clinicalIndication].filter(Boolean).join(' | ') || study,
+        meta: [orderedBy, scheduledFor ?? orderedAt].filter(Boolean).join(' · ') || 'Ordering context not recorded',
+        status: formatEnumLabel(status),
+        href: radiologyWorklistHref(status, String(item.id ?? '')),
+        actionLabel: radiologyOrderActionLabel(status),
+        group: 'Radiology worklist',
+        searchHaystack: directServiceOrderSearchHaystack(item),
+    };
+}
+
+function mapLaboratoryOrderToQueueRow(item: any): QueueRow {
+    const status = String(item.status ?? 'ordered');
+    const testLabel = [item.testCode, item.testName].filter(Boolean).join(' - ') || 'Laboratory test';
+    const patientMeta = directServicePatientMeta(item);
+    const orderedAt = item.orderedAt ? `Ordered ${formatDateTime(item.orderedAt)}` : null;
+    const orderedBy = directServiceOrderedByLabel(item);
+
+    return {
+        id: `laboratory-order-${String(item.id ?? item.orderNumber ?? Math.random())}`,
+        title: directServiceOrderTitle(item, testLabel),
+        subtitle: [patientMeta, testLabel, item.priority ? formatEnumLabel(String(item.priority)) : null].filter(Boolean).join(' | ') || 'Laboratory worklist item.',
+        meta: [orderedBy, orderedAt].filter(Boolean).join(' · ') || 'Ordering context not recorded',
+        status: formatEnumLabel(status),
+        href: laboratoryWorklistHref(status, String(item.id ?? '')),
+        actionLabel: laboratoryOrderActionLabel(status),
+        group: 'Laboratory worklist',
+        searchHaystack: directServiceOrderSearchHaystack(item),
+    };
+}
+
+function mapPharmacyOrderToQueueRow(item: any): QueueRow {
+    const status = String(item.status ?? 'pending');
+    const medicationLabel = [item.medicationCode, item.medicationName].filter(Boolean).join(' - ') || 'Medication order';
+    const patientMeta = directServicePatientMeta(item);
+    const orderedAt = item.orderedAt ? `Ordered ${formatDateTime(item.orderedAt)}` : null;
+    const orderedBy = directServiceOrderedByLabel(item);
+
+    return {
+        id: `pharmacy-order-${String(item.id ?? item.orderNumber ?? Math.random())}`,
+        title: directServiceOrderTitle(item, medicationLabel),
+        subtitle: [patientMeta, medicationLabel].filter(Boolean).join(' | ') || 'Pharmacy worklist item.',
+        meta: [orderedBy, orderedAt].filter(Boolean).join(' · ') || 'Ordering context not recorded',
+        status: formatEnumLabel(status),
+        href: pharmacyWorklistHref(status, String(item.id ?? '')),
+        actionLabel: pharmacyOrderActionLabel(status),
+        group: 'Pharmacy worklist',
+        searchHaystack: directServiceOrderSearchHaystack(item),
+    };
+}
+
+function mapDirectServiceOrderToQueueRow(item: any, moduleKey: DirectServiceModuleSummary['key']): QueueRow {
+    if (moduleKey === 'radiology') return mapRadiologyOrderToQueueRow(item);
+    if (moduleKey === 'laboratory') return mapLaboratoryOrderToQueueRow(item);
+    return mapPharmacyOrderToQueueRow(item);
+}
+
+function directServiceOrdersEndpoint(moduleKey: DirectServiceModuleSummary['key'] | null | undefined): string | null {
+    if (moduleKey === 'radiology') return '/radiology-orders';
+    if (moduleKey === 'laboratory') return '/laboratory-orders';
+    if (moduleKey === 'pharmacy') return '/pharmacy-orders';
+    return null;
+}
+
+function mapDirectServicePatientGroupsToQueueRows(
+    items: any[],
+    moduleKey: DirectServiceModuleKey,
+): QueueRow[] {
+    const moduleLabel =
+        moduleKey === 'radiology' ? 'Radiology' : moduleKey === 'laboratory' ? 'Laboratory' : 'Pharmacy';
+
+    return groupDirectServiceOrdersByPatient(items, moduleKey)
+        .filter((group) => !group.patientId.startsWith('__orphan__:'))
+        .map((group) => {
+        const earliest = group.orders[0]?.orderedAt ?? null;
+        const requesterNames = [...new Set(group.orders
+            .map((order) => String(order.orderedBy?.name ?? '').trim())
+            .filter(Boolean))];
+        const requesterSummary = requesterNames.length === 0
+            ? null
+            : `Ordered by ${requesterNames[0]}${requesterNames.length > 1 ? ` +${requesterNames.length - 1} more` : ''}`;
+
+        return {
+            id: `direct-service-patient-${group.patientId}`,
+            title: group.patientMeta
+                ? `${group.patientLabel} · ${group.patientMeta.split(' | ')[0]}`
+                : group.patientLabel,
+            subtitle: group.summarySubtitle,
+            meta: [
+                requesterSummary,
+                earliest ? `Earliest order ${formatDateTime(earliest)}` : null,
+            ].filter(Boolean).join(' Â· ') || group.summaryMeta || 'Open orders waiting',
+            status: group.summaryStatus,
+            href: directServicePatientWorklistHref(moduleKey, group.patientId),
+            actionLabel: 'Open patient orders',
+            group: `${moduleLabel} patients`,
+            searchHaystack: group.searchHaystack,
+        };
+    });
+}
+
+function mapDirectServiceOrdersToQueueRows(
+    items: any[],
+    moduleKey: DirectServiceModuleKey,
+): QueueRow[] {
+    return mapDirectServicePatientGroupsToQueueRows(items, moduleKey);
+}
+
+function mergeDashboardRowsById(...groups: any[][]): any[] {
+    const seen = new Set<string>();
+    const rows: any[] = [];
+
+    for (const group of groups) {
+        for (const row of group) {
+            const id = String(row?.id ?? '').trim();
+            if (id === '' || seen.has(id)) continue;
+            seen.add(id);
+            rows.push(row);
+        }
+    }
+
+    return rows;
+}
 
 const directServiceModules = computed<DirectServiceModuleSummary[]>(() => {
     const modules: DirectServiceModuleSummary[] = [];
@@ -545,6 +930,22 @@ const activeDirectServiceModule = computed(() => {
     modules.sort((left, right) => Number(right.active ?? -1) - Number(left.active ?? -1));
     return modules[0] ?? null;
 });
+
+const primaryDirectServiceModule = computed(() =>
+    directServiceModules.value.length === 1 ? directServiceModules.value[0] : activeDirectServiceModule.value,
+);
+
+const directServiceActiveQueueCount = computed(() =>
+    directServiceModules.value.reduce((sum, module) => sum + Number(module.active ?? 0), 0),
+);
+
+const showDirectServiceQueueAlert = computed(
+    () =>
+        activePresetKey.value === 'direct_service'
+        && !loading.value
+        && !refreshing.value
+        && directServiceActiveQueueCount.value > 0,
+);
 
 const shouldShowHandoff = computed(() => true);
 const handoffOpen = computed({
@@ -794,6 +1195,9 @@ async function loadDashboard(depth = 0): Promise<void> {
         waitingProviderAppointments: [],
         inConsultationAppointments: [],
         departmentPoolWaitingAppointments: [],
+        radiologyOrders: [],
+        laboratoryOrders: [],
+        pharmacyOrders: [],
         admissions: [],
         draftInvoices: [],
     };
@@ -908,6 +1312,66 @@ async function loadDashboard(depth = 0): Promise<void> {
                 ],
                 ['radiologyCounts', () =>
                     guardedRequest<ApiEnvelope<any>>('Radiology counts', 'radiology.orders.read', () => apiGet('/radiology-orders/status-counts')),
+                ],
+                ['radiologyOpenOrders', () =>
+                    guardedRequest<ApiEnvelope<any>>('Radiology open worklist', 'radiology.orders.read', () =>
+                        apiGet('/radiology-orders', { worklistScope: 'open', perPage: 40, sortBy: 'orderedAt', sortDir: 'asc' }),
+                    ),
+                ],
+                ['radiologyOrderedOrders', () =>
+                    guardedRequest<ApiEnvelope<any>>('Radiology ordered worklist', 'radiology.orders.read', () =>
+                        apiGet('/radiology-orders', { status: 'ordered', perPage: 4, sortBy: 'orderedAt', sortDir: 'asc' }),
+                    ),
+                ],
+                ['radiologyScheduledOrders', () =>
+                    guardedRequest<ApiEnvelope<any>>('Radiology scheduled worklist', 'radiology.orders.read', () =>
+                        apiGet('/radiology-orders', { status: 'scheduled', perPage: 4, sortBy: 'scheduledFor', sortDir: 'asc' }),
+                    ),
+                ],
+                ['radiologyInProgressOrders', () =>
+                    guardedRequest<ApiEnvelope<any>>('Radiology active worklist', 'radiology.orders.read', () =>
+                        apiGet('/radiology-orders', { status: 'in_progress', perPage: 4, sortBy: 'updatedAt', sortDir: 'asc' }),
+                    ),
+                ],
+                ['laboratoryOrderedOrders', () =>
+                    guardedRequest<ApiEnvelope<any>>('Laboratory ordered worklist', 'laboratory.orders.read', () =>
+                        apiGet('/laboratory-orders', { status: 'ordered', perPage: 4, sortBy: 'orderedAt', sortDir: 'asc' }),
+                    ),
+                ],
+                ['laboratoryOpenOrders', () =>
+                    guardedRequest<ApiEnvelope<any>>('Laboratory open worklist', 'laboratory.orders.read', () =>
+                        apiGet('/laboratory-orders', { worklistScope: 'open', perPage: 40, sortBy: 'orderedAt', sortDir: 'asc' }),
+                    ),
+                ],
+                ['laboratoryCollectedOrders', () =>
+                    guardedRequest<ApiEnvelope<any>>('Laboratory collected worklist', 'laboratory.orders.read', () =>
+                        apiGet('/laboratory-orders', { status: 'collected', perPage: 4, sortBy: 'orderedAt', sortDir: 'asc' }),
+                    ),
+                ],
+                ['laboratoryInProgressOrders', () =>
+                    guardedRequest<ApiEnvelope<any>>('Laboratory active worklist', 'laboratory.orders.read', () =>
+                        apiGet('/laboratory-orders', { status: 'in_progress', perPage: 4, sortBy: 'updatedAt', sortDir: 'asc' }),
+                    ),
+                ],
+                ['pharmacyPendingOrders', () =>
+                    guardedRequest<ApiEnvelope<any>>('Pharmacy pending worklist', 'pharmacy.orders.read', () =>
+                        apiGet('/pharmacy-orders', { status: 'pending', perPage: 4, sortBy: 'orderedAt', sortDir: 'asc' }),
+                    ),
+                ],
+                ['pharmacyOpenOrders', () =>
+                    guardedRequest<ApiEnvelope<any>>('Pharmacy open worklist', 'pharmacy.orders.read', () =>
+                        apiGet('/pharmacy-orders', { worklistScope: 'open', perPage: 40, sortBy: 'orderedAt', sortDir: 'asc' }),
+                    ),
+                ],
+                ['pharmacyInPreparationOrders', () =>
+                    guardedRequest<ApiEnvelope<any>>('Pharmacy preparation worklist', 'pharmacy.orders.read', () =>
+                        apiGet('/pharmacy-orders', { status: 'in_preparation', perPage: 4, sortBy: 'orderedAt', sortDir: 'asc' }),
+                    ),
+                ],
+                ['pharmacyPartiallyDispensedOrders', () =>
+                    guardedRequest<ApiEnvelope<any>>('Pharmacy partial dispense worklist', 'pharmacy.orders.read', () =>
+                        apiGet('/pharmacy-orders', { status: 'partially_dispensed', perPage: 4, sortBy: 'updatedAt', sortDir: 'asc' }),
+                    ),
                 ],
             );
             break;
@@ -1075,9 +1539,30 @@ async function loadDashboard(depth = 0): Promise<void> {
         waitingProviderAppointments: Array.isArray(bag.waitingProviderAppointments?.data) ? bag.waitingProviderAppointments.data : [],
         inConsultationAppointments: Array.isArray(bag.inConsultationAppointments?.data) ? bag.inConsultationAppointments.data : [],
         departmentPoolWaitingAppointments: [],
+        radiologyOrders: (Array.isArray(bag.radiologyOpenOrders?.data) ? bag.radiologyOpenOrders.data : mergeDashboardRowsById(
+            Array.isArray(bag.radiologyInProgressOrders?.data) ? bag.radiologyInProgressOrders.data : [],
+            Array.isArray(bag.radiologyScheduledOrders?.data) ? bag.radiologyScheduledOrders.data : [],
+            Array.isArray(bag.radiologyOrderedOrders?.data) ? bag.radiologyOrderedOrders.data : [],
+        )).slice(0, 40),
+        laboratoryOrders: (Array.isArray(bag.laboratoryOpenOrders?.data) ? bag.laboratoryOpenOrders.data : mergeDashboardRowsById(
+            Array.isArray(bag.laboratoryInProgressOrders?.data) ? bag.laboratoryInProgressOrders.data : [],
+            Array.isArray(bag.laboratoryCollectedOrders?.data) ? bag.laboratoryCollectedOrders.data : [],
+            Array.isArray(bag.laboratoryOrderedOrders?.data) ? bag.laboratoryOrderedOrders.data : [],
+        )).slice(0, 40),
+        pharmacyOrders: (Array.isArray(bag.pharmacyOpenOrders?.data) ? bag.pharmacyOpenOrders.data : mergeDashboardRowsById(
+            Array.isArray(bag.pharmacyPartiallyDispensedOrders?.data) ? bag.pharmacyPartiallyDispensedOrders.data : [],
+            Array.isArray(bag.pharmacyInPreparationOrders?.data) ? bag.pharmacyInPreparationOrders.data : [],
+            Array.isArray(bag.pharmacyPendingOrders?.data) ? bag.pharmacyPendingOrders.data : [],
+        )).slice(0, 40),
         admissions: Array.isArray(bag.admissions?.data) ? bag.admissions.data : [],
         draftInvoices: Array.isArray(bag.draftInvoices?.data) ? bag.draftInvoices.data : [],
     };
+
+    registerDashboardPatientsFromOrders([
+        ...lists.value.radiologyOrders,
+        ...lists.value.laboratoryOrders,
+        ...lists.value.pharmacyOrders,
+    ]);
 
     if (preset === 'clinician') {
         const departmentName = resolveClinicalDepartmentFromDirectory(bag.clinicalDirectory?.data, currentUserId.value);
@@ -1117,6 +1602,11 @@ async function loadDashboard(depth = 0): Promise<void> {
         ...lists.value.waitingProviderAppointments,
         ...lists.value.inConsultationAppointments,
         ...lists.value.departmentPoolWaitingAppointments,
+    ]);
+    void hydrateDashboardPatientsForOrders([
+        ...lists.value.radiologyOrders,
+        ...lists.value.laboratoryOrders,
+        ...lists.value.pharmacyOrders,
     ]);
 
     if (bag.auditExportHealth !== undefined) {
@@ -1214,6 +1704,64 @@ const kpis = computed(() => {
         ];
     }
     if (activePresetKey.value === 'direct_service') {
+        const singleModule = singleDirectServiceModule.value;
+        if (singleModule) {
+            if (singleModule.key === 'laboratory') {
+                const labCounts = counts.value.laboratory;
+                const tatRiskCount = (lists.value.laboratoryOrders ?? []).filter((order: any) => {
+                    const orderedAt = order?.orderedAt ? new Date(order.orderedAt).getTime() : NaN;
+                    if (!Number.isFinite(orderedAt)) return false;
+
+                    const priority = String(order?.priority ?? '').trim().toLowerCase();
+                    const thresholdMinutes = priority === 'stat' ? 60 : priority === 'urgent' ? 120 : 240;
+
+                    return nowTick.value - orderedAt > thresholdMinutes * 60_000;
+                }).length;
+
+                return [
+                    metric(
+                        'Active lab orders',
+                        'All open lab orders still moving through collection, processing, or release.',
+                        'flask-conical',
+                        numberValue(labCounts, ['ordered', 'collected', 'in_progress']),
+                    ),
+                    metric(
+                        'Awaiting collection',
+                        'Orders placed but specimen collection is not yet recorded.',
+                        'calendar-clock',
+                        numberValue(labCounts, 'ordered'),
+                    ),
+                    metric(
+                        'Collected / processing',
+                        'Specimens collected or actively being processed by the laboratory.',
+                        'activity',
+                        numberValue(labCounts, ['collected', 'in_progress']),
+                    ),
+                    metric(
+                        'TAT risk',
+                        'Open orders exceeding priority-aware dashboard turnaround thresholds.',
+                        'alert-triangle',
+                        tatRiskCount,
+                    ),
+                ];
+            }
+
+            return [
+                metric(
+                    `Pending ${singleModule.label.toLowerCase()} orders`,
+                    singleModule.subtitle,
+                    singleModule.icon,
+                    singleModule.active,
+                ),
+                metric(
+                    singleModule.key === 'pharmacy' ? 'Dispensed orders' : 'Completed orders',
+                    `${singleModule.label} work already completed in the current queue scope.`,
+                    singleModule.key === 'pharmacy' ? 'pill' : 'check-circle',
+                    singleModule.completed,
+                ),
+            ];
+        }
+
         return [
             ...directServiceModules.value.map((module) =>
                 metric(
@@ -1341,7 +1889,7 @@ const actions = computed(() => {
     }
     if (activePresetKey.value === 'direct_service') {
         return directServiceModules.value.map((module, index) => ({
-            label: module.label,
+            label: singleDirectServiceModule.value ? `${module.label} queue` : module.label,
             icon: module.icon,
             variant: index === 0 ? 'default' : 'outline',
             href: module.href,
@@ -1498,6 +2046,36 @@ const queueRows = computed<QueueRow[]>(() => {
         return [...waitingProviderRows, ...departmentPoolRows, ...inConsultationRows];
     }
     if (activePresetKey.value === 'direct_service') {
+        void dashboardPatientDirectory.value;
+
+        const focusedModule = singleDirectServiceModule.value ?? primaryDirectServiceModule.value;
+        const ordersForModule = (moduleKey: DirectServiceModuleSummary['key']) => {
+            if (moduleKey === 'radiology') return lists.value.radiologyOrders ?? [];
+            if (moduleKey === 'laboratory') return lists.value.laboratoryOrders ?? [];
+            if (moduleKey === 'pharmacy') return lists.value.pharmacyOrders ?? [];
+            return [];
+        };
+
+        if (focusedModule) {
+            const orders = ordersForModule(focusedModule.key);
+            if (orders.length > 0) {
+                return mapDirectServiceOrdersToQueueRows(orders, focusedModule.key);
+            }
+
+            if (Number(focusedModule.active ?? 0) > 0 || singleDirectServiceModule.value) {
+                return [{
+                    id: `direct-service-${focusedModule.key}-details-unavailable`,
+                    title: `${focusedModule.label} queue details`,
+                    subtitle: `${focusedModule.active ?? 0} active order${Number(focusedModule.active ?? 0) === 1 ? '' : 's'} in scope. Open the full queue for patient and requester details.`,
+                    meta: 'Patient-level summary not loaded on dashboard',
+                    status: focusedModule.queueStatus,
+                    href: directServiceModuleHref(focusedModule),
+                    actionLabel: focusedModule.actionLabel,
+                    group: `${focusedModule.label} worklist`,
+                }];
+            }
+        }
+
         return directServiceModules.value.map((module) => ({
             id: `direct-service-${module.key}`,
             title: `${module.label} queue`,
@@ -1620,6 +2198,20 @@ const queueRows = computed<QueueRow[]>(() => {
 
 const displayedQueueRows = computed(() => {
     const query = patientSearchQuery.value.trim();
+
+    if (activePresetKey.value === 'direct_service') {
+        const moduleKey = primaryDirectServiceModule.value?.key;
+        if (query.length >= 2 && moduleKey) {
+            return mapDirectServiceOrdersToQueueRows(dashboardSearchDirectServiceOrders.value, moduleKey);
+        }
+
+        if (query) {
+            return queueRows.value.filter((row) => queueRowMatchesSearch(row, query));
+        }
+
+        return queueRows.value;
+    }
+
     if (query.length >= 2) {
         return dashboardSearchAppointments.value.map((item) => mapDashboardSearchAppointmentToRow(item));
     }
@@ -1632,6 +2224,12 @@ const displayedQueueRows = computed(() => {
 });
 
 const queuePreviewSearchActive = computed(() => patientSearchQuery.value.trim() !== '');
+
+const dashboardSearchPlaceholder = computed(() =>
+    activePresetKey.value === 'direct_service'
+        ? 'Patient name, MRN, phone, order #, or status'
+        : 'Patient name, MRN, phone, or appointment #',
+);
 
 const queueGroupCounts = computed<Map<string, number>>(() => {
     const map = new Map<string, number>();
@@ -1648,7 +2246,9 @@ const queueTitle = computed(() => {
     if (activePresetKey.value === 'clinician') {
         return clinicianClinicalDepartment.value ? 'Clinical queues' : 'Consultation-ready queue';
     }
-    if (activePresetKey.value === 'direct_service') return 'Direct-service queues';
+    if (activePresetKey.value === 'direct_service') {
+        return singleDirectServiceModule.value ? `${singleDirectServiceModule.value.label} queue` : 'Service queues';
+    }
     if (activePresetKey.value === 'nursing') return 'Triage & admissions queue';
     if (activePresetKey.value === 'emergency') return 'Emergency triage queue';
     if (activePresetKey.value === 'cashier') return 'Live billing preview';
@@ -1664,7 +2264,9 @@ const queueDescription = computed(() => {
 
         return 'Patients assigned to you who are waiting for provider review, with active consultations shown below.';
     }
-    if (activePresetKey.value === 'direct_service') return 'Accessible laboratory, pharmacy, and radiology worklists for this session.';
+    if (activePresetKey.value === 'direct_service') {
+        return singleDirectServiceModule.value?.subtitle ?? 'Open orders grouped by patient — select a patient to review their full worklist.';
+    }
     if (activePresetKey.value === 'nursing') return 'Checked-in patients waiting for triage and active inpatient admissions.';
     if (activePresetKey.value === 'emergency') return 'All checked-in patients sorted by arrival time — longest wait shown first. Rows overdue at 30 min.';
     if (activePresetKey.value === 'cashier') return 'Draft billing work that still needs invoice follow-up.';
@@ -1771,23 +2373,28 @@ const handoff = computed(() => {
         };
     }
     if (activePresetKey.value === 'direct_service') {
-        const leadModule = activeDirectServiceModule.value;
-        const secondaryModule = directServiceModules.value[1] ?? null;
+        const leadModule = primaryDirectServiceModule.value;
+        const secondaryModule = singleDirectServiceModule.value ? null : directServiceModules.value[1] ?? null;
         const hasActiveQueue = Number(leadModule?.active ?? 0) > 0;
+        const isSingleModule = Boolean(singleDirectServiceModule.value);
 
         return {
-            title: 'Direct-service handoff',
-            note: 'Laboratory, pharmacy, and radiology flow',
+            title: leadModule ? `${leadModule.label} handoff` : 'Service handoff',
+            note: leadModule
+                ? isSingleModule
+                    ? `${leadModule.label} queue and status movement`
+                    : 'Laboratory, pharmacy, and radiology flow'
+                : 'Service queue flow',
             blockerTitle: leadModule
                 ? hasActiveQueue
                     ? `${leadModule.label} queue still active`
                     : `${leadModule.label} queue stable`
-                : 'No direct-service modules available',
+                : 'No service modules available',
             blockerNote: leadModule
                 ? hasActiveQueue
                     ? leadModule.subtitle
                     : `${leadModule.label} queue looks stable for this session.`
-                : 'No direct-service modules are available in this session scope.',
+                : 'No service modules are available in this session scope.',
             nextAction: leadModule
                 ? hasActiveQueue
                     ? `Start from ${leadModule.label.toLowerCase()} so service queue work keeps moving.`
@@ -2295,6 +2902,45 @@ watchDebounced(
     patientSearchQuery,
     async () => {
         const query = patientSearchQuery.value.trim();
+        if (activePresetKey.value === 'direct_service') {
+            dashboardSearchAppointments.value = [];
+
+            if (query.length < 2) {
+                dashboardSearchDirectServiceOrders.value = [];
+                dashboardSearchLoading.value = false;
+                return;
+            }
+
+            const moduleKey = primaryDirectServiceModule.value?.key;
+            const endpoint = directServiceOrdersEndpoint(moduleKey);
+            if (!endpoint) {
+                dashboardSearchDirectServiceOrders.value = [];
+                dashboardSearchLoading.value = false;
+                return;
+            }
+
+            dashboardSearchLoading.value = true;
+            try {
+                const response = await apiGet<ApiEnvelope<any[]>>(endpoint, {
+                    q: query,
+                    worklistScope: 'open',
+                    perPage: 50,
+                    sortBy: 'orderedAt',
+                    sortDir: 'asc',
+                });
+                dashboardSearchDirectServiceOrders.value = Array.isArray(response.data) ? response.data : [];
+                registerDashboardPatientsFromOrders(dashboardSearchDirectServiceOrders.value);
+                await hydrateDashboardPatientsForOrders(dashboardSearchDirectServiceOrders.value);
+            } catch {
+                dashboardSearchDirectServiceOrders.value = [];
+            } finally {
+                dashboardSearchLoading.value = false;
+            }
+            return;
+        }
+
+        dashboardSearchDirectServiceOrders.value = [];
+
         if (query.length < 2) {
             dashboardSearchAppointments.value = [];
             dashboardSearchLoading.value = false;
@@ -2326,6 +2972,11 @@ function goToPatientSearch(): void {
 
     if (['front_desk', 'clinician', 'nursing', 'emergency'].includes(activePresetKey.value)) {
         window.location.href = appointmentsWorklistSearchHref(q);
+        return;
+    }
+
+    if (activePresetKey.value === 'direct_service') {
+        window.location.href = directServiceModuleHref(primaryDirectServiceModule.value, q);
         return;
     }
 
@@ -2423,6 +3074,7 @@ const queueViewAllHref = computed(() => {
     }
     if (activePresetKey.value === 'nursing') return `/appointments?view=queue&status=checked_in&from=${today}`;
     if (activePresetKey.value === 'emergency') return `/appointments?view=queue&status=checked_in&from=${today}`;
+    if (activePresetKey.value === 'direct_service') return directServiceModuleHref(primaryDirectServiceModule.value);
     if (activePresetKey.value === 'cashier') return '/billing-invoices?status=draft';
     return '#';
 });
@@ -2461,10 +3113,10 @@ function switchPreset(key: DashboardPresetKey): void {
                         <div class="min-w-0 space-y-0.5">
                             <h1 class="text-base font-semibold tracking-tight md:text-lg">Dashboard</h1>
                             <p class="truncate text-xs text-muted-foreground md:max-w-xl md:whitespace-normal">
-                                {{ activePreset.description }}
+                                {{ dashboardPresetDescription }}
                             </p>
                             <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
-                                <span class="font-medium text-foreground">{{ activePreset.label }}</span>
+                                <span class="font-medium text-foreground">{{ dashboardPresetLabel }}</span>
                                 <span class="select-none text-border" aria-hidden="true">·</span>
                                 <span class="inline-flex items-center gap-1">
                                     <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
@@ -2797,6 +3449,19 @@ function switchPreset(key: DashboardPresetKey): void {
                     </Alert>
 
                     <Alert
+                        v-if="showDirectServiceQueueAlert"
+                        class="rounded-lg border border-sky-500/40 bg-sky-500/5 py-2.5 text-sky-950 dark:text-sky-200"
+                    >
+                        <AppIcon name="activity" class="size-4 text-sky-600" />
+                        <AlertTitle class="text-sm font-medium">
+                            {{ directServiceActiveQueueCount }} active {{ singleDirectServiceModule?.label.toLowerCase() ?? 'service' }} order{{ directServiceActiveQueueCount === 1 ? '' : 's' }} need attention
+                        </AlertTitle>
+                        <AlertDescription class="mt-1 text-xs">
+                            Start with {{ primaryDirectServiceModule?.label ?? 'the active service queue' }} so ordered, scheduled, and in-progress work keeps moving.
+                        </AlertDescription>
+                    </Alert>
+
+                    <Alert
                         v-if="activePresetKey === 'nursing' && !loading && !refreshing && escalatedTaskCount > 0"
                         class="rounded-lg border border-rose-500/40 bg-rose-500/5 py-2.5 text-rose-900 dark:text-rose-200"
                     >
@@ -2822,9 +3487,9 @@ function switchPreset(key: DashboardPresetKey): void {
                         </AlertDescription>
                     </Alert>
 
-                    <!-- Patient quick-search — front desk, clinician, nursing, emergency -->
+                    <!-- Worklist quick-search — front desk, clinician, nursing, emergency, direct service -->
                     <div
-                        v-if="['front_desk', 'clinician', 'nursing', 'emergency'].includes(activePresetKey)"
+                        v-if="['front_desk', 'clinician', 'nursing', 'emergency', 'direct_service'].includes(activePresetKey)"
                         class="relative"
                     >
                         <AppIcon
@@ -2835,7 +3500,7 @@ function switchPreset(key: DashboardPresetKey): void {
                         <input
                             v-model="patientSearchQuery"
                             type="search"
-                            placeholder="Patient name, MRN, phone, or appointment #"
+                            :placeholder="dashboardSearchPlaceholder"
                             class="h-9 w-full rounded-lg border border-border bg-background pl-8 pr-24 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                             @keydown.enter="goToPatientSearch"
                         />

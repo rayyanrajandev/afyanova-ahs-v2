@@ -7,6 +7,7 @@ use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
 use App\Modules\Radiology\Domain\Repositories\RadiologyOrderRepositoryInterface;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
 use App\Support\ClinicalOrders\ClinicalOrderEntryState;
+use App\Support\ClinicalOrders\ClinicalOrderPatientTextSearch;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -76,6 +77,7 @@ class EloquentRadiologyOrderRepository implements RadiologyOrderRepositoryInterf
         ?string $appointmentId,
         ?string $admissionId,
         ?string $status,
+        ?array $statuses,
         ?string $modality,
         ?string $fromDateTime,
         ?string $toDateTime,
@@ -93,22 +95,16 @@ class EloquentRadiologyOrderRepository implements RadiologyOrderRepositoryInterf
         $this->applyActiveEntryStateScope($queryBuilder);
 
         $queryBuilder
-            ->when($query, function (Builder $builder, string $searchTerm): void {
-                $like = '%'.$searchTerm.'%';
-                $builder->where(function (Builder $nestedQuery) use ($like): void {
-                    $nestedQuery
-                        ->where('order_number', 'like', $like)
-                        ->orWhere('procedure_code', 'like', $like)
-                        ->orWhere('modality', 'like', $like)
-                        ->orWhere('study_description', 'like', $like)
-                        ->orWhere('clinical_indication', 'like', $like);
-                });
-            })
+            ->when($query, fn (Builder $builder, string $searchTerm) => $this->applyTextSearch($builder, $searchTerm))
             ->when($patientId, fn (Builder $builder, string $requestedPatientId) => $builder->where('patient_id', $requestedPatientId))
             ->when($encounterId, fn (Builder $builder, string $requestedEncounterId) => $builder->where('encounter_id', $requestedEncounterId))
             ->when($appointmentId, fn (Builder $builder, string $requestedAppointmentId) => $builder->where('appointment_id', $requestedAppointmentId))
             ->when($admissionId, fn (Builder $builder, string $requestedAdmissionId) => $builder->where('admission_id', $requestedAdmissionId))
             ->when($status, fn (Builder $builder, string $requestedStatus) => $builder->where('status', $requestedStatus))
+            ->when(
+                $status === null && is_array($statuses) && $statuses !== [],
+                fn (Builder $builder) => $builder->whereIn('status', $statuses),
+            )
             ->when($modality, fn (Builder $builder, string $requestedModality) => $builder->where('modality', $requestedModality))
             ->when($fromDateTime, fn (Builder $builder, string $startDateTime) => $builder->where('ordered_at', '>=', $startDateTime))
             ->when($toDateTime, fn (Builder $builder, string $endDateTime) => $builder->where('ordered_at', '<=', $endDateTime))
@@ -138,17 +134,7 @@ class EloquentRadiologyOrderRepository implements RadiologyOrderRepositoryInterf
         $this->applyActiveEntryStateScope($queryBuilder);
 
         $queryBuilder
-            ->when($query, function (Builder $builder, string $searchTerm): void {
-                $like = '%'.$searchTerm.'%';
-                $builder->where(function (Builder $nestedQuery) use ($like): void {
-                    $nestedQuery
-                        ->where('order_number', 'like', $like)
-                        ->orWhere('procedure_code', 'like', $like)
-                        ->orWhere('modality', 'like', $like)
-                        ->orWhere('study_description', 'like', $like)
-                        ->orWhere('clinical_indication', 'like', $like);
-                });
-            })
+            ->when($query, fn (Builder $builder, string $searchTerm) => $this->applyTextSearch($builder, $searchTerm))
             ->when($patientId, fn (Builder $builder, string $requestedPatientId) => $builder->where('patient_id', $requestedPatientId))
             ->when($appointmentId, fn (Builder $builder, string $requestedAppointmentId) => $builder->where('appointment_id', $requestedAppointmentId))
             ->when($admissionId, fn (Builder $builder, string $requestedAdmissionId) => $builder->where('admission_id', $requestedAdmissionId))
@@ -185,6 +171,24 @@ class EloquentRadiologyOrderRepository implements RadiologyOrderRepositoryInterf
         }
 
         return $counts;
+    }
+
+    private function applyTextSearch(Builder $queryBuilder, string $searchTerm): void
+    {
+        ClinicalOrderPatientTextSearch::apply(
+            $queryBuilder,
+            $searchTerm,
+            $this->platformScopeQueryApplier,
+            $this->isPlatformScopingEnabled(),
+            static function (Builder $nestedQuery, string $like): void {
+                $nestedQuery
+                    ->whereRaw('LOWER(order_number) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(procedure_code, \'\')) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(modality, \'\')) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(study_description, \'\')) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(clinical_indication, \'\')) LIKE ?', [$like]);
+            },
+        );
     }
 
     private function applyPlatformScopeIfEnabled(Builder $query): void

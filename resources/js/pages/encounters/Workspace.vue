@@ -66,7 +66,6 @@ import {
 import {
     Sheet,
     SheetContent,
-    SheetFooter,
 } from '@/components/ui/sheet';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
@@ -86,7 +85,10 @@ import {
     encounterWorkspaceHrefForRecord,
     encounterWorkspaceLegacyAppointmentHref,
 } from '@/lib/encounterWorkspace';
-import type { EncounterInlineOrderType } from '@/lib/encounterInlineOrders';
+import type {
+    EncounterInlineOrderLinkageContext,
+    EncounterInlineOrderType,
+} from '@/lib/encounterInlineOrders';
 import type { EncounterCloseReadiness } from '@/lib/encounterCloseReadiness';
 import {
     encounterCareState,
@@ -624,6 +626,7 @@ let createDraftBroadcastChannel: BroadcastChannel | null = null;
 let createDraftAutosaveTimer: number | null = null;
 let createDraftAutosaveMaxTimer: number | null = null;
 let createDraftLoadRequestId = 0;
+let createDraftEnsureInFlight: Promise<void> | null = null;
 let removeMedicalRecordsNavigationGuard: VoidFunction | null = null;
 const createLeaveConfirmOpen = ref(false);
 const pendingMedicalRecordsVisit = ref<any | null>(null);
@@ -675,6 +678,8 @@ const createEncounterReopenSubmitting = ref(false);
 const createComposerWorkspaceTab = ref<'note' | 'workflow'>('note');
 const createEncounterCareTab = ref<CreateEncounterCareSectionId | ''>('');
 const encounterInlineOrderType = ref<EncounterInlineOrderType | null>(null);
+const encounterInlineOrderLinkage =
+    ref<EncounterInlineOrderLinkageContext | null>(null);
 const createAppointmentLinkSource = ref<CreateContextLinkSource>(
     queryParam('appointmentId') ? 'route' : 'none',
 );
@@ -1514,6 +1519,21 @@ function shouldAutosaveCreateDraft(): boolean {
 }
 
 async function ensureEncounterDraftOnServer(): Promise<void> {
+    if (createDraftEnsureInFlight) {
+        await createDraftEnsureInFlight;
+        return;
+    }
+
+    createDraftEnsureInFlight = ensureEncounterDraftOnServerOnce();
+
+    try {
+        await createDraftEnsureInFlight;
+    } finally {
+        createDraftEnsureInFlight = null;
+    }
+}
+
+async function ensureEncounterDraftOnServerOnce(): Promise<void> {
     if (medicalRecordTab.value !== 'new') return;
     if (createLoading.value || createDraftHydratingExisting.value) return;
     if (createDraftRecord.value) return;
@@ -1717,8 +1737,10 @@ function scheduleMedicalRecordCreateDraftAutosave() {
         medicalRecordTab.value !== 'new' ||
         createLoading.value ||
         createDraftHydratingExisting.value ||
+        encounterWorkspaceBootstrapping.value ||
         createDraftSyncState.value === 'conflict' ||
         !createForm.patientId.trim() ||
+        !createDraftHasPendingChanges.value ||
         !shouldAutosaveCreateDraft()
     ) {
         clearMedicalRecordCreateDraftAutosaveMaxTimer();
@@ -1756,6 +1778,7 @@ async function flushCreateDraftAutosave(options?: {
         medicalRecordTab.value !== 'new' ||
         createLoading.value ||
         createDraftHydratingExisting.value ||
+        encounterWorkspaceBootstrapping.value ||
         createDraftSyncState.value === 'conflict' ||
         createDraftSyncState.value === 'saving' ||
         !createDraftHasPendingChanges.value ||
@@ -3506,8 +3529,12 @@ function canUseEncounterInlineOrders(): boolean {
     );
 }
 
-function openEncounterInlineOrder(type: EncounterInlineOrderType): void {
+function openEncounterInlineOrder(
+    type: EncounterInlineOrderType,
+    linkage?: EncounterInlineOrderLinkageContext | null,
+): void {
     encounterInlineOrderType.value = type;
+    encounterInlineOrderLinkage.value = linkage ?? null;
 
     if (isEncounterWorkspaceMode.value || createComposerWorkspaceTab.value !== 'workflow') {
         createComposerWorkspaceTab.value = 'workflow';
@@ -3524,12 +3551,14 @@ function openEncounterInlineOrder(type: EncounterInlineOrderType): void {
 
 function closeEncounterInlineOrder(): void {
     encounterInlineOrderType.value = null;
+    encounterInlineOrderLinkage.value = null;
 }
 
 async function handleEncounterInlineOrderCreated(
     type: EncounterInlineOrderType,
 ): Promise<void> {
     encounterInlineOrderType.value = null;
+    encounterInlineOrderLinkage.value = null;
     await refreshCreateEncounterCare();
 
     if (type === 'laboratory') {
@@ -4027,10 +4056,6 @@ async function refreshPage() {
         if (createForm.patientId.trim() && createForm.appointmentId.trim()) {
             await initializeMedicalRecordCreateDraftRecovery();
             await ensureEncounterDraftOnServer();
-
-            if (createDraftHasPendingChanges.value) {
-                await flushCreateDraftAutosave();
-            }
         }
 
         return;
@@ -7931,7 +7956,7 @@ const encounterWorkspacePageTitle = computed(() => {
 const encounterWorkspaceMetaSeparator = ' \u00B7 ';
 const encounterWorkspacePaneFocusStorageKey = 'encounterWorkspace.paneFocus.v3';
 const workspacePaneFocus = ref<EncounterWorkspacePaneFocus>('note');
-const encounterAttachmentsOpen = ref(true);
+const encounterAttachmentsOpen = ref(false);
 const encounterGovernanceOpen = ref(false);
 
 function sanitizeEncounterWorkspacePaneFocus(
@@ -8137,7 +8162,7 @@ const encounterWorkspaceTabsClass = computed(() => [
 ]);
 
 const encounterWorkspaceCarePaneClass = computed(() => [
-    'order-2 mt-0 flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm lg:order-2',
+    'order-2 mt-0 flex min-h-0 flex-col overflow-hidden lg:order-2',
     isEncounterWorkspaceMode.value &&
         'encounter-workspace-pane encounter-workspace-pane--care',
     isEncounterWorkspaceMode.value &&
@@ -8149,7 +8174,7 @@ const encounterWorkspaceCarePaneClass = computed(() => [
 ]);
 
 const encounterWorkspaceNotePaneClass = computed(() => [
-    'order-1 mt-0 flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm lg:order-1',
+    'order-1 mt-0 flex min-h-0 flex-col overflow-hidden lg:order-1',
     isEncounterWorkspaceMode.value &&
         'encounter-workspace-pane encounter-workspace-pane--note',
     isEncounterWorkspaceMode.value &&
@@ -8632,7 +8657,7 @@ onMounted(() => {
             >
                         <div
                             v-if="canTakeOverCreateConsultationSession || canStartCreateConsultationSession"
-                            class="shrink-0 px-4 pt-4 md:px-6"
+                            class="shrink-0 pt-4"
                         >
                             <div
                                 class="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 shadow-sm ring-1 ring-amber-200/70 dark:bg-amber-950/30 dark:ring-amber-800/70"
@@ -8689,42 +8714,49 @@ onMounted(() => {
                                         :badge-label="encounterWorkspaceNoteStatusLabel"
                                         :badge-variant="encounterWorkspaceNoteStatusVariant"
                                     />
-                                    <div class="min-h-0 flex-1 space-y-5 overflow-hidden px-4 py-4 md:px-6">
+                                    <div class="min-h-0 flex-1 space-y-5 overflow-hidden py-4">
                                         <div class="rounded-lg border bg-card p-4 shadow-sm">
                                             <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                                Visit context
+                                                Note setup
+                                            </p>
+                                            <p class="mt-1 text-xs text-muted-foreground">
+                                                Loading visit-specific note defaults.
                                             </p>
                                             <div class="mt-4 grid gap-3 lg:grid-cols-2">
                                                 <div class="space-y-2">
-                                                    <p class="text-xs text-muted-foreground">Patient</p>
+                                                    <p class="text-xs font-medium text-muted-foreground">Record type</p>
                                                     <Skeleton class="h-9 rounded-lg" />
                                                 </div>
                                                 <div class="space-y-2">
-                                                    <p class="text-xs text-muted-foreground">Appointment</p>
+                                                    <p class="text-xs font-medium text-muted-foreground">Diagnosis / ICD-10</p>
                                                     <Skeleton class="h-9 rounded-lg" />
                                                 </div>
                                             </div>
                                         </div>
                                         <div class="rounded-lg border bg-card p-4 shadow-sm">
                                             <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                                Charting sections
+                                                Documentation
                                             </p>
                                             <div class="mt-5 space-y-5">
+                                                <div class="space-y-2">
+                                                    <p class="text-sm font-medium text-foreground">Subjective</p>
+                                                    <Skeleton class="h-32 rounded-lg" />
+                                                </div>
                                                 <div class="space-y-2">
                                                     <p class="text-sm font-medium text-foreground">Triage and vitals</p>
                                                     <Skeleton class="h-16 rounded-lg" />
                                                 </div>
                                                 <div class="space-y-2">
-                                                    <p class="text-sm font-medium text-foreground">Subjective</p>
-                                                    <Skeleton class="h-24 rounded-lg" />
-                                                </div>
-                                                <div class="space-y-2">
                                                     <p class="text-sm font-medium text-foreground">Objective</p>
-                                                    <Skeleton class="h-24 rounded-lg" />
+                                                    <Skeleton class="h-32 rounded-lg" />
                                                 </div>
                                                 <div class="space-y-2">
-                                                    <p class="text-sm font-medium text-foreground">Assessment and plan</p>
-                                                    <Skeleton class="h-24 rounded-lg" />
+                                                    <p class="text-sm font-medium text-foreground">Assessment</p>
+                                                    <Skeleton class="h-32 rounded-lg" />
+                                                </div>
+                                                <div class="space-y-2">
+                                                    <p class="text-sm font-medium text-foreground">Plan</p>
+                                                    <Skeleton class="h-32 rounded-lg" />
                                                 </div>
                                             </div>
                                         </div>
@@ -8762,7 +8794,7 @@ onMounted(() => {
                                         isCreateComposerReadOnly ||
                                         createDraftFailureAlertVisible
                                     "
-                                    class="space-y-3 border-b border-border/40 px-4 py-3 md:px-6"
+                                    class="space-y-3 border-b border-border/40 py-3"
                                 >
                                 <Alert
                                     v-if="createSuccessFeedback"
@@ -8950,8 +8982,8 @@ onMounted(() => {
                                         :class="[
                                             'space-y-4',
                                             workspacePaneFocus === 'both'
-                                                ? 'px-3 pb-4 pt-3'
-                                                : 'px-4 pb-5 pt-4 md:px-6 md:pb-6',
+                                                ? 'pb-4 pt-3'
+                                                : 'pb-5 pt-4 md:pb-6',
                                         ]"
                                     >
                                     <EncounterOrdersCommandCenter
@@ -8963,6 +8995,7 @@ onMounted(() => {
                                         :active-stream-count="createEncounterCareActiveCount"
                                         :summaries="createEncounterCareSummaries"
                                         :inline-order-type="encounterInlineOrderType"
+                                        :inline-order-linkage="encounterInlineOrderLinkage"
                                         :inline-order-context="encounterInlineOrderContext"
                                         :can-use-inline-orders="canUseEncounterInlineOrders()"
                                         :can-open-laboratory-workflow="canOpenLaboratoryWorkflow"
@@ -9044,10 +9077,12 @@ onMounted(() => {
                                             :can-create-pharmacy-orders="canCreatePharmacyOrders"
                                             :can-create-radiology-orders="canCreateRadiologyOrders"
                                             :can-create-theatre-procedures="canCreateTheatreProcedures"
+                                            :can-use-inline-orders="canUseEncounterInlineOrders()"
                                             :context-create-href="contextCreateHref"
                                             :format-date-time="formatDateTime"
                                             :compact="workspacePaneFocus === 'both'"
                                             @lifecycle="openEncounterLifecycleDialog($event.kind, $event.id, $event.action, $event.defaultReason)"
+                                            @open-inline-order="openEncounterInlineOrder($event.type, $event.linkage)"
                                         />
                                     </section>
 
@@ -9162,10 +9197,10 @@ onMounted(() => {
                                     />
                                     <div
                                         v-if="createDraftConflictAlertVisible"
-                                        class="shrink-0 border-b border-border/40 px-4 py-3 md:px-6"
+                                        class="shrink-0 overflow-visible border-b border-border/40 px-px py-3"
                                     >
                                         <Alert
-                                            class="border-0 bg-card text-amber-950 shadow-sm ring-1 ring-amber-200/70 dark:bg-card dark:text-amber-100 dark:ring-amber-900/60"
+                                            class="border border-amber-200/70 bg-card text-amber-950 shadow-sm dark:border-amber-900/60 dark:bg-card dark:text-amber-100"
                                         >
                                             <AlertDescription class="flex flex-col gap-2 text-amber-900/90 dark:text-amber-100/90 md:flex-row md:items-center md:justify-between">
                                                 <div class="flex min-w-0 items-start gap-2">
@@ -9211,9 +9246,6 @@ onMounted(() => {
                                     >
                                         <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                                             Note setup
-                                        </p>
-                                        <p class="text-xs text-muted-foreground">
-                                            {{ createRecordTypeLabel }}
                                         </p>
                                         <div class="grid gap-3 lg:grid-cols-2">
                                             <div class="grid min-w-0 gap-2">
@@ -9609,101 +9641,98 @@ onMounted(() => {
                                             </div>
                                         </div>
                                     </div>
+                                    <template #footer>
+                                        <div class="flex w-full flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                            <p
+                                                v-if="createFooterWorkflowHint"
+                                                class="min-w-0 flex-1 text-xs text-muted-foreground"
+                                            >
+                                                {{ createFooterWorkflowHint }}
+                                            </p>
+                                            <div
+                                                :class="[
+                                                    'flex shrink-0 flex-wrap items-center gap-2 lg:ml-auto lg:justify-end',
+                                                    !createFooterWorkflowHint && 'w-full',
+                                                ]"
+                                            >
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    class="gap-1.5 text-muted-foreground"
+                                                    data-test="encounter-workspace-close-panel"
+                                                    @click="encounterWorkspaceBack()"
+                                                >
+                                                    Close
+                                                </Button>
+                                                <Button
+                                                    :variant="canFinalizeAndCompleteVisit || canSaveAndReturnToAppointments ? 'outline' : 'default'"
+                                                    size="sm"
+                                                    class="gap-1.5"
+                                                    data-test="encounter-workspace-save-note"
+                                                    :disabled="createLoading || !createForm.patientId.trim() || isCreateComposerReadOnly"
+                                                    @click="createRecord('save')"
+                                                >
+                                                    <AppIcon name="save" class="size-3.5" />
+                                                    {{
+                                                        createLoading && createSubmitIntent === 'save'
+                                                            ? 'Saving...'
+                                                            : 'Save note'
+                                                    }}
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    class="gap-1.5"
+                                                    :disabled="createLoading || !createForm.patientId.trim() || !canSaveAndReturnToAppointments"
+                                                    @click="createRecord('return')"
+                                                >
+                                                    <AppIcon name="save" class="size-3.5" />
+                                                    {{
+                                                        createLoading &&
+                                                        createSubmitIntent === 'return'
+                                                            ? 'Saving...'
+                                                        : 'Save & return'
+                                                    }}
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    class="gap-1.5"
+                                                    data-test="encounter-workspace-finalize-note"
+                                                    :disabled="createLoading || !createForm.patientId.trim() || !canFinalizeCreateNote"
+                                                    @click="openCreateFinalizeConfirmDialog()"
+                                                >
+                                                    <AppIcon name="shield-check" class="size-3.5" />
+                                                    {{
+                                                        createLoading &&
+                                                        createSubmitIntent === 'finalize'
+                                                            ? 'Finalizing...'
+                                                            : 'Finalize note'
+                                                    }}
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    class="gap-1.5"
+                                                    :disabled="createLoading || !createForm.patientId.trim() || !canFinalizeAndCompleteVisit"
+                                                    @click="openCreateFinalizeAndCompleteConfirmDialog()"
+                                                >
+                                                    <AppIcon name="circle-check-big" class="size-3.5" />
+                                                    {{
+                                                        createLoading &&
+                                                        createSubmitIntent === 'finalize_complete'
+                                                            ? 'Finalizing...'
+                                                            : 'Finalize & close visit'
+                                                    }}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </template>
                                     </EncounterNoteComposerShell>
                                 </TabsContent>
                                 </div>
                             </div>
                             </Tabs>
                         </div>
-                        <SheetFooter
-                            v-if="!encounterWorkspaceBootstrapSkeleton"
-                            class="sticky bottom-0 z-20 shrink-0 w-full bg-background/95 px-4 py-4 shadow-[0_-1px_0_0_hsl(var(--border)/0.45),0_-8px_24px_-18px_hsl(var(--foreground)/0.35)] backdrop-blur supports-[backdrop-filter]:bg-background/90 md:px-6"
-                        >
-                            <div class="flex w-full flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                <p
-                                    v-if="createFooterWorkflowHint"
-                                    class="min-w-0 flex-1 text-xs text-muted-foreground"
-                                >
-                                    {{ createFooterWorkflowHint }}
-                                </p>
-                                <div
-                                    :class="[
-                                        'flex shrink-0 flex-wrap items-center gap-2 lg:ml-auto lg:justify-end',
-                                        !createFooterWorkflowHint && 'w-full',
-                                    ]"
-                                >
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        class="gap-1.5 text-muted-foreground"
-                                        data-test="encounter-workspace-close-panel"
-                                        @click="encounterWorkspaceBack()"
-                                    >
-                                        Close
-                                    </Button>
-                                    <Button
-                                        :variant="canFinalizeAndCompleteVisit || canSaveAndReturnToAppointments ? 'outline' : 'default'"
-                                        size="sm"
-                                        class="gap-1.5"
-                                        data-test="encounter-workspace-save-note"
-                                        :disabled="createLoading || !createForm.patientId.trim() || isCreateComposerReadOnly"
-                                        @click="createRecord('save')"
-                                    >
-                                        <AppIcon name="save" class="size-3.5" />
-                                        {{
-                                            createLoading && createSubmitIntent === 'save'
-                                                ? 'Saving...'
-                                                : 'Save note'
-                                        }}
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        class="gap-1.5"
-                                        :disabled="createLoading || !createForm.patientId.trim() || !canSaveAndReturnToAppointments"
-                                        @click="createRecord('return')"
-                                    >
-                                        <AppIcon name="save" class="size-3.5" />
-                                        {{
-                                            createLoading &&
-                                            createSubmitIntent === 'return'
-                                                ? 'Saving...'
-                                            : 'Save & return'
-                                        }}
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        class="gap-1.5"
-                                        data-test="encounter-workspace-finalize-note"
-                                        :disabled="createLoading || !createForm.patientId.trim() || !canFinalizeCreateNote"
-                                        @click="openCreateFinalizeConfirmDialog()"
-                                    >
-                                        <AppIcon name="shield-check" class="size-3.5" />
-                                        {{
-                                            createLoading &&
-                                            createSubmitIntent === 'finalize'
-                                                ? 'Finalizing...'
-                                                : 'Finalize note'
-                                        }}
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        class="gap-1.5"
-                                        :disabled="createLoading || !createForm.patientId.trim() || !canFinalizeAndCompleteVisit"
-                                        @click="openCreateFinalizeAndCompleteConfirmDialog()"
-                                    >
-                                        <AppIcon name="circle-check-big" class="size-3.5" />
-                                        {{
-                                            createLoading &&
-                                            createSubmitIntent === 'finalize_complete'
-                                                ? 'Finalizing...'
-                                                : 'Finalize & close visit'
-                                        }}
-                                    </Button>
-                                </div>
-                            </div>
-                        </SheetFooter>
             </SheetContent>
         </Sheet>
             </div>

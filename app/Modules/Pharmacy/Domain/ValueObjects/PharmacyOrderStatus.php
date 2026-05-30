@@ -21,6 +21,18 @@ enum PharmacyOrderStatus: string
     /**
      * @return array<int, string>
      */
+    public static function openWorklistValues(): array
+    {
+        return [
+            self::PENDING->value,
+            self::IN_PREPARATION->value,
+            self::PARTIALLY_DISPENSED->value,
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
     public static function allowedWorkflowTransitions(string $currentStatus): array
     {
         return match ($currentStatus) {

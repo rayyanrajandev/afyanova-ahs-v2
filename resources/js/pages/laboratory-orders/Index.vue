@@ -15,6 +15,7 @@ import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextB
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycleActionDialog.vue';
+import PatientOrderGroupList from '@/components/orders/PatientOrderGroupList.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import WalkInServiceRequestsPanel from '@/components/service-requests/WalkInServiceRequestsPanel.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -84,6 +85,7 @@ import ConfirmationDialog from '@/components/workflow/ConfirmationDialog.vue';
 import LeaveWorkflowDialog from '@/components/workflow/LeaveWorkflowDialog.vue';
 import { useConfirmationDialog } from '@/composables/useConfirmationDialog';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
+import { usePatientOrderGroups } from '@/composables/usePatientOrderGroups';
 import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
 import {
     usePlatformAccess,
@@ -150,6 +152,7 @@ type LaboratoryOrder = {
     enteredInErrorByUserId: number | null;
     lifecycleLockedAt: string | null;
     stockPrecheck: ClinicalStockPrecheck | null;
+    patient?: PatientSummary | null;
     createdAt: string | null;
     updatedAt: string | null;
 };
@@ -420,6 +423,7 @@ type SearchForm = {
     patientId: string;
     status: string;
     priority: string;
+    worklistScope: string;
     from: string;
     to: string;
     perPage: number;
@@ -742,11 +746,19 @@ const searchForm = reactive<SearchForm>({
     patientId: queryParam('patientId'),
     status: queryParam('status'),
     priority: queryParam('priority'),
+    worklistScope: queryParam('worklistScope'),
     from: queryDateParam('from'),
     to: queryDateParam('to'),
     perPage: 10,
     page: 1,
 });
+const focusPatientId = computed(() => searchForm.patientId.trim());
+const {
+    patientOrderGroups,
+    useGroupedQueueView,
+    isPatientGroupExpanded,
+    setPatientGroupExpanded,
+} = usePatientOrderGroups(orders, 'laboratory', focusPatientId);
 const advancedFiltersDraft = reactive({
     patientId: searchForm.patientId,
     from: searchForm.from,
@@ -2326,6 +2338,7 @@ async function loadOrders() {
                     patientId: searchForm.patientId.trim() || null,
                     status: searchForm.status || null,
                     priority: searchForm.priority || null,
+                    worklistScope: searchForm.worklistScope.trim() || null,
                     from: searchForm.from
                         ? `${searchForm.from} 00:00:00`
                         : null,
@@ -4500,6 +4513,28 @@ function patientName(summary: PatientSummary): string {
 }
 
 function orderPatientSummary(order: LaboratoryOrder): PatientSummary | null {
+    const embedded = order.patient;
+    if (embedded) {
+        const hasContent = [
+            embedded.firstName,
+            embedded.middleName,
+            embedded.lastName,
+            embedded.patientNumber,
+            embedded.phone,
+        ].some((value) => String(value ?? '').trim() !== '');
+
+        if (hasContent) {
+            return {
+                id: embedded.id ?? order.patientId ?? '',
+                firstName: embedded.firstName ?? null,
+                middleName: embedded.middleName ?? null,
+                lastName: embedded.lastName ?? null,
+                patientNumber: embedded.patientNumber ?? null,
+                phone: embedded.phone ?? null,
+            };
+        }
+    }
+
     if (!order.patientId) return null;
     return patientDirectory.value[order.patientId] ?? null;
 }
@@ -5132,42 +5167,145 @@ function queueCountLabel(value: number): string {
     return value > 99 ? '99+' : String(value);
 }
 
-function isLaboratorySummaryFilterActive(
-    statusKey:
-        | 'ordered'
-        | 'collected'
-        | 'in_progress'
-        | 'completed'
-        | 'cancelled',
-): boolean {
-    return searchForm.status === statusKey;
+type LaboratoryStatusPreset =
+    | 'all'
+    | 'ordered'
+    | 'collected'
+    | 'in_progress'
+    | 'completed'
+    | 'cancelled';
+
+const laboratoryStatusPresets = computed((): LaboratoryStatusPreset[] => {
+    const presets: LaboratoryStatusPreset[] = ['all', 'ordered'];
+    if (showLaboratoryOperationalQueueControls.value) {
+        presets.push('collected', 'in_progress');
+    }
+    presets.push('completed', 'cancelled');
+    return presets;
+});
+
+function laboratoryPresetDotClass(preset: LaboratoryStatusPreset): string {
+    switch (preset) {
+        case 'ordered':
+            return 'bg-sky-400';
+        case 'collected':
+            return 'bg-amber-500';
+        case 'in_progress':
+            return 'bg-primary';
+        case 'completed':
+            return 'bg-emerald-500';
+        case 'cancelled':
+            return 'bg-destructive';
+        default:
+            return 'bg-muted-foreground/40';
+    }
 }
 
-function applyLaboratorySummaryFilter(
-    statusKey:
-        | 'ordered'
-        | 'collected'
-        | 'in_progress'
-        | 'completed'
-        | 'cancelled',
-) {
+function laboratoryQuickPresetLabel(preset: LaboratoryStatusPreset): string {
+    if (preset === 'all') return 'All';
+    return formatEnumLabel(preset);
+}
+
+function laboratoryQuickCountText(preset: LaboratoryStatusPreset): string {
+    if (preset === 'all') {
+        return queueCountLabel(summaryQueueCounts.value.total);
+    }
+    if (preset === 'ordered') {
+        return queueCountLabel(summaryQueueCounts.value.ordered);
+    }
+    if (preset === 'collected') {
+        return queueCountLabel(summaryQueueCounts.value.collected);
+    }
+    if (preset === 'in_progress') {
+        return queueCountLabel(summaryQueueCounts.value.inProgress);
+    }
+    if (preset === 'completed') {
+        return queueCountLabel(summaryQueueCounts.value.completed);
+    }
+    return queueCountLabel(summaryQueueCounts.value.cancelled);
+}
+
+function matchesLaboratoryStatusPreset(preset: LaboratoryStatusPreset): boolean {
+    if (preset === 'all') {
+        return searchForm.status.trim() === '';
+    }
+
+    return searchForm.status === preset;
+}
+
+function applyLaboratoryStatusPreset(preset: LaboratoryStatusPreset): void {
     clearSearchDebounce();
     searchForm.page = 1;
-    searchForm.status = searchForm.status === statusKey ? '' : statusKey;
+    searchForm.status = preset === 'all' ? '' : preset;
     void Promise.all([loadOrders(), loadOrderStatusCounts()]);
 }
 
-const statusSelectValue = computed({
-    get: () => searchForm.status || 'all',
-    set: (v: string) => {
-        searchForm.status = v === 'all' ? '' : v;
-        searchForm.page = 1;
-        void Promise.all([
-            loadOrders(),
-            loadOrderStatusCounts(),
-            loadLaboratoryExceptionOrders(),
-        ]);
-    },
+const isLaboratoryOpenWorklist = computed(
+    () => searchForm.worklistScope.trim() === 'open',
+);
+
+function openLaboratoryOpenWorklist(): void {
+    clearSearchDebounce();
+    searchForm.worklistScope = 'open';
+    searchForm.page = 1;
+    void Promise.all([loadOrders(), loadOrderStatusCounts()]);
+}
+
+function openLaboratoryQueueToday(): void {
+    clearSearchDebounce();
+    searchForm.worklistScope = '';
+    searchForm.from = today;
+    searchForm.to = '';
+    searchForm.status = '';
+    searchForm.page = 1;
+    void Promise.all([loadOrders(), loadOrderStatusCounts()]);
+}
+
+const workspaceIntroText = computed(() =>
+    isLaboratoryOpenWorklist.value
+        ? 'Operational open worklist for collection, processing, verification, and release.'
+        : 'Create and track laboratory orders from outpatient and consultation workflows.',
+);
+
+const queueTitle = computed(() => {
+    if (isPatientChartQueueFocusApplied.value) {
+        return 'Patient laboratory queue';
+    }
+    if (isLaboratoryOpenWorklist.value) {
+        return 'Open laboratory worklist';
+    }
+    return 'Laboratory queue';
+});
+
+const queueDescription = computed(() => {
+    if (isPatientChartQueueFocusApplied.value) {
+        return 'Orders for the selected patient chart handoff, grouped for quick collection and processing.';
+    }
+    if (isLaboratoryOpenWorklist.value) {
+        return 'Showing open orders only. Cancelled and completed work is hidden from this operational view.';
+    }
+    return 'Search and filter by patient, test, status, priority, and order date.';
+});
+
+const queueSummary = computed(() => {
+    const total = pagination.value?.total ?? orders.value.length;
+    const page = pagination.value?.currentPage ?? 1;
+    const lastPage = pagination.value?.lastPage ?? 1;
+
+    if (useGroupedQueueView.value) {
+        const patientCount = patientOrderGroups.value.length;
+        return `${patientCount} ${patientCount === 1 ? 'patient' : 'patients'} · ${orders.value.length} orders on this page · Page ${page} of ${lastPage}`;
+    }
+
+    return `${total} orders in scope · Page ${page} of ${lastPage}`;
+});
+
+const laboratoryActiveStatusPresetLabel = computed(() => {
+    if (!searchForm.status) {
+        return 'All statuses';
+    }
+
+    return formatEnumLabel(searchForm.status);
 });
 
 const prioritySelectValue = computed({
@@ -5189,13 +5327,6 @@ const resultsPerPageValue = computed({
         searchForm.perPage = Number(v) || 10;
         searchForm.page = 1;
         void loadOrders();
-    },
-});
-
-const queueDensityValue = computed({
-    get: () => (compactQueueRows.value ? 'compact' : 'comfortable'),
-    set: (value: string) => {
-        compactQueueRows.value = value === 'compact';
     },
 });
 
@@ -5906,15 +6037,6 @@ function applyCreateCatalogSpecimenDefault() {
     createForm.specimenType = catalogSpecimenType;
     lastAppliedCreateLabTestCatalogSpecimenType.value = catalogSpecimenType;
 }
-
-const laboratoryListBadgeLabel = computed(() => {
-    return (
-        activeLaboratoryQueuePresetLabel.value ||
-        activeLaboratoryStatusBadgeLabel.value ||
-        activeLaboratoryOrderDateFilterBadgeLabel.value ||
-        'Queue Today'
-    );
-});
 
 const laboratoryExceptionItems = computed<LaboratoryExceptionItem[]>(() => {
     return laboratoryExceptionOrders.value
@@ -6686,88 +6808,98 @@ onMounted(async () => {
                 :return-to="encounterReturnTo"
             />
             <!-- Page header -->
-            <div
-                class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
-            >
-                <div class="min-w-0">
-                    <h1
-                        class="flex items-center gap-2 text-2xl font-semibold tracking-tight"
-                    >
-                        <AppIcon
-                            name="flask-conical"
-                            class="size-7 text-primary"
-                        />
-                        Laboratory Orders
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Create and track lab orders from outpatient and
-                        consultation workflows.
-                    </p>
-                </div>
-                <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
-                    <Badge variant="outline">
-                        {{
-                            !scope
-                                ? 'Scope Unavailable'
-                                : scope.resolvedFrom === 'none'
-                                  ? 'Scope Unresolved'
-                                  : 'Scope Ready'
-                        }}
-                    </Badge>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        :disabled="listLoading"
-                        class="gap-1.5"
-                        @click="refreshPage"
-                    >
-                        <AppIcon name="activity" class="size-3.5" />
-                        {{ listLoading ? 'Refreshing...' : 'Refresh' }}
-                    </Button>
-                    <Button
-                        v-if="
-                            laboratoryWorkspaceView === 'new' ||
-                            canCreateLaboratoryOrders
-                        "
-                        :variant="
-                            laboratoryWorkspaceView === 'new'
-                                ? 'outline'
-                                : 'default'
-                        "
-                        size="sm"
-                        class="h-8 gap-1.5"
-                        @click="
-                            laboratoryWorkspaceView === 'new'
-                                ? setLaboratoryWorkspaceView('queue', {
-                                      focusSearch: true,
-                                  })
-                                : setLaboratoryWorkspaceView('new', {
-                                      focusCreate: true,
-                                  })
-                        "
-                    >
-                        <AppIcon
-                            :name="
-                                laboratoryWorkspaceView === 'new'
-                                    ? 'layout-list'
-                                    : 'plus'
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div
+                    class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6"
+                >
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div
+                            class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20"
+                            aria-hidden="true"
+                        >
+                            <AppIcon name="flask-conical" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <h1 class="text-base font-semibold tracking-tight md:text-lg">
+                                Laboratory Orders
+                            </h1>
+                            <p class="truncate text-xs text-muted-foreground">
+                                {{ workspaceIntroText }}
+                            </p>
+                            <div
+                                class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground"
+                            >
+                                <span class="inline-flex items-center gap-1">
+                                    <AppIcon
+                                        name="building-2"
+                                        class="size-3 opacity-75"
+                                        aria-hidden="true"
+                                    />
+                                    <span class="font-medium text-foreground">{{
+                                        scope?.facility?.name || 'No facility'
+                                    }}</span>
+                                </span>
+                                <span class="select-none text-border" aria-hidden="true">·</span>
+                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            :disabled="listLoading"
+                            @click="refreshPage"
+                        >
+                            <AppIcon name="refresh-cw" class="size-3.5" />
+                            {{ listLoading ? 'Refreshing...' : 'Refresh' }}
+                        </Button>
+                        <Button
+                            v-if="
+                                laboratoryWorkspaceView === 'new' ||
+                                canCreateLaboratoryOrders
                             "
-                            class="size-3.5"
-                        />
-                        {{
-                            laboratoryWorkspaceView === 'new'
-                                ? 'Laboratory Queue'
-                                : 'Create order'
-                        }}
-                    </Button>
-            </div>
-            </div>
+                            class="h-8 gap-1.5"
+                            :variant="
+                                laboratoryWorkspaceView === 'new'
+                                    ? 'outline'
+                                    : 'default'
+                            "
+                            @click="
+                                laboratoryWorkspaceView === 'new'
+                                    ? setLaboratoryWorkspaceView('queue', {
+                                          focusSearch: true,
+                                      })
+                                    : setLaboratoryWorkspaceView('new', {
+                                          focusCreate: true,
+                                      })
+                            "
+                        >
+                            <AppIcon
+                                :name="
+                                    laboratoryWorkspaceView === 'new'
+                                        ? 'layout-list'
+                                        : 'plus'
+                                "
+                                class="size-3.5"
+                            />
+                            {{
+                                laboratoryWorkspaceView === 'new'
+                                    ? 'Laboratory queue'
+                                    : 'Create lab order'
+                            }}
+                        </Button>
+                    </div>
+                </div>
+            </section>
 
             <WalkInServiceRequestsPanel
                 ref="laboratoryWalkInPanelRef"
                 service-type="laboratory"
                 :enabled="canUpdateServiceRequestStatus"
-                panel-title="Direct-service patients awaiting lab"
+                panel-title="Patients awaiting laboratory"
+                success-message="Laboratory handoff accepted. Patient is ready for lab order entry."
                 @acknowledged="onLaboratoryWalkInAcknowledged"
             />
 
@@ -6777,146 +6909,47 @@ onMounted(async () => {
                     canReadLaboratoryOrders &&
                     laboratoryWorkspaceView === 'queue'
                 "
-                class="rounded-lg border bg-muted/30 px-3 py-2"
+                class="rounded-lg border bg-muted/30 px-3 py-2.5"
             >
                 <div
-                    class="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between"
+                    class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"
                 >
-                    <div class="flex flex-wrap items-center gap-2">
-                        <button
-                            type="button"
-                            class="flex h-8 items-center gap-1 rounded-md border bg-background px-2.5 text-xs transition-colors hover:bg-accent/50"
-                            :class="
-                                isLaboratorySummaryFilterActive('ordered')
-                                    ? 'border-primary bg-primary/10'
-                                    : ''
-                            "
-                            @click="applyLaboratorySummaryFilter('ordered')"
-                        >
-                            <span class="font-medium text-foreground">{{
-                                queueCountLabel(summaryQueueCounts.ordered)
-                            }}</span>
-                            <span class="text-muted-foreground">Ordered</span>
-                        </button>
-                        <button
-                            v-if="showLaboratoryOperationalQueueControls"
-                            type="button"
-                            class="flex h-8 items-center gap-1 rounded-md border bg-background px-2.5 text-xs transition-colors hover:bg-accent/50"
-                            :class="
-                                isLaboratorySummaryFilterActive('collected')
-                                    ? 'border-primary bg-primary/10'
-                                    : ''
-                            "
-                            @click="applyLaboratorySummaryFilter('collected')"
-                        >
-                            <span class="font-medium text-foreground">{{
-                                queueCountLabel(summaryQueueCounts.collected)
-                            }}</span>
-                            <span class="text-muted-foreground">Collected</span>
-                        </button>
-                        <button
-                            v-if="showLaboratoryOperationalQueueControls"
-                            type="button"
-                            class="flex h-8 items-center gap-1 rounded-md border bg-background px-2.5 text-xs transition-colors hover:bg-accent/50"
-                            :class="
-                                isLaboratorySummaryFilterActive('in_progress')
-                                    ? 'border-primary bg-primary/10'
-                                    : ''
-                            "
-                            @click="applyLaboratorySummaryFilter('in_progress')"
-                        >
-                            <span class="font-medium text-foreground">{{
-                                queueCountLabel(summaryQueueCounts.inProgress)
-                            }}</span>
-                            <span class="text-muted-foreground"
-                                >In Progress</span
-                            >
-                        </button>
-                        <button
-                            type="button"
-                            class="flex h-8 items-center gap-1 rounded-md border bg-background px-2.5 text-xs transition-colors hover:bg-accent/50"
-                            :class="
-                                isLaboratorySummaryFilterActive('completed')
-                                    ? 'border-primary bg-primary/10'
-                                    : ''
-                            "
-                            @click="applyLaboratorySummaryFilter('completed')"
-                        >
-                            <span class="font-medium text-foreground">{{
-                                queueCountLabel(summaryQueueCounts.completed)
-                            }}</span>
-                            <span class="text-muted-foreground">Completed</span>
-                        </button>
-                        <button
-                            type="button"
-                            class="flex h-8 items-center gap-1 rounded-md border bg-background px-2.5 text-xs transition-colors hover:bg-accent/50"
-                            :class="
-                                isLaboratorySummaryFilterActive('cancelled')
-                                    ? 'border-primary bg-primary/10'
-                                    : ''
-                            "
-                            @click="applyLaboratorySummaryFilter('cancelled')"
-                        >
-                            <span class="font-medium text-foreground">{{
-                                queueCountLabel(summaryQueueCounts.cancelled)
-                            }}</span>
-                            <span class="text-muted-foreground">Cancelled</span>
-                        </button>
-                    </div>
-
-                    <div class="flex flex-wrap items-center gap-2">
-
+                    <template v-if="pageLoading">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <Skeleton class="h-8 w-32 rounded-md" />
+                            <Skeleton class="h-8 w-28 rounded-md" />
+                        </div>
+                        <div class="flex flex-wrap items-center gap-1.5">
+                            <Skeleton
+                                v-for="index in 6"
+                                :key="`lab-preset-skeleton-${index}`"
+                                class="h-7 w-24 rounded-full"
+                            />
+                        </div>
+                    </template>
+                    <div v-else class="flex flex-wrap items-center gap-2">
                         <Button
                             size="sm"
-                            class="h-8 gap-1.5"
                             :variant="
+                                !isLaboratoryOpenWorklist &&
                                 laboratoryQueuePresetState.queueToday
                                     ? 'default'
                                     : 'outline'
                             "
-                            as-child
-                        >
-                            <Link
-                                :href="`/laboratory-orders?tab=queue&from=${today}`"
-                            >
-                                <AppIcon name="layout-list" class="size-3.5" />
-                                Queue Today
-                            </Link>
-                        </Button>
-                        <Button
-                            v-if="showLaboratoryOperationalQueueControls"
-                            size="sm"
                             class="h-8 gap-1.5"
-                            :variant="
-                                laboratoryQueuePresetState.inProgress
-                                    ? 'default'
-                                    : 'outline'
-                            "
-                            as-child
+                            @click="openLaboratoryQueueToday()"
                         >
-                            <Link
-                                :href="`/laboratory-orders?tab=queue&status=in_progress&from=${today}`"
-                            >
-                                <AppIcon name="activity" class="size-3.5" />
-                                In Progress
-                            </Link>
+                            <AppIcon name="layout-list" class="size-3.5" />
+                            Queue today
                         </Button>
                         <Button
                             size="sm"
+                            :variant="isLaboratoryOpenWorklist ? 'default' : 'outline'"
                             class="h-8 gap-1.5"
-                            :variant="
-                                laboratoryQueuePresetState.completed
-                                    ? 'default'
-                                    : 'outline'
-                            "
-                            as-child
+                            @click="openLaboratoryOpenWorklist()"
                         >
-                            <Link
-                                :href="`/laboratory-orders?tab=queue&status=completed&from=${today}`"
-                            >
-                                <AppIcon name="check-check" class="size-3.5" />
-                                Completed
-                            </Link>
+                            <AppIcon name="activity" class="size-3.5" />
+                            Open worklist
                         </Button>
                         <Button
                             v-if="showLaboratoryExceptionQueue"
@@ -6935,6 +6968,34 @@ onMounted(async () => {
                                 {{ laboratoryExceptionSummary.total }}
                             </Badge>
                         </Button>
+                    </div>
+                    <div v-if="!pageLoading" class="flex flex-wrap items-center gap-1.5">
+                        <button
+                            v-for="preset in laboratoryStatusPresets"
+                            :key="`lab-status-preset-${preset}`"
+                            type="button"
+                            class="inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors"
+                            :class="
+                                matchesLaboratoryStatusPreset(preset)
+                                    ? 'border-foreground/20 bg-foreground text-background'
+                                    : 'border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground'
+                            "
+                            @click="applyLaboratoryStatusPreset(preset)"
+                        >
+                            <span
+                                v-if="preset !== 'all'"
+                                class="size-1.5 rounded-full"
+                                :class="
+                                    matchesLaboratoryStatusPreset(preset)
+                                        ? 'bg-background/70'
+                                        : laboratoryPresetDotClass(preset)
+                                "
+                            />
+                            <span class="font-semibold tabular-nums">{{
+                                laboratoryQuickCountText(preset)
+                            }}</span>
+                            <span>{{ laboratoryQuickPresetLabel(preset) }}</span>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -7079,31 +7140,143 @@ onMounted(async () => {
                         id="laboratory-order-queue"
                         class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70"
                     >
-                        <CardHeader class="shrink-0 gap-2 pb-2">
-                            <div class="space-y-2">
-                                <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <span class="text-xs text-muted-foreground">{{ laboratoryListBadgeLabel }}</span>
-                                        <Badge v-if="isPatientChartQueueFocusApplied" variant="outline" class="text-[10px]">
-                                            Patient chart handoff
-                                        </Badge>
-                                        <span v-if="activePatientSummary" class="text-xs text-muted-foreground">
-                                            {{ patientName(activePatientSummary) }} · {{ activePatientSummary.patientNumber || shortId(activePatientSummary.id) }}
-                                        </span>
-                                    </div>
-                                    <div v-if="patientChartQueueReturnHref || patientChartQueueRouteContext.patientId" class="flex flex-wrap items-center gap-2">
-                                        <Button v-if="patientChartQueueReturnHref" variant="outline" size="sm" as-child>
-                                            <Link :href="patientChartQueueReturnHref">Back to chart</Link>
+                        <CardHeader class="shrink-0 gap-3 pb-3">
+                            <div
+                                v-if="pageLoading"
+                                class="min-w-0 space-y-2"
+                            >
+                                <div class="flex items-center gap-2">
+                                    <Skeleton class="size-5 rounded-md" />
+                                    <Skeleton class="h-5 w-44" />
+                                </div>
+                                <Skeleton class="h-4 w-80 max-w-full" />
+                                <div class="mt-2 flex flex-wrap items-center gap-2">
+                                    <Skeleton class="h-5 w-24 rounded-full" />
+                                    <Skeleton class="h-5 w-24 rounded-full" />
+                                </div>
+                                <Skeleton class="h-3 w-96 max-w-full" />
+                            </div>
+                            <div v-else class="min-w-0 space-y-1">
+                                <div
+                                    class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
+                                >
+                                    <CardTitle class="flex items-center gap-2">
+                                        <AppIcon
+                                            name="layout-list"
+                                            class="size-5 text-muted-foreground"
+                                        />
+                                        {{ queueTitle }}
+                                    </CardTitle>
+                                    <div
+                                        v-if="
+                                            patientChartQueueReturnHref ||
+                                            patientChartQueueRouteContext.patientId
+                                        "
+                                        class="flex flex-wrap items-center gap-2"
+                                    >
+                                        <Button
+                                            v-if="patientChartQueueReturnHref"
+                                            variant="outline"
+                                            size="sm"
+                                            class="h-8"
+                                            as-child
+                                        >
+                                            <Link :href="patientChartQueueReturnHref"
+                                                >Back to chart</Link
+                                            >
                                         </Button>
-                                        <Button v-if="isPatientChartQueueFocusApplied" variant="outline" size="sm" @click="openFullLaboratoryQueue">
+                                        <Button
+                                            v-if="isPatientChartQueueFocusApplied"
+                                            variant="outline"
+                                            size="sm"
+                                            class="h-8"
+                                            @click="openFullLaboratoryQueue"
+                                        >
                                             Full queue
                                         </Button>
-                                        <Button v-else-if="openedFromPatientChart && patientChartQueueRouteContext.patientId" variant="outline" size="sm" @click="refocusLaboratoryPatientQueue">
+                                        <Button
+                                            v-else-if="
+                                                openedFromPatientChart &&
+                                                patientChartQueueRouteContext.patientId
+                                            "
+                                            variant="outline"
+                                            size="sm"
+                                            class="h-8"
+                                            @click="refocusLaboratoryPatientQueue"
+                                        >
                                             Refocus patient
                                         </Button>
                                     </div>
                                 </div>
-                                <div class="flex w-full flex-col gap-2">
+                                <CardDescription>
+                                    {{ queueSummary }}
+                                </CardDescription>
+                                <div class="mt-2 flex flex-wrap items-center gap-2">
+                                    <Badge variant="secondary">{{
+                                        laboratoryActiveStatusPresetLabel
+                                    }}</Badge>
+                                    <Badge
+                                        v-if="isLaboratoryOpenWorklist"
+                                        variant="outline"
+                                    >
+                                        Open worklist
+                                    </Badge>
+                                    <Badge
+                                        v-if="isPatientChartQueueFocusApplied"
+                                        variant="outline"
+                                    >
+                                        Patient chart handoff
+                                    </Badge>
+                                    <Badge
+                                        v-if="activeLaboratoryAdvancedFilterCount"
+                                        variant="outline"
+                                    >
+                                        {{ activeLaboratoryAdvancedFilterCount }}
+                                        filters
+                                    </Badge>
+                                    <Badge
+                                        v-if="searchForm.priority"
+                                        variant="outline"
+                                    >
+                                        Priority:
+                                        {{ formatEnumLabel(searchForm.priority) }}
+                                    </Badge>
+                                </div>
+                                <p class="text-xs text-muted-foreground">
+                                    {{ queueDescription }}
+                                </p>
+                                <p
+                                    v-if="activePatientSummary"
+                                    class="text-xs text-muted-foreground"
+                                >
+                                    Patient in focus:
+                                    {{ patientName(activePatientSummary) }}
+                                    |
+                                    {{
+                                        activePatientSummary.patientNumber ||
+                                        shortId(activePatientSummary.id)
+                                    }}
+                                </p>
+                            </div>
+
+                            <div
+                                v-if="pageLoading"
+                                class="flex w-full flex-col gap-2"
+                            >
+                                <div
+                                    class="flex w-full flex-col gap-2 xl:flex-row xl:items-center"
+                                >
+                                    <Skeleton class="h-9 min-w-0 flex-1 rounded-md" />
+                                    <div
+                                        class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:flex-nowrap"
+                                    >
+                                        <Skeleton class="h-9 w-full rounded-md sm:w-44" />
+                                        <Skeleton class="h-9 w-28 rounded-md" />
+                                        <Skeleton class="h-9 w-20 rounded-md" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-else class="flex w-full flex-col gap-2">
                                     <div
                                         class="flex w-full flex-col gap-2 xl:flex-row xl:items-center"
                                     >
@@ -7112,141 +7285,169 @@ onMounted(async () => {
                                                 name="search"
                                                 class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground"
                                             />
-                                            <Input
-                                                id="lab-q"
-                                                v-model="searchForm.q"
-                                                placeholder="Search order number, test code, or test name"
-                                                class="h-9 pl-9"
-                                                @keyup.enter="submitSearch"
-                                            />
+                                        <Input
+                                            id="lab-q"
+                                            v-model="searchForm.q"
+                                            placeholder="Patient name, MRN, order #, test code, or test name"
+                                            class="h-9 pl-9"
+                                            @keyup.enter="submitSearch"
+                                        />
                                         </div>
                                         <div
                                             class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:flex-nowrap"
                                         >
-                                            <Select v-model="statusSelectValue">
-                                                <SelectTrigger
-                                                    class="h-9 w-full bg-background sm:w-[11rem]"
-                                                    size="sm"
-                                                    aria-label="Filter laboratory orders by status"
-                                                >
-                                                    <SelectValue placeholder="All statuses" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="all"
-                                                        >All statuses</SelectItem
-                                                    >
-                                                    <SelectItem value="ordered"
-                                                        >Ordered</SelectItem
-                                                    >
-                                                    <SelectItem value="collected"
-                                                        >Collected</SelectItem
-                                                    >
-                                                    <SelectItem value="in_progress"
-                                                        >In Progress</SelectItem
-                                                    >
-                                                    <SelectItem value="completed"
-                                                        >Completed</SelectItem
-                                                    >
-                                                    <SelectItem value="cancelled"
-                                                        >Cancelled</SelectItem
-                                                    >
-                                                </SelectContent>
-                                            </Select>
-
-                                            <Select v-model="prioritySelectValue">
-                                                <SelectTrigger
-                                                    class="h-9 w-full bg-background sm:w-[11rem]"
-                                                    size="sm"
-                                                    aria-label="Filter laboratory orders by priority"
-                                                >
-                                                    <SelectValue placeholder="All priorities" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="all"
-                                                        >All priorities</SelectItem
-                                                    >
-                                                    <SelectItem value="routine"
-                                                        >Routine</SelectItem
-                                                    >
-                                                    <SelectItem value="urgent"
-                                                        >Urgent</SelectItem
-                                                    >
-                                                    <SelectItem value="stat"
-                                                        >STAT</SelectItem
-                                                    >
-                                                </SelectContent>
-                                            </Select>
-
-                                            <Button
-                                                variant="outline"
+                                        <Select v-model="prioritySelectValue">
+                                            <SelectTrigger
+                                                class="h-9 w-full bg-background sm:w-44"
                                                 size="sm"
-                                                class="h-9 gap-1.5"
-                                                @click="advancedFiltersSheetOpen = true"
+                                                aria-label="Filter laboratory orders by priority"
                                             >
-                                                <AppIcon
-                                                    name="sliders-horizontal"
-                                                    class="size-3.5"
-                                                />
-                                                All filters
-                                                <Badge
-                                                    v-if="activeLaboratoryAdvancedFilterCount"
-                                                    variant="secondary"
-                                                    class="ml-1 text-[10px]"
+                                                <SelectValue placeholder="All priorities" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all"
+                                                    >All priorities</SelectItem
                                                 >
-                                                    {{ activeLaboratoryAdvancedFilterCount }}
-                                                </Badge>
-                                            </Button>
+                                                <SelectItem value="routine"
+                                                    >Routine</SelectItem
+                                                >
+                                                <SelectItem value="urgent"
+                                                    >Urgent</SelectItem
+                                                >
+                                                <SelectItem value="stat"
+                                                    >STAT</SelectItem
+                                                >
+                                            </SelectContent>
+                                        </Select>
 
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger as-child>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        class="h-9 gap-1.5"
-                                                    >
-                                                        <AppIcon
-                                                            name="eye"
-                                                            class="size-3.5"
-                                                        />
-                                                        View
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent
-                                                    align="end"
-                                                    class="w-56"
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            class="hidden h-9 gap-1.5 md:inline-flex"
+                                            @click="
+                                                syncAdvancedFiltersDraftFromSearch();
+                                                advancedFiltersSheetOpen = true;
+                                            "
+                                        >
+                                            <AppIcon
+                                                name="sliders-horizontal"
+                                                class="size-3.5"
+                                            />
+                                            All filters
+                                            <Badge
+                                                v-if="activeLaboratoryAdvancedFilterCount"
+                                                variant="secondary"
+                                                class="ml-1 text-[10px]"
+                                            >
+                                                {{ activeLaboratoryAdvancedFilterCount }}
+                                            </Badge>
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            class="h-9 gap-1.5 md:hidden"
+                                            @click="
+                                                syncAdvancedFiltersDraftFromSearch();
+                                                mobileFiltersDrawerOpen = true;
+                                            "
+                                        >
+                                            <AppIcon
+                                                name="sliders-horizontal"
+                                                class="size-3.5"
+                                            />
+                                            All filters
+                                        </Button>
+
+                                        <Popover>
+                                            <PopoverTrigger as-child>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    class="h-9 gap-1.5"
                                                 >
-                                                    <DropdownMenuLabel class="text-xs text-muted-foreground">
-                                                        Results per page
-                                                    </DropdownMenuLabel>
-                                                    <DropdownMenuRadioGroup
+                                                    <AppIcon
+                                                        name="eye"
+                                                        class="size-3.5"
+                                                    />
+                                                    View
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent
+                                                align="end"
+                                                class="w-72 space-y-4"
+                                            >
+                                                <div class="grid gap-2">
+                                                    <Label for="lab-per-page-view"
+                                                        >Results per page</Label
+                                                    >
+                                                    <Select
                                                         v-model="resultsPerPageValue"
                                                     >
-                                                        <DropdownMenuRadioItem value="10"
-                                                            >10</DropdownMenuRadioItem
+                                                        <SelectTrigger
+                                                            id="lab-per-page-view"
+                                                            class="w-full"
                                                         >
-                                                        <DropdownMenuRadioItem value="25"
-                                                            >25</DropdownMenuRadioItem
-                                                        >
-                                                        <DropdownMenuRadioItem value="50"
-                                                            >50</DropdownMenuRadioItem
-                                                        >
-                                                    </DropdownMenuRadioGroup>
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuLabel class="text-xs text-muted-foreground">
-                                                        Row density
-                                                    </DropdownMenuLabel>
-                                                    <DropdownMenuRadioGroup
-                                                        v-model="queueDensityValue"
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="10"
+                                                                >10</SelectItem
+                                                            >
+                                                            <SelectItem value="25"
+                                                                >25</SelectItem
+                                                            >
+                                                            <SelectItem value="50"
+                                                                >50</SelectItem
+                                                            >
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div class="grid gap-2">
+                                                    <Label>Row density</Label>
+                                                    <div
+                                                        class="grid grid-cols-2 gap-2"
                                                     >
-                                                        <DropdownMenuRadioItem value="comfortable"
-                                                            >Comfortable</DropdownMenuRadioItem
+                                                        <Button
+                                                            size="sm"
+                                                            :variant="
+                                                                compactQueueRows
+                                                                    ? 'outline'
+                                                                    : 'default'
+                                                            "
+                                                            @click="
+                                                                compactQueueRows = false
+                                                            "
                                                         >
-                                                        <DropdownMenuRadioItem value="compact"
-                                                            >Compact</DropdownMenuRadioItem
+                                                            Comfortable
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            :variant="
+                                                                compactQueueRows
+                                                                    ? 'default'
+                                                                    : 'outline'
+                                                            "
+                                                            @click="
+                                                                compactQueueRows = true
+                                                            "
                                                         >
-                                                    </DropdownMenuRadioGroup>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
+                                                            Compact
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </PopoverContent>
+                                        </Popover>
+
+                                        <Button
+                                            v-if="hasActiveFilters"
+                                            variant="ghost"
+                                            size="sm"
+                                            class="h-9 gap-1.5"
+                                            :disabled="listLoading"
+                                            @click="resetFilters"
+                                        >
+                                            Reset
+                                        </Button>
                                         </div>
                                     </div>
 
@@ -7272,7 +7473,6 @@ onMounted(async () => {
                                             Reset
                                         </Button>
                                     </div>
-                                </div>
                             </div>
                         </CardHeader>
                         <CardContent
@@ -7620,16 +7820,16 @@ onMounted(async () => {
                                         No laboratory orders found for the
                                         current filters.
                                     </div>
-                                    <div
-                                        v-else
-                                        :class="
-                                            compactQueueRows
-                                                ? 'space-y-2'
-                                                : 'space-y-2.5'
-                                        "
+                                    <PatientOrderGroupList
+                                        v-else-if="useGroupedQueueView"
+                                        :groups="patientOrderGroups"
+                                        :compact="compactQueueRows"
+                                        :is-expanded="isPatientGroupExpanded"
+                                        @update:expanded="setPatientGroupExpanded"
                                     >
+                                        <template #orders="{ group }">
                                         <div
-                                            v-for="order in orders"
+                                            v-for="order in group.orders"
                                             :key="order.id"
                                             class="rounded-lg border transition-colors"
                                             :class="[
@@ -7907,11 +8107,22 @@ onMounted(async () => {
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
+                                        </template>
+                                    </PatientOrderGroupList>
                                 </div>
                             </ScrollArea>
                             <footer class="flex shrink-0 items-center justify-between gap-2 border-t px-4 py-2">
-                                <span class="text-xs text-muted-foreground">{{ pagination?.total ?? 0 }} orders</span>
+                                <span class="text-xs text-muted-foreground">
+                                    <template v-if="useGroupedQueueView">
+                                        {{ patientOrderGroups.length }}
+                                        {{ patientOrderGroups.length === 1 ? 'patient' : 'patients' }}
+                                        · {{ orders.length }}
+                                        {{ orders.length === 1 ? 'order' : 'orders' }}
+                                    </template>
+                                    <template v-else>
+                                        {{ pagination?.total ?? 0 }} orders
+                                    </template>
+                                </span>
                                 <div class="flex items-center gap-1">
                                     <Button
                                         variant="ghost"
@@ -8985,50 +9196,6 @@ onMounted(async () => {
                     </div>
                     </CardContent>
                 </Card>
-            </div>
-
-            <!-- Care workflow (footer bar, same as other pages) -->
-            <div
-                v-if="canReadLaboratoryOrders"
-                class="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-4 py-2.5"
-            >
-                <span
-                    class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
-                >
-                    <AppIcon name="activity" class="size-3.5" />
-                    Related workflows
-                </span>
-                <Button size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="consultationContextHref"
-                        ><AppIcon name="stethoscope" class="size-3.5" />{{
-                            consultationWorkflowLabel
-                        }}</Link
-                    >
-                </Button>
-                <Button size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="contextCreateHref('/pharmacy-orders', { includeTabNew: true })"
-                        ><AppIcon name="pill" class="size-3.5" />New Pharmacy
-                        Order</Link
-                    >
-                </Button>
-                <Button size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="contextCreateHref('/billing-invoices', { includeTabNew: true })"
-                        ><AppIcon name="receipt" class="size-3.5" />New Billing
-                        Invoice</Link
-                    >
-                </Button>
-                <Button
-                    v-if="canCreateTheatreProcedures"
-                    size="sm"
-                    variant="outline"
-                    as-child
-                    class="gap-1.5"
-                >
-                    <Link :href="contextCreateHref('/theatre-procedures', { includeTabNew: true })"
-                        ><AppIcon name="scissors" class="size-3.5" />Schedule
-                        Procedure</Link
-                    >
-                </Button>
             </div>
 
             <Sheet

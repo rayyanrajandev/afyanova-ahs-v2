@@ -8,6 +8,13 @@ export type EncounterOrderContext = {
 };
 
 export type EncounterInlineOrderType = 'laboratory' | 'pharmacy' | 'radiology';
+export type EncounterInlineOrderMode = 'new' | 'reorder' | 'add_on';
+
+export type EncounterInlineOrderLinkageContext = {
+    mode: Exclude<EncounterInlineOrderMode, 'new'>;
+    sourceOrderId: string;
+    sourceLabel: string;
+};
 
 export type ClinicalCatalogItem = {
     id: string;
@@ -240,6 +247,14 @@ export async function fetchPatientMedicationSafetySummary(input: {
 export type PharmacyInlineOrderCreateOptions = {
     orderSessionId?: string;
     safetyDecision?: MedicationSafetyContinuationDecision | null;
+    replacesOrderId?: string | null;
+    addOnToOrderId?: string | null;
+};
+
+export type InlineOrderCreateOptions = {
+    orderSessionId?: string;
+    replacesOrderId?: string | null;
+    addOnToOrderId?: string | null;
 };
 
 export type RadiologyInlineOrderInput = {
@@ -321,7 +336,7 @@ export async function checkRadiologyDuplicate(
 export async function createLaboratoryInlineOrder(
     context: EncounterOrderContext,
     item: LaboratoryInlineOrderInput,
-    orderSessionId?: string,
+    options?: InlineOrderCreateOptions,
 ) {
     return apiPost<{ data: Record<string, unknown> }>('/laboratory-orders', {
         body: {
@@ -329,8 +344,12 @@ export async function createLaboratoryInlineOrder(
             encounterId: context.encounterId?.trim() || null,
             appointmentId: context.appointmentId?.trim() || null,
             admissionId: context.admissionId?.trim() || null,
-            orderSessionId: orderSessionId ?? generateClinicalOrderSessionId('lab-session'),
+            orderSessionId:
+                options?.orderSessionId ??
+                generateClinicalOrderSessionId('lab-session'),
             entryMode: 'active',
+            replacesOrderId: options?.replacesOrderId?.trim() || null,
+            addOnToOrderId: options?.addOnToOrderId?.trim() || null,
             labTestCatalogItemId: item.labTestCatalogItemId.trim() || null,
             testCode: item.testCode.trim() || null,
             testName: item.testName.trim() || null,
@@ -358,6 +377,8 @@ export async function createPharmacyInlineOrder(
                 options?.orderSessionId ??
                 generateClinicalOrderSessionId('pharm-session'),
             entryMode: 'active',
+            replacesOrderId: options?.replacesOrderId?.trim() || null,
+            addOnToOrderId: options?.addOnToOrderId?.trim() || null,
             approvedMedicineCatalogItemId:
                 item.approvedMedicineCatalogItemId.trim() || null,
             medicationCode: item.medicationCode.trim(),
@@ -377,7 +398,7 @@ export async function createPharmacyInlineOrder(
 export async function createRadiologyInlineOrder(
     context: EncounterOrderContext,
     item: RadiologyInlineOrderInput,
-    orderSessionId?: string,
+    options?: InlineOrderCreateOptions,
 ) {
     return apiPost<{ data: Record<string, unknown> }>('/radiology-orders', {
         body: {
@@ -386,8 +407,11 @@ export async function createRadiologyInlineOrder(
             appointmentId: context.appointmentId?.trim() || null,
             admissionId: context.admissionId?.trim() || null,
             orderSessionId:
-                orderSessionId ?? generateClinicalOrderSessionId('rad-session'),
+                options?.orderSessionId ??
+                generateClinicalOrderSessionId('rad-session'),
             entryMode: 'active',
+            replacesOrderId: options?.replacesOrderId?.trim() || null,
+            addOnToOrderId: options?.addOnToOrderId?.trim() || null,
             orderedByUserId: null,
             radiologyProcedureCatalogItemId:
                 item.radiologyProcedureCatalogItemId.trim() || null,
@@ -410,5 +434,18 @@ export function encounterInlineOrderTypeLabel(
             return 'Pharmacy order';
         case 'radiology':
             return 'Imaging order';
+    }
+}
+
+export function encounterInlineOrderModeLabel(
+    mode: EncounterInlineOrderMode,
+): string {
+    switch (mode) {
+        case 'reorder':
+            return 'Reorder';
+        case 'add_on':
+            return 'Add linked order';
+        default:
+            return 'Place order';
     }
 }

@@ -21,6 +21,7 @@ interface PharmacyOrderRepositoryInterface
         ?string $appointmentId,
         ?string $admissionId,
         ?string $status,
+        ?array $statuses,
         ?string $fromDateTime,
         ?string $toDateTime,
         int $page,

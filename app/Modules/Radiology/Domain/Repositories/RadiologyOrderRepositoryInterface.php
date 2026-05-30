@@ -21,6 +21,7 @@ interface RadiologyOrderRepositoryInterface
         ?string $appointmentId,
         ?string $admissionId,
         ?string $status,
+        ?array $statuses,
         ?string $modality,
         ?string $fromDateTime,
         ?string $toDateTime,

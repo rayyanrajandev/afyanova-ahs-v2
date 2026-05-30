@@ -9,6 +9,7 @@ import SearchableSelectField from '@/components/forms/SearchableSelectField.vue'
 import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycleActionDialog.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import WalkInServiceRequestsPanel from '@/components/service-requests/WalkInServiceRequestsPanel.vue';
+import PatientOrderGroupList from '@/components/orders/PatientOrderGroupList.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -35,6 +36,7 @@ import ConfirmationDialog from '@/components/workflow/ConfirmationDialog.vue';
 import LeaveWorkflowDialog from '@/components/workflow/LeaveWorkflowDialog.vue';
 import { useConfirmationDialog } from '@/composables/useConfirmationDialog';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
+import { usePatientOrderGroups } from '@/composables/usePatientOrderGroups';
 import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
 import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersistence';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -87,6 +89,7 @@ type RadiologyOrder = {
     enteredInErrorByUserId: number | null;
     lifecycleLockedAt: string | null;
     stockPrecheck: ClinicalStockPrecheck | null;
+    patient?: PatientSummary | null;
     createdAt: string | null;
     updatedAt: string | null;
 };
@@ -387,11 +390,20 @@ const searchForm = reactive({
     patientId: queryParam('patientId'),
     status: queryParam('status'),
     modality: queryParam('modality'),
+    worklistScope: queryParam('worklistScope'),
     from: queryDateParam('from', today),
     to: queryDateParam('to'),
     perPage: queryIntParam('perPage', 25),
     page: queryIntParam('page', 1),
 });
+
+const focusPatientId = computed(() => searchForm.patientId.trim());
+const {
+    patientOrderGroups,
+    useGroupedQueueView,
+    isPatientGroupExpanded,
+    setPatientGroupExpanded,
+} = usePatientOrderGroups(orders, 'radiology', focusPatientId);
 
 const createForm = reactive<CreateForm>({
     patientId: queryParam('patientId'),
@@ -2871,6 +2883,7 @@ async function loadQueue() {
                     patientId: searchForm.patientId.trim() || null,
                     status: searchForm.status || null,
                     modality: searchForm.modality || null,
+                    worklistScope: searchForm.worklistScope.trim() || null,
                     from: searchForm.from ? `${searchForm.from} 00:00:00` : null,
                     to: searchForm.to ? `${searchForm.to} 23:59:59` : null,
                     page: searchForm.page,
@@ -4378,7 +4391,8 @@ onMounted(async () => {
                 ref="radiologyWalkInPanelRef"
                 service-type="radiology"
                 :enabled="canUpdateServiceRequestStatus"
-                panel-title="Direct-service patients awaiting imaging"
+                panel-title="Patients awaiting imaging"
+                success-message="Imaging handoff accepted. Patient is ready for radiology order entry."
                 @acknowledged="onRadiologyWalkInAcknowledged"
             />
 
@@ -4852,13 +4866,20 @@ onMounted(async () => {
                                 >
                                     No radiology orders found for the current filters.
                                 </div>
-                                <div v-else :class="compactQueueRows ? 'space-y-2' : 'space-y-3'">
-                                    <div
-                                        v-for="order in orders"
-                                        :key="order.id"
-                                        class="rounded-lg border transition-colors"
-                                        :class="[compactQueueRows ? 'p-2.5' : 'p-3', orderAccentClass(order.status)]"
-                                    >
+                                <PatientOrderGroupList
+                                    v-else-if="useGroupedQueueView"
+                                    :groups="patientOrderGroups"
+                                    :compact="compactQueueRows"
+                                    :is-expanded="isPatientGroupExpanded"
+                                    @update:expanded="setPatientGroupExpanded"
+                                >
+                                    <template #orders="{ group }">
+                                        <div
+                                            v-for="order in group.orders"
+                                            :key="order.id"
+                                            class="rounded-lg border transition-colors"
+                                            :class="[compactQueueRows ? 'p-2.5' : 'p-3', orderAccentClass(order.status)]"
+                                        >
                                         <div
                                             :class="
                                                 compactQueueRows
@@ -4994,13 +5015,22 @@ onMounted(async () => {
                                                 </DropdownMenu>
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
+                                        </div>
+                                    </template>
+                                </PatientOrderGroupList>
                             </div>
                         </ScrollArea>
                         <footer class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-4 py-2">
                             <p class="text-xs text-muted-foreground">
-                                Showing {{ orders.length }} of {{ pagination?.total ?? 0 }} results &middot; Page {{ pagination?.currentPage ?? 1 }} of {{ pagination?.lastPage ?? 1 }}
+                                <template v-if="useGroupedQueueView">
+                                    {{ patientOrderGroups.length }}
+                                    {{ patientOrderGroups.length === 1 ? 'patient' : 'patients' }}
+                                    · Showing {{ orders.length }} of {{ pagination?.total ?? 0 }} results
+                                </template>
+                                <template v-else>
+                                    Showing {{ orders.length }} of {{ pagination?.total ?? 0 }} results
+                                </template>
+                                &middot; Page {{ pagination?.currentPage ?? 1 }} of {{ pagination?.lastPage ?? 1 }}
                             </p>
                             <div class="flex items-center gap-2">
                                 <Button
@@ -7467,7 +7497,6 @@ onMounted(async () => {
             />
     </AppLayout>
 </template>
-
 
 
 

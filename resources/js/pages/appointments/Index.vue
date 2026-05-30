@@ -44,7 +44,7 @@ import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiPatch, apiRequestJson, isApiClientError } from '@/lib/apiClient';
-import { encounterWorkspaceHref, encounterWorkspaceLegacyAppointmentHref } from '@/lib/encounterWorkspace';
+import { encounterWorkspaceLegacyAppointmentHref } from '@/lib/encounterWorkspace';
 import {
     FINANCIAL_CLASS_OPTIONS,
     compactVisitCoverageSummary,
@@ -331,19 +331,6 @@ type ApiError = Error & {
 
 type ApiItemResponse<T> = { data: T };
 
-type EncounterSummary = {
-    id: string;
-    encounterNumber: string | null;
-    patientId: string | null;
-    appointmentId: string | null;
-    admissionId: string | null;
-    primaryClinicianUserId: number | null;
-    status: string | null;
-    statusReason: string | null;
-    openedAt: string | null;
-    closedAt: string | null;
-    updatedAt: string | null;
-};
 type ApiListResponse<T> = {
     data: T[];
     meta?: {
@@ -3585,7 +3572,7 @@ async function submitConsultationTakeover(): Promise<void> {
         await loadQueue();
         closeConsultationTakeoverDialog();
         notifySuccess('Consultation takeover confirmed. Opening chart.');
-        router.visit(await resolveAppointmentEncounterHref(response.data));
+        visitAppointmentEncounter(response.data);
     } catch (error) {
         const apiError = error as ApiError;
         consultationTakeoverError.value = apiError.payload?.errors?.takeoverReason?.[0]
@@ -3605,7 +3592,7 @@ async function launchConsultationWorkflow(appointment: Appointment): Promise<voi
     }
 
     if (appointment.status === 'in_consultation' && consultationOwnedByCurrentClinician(appointment)) {
-        router.visit(await resolveAppointmentEncounterHref(appointment));
+        visitAppointmentEncounter(appointment);
         return;
     }
 
@@ -3639,7 +3626,7 @@ async function launchConsultationWorkflow(appointment: Appointment): Promise<voi
             }
         }
 
-        router.visit(await resolveAppointmentEncounterHref(nextAppointment));
+        visitAppointmentEncounter(nextAppointment);
     } catch (error) {
         const apiError = error as ApiError;
         if (apiError.status === 409 && apiError.payload?.code === 'CONSULTATION_OWNER_CONFLICT') {
@@ -4499,16 +4486,9 @@ function consultationWorkflowHref(appointment: Appointment): string {
     return encounterWorkspaceLegacyAppointmentHref(appointment.id, { from: 'appointments' });
 }
 
-async function resolveAppointmentEncounterHref(appointment: Appointment): Promise<string> {
-    const response = await apiRequest<ApiItemResponse<EncounterSummary>>(
-        'GET',
-        `/appointments/${appointment.id}/encounter`,
-    );
-
-    return encounterWorkspaceHref(response.data.id, {
-        from: 'appointments',
-        patientId: appointment.patientId ?? response.data.patientId ?? undefined,
-        appointmentId: appointment.id,
+function visitAppointmentEncounter(appointment: Appointment): void {
+    router.visit(consultationWorkflowHref(appointment), {
+        preserveScroll: false,
     });
 }
 

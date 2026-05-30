@@ -29,7 +29,7 @@ withDefaults(
 
 <template>
     <div
-        class="shrink-0 border-b border-border/40 bg-muted/10 px-4 py-3 md:px-6"
+        class="shrink-0 border-b border-border/40 bg-muted/10 py-3"
         data-test="encounter-workspace-pane-header"
     >
         <div class="flex items-start justify-between gap-3">

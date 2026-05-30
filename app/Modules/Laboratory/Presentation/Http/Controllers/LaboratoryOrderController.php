@@ -27,6 +27,8 @@ use App\Modules\Laboratory\Presentation\Http\Requests\UpdateLaboratoryOrderReque
 use App\Modules\Laboratory\Presentation\Http\Requests\UpdateLaboratoryOrderStatusRequest;
 use App\Modules\Laboratory\Presentation\Http\Transformers\LaboratoryOrderAuditLogResponseTransformer;
 use App\Modules\Laboratory\Presentation\Http\Transformers\LaboratoryOrderResponseTransformer;
+use App\Support\ClinicalOrders\ClinicalOrderPatientSummaryEnricher;
+use App\Support\ClinicalOrders\ClinicalOrderUserSummaryEnricher;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
 use App\Modules\Platform\Infrastructure\Models\AuditExportJobModel;
 use Illuminate\Http\JsonResponse;
@@ -47,9 +49,13 @@ class LaboratoryOrderController extends Controller
     public function index(Request $request, ListLaboratoryOrdersUseCase $useCase): JsonResponse
     {
         $result = $useCase->execute($request->all());
+        $orders = ClinicalOrderPatientSummaryEnricher::attachToTransformedOrders(
+            $result['data'],
+            array_map([LaboratoryOrderResponseTransformer::class, 'transform'], $result['data']),
+        );
 
         return response()->json([
-            'data' => array_map([LaboratoryOrderResponseTransformer::class, 'transform'], $result['data']),
+            'data' => ClinicalOrderUserSummaryEnricher::attachOrderingClinicianToTransformedOrders($result['data'], $orders),
             'meta' => $result['meta'],
         ]);
     }

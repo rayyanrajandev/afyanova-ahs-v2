@@ -37,7 +37,7 @@ const props = withDefaults(
     }>(),
     {
         acknowledgeButtonLabel: 'Accept handoff',
-        successMessage: 'Direct service handoff accepted. Patient is ready for order entry.',
+        successMessage: 'Service handoff accepted. Patient is ready for order entry.',
     },
 );
 
@@ -111,7 +111,7 @@ async function reload(): Promise<void> {
             }
         }
     } catch {
-        loadError.value = 'Could not load direct service requests.';
+        loadError.value = 'Could not load service requests.';
         requests.value = [];
     } finally {
         loading.value = false;
@@ -135,14 +135,14 @@ async function acknowledge(request: WalkInServiceRequestRow): Promise<void> {
             appointmentId: request.appointmentId?.trim() || null,
         });
     } catch {
-        notifyError('Could not acknowledge direct service request. Please try again.');
+        notifyError('Could not acknowledge service request. Please try again.');
     } finally {
         acknowledgingId.value = null;
     }
 }
 
 const visible = (): boolean =>
-    props.enabled && (loading.value || requests.value.length > 0 || loadError.value !== null);
+    props.enabled && (requests.value.length > 0 || loadError.value !== null);
 
 watch(
     () => props.enabled,
@@ -191,7 +191,7 @@ defineExpose({ reload });
             </span>
         </div>
 
-        <div v-if="loading" class="py-1 text-xs text-amber-700 dark:text-amber-400">Loading direct service requests...</div>
+        <div v-if="loading" class="py-1 text-xs text-amber-700 dark:text-amber-400">Refreshing service requests...</div>
         <div v-else-if="loadError" class="py-1 text-xs text-red-600 dark:text-red-400">{{ loadError }}</div>
         <ul v-else class="flex flex-col gap-1.5">
             <li

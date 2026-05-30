@@ -65,6 +65,12 @@ class ListPharmacyOrdersUseCase
         $toDateTime = isset($filters['to']) ? trim((string) $filters['to']) : null;
         $toDateTime = $toDateTime === '' ? null : $toDateTime;
 
+        $statuses = null;
+        $worklistScope = strtolower(trim((string) ($filters['worklistScope'] ?? '')));
+        if ($status === null && $worklistScope === 'open') {
+            $statuses = PharmacyOrderStatus::openWorklistValues();
+        }
+
         return $this->pharmacyOrderRepository->search(
             query: $query,
             patientId: $patientId,
@@ -72,6 +78,7 @@ class ListPharmacyOrdersUseCase
             appointmentId: $appointmentId,
             admissionId: $admissionId,
             status: $status,
+            statuses: $statuses,
             fromDateTime: $fromDateTime,
             toDateTime: $toDateTime,
             page: $page,

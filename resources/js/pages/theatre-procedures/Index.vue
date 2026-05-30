@@ -4274,7 +4274,7 @@ onMounted(async () => {
                         </div>
                         <div class="min-w-0 space-y-0.5">
                             <div class="flex flex-wrap items-center gap-2">
-                                <h1 class="truncate text-base font-semibold tracking-tight md:text-lg">
+                                <h1 class="truncate text-base font-semibold leading-6 tracking-tight md:text-lg">
                                     {{
                                         createForm.patientId.trim()
                                             ? createPatientContextLabel
@@ -4284,28 +4284,28 @@ onMounted(async () => {
                                 <Badge
                                     v-if="createPatientSummary?.patientNumber"
                                     variant="secondary"
-                                    class="h-5 px-1.5 text-[11px]"
+                                    class="text-[11px] leading-none"
                                 >
                                     {{ createPatientSummary.patientNumber }}
                                 </Badge>
                                 <Badge
                                     v-if="createForm.patientId.trim()"
                                     :variant="createContextStatusVariant"
-                                    class="h-5 px-1.5 text-[11px]"
+                                    class="text-[11px] leading-none"
                                 >
                                     {{ createContextStatusLabel }}
                                 </Badge>
                                 <Badge
                                     v-if="createAppointmentContextStatusLabel"
                                     :variant="appointmentStatusVariant(createAppointmentSummary?.status)"
-                                    class="h-5 px-1.5 text-[11px]"
+                                    class="text-[11px] leading-none"
                                 >
                                     {{ createAppointmentContextStatusLabel }}
                                 </Badge>
                                 <Badge
                                     v-if="createAdmissionContextStatusLabel"
                                     variant="outline"
-                                    class="h-5 px-1.5 text-[11px]"
+                                    class="text-[11px] leading-none"
                                 >
                                     {{ createAdmissionContextStatusLabel }}
                                 </Badge>

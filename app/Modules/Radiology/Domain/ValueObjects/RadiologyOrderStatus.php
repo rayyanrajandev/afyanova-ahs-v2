@@ -21,6 +21,18 @@ enum RadiologyOrderStatus: string
     /**
      * @return array<int, string>
      */
+    public static function openWorklistValues(): array
+    {
+        return [
+            self::ORDERED->value,
+            self::SCHEDULED->value,
+            self::IN_PROGRESS->value,
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
     public static function allowedForwardTransitions(string $currentStatus): array
     {
         return match ($currentStatus) {

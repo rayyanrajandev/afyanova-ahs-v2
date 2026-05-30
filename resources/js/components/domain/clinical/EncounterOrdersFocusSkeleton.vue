@@ -64,7 +64,7 @@ defineProps<{
     <div
         :class="[
             'space-y-4',
-            compact ? 'px-3 pb-4 pt-3' : 'px-4 pb-5 pt-4 md:px-6 md:pb-6',
+            compact ? 'pb-4 pt-3' : 'pb-5 pt-4 md:pb-6',
         ]"
     >
         <section

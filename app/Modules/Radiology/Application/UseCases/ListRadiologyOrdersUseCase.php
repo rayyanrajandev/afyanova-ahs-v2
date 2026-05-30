@@ -75,6 +75,12 @@ class ListRadiologyOrdersUseCase
         $toDateTime = isset($filters['to']) ? trim((string) $filters['to']) : null;
         $toDateTime = $toDateTime === '' ? null : $toDateTime;
 
+        $statuses = null;
+        $worklistScope = strtolower(trim((string) ($filters['worklistScope'] ?? '')));
+        if ($status === null && $worklistScope === 'open') {
+            $statuses = RadiologyOrderStatus::openWorklistValues();
+        }
+
         return $this->radiologyOrderRepository->search(
             query: $query,
             patientId: $patientId,
@@ -82,6 +88,7 @@ class ListRadiologyOrdersUseCase
             appointmentId: $appointmentId,
             admissionId: $admissionId,
             status: $status,
+            statuses: $statuses,
             modality: $modality,
             fromDateTime: $fromDateTime,
             toDateTime: $toDateTime,

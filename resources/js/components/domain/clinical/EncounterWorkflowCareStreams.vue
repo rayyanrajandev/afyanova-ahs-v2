@@ -4,8 +4,19 @@ import AppIcon from '@/components/AppIcon.vue';
 import EncounterOrderProgress from '@/components/domain/clinical/EncounterOrderProgress.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import type {
+    EncounterInlineOrderLinkageContext,
+    EncounterInlineOrderType,
+} from '@/lib/encounterInlineOrders';
 import {
     encounterCareState,
     encounterCareStateLabel,
@@ -59,6 +70,7 @@ const props = defineProps<{
     canCreatePharmacyOrders: boolean;
     canCreateRadiologyOrders: boolean;
     canCreateTheatreProcedures: boolean;
+    canUseInlineOrders: boolean;
     contextCreateHref: (path: string, options?: Record<string, unknown>) => string;
     formatDateTime: (value: string | null | undefined) => string;
     compact?: boolean;
@@ -73,6 +85,12 @@ const emit = defineEmits<{
             defaultReason?: string | null;
         },
     ];
+    openInlineOrder: [
+        payload: {
+            type: EncounterInlineOrderType;
+            linkage: EncounterInlineOrderLinkageContext;
+        },
+    ];
 }>();
 
 function emitLifecycle(
@@ -82,6 +100,29 @@ function emitLifecycle(
     defaultReason?: string | null,
 ): void {
     emit('lifecycle', { kind, id, action, defaultReason });
+}
+
+function orderActionLabel(...parts: Array<string | null | undefined>): string {
+    return parts
+        .map((part) => String(part ?? '').trim())
+        .filter(Boolean)
+        .join(' · ');
+}
+
+function emitInlineOrder(
+    type: EncounterInlineOrderType,
+    mode: EncounterInlineOrderLinkageContext['mode'],
+    sourceOrderId: string,
+    sourceLabel: string,
+): void {
+    emit('openInlineOrder', {
+        type,
+        linkage: {
+            mode,
+            sourceOrderId,
+            sourceLabel: sourceLabel.trim() || sourceOrderId,
+        },
+    });
 }
 
 function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
@@ -157,17 +198,10 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                         :key="`mr-create-lab-order-${order.id}`"
                         :class="[
                             'space-y-2 rounded-lg border bg-background shadow-sm',
-                            compact ? 'px-2.5 py-2.5' : 'px-3 py-3',
+                            compact ? 'px-2 py-1.5' : 'px-2.5 py-2',
                         ]"
                     >
-                        <div
-                            :class="[
-                                'flex gap-3',
-                                compact
-                                    ? 'flex-col items-start'
-                                    : 'items-start justify-between',
-                            ]"
-                        >
+                        <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="truncate text-sm font-medium text-foreground">
                                     {{ order.testName || 'Laboratory order' }}
@@ -194,46 +228,63 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                         />
                         <div
                             v-if="canOpenLaboratoryWorkflow"
-                            class="mt-2 flex flex-wrap gap-1.5"
+                            class="mt-2 flex justify-end"
                         >
-                            <Button size="sm" variant="outline" as-child class="h-6 gap-1 px-2 text-[10px]">
-                                <Link
-                                    :href="contextCreateHref('/laboratory-orders', {
-                                        includeTabNew: true,
-                                        reorderOfId: order.id,
-                                    })"
-                                >
-                                    Reorder
-                                </Link>
-                            </Button>
-                            <Button size="sm" variant="outline" as-child class="h-6 gap-1 px-2 text-[10px]">
-                                <Link
-                                    :href="contextCreateHref('/laboratory-orders', {
-                                        includeTabNew: true,
-                                        addOnToOrderId: order.id,
-                                    })"
-                                >
-                                    Add Linked Test
-                                </Link>
-                            </Button>
-                            <Button
-                                v-if="canApplyLaboratoryEncounterLifecycleAction(order, 'cancel', canCreateLaboratoryOrders)"
-                                size="sm"
-                                variant="outline"
-                                class="h-6 gap-1 px-2 text-[10px]"
-                                @click="emitLifecycle('laboratory', order.id, 'cancel', order.statusReason)"
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                v-if="canApplyLaboratoryEncounterLifecycleAction(order, 'entered_in_error', canCreateLaboratoryOrders)"
-                                size="sm"
-                                variant="outline"
-                                class="h-6 gap-1 px-2 text-[10px]"
-                                @click="emitLifecycle('laboratory', order.id, 'entered_in_error')"
-                            >
-                                Entered in error
-                            </Button>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger as-child>
+                                    <Button size="sm" variant="outline" class="h-7 gap-1.5 px-2 text-[11px]">
+                                        Actions
+                                        <AppIcon name="chevron-down" class="size-3" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" class="w-48">
+                                    <DropdownMenuItem
+                                        v-if="canUseInlineOrders"
+                                        @select="emitInlineOrder('laboratory', 'reorder', order.id, orderActionLabel(order.orderNumber, order.testName))"
+                                    >
+                                        <AppIcon name="repeat-2" class="size-4" />
+                                        Reorder inline
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem v-else as-child>
+                                        <Link :href="contextCreateHref('/laboratory-orders', { includeTabNew: true, reorderOfId: order.id })">
+                                            <AppIcon name="repeat-2" class="size-4" />
+                                            Reorder
+                                        </Link>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        v-if="canUseInlineOrders"
+                                        @select="emitInlineOrder('laboratory', 'add_on', order.id, orderActionLabel(order.orderNumber, order.testName))"
+                                    >
+                                        <AppIcon name="git-branch-plus" class="size-4" />
+                                        Add linked test
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem v-else as-child>
+                                        <Link :href="contextCreateHref('/laboratory-orders', { includeTabNew: true, addOnToOrderId: order.id })">
+                                            <AppIcon name="git-branch-plus" class="size-4" />
+                                            Add linked test
+                                        </Link>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator
+                                        v-if="canApplyLaboratoryEncounterLifecycleAction(order, 'cancel', canCreateLaboratoryOrders) || canApplyLaboratoryEncounterLifecycleAction(order, 'entered_in_error', canCreateLaboratoryOrders)"
+                                    />
+                                    <DropdownMenuItem
+                                        v-if="canApplyLaboratoryEncounterLifecycleAction(order, 'cancel', canCreateLaboratoryOrders)"
+                                        variant="destructive"
+                                        @select="emitLifecycle('laboratory', order.id, 'cancel', order.statusReason)"
+                                    >
+                                        <AppIcon name="circle-x" class="size-4" />
+                                        Cancel
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        v-if="canApplyLaboratoryEncounterLifecycleAction(order, 'entered_in_error', canCreateLaboratoryOrders)"
+                                        variant="destructive"
+                                        @select="emitLifecycle('laboratory', order.id, 'entered_in_error')"
+                                    >
+                                        <AppIcon name="file-x" class="size-4" />
+                                        Entered in error
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </div>
                 </div>
@@ -279,17 +330,10 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                         :key="`mr-create-pharmacy-order-${order.id}`"
                         :class="[
                             'space-y-2 rounded-lg border bg-background shadow-sm',
-                            compact ? 'px-2.5 py-2.5' : 'px-3 py-3',
+                            compact ? 'px-2 py-1.5' : 'px-2.5 py-2',
                         ]"
                     >
-                        <div
-                            :class="[
-                                'flex gap-3',
-                                compact
-                                    ? 'flex-col items-start'
-                                    : 'items-start justify-between',
-                            ]"
-                        >
+                        <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="truncate text-sm font-medium text-foreground">
                                     {{ order.medicationName || 'Pharmacy order' }}
@@ -322,55 +366,71 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                         />
                         <div
                             v-if="canOpenPharmacyWorkflow"
-                            class="mt-2 flex flex-wrap gap-1.5"
+                            class="mt-2 flex justify-end"
                         >
-                            <Button size="sm" variant="outline" as-child class="h-6 gap-1 px-2 text-[10px]">
-                                <Link
-                                    :href="contextCreateHref('/pharmacy-orders', {
-                                        includeTabNew: true,
-                                        reorderOfId: order.id,
-                                    })"
-                                >
-                                    Reorder
-                                </Link>
-                            </Button>
-                            <Button size="sm" variant="outline" as-child class="h-6 gap-1 px-2 text-[10px]">
-                                <Link
-                                    :href="contextCreateHref('/pharmacy-orders', {
-                                        includeTabNew: true,
-                                        addOnToOrderId: order.id,
-                                    })"
-                                >
-                                    Add Linked Medication
-                                </Link>
-                            </Button>
-                            <Button
-                                v-if="canApplyPharmacyEncounterLifecycleAction(order, 'cancel', canCreatePharmacyOrders)"
-                                size="sm"
-                                variant="outline"
-                                class="h-6 gap-1 px-2 text-[10px]"
-                                @click="emitLifecycle('pharmacy', order.id, 'cancel', order.statusReason)"
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                v-if="canApplyPharmacyEncounterLifecycleAction(order, 'discontinue', canCreatePharmacyOrders)"
-                                size="sm"
-                                variant="outline"
-                                class="h-6 gap-1 px-2 text-[10px]"
-                                @click="emitLifecycle('pharmacy', order.id, 'discontinue')"
-                            >
-                                Discontinue
-                            </Button>
-                            <Button
-                                v-if="canApplyPharmacyEncounterLifecycleAction(order, 'entered_in_error', canCreatePharmacyOrders)"
-                                size="sm"
-                                variant="outline"
-                                class="h-6 gap-1 px-2 text-[10px]"
-                                @click="emitLifecycle('pharmacy', order.id, 'entered_in_error')"
-                            >
-                                Entered in error
-                            </Button>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger as-child>
+                                    <Button size="sm" variant="outline" class="h-7 gap-1.5 px-2 text-[11px]">
+                                        Actions
+                                        <AppIcon name="chevron-down" class="size-3" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" class="w-52">
+                                    <DropdownMenuItem
+                                        v-if="canUseInlineOrders"
+                                        @select="emitInlineOrder('pharmacy', 'reorder', order.id, orderActionLabel(order.orderNumber, order.medicationName))"
+                                    >
+                                        <AppIcon name="repeat-2" class="size-4" />
+                                        Reorder inline
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem v-else as-child>
+                                        <Link :href="contextCreateHref('/pharmacy-orders', { includeTabNew: true, reorderOfId: order.id })">
+                                            <AppIcon name="repeat-2" class="size-4" />
+                                            Reorder
+                                        </Link>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        v-if="canUseInlineOrders"
+                                        @select="emitInlineOrder('pharmacy', 'add_on', order.id, orderActionLabel(order.orderNumber, order.medicationName))"
+                                    >
+                                        <AppIcon name="git-branch-plus" class="size-4" />
+                                        Add linked medication
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem v-else as-child>
+                                        <Link :href="contextCreateHref('/pharmacy-orders', { includeTabNew: true, addOnToOrderId: order.id })">
+                                            <AppIcon name="git-branch-plus" class="size-4" />
+                                            Add linked medication
+                                        </Link>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator
+                                        v-if="canApplyPharmacyEncounterLifecycleAction(order, 'cancel', canCreatePharmacyOrders) || canApplyPharmacyEncounterLifecycleAction(order, 'discontinue', canCreatePharmacyOrders) || canApplyPharmacyEncounterLifecycleAction(order, 'entered_in_error', canCreatePharmacyOrders)"
+                                    />
+                                    <DropdownMenuItem
+                                        v-if="canApplyPharmacyEncounterLifecycleAction(order, 'cancel', canCreatePharmacyOrders)"
+                                        variant="destructive"
+                                        @select="emitLifecycle('pharmacy', order.id, 'cancel', order.statusReason)"
+                                    >
+                                        <AppIcon name="circle-x" class="size-4" />
+                                        Cancel
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        v-if="canApplyPharmacyEncounterLifecycleAction(order, 'discontinue', canCreatePharmacyOrders)"
+                                        variant="destructive"
+                                        @select="emitLifecycle('pharmacy', order.id, 'discontinue')"
+                                    >
+                                        <AppIcon name="ban" class="size-4" />
+                                        Discontinue
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        v-if="canApplyPharmacyEncounterLifecycleAction(order, 'entered_in_error', canCreatePharmacyOrders)"
+                                        variant="destructive"
+                                        @select="emitLifecycle('pharmacy', order.id, 'entered_in_error')"
+                                    >
+                                        <AppIcon name="file-x" class="size-4" />
+                                        Entered in error
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </div>
                 </div>
@@ -416,17 +476,10 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                         :key="`mr-create-radiology-order-${order.id}`"
                         :class="[
                             'space-y-2 rounded-lg border bg-background shadow-sm',
-                            compact ? 'px-2.5 py-2.5' : 'px-3 py-3',
+                            compact ? 'px-2 py-1.5' : 'px-2.5 py-2',
                         ]"
                     >
-                        <div
-                            :class="[
-                                'flex gap-3',
-                                compact
-                                    ? 'flex-col items-start'
-                                    : 'items-start justify-between',
-                            ]"
-                        >
+                        <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="truncate text-sm font-medium text-foreground">
                                     {{ order.studyDescription || 'Imaging order' }}
@@ -453,46 +506,63 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                         />
                         <div
                             v-if="canOpenRadiologyWorkflow"
-                            class="mt-2 flex flex-wrap gap-1.5"
+                            class="mt-2 flex justify-end"
                         >
-                            <Button size="sm" variant="outline" as-child class="h-6 gap-1 px-2 text-[10px]">
-                                <Link
-                                    :href="contextCreateHref('/radiology-orders', {
-                                        includeTabNew: true,
-                                        reorderOfId: order.id,
-                                    })"
-                                >
-                                    Reorder
-                                </Link>
-                            </Button>
-                            <Button size="sm" variant="outline" as-child class="h-6 gap-1 px-2 text-[10px]">
-                                <Link
-                                    :href="contextCreateHref('/radiology-orders', {
-                                        includeTabNew: true,
-                                        addOnToOrderId: order.id,
-                                    })"
-                                >
-                                    Add Linked Study
-                                </Link>
-                            </Button>
-                            <Button
-                                v-if="canApplyRadiologyEncounterLifecycleAction(order, 'cancel', canCreateRadiologyOrders)"
-                                size="sm"
-                                variant="outline"
-                                class="h-6 gap-1 px-2 text-[10px]"
-                                @click="emitLifecycle('radiology', order.id, 'cancel', order.statusReason)"
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                v-if="canApplyRadiologyEncounterLifecycleAction(order, 'entered_in_error', canCreateRadiologyOrders)"
-                                size="sm"
-                                variant="outline"
-                                class="h-6 gap-1 px-2 text-[10px]"
-                                @click="emitLifecycle('radiology', order.id, 'entered_in_error')"
-                            >
-                                Entered in error
-                            </Button>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger as-child>
+                                    <Button size="sm" variant="outline" class="h-7 gap-1.5 px-2 text-[11px]">
+                                        Actions
+                                        <AppIcon name="chevron-down" class="size-3" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" class="w-48">
+                                    <DropdownMenuItem
+                                        v-if="canUseInlineOrders"
+                                        @select="emitInlineOrder('radiology', 'reorder', order.id, orderActionLabel(order.orderNumber, order.studyDescription))"
+                                    >
+                                        <AppIcon name="repeat-2" class="size-4" />
+                                        Reorder inline
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem v-else as-child>
+                                        <Link :href="contextCreateHref('/radiology-orders', { includeTabNew: true, reorderOfId: order.id })">
+                                            <AppIcon name="repeat-2" class="size-4" />
+                                            Reorder
+                                        </Link>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        v-if="canUseInlineOrders"
+                                        @select="emitInlineOrder('radiology', 'add_on', order.id, orderActionLabel(order.orderNumber, order.studyDescription))"
+                                    >
+                                        <AppIcon name="git-branch-plus" class="size-4" />
+                                        Add linked study
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem v-else as-child>
+                                        <Link :href="contextCreateHref('/radiology-orders', { includeTabNew: true, addOnToOrderId: order.id })">
+                                            <AppIcon name="git-branch-plus" class="size-4" />
+                                            Add linked study
+                                        </Link>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator
+                                        v-if="canApplyRadiologyEncounterLifecycleAction(order, 'cancel', canCreateRadiologyOrders) || canApplyRadiologyEncounterLifecycleAction(order, 'entered_in_error', canCreateRadiologyOrders)"
+                                    />
+                                    <DropdownMenuItem
+                                        v-if="canApplyRadiologyEncounterLifecycleAction(order, 'cancel', canCreateRadiologyOrders)"
+                                        variant="destructive"
+                                        @select="emitLifecycle('radiology', order.id, 'cancel', order.statusReason)"
+                                    >
+                                        <AppIcon name="circle-x" class="size-4" />
+                                        Cancel
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        v-if="canApplyRadiologyEncounterLifecycleAction(order, 'entered_in_error', canCreateRadiologyOrders)"
+                                        variant="destructive"
+                                        @select="emitLifecycle('radiology', order.id, 'entered_in_error')"
+                                    >
+                                        <AppIcon name="file-x" class="size-4" />
+                                        Entered in error
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </div>
                 </div>
@@ -538,17 +608,10 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                         :key="`mr-create-theatre-procedure-${procedure.id}`"
                         :class="[
                             'space-y-2 rounded-lg border bg-background shadow-sm',
-                            compact ? 'px-2.5 py-2.5' : 'px-3 py-3',
+                            compact ? 'px-2 py-1.5' : 'px-2.5 py-2',
                         ]"
                     >
-                        <div
-                            :class="[
-                                'flex gap-3',
-                                compact
-                                    ? 'flex-col items-start'
-                                    : 'items-start justify-between',
-                            ]"
-                        >
+                        <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="truncate text-sm font-medium text-foreground">
                                     {{ procedure.procedureName || procedure.procedureType || 'Theatre procedure' }}
@@ -575,46 +638,49 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                         />
                         <div
                             v-if="canOpenTheatreWorkflow"
-                            class="mt-2 flex flex-wrap gap-1.5"
+                            class="mt-2 flex justify-end"
                         >
-                            <Button size="sm" variant="outline" as-child class="h-6 gap-1 px-2 text-[10px]">
-                                <Link
-                                    :href="contextCreateHref('/theatre-procedures', {
-                                        includeTabNew: true,
-                                        reorderOfId: procedure.id,
-                                    })"
-                                >
-                                    Reorder
-                                </Link>
-                            </Button>
-                            <Button size="sm" variant="outline" as-child class="h-6 gap-1 px-2 text-[10px]">
-                                <Link
-                                    :href="contextCreateHref('/theatre-procedures', {
-                                        includeTabNew: true,
-                                        addOnToOrderId: procedure.id,
-                                    })"
-                                >
-                                    Add Linked Procedure
-                                </Link>
-                            </Button>
-                            <Button
-                                v-if="canApplyTheatreEncounterLifecycleAction(procedure, 'cancel', canCreateTheatreProcedures)"
-                                size="sm"
-                                variant="outline"
-                                class="h-6 gap-1 px-2 text-[10px]"
-                                @click="emitLifecycle('theatre', procedure.id, 'cancel', procedure.statusReason)"
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                v-if="canApplyTheatreEncounterLifecycleAction(procedure, 'entered_in_error', canCreateTheatreProcedures)"
-                                size="sm"
-                                variant="outline"
-                                class="h-6 gap-1 px-2 text-[10px]"
-                                @click="emitLifecycle('theatre', procedure.id, 'entered_in_error')"
-                            >
-                                Entered in error
-                            </Button>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger as-child>
+                                    <Button size="sm" variant="outline" class="h-7 gap-1.5 px-2 text-[11px]">
+                                        Actions
+                                        <AppIcon name="chevron-down" class="size-3" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" class="w-52">
+                                    <DropdownMenuItem as-child>
+                                        <Link :href="contextCreateHref('/theatre-procedures', { includeTabNew: true, reorderOfId: procedure.id })">
+                                            <AppIcon name="repeat-2" class="size-4" />
+                                            Reorder in theatre
+                                        </Link>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem as-child>
+                                        <Link :href="contextCreateHref('/theatre-procedures', { includeTabNew: true, addOnToOrderId: procedure.id })">
+                                            <AppIcon name="git-branch-plus" class="size-4" />
+                                            Add linked procedure
+                                        </Link>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator
+                                        v-if="canApplyTheatreEncounterLifecycleAction(procedure, 'cancel', canCreateTheatreProcedures) || canApplyTheatreEncounterLifecycleAction(procedure, 'entered_in_error', canCreateTheatreProcedures)"
+                                    />
+                                    <DropdownMenuItem
+                                        v-if="canApplyTheatreEncounterLifecycleAction(procedure, 'cancel', canCreateTheatreProcedures)"
+                                        variant="destructive"
+                                        @select="emitLifecycle('theatre', procedure.id, 'cancel', procedure.statusReason)"
+                                    >
+                                        <AppIcon name="circle-x" class="size-4" />
+                                        Cancel
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        v-if="canApplyTheatreEncounterLifecycleAction(procedure, 'entered_in_error', canCreateTheatreProcedures)"
+                                        variant="destructive"
+                                        @select="emitLifecycle('theatre', procedure.id, 'entered_in_error')"
+                                    >
+                                        <AppIcon name="file-x" class="size-4" />
+                                        Entered in error
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </div>
                 </div>

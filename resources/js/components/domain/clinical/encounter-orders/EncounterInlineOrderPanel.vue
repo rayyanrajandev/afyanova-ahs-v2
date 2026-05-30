@@ -27,6 +27,7 @@ import {
     createPharmacyInlineOrder,
     createRadiologyInlineOrder,
     duplicateCheckDetails,
+    encounterInlineOrderModeLabel,
     encounterInlineOrderTypeLabel,
     fetchApprovedMedicinesCatalog,
     fetchLabTestCatalog,
@@ -37,6 +38,7 @@ import {
     radiologyModalityOptions,
     type ClinicalCatalogItem,
     type EncounterDuplicateCheckResult,
+    type EncounterInlineOrderLinkageContext,
     type EncounterInlineOrderType,
     type EncounterOrderContext,
     type MedicationSafetyContinuationDecision,
@@ -46,6 +48,7 @@ import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 const props = defineProps<{
     orderType: EncounterInlineOrderType;
     context: EncounterOrderContext;
+    linkage?: EncounterInlineOrderLinkageContext | null;
 }>();
 
 const emit = defineEmits<{
@@ -162,6 +165,32 @@ const catalogFieldLabel = computed(() => {
 });
 
 const panelTitle = computed(() => encounterInlineOrderTypeLabel(props.orderType));
+const panelModeLabel = computed(() =>
+    encounterInlineOrderModeLabel(props.linkage?.mode ?? 'new'),
+);
+const panelDescription = computed(() => {
+    if (props.linkage?.mode === 'reorder') {
+        return `Creates a replacement linked to ${props.linkage.sourceLabel}. The encounter note remains open.`;
+    }
+
+    if (props.linkage?.mode === 'add_on') {
+        return `Creates an add-on linked to ${props.linkage.sourceLabel}. The encounter note remains open.`;
+    }
+
+    return 'This order stays in the current visit context. The encounter note remains open.';
+});
+const submitButtonLabel = computed(() => {
+    if (submitLoading.value) return 'Placing order…';
+    if (props.linkage?.mode === 'reorder') return 'Place replacement';
+    if (props.linkage?.mode === 'add_on') return 'Place linked order';
+    return 'Place order';
+});
+const createLinkageOptions = computed(() => ({
+    replacesOrderId:
+        props.linkage?.mode === 'reorder' ? props.linkage.sourceOrderId : null,
+    addOnToOrderId:
+        props.linkage?.mode === 'add_on' ? props.linkage.sourceOrderId : null,
+}));
 
 const pharmacySafetyCatalogItemId = computed(() =>
     props.orderType === 'pharmacy' ? pharmacyForm.catalogItemId.trim() : '',
@@ -396,6 +425,7 @@ async function submitOrder() {
             const response = await createLaboratoryInlineOrder(
                 props.context,
                 payload,
+                createLinkageOptions.value,
             );
             const orderNumber =
                 (response.data.orderNumber as string | null | undefined)?.trim() ||
@@ -455,7 +485,7 @@ async function submitOrder() {
             const response = await createPharmacyInlineOrder(
                 props.context,
                 payload,
-                { safetyDecision },
+                { ...createLinkageOptions.value, safetyDecision },
             );
             const orderNumber =
                 (response.data.orderNumber as string | null | undefined)?.trim() ||
@@ -492,6 +522,7 @@ async function submitOrder() {
             const response = await createRadiologyInlineOrder(
                 props.context,
                 payload,
+                createLinkageOptions.value,
             );
             const orderNumber =
                 (response.data.orderNumber as string | null | undefined)?.trim() ||
@@ -523,13 +554,13 @@ async function submitOrder() {
         <div class="mb-4 flex items-start justify-between gap-3">
             <div class="min-w-0 space-y-1">
                 <p class="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Place order in encounter
+                    {{ panelModeLabel }} in encounter
                 </p>
                 <p class="text-sm font-medium text-foreground">
                     {{ panelTitle }}
                 </p>
                 <p class="text-xs text-muted-foreground">
-                    This order stays in the current visit context. The encounter note remains open.
+                    {{ panelDescription }}
                 </p>
             </div>
             <Button
@@ -713,11 +744,7 @@ async function submitOrder() {
                         class="size-3.5"
                         :class="{ 'animate-spin': submitLoading }"
                     />
-                    {{
-                        submitLoading
-                            ? 'Placing order…'
-                            : 'Place order'
-                    }}
+                    {{ submitButtonLabel }}
                 </Button>
                 <Button
                     variant="outline"

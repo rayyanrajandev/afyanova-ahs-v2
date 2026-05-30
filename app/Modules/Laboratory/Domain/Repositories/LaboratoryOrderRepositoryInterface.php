@@ -21,6 +21,7 @@ interface LaboratoryOrderRepositoryInterface
         ?string $appointmentId,
         ?string $admissionId,
         ?string $status,
+        ?array $statuses,
         ?string $priority,
         ?string $fromDateTime,
         ?string $toDateTime,

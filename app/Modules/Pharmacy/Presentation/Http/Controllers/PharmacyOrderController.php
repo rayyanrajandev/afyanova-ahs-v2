@@ -44,6 +44,8 @@ use App\Modules\Pharmacy\Presentation\Http\Transformers\MedicationLaboratorySign
 use App\Modules\Pharmacy\Presentation\Http\Transformers\PharmacyOrderAuditLogResponseTransformer;
 use App\Modules\Pharmacy\Presentation\Http\Transformers\PharmacyMedicationAvailabilityResponseTransformer;
 use App\Modules\Pharmacy\Presentation\Http\Transformers\PharmacyOrderResponseTransformer;
+use App\Support\ClinicalOrders\ClinicalOrderPatientSummaryEnricher;
+use App\Support\ClinicalOrders\ClinicalOrderUserSummaryEnricher;
 use App\Modules\Platform\Application\UseCases\ListClinicalCatalogItemsUseCase;
 use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogType;
 use App\Modules\Platform\Presentation\Http\Transformers\ClinicalCatalogItemResponseTransformer;
@@ -67,9 +69,13 @@ class PharmacyOrderController extends Controller
     public function index(Request $request, ListPharmacyOrdersUseCase $useCase): JsonResponse
     {
         $result = $useCase->execute($request->all());
+        $orders = ClinicalOrderPatientSummaryEnricher::attachToTransformedOrders(
+            $result['data'],
+            array_map([PharmacyOrderResponseTransformer::class, 'transform'], $result['data']),
+        );
 
         return response()->json([
-            'data' => array_map([PharmacyOrderResponseTransformer::class, 'transform'], $result['data']),
+            'data' => ClinicalOrderUserSummaryEnricher::attachOrderingClinicianToTransformedOrders($result['data'], $orders),
             'meta' => $result['meta'],
         ]);
     }

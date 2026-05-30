@@ -200,6 +200,84 @@ it('can create radiology order and canonicalizes selected procedure from catalog
         ->assertJsonPath('data.studyDescription', 'Chest X-Ray (PA)');
 });
 
+it('includes patient summary on radiology order list without patients.read permission', function (): void {
+    $user = makeRadiologyUser();
+    $patient = makeRadiologyPatient([
+        'first_name' => 'Halima',
+        'last_name' => 'Mushi',
+        'patient_number' => 'PT-RAD-001',
+    ]);
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/radiology-orders', radiologyOrderPayload($patient->id))
+        ->assertCreated();
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/radiology-orders')
+        ->assertOk()
+        ->assertJsonPath('data.0.patientId', $patient->id)
+        ->assertJsonPath('data.0.patient.firstName', 'Halima')
+        ->assertJsonPath('data.0.patient.lastName', 'Mushi')
+        ->assertJsonPath('data.0.patient.patientNumber', 'PT-RAD-001');
+});
+
+it('limits radiology order search to open worklist statuses when worklistScope=open', function (): void {
+    $user = makeRadiologyUser();
+    $patient = makeRadiologyPatient([
+        'first_name' => 'Worklist',
+        'last_name' => 'Scope',
+    ]);
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/radiology-orders', radiologyOrderPayload($patient->id))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/radiology-orders/'.$created['id'].'/status', [
+            'status' => 'cancelled',
+            'reason' => 'Patient declined imaging.',
+        ])
+        ->assertOk();
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/radiology-orders?q=Worklist')
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.status', 'cancelled');
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/radiology-orders?q=Worklist&worklistScope=open')
+        ->assertOk()
+        ->assertJsonCount(0, 'data');
+});
+
+it('can search radiology orders by patient name', function (): void {
+    $user = makeRadiologyUser();
+    $patient = makeRadiologyPatient([
+        'first_name' => 'Zawadi',
+        'last_name' => 'Mwangi',
+    ]);
+    $otherPatient = makeRadiologyPatient([
+        'first_name' => 'Other',
+        'last_name' => 'Patient',
+    ]);
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/radiology-orders', radiologyOrderPayload($patient->id))
+        ->assertCreated();
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/radiology-orders', radiologyOrderPayload($otherPatient->id))
+        ->assertCreated();
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/radiology-orders?q=Zawadi')
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.patientId', $patient->id);
+});
+
 it('flags insufficient recipe stock on radiology order show responses', function (): void {
     $user = makeRadiologyUser();
     $patient = makeRadiologyPatient();

@@ -1,9 +1,5 @@
 <script setup lang="ts">
-import { defineAsyncComponent } from 'vue';
-
-const EncounterWorkspace = defineAsyncComponent(
-    () => import('@/pages/encounters/Workspace.vue'),
-);
+import EncounterWorkspace from '@/pages/encounters/Workspace.vue';
 
 defineProps<{
     encounterId?: string;

@@ -24,6 +24,8 @@ use App\Modules\Radiology\Presentation\Http\Requests\UpdateRadiologyOrderRequest
 use App\Modules\Radiology\Presentation\Http\Requests\UpdateRadiologyOrderStatusRequest;
 use App\Modules\Radiology\Presentation\Http\Transformers\RadiologyOrderAuditLogResponseTransformer;
 use App\Modules\Radiology\Presentation\Http\Transformers\RadiologyOrderResponseTransformer;
+use App\Support\ClinicalOrders\ClinicalOrderPatientSummaryEnricher;
+use App\Support\ClinicalOrders\ClinicalOrderUserSummaryEnricher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -39,9 +41,13 @@ class RadiologyOrderController extends Controller
     public function index(Request $request, ListRadiologyOrdersUseCase $useCase): JsonResponse
     {
         $result = $useCase->execute($request->all());
+        $orders = ClinicalOrderPatientSummaryEnricher::attachToTransformedOrders(
+            $result['data'],
+            array_map([RadiologyOrderResponseTransformer::class, 'transform'], $result['data']),
+        );
 
         return response()->json([
-            'data' => array_map([RadiologyOrderResponseTransformer::class, 'transform'], $result['data']),
+            'data' => ClinicalOrderUserSummaryEnricher::attachOrderingClinicianToTransformedOrders($result['data'], $orders),
             'meta' => $result['meta'],
         ]);
     }

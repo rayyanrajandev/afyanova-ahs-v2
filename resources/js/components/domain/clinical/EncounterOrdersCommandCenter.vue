@@ -5,7 +5,11 @@ import AppIcon from '@/components/AppIcon.vue';
 import EncounterInlineOrderPanel from '@/components/domain/clinical/encounter-orders/EncounterInlineOrderPanel.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import type { EncounterInlineOrderType, EncounterOrderContext } from '@/lib/encounterInlineOrders';
+import type {
+    EncounterInlineOrderLinkageContext,
+    EncounterInlineOrderType,
+    EncounterOrderContext,
+} from '@/lib/encounterInlineOrders';
 import {
     encounterCareStateVariant,
     type CreateEncounterCareSectionId,
@@ -21,6 +25,7 @@ const props = defineProps<{
     activeStreamCount: number;
     summaries: CreateEncounterCareSummary[];
     inlineOrderType: EncounterInlineOrderType | null;
+    inlineOrderLinkage: EncounterInlineOrderLinkageContext | null;
     inlineOrderContext: EncounterOrderContext;
     canUseInlineOrders: boolean;
     canOpenLaboratoryWorkflow: boolean;
@@ -35,7 +40,10 @@ const props = defineProps<{
 const emit = defineEmits<{
     closeInlineOrder: [];
     createdInlineOrder: [type: EncounterInlineOrderType];
-    openInlineOrder: [type: EncounterInlineOrderType];
+    openInlineOrder: [
+        type: EncounterInlineOrderType,
+        linkage?: EncounterInlineOrderLinkageContext | null,
+    ];
 }>();
 
 const summariesById = computed(
@@ -113,6 +121,7 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
         <EncounterInlineOrderPanel
             v-if="inlineOrderType && canUseInlineOrders"
             :order-type="inlineOrderType"
+            :linkage="inlineOrderLinkage"
             :context="inlineOrderContext"
             @close="emit('closeInlineOrder')"
             @created="emit('createdInlineOrder', $event)"
