@@ -33,7 +33,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
+import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -660,6 +660,27 @@ function statusVariant(status: string | null) {
     return 'outline';
 }
 
+function staffStatusDotClass(status: string | null): string {
+    const normalized = (status ?? '').toLowerCase();
+    if (normalized === 'active') return 'bg-emerald-500';
+    if (normalized === 'suspended') return 'bg-amber-500';
+    if (normalized === 'inactive') return 'bg-rose-500';
+    return 'bg-slate-400';
+}
+
+function formatDateTime(value: string | null | undefined): string {
+    if (!value) return 'Not recorded';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+    }).format(date);
+}
+
 function credentialingStateVariant(state: string | null) {
     const normalized = (state ?? '').toLowerCase();
     if (normalized === 'ready') return 'secondary';
@@ -802,14 +823,109 @@ function formatFileSize(bytes: number | null): string {
 
 const canPrev = computed(() => (pagination.value?.currentPage ?? 1) > 1);
 const canNext = computed(() => (pagination.value ? pagination.value.currentPage < pagination.value.lastPage : false));
+
+const staffDirectoryReadOnly = computed(
+    () => canReadStaff.value && !canCreateStaff.value && !canUpdateStaff.value && !canUpdateStaffStatus.value,
+);
+
+const workspaceIntroText = computed(() => {
+    const base = `${summaryStatusCounts.value.total} staff profiles in facility scope`;
+
+    return staffDirectoryReadOnly.value
+        ? `${base} · browse staff placement, status, and credentialing context`
+        : `${base} · manage profiles, titles, and status transitions`;
+});
+
+const paginationPageNumbers = computed((): (number | '...')[] => {
+    const total = pagination.value?.lastPage ?? 1;
+    const current = pagination.value?.currentPage ?? 1;
+    if (total <= 7) {
+        return Array.from({ length: total }, (_, index) => index + 1);
+    }
+
+    const pages: (number | '...')[] = [1];
+    if (current > 3) pages.push('...');
+
+    for (let page = Math.max(2, current - 1); page <= Math.min(total - 1, current + 1); page += 1) {
+        pages.push(page);
+    }
+
+    if (current < total - 2) pages.push('...');
+    pages.push(total);
+
+    return pages;
+});
+
+const staffFilterChips = computed(() => {
+    const chips: Array<{ key: string; label: string; clear: () => void }> = [];
+    const query = searchForm.q.trim();
+
+    if (query) {
+        chips.push({
+            key: 'q',
+            label: `Search: ${query}`,
+            clear: () => {
+                searchForm.q = '';
+                submitSearch();
+            },
+        });
+    }
+
+    if (searchForm.status && searchForm.status !== 'active') {
+        chips.push({
+            key: 'status',
+            label: `Status: ${humanizeLabel(searchForm.status)}`,
+            clear: () => {
+                searchForm.status = 'active';
+                submitSearch();
+            },
+        });
+    }
+
+    if (searchForm.department.trim()) {
+        chips.push({
+            key: 'department',
+            label: `Department: ${searchForm.department.trim()}`,
+            clear: () => {
+                searchForm.department = '';
+                submitSearch();
+            },
+        });
+    }
+
+    if (searchForm.employmentType) {
+        chips.push({
+            key: 'employment',
+            label: `Employment: ${employmentTypeLabel(searchForm.employmentType)}`,
+            clear: () => {
+                searchForm.employmentType = '';
+                submitSearch();
+            },
+        });
+    }
+
+    if (searchForm.perPage !== 12) {
+        chips.push({
+            key: 'perPage',
+            label: `${searchForm.perPage} per page`,
+            clear: () => {
+                searchForm.perPage = 12;
+                submitSearch();
+            },
+        });
+    }
+
+    return chips;
+});
+
+const detailsSheetTabGridClass = computed(() => {
+    const tabCount = 1 + (canReadStaffDocuments.value ? 1 : 0) + (canViewStaffAudit.value ? 1 : 0);
+    if (tabCount >= 3) return 'grid-cols-3';
+    if (tabCount === 2) return 'grid-cols-2';
+    return 'grid-cols-1';
+});
 const filterDepartmentOptions = computed(() => mergeSelectedDepartmentOption(departmentOptions.value, searchForm.department));
 const createDepartmentOptions = computed(() => mergeSelectedDepartmentOption(departmentOptions.value, createForm.department));
-const scopeStatusLabel = computed(() => {
-    if (!scopeLoaded.value) return 'Loading scope...';
-    if (!scope.value) return 'Scope unavailable';
-    if (scope.value.resolvedFrom === 'none') return 'Scope unresolved';
-    return 'Scope ready';
-});
 const scopeWarning = computed(() => {
     if (!scopeLoaded.value) return null;
     if (!scope.value) return 'Staff scope could not be loaded. Refresh the page or confirm facility access.';
@@ -1476,6 +1592,12 @@ function nextPage() {
     if (!canNext.value) return;
     clearSearchDebounce();
     searchForm.page += 1;
+    void loadStaffProfiles();
+}
+
+function goToPage(page: number) {
+    clearSearchDebounce();
+    searchForm.page = page;
     void loadStaffProfiles();
 }
 
@@ -2186,43 +2308,70 @@ onMounted(refreshPage);
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
 
             <!-- Page header -->
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div class="min-w-0">
-                    <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <AppIcon name="users" class="size-7 text-primary" />
-                        Staff Directory
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Manage staff profiles, titles, and status transitions.
-                    </p>
-                </div>
-                <div class="flex flex-shrink-0 items-center gap-2">
-                    <Badge variant="outline" class="hidden sm:inline-flex">Staff Registry</Badge>
-                    <Popover>
-                        <PopoverTrigger as-child>
-                            <Button variant="outline" size="sm" class="px-2.5">
-                                <Badge :variant="scopeWarning ? 'destructive' : 'secondary'">
-                                    {{ scopeStatusLabel }}
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div
+                            class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20"
+                            aria-hidden="true"
+                        >
+                            <AppIcon name="users" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h1 class="text-base font-semibold tracking-tight md:text-lg">
+                                    Staff Directory
+                                </h1>
+                                <Badge
+                                    v-if="staffDirectoryReadOnly"
+                                    variant="outline"
+                                    class="h-5 px-1.5 text-[10px] font-medium"
+                                >
+                                    View only
                                 </Badge>
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent align="end" class="w-72 space-y-1 text-xs">
-                            <p v-if="scope?.tenant">Tenant: {{ scope.tenant.name }} ({{ scope.tenant.code }})</p>
-                            <p v-if="scope?.facility">Facility: {{ scope.facility.name }} ({{ scope.facility.code }})</p>
-                            <p>Accessible facilities: {{ scope?.userAccess?.accessibleFacilityCount ?? 'N/A' }}</p>
-                            <p v-if="scopeWarning" class="text-destructive">{{ scopeWarning }}</p>
-                        </PopoverContent>
-                    </Popover>
-                    <Button variant="outline" size="sm" :disabled="listLoading" @click="refreshPage">
-                        <AppIcon name="activity" class="size-3.5" />
-                        {{ listLoading ? 'Refreshing...' : 'Refresh' }}
-                    </Button>
-                    <Button v-if="canCreateStaff" size="sm" @click="openCreateStaffSheet()">
-                        <AppIcon name="plus" class="size-3.5" />
-                        Create Profile
-                    </Button>
+                            </div>
+                            <p class="truncate text-xs text-muted-foreground">
+                                {{ workspaceIntroText }}
+                            </p>
+                            <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
+                                <span class="inline-flex items-center gap-1">
+                                    <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
+                                    <span class="font-medium text-foreground">
+                                        {{ scope?.facility?.name || 'No facility' }}
+                                    </span>
+                                </span>
+                                <span class="select-none text-border" aria-hidden="true">·</span>
+                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
+                                <template v-if="scope?.userAccess?.accessibleFacilityCount">
+                                    <span class="select-none text-border" aria-hidden="true">·</span>
+                                    <span>{{ scope.userAccess.accessibleFacilityCount }} accessible facilities</span>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            :disabled="listLoading"
+                            @click="refreshPage"
+                        >
+                            <AppIcon name="refresh-cw" class="size-3.5" />
+                            {{ listLoading ? 'Refreshing...' : 'Refresh' }}
+                        </Button>
+                        <Button
+                            v-if="canCreateStaff"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            @click="openCreateStaffSheet()"
+                        >
+                            <AppIcon name="plus" class="size-3.5" />
+                            Create profile
+                        </Button>
+                    </div>
                 </div>
-            </div>
+            </section>
 
             <!-- Alerts -->
             <Alert v-if="scopeWarning" variant="destructive">
@@ -2312,37 +2461,35 @@ onMounted(refreshPage);
                 </div>
 
                 <Card v-if="!permissionsLoaded || canReadStaff" class="flex min-h-0 flex-1 flex-col gap-0 rounded-lg border-sidebar-border/70 py-0">
-                    <CardHeader class="shrink-0 gap-3 pt-4 pb-2">
+                    <CardHeader class="shrink-0 gap-3 border-b px-4 py-3 pt-4 pb-3">
                         <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                             <div class="min-w-0 space-y-1">
-                                <CardTitle class="flex items-center gap-2 text-base">
-                                    <AppIcon name="layout-list" class="size-4.5 text-muted-foreground" />
-                                    Staff
+                                <CardTitle class="text-sm font-semibold">
+                                    Staff profiles
                                 </CardTitle>
-                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                                    <span>{{ staffListSummaryText }}</span>
-                                    <span v-if="canReadStaffCredentialing">{{ staffCredentialingSummaryText }}</span>
-                                </div>
+                                <p class="text-xs text-muted-foreground">
+                                    {{ staffListSummaryText }}
+                                    <template v-if="canReadStaffCredentialing">
+                                        · {{ staffCredentialingSummaryText }}
+                                    </template>
+                                </p>
                             </div>
                             <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center xl:max-w-2xl">
-                                <div class="relative min-w-0 flex-1 min-w-[12rem]">
-                                    <AppIcon
-                                        name="search"
-                                        class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                                    />
-                                    <Input
-                                        id="staff-search-q-modern"
-                                        v-model="searchForm.q"
-                                        placeholder="Search name, employee number, title, or department"
-                                        class="h-9 pl-9"
-                                        @keyup.enter="submitSearch"
-                                    />
-                                </div>
+                                <SearchInput
+                                    id="staff-search-q-modern"
+                                    v-model="searchForm.q"
+                                    placeholder="Search name, employee number, title, or department"
+                                    class="min-w-0 flex-1 text-xs [&_input]:h-8"
+                                    @keyup.enter="submitSearch"
+                                />
                                 <Popover>
                                     <PopoverTrigger as-child>
-                                        <Button variant="outline" size="sm" class="hidden md:inline-flex">
+                                        <Button variant="outline" size="sm" class="hidden h-8 gap-1.5 rounded-lg text-xs md:inline-flex">
                                             <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                            Filters & view
+                                            Filters
+                                            <Badge v-if="staffFilterBadgeCount > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">
+                                                {{ staffFilterBadgeCount }}
+                                            </Badge>
                                         </Button>
                                     </PopoverTrigger>
                                     <PopoverContent class="w-72" align="end">
@@ -2436,142 +2583,131 @@ onMounted(refreshPage);
                                         </div>
                                     </PopoverContent>
                                 </Popover>
-                                <Button variant="outline" size="sm" class="md:hidden" @click="mobileFiltersDrawerOpen = true">
+                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs md:hidden" @click="mobileFiltersDrawerOpen = true">
                                     <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                    Filters & view
+                                    Filters
+                                    <Badge v-if="staffFilterBadgeCount > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">
+                                        {{ staffFilterBadgeCount }}
+                                    </Badge>
                                 </Button>
                             </div>
                         </div>
                     </CardHeader>
-
-                    <CardContent class="px-0 pb-0">
-                        <div
-                            class="hidden shrink-0 border-b bg-muted/30 px-4 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground md:grid md:grid-cols-[minmax(0,2.5fr)_minmax(0,0.8fr)_minmax(0,0.95fr)_minmax(0,1.1fr)_minmax(0,auto)]"
+                    <div v-if="staffFilterChips.length" class="flex flex-wrap items-center gap-1.5 border-b px-4 py-2">
+                        <span class="text-[11px] text-muted-foreground">Filters:</span>
+                        <button
+                            v-for="chip in staffFilterChips"
+                            :key="chip.key"
+                            type="button"
+                            class="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] hover:bg-muted/80"
+                            @click="chip.clear"
                         >
-                            <span>Staff</span>
-                            <span>Status</span>
-                            <span>Credentialing</span>
-                            <span>Department</span>
-                            <span class="text-right">Actions</span>
-                        </div>
+                            {{ chip.label }}
+                            <AppIcon name="circle-x" class="size-3" />
+                        </button>
+                        <button class="ml-1 text-[11px] text-muted-foreground underline-offset-2 hover:underline" @click="resetFilters">
+                            Clear all
+                        </button>
+                    </div>
 
-                        <div>
-                            <div>
-                                <div v-if="loading || listLoading" class="min-h-[12rem] space-y-0 divide-y px-4">
+                    <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+                        <ScrollArea class="min-h-0 flex-1">
+                            <div class="min-h-[12rem]">
+                                <div v-if="loading || listLoading" class="divide-y px-4">
                                     <div
                                         v-for="index in 6"
                                         :key="`staff-modern-skeleton-${index}`"
-                                        class="grid items-center gap-3 md:grid-cols-[minmax(0,2.5fr)_minmax(0,0.8fr)_minmax(0,0.95fr)_minmax(0,1.1fr)_minmax(0,auto)]"
-                                        :class="compactQueueRows ? 'py-2' : 'py-2.5'"
+                                        class="flex items-center gap-3 py-3"
                                     >
-                                        <div class="flex min-w-0 items-center gap-3">
-                                            <Skeleton class="h-8 w-8 rounded-full" />
-                                            <div class="min-w-0 flex-1 space-y-1.5">
-                                                <Skeleton class="h-3.5 w-32" />
-                                                <Skeleton class="h-3 w-44" />
-                                            </div>
+                                        <Skeleton class="size-2 shrink-0 rounded-full" />
+                                        <div class="min-w-0 flex-1 space-y-2">
+                                            <Skeleton class="h-4 w-40" />
+                                            <Skeleton class="h-3.5 w-56 max-w-full" />
                                         </div>
-                                        <Skeleton class="h-5 w-16 rounded-full" />
-                                        <Skeleton class="h-5 w-20 rounded-full" />
-                                        <Skeleton class="h-3.5 w-28" />
-                                        <div class="flex justify-end gap-2">
-                                            <Skeleton class="hidden h-7 w-14 rounded-md lg:block" />
-                                            <Skeleton class="h-7 w-7 rounded-md" />
-                                        </div>
+                                        <Skeleton class="hidden h-5 w-14 shrink-0 rounded-full sm:block" />
+                                        <Skeleton class="hidden h-5 w-16 shrink-0 rounded-full sm:block" />
+                                        <Skeleton class="h-8 w-16 shrink-0 rounded-md" />
+                                        <Skeleton class="hidden h-8 w-8 shrink-0 rounded-md sm:block" />
                                     </div>
                                 </div>
 
                                 <div
                                     v-else-if="staffProfiles.length === 0"
-                                    class="flex min-h-[12rem] flex-col items-center justify-center py-16 text-center"
+                                    class="flex flex-col items-center gap-3 px-4 py-10 text-center"
                                 >
-                                    <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                                        <AppIcon name="users" class="size-6 text-muted-foreground" />
+                                    <div class="flex size-10 items-center justify-center rounded-lg bg-muted">
+                                        <AppIcon name="users" class="size-4 text-muted-foreground" />
                                     </div>
-                                    <p class="text-sm font-medium">No staff profiles found</p>
-                                    <p class="mt-1 max-w-sm text-xs text-muted-foreground">
-                                        Try adjusting your search or filters, or create a new staff profile.
-                                    </p>
+                                    <div class="space-y-1">
+                                        <p class="text-sm font-medium">No staff profiles found</p>
+                                        <p class="text-xs text-muted-foreground">
+                                            Try adjusting your search or filters, or create a new staff profile.
+                                        </p>
+                                    </div>
                                     <Button
                                         v-if="canCreateStaff"
                                         size="sm"
-                                        variant="outline"
-                                        class="mt-4"
+                                        class="h-8 gap-1.5"
                                         @click="openCreateStaffSheet()"
                                     >
                                         <AppIcon name="plus" class="size-3.5" />
-                                        Create Staff Profile
+                                        Create staff profile
                                     </Button>
                                 </div>
 
-                                <div v-else class="divide-y">
+                                <div v-else class="divide-y px-4">
                                     <div
                                         v-for="profile in staffProfiles"
                                         :key="`staff-modern-row-${profile.id}`"
-                                        class="group grid items-center gap-2.5 px-4 transition-colors hover:bg-muted/30 md:grid-cols-[minmax(0,2.5fr)_minmax(0,0.8fr)_minmax(0,0.95fr)_minmax(0,1.1fr)_minmax(0,auto)]"
-                                        :class="compactQueueRows ? 'py-2' : 'py-2.5'"
+                                        class="flex items-center gap-3 py-3 transition-colors hover:bg-muted/30"
                                     >
-                                        <div class="flex min-w-0 items-center gap-3">
-                                            <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
-                                                {{ staffInitials(profile) }}
-                                            </div>
-                                            <div class="min-w-0">
-                                                <button
-                                                    class="truncate text-sm font-medium hover:text-primary hover:underline"
-                                                    @click="openStaffDetailsSheet(profile)"
-                                                >
+                                        <span
+                                            class="size-2 shrink-0 rounded-full"
+                                            :class="staffStatusDotClass(profile.status)"
+                                            :title="(profile.status ?? 'unknown').toString()"
+                                        />
+                                        <button
+                                            type="button"
+                                            class="min-w-0 flex-1 space-y-0.5 text-left"
+                                            @click="openStaffDetailsSheet(profile)"
+                                        >
+                                            <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                                <span class="truncate text-sm font-medium transition-colors hover:text-primary">
                                                     {{ staffDisplayName(profile) }}
-                                                </button>
-                                                <p class="truncate text-xs text-muted-foreground">
-                                                    {{ profile.employeeNumber || 'No employee number' }} · {{ profile.jobTitle || 'No title' }}
-                                                </p>
-
+                                                </span>
+                                                <span class="shrink-0 text-xs text-muted-foreground">
+                                                    {{ profile.employeeNumber || 'No employee number' }}
+                                                </span>
                                             </div>
-                                        </div>
-
-                                        <div class="flex items-center gap-2">
-                                            <span class="text-xs text-muted-foreground md:hidden">Status:</span>
-                                            <Badge :variant="statusVariant(profile.status)" class="text-[10px] leading-none">
+                                            <p class="truncate text-xs text-muted-foreground">
+                                                {{ profile.jobTitle || 'No title' }}
+                                                <span class="text-border"> · </span>
+                                                {{ profile.department || 'No department' }}
+                                            </p>
+                                        </button>
+                                        <div class="hidden shrink-0 flex-wrap items-center gap-1.5 sm:flex">
+                                            <Badge :variant="statusVariant(profile.status)" class="capitalize">
                                                 {{ profile.status || 'unknown' }}
                                             </Badge>
-                                        </div>
-
-                                        <div class="flex items-center gap-2">
-                                            <span class="text-xs text-muted-foreground md:hidden">Credentialing:</span>
                                             <Badge
                                                 v-if="canReadStaffCredentialing && staffCredentialingSummary(profile.id)?.credentialingState"
                                                 :variant="credentialingStateVariant(staffCredentialingSummary(profile.id)?.credentialingState ?? null)"
-                                                class="text-[10px] leading-none"
                                             >
                                                 {{ credentialingStateLabel(staffCredentialingSummary(profile.id)?.credentialingState ?? null) }}
                                             </Badge>
-                                            <span v-else-if="canReadStaffCredentialing && credentialingSummariesLoading" class="text-xs text-muted-foreground">
-                                                Checking credentialing
-                                            </span>
-                                            <span v-else class="text-xs text-muted-foreground">
-                                                {{ canReadStaffCredentialing ? 'No credentialing state' : 'Hidden' }}
-                                            </span>
                                         </div>
-
-                                        <div class="min-w-0">
-                                            <p class="truncate text-xs text-muted-foreground">
-                                                {{ profile.department || 'No department' }}
-                                            </p>
-                                        </div>
-
-                                        <div class="flex items-center justify-end gap-2">
+                                        <div class="flex shrink-0 items-center gap-1.5">
                                             <Button
-                                                variant="ghost"
                                                 size="sm"
-                                                class="hidden lg:inline-flex"
+                                                variant="outline"
+                                                class="h-8 rounded-lg text-xs"
                                                 @click="openStaffDetailsSheet(profile)"
                                             >
-                                                <AppIcon name="eye" class="size-3.5" />
-                                                View
+                                                Details
                                             </Button>
                                             <DropdownMenu v-if="canUpdateStaff || canUpdateStaffStatus">
                                                 <DropdownMenuTrigger as-child>
-                                                    <Button variant="ghost" size="icon-sm">
+                                                    <Button variant="outline" size="icon" class="size-8 shrink-0">
                                                         <AppIcon name="ellipsis-vertical" class="size-4" />
                                                         <span class="sr-only">More actions</span>
                                                     </Button>
@@ -2595,32 +2731,59 @@ onMounted(refreshPage);
                                                     </DropdownMenuItem>
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
-                                            <Button
-                                                v-else
-                                                variant="ghost"
-                                                size="icon-sm"
-                                                class="md:hidden"
-                                                @click="openStaffDetailsSheet(profile)"
-                                            >
-                                                <AppIcon name="eye" class="size-4" />
-                                                <span class="sr-only">View details</span>
-                                            </Button>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        </ScrollArea>
 
-                        <footer class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-4 py-3">
+                        <footer class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
                             <p class="text-xs text-muted-foreground">
-                                Showing {{ staffProfiles.length }} of {{ pagination?.total ?? 0 }} results &middot; Page {{ pagination?.currentPage ?? 1 }} of {{ pagination?.lastPage ?? 1 }}
+                                <template v-if="pagination">
+                                    Showing {{ staffProfiles.length }} of
+                                    {{ pagination.total }} · Page
+                                    {{ pagination.currentPage }} of
+                                    {{ pagination.lastPage }}
+                                </template>
+                                <template v-else>No pagination data</template>
                             </p>
-                            <div class="flex items-center gap-2">
-                                <Button variant="outline" size="sm" :disabled="!canPrev || listLoading" @click="prevPage">
-                                    Previous
+                            <div class="flex items-center gap-1">
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    class="size-8"
+                                    :disabled="!canPrev || listLoading"
+                                    @click="prevPage"
+                                >
+                                    <AppIcon name="chevron-left" class="size-4" />
                                 </Button>
-                                <Button variant="outline" size="sm" :disabled="!canNext || listLoading" @click="nextPage">
-                                    Next
+                                <template
+                                    v-for="pageNumber in paginationPageNumbers"
+                                    :key="String(pageNumber)"
+                                >
+                                    <span
+                                        v-if="pageNumber === '...'"
+                                        class="px-1 text-xs text-muted-foreground"
+                                    >…</span>
+                                    <Button
+                                        v-else
+                                        :variant="pageNumber === pagination?.currentPage ? 'default' : 'ghost'"
+                                        size="icon"
+                                        class="size-8 text-xs"
+                                        :disabled="listLoading"
+                                        @click="goToPage(pageNumber as number)"
+                                    >
+                                        {{ pageNumber }}
+                                    </Button>
+                                </template>
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    class="size-8"
+                                    :disabled="!canNext || listLoading"
+                                    @click="nextPage"
+                                >
+                                    <AppIcon name="chevron-right" class="size-4" />
                                 </Button>
                             </div>
                         </footer>
@@ -2646,19 +2809,19 @@ onMounted(refreshPage);
             </div>
 
             <Sheet :open="createSheetOpen" @update:open="createSheetOpen = $event">
-                <SheetContent side="right" variant="form" size="4xl">
+                <SheetContent side="right" variant="form" size="3xl" class="flex h-full min-h-0 flex-col">
                     <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
                         <SheetTitle class="flex items-center gap-2">
-                            <AppIcon name="plus" class="size-5" />
-                            Create Staff Profile
+                            <AppIcon name="users" class="size-5 text-muted-foreground" />
+                            Create staff profile
                         </SheetTitle>
                         <SheetDescription>
-                            Register a staff profile for an existing linked user account.
+                            Link an existing user account, then assign department placement and job details.
                         </SheetDescription>
                     </SheetHeader>
 
-                    <div>
-                        <div class="mx-auto w-full max-w-4xl space-y-5 p-4 pb-24">
+                    <ScrollArea class="min-h-0 flex-1">
+                        <div class="grid gap-4 px-6 py-4">
                             <div v-if="createLinkedUser" class="rounded-lg border bg-muted/20 px-4 py-3">
                                 <div class="flex flex-wrap items-center gap-2">
                                     <span class="text-sm font-semibold text-foreground">{{ createLinkedUser.displayName }}</span>
@@ -2686,111 +2849,92 @@ onMounted(refreshPage);
                                 </div>
                             </div>
 
-                            <div class="grid gap-4 md:grid-cols-2">
-                                <Card class="rounded-lg border-sidebar-border/70">
-                                    <CardHeader class="px-4 pb-0 pt-4">
-                                        <CardTitle class="text-sm">Identity & placement</CardTitle>
-                                        <CardDescription>Select the linked user and assign department placement.</CardDescription>
-                                    </CardHeader>
-                                    <CardContent class="space-y-4 px-4 pb-4">
-                                        <div class="grid gap-2">
-                                            <StaffUserLookupField
-                                                input-id="staff-user-id-sheet"
-                                                v-model="createForm.userId"
-                                                @selected="handleCreateLinkedUserSelected"
-                                                label="Linked User"
-                                                placeholder="Search user by name or email"
-                                                helper-text="Search active user accounts that do not already have a staff profile."
-                                                :error-message="createErrors.userId?.[0] ?? null"
-                                                :disabled="createLoading"
-                                            />
-                                        </div>
-                                        <div class="grid gap-2">
-                                            <SearchableSelectField
-                                                input-id="staff-department-sheet"
-                                                v-model="createForm.department"
-                                                label="Department"
-                                                :options="createDepartmentOptions"
-                                                placeholder="Select department"
-                                                search-placeholder="Search departments or categories"
-                                                helper-text="Departments are grouped by category from the registry."
-                                                :error-message="createErrors.department?.[0] ?? null"
-                                                :disabled="departmentOptionsLoading || createLoading"
-                                            />
-                                            <div
-                                                v-if="createDepartmentCategorySuggestion"
-                                                class="rounded-lg border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
-                                            >
-                                                Suggested category from linked user role:
-                                                <span class="font-medium text-foreground">
-                                                    {{ createDepartmentCategorySuggestion }}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div class="grid gap-2">
-                                            <Label for="staff-employment-type-sheet">Employment Type</Label>
-                                            <Select v-model="createForm.employmentType">
-                                                <SelectTrigger class="w-full">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                <SelectItem value="full_time">Full time</SelectItem>
-                                                <SelectItem value="part_time">Part time</SelectItem>
-                                                <SelectItem value="contract">Contract</SelectItem>
-                                                <SelectItem value="locum">Locum</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                            <fieldset class="grid gap-3 rounded-lg border p-3 sm:grid-cols-2">
+                                <legend class="px-2 text-sm font-medium text-muted-foreground">Identity & placement</legend>
+                                <div class="grid gap-2 sm:col-span-2">
+                                    <StaffUserLookupField
+                                        input-id="staff-user-id-sheet"
+                                        v-model="createForm.userId"
+                                        @selected="handleCreateLinkedUserSelected"
+                                        label="Linked user"
+                                        placeholder="Search user by name or email"
+                                        helper-text="Search active user accounts that do not already have a staff profile."
+                                        :error-message="createErrors.userId?.[0] ?? null"
+                                        :disabled="createLoading"
+                                    />
+                                </div>
+                                <div class="grid gap-2 sm:col-span-2">
+                                    <SearchableSelectField
+                                        input-id="staff-department-sheet"
+                                        v-model="createForm.department"
+                                        label="Department"
+                                        :options="createDepartmentOptions"
+                                        placeholder="Select department"
+                                        search-placeholder="Search departments or categories"
+                                        helper-text="Departments are grouped by category from the registry."
+                                        :error-message="createErrors.department?.[0] ?? null"
+                                        :disabled="departmentOptionsLoading || createLoading"
+                                    />
+                                    <div
+                                        v-if="createDepartmentCategorySuggestion"
+                                        class="rounded-lg border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+                                    >
+                                        Suggested category from linked user role:
+                                        <span class="font-medium text-foreground">
+                                            {{ createDepartmentCategorySuggestion }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="grid gap-2">
+                                    <Label for="staff-employment-type-sheet">Employment type</Label>
+                                    <Select v-model="createForm.employmentType">
+                                        <SelectTrigger class="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="full_time">Full time</SelectItem>
+                                            <SelectItem value="part_time">Part time</SelectItem>
+                                            <SelectItem value="contract">Contract</SelectItem>
+                                            <SelectItem value="locum">Locum</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </fieldset>
 
-                                <Card class="rounded-lg border-sidebar-border/70">
-                                    <CardHeader class="px-4 pb-0 pt-4">
-                                        <CardTitle class="text-sm">Role & licence details</CardTitle>
-                                        <CardDescription>Capture the staff post and reference licence details if available.</CardDescription>
-                                    </CardHeader>
-                                    <CardContent class="space-y-4 px-4 pb-4">
-                                        <div class="grid gap-2">
-                                            <Label for="staff-job-title-sheet">Staff Position / Job Title</Label>
-                                            <Input id="staff-job-title-sheet" v-model="createForm.jobTitle" placeholder="Registration Officer, Theatre Nurse, Medical Officer" />
-                                            <p class="text-xs text-muted-foreground">
-                                                Organizational staff post on the staff profile. Facility posting is managed under Platform Users. Professional title is managed in Credentialing.
-                                            </p>
-                                            <p v-if="createErrors.jobTitle" class="text-xs text-destructive">{{ createErrors.jobTitle[0] }}</p>
-                                        </div>
-                                        <div class="grid gap-2">
-                                            <Label for="staff-license-number-sheet">Professional License Number</Label>
-                                            <Input id="staff-license-number-sheet" v-model="createForm.professionalLicenseNumber" />
-                                        </div>
-                                        <div class="grid gap-2">
-                                            <Label for="staff-license-type-sheet">License Type</Label>
-                                            <Input id="staff-license-type-sheet" v-model="createForm.licenseType" />
-                                        </div>
-                                        <div class="grid gap-2">
-                                            <Label for="staff-phone-extension-sheet">Phone Extension</Label>
-                                            <Input id="staff-phone-extension-sheet" v-model="createForm.phoneExtension" />
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            </div>
+                            <fieldset class="grid gap-3 rounded-lg border p-3 sm:grid-cols-2">
+                                <legend class="px-2 text-sm font-medium text-muted-foreground">Role & licence details</legend>
+                                <div class="grid gap-2 sm:col-span-2">
+                                    <Label for="staff-job-title-sheet">Staff position / job title</Label>
+                                    <Input id="staff-job-title-sheet" v-model="createForm.jobTitle" placeholder="Registration Officer, Theatre Nurse, Medical Officer" />
+                                    <p class="text-xs text-muted-foreground">
+                                        Organizational staff post on the staff profile. Facility posting is managed under Platform Users. Professional title is managed in Credentialing.
+                                    </p>
+                                    <p v-if="createErrors.jobTitle" class="text-xs text-destructive">{{ createErrors.jobTitle[0] }}</p>
+                                </div>
+                                <div class="grid gap-2">
+                                    <Label for="staff-license-number-sheet">Professional license number</Label>
+                                    <Input id="staff-license-number-sheet" v-model="createForm.professionalLicenseNumber" />
+                                </div>
+                                <div class="grid gap-2">
+                                    <Label for="staff-license-type-sheet">License type</Label>
+                                    <Input id="staff-license-type-sheet" v-model="createForm.licenseType" />
+                                </div>
+                                <div class="grid gap-2 sm:col-span-2">
+                                    <Label for="staff-phone-extension-sheet">Phone extension</Label>
+                                    <Input id="staff-phone-extension-sheet" v-model="createForm.phoneExtension" />
+                                </div>
+                            </fieldset>
                         </div>
-                    </div>
+                    </ScrollArea>
 
                     <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
-                        <div class="flex w-full flex-wrap items-center justify-between gap-2">
-                            <p class="text-xs text-muted-foreground">
-                                Link an existing user first, then complete department and job details.
-                            </p>
-                            <div class="flex items-center gap-2">
-                                <Button variant="outline" :disabled="createLoading" @click="createSheetOpen = false">
-                                    Cancel
-                                </Button>
-                                <Button :disabled="createLoading" class="gap-1.5" @click="createStaffProfile">
-                                    <AppIcon name="plus" class="size-3.5" />
-                                    {{ createLoading ? 'Creating...' : 'Create Staff Profile' }}
-                                </Button>
-                            </div>
-                        </div>
+                        <Button type="button" variant="outline" :disabled="createLoading" @click="createSheetOpen = false">
+                            Cancel
+                        </Button>
+                        <Button type="button" :disabled="createLoading" class="gap-1.5" @click="createStaffProfile">
+                            <AppIcon name="plus" class="size-3.5" />
+                            {{ createLoading ? 'Creating...' : 'Create staff profile' }}
+                        </Button>
                     </SheetFooter>
                 </SheetContent>
             </Sheet>
@@ -2956,282 +3100,400 @@ onMounted(refreshPage);
                 :open="detailsSheetOpen"
                 @update:open="(open) => (open ? (detailsSheetOpen = true) : closeStaffDetailsSheet())"
             >
-                <SheetContent side="right" variant="workspace" size="2xl">
-                    <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
-                        <SheetTitle class="flex items-center gap-2 text-base">
-                            <AppIcon name="users" class="size-4 text-muted-foreground" />
-                            Staff Profile Details
+                <SheetContent side="right" variant="workspace" size="5xl" class="flex h-full min-h-0 flex-col">
+                    <SheetHeader
+                        v-if="detailsSheetStaff"
+                        class="shrink-0 border-b bg-background/95 px-4 py-3 pr-12 text-left sm:px-5"
+                    >
+                        <SheetTitle class="flex min-w-0 flex-wrap items-center gap-2 text-base">
+                            <AppIcon name="user" class="size-5 text-muted-foreground" />
+                            <span class="min-w-0 truncate">{{ staffDisplayName(detailsSheetStaff) }}</span>
+                            <Badge
+                                v-if="detailsSheetStaff.employeeNumber"
+                                variant="outline"
+                                class="shrink-0 font-normal"
+                            >
+                                {{ detailsSheetStaff.employeeNumber }}
+                            </Badge>
+                            <Badge :variant="statusVariant(detailsSheetStaff.status)" class="shrink-0 capitalize">
+                                {{ detailsSheetStaff.status || 'unknown' }}
+                            </Badge>
                         </SheetTitle>
-                        <SheetDescription class="text-xs">Review profile metadata and current credentialing status.</SheetDescription>
+                        <SheetDescription class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                            <span class="flex items-center gap-1">
+                                <AppIcon name="briefcase" class="size-3 opacity-50" />
+                                <span>{{ detailsSheetStaff.jobTitle || 'No title recorded' }}</span>
+                            </span>
+                            <span class="text-muted-foreground/40">&middot;</span>
+                            <span class="flex items-center gap-1">
+                                <AppIcon name="building-2" class="size-3 opacity-50" />
+                                <span>{{ detailsSheetStaff.department || 'No department' }}</span>
+                            </span>
+                            <span class="text-muted-foreground/40">&middot;</span>
+                            <span class="flex items-center gap-1">
+                                <AppIcon name="mail" class="size-3 opacity-50" />
+                                <span>{{ detailsSheetStaff.userEmail || 'No linked email' }}</span>
+                            </span>
+                        </SheetDescription>
                     </SheetHeader>
 
-                    <ScrollArea v-if="detailsSheetStaff" class="min-h-0 flex-1">
-                        <div class="space-y-4 p-4">
-                            <!-- Sticky identity card -->
-                            <div class="sticky top-0 z-10 rounded-lg border bg-background/95 p-3 shadow-sm backdrop-blur">
-                                <div class="flex items-start gap-3">
-                                    <div class="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary">
-                                        {{ staffInitials(detailsSheetStaff) }}
+                    <div v-if="detailsSheetStaff" class="flex min-h-0 flex-1 flex-col overflow-hidden">
+                        <Tabs v-model="detailsSheetTab" class="flex h-full min-h-0 flex-col">
+                            <div class="shrink-0 border-b bg-background px-4 py-2 sm:px-5">
+                                <div class="space-y-2.5">
+                                    <div
+                                        class="grid gap-y-2 rounded-md bg-muted/20 px-3 py-2 text-xs sm:grid-cols-3 sm:divide-x sm:divide-border/50"
+                                    >
+                                        <div class="min-w-0 sm:pr-3">
+                                            <p class="font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                                                Placement
+                                            </p>
+                                            <p class="mt-1 truncate text-sm font-medium text-foreground">
+                                                {{ detailsSheetStaff.department || 'No department' }}
+                                            </p>
+                                            <p class="truncate text-muted-foreground">
+                                                {{ employmentTypeLabel(detailsSheetStaff.employmentType) }}
+                                            </p>
+                                        </div>
+                                        <div class="min-w-0 sm:px-3">
+                                            <p class="font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                                                Credentialing
+                                            </p>
+                                            <p class="mt-1 truncate text-sm font-medium text-foreground">
+                                                {{
+                                                    canReadStaffCredentialing && detailsSheetCredentialingSummary?.credentialingState
+                                                        ? credentialingStateLabel(detailsSheetCredentialingSummary.credentialingState)
+                                                        : canReadStaffCredentialing && credentialingSummariesLoading
+                                                          ? 'Checking...'
+                                                          : 'Not available'
+                                                }}
+                                            </p>
+                                            <p class="truncate text-muted-foreground">
+                                                {{ linkedUserVerificationLabel(detailsSheetStaff) }}
+                                            </p>
+                                        </div>
+                                        <div class="min-w-0 sm:pl-3">
+                                            <p class="font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                                                Records
+                                            </p>
+                                            <p class="mt-1 truncate text-sm font-medium text-foreground">
+                                                {{ detailsDocumentMeta?.total ?? detailsDocuments.length }} documents
+                                            </p>
+                                            <p class="truncate text-muted-foreground">
+                                                {{ detailsAuditMeta?.total ?? detailsAuditLogs.length }} audit events
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div class="min-w-0 flex-1 pt-0.5">
-                                        <p class="truncate text-base font-semibold leading-tight">{{ staffDisplayName(detailsSheetStaff) }}</p>
-                                        <p class="mt-0.5 truncate text-xs text-muted-foreground">
-                                            {{ detailsSheetStaff.employeeNumber || 'N/A' }} - {{ detailsSheetStaff.jobTitle || 'No title' }} - {{ detailsSheetStaff.department || 'No department' }}
-                                        </p>
-                                        <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
-                                            <Badge :variant="statusVariant(detailsSheetStaff.status)">{{ detailsSheetStaff.status || 'unknown' }}</Badge>
-                                            <Badge
-                                                v-if="canReadStaffCredentialing && detailsSheetCredentialingSummary?.credentialingState"
-                                                :variant="credentialingStateVariant(detailsSheetCredentialingSummary.credentialingState)"
+
+                                    <div class="w-full">
+                                        <TabsList
+                                            class="grid h-auto w-full gap-1 rounded-md bg-muted p-1"
+                                            :class="detailsSheetTabGridClass"
+                                        >
+                                            <TabsTrigger
+                                                value="overview"
+                                                class="h-9 min-w-0 gap-1.5 rounded-md px-2 text-xs sm:px-3 sm:text-sm"
                                             >
-                                                {{ credentialingStateLabel(detailsSheetCredentialingSummary.credentialingState) }}
-                                            </Badge>
-                                            <Badge v-else-if="canReadStaffCredentialing && credentialingSummariesLoading" variant="outline">Checking credentialing</Badge>
-                                            <Badge :variant="linkedUserVerificationVariant(detailsSheetStaff)">{{ linkedUserVerificationLabel(detailsSheetStaff) }}</Badge>
-                                            <span class="text-xs text-muted-foreground">User ID: {{ detailsSheetStaff.userId ?? 'N/A' }}</span>
-                                        </div>
-                                        <p class="mt-1 text-xs text-muted-foreground">
-                                            {{ detailsSheetStaff.userEmail || 'No linked user email recorded' }}
-                                        </p>
-                                        <div class="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                                            <Button v-if="canUpdateStaff" size="sm" variant="outline" class="h-8 w-full justify-center text-xs" @click="openStaffEditDialog(detailsSheetStaff)">
-                                                Edit Staff
-                                            </Button>
-                                            <Button v-if="canUpdateStaffStatus" size="sm" class="h-8 w-full justify-center text-xs" @click="openStaffStatusDialog(detailsSheetStaff)">
-                                                Change Status
-                                            </Button>
-                                            <Button v-if="canReadPlatformUsers && detailsSheetStaff.userId" size="sm" variant="outline" class="h-8 w-full justify-center text-xs" as-child>
-                                                <Link :href="linkedPlatformUserHref(detailsSheetStaff)">Open Linked User</Link>
-                                            </Button>
-                                            <Button
-                                                v-if="canReadStaffCredentialing && detailsSheetCredentialingSummary && !credentialingNotApplicable(detailsSheetCredentialingSummary)"
-                                                size="sm"
-                                                variant="outline"
-                                                class="h-8 w-full justify-center text-xs"
-                                                as-child
+                                                <AppIcon name="layout-grid" class="size-3.5" />
+                                                Overview
+                                            </TabsTrigger>
+                                            <TabsTrigger
+                                                value="documents"
+                                                class="h-9 min-w-0 gap-1.5 rounded-md px-2 text-xs sm:px-3 sm:text-sm"
                                             >
-                                                <Link :href="workspaceStaffHref('/staff-credentialing', detailsSheetStaff)">Open Credentialing</Link>
-                                            </Button>
-                                            <Button
-                                                v-if="canReadStaffPrivileges && (!canReadStaffCredentialing || (detailsSheetCredentialingSummary && !credentialingNotApplicable(detailsSheetCredentialingSummary)))"
-                                                size="sm"
-                                                variant="outline"
-                                                class="h-8 w-full justify-center text-xs"
-                                                as-child
+                                                <AppIcon name="file-text" class="size-3.5" />
+                                                Documents
+                                                <Badge
+                                                    v-if="(detailsDocumentMeta?.total ?? detailsDocuments.length) > 0"
+                                                    variant="secondary"
+                                                    class="h-4 min-w-4 px-1 text-xs"
+                                                >
+                                                    {{ detailsDocumentMeta?.total ?? detailsDocuments.length }}
+                                                </Badge>
+                                            </TabsTrigger>
+                                            <TabsTrigger
+                                                value="audit"
+                                                class="h-9 min-w-0 gap-1.5 rounded-md px-2 text-xs sm:px-3 sm:text-sm"
                                             >
-                                                <Link :href="workspaceStaffHref('/staff-privileges', detailsSheetStaff)">Open Privileging</Link>
-                                            </Button>
-                                        </div>
-                                        <p v-if="credentialingApplicabilityNote(detailsSheetCredentialingSummary)" class="mt-2 text-xs text-muted-foreground">
-                                            {{ credentialingApplicabilityNote(detailsSheetCredentialingSummary) }}
-                                        </p>
+                                                <AppIcon name="activity" class="size-3.5" />
+                                                Audit
+                                                <Badge
+                                                    v-if="detailsAuditMeta"
+                                                    variant="secondary"
+                                                    class="h-4 min-w-4 px-1 text-xs"
+                                                >
+                                                    {{ detailsAuditMeta.total }}
+                                                </Badge>
+                                            </TabsTrigger>
+                                        </TabsList>
                                     </div>
                                 </div>
                             </div>
 
-                            <Alert v-if="detailsSheetActionMessage">
-                                <AlertTitle>Saved</AlertTitle>
-                                <AlertDescription>{{ detailsSheetActionMessage }}</AlertDescription>
-                            </Alert>
+                            <ScrollArea class="min-h-0 flex-1" viewport-class="pb-6">
+                                <Alert v-if="detailsSheetActionMessage" class="mx-4 mt-3 sm:mx-5">
+                                    <AlertTitle>Saved</AlertTitle>
+                                    <AlertDescription>{{ detailsSheetActionMessage }}</AlertDescription>
+                                </Alert>
 
-                            <Alert v-if="linkedUserGovernanceBlockerMessage(detailsSheetStaff)" variant="destructive">
-                                <AlertTitle>Linked user verification required</AlertTitle>
-                                <AlertDescription>{{ linkedUserGovernanceBlockerMessage(detailsSheetStaff) }}</AlertDescription>
-                            </Alert>
+                                <Alert
+                                    v-if="linkedUserGovernanceBlockerMessage(detailsSheetStaff)"
+                                    variant="destructive"
+                                    class="mx-4 mt-3 sm:mx-5"
+                                >
+                                    <AlertTitle>Linked user verification required</AlertTitle>
+                                    <AlertDescription>{{ linkedUserGovernanceBlockerMessage(detailsSheetStaff) }}</AlertDescription>
+                                </Alert>
 
-                            <!-- Tabs -->
-                            <Tabs v-model="detailsSheetTab" class="w-full">
-                                <TabsList class="w-full">
-                                    <TabsTrigger value="overview" class="flex-1">Overview</TabsTrigger>
-                                    <TabsTrigger value="documents" class="flex-1">Documents</TabsTrigger>
-                                    <TabsTrigger value="audit" class="flex-1">Audit</TabsTrigger>
-                                </TabsList>
+                                <p
+                                    v-if="credentialingApplicabilityNote(detailsSheetCredentialingSummary)"
+                                    class="mx-4 mt-3 text-xs text-muted-foreground sm:mx-5"
+                                >
+                                    {{ credentialingApplicabilityNote(detailsSheetCredentialingSummary) }}
+                                </p>
 
                                 <!-- Overview Tab -->
-                                <TabsContent value="overview" class="mt-3 space-y-3">
+                                <TabsContent value="overview" class="m-0 space-y-3 px-4 py-3 sm:px-5">
+                                    <div
+                                        v-if="
+                                            detailsSheetStaff.status &&
+                                            detailsSheetStaff.status.toLowerCase() !== 'active' &&
+                                            detailsSheetStaff.statusReason
+                                        "
+                                        class="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2.5 text-xs"
+                                    >
+                                        <AppIcon
+                                            name="alert-triangle"
+                                            class="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+                                        />
+                                        <span class="text-amber-700 dark:text-amber-300">
+                                            <span class="font-semibold capitalize">{{ detailsSheetStaff.status }}</span>:
+                                            {{ detailsSheetStaff.statusReason }}
+                                        </span>
+                                    </div>
+
                                     <div class="grid gap-3 sm:grid-cols-2">
-                                        <Card class="rounded-lg !gap-4 !py-4">
-                                            <CardHeader class="px-4 pb-0 pt-0">
-                                                <CardTitle class="flex items-center gap-2 text-sm">
-                                                    <AppIcon name="briefcase" class="size-4 text-muted-foreground" />
-                                                    Role & Employment
+                                        <Card class="!gap-0 overflow-hidden rounded-md border-border/50 bg-card/70 !py-0 shadow-none">
+                                            <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
+                                                <CardTitle class="flex items-center gap-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                                                    <AppIcon name="user" class="size-3.5" />
+                                                    Identity
                                                 </CardTitle>
                                             </CardHeader>
-                                            <CardContent class="space-y-2 px-4 pb-0 text-sm">
-                                                <div class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">Department</span>
-                                                    <span class="font-medium">{{ detailsSheetStaff.department || 'N/A' }}</span>
+                                            <CardContent class="divide-y divide-border/50 px-3 py-1.5 text-sm">
+                                                <div class="flex items-center justify-between gap-4 py-2">
+                                                    <span class="text-muted-foreground">Display name</span>
+                                                    <span class="max-w-[14rem] truncate text-right font-medium">{{ staffDisplayName(detailsSheetStaff) }}</span>
                                                 </div>
-                                                <div class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">Job Title</span>
-                                                    <span class="font-medium">{{ detailsSheetStaff.jobTitle || 'N/A' }}</span>
+                                                <div class="flex items-center justify-between gap-4 py-2">
+                                                    <span class="text-muted-foreground">Employee number</span>
+                                                    <span class="font-medium">{{ detailsSheetStaff.employeeNumber || 'Not recorded' }}</span>
                                                 </div>
-                                                <div class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">Employment</span>
-                                                    <span class="font-medium">{{ employmentTypeLabel(detailsSheetStaff.employmentType) }}</span>
+                                                <div class="flex items-center justify-between gap-4 py-2">
+                                                    <span class="text-muted-foreground">Status</span>
+                                                    <Badge :variant="statusVariant(detailsSheetStaff.status)" class="capitalize">
+                                                        {{ detailsSheetStaff.status || 'unknown' }}
+                                                    </Badge>
+                                                </div>
+                                                <div class="flex items-center justify-between gap-4 py-2">
+                                                    <span class="text-muted-foreground">Email verification</span>
+                                                    <Badge :variant="linkedUserVerificationVariant(detailsSheetStaff)">
+                                                        {{ linkedUserVerificationLabel(detailsSheetStaff) }}
+                                                    </Badge>
                                                 </div>
                                             </CardContent>
                                         </Card>
 
-                                        <Card class="rounded-lg !gap-4 !py-4">
-                                            <CardHeader class="px-4 pb-0 pt-0">
-                                                <CardTitle class="flex items-center gap-2 text-sm">
-                                                    <AppIcon name="badge-check" class="size-4 text-muted-foreground" />
+                                        <Card class="!gap-0 overflow-hidden rounded-md border-border/50 bg-card/70 !py-0 shadow-none">
+                                            <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
+                                                <CardTitle class="flex items-center gap-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                                                    <AppIcon name="layout-list" class="size-3.5" />
+                                                    Role & employment
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent class="divide-y divide-border/50 px-3 py-1.5 text-sm">
+                                                <div class="flex items-center justify-between gap-4 py-2">
+                                                    <span class="text-muted-foreground">Department</span>
+                                                    <span class="max-w-[14rem] truncate text-right font-medium">{{ detailsSheetStaff.department || 'Not recorded' }}</span>
+                                                </div>
+                                                <div class="flex items-center justify-between gap-4 py-2">
+                                                    <span class="text-muted-foreground">Job title</span>
+                                                    <span class="max-w-[14rem] truncate text-right font-medium">{{ detailsSheetStaff.jobTitle || 'Not recorded' }}</span>
+                                                </div>
+                                                <div class="flex items-center justify-between gap-4 py-2">
+                                                    <span class="text-muted-foreground">Employment</span>
+                                                    <span class="font-medium capitalize">{{ employmentTypeLabel(detailsSheetStaff.employmentType) }}</span>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+
+                                        <Card class="!gap-0 overflow-hidden rounded-md border-border/50 bg-card/70 !py-0 shadow-none">
+                                            <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
+                                                <CardTitle class="flex items-center gap-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                                                    <AppIcon name="shield-check" class="size-3.5" />
                                                     Credentials
                                                 </CardTitle>
                                             </CardHeader>
-                                            <CardContent class="space-y-2 px-4 pb-0 text-sm">
-                                                <div class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">License No.</span>
-                                                    <span class="font-medium">{{ detailsSheetStaff.professionalLicenseNumber || 'N/A' }}</span>
+                                            <CardContent class="divide-y divide-border/50 px-3 py-1.5 text-sm">
+                                                <div class="flex items-center justify-between gap-4 py-2">
+                                                    <span class="text-muted-foreground">License number</span>
+                                                    <span class="font-medium">{{ detailsSheetStaff.professionalLicenseNumber || 'Not recorded' }}</span>
                                                 </div>
-                                                <div class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">License Type</span>
-                                                    <span class="font-medium">{{ detailsSheetStaff.licenseType || 'N/A' }}</span>
+                                                <div class="flex items-center justify-between gap-4 py-2">
+                                                    <span class="text-muted-foreground">License type</span>
+                                                    <span class="font-medium">{{ detailsSheetStaff.licenseType || 'Not recorded' }}</span>
                                                 </div>
-                                                <div class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">Phone Ext.</span>
-                                                    <span class="font-medium">{{ detailsSheetStaff.phoneExtension || 'N/A' }}</span>
+                                                <div class="flex items-center justify-between gap-4 py-2">
+                                                    <span class="text-muted-foreground">Phone extension</span>
+                                                    <span class="font-medium">{{ detailsSheetStaff.phoneExtension || 'Not recorded' }}</span>
                                                 </div>
                                             </CardContent>
                                         </Card>
 
-                                        <Card class="rounded-lg !gap-4 !py-4 sm:col-span-2">
-                                            <CardHeader class="px-4 pb-0 pt-0">
-                                                <CardTitle class="flex items-center gap-2 text-sm">
-                                                    <AppIcon name="stethoscope" class="size-4 text-muted-foreground" />
-                                                    Specialties
+                                        <Card class="!gap-0 overflow-hidden rounded-md border-border/50 bg-card/70 !py-0 shadow-none">
+                                            <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
+                                                <CardTitle class="flex items-center gap-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                                                    <AppIcon name="mail" class="size-3.5" />
+                                                    Linked account
                                                 </CardTitle>
                                             </CardHeader>
-                                            <CardContent class="space-y-2 px-4 pb-0 text-sm">
-                                                <template v-if="canReadStaffSpecialties">
-                                                    <div v-if="detailsSpecialtiesLoading" class="space-y-2">
-                                                        <div class="flex items-center justify-between gap-3 rounded-md border border-dashed p-3">
-                                                            <div class="space-y-2">
-                                                                <Skeleton class="h-3.5 w-36" />
-                                                                <Skeleton class="h-3 w-24" />
-                                                            </div>
-                                                            <Skeleton class="h-5 w-14 rounded-full" />
-                                                        </div>
-                                                        <div class="flex items-center justify-between gap-3 rounded-md border border-dashed p-3">
-                                                            <div class="space-y-2">
-                                                                <Skeleton class="h-3.5 w-40" />
-                                                                <Skeleton class="h-3 w-20" />
-                                                            </div>
-                                                            <Skeleton class="h-5 w-16 rounded-full" />
-                                                        </div>
-                                                    </div>
-                                                    <div v-else-if="detailsSpecialtiesError" class="rounded-md border border-dashed border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-                                                        {{ detailsSpecialtiesError }}
-                                                    </div>
-                                                    <div v-else-if="detailsSpecialties.length" class="space-y-2">
-                                                        <div
-                                                            v-for="assignment in detailsSpecialties"
-                                                            :key="assignment.id ?? assignment.specialtyId ?? staffSpecialtyLabel(assignment)"
-                                                            class="flex items-start justify-between gap-3 rounded-md border border-border/70 bg-muted/20 px-3 py-2.5"
-                                                        >
-                                                            <div class="min-w-0">
-                                                                <p class="truncate font-medium">{{ staffSpecialtyLabel(assignment) }}</p>
-                                                                <p class="text-xs text-muted-foreground">{{ assignment.specialty?.description || 'Assigned clinical specialty' }}</p>
-                                                            </div>
-                                                            <Badge :variant="assignment.isPrimary ? 'default' : 'outline'">
-                                                                {{ assignment.isPrimary ? 'Primary' : 'Assigned' }}
-                                                            </Badge>
-                                                        </div>
-                                                    </div>
-                                                    <div v-else-if="credentialingNotApplicable(detailsSheetCredentialingSummary)" class="rounded-md border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
-                                                        Clinical specialties are not used for this non-clinical staff role.
-                                                    </div>
-                                                    <div v-else class="rounded-md border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
-                                                        No specialties are assigned to this staff profile yet.
-                                                    </div>
-                                                </template>
-                                                <template v-else-if="credentialingNotApplicable(detailsSheetCredentialingSummary)">
-                                                    <div class="rounded-md border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
-                                                        Clinical specialties are not used for this non-clinical staff role.
-                                                    </div>
-                                                </template>
-                                                <template v-else>
-                                                    <div class="text-muted-foreground">Request `staff.specialties.read` permission to review specialty assignments.</div>
-                                                </template>
-                                            </CardContent>
-                                        </Card>
-
-                                        <Card class="rounded-lg !gap-4 !py-4 sm:col-span-2">
-                                            <CardHeader class="px-4 pb-0 pt-0">
-                                                <CardTitle class="flex items-center gap-2 text-sm">
-                                                    <AppIcon name="shield-check" class="size-4 text-muted-foreground" />
-                                                    Credentialing
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent class="space-y-2 px-4 pb-0 text-sm">
-                                                <template v-if="canReadStaffCredentialing">
-                                                    <div class="flex justify-between gap-4">
-                                                        <span class="text-muted-foreground">State</span>
-                                                        <span class="font-medium">
-                                                            {{ detailsSheetCredentialingSummary?.credentialingState ? credentialingStateLabel(detailsSheetCredentialingSummary.credentialingState) : (credentialingSummariesLoading ? 'Checking...' : 'N/A') }}
-                                                        </span>
-                                                    </div>
-                                                    <template v-if="credentialingNotApplicable(detailsSheetCredentialingSummary)">
-                                                        <div class="rounded-md border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
-                                                            {{ credentialingApplicabilityNote(detailsSheetCredentialingSummary) }}
-                                                        </div>
-                                                    </template>
-                                                    <template v-else>
-                                                        <div class="flex justify-between gap-4">
-                                                            <span class="text-muted-foreground">Next Expiry</span>
-                                                            <span class="font-medium">{{ detailsSheetCredentialingSummary?.nextExpiryAt || 'N/A' }}</span>
-                                                        </div>
-                                                        <div class="flex justify-between gap-4">
-                                                            <span class="text-muted-foreground">Verified Registrations</span>
-                                                            <span class="font-medium">{{ detailsSheetCredentialingSummary?.registrationSummary?.verified ?? 0 }}</span>
-                                                        </div>
-                                                        <div class="flex justify-between gap-4">
-                                                            <span class="text-muted-foreground">Blocking Preview</span>
-                                                            <span class="font-medium text-right">
-                                                                {{ credentialingSummariesLoading && !detailsSheetCredentialingSummary ? 'Checking...' : credentialingBlockingPreview(detailsSheetCredentialingSummary) }}
-                                                            </span>
-                                                        </div>
-                                                        <div class="pt-2">
-                                                            <Button variant="outline" size="sm" as-child>
-                                                                <Link :href="workspaceStaffHref('/staff-credentialing', detailsSheetStaff)">Open Credentialing Workspace</Link>
-                                                            </Button>
-                                                        </div>
-                                                    </template>
-                                                </template>
-                                                <template v-else>
-                                                    <div class="text-muted-foreground">Request `staff.credentialing.read` permission to review credentialing state.</div>
-                                                </template>
-                                            </CardContent>
-                                        </Card>
-
-                                        <Card class="rounded-lg !gap-4 !py-4 sm:col-span-2">
-                                            <CardHeader class="px-4 pb-0 pt-0">
-                                                <CardTitle class="flex items-center gap-2 text-sm">
-                                                    <AppIcon name="clock" class="size-4 text-muted-foreground" />
-                                                    Timeline
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent class="space-y-2 px-4 pb-0 text-sm">
-                                                <div class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">Created</span>
-                                                    <span class="font-medium">{{ detailsSheetStaff.createdAt || 'N/A' }}</span>
+                                            <CardContent class="divide-y divide-border/50 px-3 py-1.5 text-sm">
+                                                <div class="flex items-center justify-between gap-4 py-2">
+                                                    <span class="text-muted-foreground">User ID</span>
+                                                    <span class="font-medium">{{ detailsSheetStaff.userId ?? 'Not linked' }}</span>
                                                 </div>
-                                                <div class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">Updated</span>
-                                                    <span class="font-medium">{{ detailsSheetStaff.updatedAt || 'N/A' }}</span>
+                                                <div class="flex items-center justify-between gap-4 py-2">
+                                                    <span class="shrink-0 text-muted-foreground">Email</span>
+                                                    <span class="max-w-[14rem] truncate text-right font-medium">{{ detailsSheetStaff.userEmail || 'Not recorded' }}</span>
                                                 </div>
-                                                <div v-if="detailsSheetStaff.statusReason" class="flex justify-between gap-4">
-                                                    <span class="text-muted-foreground">Status Note</span>
-                                                    <span class="font-medium">{{ detailsSheetStaff.statusReason }}</span>
+                                                <div class="flex items-center justify-between gap-4 py-2">
+                                                    <span class="text-muted-foreground">Platform user</span>
+                                                    <Link
+                                                        v-if="canReadPlatformUsers && detailsSheetStaff.userId"
+                                                        :href="linkedPlatformUserHref(detailsSheetStaff)"
+                                                        class="font-medium hover:text-primary hover:underline"
+                                                    >
+                                                        Open linked user
+                                                    </Link>
+                                                    <span v-else class="font-medium text-muted-foreground">Unavailable</span>
                                                 </div>
                                             </CardContent>
                                         </Card>
                                     </div>
+
+                                    <Card class="!gap-0 overflow-hidden rounded-md border-border/50 bg-card/70 !py-0 shadow-none">
+                                        <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
+                                            <CardTitle class="flex items-center gap-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                                                <AppIcon name="stethoscope" class="size-3.5" />
+                                                Specialties
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent class="px-3 py-3 text-sm">
+                                            <template v-if="canReadStaffSpecialties">
+                                                <div v-if="detailsSpecialtiesLoading" class="space-y-2">
+                                                    <Skeleton class="h-12 w-full" />
+                                                    <Skeleton class="h-12 w-full" />
+                                                </div>
+                                                <div v-else-if="detailsSpecialtiesError" class="text-sm text-destructive">
+                                                    {{ detailsSpecialtiesError }}
+                                                </div>
+                                                <div v-else-if="detailsSpecialties.length" class="divide-y divide-border/50">
+                                                    <div
+                                                        v-for="assignment in detailsSpecialties"
+                                                        :key="assignment.id ?? assignment.specialtyId ?? staffSpecialtyLabel(assignment)"
+                                                        class="flex items-start justify-between gap-3 py-2.5"
+                                                    >
+                                                        <div class="min-w-0">
+                                                            <p class="truncate font-medium">{{ staffSpecialtyLabel(assignment) }}</p>
+                                                            <p class="text-xs text-muted-foreground">{{ assignment.specialty?.description || 'Assigned clinical specialty' }}</p>
+                                                        </div>
+                                                        <Badge :variant="assignment.isPrimary ? 'default' : 'outline'">
+                                                            {{ assignment.isPrimary ? 'Primary' : 'Assigned' }}
+                                                        </Badge>
+                                                    </div>
+                                                </div>
+                                                <p v-else class="text-muted-foreground">
+                                                    {{
+                                                        credentialingNotApplicable(detailsSheetCredentialingSummary)
+                                                            ? 'Clinical specialties are not used for this non-clinical staff role.'
+                                                            : 'No specialties are assigned to this staff profile yet.'
+                                                    }}
+                                                </p>
+                                            </template>
+                                            <p v-else class="text-muted-foreground">
+                                                Request `staff.specialties.read` permission to review specialty assignments.
+                                            </p>
+                                        </CardContent>
+                                    </Card>
+
+                                    <Card v-if="canReadStaffCredentialing" class="!gap-0 overflow-hidden rounded-md border-border/50 bg-card/70 !py-0 shadow-none">
+                                        <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
+                                            <CardTitle class="flex items-center gap-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                                                <AppIcon name="shield-check" class="size-3.5" />
+                                                Credentialing
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent class="divide-y divide-border/50 px-3 py-1.5 text-sm">
+                                            <div class="flex items-center justify-between gap-4 py-2">
+                                                <span class="text-muted-foreground">State</span>
+                                                <span class="font-medium">
+                                                    {{
+                                                        detailsSheetCredentialingSummary?.credentialingState
+                                                            ? credentialingStateLabel(detailsSheetCredentialingSummary.credentialingState)
+                                                            : credentialingSummariesLoading
+                                                              ? 'Checking...'
+                                                              : 'Not recorded'
+                                                    }}
+                                                </span>
+                                            </div>
+                                            <template v-if="!credentialingNotApplicable(detailsSheetCredentialingSummary)">
+                                                <div class="flex items-center justify-between gap-4 py-2">
+                                                    <span class="text-muted-foreground">Next expiry</span>
+                                                    <span class="font-medium">{{ detailsSheetCredentialingSummary?.nextExpiryAt || 'Not recorded' }}</span>
+                                                </div>
+                                                <div class="flex items-center justify-between gap-4 py-2">
+                                                    <span class="text-muted-foreground">Verified registrations</span>
+                                                    <span class="font-medium">{{ detailsSheetCredentialingSummary?.registrationSummary?.verified ?? 0 }}</span>
+                                                </div>
+                                                <div class="flex items-start justify-between gap-4 py-2">
+                                                    <span class="shrink-0 text-muted-foreground">Blocking preview</span>
+                                                    <span class="text-right font-medium">
+                                                        {{
+                                                            credentialingSummariesLoading && !detailsSheetCredentialingSummary
+                                                                ? 'Checking...'
+                                                                : credentialingBlockingPreview(detailsSheetCredentialingSummary)
+                                                        }}
+                                                    </span>
+                                                </div>
+                                            </template>
+                                            <p v-else class="py-2 text-muted-foreground">
+                                                {{ credentialingApplicabilityNote(detailsSheetCredentialingSummary) }}
+                                            </p>
+                                        </CardContent>
+                                    </Card>
+
+                                    <Card class="!gap-0 overflow-hidden rounded-md border-border/50 bg-card/70 !py-0 shadow-none">
+                                        <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
+                                            <CardTitle class="flex items-center gap-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                                                <AppIcon name="calendar-clock" class="size-3.5" />
+                                                Timeline
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent class="divide-y divide-border/50 px-3 py-1.5 text-sm">
+                                            <div class="flex items-center justify-between gap-4 py-2">
+                                                <span class="text-muted-foreground">Created</span>
+                                                <span class="font-medium">{{ formatDateTime(detailsSheetStaff.createdAt) }}</span>
+                                            </div>
+                                            <div class="flex items-center justify-between gap-4 py-2">
+                                                <span class="text-muted-foreground">Updated</span>
+                                                <span class="font-medium">{{ formatDateTime(detailsSheetStaff.updatedAt) }}</span>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
                                 </TabsContent>
 
                                 <!-- Documents Tab -->
-                                <TabsContent value="documents" class="mt-3 space-y-3">
+                                <TabsContent value="documents" class="m-0 space-y-3 px-4 py-3 sm:px-5">
                                     <Alert v-if="permissionsLoaded && !canReadStaffDocuments" variant="destructive">
                                         <AlertTitle>Document Access Restricted</AlertTitle>
                                         <AlertDescription>Request <code>staff.documents.read</code> permission.</AlertDescription>
@@ -3498,7 +3760,7 @@ onMounted(refreshPage);
                                 </TabsContent>
 
                                 <!-- Audit Tab -->
-                                <TabsContent value="audit" class="mt-3 space-y-3">
+                                <TabsContent value="audit" class="m-0 space-y-3 px-4 py-3 sm:px-5">
                                     <Alert v-if="permissionsLoaded && !canViewStaffAudit" variant="destructive">
                                         <AlertTitle>Audit Access Restricted</AlertTitle>
                                         <AlertDescription>Request <code>staff.view-audit-logs</code> permission.</AlertDescription>
@@ -3627,15 +3889,79 @@ onMounted(refreshPage);
                                         </div>
                                     </div>
                                 </TabsContent>
-                            </Tabs>
-                        </div>
-                    </ScrollArea>
+                            </ScrollArea>
+                        </Tabs>
+                    </div>
 
-                    <SheetFooter class="shrink-0 flex-row border-t bg-muted/20 px-4 py-3 sm:justify-end">
-                        <Button variant="outline" class="gap-1.5" @click="closeStaffDetailsSheet">
-                            <AppIcon name="circle-x" class="size-4" />
+                    <SheetFooter
+                        class="shrink-0 flex-col-reverse gap-2 border-t bg-background px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-5"
+                    >
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="gap-1.5 sm:shrink-0"
+                            @click="closeStaffDetailsSheet"
+                        >
+                            <AppIcon name="circle-x" class="size-3.5" />
                             Close
                         </Button>
+                        <div v-if="detailsSheetStaff" class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+                            <Button
+                                v-if="canUpdateStaffStatus"
+                                size="sm"
+                                variant="outline"
+                                class="gap-1.5"
+                                @click="openStaffStatusDialog(detailsSheetStaff)"
+                            >
+                                <AppIcon name="activity" class="size-3.5" />
+                                Change status
+                            </Button>
+                            <Button
+                                v-if="canUpdateStaff"
+                                size="sm"
+                                variant="outline"
+                                class="gap-1.5"
+                                @click="openStaffEditDialog(detailsSheetStaff)"
+                            >
+                                <AppIcon name="pencil" class="size-3.5" />
+                                Edit profile
+                            </Button>
+                            <Button
+                                v-if="canReadPlatformUsers && detailsSheetStaff.userId"
+                                size="sm"
+                                variant="outline"
+                                as-child
+                                class="gap-1.5"
+                            >
+                                <Link :href="linkedPlatformUserHref(detailsSheetStaff)">
+                                    <AppIcon name="user" class="size-3.5" />
+                                    Open linked user
+                                </Link>
+                            </Button>
+                            <Button
+                                v-if="canReadStaffCredentialing && detailsSheetCredentialingSummary && !credentialingNotApplicable(detailsSheetCredentialingSummary)"
+                                size="sm"
+                                as-child
+                                class="gap-1.5"
+                            >
+                                <Link :href="workspaceStaffHref('/staff-credentialing', detailsSheetStaff)">
+                                    <AppIcon name="badge-check" class="size-3.5" />
+                                    Open credentialing
+                                </Link>
+                            </Button>
+                            <Button
+                                v-if="canReadStaffPrivileges && (!canReadStaffCredentialing || (detailsSheetCredentialingSummary && !credentialingNotApplicable(detailsSheetCredentialingSummary)))"
+                                size="sm"
+                                variant="outline"
+                                as-child
+                                class="gap-1.5"
+                            >
+                                <Link :href="workspaceStaffHref('/staff-privileges', detailsSheetStaff)">
+                                    <AppIcon name="shield-check" class="size-3.5" />
+                                    Open privileging
+                                </Link>
+                            </Button>
+                        </div>
                     </SheetFooter>
                 </SheetContent>
             </Sheet>
@@ -3755,32 +4081,6 @@ onMounted(refreshPage);
                     </DrawerFooter>
                 </DrawerContent>
             </Drawer>
-
-            <div class="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-4 py-2.5">
-                <span class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                    <AppIcon name="activity" class="size-3.5" />
-                    Care workflow:
-                </span>
-                <Button size="sm" class="gap-1.5">
-                    <AppIcon name="users" class="size-3.5" />
-                    Staff Directory
-                </Button>
-                <Button v-if="canReadStaffCredentialing" size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="workspaceStaffHref('/staff-credentialing', detailsSheetStaff)">
-                        <AppIcon name="badge-check" class="size-3.5" />
-                        Credentialing
-                    </Link>
-                </Button>
-                <Button v-if="canReadStaffPrivileges" size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="workspaceStaffHref('/staff-privileges', detailsSheetStaff)">
-                        <AppIcon name="shield-check" class="size-3.5" />
-                        Privileging &amp; Coverage
-                    </Link>
-                </Button>
-                <span v-if="detailsSheetStaff" class="text-xs text-muted-foreground">
-                    Viewing {{ staffDisplayName(detailsSheetStaff) }}
-                </span>
-            </div>
         </div>
     </AppLayout>
 </template>
