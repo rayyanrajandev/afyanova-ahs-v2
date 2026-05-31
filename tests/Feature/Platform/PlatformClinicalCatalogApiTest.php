@@ -433,3 +433,69 @@ it('rejects clinical catalog detail update when status fields are provided', fun
         ->assertStatus(422)
         ->assertJsonValidationErrors(['status']);
 });
+
+it('exports clinical catalog items as csv when authorized', function (): void {
+    $user = makeClinicalCatalogActor([
+        'platform.clinical-catalog.read',
+        'platform.clinical-catalog.manage-lab-tests',
+    ]);
+    createLabCatalogItem($user, ['code' => 'LAB-EXPORT-001', 'name' => 'Exportable Test']);
+
+    $response = $this->actingAs($user)
+        ->get('/api/v1/platform/admin/clinical-catalogs/lab-tests/export');
+
+    $response->assertOk();
+    expect($response->headers->get('content-type'))->toContain('text/csv');
+    expect($response->streamedContent())->toContain('LAB-EXPORT-001');
+});
+
+it('downloads clinical catalog import template csv when authorized', function (): void {
+    $user = makeClinicalCatalogActor(['platform.clinical-catalog.read']);
+
+    $response = $this->actingAs($user)
+        ->get('/api/v1/platform/admin/clinical-catalogs/lab-tests/import-template');
+
+    $response->assertOk();
+    expect($response->streamedContent())->toContain('code');
+    expect($response->streamedContent())->toContain('sample_type');
+});
+
+it('validates clinical catalog bulk import in dry run mode', function (): void {
+    $user = makeClinicalCatalogActor(['platform.clinical-catalog.manage-lab-tests']);
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/platform/admin/clinical-catalogs/lab-tests/bulk-import', [
+            'dryRun' => true,
+            'mode' => 'create',
+            'rows' => [
+                [
+                    'rowNumber' => 2,
+                    'values' => [
+                        'code' => 'LAB-BULK-001',
+                        'name' => 'Bulk Import Test',
+                        'category' => 'chemistry',
+                        'unit' => 'test',
+                        'status' => 'active',
+                    ],
+                ],
+            ],
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.created_count', 1)
+        ->assertJsonPath('data.results.0.outcome', 'would_create');
+});
+
+it('bulk updates clinical catalog item status when authorized', function (): void {
+    $user = makeClinicalCatalogActor(['platform.clinical-catalog.manage-lab-tests']);
+    $first = createLabCatalogItem($user, ['code' => 'LAB-BULK-STATUS-001', 'name' => 'Bulk Status A']);
+    $second = createLabCatalogItem($user, ['code' => 'LAB-BULK-STATUS-002', 'name' => 'Bulk Status B']);
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/platform/admin/clinical-catalogs/lab-tests/bulk-status', [
+            'itemIds' => [$first['id'], $second['id']],
+            'status' => 'inactive',
+            'reason' => 'Bulk deactivation test',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.updatedCount', 2);
+});

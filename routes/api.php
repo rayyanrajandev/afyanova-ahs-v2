@@ -302,6 +302,18 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('platform/admin/clinical-catalogs/lab-tests/consumption-inventory-options', [PlatformClinicalCatalogController::class, 'labTestConsumptionInventoryOptions'])
         ->middleware('can:platform.clinical-catalog.read')
         ->name('platform.admin.clinical-catalogs.lab-tests.consumption-inventory-options');
+    Route::get('platform/admin/clinical-catalogs/lab-tests/export', [PlatformClinicalCatalogController::class, 'exportLabTestsCsv'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.admin.clinical-catalogs.lab-tests.export');
+    Route::get('platform/admin/clinical-catalogs/lab-tests/import-template', [PlatformClinicalCatalogController::class, 'labTestsImportTemplate'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.admin.clinical-catalogs.lab-tests.import-template');
+    Route::post('platform/admin/clinical-catalogs/lab-tests/bulk-import', [PlatformClinicalCatalogController::class, 'bulkImportLabTests'])
+        ->middleware('can:platform.clinical-catalog.manage-lab-tests')
+        ->name('platform.admin.clinical-catalogs.lab-tests.bulk-import');
+    Route::patch('platform/admin/clinical-catalogs/lab-tests/bulk-status', [PlatformClinicalCatalogController::class, 'bulkUpdateLabTestStatus'])
+        ->middleware('can:platform.clinical-catalog.manage-lab-tests')
+        ->name('platform.admin.clinical-catalogs.lab-tests.bulk-status');
     Route::post('platform/admin/clinical-catalogs/lab-tests', [PlatformClinicalCatalogController::class, 'storeLabTest'])
         ->middleware('can:platform.clinical-catalog.manage-lab-tests')
         ->name('platform.admin.clinical-catalogs.lab-tests.store');
@@ -336,6 +348,18 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('platform/admin/clinical-catalogs/radiology-procedures/consumption-inventory-options', [PlatformClinicalCatalogController::class, 'radiologyConsumptionInventoryOptions'])
         ->middleware('can:platform.clinical-catalog.read')
         ->name('platform.admin.clinical-catalogs.radiology-procedures.consumption-inventory-options');
+    Route::get('platform/admin/clinical-catalogs/radiology-procedures/export', [PlatformClinicalCatalogController::class, 'exportRadiologyProceduresCsv'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.admin.clinical-catalogs.radiology-procedures.export');
+    Route::get('platform/admin/clinical-catalogs/radiology-procedures/import-template', [PlatformClinicalCatalogController::class, 'radiologyProceduresImportTemplate'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.admin.clinical-catalogs.radiology-procedures.import-template');
+    Route::post('platform/admin/clinical-catalogs/radiology-procedures/bulk-import', [PlatformClinicalCatalogController::class, 'bulkImportRadiologyProcedures'])
+        ->middleware('can:platform.clinical-catalog.manage-radiology-procedures')
+        ->name('platform.admin.clinical-catalogs.radiology-procedures.bulk-import');
+    Route::patch('platform/admin/clinical-catalogs/radiology-procedures/bulk-status', [PlatformClinicalCatalogController::class, 'bulkUpdateRadiologyProcedureStatus'])
+        ->middleware('can:platform.clinical-catalog.manage-radiology-procedures')
+        ->name('platform.admin.clinical-catalogs.radiology-procedures.bulk-status');
     Route::post('platform/admin/clinical-catalogs/radiology-procedures', [PlatformClinicalCatalogController::class, 'storeRadiologyProcedure'])
         ->middleware('can:platform.clinical-catalog.manage-radiology-procedures')
         ->name('platform.admin.clinical-catalogs.radiology-procedures.store');
@@ -370,6 +394,18 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('platform/admin/clinical-catalogs/theatre-procedures/consumption-inventory-options', [PlatformClinicalCatalogController::class, 'theatreConsumptionInventoryOptions'])
         ->middleware('can:platform.clinical-catalog.read')
         ->name('platform.admin.clinical-catalogs.theatre-procedures.consumption-inventory-options');
+    Route::get('platform/admin/clinical-catalogs/theatre-procedures/export', [PlatformClinicalCatalogController::class, 'exportTheatreProceduresCsv'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.admin.clinical-catalogs.theatre-procedures.export');
+    Route::get('platform/admin/clinical-catalogs/theatre-procedures/import-template', [PlatformClinicalCatalogController::class, 'theatreProceduresImportTemplate'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.admin.clinical-catalogs.theatre-procedures.import-template');
+    Route::post('platform/admin/clinical-catalogs/theatre-procedures/bulk-import', [PlatformClinicalCatalogController::class, 'bulkImportTheatreProcedures'])
+        ->middleware('can:platform.clinical-catalog.manage-theatre-procedures')
+        ->name('platform.admin.clinical-catalogs.theatre-procedures.bulk-import');
+    Route::patch('platform/admin/clinical-catalogs/theatre-procedures/bulk-status', [PlatformClinicalCatalogController::class, 'bulkUpdateTheatreProcedureStatus'])
+        ->middleware('can:platform.clinical-catalog.manage-theatre-procedures')
+        ->name('platform.admin.clinical-catalogs.theatre-procedures.bulk-status');
     Route::post('platform/admin/clinical-catalogs/theatre-procedures', [PlatformClinicalCatalogController::class, 'storeTheatreProcedure'])
         ->middleware('can:platform.clinical-catalog.manage-theatre-procedures')
         ->name('platform.admin.clinical-catalogs.theatre-procedures.store');
@@ -401,6 +437,18 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('platform/admin/clinical-catalogs/formulary-items/status-counts', [PlatformClinicalCatalogController::class, 'formularyItemStatusCounts'])
         ->middleware('can:platform.clinical-catalog.read')
         ->name('platform.admin.clinical-catalogs.formulary-items.status-counts');
+    Route::get('platform/admin/clinical-catalogs/formulary-items/export', [PlatformClinicalCatalogController::class, 'exportFormularyItemsCsv'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.admin.clinical-catalogs.formulary-items.export');
+    Route::get('platform/admin/clinical-catalogs/formulary-items/import-template', [PlatformClinicalCatalogController::class, 'formularyItemsImportTemplate'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.admin.clinical-catalogs.formulary-items.import-template');
+    Route::post('platform/admin/clinical-catalogs/formulary-items/bulk-import', [PlatformClinicalCatalogController::class, 'bulkImportFormularyItems'])
+        ->middleware('can:platform.clinical-catalog.manage-formulary')
+        ->name('platform.admin.clinical-catalogs.formulary-items.bulk-import');
+    Route::patch('platform/admin/clinical-catalogs/formulary-items/bulk-status', [PlatformClinicalCatalogController::class, 'bulkUpdateFormularyItemStatus'])
+        ->middleware('can:platform.clinical-catalog.manage-formulary')
+        ->name('platform.admin.clinical-catalogs.formulary-items.bulk-status');
     Route::post('platform/admin/clinical-catalogs/formulary-items', [PlatformClinicalCatalogController::class, 'storeFormularyItem'])
         ->middleware('can:platform.clinical-catalog.manage-formulary')
         ->name('platform.admin.clinical-catalogs.formulary-items.store');

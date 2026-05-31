@@ -2,12 +2,15 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
+import ClinicalCatalogBulkSheet from '@/components/platform/clinical-catalogs/ClinicalCatalogBulkSheet.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import ComboboxField from '@/components/forms/ComboboxField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -18,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { CLINICAL_CATALOG_BULK_MAX_STATUS_IDS } from '@/lib/clinicalCatalogBulk';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
@@ -263,6 +267,16 @@ const consumptionRecipeForm = reactive({
 const statusBusy = ref(false);
 const statusErrors = ref<Record<string, string[]>>({});
 const statusForm = reactive({ status: 'active' as CatalogStatus, reason: '' });
+
+type CheckboxCheckedState = boolean | 'indeterminate';
+
+const bulkSheetOpen = ref(false);
+const bulkStatusDialogOpen = ref(false);
+const bulkStatusTarget = ref<CatalogStatus | null>(null);
+const bulkStatusReason = ref('');
+const bulkStatusBusy = ref(false);
+const bulkStatusError = ref<string | null>(null);
+const selectedItemIds = ref<string[]>([]);
 
 const auditBusy = ref(false);
 const auditExportBusy = ref(false);
@@ -826,6 +840,19 @@ const clinicalCatalogTabs = [
 ] as const;
 
 const activeCatalogTab = computed(() => clinicalCatalogTabs.find((tab) => tab.key === catalogKey.value) ?? clinicalCatalogTabs[0]);
+const pageItemIds = computed(() =>
+    items.value.map((item) => String(item.id ?? '').trim()).filter((id) => id.length > 0),
+);
+const selectedCount = computed(() => selectedItemIds.value.length);
+const allVisibleSelected = computed(
+    () => pageItemIds.value.length > 0 && pageItemIds.value.every((id) => selectedItemIds.value.includes(id)),
+);
+const canUseBulkSelection = computed(() => canRead.value && canManage.value);
+const bulkStatusDialogTitle = computed(() => {
+    if (bulkStatusTarget.value === 'retired') return 'Retire selected definitions';
+    if (bulkStatusTarget.value === 'inactive') return 'Deactivate selected definitions';
+    return 'Activate selected definitions';
+});
 const detailsSheetTabGridClass = computed(() => (canAudit.value ? 'grid-cols-2' : 'grid-cols-1'));
 const editSheetTitle = computed(() => `Edit ${catalog.value.singular.toLowerCase()}`);
 const selectedDepartmentLabel = computed(() => {
@@ -1510,8 +1537,90 @@ async function exportAudit(): Promise<void> {
     }
 }
 
+function clearSelectedItems(): void {
+    selectedItemIds.value = [];
+}
+
+function toggleItemSelection(itemId: string, checked: CheckboxCheckedState): void {
+    const normalizedId = itemId.trim();
+    if (!normalizedId) {
+        return;
+    }
+
+    if (checked === true) {
+        if (!selectedItemIds.value.includes(normalizedId)) {
+            selectedItemIds.value = [...selectedItemIds.value, normalizedId];
+        }
+        return;
+    }
+
+    selectedItemIds.value = selectedItemIds.value.filter((id) => id !== normalizedId);
+}
+
+function toggleSelectAllVisible(checked: CheckboxCheckedState): void {
+    if (checked !== true) {
+        const visible = new Set(pageItemIds.value);
+        selectedItemIds.value = selectedItemIds.value.filter((id) => !visible.has(id));
+        return;
+    }
+
+    selectedItemIds.value = Array.from(new Set([...selectedItemIds.value, ...pageItemIds.value]));
+}
+
+function openBulkStatusDialog(status: CatalogStatus): void {
+    if (!canManage.value || selectedCount.value === 0) {
+        return;
+    }
+
+    bulkStatusTarget.value = status;
+    bulkStatusReason.value = '';
+    bulkStatusError.value = null;
+    bulkStatusDialogOpen.value = true;
+}
+
+async function submitBulkStatusDialog(): Promise<void> {
+    if (!canManage.value || !bulkStatusTarget.value || selectedCount.value === 0 || bulkStatusBusy.value) {
+        return;
+    }
+
+    if (selectedCount.value > CLINICAL_CATALOG_BULK_MAX_STATUS_IDS) {
+        bulkStatusError.value = `Select up to ${CLINICAL_CATALOG_BULK_MAX_STATUS_IDS} items for bulk status changes.`;
+        return;
+    }
+
+    bulkStatusBusy.value = true;
+    bulkStatusError.value = null;
+
+    try {
+        const response = await apiRequest<{
+            data: { updatedCount: number; skippedItemIds: string[]; failed: Array<{ itemId: string; message: string }> };
+        }>('PATCH', `${base.value}/bulk-status`, {
+            body: {
+                itemIds: selectedItemIds.value,
+                status: bulkStatusTarget.value,
+                reason: bulkStatusReason.value.trim() || null,
+            },
+        });
+
+        const failedCount = response.data.failed?.length ?? 0;
+        const skippedCount = response.data.skippedItemIds?.length ?? 0;
+        notifySuccess(
+            `${response.data.updatedCount ?? 0} updated${skippedCount > 0 ? `, ${skippedCount} skipped` : ''}${failedCount > 0 ? `, ${failedCount} failed` : ''}.`,
+        );
+        bulkStatusDialogOpen.value = false;
+        clearSelectedItems();
+        await Promise.all([loadItems(), loadStatusCounts()]);
+    } catch (error) {
+        bulkStatusError.value = messageFromUnknown(error, 'Unable to apply bulk status change.');
+        notifyError(bulkStatusError.value);
+    } finally {
+        bulkStatusBusy.value = false;
+    }
+}
+
 watch(catalogKey, () => {
     loading.value = true;
+    clearSelectedItems();
     closeDetails();
     closeCreateSheet();
     resetCreateForm();
@@ -1591,6 +1700,16 @@ onMounted(() => {
                         <Button v-if="canManage" size="sm" class="h-8 gap-1.5" @click="openCreateSheet">
                             <AppIcon name="plus" class="size-3.5" />
                             {{ createButtonLabel }}
+                        </Button>
+                        <Button
+                            v-if="canRead"
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            @click="bulkSheetOpen = true"
+                        >
+                            <AppIcon name="layout-grid" class="size-3.5" />
+                            Bulk workspace
                         </Button>
                         <Button variant="outline" size="sm" as-child class="h-8 gap-1.5">
                             <Link href="/billing-service-catalog">
@@ -1672,6 +1791,59 @@ onMounted(() => {
                                 <Badge v-if="filterCount > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">
                                     {{ filterCount }}
                                 </Badge>
+                            </Button>
+                        </div>
+                    </div>
+                    <div
+                        v-if="canUseBulkSelection"
+                        class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed bg-muted/20 px-3 py-2"
+                    >
+                        <label class="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Checkbox
+                                id="clinical-catalog-select-page"
+                                :model-value="allVisibleSelected"
+                                :disabled="pageItemIds.length === 0 || bulkStatusBusy"
+                                @update:model-value="toggleSelectAllVisible"
+                            />
+                            Select page
+                        </label>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-xs text-muted-foreground">{{ selectedCount }} selected</span>
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                class="h-8"
+                                :disabled="selectedCount === 0 || bulkStatusBusy"
+                                @click="openBulkStatusDialog('active')"
+                            >
+                                Activate
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                class="h-8"
+                                :disabled="selectedCount === 0 || bulkStatusBusy"
+                                @click="openBulkStatusDialog('inactive')"
+                            >
+                                Deactivate
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="destructive"
+                                class="h-8"
+                                :disabled="selectedCount === 0 || bulkStatusBusy"
+                                @click="openBulkStatusDialog('retired')"
+                            >
+                                Retire
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                class="h-8"
+                                :disabled="selectedCount === 0 || bulkStatusBusy"
+                                @click="clearSelectedItems"
+                            >
+                                Clear
                             </Button>
                         </div>
                     </div>
@@ -1783,6 +1955,14 @@ onMounted(() => {
                                     :key="String(item.id)"
                                     class="flex items-center gap-3 py-3 transition-colors hover:bg-muted/30"
                                 >
+                                    <Checkbox
+                                        v-if="canUseBulkSelection"
+                                        class="shrink-0"
+                                        :model-value="selectedItemIds.includes(String(item.id ?? ''))"
+                                        :disabled="!item.id || bulkStatusBusy"
+                                        @update:model-value="(checked) => toggleItemSelection(String(item.id ?? ''), checked)"
+                                        @click.stop
+                                    />
                                     <span
                                         class="size-2 shrink-0 rounded-full"
                                         :class="
@@ -2559,6 +2739,41 @@ onMounted(() => {
                 </SheetContent>
             </Sheet>
 
+            <ClinicalCatalogBulkSheet
+                v-model:open="bulkSheetOpen"
+                :catalog-key="catalogKey"
+                :api-base="base"
+                :catalog-label="catalog.label"
+                :can-manage="canManage"
+                :list-filters="{ q: filters.q, status: filters.status, category: filters.category }"
+                :selected-item-ids="selectedItemIds"
+                @completed="void Promise.all([loadItems(), loadStatusCounts()])"
+            />
+
+            <Dialog v-model:open="bulkStatusDialogOpen">
+                <DialogContent class="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>{{ bulkStatusDialogTitle }}</DialogTitle>
+                        <DialogDescription>
+                            Applies to {{ selectedCount }} selected {{ catalog.label.toLowerCase() }}. Add a short reason for audit traceability.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div class="grid gap-2">
+                        <Label for="bulk-status-reason">Reason (optional)</Label>
+                        <Textarea id="bulk-status-reason" v-model="bulkStatusReason" class="min-h-20" placeholder="Why is this bulk status change needed?" />
+                    </div>
+                    <Alert v-if="bulkStatusError" variant="destructive">
+                        <AlertTitle>Bulk status issue</AlertTitle>
+                        <AlertDescription>{{ bulkStatusError }}</AlertDescription>
+                    </Alert>
+                    <DialogFooter class="gap-2 sm:justify-end">
+                        <Button variant="outline" :disabled="bulkStatusBusy" @click="bulkStatusDialogOpen = false">Cancel</Button>
+                        <Button :disabled="bulkStatusBusy" @click="submitBulkStatusDialog">
+                            {{ bulkStatusBusy ? 'Applying...' : 'Apply status' }}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             </div>
         </div>

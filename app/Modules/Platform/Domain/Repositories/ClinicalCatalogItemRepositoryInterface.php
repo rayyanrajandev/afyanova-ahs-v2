@@ -27,8 +27,16 @@ interface ClinicalCatalogItemRepositoryInterface
         int $page,
         int $perPage,
         ?string $sortBy,
-        string $sortDirection
+        string $sortDirection,
+        ?array $ids = null,
     ): array;
+
+    public function findIdByCodeInScope(
+        string $catalogType,
+        string $code,
+        ?string $tenantId,
+        ?string $facilityId,
+    ): ?string;
 
     public function statusCounts(
         string $catalogType,

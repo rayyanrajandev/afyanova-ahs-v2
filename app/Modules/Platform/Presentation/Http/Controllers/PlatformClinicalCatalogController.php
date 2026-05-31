@@ -16,6 +16,7 @@ use App\Modules\Platform\Application\UseCases\UpdateClinicalCatalogItemUseCase;
 use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogType;
 use App\Modules\Platform\Presentation\Http\Requests\StoreClinicalCatalogItemRequest;
 use App\Modules\Platform\Presentation\Http\Requests\UpdateClinicalCatalogItemRequest;
+use App\Modules\Platform\Presentation\Http\Controllers\Concerns\HandlesClinicalCatalogBulkOperations;
 use App\Modules\Platform\Presentation\Http\Requests\UpdateClinicalCatalogItemStatusRequest;
 use App\Modules\Platform\Presentation\Http\Transformers\ClinicalCatalogItemAuditLogResponseTransformer;
 use App\Modules\Platform\Presentation\Http\Transformers\ClinicalCatalogItemResponseTransformer;
@@ -26,6 +27,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PlatformClinicalCatalogController extends Controller
 {
+    use HandlesClinicalCatalogBulkOperations;
+
     private const AUDIT_CSV_SCHEMA_VERSION = 'audit-log-csv.v1';
 
     private const AUDIT_CSV_COLUMNS = ['createdAt', 'action', 'actorType', 'actorId', 'changes', 'metadata'];

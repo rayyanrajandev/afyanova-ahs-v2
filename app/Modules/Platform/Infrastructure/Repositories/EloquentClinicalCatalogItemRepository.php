@@ -82,6 +82,33 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
         return $query->exists();
     }
 
+    public function findIdByCodeInScope(
+        string $catalogType,
+        string $code,
+        ?string $tenantId,
+        ?string $facilityId,
+    ): ?string {
+        $query = ClinicalCatalogItemModel::query()
+            ->where('catalog_type', $catalogType)
+            ->whereRaw('LOWER(code) = ?', [strtolower(trim($code))]);
+
+        if ($tenantId === null) {
+            $query->whereNull('tenant_id');
+        } else {
+            $query->where('tenant_id', $tenantId);
+        }
+
+        if ($facilityId === null) {
+            $query->whereNull('facility_id');
+        } else {
+            $query->where('facility_id', $facilityId);
+        }
+
+        $id = $query->value('id');
+
+        return is_string($id) && $id !== '' ? $id : null;
+    }
+
     public function search(
         string $catalogType,
         ?string $query,
@@ -91,7 +118,8 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
         int $page,
         int $perPage,
         ?string $sortBy,
-        string $sortDirection
+        string $sortDirection,
+        ?array $ids = null,
     ): array {
         $sortBy = in_array($sortBy, ['code', 'name', 'category', 'status', 'created_at', 'updated_at'], true)
             ? $sortBy
@@ -121,6 +149,7 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
             ->when($status, fn (Builder $builder, string $value) => $builder->where('status', $value))
             ->when($departmentId, fn (Builder $builder, string $value) => $builder->where('department_id', $value))
             ->when($category, fn (Builder $builder, string $value) => $builder->where('category', $value))
+            ->when($ids !== null && $ids !== [], fn (Builder $builder) => $builder->whereIn('id', $ids))
             ->orderBy($sortBy, $sortDirection);
 
         $paginator = $queryBuilder->paginate(
