@@ -529,6 +529,65 @@ it('limits facility assigned user admins to hospital operational role assignment
     expect($target->roles()->where('roles.id', $platformRole->id)->exists())->toBeFalse();
 });
 
+it('filters assignable roles in rbac list for facility scoped user admins', function (): void {
+    $actor = makePlatformUserAdminActor(['platform.rbac.manage-user-roles', 'platform.rbac.read']);
+    $tenant = TenantModel::query()->create([
+        'code' => 'ROLELIST',
+        'name' => 'Role List Hospital Group',
+        'country_code' => 'TZ',
+        'status' => 'active',
+    ]);
+    $facility = FacilityModel::query()->create([
+        'tenant_id' => $tenant->id,
+        'code' => 'ROLE-LIST',
+        'name' => 'Role List Facility',
+        'facility_type' => 'dispensary',
+        'timezone' => 'Africa/Dar_es_Salaam',
+        'status' => 'active',
+    ]);
+    RoleModel::query()->create([
+        'code' => 'HOSPITAL.REGISTRATION.CLERK',
+        'name' => 'Registration Clerk',
+        'status' => 'active',
+        'is_system' => true,
+    ]);
+    RoleModel::query()->create([
+        'code' => 'PLATFORM.USER.ADMIN',
+        'name' => 'Platform User Administrator',
+        'status' => 'active',
+        'is_system' => true,
+    ]);
+
+    DB::table('facility_user')->insert([
+        'facility_id' => $facility->id,
+        'user_id' => $actor->id,
+        'role' => 'facility_admin',
+        'is_primary' => true,
+        'is_active' => true,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $response = $this->actingAs($actor)
+        ->withHeaders([
+            'X-Tenant-Code' => 'ROLELIST',
+            'X-Facility-Code' => 'ROLE-LIST',
+        ])
+        ->getJson('/api/v1/platform/admin/roles')
+        ->assertOk()
+        ->assertJsonPath('meta.roleAssignmentPolicy', 'hospital_operational');
+
+    $codes = collect($response->json('data'))->pluck('code')->map(fn ($code) => strtoupper((string) $code))->all();
+
+    expect($codes)->toContain('HOSPITAL.REGISTRATION.CLERK');
+    expect($codes)->not->toContain('PLATFORM.USER.ADMIN');
+    expect(collect($response->json('data'))->firstWhere('code', 'HOSPITAL.REGISTRATION.CLERK'))->toMatchArray([
+        'riskTier' => 'hospital',
+        'isElevated' => false,
+    ]);
+    expect(collect($response->json('data'))->every(fn (array $role): bool => str_starts_with(strtoupper((string) ($role['code'] ?? '')), 'HOSPITAL.')))->toBeTrue();
+});
+
 it('forbids bulk platform role assignment without permission', function (): void {
     $actor = makePlatformUserAdminActor();
     $target = User::factory()->create([

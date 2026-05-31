@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import PlatformRoleAssignmentPicker from '@/components/platform/PlatformRoleAssignmentPicker.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -53,7 +54,13 @@ type ScopeData = {
     facility?: AccessibleFacility | null;
     userAccess?: { facilities?: AccessibleFacility[]; accessibleFacilityCount?: number };
 };
-type PlatformRole = { id: string | null; name: string | null; code: string | null };
+type PlatformRole = {
+    id: string | null;
+    name: string | null;
+    code: string | null;
+    riskTier?: 'hospital' | 'platform' | 'system' | 'other' | null;
+    isElevated?: boolean | null;
+};
 type PlatformUserFacilityAssignment = { facilityId: string | null; role?: string | null; isPrimary?: boolean; isActive?: boolean };
 type PlatformUserPrivilegedContext = {
     isPrivileged?: boolean;
@@ -121,7 +128,10 @@ type PlatformUserBulkFacilitiesResponse = {
         users: PlatformUser[];
     };
 };
-type PlatformRoleListResponse = { data: PlatformRole[] };
+type PlatformRoleListResponse = {
+    data: PlatformRole[];
+    meta?: { roleAssignmentPolicy?: 'full' | 'hospital_operational' };
+};
 type PlatformUserRoleSyncResponse = { data: { roleIds: string[]; roles: PlatformRole[] } };
 type PlatformUserCredentialLinkResponse = {
     data: {
@@ -278,6 +288,7 @@ const detailsSheetTab = ref('overview');
 const detailsAuditFiltersOpen = ref(false);
 const detailsUser = ref<PlatformUser | null>(null);
 const roles = ref<PlatformRole[]>([]);
+const roleAssignmentPolicy = ref<'full' | 'hospital_operational'>('full');
 const roleDraftIds = ref<string[]>([]);
 const facilityDrafts = ref<FacilityAssignmentDraft[]>([]);
 const newFacilityDraftId = ref('');
@@ -421,6 +432,15 @@ const queueDensityValue = computed({
 const detailsUserRequiresApprovalCase = computed(() => Boolean(detailsUser.value?.requiresApprovalCaseForSensitiveChanges));
 const detailsPrivilegedRoleCodes = computed(() => detailsUser.value?.privilegedTargetUser?.roleCodes?.filter(Boolean) ?? []);
 const detailsPrivilegedMatchedPermissions = computed(() => detailsUser.value?.privilegedTargetUser?.matchedPermissionNames?.filter(Boolean) ?? []);
+
+const detailsRolesOutsideAssignmentScope = computed(() => {
+    const assignableIds = new Set(roles.value.map((role) => String(role.id ?? '')).filter(Boolean));
+
+    return (detailsUser.value?.roles ?? []).filter((role) => {
+        const roleId = String(role.id ?? '');
+        return roleId !== '' && !assignableIds.has(roleId);
+    });
+});
 
 const unassignedFacilities = computed(() => {
     const selected = new Set(facilityDrafts.value.map((entry) => entry.facilityId));
@@ -1137,6 +1157,7 @@ async function loadUsers() {
 async function loadRoles() {
     if (!canReadRoles.value && !canManageRoles.value) {
         roles.value = [];
+        roleAssignmentPolicy.value = 'full';
         return;
     }
 
@@ -1145,8 +1166,10 @@ async function loadRoles() {
             query: { page: 1, perPage: 100, sortBy: 'name', sortDir: 'asc' },
         });
         roles.value = (response.data ?? []).filter((entry) => entry.id !== null);
+        roleAssignmentPolicy.value = response.meta?.roleAssignmentPolicy === 'hospital_operational' ? 'hospital_operational' : 'full';
     } catch {
         roles.value = [];
+        roleAssignmentPolicy.value = 'full';
     }
 }
 
@@ -2530,21 +2553,14 @@ onMounted(async () => {
                                 placeholder="CASE-2026-0001"
                             />
                         </div>
-                        <div v-if="roles.length === 0" class="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
-                            No platform roles available.
-                        </div>
-                        <div v-else class="grid max-h-64 gap-2 overflow-y-auto rounded-md border p-3 sm:grid-cols-2">
-                            <label v-for="role in roles" :key="`bulk-role-${String(role.id)}`" class="flex cursor-pointer items-center gap-2 rounded border px-3 py-2 text-sm">
-                                <Checkbox
-                                    :id="`bulk-role-${String(role.id)}`"
-                                    :model-value="role.id !== null && bulkRoleDraftIds.includes(String(role.id))"
-                                    :disabled="bulkRolesLoading || role.id === null"
-                                    @update:model-value="role.id !== null && updateBulkRoleSelection(String(role.id), $event)"
-                                />
-                                <span class="min-w-0">
-                                    <span class="font-medium">{{ role.name || role.code || `Role #${role.id}` }}</span>
-                                </span>
-                            </label>
+                        <div class="max-h-[min(24rem,55vh)] overflow-y-auto rounded-md border p-3">
+                            <PlatformRoleAssignmentPicker
+                                v-model="bulkRoleDraftIds"
+                                :roles="roles"
+                                :policy="roleAssignmentPolicy"
+                                :disabled="bulkRolesLoading"
+                                id-prefix="bulk-role"
+                            />
                         </div>
                     </div>
                     <DialogFooter>
@@ -3017,7 +3033,9 @@ onMounted(async () => {
                                                 <AppIcon name="shield-check" class="size-4 text-muted-foreground" />
                                                 Role Assignments
                                             </CardTitle>
-                                            <CardDescription class="text-xs">Mapped platform roles for this user account.</CardDescription>
+                                            <CardDescription class="text-xs">
+                                                Account-level RBAC roles (hospital operational vs platform/system). Separate from facility site posting below.
+                                            </CardDescription>
                                         </CardHeader>
                                         <CardContent class="px-4 pt-0">
                                             <Alert v-if="!canManageRoles && !canReadRoles" variant="destructive">
@@ -3038,24 +3056,34 @@ onMounted(async () => {
                                                     <AlertTitle>Unable to save roles</AlertTitle>
                                                     <AlertDescription>{{ saveRolesError }}</AlertDescription>
                                                 </Alert>
-                                                <div v-if="roles.length === 0" class="flex flex-col items-center gap-2 rounded-lg border border-dashed p-4 text-center">
-                                                    <AppIcon name="shield-check" class="size-5 text-muted-foreground/50" />
-                                                    <p class="text-sm text-muted-foreground">No platform roles available.</p>
-                                                </div>
-                                                <div v-else class="grid gap-2 sm:grid-cols-2">
-                                                    <label v-for="role in roles" :key="String(role.id)" class="flex cursor-pointer items-center gap-2 rounded border px-3 py-2 text-sm">
-                                                        <Checkbox
-                                                            :id="`details-role-${String(role.id)}`"
-                                                            :model-value="role.id !== null && roleDraftIds.includes(role.id)"
-                                                            :disabled="!canManageRoles || saveRolesLoading || role.id === null"
-                                                            @update:model-value="role.id !== null && updateRoleSelection(role.id, $event)"
-                                                        />
-                                                        <span class="min-w-0">
-                                                            <span class="font-medium">{{ role.name || role.code || `Role #${role.id}` }}</span>
-                                                            <span v-if="role.code" class="ml-1 text-xs text-muted-foreground">{{ role.code }}</span>
-                                                        </span>
-                                                    </label>
-                                                </div>
+                                                <Alert
+                                                    v-if="detailsRolesOutsideAssignmentScope.length > 0"
+                                                    variant="outline"
+                                                    class="rounded-lg"
+                                                >
+                                                    <AlertTitle class="text-sm">Roles outside your assignment scope</AlertTitle>
+                                                    <AlertDescription class="space-y-1 text-xs">
+                                                        <p>
+                                                            This user still holds elevated roles you cannot modify from a facility-scoped session.
+                                                            Contact tenant or platform IAM to change them.
+                                                        </p>
+                                                        <p class="font-medium">
+                                                            {{
+                                                                detailsRolesOutsideAssignmentScope
+                                                                    .map((role) => role.code || role.name)
+                                                                    .filter(Boolean)
+                                                                    .join(', ')
+                                                            }}
+                                                        </p>
+                                                    </AlertDescription>
+                                                </Alert>
+                                                <PlatformRoleAssignmentPicker
+                                                    v-model="roleDraftIds"
+                                                    :roles="roles"
+                                                    :policy="roleAssignmentPolicy"
+                                                    :disabled="!canManageRoles || saveRolesLoading"
+                                                    id-prefix="details-role"
+                                                />
                                                 <div class="grid gap-1.5">
                                                     <Label for="details-roles-approval-case-reference" class="text-xs">
                                                         Approval Case Reference

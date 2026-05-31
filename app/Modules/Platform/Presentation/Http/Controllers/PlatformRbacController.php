@@ -53,8 +53,12 @@ class PlatformRbacController extends Controller
     {
         $result = $useCase->execute($request->all());
         $roles = $result['data'];
+        $restrictedToAssignableHospitalRoles = $this->shouldRestrictToAssignableHospitalRoles(
+            $request->user(),
+            $scopeContext,
+        );
 
-        if ($this->shouldRestrictToAssignableHospitalRoles($request->user(), $scopeContext)) {
+        if ($restrictedToAssignableHospitalRoles) {
             $roles = array_values(array_filter(
                 $roles,
                 fn (array $role): bool => $this->isAssignableHospitalRoleCode($role['code'] ?? null),
@@ -64,6 +68,10 @@ class PlatformRbacController extends Controller
             $result['meta']['currentPage'] = 1;
             $result['meta']['lastPage'] = 1;
         }
+
+        $result['meta']['roleAssignmentPolicy'] = $restrictedToAssignableHospitalRoles
+            ? 'hospital_operational'
+            : 'full';
 
         return response()->json([
             'data' => array_map([PlatformRoleResponseTransformer::class, 'transform'], $roles),
