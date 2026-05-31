@@ -298,7 +298,7 @@ const patientDirectory = ref<Record<string, PatientSummary>>({});
 const unavailablePatientIds = ref<Record<string, true>>({});
 const advancedFiltersSheetOpen = ref(false);
 const mobileFiltersDrawerOpen = ref(false);
-const compactQueueRows = useLocalStorageBoolean('opd.queueRows.compact', false);
+const compactQueueRows = useLocalStorageBoolean('opd.queueRows.compact', true);
 const billingQueueLaneFilter = ref<BillingQueueLaneFilter>('all');
 const billingQueueThirdPartyPhaseFilter =
     ref<BillingQueueThirdPartyPhaseFilter>('all');
@@ -14632,13 +14632,16 @@ onMounted(refreshPage);
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div
-            class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6"
+            class="flex h-full flex-1 flex-col gap-4 overflow-x-hidden rounded-lg p-4 md:p-6"
         >
             <BillingWorkspaceHeader
                 :page-loading="pageLoading"
                 :list-loading="listLoading"
                 :page-description="billingWorkspaceHeaderDescription"
                 :scope-status-label="billingWorkspaceHeaderScopeLabel"
+                :facility-name="scope?.facility?.name ?? ''"
+                :tenant-name="scope?.tenant?.name ?? ''"
+                :scope-unresolved="scope?.resolvedFrom === 'none'"
                 :billing-workspace-view="billingWorkspaceView"
                 :can-read-billing-financial-controls="canReadBillingFinancialControls"
                 :can-read-billing-invoices="canReadBillingInvoices"
@@ -14739,13 +14742,6 @@ onMounted(refreshPage);
                 </div>
             </template>
             <template v-else>
-            <BillingQueueControlBar
-                :state="billingQueueControlBarState"
-                :view="billingQueueControlBarView"
-                :actions="billingQueueControlBarActions"
-                :helpers="billingQueueControlBarHelpers"
-            />
-
             <BillingBoardView
                 v-if="billingWorkspaceView === 'board'"
                 :can-read-billing-invoices="canReadBillingInvoices"
@@ -14845,7 +14841,6 @@ onMounted(refreshPage);
                         :status-value="statusSelectValue"
                         :list-loading="listLoading"
                         :active-advanced-filter-count="activeBillingAdvancedFilterCount"
-                        :queue-toolbar-summary="billingQueueToolbarSummary"
                         :has-visible-scope-badges="hasVisibleBillingQueueScopeBadges"
                         :queue-lane-filter-label="billingQueueLaneFilterLabel"
                         :queue-third-party-phase-filter-label="billingQueueThirdPartyPhaseFilterLabel"
@@ -14857,12 +14852,17 @@ onMounted(refreshPage);
                         @update:status-value="updateBillingQueueStatusValue"
                         @submit-search="submitSearch"
                         @open-advanced-filters="advancedFiltersSheetOpen = true"
-                        @open-mobile-filters="mobileFiltersDrawerOpen = true"
                         @set-results-per-page="setBillingResultsPerPage"
                         @set-compact-rows="setBillingQueueDensity"
                         @reset-filters="resetFilters"
                         @open-full-queue="openFullBillingQueue"
                         @refocus-patient="refocusBillingPatientQueue"
+                    />
+                    <BillingQueueControlBar
+                        :state="billingQueueControlBarState"
+                        :view="billingQueueControlBarView"
+                        :actions="billingQueueControlBarActions"
+                        :helpers="billingQueueControlBarHelpers"
                     />
                     <BillingQueueTable
                         :page-loading="pageLoading"

@@ -15,7 +15,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input, SearchInput } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/input';
 import {
     Select,
     SelectContent,
@@ -46,7 +46,6 @@ const props = defineProps<{
     statusValue: string;
     listLoading: boolean;
     activeAdvancedFilterCount: number;
-    queueToolbarSummary: string;
     hasVisibleScopeBadges: boolean;
     queueLaneFilterLabel: string | null;
     queueThirdPartyPhaseFilterLabel: string | null;
@@ -61,7 +60,6 @@ const emit = defineEmits<{
     (e: 'update:statusValue', value: string): void;
     (e: 'submit-search'): void;
     (e: 'open-advanced-filters'): void;
-    (e: 'open-mobile-filters'): void;
     (e: 'set-results-per-page', value: number): void;
     (e: 'set-compact-rows', value: boolean): void;
     (e: 'reset-filters'): void;
@@ -75,100 +73,88 @@ function bindSearchInputRef(value: unknown) {
 </script>
 
 <template>
-    <CardHeader class="shrink-0 gap-3 pb-3">
-        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div class="min-w-0">
-                <CardTitle class="flex items-center gap-2">
+    <CardHeader class="shrink-0 gap-3 border-b pb-3">
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div class="min-w-0 space-y-1">
+                <CardTitle class="flex items-center gap-2 text-base">
                     <AppIcon name="layout-list" class="size-5 text-muted-foreground" />
-                    Billing Invoices
+                    Invoice queue
                 </CardTitle>
-                <CardDescription>
+                <CardDescription class="text-xs leading-relaxed">
                     {{ queueScopeSummary }}
-                    <span class="ml-1">
-                        Showing {{ visibleCount }} on this page &middot; Page {{ currentPage }} of {{ lastPage }}
-                    </span>
-                    <span v-if="patientFiltered">&middot; Patient filtered</span>
                 </CardDescription>
+                <p class="text-[11px] text-muted-foreground">
+                    {{ visibleCount }} on this page · Page {{ currentPage }} of {{ lastPage }}
+                    <span v-if="patientFiltered"> · Patient filtered</span>
+                </p>
                 <div
                     v-if="activePatientFocus"
-                    class="mt-1 rounded-md border bg-muted/40 p-2 text-xs"
+                    class="mt-1 flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/20 bg-primary/5 px-2.5 py-2 text-xs"
                 >
-                    <p class="font-medium">
-                        Patient in focus:
-                        {{ activePatientFocus.label }}
-                    </p>
-                    <p class="text-muted-foreground">
-                        Patient number:
-                        {{ activePatientFocus.number }}
-                    </p>
+                    <div>
+                        <p class="font-medium text-foreground">{{ activePatientFocus.label }}</p>
+                        <p class="text-muted-foreground">MRN {{ activePatientFocus.number }}</p>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5">
+                        <Button
+                            v-if="patientChartQueueReturnHref"
+                            variant="outline"
+                            size="sm"
+                            class="h-7 text-xs"
+                            as-child
+                        >
+                            <Link :href="patientChartQueueReturnHref">Patient chart</Link>
+                        </Button>
+                        <Button
+                            v-if="isPatientChartQueueFocusApplied"
+                            variant="ghost"
+                            size="sm"
+                            class="h-7 text-xs"
+                            @click="emit('open-full-queue')"
+                        >
+                            Full queue
+                        </Button>
+                        <Button
+                            v-else-if="openedFromPatientChart && patientChartQueueRoutePatientAvailable"
+                            variant="ghost"
+                            size="sm"
+                            class="h-7 text-xs"
+                            @click="emit('refocus-patient')"
+                        >
+                            Refocus patient
+                        </Button>
+                    </div>
                 </div>
             </div>
-            <div class="flex shrink-0 flex-col gap-2 lg:items-end">
-                <div class="flex flex-wrap items-center gap-2 lg:justify-end">
-                    <Badge variant="secondary">
-                        {{ queueStateLabel }}
-                    </Badge>
-                    <Badge v-if="filterBadgeCount > 0" variant="outline">
-                        {{ filterBadgeCount }} filters
-                    </Badge>
-                </div>
-                <div
-                    v-if="patientChartQueueReturnHref || patientChartQueueRoutePatientAvailable"
-                    class="flex flex-wrap items-center gap-2 lg:justify-end"
-                >
-                    <Button
-                        v-if="patientChartQueueReturnHref"
-                        variant="outline"
-                        size="sm"
-                        as-child
-                    >
-                        <Link :href="patientChartQueueReturnHref">
-                            Back to Patient Chart
-                        </Link>
-                    </Button>
-                    <Button
-                        v-if="isPatientChartQueueFocusApplied"
-                        variant="outline"
-                        size="sm"
-                        @click="emit('open-full-queue')"
-                    >
-                        Open Full Queue
-                    </Button>
-                    <Button
-                        v-else-if="openedFromPatientChart && patientChartQueueRoutePatientAvailable"
-                        variant="outline"
-                        size="sm"
-                        @click="emit('refocus-patient')"
-                    >
-                        Refocus This Patient
-                    </Button>
-                </div>
-            </div>
+            <Badge variant="secondary" class="w-fit shrink-0 font-normal">
+                {{ queueStateLabel }}
+            </Badge>
         </div>
+
         <div class="flex w-full flex-col gap-2">
-            <div class="flex w-full flex-col gap-2 xl:flex-row xl:items-center">
+            <div class="flex w-full flex-col gap-2 lg:flex-row lg:items-center">
                 <SearchInput
                     :ref="bindSearchInputRef"
                     id="bil-q"
                     :model-value="searchQuery"
-                    placeholder="Search invoice number, patient, notes, or payer reference"
+                    placeholder="Invoice #, patient, payer reference, notes"
                     class="min-w-0 flex-1"
                     @update:model-value="emit('update:searchQuery', String($event ?? ''))"
                     @keyup.enter="emit('submit-search')"
                 />
-                <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:flex-nowrap">
+                <div class="flex flex-wrap items-center gap-2">
                     <Select
                         :model-value="statusValue"
                         @update:model-value="emit('update:statusValue', String($event ?? 'all'))"
                     >
                         <SelectTrigger class="h-9 w-full bg-background sm:w-[11rem]" size="sm">
-                            <SelectValue placeholder="Queue status" />
+                            <SelectValue placeholder="Status" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All statuses</SelectItem>
                             <SelectItem value="draft">Draft</SelectItem>
                             <SelectItem value="issued">Issued</SelectItem>
-                            <SelectItem value="partially_paid">Partially Paid</SelectItem>
+                            <SelectItem value="partially_paid">Partially paid</SelectItem>
                             <SelectItem value="paid">Paid</SelectItem>
                             <SelectItem value="cancelled">Cancelled</SelectItem>
                             <SelectItem value="voided">Voided</SelectItem>
@@ -177,118 +163,92 @@ function bindSearchInputRef(value: unknown) {
                     <Button
                         variant="outline"
                         size="sm"
-                        class="hidden h-9 gap-1.5 md:inline-flex"
+                        class="h-9 gap-1.5"
                         @click="emit('open-advanced-filters')"
                     >
                         <AppIcon name="sliders-horizontal" class="size-3.5" />
-                        Work filters
+                        Filters
                         <Badge
                             v-if="activeAdvancedFilterCount"
                             variant="secondary"
-                            class="ml-1 text-[10px]"
+                            class="ml-0.5 text-[10px]"
                         >
                             {{ activeAdvancedFilterCount }}
                         </Badge>
                     </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        class="h-9 gap-1.5 md:hidden"
-                        @click="emit('open-mobile-filters')"
-                    >
-                        <AppIcon name="sliders-horizontal" class="size-3.5" />
-                        Work filters
-                        <Badge
-                            v-if="activeAdvancedFilterCount"
-                            variant="secondary"
-                            class="ml-1 text-[10px]"
-                        >
-                            {{ activeAdvancedFilterCount }}
-                        </Badge>
-                    </Button>
-
                     <DropdownMenu>
                         <DropdownMenuTrigger as-child>
                             <Button variant="outline" size="sm" class="h-9 gap-1.5">
                                 <AppIcon name="eye" class="size-3.5" />
-                                Queue setup
+                                View
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" class="w-48">
-                            <DropdownMenuItem @click="emit('set-results-per-page', 10)">
-                                10 rows per page
-                            </DropdownMenuItem>
-                            <DropdownMenuItem @click="emit('set-results-per-page', 25)">
-                                25 rows per page
-                            </DropdownMenuItem>
-                            <DropdownMenuItem @click="emit('set-results-per-page', 50)">
-                                50 rows per page
-                            </DropdownMenuItem>
-                            <DropdownMenuItem @click="emit('set-compact-rows', false)">
-                                Comfortable layout
-                            </DropdownMenuItem>
-                            <DropdownMenuItem @click="emit('set-compact-rows', true)">
-                                Compact layout
-                            </DropdownMenuItem>
+                            <DropdownMenuItem @click="emit('set-results-per-page', 10)">10 per page</DropdownMenuItem>
+                            <DropdownMenuItem @click="emit('set-results-per-page', 25)">25 per page</DropdownMenuItem>
+                            <DropdownMenuItem @click="emit('set-results-per-page', 50)">50 per page</DropdownMenuItem>
+                            <DropdownMenuItem @click="emit('set-compact-rows', true)">Compact rows</DropdownMenuItem>
+                            <DropdownMenuItem @click="emit('set-compact-rows', false)">Comfortable rows</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
             </div>
-            <div class="rounded-md border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-                Current queue setup: {{ queueToolbarSummary }}
-            </div>
-            <div v-if="hasVisibleScopeBadges" class="flex flex-wrap items-center gap-1.5 pt-1">
+
+            <div
+                v-if="hasVisibleScopeBadges || filterBadgeCount > 0"
+                class="flex flex-wrap items-center gap-1.5"
+            >
+                <span class="text-[11px] text-muted-foreground">Active:</span>
                 <Badge
                     v-if="queueLaneFilterLabel"
                     variant="outline"
-                    class="h-6 rounded-full px-2.5 text-[10px] font-medium"
+                    class="text-[11px] font-normal"
                 >
                     Lane: {{ queueLaneFilterLabel }}
                 </Badge>
                 <Badge
                     v-if="queueThirdPartyPhaseFilterLabel"
                     variant="outline"
-                    class="h-6 rounded-full px-2.5 text-[10px] font-medium"
+                    class="text-[11px] font-normal"
                 >
-                    Workstream: {{ queueThirdPartyPhaseFilterLabel }}
+                    {{ queueThirdPartyPhaseFilterLabel }}
                 </Badge>
                 <Badge
                     v-if="patientFiltered"
                     variant="outline"
-                    class="h-6 rounded-full px-2.5 text-[10px] font-medium"
+                    class="text-[11px] font-normal"
                 >
-                    Patient filtered
+                    Patient
                 </Badge>
                 <Badge
                     v-if="currencyCode.trim()"
                     variant="outline"
-                    class="h-6 rounded-full px-2.5 text-[10px] font-medium"
+                    class="text-[11px] font-normal"
                 >
-                    Currency: {{ currencyCode.trim().toUpperCase() }}
+                    {{ currencyCode.trim().toUpperCase() }}
                 </Badge>
                 <Badge
                     v-if="invoiceDateFilterActive"
                     variant="outline"
-                    class="h-6 rounded-full px-2.5 text-[10px] font-medium"
+                    class="text-[11px] font-normal"
                 >
-                    Invoice date active
+                    Invoice dates
                 </Badge>
                 <Badge
                     v-if="paymentActivityFilterActive"
                     variant="outline"
-                    class="h-6 rounded-full px-2.5 text-[10px] font-medium"
+                    class="text-[11px] font-normal"
                 >
-                    Payment activity active
+                    Payment activity
                 </Badge>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    class="h-6 px-2 text-[11px]"
+                <button
+                    type="button"
+                    class="text-[11px] text-muted-foreground underline-offset-2 hover:underline"
                     :disabled="listLoading"
                     @click="emit('reset-filters')"
                 >
-                    Reset
-                </Button>
+                    Clear all
+                </button>
             </div>
         </div>
     </CardHeader>

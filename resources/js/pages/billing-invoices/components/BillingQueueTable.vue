@@ -155,24 +155,138 @@ function consultationReviewDiscountLabel(invoice: BillingInvoice): string | null
 function requestStatusAction(invoice: BillingInvoice, action: BillingInvoiceStatusAction): void {
     emit('status-action', { invoice, action });
 }
+
+function invoiceStatusDotClass(status: string | null): string {
+    const normalized = (status ?? '').toLowerCase();
+    if (normalized === 'draft') return 'bg-slate-500';
+    if (normalized === 'issued') return 'bg-sky-500';
+    if (normalized === 'partially_paid') return 'bg-amber-500';
+    if (normalized === 'paid') return 'bg-emerald-500';
+    if (normalized === 'cancelled' || normalized === 'voided') return 'bg-rose-500';
+    return 'bg-muted-foreground';
+}
 </script>
 
 <template>
     <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
-        <ScrollArea class="min-h-0 flex-1">
-            <div class="min-h-[12rem] p-4" :class="compactQueueRows ? 'space-y-2' : 'space-y-3'">
-                <div v-if="pageLoading || listLoading" class="space-y-2">
-                    <Skeleton class="h-24 w-full" />
-                    <Skeleton class="h-24 w-full" />
-                    <Skeleton class="h-24 w-full" />
+        <ScrollArea class="max-h-[min(70vh,42rem)] min-h-0 flex-1">
+            <div class="min-h-[12rem]" :class="compactQueueRows ? '' : 'space-y-3 p-4'">
+                <div v-if="pageLoading || listLoading" class="divide-y px-4">
+                    <div v-for="index in 6" :key="`invoice-skeleton-${index}`" class="flex items-center gap-3 py-3">
+                        <Skeleton class="size-2 shrink-0 rounded-full" />
+                        <div class="min-w-0 flex-1 space-y-2">
+                            <Skeleton class="h-4 w-48" />
+                            <Skeleton class="h-3.5 w-72 max-w-full" />
+                        </div>
+                        <Skeleton class="h-8 w-20 shrink-0 rounded-md" />
+                    </div>
                 </div>
                 <div
                     v-else-if="visibleInvoices.length === 0"
-                    class="rounded-lg border border-dashed p-6 text-sm text-muted-foreground"
+                    class="flex flex-col items-center gap-3 px-4 py-10 text-center"
                 >
-                    {{ emptyStateMessage }}
+                    <div class="flex size-10 items-center justify-center rounded-lg bg-muted">
+                        <AppIcon name="receipt" class="size-4 text-muted-foreground" />
+                    </div>
+                    <div class="space-y-1">
+                        <p class="text-sm font-medium">No invoices in this view</p>
+                        <p class="text-xs text-muted-foreground">{{ emptyStateMessage }}</p>
+                    </div>
                 </div>
-                <div v-else :class="compactQueueRows ? 'space-y-2' : 'space-y-3'">
+                <div v-else-if="compactQueueRows" class="divide-y px-4">
+                    <div
+                        v-for="invoice in visibleInvoices"
+                        :key="invoice.id"
+                        class="flex items-center gap-3 py-3 transition-colors hover:bg-muted/30"
+                    >
+                        <span
+                            class="size-2 shrink-0 rounded-full"
+                            :class="invoiceStatusDotClass(invoice.status)"
+                            :title="formatEnumLabel(invoice.status)"
+                        />
+                        <button
+                            type="button"
+                            class="min-w-0 flex-1 space-y-0.5 text-left"
+                            @click="emit('open-details', invoice)"
+                        >
+                            <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span class="truncate text-sm font-medium">
+                                    {{ invoice.invoiceNumber || 'Draft invoice' }}
+                                </span>
+                                <span class="shrink-0 text-xs text-muted-foreground">
+                                    {{ invoicePatientLabel(invoice) }}
+                                </span>
+                                <span class="shrink-0 text-xs font-medium tabular-nums">
+                                    {{ formatMoney(invoice.totalAmount, invoice.currencyCode) }}
+                                </span>
+                            </div>
+                            <p class="truncate text-xs text-muted-foreground">
+                                <span>{{ formatEnumLabel(invoice.status) }}</span>
+                                <span class="text-border"> · </span>
+                                <span>{{ billingInvoiceQueueLaneLabel(invoice) }}</span>
+                                <span v-if="amountToNumber(invoice.balanceAmount) !== null">
+                                    <span class="text-border"> · </span>
+                                    Balance {{ formatMoney(invoice.balanceAmount, invoice.currencyCode) }}
+                                </span>
+                                <span v-if="billingInvoiceQueueNextStep(invoice)">
+                                    <span class="text-border"> · </span>
+                                    {{ billingInvoiceQueueNextStep(invoice)?.title }}
+                                </span>
+                            </p>
+                        </button>
+                        <Badge :variant="statusVariant(invoice.status)" class="hidden shrink-0 capitalize sm:inline-flex">
+                            {{ formatEnumLabel(invoice.status) }}
+                        </Badge>
+                        <div class="flex shrink-0 items-center gap-1">
+                            <Button
+                                v-if="canIssueBillingInvoices && invoice.status === 'draft'"
+                                size="sm"
+                                class="hidden h-8 sm:inline-flex"
+                                :disabled="actionLoadingId === invoice.id"
+                                @click="requestStatusAction(invoice, 'issued')"
+                            >
+                                Issue
+                            </Button>
+                            <Button
+                                v-else-if="
+                                    canRecordBillingPayments &&
+                                    (invoice.status === 'issued' || invoice.status === 'partially_paid')
+                                "
+                                size="sm"
+                                class="hidden h-8 sm:inline-flex"
+                                :disabled="actionLoadingId === invoice.id"
+                                @click="requestStatusAction(invoice, 'record_payment')"
+                            >
+                                Record payment
+                            </Button>
+                            <Button
+                                v-else-if="claimsAction(invoice)"
+                                size="sm"
+                                variant="outline"
+                                class="hidden h-8 sm:inline-flex"
+                                as-child
+                            >
+                                <Link :href="claimsAction(invoice)?.href || '#'">
+                                    Claims
+                                </Link>
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                class="h-8 rounded-lg text-xs"
+                                :disabled="
+                                    actionLoadingId === invoice.id ||
+                                    (invoiceDetailsPaymentsLoading &&
+                                        invoiceDetailsInvoiceId === invoice.id)
+                                "
+                                @click="emit('open-details', invoice)"
+                            >
+                                Details
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+                <div v-else class="space-y-3 p-4">
                     <div
                         v-for="invoice in visibleInvoices"
                         :key="invoice.id"
