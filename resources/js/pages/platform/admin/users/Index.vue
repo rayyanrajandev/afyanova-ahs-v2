@@ -1651,11 +1651,53 @@ function exportDetailsAuditLogs() {
     }, 600);
 }
 
+function seedDetailsUserFromList(user: PlatformUser): void {
+    detailsUser.value = user;
+    roleDraftIds.value = normalizeRoleIds(user.roleIds ?? []);
+    facilityDrafts.value = toFacilityDrafts(user.facilityAssignments ?? []);
+    ensureSinglePrimary();
+    newFacilityDraftId.value = '';
+    setDetailsInlineMessage(null);
+    saveRolesApprovalCaseReference.value = '';
+    saveFacilitiesApprovalCaseReference.value = '';
+    saveRolesError.value = null;
+    saveFacilitiesError.value = null;
+}
+
 async function openDetails(user: PlatformUser) {
     const userId = Number(user.id);
     if (!Number.isFinite(userId)) return;
 
-    await openDetailsById(userId);
+    detailsOpen.value = true;
+    detailsSheetTab.value = 'overview';
+    detailsAuditFiltersOpen.value = false;
+    seedDetailsUserFromList(user);
+    detailsAuditLogs.value = [];
+    detailsAuditMeta.value = null;
+    detailsAuditError.value = null;
+
+    detailsAuditFilters.q = '';
+    detailsAuditFilters.action = '';
+    detailsAuditFilters.actorType = '';
+    detailsAuditFilters.actorId = '';
+    detailsAuditFilters.from = '';
+    detailsAuditFilters.to = '';
+    detailsAuditFilters.page = 1;
+    detailsAuditFilters.perPage = 20;
+
+    detailsLoading.value = true;
+    try {
+        const response = await apiRequest<PlatformUserResponse>('GET', `/platform/admin/users/${userId}`);
+        detailsUser.value = response.data;
+        roleDraftIds.value = normalizeRoleIds(response.data.roleIds ?? []);
+        facilityDrafts.value = toFacilityDrafts(response.data.facilityAssignments ?? []);
+        ensureSinglePrimary();
+        newFacilityDraftId.value = '';
+    } catch (error) {
+        notifyError(messageFromUnknown(error, 'Unable to refresh user details.'));
+    } finally {
+        detailsLoading.value = false;
+    }
 }
 
 async function openDetailsById(userId: number) {
@@ -1691,7 +1733,6 @@ async function openDetailsById(userId: number) {
         saveFacilitiesApprovalCaseReference.value = '';
         saveRolesError.value = null;
         saveFacilitiesError.value = null;
-        await loadDetailsAudit(userId);
     } catch (error) {
         detailsUser.value = null;
         notifyError(messageFromUnknown(error, 'Unable to load user details.'));
@@ -1832,6 +1873,24 @@ watch(pageUserIds, () => {
     const visible = new Set(pageUserIds.value);
     selectedUserIds.value = selectedUserIds.value.filter((id) => visible.has(id));
 });
+
+watch(
+    () => detailsSheetTab.value,
+    (tab) => {
+        const userId = Number(detailsUser.value?.id);
+        if (!Number.isFinite(userId)) return;
+
+        if (
+            tab === 'audit' &&
+            canViewAudit.value &&
+            !detailsAuditLoading.value &&
+            detailsAuditMeta.value === null &&
+            detailsAuditLogs.value.length === 0
+        ) {
+            void loadDetailsAudit(userId);
+        }
+    },
+);
 
 onBeforeUnmount(clearSearchDebounce);
 onMounted(async () => {
@@ -2712,7 +2771,7 @@ onMounted(async () => {
                         </div>
                     </div>
 
-                    <div v-if="detailsLoading" class="space-y-3 p-4">
+                    <div v-if="detailsLoading && !detailsUser" class="space-y-3 p-4">
                         <Skeleton class="h-20 w-full" />
                         <Skeleton class="h-10 w-full" />
                         <Skeleton class="h-32 w-full" />

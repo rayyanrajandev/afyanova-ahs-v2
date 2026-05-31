@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -674,7 +674,6 @@ async function loadDetails(caseId: string): Promise<void> {
         const response = await apiRequest<ApprovalCaseResponse>('GET', `/platform/admin/user-approval-cases/${caseId}`);
         hydrateDetails(response.data);
         await loadComments();
-        if (canViewAudit.value) await loadAuditLogs(1);
     } catch (error) {
         selectedCase.value = null;
         detailsError.value = messageFromUnknown(error, 'Unable to load approval case.');
@@ -689,6 +688,7 @@ async function openDetails(item: ApprovalCase): Promise<void> {
 
     detailsOpen.value = true;
     detailsTab.value = 'overview';
+    hydrateDetails(item);
     await loadDetails(caseId);
 }
 
@@ -793,6 +793,15 @@ async function addComment(): Promise<void> {
         commentSaveLoading.value = false;
     }
 }
+
+watch(
+    () => [detailsOpen.value, detailsTab.value, currentCaseId.value] as const,
+    ([open, tab, caseId]) => {
+        if (!open || !caseId || tab !== 'audit' || !canViewAudit.value) return;
+        if (auditLoading.value || auditLogs.value.length > 0 || auditMeta.value !== null) return;
+        void loadAuditLogs(1);
+    },
+);
 
 onMounted(async () => {
     if (availableFacilities.value.length > 0) {
@@ -1227,12 +1236,12 @@ onMounted(async () => {
                         </SheetDescription>
                     </SheetHeader>
 
-                    <div v-if="detailsLoading" class="space-y-3 p-4">
+                    <div v-if="detailsLoading && !selectedCase" class="space-y-3 p-4">
                         <Skeleton class="h-16 w-full" />
                         <Skeleton class="h-10 w-full" />
                         <Skeleton class="h-52 w-full" />
                     </div>
-                    <div v-else-if="detailsError" class="p-4">
+                    <div v-else-if="detailsError && !selectedCase" class="p-4">
                         <Alert variant="destructive">
                             <AlertTitle>Unable to load case details</AlertTitle>
                             <AlertDescription>{{ detailsError }}</AlertDescription>

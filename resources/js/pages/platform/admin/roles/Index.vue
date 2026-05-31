@@ -668,7 +668,13 @@ async function openDetails(role: PlatformRole) {
     detailsOpen.value = true;
     detailsLoading.value = true;
     detailsSheetTab.value = 'overview';
-    detailsRole.value = null;
+    detailsRole.value = normalizeRolePayload(role as Partial<PlatformRole> & Record<string, unknown>);
+    detailsForm.code = role.code ?? '';
+    detailsForm.name = role.name ?? '';
+    detailsForm.description = role.description ?? '';
+    detailsForm.status = role.status ?? 'active';
+    permissionDraftNames.value = normalizePermissionNames(role.permissionNames ?? []);
+    permissionDraftDirty.value = false;
     detailsFormErrors.value = {};
     permissionSearch.value = '';
     deleteRoleError.value = null;
@@ -696,7 +702,6 @@ async function openDetails(role: PlatformRole) {
         detailsForm.status = resolvedRole.status ?? 'active';
         permissionDraftNames.value = normalizePermissionNames(resolvedRole.permissionNames ?? []);
         permissionDraftDirty.value = false;
-        await loadDetailsAudit(roleId);
     } catch (error) {
         notifyError(messageFromUnknown(error, 'Unable to load role details.'));
         detailsRole.value = null;
@@ -942,6 +947,25 @@ watch(
         void loadRoles();
     },
 );
+
+watch(
+    () => detailsSheetTab.value,
+    (tab) => {
+        const roleId = String(detailsRole.value?.id ?? '').trim();
+        if (!roleId) return;
+
+        if (
+            tab === 'audit' &&
+            canViewAudit.value &&
+            !detailsAuditLoading.value &&
+            detailsAuditMeta.value === null &&
+            detailsAuditLogs.value.length === 0
+        ) {
+            void loadDetailsAudit(roleId);
+        }
+    },
+);
+
 function openCreateDialog() {
     createErrors.value = {};
     createMessage.value = null;
@@ -1318,7 +1342,7 @@ onMounted(refreshPage);
                         </SheetDescription>
                     </SheetHeader>
 
-                    <div v-if="detailsLoading" class="space-y-3 p-4">
+                    <div v-if="detailsLoading && !detailsRole" class="space-y-3 p-4">
                         <Skeleton class="h-24 w-full rounded-lg" />
                         <Skeleton class="h-10 w-full rounded-lg" />
                         <Skeleton class="h-40 w-full rounded-lg" />

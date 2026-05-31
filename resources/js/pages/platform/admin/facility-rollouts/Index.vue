@@ -1,7 +1,7 @@
 
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vue';
 import TimePopoverField from '@/components/forms/TimePopoverField.vue';
@@ -870,7 +870,6 @@ async function loadDetails(planId: string): Promise<void> {
         selectedPlan.value = response.data;
         hydrateDetails(response.data);
         await loadOwnerSummary();
-        if (canViewAudit.value) await loadAuditLogs(1);
     } catch (error) {
         detailsError.value = messageFromUnknown(error, 'Unable to load rollout details.');
         selectedPlan.value = null;
@@ -885,7 +884,8 @@ function openDetails(plan: RolloutPlan): void {
 
     detailsOpen.value = true;
     detailsTab.value = 'overview';
-    selectedPlan.value = null;
+    selectedPlan.value = plan;
+    hydrateDetails(plan);
     selectedOwnerUser.value = null;
     resetOwnerLookup();
     detailsError.value = null;
@@ -1222,6 +1222,15 @@ function exportAuditLogs(): void {
         auditExporting.value = false;
     }
 }
+
+watch(
+    () => [detailsOpen.value, detailsTab.value, selectedPlan.value?.id ?? null] as const,
+    ([open, tab, planId]) => {
+        if (!open || !planId || tab !== 'audit' || !canViewAudit.value) return;
+        if (auditLoading.value || auditLogs.value.length > 0 || auditMeta.value !== null) return;
+        void loadAuditLogs(1);
+    },
+);
 
 onMounted(async () => {
     if (availableFacilities.value.length > 0) createForm.facilityId = String(availableFacilities.value[0]?.id ?? '');
@@ -1725,11 +1734,11 @@ onBeforeUnmount(() => {
                     </SheetHeader>
 
                     <div class="min-h-0 flex-1 overflow-hidden">
-                        <div v-if="detailsLoading" class="space-y-2 p-4">
+                        <div v-if="detailsLoading && !selectedPlan" class="space-y-2 p-4">
                             <Skeleton class="h-14 w-full" />
                             <Skeleton class="h-14 w-full" />
                         </div>
-                        <Alert v-else-if="detailsError" variant="destructive" class="m-4">
+                        <Alert v-else-if="detailsError && !selectedPlan" variant="destructive" class="m-4">
                             <AlertTitle>Details load failed</AlertTitle>
                             <AlertDescription>{{ detailsError }}</AlertDescription>
                         </Alert>

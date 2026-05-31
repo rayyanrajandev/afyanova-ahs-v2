@@ -3827,7 +3827,7 @@ onMounted(async () => {
                         <div class="min-h-0 flex-1">
                             <ScrollArea class="h-full">
                                 <div class="space-y-6 px-6 py-5">
-                                    <div v-if="detailsCaseLoading" class="space-y-4">
+                                    <div v-if="detailsCaseLoading && !detailsCase" class="space-y-4">
                                         <Skeleton class="h-28 rounded-lg" />
                                         <div class="grid gap-4 lg:grid-cols-3">
                                             <Skeleton class="h-64 rounded-lg lg:col-span-2" />
@@ -3836,7 +3836,7 @@ onMounted(async () => {
                                         <Skeleton class="h-56 rounded-lg" />
                                     </div>
 
-                                    <Alert v-else-if="detailsCaseError" variant="destructive">
+                                    <Alert v-else-if="detailsCaseError && !detailsCase" variant="destructive">
                                         <AlertTitle>Details unavailable</AlertTitle>
                                         <AlertDescription>{{ detailsCaseError }}</AlertDescription>
                                     </Alert>

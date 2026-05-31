@@ -3478,7 +3478,7 @@ onMounted(async () => {
             </SheetHeader>
             <ScrollArea class="min-h-0 flex-1">
                 <div class="space-y-4 p-6">
-                    <div v-if="detailsLoading" class="space-y-3">
+                    <div v-if="detailsLoading && !detailsClaim" class="space-y-3">
                         <div class="h-24 animate-pulse rounded-lg bg-muted" />
                         <div class="h-32 animate-pulse rounded-lg bg-muted" />
                     </div>

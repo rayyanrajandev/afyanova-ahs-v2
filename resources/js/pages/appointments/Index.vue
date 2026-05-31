@@ -6416,13 +6416,13 @@ watchDebounced(
                         <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
                             <ScrollArea class="min-h-0 flex-1" viewport-class="pb-12">
                                 <div class="space-y-6 px-6 py-5 pb-16">
-                                    <div v-if="detailsLoading" class="space-y-4">
+                                    <div v-if="detailsLoading && !detailsAppointment" class="space-y-4">
                                         <Skeleton class="h-28 rounded-lg" />
                                         <Skeleton class="h-80 rounded-lg" />
                                         <Skeleton class="h-56 rounded-lg" />
                                     </div>
 
-                                    <Alert v-else-if="detailsError" variant="destructive">
+                                    <Alert v-else-if="detailsError && !detailsAppointment" variant="destructive">
                                         <AlertTitle>Details unavailable</AlertTitle>
                                         <AlertDescription>{{ detailsError }}</AlertDescription>
                                     </Alert>

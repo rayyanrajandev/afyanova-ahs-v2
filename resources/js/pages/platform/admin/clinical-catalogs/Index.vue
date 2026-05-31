@@ -1209,7 +1209,8 @@ async function openDetails(item: Item): Promise<void> {
     detailsLoading.value = true;
     detailsError.value = null;
     detailsTab.value = 'overview';
-    selected.value = null;
+    selected.value = item;
+    hydrateEdit(item);
     auditLogs.value = [];
     auditPager.value = null;
     resetConsumptionRecipeWorkspace();
@@ -1218,8 +1219,7 @@ async function openDetails(item: Item): Promise<void> {
         const response = await apiRequest<{ data: Item }>('GET', `${base.value}/${id}`);
         selected.value = response.data;
         hydrateEdit(response.data);
-        await loadConsumptionRecipe(response.data);
-        if (canAudit.value) await loadAudit(1);
+        void loadConsumptionRecipe(response.data);
     } catch (error) {
         detailsError.value = messageFromUnknown(error, 'Unable to load item details.');
     } finally {
@@ -1400,6 +1400,15 @@ watch(catalogKey, () => {
     filters.page = 1;
     void loadItems();
 });
+
+watch(
+    () => [sheetOpen.value, detailsTab.value, selected.value?.id ?? null] as const,
+    ([open, tab, itemId]) => {
+        if (!open || !itemId || tab !== 'audit' || !canAudit.value) return;
+        if (auditBusy.value || auditLogs.value.length > 0 || auditPager.value !== null) return;
+        void loadAudit(1);
+    },
+);
 
 onMounted(() => {
     void Promise.all([loadItems(), loadDepartments()]);
@@ -1805,11 +1814,11 @@ onMounted(() => {
                         <SheetDescription>{{ selected?.name || `${catalog.label} workspace` }} | {{ billingLinkLabel(selected?.billingLinkStatus ?? null) }}</SheetDescription>
                     </SheetHeader>
                     <div class="min-h-0 flex-1 overflow-hidden">
-                        <div v-if="detailsLoading" class="space-y-2 p-4">
+                        <div v-if="detailsLoading && !selected" class="space-y-2 p-4">
                             <Skeleton class="h-14 w-full" />
                             <Skeleton class="h-14 w-full" />
                         </div>
-                        <Alert v-else-if="detailsError" variant="destructive" class="m-4">
+                        <Alert v-else-if="detailsError && !selected" variant="destructive" class="m-4">
                             <AlertTitle>Details load issue</AlertTitle>
                             <AlertDescription>{{ detailsError }}</AlertDescription>
                         </Alert>

@@ -1137,17 +1137,6 @@ const detailsWorkflowRecommendation =
         const patient = detailsSheetPatient.value;
         if (!patient) return null;
 
-        if (detailsTimelineLoading.value && canReadAppointments.value) {
-            return {
-                title: 'Loading current visit',
-                description:
-                    'Checking the latest appointment and queue state for this patient before recommending the next workflow step.',
-                primaryLabel: null,
-                primaryHref: null,
-                primaryIcon: 'calendar-clock',
-            };
-        }
-
         const appointment = detailsCurrentAppointment.value;
         if (!appointment) {
             if (canCreateAppointments.value) {
@@ -3134,12 +3123,14 @@ async function loadPatientTimeline(patient: Patient) {
 }
 
 function openPatientDetailsSheet(patient: Patient) {
+    timelineRequestToken += 1;
+    detailsTimelineLoading.value = false;
+    clearTimelineState();
+    setTimelineProfileEvents(patient);
+
     detailsSheetPatient.value = patient;
     detailsSheetOpen.value = true;
     detailsSheetTab.value = 'overview';
-    void loadPatientTimeline(patient);
-    void loadPatientInsurance(patient.id);
-    void loadPatientInsuranceOptions();
     detailsAuditLogs.value = [];
     detailsAuditMeta.value = null;
     detailsAuditError.value = null;
@@ -5710,20 +5701,34 @@ watch(
 );
 
 watch(
-    () => detailsSheetTab.value,
-    (tab) => {
-        if (
-            tab !== 'audit' ||
-            !detailsSheetPatient.value ||
-            !canViewPatientAudit.value ||
-            detailsAuditLoading.value ||
-            detailsAuditMeta.value !== null ||
-            detailsAuditLogs.value.length > 0
-        ) {
-            return;
+    () =>
+        [
+            detailsSheetOpen.value,
+            detailsSheetTab.value,
+            detailsSheetPatient.value?.id ?? null,
+        ] as const,
+    ([open, tab, patientId]) => {
+        if (!open || !patientId) return;
+
+        if (tab === 'overview') {
+            void loadPatientInsurance(patientId);
+            void loadPatientInsuranceOptions();
         }
 
-        void loadDetailsAuditLogs(detailsSheetPatient.value.id);
+        if (tab === 'activity') {
+            const patient = detailsSheetPatient.value;
+            if (patient) void loadPatientTimeline(patient);
+        }
+
+        if (
+            tab === 'audit' &&
+            canViewPatientAudit.value &&
+            !detailsAuditLoading.value &&
+            detailsAuditMeta.value === null &&
+            detailsAuditLogs.value.length === 0
+        ) {
+            void loadDetailsAuditLogs(patientId);
+        }
     },
 );
 
@@ -9182,8 +9187,13 @@ onMounted(() => {
                                         <p
                                             class="truncate text-muted-foreground"
                                         >
-                                            {{ detailsTimelineEvents.length }}
-                                            recorded events
+                                            <template v-if="detailsTimelineLoading">
+                                                Loading activity…
+                                            </template>
+                                            <template v-else>
+                                                {{ detailsTimelineEvents.length }}
+                                                recorded events
+                                            </template>
                                         </p>
                                     </div>
                                 </div>
