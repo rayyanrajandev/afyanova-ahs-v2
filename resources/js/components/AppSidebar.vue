@@ -18,7 +18,15 @@ import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import AppLogo from './AppLogo.vue';
 
-type NavSectionKey = 'care_delivery' | 'revenue' | 'supply_chain' | 'configuration';
+type NavSectionKey =
+    | 'front_office'
+    | 'clinical_care'
+    | 'diagnostics'
+    | 'billing'
+    | 'stores'
+    | 'people'
+    | 'facility_setup'
+    | 'system_access';
 
 type NavCatalogItem = NavItem & {
     section: NavSectionKey;
@@ -32,158 +40,163 @@ type NavSection = {
 };
 
 const navCatalog: NavCatalogItem[] = [
+    // Registration & visits — front desk, OPD, and admissions
     {
-        title: 'Patients',
+        title: 'Patient registry',
         href: '/patients',
         iconName: 'users',
-        section: 'care_delivery',
+        section: 'front_office',
         permissionPrefixes: ['patients.'],
     },
     {
-        title: 'Direct service queue',
+        title: 'Walk-in service desk',
         href: '/walk-in-service-requests',
         iconName: 'layout-list',
-        section: 'care_delivery',
+        section: 'front_office',
         permissionPrefixes: ['service.requests.'],
     },
     {
-        title: 'Appointments',
+        title: 'OPD appointments',
         href: '/appointments',
         iconName: 'calendar-clock',
-        section: 'care_delivery',
+        section: 'front_office',
         permissionPrefixes: ['appointments.'],
     },
     {
-        title: 'Admissions',
+        title: 'Inpatient admissions',
         href: '/admissions',
         iconName: 'bed-double',
-        section: 'care_delivery',
+        section: 'front_office',
         permissionPrefixes: ['admissions.'],
     },
+    // Clinical care — emergency, wards, theatre, records
     {
-        title: 'Medical Records',
-        href: '/medical-records',
-        iconName: 'file-text',
-        section: 'care_delivery',
-        permissionPrefixes: ['medical.records.', 'medical-records.'],
-    },
-    {
-        title: 'Emergency & Triage',
+        title: 'Emergency & triage',
         href: '/emergency-triage',
         iconName: 'alert-triangle',
-        section: 'care_delivery',
+        section: 'clinical_care',
         permissionPrefixes: ['emergency.triage.'],
     },
     {
-        title: 'Inpatient Ward',
+        title: 'Ward management',
         href: '/inpatient-ward',
         iconName: 'clipboard-list',
-        section: 'care_delivery',
+        section: 'clinical_care',
         permissionPrefixes: ['inpatient.ward.'],
     },
     {
-        title: 'Theatre & Procedures',
+        title: 'Operating theatre',
         href: '/theatre-procedures',
         iconName: 'scissors',
-        section: 'care_delivery',
+        section: 'clinical_care',
         permissionPrefixes: ['theatre.procedures.'],
     },
+    {
+        title: 'Clinical records',
+        href: '/medical-records',
+        iconName: 'file-text',
+        section: 'clinical_care',
+        permissionPrefixes: ['medical.records.', 'medical-records.'],
+    },
+    // Diagnostics & pharmacy — lab, imaging, dispensing
     {
         title: 'Laboratory',
         href: '/laboratory-orders',
         iconName: 'flask-conical',
-        section: 'care_delivery',
+        section: 'diagnostics',
         permissionPrefixes: ['laboratory.orders.', 'laboratory-orders.'],
     },
     {
-        title: 'Radiology',
+        title: 'Imaging & radiology',
         href: '/radiology-orders',
         iconName: 'activity',
-        section: 'care_delivery',
+        section: 'diagnostics',
         permissionPrefixes: ['radiology.orders.'],
     },
     {
-        title: 'Pharmacy',
+        title: 'Pharmacy & dispensing',
         href: '/pharmacy-orders',
         iconName: 'pill',
-        section: 'care_delivery',
+        section: 'diagnostics',
         permissionPrefixes: ['pharmacy.orders.', 'pharmacy-orders.'],
     },
+    // Billing & insurance — cash, NHIF, tariffs
     {
-        title: 'Billing',
+        title: 'Invoices & billing',
         href: '/billing-invoices',
         iconName: 'receipt',
-        section: 'revenue',
+        section: 'billing',
         permissionPrefixes: ['billing.', 'billing-invoices.'],
     },
     {
-        title: 'Cash Billing',
+        title: 'Cashier',
         href: '/billing-cash',
         iconName: 'receipt',
-        section: 'revenue',
+        section: 'billing',
         permissionPrefixes: ['billing.cash-accounts.'],
     },
     {
-        title: 'Point of Sale',
+        title: 'POS counter',
         href: '/pos',
         iconName: 'receipt',
-        section: 'revenue',
+        section: 'billing',
         permissionPrefixes: ['pos.'],
     },
     {
-        title: 'Billable Service Catalog',
+        title: 'Tariffs & services',
         href: '/billing-service-catalog',
-        iconName: 'receipt',
-        section: 'revenue',
+        iconName: 'file-text',
+        section: 'billing',
         permissionPrefixes: ['billing.service-catalog.'],
     },
     {
-        title: 'Claims & Insurance',
+        title: 'NHIF & insurance',
         href: '/claims-insurance',
         iconName: 'shield-check',
-        section: 'revenue',
+        section: 'billing',
         permissionPrefixes: ['claims.insurance.'],
     },
     {
-        title: 'Payer Contracts',
+        title: 'Payer contracts',
         href: '/billing-payer-contracts',
         iconName: 'file-text',
-        section: 'revenue',
+        section: 'billing',
         permissionPrefixes: ['billing.payer-contracts.'],
     },
     {
-        title: 'Refund Operations',
+        title: 'Refunds',
         href: '/billing-refunds',
         iconName: 'rotate-ccw',
-        section: 'revenue',
+        section: 'billing',
         permissionPrefixes: ['billing.refunds.'],
     },
     {
-        title: 'Discount Policies',
+        title: 'Discount policies',
         href: '/billing-discounts',
         iconName: 'file-text',
-        section: 'revenue',
+        section: 'billing',
         permissionPrefixes: ['billing.discounts.'],
     },
     {
-        title: 'Financial Reports',
+        title: 'Financial reports',
         href: '/billing-financial-reports',
         iconName: 'file-text',
-        section: 'revenue',
+        section: 'billing',
         permissionPrefixes: ['billing.financial-controls.'],
     },
+    // Stores & supply — procurement and stock
     {
-        title: 'Inventory & Procurement',
+        title: 'Stores & procurement',
         href: '/inventory-procurement',
         iconName: 'package',
-        section: 'supply_chain',
+        section: 'stores',
         permissionPrefixes: ['inventory.procurement.'],
     },
     {
         title: 'Warehouses',
         href: '/inventory-procurement/warehouses',
         iconName: 'building-2',
-        section: 'supply_chain',
+        section: 'stores',
         permissionPrefixes: [
             'inventory.procurement.read',
             'inventory.procurement.manage-warehouses',
@@ -193,17 +206,101 @@ const navCatalog: NavCatalogItem[] = [
         title: 'Suppliers',
         href: '/inventory-procurement/suppliers',
         iconName: 'package',
-        section: 'supply_chain',
+        section: 'stores',
         permissionPrefixes: [
             'inventory.procurement.read',
             'inventory.procurement.manage-suppliers',
         ],
     },
+    // People & credentials — staff and clinical privileges
     {
-        title: 'Clinical Care Catalog',
+        title: 'Staff directory',
+        href: '/staff',
+        iconName: 'users',
+        section: 'people',
+        permissionPrefixes: ['staff.'],
+    },
+    {
+        title: 'Staff credentialing',
+        href: '/staff-credentialing',
+        iconName: 'shield-check',
+        section: 'people',
+        permissionPrefixes: ['staff.credentialing.'],
+    },
+    {
+        title: 'Clinical privileges',
+        href: '/staff-privileges',
+        iconName: 'shield-check',
+        section: 'people',
+        permissionPrefixes: ['staff.privileges.', 'staff.privileges'],
+    },
+    {
+        title: 'Privilege catalog',
+        href: '/platform/admin/privilege-catalogs',
+        iconName: 'shield-check',
+        section: 'people',
+        permissionPrefixes: ['staff.privileges.'],
+    },
+    // Facility setup — structure, plans, and master data
+    {
+        title: 'Facility setup',
+        href: '/platform/admin/facility-config',
+        iconName: 'building-2',
+        section: 'facility_setup',
+        permissionPrefixes: [
+            'platform.facilities.',
+            'platform.multi-facility.',
+            'platform.resources.',
+            'platform.users.manage-facilities',
+        ],
+    },
+    {
+        title: 'Subscription plans',
+        href: '/platform/admin/service-plans',
+        iconName: 'receipt',
+        section: 'facility_setup',
+        permissionPrefixes: ['platform.subscription-plans.'],
+    },
+    {
+        title: 'Facility rollouts',
+        href: '/platform/admin/facility-rollouts',
+        iconName: 'clipboard-list',
+        section: 'facility_setup',
+        permissionPrefixes: ['platform.multi-facility.'],
+    },
+    {
+        title: 'Departments',
+        href: '/platform/admin/departments',
+        iconName: 'building-2',
+        section: 'facility_setup',
+        permissionPrefixes: ['departments.'],
+    },
+    {
+        title: 'Service points',
+        href: '/platform/admin/service-points',
+        iconName: 'map-pin',
+        section: 'facility_setup',
+        permissionPrefixes: ['platform.resources.'],
+    },
+    {
+        title: 'Wards & beds',
+        href: '/platform/admin/ward-beds',
+        iconName: 'bed-double',
+        section: 'facility_setup',
+        permissionPrefixes: ['platform.resources.'],
+    },
+    {
+        title: 'Clinical specialties',
+        href: '/platform/admin/specialties',
+        iconName: 'activity',
+        section: 'facility_setup',
+        permissionPrefixes: ['specialties.', 'staff.specialties.'],
+    },
+    {
+        title: 'Clinical service catalog',
         href: '/platform/admin/clinical-catalogs',
         iconName: 'book-open',
-        section: 'configuration',
+        section: 'facility_setup',
         permissionPrefixes: [
             'platform.clinical-catalog.',
             'laboratory.orders.',
@@ -213,113 +310,32 @@ const navCatalog: NavCatalogItem[] = [
         ],
     },
     {
-        title: 'Departments',
-        href: '/platform/admin/departments',
-        iconName: 'building-2',
-        section: 'configuration',
-        permissionPrefixes: ['departments.'],
-    },
-    {
-        title: 'Service Points',
-        href: '/platform/admin/service-points',
-        iconName: 'map-pin',
-        section: 'configuration',
-        permissionPrefixes: ['platform.resources.'],
-    },
-    {
-        title: 'Ward & Beds',
-        href: '/platform/admin/ward-beds',
-        iconName: 'bed-double',
-        section: 'configuration',
-        permissionPrefixes: ['platform.resources.'],
-    },
-    {
-        title: 'Clinical Specialties',
-        href: '/platform/admin/specialties',
-        iconName: 'activity',
-        section: 'configuration',
-        permissionPrefixes: ['specialties.', 'staff.specialties.'],
-    },
-    {
-        title: 'Staff Directory',
-        href: '/staff',
-        iconName: 'users',
-        section: 'configuration',
-        permissionPrefixes: ['staff.'],
-    },
-    {
-        title: 'Staff Credentialing',
-        href: '/staff-credentialing',
-        iconName: 'shield-check',
-        section: 'configuration',
-        permissionPrefixes: ['staff.credentialing.'],
-    },
-    {
-        title: 'Staff Privileges',
-        href: '/staff-privileges',
-        iconName: 'shield-check',
-        section: 'configuration',
-        permissionPrefixes: ['staff.privileges.', 'staff.privileges'],
-    },
-    {
-        title: 'Privilege Catalog',
-        href: '/platform/admin/privilege-catalogs',
-        iconName: 'shield-check',
-        section: 'configuration',
-        permissionPrefixes: ['staff.privileges.'],
-    },
-    {
-        title: 'Facility Configuration',
-        href: '/platform/admin/facility-config',
-        iconName: 'building-2',
-        section: 'configuration',
-        permissionPrefixes: [
-            'platform.facilities.',
-            'platform.multi-facility.',
-            'platform.resources.',
-            'platform.users.manage-facilities',
-        ],
-    },
-    {
-        title: 'Facility Subscription Plans',
-        href: '/platform/admin/service-plans',
-        iconName: 'receipt',
-        section: 'configuration',
-        permissionPrefixes: ['platform.subscription-plans.'],
-    },
-    {
-        title: 'Facility Rollouts',
-        href: '/platform/admin/facility-rollouts',
-        iconName: 'clipboard-list',
-        section: 'configuration',
-        permissionPrefixes: ['platform.multi-facility.'],
-    },
-    {
         title: 'Branding',
         href: '/platform/admin/branding',
         iconName: 'pencil',
-        section: 'configuration',
+        section: 'facility_setup',
         permissionPrefixes: ['platform.settings.'],
     },
+    // Users & system — access control and approvals
     {
-        title: 'Users & Access',
+        title: 'Users & access',
         href: '/platform/admin/users',
         iconName: 'user',
-        section: 'configuration',
+        section: 'system_access',
         permissionPrefixes: ['platform.users.'],
     },
     {
-        title: 'User Approval Cases',
+        title: 'Access approvals',
         href: '/platform/admin/user-approval-cases',
         iconName: 'clipboard-list',
-        section: 'configuration',
+        section: 'system_access',
         permissionPrefixes: ['platform.users.approval-cases.'],
     },
     {
-        title: 'Roles & Permissions',
+        title: 'Roles & permissions',
         href: '/platform/admin/roles',
         iconName: 'shield-check',
-        section: 'configuration',
+        section: 'system_access',
         permissionPrefixes: ['platform.rbac.'],
     },
 ];
@@ -330,17 +346,25 @@ const { permissionNames, hasUniversalAdminAccess, facilityEntitlementNames } = u
 const resolvedPermissionNames = computed(() => permissionNames.value ?? []);
 
 const sectionLabels: Record<NavSectionKey, string> = {
-    care_delivery: 'Care Delivery',
-    revenue: 'Revenue',
-    supply_chain: 'Supply Chain',
-    configuration: 'Configuration',
+    front_office: 'Registration & visits',
+    clinical_care: 'Clinical care',
+    diagnostics: 'Diagnostics & pharmacy',
+    billing: 'Billing & insurance',
+    stores: 'Stores & supply',
+    people: 'People & credentials',
+    facility_setup: 'Facility setup',
+    system_access: 'Users & system',
 };
 
 const sectionOrder: NavSectionKey[] = [
-    'care_delivery',
-    'revenue',
-    'supply_chain',
-    'configuration',
+    'front_office',
+    'clinical_care',
+    'diagnostics',
+    'billing',
+    'stores',
+    'people',
+    'facility_setup',
+    'system_access',
 ];
 
 const visibleNavItems = computed<NavCatalogItem[]>(() =>
@@ -359,7 +383,7 @@ const homeItems = computed<NavItem[]>(() => [
         iconName: 'layout-grid',
     },
     {
-        title: 'Shortcuts',
+        title: 'Help & shortcuts',
         href: '/help/shortcuts',
         iconName: 'book-open',
     },
