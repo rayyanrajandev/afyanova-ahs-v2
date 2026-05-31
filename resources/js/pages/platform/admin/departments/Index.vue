@@ -179,21 +179,12 @@ const departmentFilterCount = computed(() => {
     if (filters.perPage !== 20) count += 1;
     return count;
 });
-const departmentListSummaryText = computed(() => {
-    const segments = [`${counts.value.active} active`, `${counts.value.inactive} inactive`];
-
-    if (counts.value.other > 0) {
-        segments.push(`${counts.value.other} other`);
-    }
-
-    if (departmentFilterCount.value > 0) {
-        segments.push(`${departmentFilterCount.value} filters applied`);
-    }
-
-    return segments.join(' | ');
-});
-
 const departmentScopeText = computed(() => `${counts.value.total} departments in scope`);
+const departmentListFilterHintText = computed(() =>
+    departmentFilterCount.value > 0
+        ? `${departmentFilterCount.value} filters applied`
+        : 'Use filters for category, manager, or page size',
+);
 const departmentFilterChips = computed(() => {
     const chips: Array<{ key: string; label: string; clear: () => void }> = [];
 
@@ -986,61 +977,20 @@ onMounted(() => {
                 </AlertDescription>
             </Alert>
 
-            <div v-if="canRead" class="grid gap-3 sm:grid-cols-3">
-                <button
-                    type="button"
-                    class="rounded-lg border bg-background p-4 text-left transition-colors hover:bg-muted/30"
-                    :class="{ 'border-primary bg-primary/5': filters.status === '' }"
-                    @click="setStatus('')"
-                >
-                    <div class="flex items-center justify-between gap-3">
-                        <p class="text-xs font-medium uppercase text-muted-foreground">Total registry</p>
-                        <span class="h-2.5 w-2.5 rounded-full bg-slate-400" />
-                    </div>
-                    <p class="mt-2 text-2xl font-semibold tabular-nums">{{ counts.total }}</p>
-                    <p class="mt-1 text-xs text-muted-foreground">Departments in the current facility scope</p>
-                </button>
-                <button
-                    type="button"
-                    class="rounded-lg border bg-background p-4 text-left transition-colors hover:bg-muted/30"
-                    :class="{ 'border-primary bg-primary/5': filters.status === 'active' }"
-                    @click="setStatus('active')"
-                >
-                    <div class="flex items-center justify-between gap-3">
-                        <p class="text-xs font-medium uppercase text-muted-foreground">Active</p>
-                        <span class="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                    </div>
-                    <p class="mt-2 text-2xl font-semibold tabular-nums">{{ counts.active }}</p>
-                    <p class="mt-1 text-xs text-muted-foreground">Selectable in workflows when permitted</p>
-                </button>
-                <button
-                    type="button"
-                    class="rounded-lg border bg-background p-4 text-left transition-colors hover:bg-muted/30"
-                    :class="{ 'border-primary bg-primary/5': filters.status === 'inactive' }"
-                    @click="setStatus('inactive')"
-                >
-                    <div class="flex items-center justify-between gap-3">
-                        <p class="text-xs font-medium uppercase text-muted-foreground">Inactive</p>
-                        <span class="h-2.5 w-2.5 rounded-full bg-rose-500" />
-                    </div>
-                    <p class="mt-2 text-2xl font-semibold tabular-nums">{{ counts.inactive }}</p>
-                    <p class="mt-1 text-xs text-muted-foreground">Retained for audit and historical records</p>
-                </button>
-            </div>
-
             <!-- Single column layout -->
             <div class="flex min-w-0 flex-col gap-4">
 
                 <!-- Departments card -->
                 <Card v-if="canRead" class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70 shadow-sm">
-                    <div class="flex flex-col gap-3 border-b px-4 py-3.5 lg:flex-row lg:items-center lg:justify-between">
+                    <div class="flex flex-col gap-3 border-b px-4 py-3">
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <div class="min-w-0">
                             <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
                                 <AppIcon name="layout-list" class="size-4 text-muted-foreground" />
                                 Departments
                             </h3>
                             <p class="mt-1 text-xs text-muted-foreground">
-                                {{ departmentScopeText }} · {{ departmentListSummaryText }}
+                                {{ departmentScopeText }} · {{ departmentListFilterHintText }}
                             </p>
                         </div>
                         <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:max-w-2xl">
@@ -1058,6 +1008,48 @@ onMounted(() => {
                                     {{ departmentFilterCount }}
                                 </Badge>
                             </Button>
+                        </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': filters.status === '' }"
+                                @click="setStatus('')"
+                            >
+                                <span class="inline-block h-2 w-2 rounded-full bg-slate-400" />
+                                <span class="font-medium tabular-nums">{{ counts.total }}</span>
+                                <span class="text-muted-foreground">All</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': filters.status === 'active' }"
+                                @click="setStatus('active')"
+                            >
+                                <span class="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                                <span class="font-medium tabular-nums">{{ counts.active }}</span>
+                                <span class="text-muted-foreground">Active</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': filters.status === 'inactive' }"
+                                @click="setStatus('inactive')"
+                            >
+                                <span class="inline-block h-2 w-2 rounded-full bg-rose-500" />
+                                <span class="font-medium tabular-nums">{{ counts.inactive }}</span>
+                                <span class="text-muted-foreground">Inactive</span>
+                            </button>
+                            <button
+                                v-if="counts.other > 0"
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border border-dashed bg-background px-2.5 py-1 text-xs text-muted-foreground"
+                                disabled
+                            >
+                                <span class="font-medium tabular-nums">{{ counts.other }}</span>
+                                <span>Other</span>
+                            </button>
                         </div>
                     </div>
                     <div v-if="departmentFilterChips.length" class="flex flex-wrap items-center gap-1.5 border-b px-4 py-2">
