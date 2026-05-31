@@ -2125,7 +2125,7 @@ onMounted(() => {
             </Sheet>
 
             <Sheet v-if="canManage" :open="createSheetOpen" @update:open="closeCreateSheet">
-                <SheetContent side="right" variant="form" size="3xl" class="flex h-full min-h-0 flex-col">
+                <SheetContent side="right" variant="workspace" size="4xl" class="flex h-full min-h-0 flex-col">
                     <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
                         <SheetTitle class="flex items-center gap-2">
                             <AppIcon name="plus" class="size-5 text-muted-foreground" />
@@ -2252,7 +2252,7 @@ onMounted(() => {
             </Sheet>
 
             <Sheet :open="detailsOpen" @update:open="(open) => (open ? (detailsOpen = true) : closeDetails())">
-                <SheetContent side="right" variant="workspace" size="4xl" class="flex h-full min-h-0 flex-col">
+                <SheetContent side="right" variant="workspace" size="5xl" class="flex h-full min-h-0 flex-col">
                     <SheetHeader
                         v-if="selected"
                         class="shrink-0 border-b bg-background/95 px-4 py-3 pr-12 text-left sm:px-5"
