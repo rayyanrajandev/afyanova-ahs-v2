@@ -655,15 +655,22 @@ function userInitials(user: PlatformUser): string {
 }
 
 
+const MAX_VISIBLE_USER_ROLES_IN_TABLE = 3;
+
 function userRoleSummary(user: PlatformUser): string {
     const roleLabels = (user.roles ?? [])
         .map((role) => (role.name ?? role.code ?? '').trim())
         .filter((value) => value !== '');
 
     if (roleLabels.length === 0) return 'No roles assigned';
-    if (roleLabels.length === 1) return roleLabels[0];
+    if (roleLabels.length <= MAX_VISIBLE_USER_ROLES_IN_TABLE) {
+        return roleLabels.join(', ');
+    }
 
-    return `${roleLabels[0]} +${roleLabels.length - 1} more`;
+    const visible = roleLabels.slice(0, MAX_VISIBLE_USER_ROLES_IN_TABLE);
+    const remaining = roleLabels.length - MAX_VISIBLE_USER_ROLES_IN_TABLE;
+
+    return `${visible.join(', ')} +${remaining} more`;
 }
 
 
