@@ -208,6 +208,25 @@ function permissionMatchesPrefixRule(userPermission: string, rule: string): bool
     return userPermission === rule;
 }
 
+/** True when any granted permission matches at least one prefix rule (empty prefixes = always true). */
+export function hasAnyPermissionMatchingPrefixes(
+    permissionNames: readonly string[],
+    prefixes: readonly string[],
+    hasUnrestrictedAccess = false,
+): boolean {
+    if (hasUnrestrictedAccess) {
+        return true;
+    }
+
+    if (prefixes.length === 0) {
+        return true;
+    }
+
+    return prefixes.some((rule) =>
+        permissionNames.some((perm) => permissionMatchesPrefixRule(perm, rule)),
+    );
+}
+
 /**
  * Sidebar catalog items declare coarse permissionPrefixes; routes also have explicit guards in routeAccessRules.
  * Explicit rules win; prefixes only apply when no route rule matched (avoids leaking items like branding).
