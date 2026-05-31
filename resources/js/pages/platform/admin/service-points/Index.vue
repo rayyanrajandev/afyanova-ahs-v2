@@ -777,6 +777,8 @@ onMounted(async () => {
                 </AlertDescription>
             </Alert>
 
+            <!-- Single column layout -->
+            <div class="flex min-w-0 flex-col gap-4">
             <Card v-if="canRead" class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70 shadow-sm">
                 <div class="flex flex-col gap-3 border-b px-4 py-3">
                     <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -1574,7 +1576,7 @@ onMounted(async () => {
                 </SheetContent>
             </Sheet>
 
-            <!-- Status dialog -->
+            <!-- Status update dialog -->
             <Dialog :open="statusOpen" @update:open="(open) => (statusOpen = open)">
                 <DialogContent variant="action" size="lg">
                     <DialogHeader>
@@ -1612,6 +1614,7 @@ onMounted(async () => {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            </div>
         </div>
     </AppLayout>
 </template>
