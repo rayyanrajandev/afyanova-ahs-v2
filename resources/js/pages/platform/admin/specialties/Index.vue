@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
+import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -30,10 +31,12 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
+import type { SearchableSelectOption } from '@/lib/patientLocations';
 import { type BreadcrumbItem } from '@/types';
 
 type Pagination = {
@@ -203,6 +206,7 @@ const assignmentRows = ref<StaffSpecialtyAssignment[]>([]);
 const assignmentSelectedIds = ref<string[]>([]);
 const assignmentPrimaryId = ref('');
 const assignmentSaving = ref(false);
+const assignmentSheetTab = ref<'staff' | 'assignments'>('staff');
 
 const visibleStatusCounts = computed(() => {
     const counts = { active: 0, inactive: 0, other: 0 };
@@ -746,11 +750,50 @@ async function loadStaffAssignments() {
     }
 }
 
+const assignmentStaffOptions = computed<SearchableSelectOption[]>(() =>
+    assignmentStaffResults.value.map((profile) => {
+        const value = String(profile.id ?? '').trim();
+        const label = staffProfileLabel(profile);
+        const description = staffProfileMeta(profile);
+        return {
+            value,
+            label,
+            description: description === 'No job title or department recorded.' ? undefined : description,
+            keywords: [
+                profile.userName,
+                profile.userEmail,
+                profile.employeeNumber,
+                profile.jobTitle,
+                profile.department,
+            ].filter(Boolean) as string[],
+        } satisfies SearchableSelectOption;
+    }),
+);
+
+function openAssignmentSheet() {
+    assignmentSheetTab.value = 'staff';
+    assignmentSheetOpen.value = true;
+}
+
+function closeAssignmentSheet() {
+    assignmentSheetOpen.value = false;
+    assignmentSheetTab.value = 'staff';
+    assignmentError.value = null;
+}
+
+function onAssignmentStaffSelectValue(profileId: string) {
+    const id = profileId.trim();
+    if (!id) return;
+    const profile = assignmentStaffResults.value.find((row) => String(row.id) === id);
+    if (profile) selectAssignmentStaff(profile);
+}
+
 function selectAssignmentStaff(profile: AssignmentStaffProfile) {
     assignmentSelectedStaff.value = profile;
     staffProfileId.value = profile.id;
     assignmentError.value = null;
     clearAssignmentDraft();
+    assignmentSheetTab.value = 'assignments';
     void loadStaffAssignments();
 }
 
@@ -922,7 +965,7 @@ onMounted(refreshPage);
                             variant="outline"
                             size="sm"
                             class="h-8 gap-1.5"
-                            @click="assignmentSheetOpen = true"
+                            @click="openAssignmentSheet"
                         >
                             <AppIcon name="users" class="size-3.5" />
                             Staff assignments
@@ -1296,7 +1339,7 @@ onMounted(refreshPage);
                                                     variant="outline"
                                                     size="sm"
                                                     class="gap-1.5"
-                                                    @click="assignmentSheetOpen = true"
+                                                    @click="openAssignmentSheet"
                                                 >
                                                     <AppIcon name="users" class="size-3.5" />
                                                     Manage assignments
@@ -1464,162 +1507,198 @@ onMounted(refreshPage);
                     </DialogContent>
                 </Dialog>
 
-                <Sheet :open="assignmentSheetOpen" @update:open="(open) => (assignmentSheetOpen = open)">
-                    <SheetContent side="right" variant="workspace" size="5xl" class="flex h-full min-h-0 flex-col">
-                        <SheetHeader class="shrink-0 border-b bg-background px-4 py-3 text-left pr-12">
-                            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                <div class="min-w-0 space-y-1">
-                                    <SheetTitle class="flex min-w-0 items-center gap-2 text-lg">
-                                        <AppIcon name="users" class="size-5 shrink-0 text-primary" />
-                                        Staff Specialty Assignment
-                                    </SheetTitle>
-                                    <SheetDescription class="text-sm">
-                                        Search staff, review specialty coverage, and set the primary specialty for the selected profile.
-                                    </SheetDescription>
-                                </div>
-                                <div v-if="assignmentSelectedStaff" class="flex flex-wrap items-center gap-2 sm:justify-end">
-                                    <Badge :variant="staffStatusVariant(assignmentSelectedStaff.status)" class="rounded-md capitalize">
-                                        {{ assignmentSelectedStaff.status || 'unknown' }}
-                                    </Badge>
-                                    <Badge :variant="staffVerificationVariant(assignmentSelectedStaff)" class="rounded-md">
-                                        {{ staffProfileVerificationLabel(assignmentSelectedStaff) }}
-                                    </Badge>
-                                </div>
-                            </div>
+                <Sheet
+                    :open="assignmentSheetOpen"
+                    @update:open="(open) => (open ? openAssignmentSheet() : closeAssignmentSheet())"
+                >
+                    <SheetContent side="right" variant="workspace" size="4xl" class="flex h-full min-h-0 flex-col">
+                        <SheetHeader
+                            class="shrink-0 border-b bg-background/95 px-4 py-3 pr-12 text-left sm:px-5"
+                        >
+                            <SheetTitle class="flex min-w-0 flex-wrap items-center gap-2 text-base">
+                                <AppIcon name="users" class="size-5 text-muted-foreground" />
+                                <span class="min-w-0 truncate">
+                                    {{
+                                        assignmentSelectedStaff
+                                            ? staffProfileLabel(assignmentSelectedStaff)
+                                            : 'Staff specialty assignment'
+                                    }}
+                                </span>
+                                <Badge
+                                    v-if="assignmentSelectedStaff"
+                                    :variant="staffStatusVariant(assignmentSelectedStaff.status)"
+                                    class="shrink-0 capitalize"
+                                >
+                                    {{ assignmentSelectedStaff.status || 'unknown' }}
+                                </Badge>
+                                <Badge
+                                    v-if="assignmentSelectedStaff"
+                                    :variant="staffVerificationVariant(assignmentSelectedStaff)"
+                                    class="shrink-0"
+                                >
+                                    {{ staffProfileVerificationLabel(assignmentSelectedStaff) }}
+                                </Badge>
+                            </SheetTitle>
+                            <SheetDescription class="text-xs">
+                                <template v-if="assignmentSelectedStaff">
+                                    {{ staffProfileMeta(assignmentSelectedStaff) }}
+                                    <span class="text-border"> · </span>
+                                    {{ staffProfileContact(assignmentSelectedStaff) }}
+                                </template>
+                                <template v-else>
+                                    Search for a staff profile, then assign clinical specialties and set a primary role.
+                                </template>
+                            </SheetDescription>
                         </SheetHeader>
 
-                        <div v-if="assignmentSelectedStaff" class="shrink-0 border-b bg-muted/5 px-4 py-3">
-                            <div class="grid gap-2 md:grid-cols-2">
-                                <div class="min-w-0 rounded-lg border bg-background/70 px-3 py-2">
-                                    <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Staff</p>
-                                    <p class="mt-0.5 truncate text-sm font-semibold leading-4">
-                                        {{ staffProfileLabel(assignmentSelectedStaff) }}
-                                    </p>
-                                    <p class="truncate text-xs leading-4 text-muted-foreground">
-                                        {{ staffProfileMeta(assignmentSelectedStaff) }}
-                                    </p>
-                                </div>
-                                <div class="min-w-0 rounded-lg border bg-background/70 px-3 py-2">
-                                    <div class="flex items-center justify-between gap-2">
-                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Assignments</p>
-                                        <Badge variant="secondary">{{ assignmentSelectedIds.length }} selected</Badge>
-                                    </div>
-                                    <p class="mt-0.5 truncate text-sm font-semibold leading-4">
-                                        {{ assignmentPrimaryId ? specialtyLabel(assignmentPrimaryOptions.find((row) => String(row.id) === assignmentPrimaryId) ?? null) : 'No primary specialty' }}
-                                    </p>
-                                    <p class="truncate text-xs leading-4 text-muted-foreground">
-                                        {{ assignmentCatalog.length }} active specialties in catalog
-                                    </p>
-                                </div>
+                        <Tabs v-model="assignmentSheetTab" class="flex min-h-0 flex-1 flex-col overflow-hidden">
+                            <div class="shrink-0 border-b bg-background px-4 py-2 sm:px-5">
+                                <TabsList class="grid h-auto w-full grid-cols-2 gap-1 rounded-md bg-muted p-1">
+                                    <TabsTrigger value="staff" class="h-9 gap-1.5 text-xs sm:text-sm">
+                                        <AppIcon name="user" class="size-3.5" />
+                                        Select staff
+                                    </TabsTrigger>
+                                    <TabsTrigger
+                                        value="assignments"
+                                        class="h-9 gap-1.5 text-xs sm:text-sm"
+                                        :disabled="!assignmentSelectedStaff"
+                                    >
+                                        <AppIcon name="stethoscope" class="size-3.5" />
+                                        Assign specialties
+                                        <Badge
+                                            v-if="assignmentSelectedStaff && assignmentSelectedIds.length"
+                                            variant="secondary"
+                                            class="h-4 min-w-4 px-1 text-[10px]"
+                                        >
+                                            {{ assignmentSelectedIds.length }}
+                                        </Badge>
+                                    </TabsTrigger>
+                                </TabsList>
                             </div>
-                        </div>
 
-                        <div class="flex min-h-0 flex-1 overflow-hidden">
-                            <div class="grid h-full min-h-0 w-full grid-cols-1 lg:grid-cols-2">
-                                <div class="flex min-h-0 flex-col border-b lg:border-b-0 lg:border-r">
-                                    <div class="shrink-0 space-y-3 border-b bg-muted/10 px-4 py-3">
-                                        <div class="space-y-1">
-                                            <p class="text-sm font-medium">Select staff</p>
-                                            <p class="text-xs text-muted-foreground">Find the staff profile you want to review or update.</p>
-                                        </div>
-                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                            <SearchInput
-                                                id="assignment-staff-search"
-                                                v-model="assignmentStaffQuery"
-                                                placeholder="Search name, email, title, or department…"
-                                                class="sm:flex-1"
-                                                @keyup.enter="loadAssignmentStaffProfiles"
+                            <ScrollArea class="min-h-0 flex-1" viewport-class="pb-6">
+                                <TabsContent value="staff" class="m-0 space-y-4 px-4 py-4 sm:px-5">
+                                    <div class="rounded-lg border p-3">
+                                        <div class="space-y-3">
+                                            <div class="space-y-1">
+                                                <p class="text-sm font-medium">Find staff profile</p>
+                                                <p class="text-xs text-muted-foreground">
+                                                    Search the directory, then pick a profile to open specialty assignments.
+                                                </p>
+                                            </div>
+                                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                                <SearchInput
+                                                    id="assignment-staff-search"
+                                                    v-model="assignmentStaffQuery"
+                                                    placeholder="Name, email, employee #, title, department…"
+                                                    class="min-w-0 flex-1 text-xs [&_input]:h-8"
+                                                    :disabled="!canReadStaffDirectory"
+                                                    @keyup.enter="loadAssignmentStaffProfiles"
+                                                />
+                                                <Button
+                                                    size="sm"
+                                                    class="h-8 shrink-0 gap-1.5"
+                                                    :disabled="assignmentStaffLoading || !canReadStaffDirectory"
+                                                    @click="loadAssignmentStaffProfiles"
+                                                >
+                                                    <AppIcon name="search" class="size-3.5" />
+                                                    {{ assignmentStaffLoading ? 'Searching...' : 'Search' }}
+                                                </Button>
+                                            </div>
+                                            <SearchableSelectField
+                                                v-if="assignmentStaffOptions.length > 0"
+                                                input-id="assignment-staff-jump"
+                                                label="Jump to result"
+                                                :model-value="staffProfileId"
+                                                :options="assignmentStaffOptions"
+                                                placeholder="Select from current results"
+                                                search-placeholder="Filter loaded results"
+                                                empty-text="No staff profile matched."
+                                                @update:model-value="onAssignmentStaffSelectValue"
                                             />
-                                            <Button
-                                                size="sm"
-                                                class="gap-1.5 sm:shrink-0"
-                                                :disabled="assignmentStaffLoading || !canReadStaffDirectory"
-                                                @click="loadAssignmentStaffProfiles"
-                                            >
-                                                <AppIcon name="search" class="size-3.5" />
-                                                {{ assignmentStaffLoading ? 'Searching...' : 'Search' }}
-                                            </Button>
                                         </div>
                                     </div>
 
-                                    <ScrollArea class="min-h-0 flex-1" viewport-class="pb-4">
-                                        <div class="space-y-2 px-4 py-4">
-                                            <div v-if="assignmentStaffLoading && !assignmentStaffReady" class="space-y-2">
-                                                <div
-                                                    v-for="index in 5"
-                                                    :key="`assignment-staff-skeleton-${index}`"
-                                                    class="rounded-lg border bg-background px-3 py-3"
-                                                >
-                                                    <Skeleton class="h-4 w-32" />
-                                                    <Skeleton class="mt-2 h-3 w-full max-w-[12rem]" />
-                                                    <div class="mt-3 flex items-center gap-2">
-                                                        <Skeleton class="h-5 w-16 rounded-full" />
-                                                        <Skeleton class="h-5 w-20 rounded-full" />
-                                                    </div>
-                                                </div>
+                                    <Alert v-if="assignmentStaffError" variant="destructive">
+                                        <AlertTitle>Staff lookup issue</AlertTitle>
+                                        <AlertDescription>{{ assignmentStaffError }}</AlertDescription>
+                                    </Alert>
+                                    <div
+                                        v-else-if="!canReadStaffDirectory"
+                                        class="flex flex-col items-center gap-3 rounded-lg border border-dashed bg-muted/10 px-4 py-10 text-center"
+                                    >
+                                        <AppIcon name="users" class="size-8 text-muted-foreground/60" />
+                                        <p class="max-w-sm text-sm text-muted-foreground">
+                                            Request <code>staff.read</code> permission to search staff profiles.
+                                        </p>
+                                    </div>
+                                    <div v-else-if="assignmentStaffLoading && !assignmentStaffReady" class="divide-y rounded-lg border">
+                                        <div
+                                            v-for="index in 5"
+                                            :key="`assignment-staff-skeleton-${index}`"
+                                            class="flex items-center gap-3 px-3 py-3"
+                                        >
+                                            <Skeleton class="size-8 shrink-0 rounded-full" />
+                                            <div class="min-w-0 flex-1 space-y-2">
+                                                <Skeleton class="h-4 w-40" />
+                                                <Skeleton class="h-3 w-56 max-w-full" />
                                             </div>
-                                            <template v-else>
-                                                <Alert v-if="assignmentStaffError" variant="destructive">
-                                                    <AlertTitle>Staff lookup issue</AlertTitle>
-                                                    <AlertDescription>{{ assignmentStaffError }}</AlertDescription>
-                                                </Alert>
-                                                <div
-                                                    v-else-if="!canReadStaffDirectory"
-                                                    class="rounded-lg border border-dashed bg-muted/10 p-4 text-sm text-muted-foreground"
-                                                >
-                                                    Request <code>staff.read</code> permission to search staff profiles here.
-                                                </div>
-                                                <div
-                                                    v-else-if="assignmentStaffReady && assignmentStaffResults.length === 0"
-                                                    class="rounded-lg border border-dashed bg-muted/10 p-4 text-sm text-muted-foreground"
-                                                >
-                                                    No staff profiles matched the current search.
-                                                </div>
-                                                <button
-                                                    v-for="profile in assignmentStaffResults"
-                                                    :key="profile.id"
-                                                    type="button"
-                                                    class="flex w-full items-center gap-3 rounded-lg border border-border/70 bg-background px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-muted/30"
-                                                    :class="assignmentSelectedStaff?.id === profile.id ? 'border-primary/50 bg-primary/5 shadow-sm' : ''"
-                                                    @click="selectAssignmentStaff(profile)"
-                                                >
-                                                    <div
-                                                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary"
-                                                    >
-                                                        {{ staffProfileInitials(profile) }}
-                                                    </div>
-                                                    <div class="min-w-0 flex-1 space-y-0.5">
-                                                        <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                                                            <span class="truncate text-sm font-medium">{{ staffProfileLabel(profile) }}</span>
-                                                            <Badge
-                                                                :variant="staffStatusVariant(profile.status)"
-                                                                class="h-5 px-1.5 text-[10px] leading-none"
-                                                            >
-                                                                {{ profile.status || 'unknown' }}
-                                                            </Badge>
-                                                        </div>
-                                                        <p class="truncate text-xs text-muted-foreground">{{ staffProfileMeta(profile) }}</p>
-                                                        <p class="truncate text-xs text-muted-foreground">{{ staffProfileContact(profile) }}</p>
-                                                    </div>
-                                                    <AppIcon name="chevron-right" class="size-4 shrink-0 text-muted-foreground" />
-                                                </button>
-                                            </template>
                                         </div>
-                                    </ScrollArea>
-                                </div>
+                                    </div>
+                                    <div
+                                        v-else-if="assignmentStaffReady && assignmentStaffResults.length === 0"
+                                        class="flex flex-col items-center gap-3 rounded-lg border border-dashed bg-muted/10 px-4 py-10 text-center"
+                                    >
+                                        <AppIcon name="search" class="size-8 text-muted-foreground/60" />
+                                        <p class="text-sm font-medium">No staff profiles found</p>
+                                        <p class="max-w-sm text-xs text-muted-foreground">
+                                            Try a different search term or clear filters in the staff directory.
+                                        </p>
+                                    </div>
+                                    <div v-else class="divide-y rounded-lg border">
+                                        <button
+                                            v-for="profile in assignmentStaffResults"
+                                            :key="profile.id"
+                                            type="button"
+                                            class="flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/30"
+                                            :class="
+                                                assignmentSelectedStaff?.id === profile.id ? 'bg-primary/5' : ''
+                                            "
+                                            @click="selectAssignmentStaff(profile)"
+                                        >
+                                            <span
+                                                class="size-2 shrink-0 rounded-full"
+                                                :class="
+                                                    (profile.status ?? '').toLowerCase() === 'active'
+                                                        ? 'bg-emerald-500'
+                                                        : 'bg-rose-500'
+                                                "
+                                            />
+                                            <div
+                                                class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary"
+                                            >
+                                                {{ staffProfileInitials(profile) }}
+                                            </div>
+                                            <div class="min-w-0 flex-1">
+                                                <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                                    <span class="truncate text-sm font-medium">{{
+                                                        staffProfileLabel(profile)
+                                                    }}</span>
+                                                    <span class="text-xs text-muted-foreground">{{
+                                                        profile.employeeNumber || 'No employee #'
+                                                    }}</span>
+                                                </div>
+                                                <p class="truncate text-xs text-muted-foreground">
+                                                    {{ staffProfileMeta(profile) }}
+                                                </p>
+                                            </div>
+                                            <AppIcon name="chevron-right" class="size-4 shrink-0 text-muted-foreground" />
+                                        </button>
+                                    </div>
+                                </TabsContent>
 
-                                <div class="flex min-h-0 flex-col">
-                                    <div class="shrink-0 space-y-3 border-b bg-muted/10 px-4 py-3">
-                                        <div class="space-y-1">
-                                            <p class="text-sm font-medium">Specialty assignments</p>
-                                            <p class="text-xs text-muted-foreground">
-                                                {{
-                                                    assignmentSelectedStaff
-                                                        ? 'Toggle specialties and choose the primary role for this staff member.'
-                                                        : 'Choose a staff profile from the left to review and update specialty coverage.'
-                                                }}
-                                            </p>
-                                        </div>
+                                <TabsContent value="assignments" class="m-0 space-y-4 px-4 py-4 sm:px-5">
+                                    <template v-if="assignmentSelectedStaff">
                                         <Alert v-if="assignmentCatalogError" variant="destructive">
                                             <AlertTitle>Catalog issue</AlertTitle>
                                             <AlertDescription>{{ assignmentCatalogError }}</AlertDescription>
@@ -1628,64 +1707,153 @@ onMounted(refreshPage);
                                             <AlertTitle>Assignment issue</AlertTitle>
                                             <AlertDescription>{{ assignmentError }}</AlertDescription>
                                         </Alert>
-                                    </div>
 
-                                    <template v-if="assignmentSelectedStaff">
-                                        <ScrollArea class="min-h-0 flex-1" viewport-class="pb-4">
-                                            <div class="space-y-2 px-4 py-4">
-                                                <div v-if="assignmentCatalogLoading || assignmentLoading" class="space-y-2">
-                                                    <Skeleton class="h-5 w-40" />
-                                                    <div
-                                                        v-for="index in 6"
-                                                        :key="`assignment-specialty-skeleton-${index}`"
-                                                        class="rounded-lg border bg-background px-3 py-3"
+                                        <div class="grid gap-3 sm:grid-cols-2">
+                                            <Card class="!gap-0 overflow-hidden rounded-md border-border/50 !py-0 shadow-none">
+                                                <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
+                                                    <CardTitle
+                                                        class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                                                     >
-                                                        <div class="flex items-center gap-3">
-                                                            <Skeleton class="h-4 w-4 rounded" />
-                                                            <div class="min-w-0 flex-1 space-y-2">
-                                                                <Skeleton class="h-4 w-40" />
-                                                                <Skeleton class="h-3 w-full max-w-[18rem]" />
-                                                            </div>
-                                                        </div>
+                                                        Staff
+                                                    </CardTitle>
+                                                </CardHeader>
+                                                <CardContent class="divide-y divide-border/50 px-3 py-1.5 text-sm">
+                                                    <div class="flex justify-between gap-4 py-2">
+                                                        <span class="text-muted-foreground">Name</span>
+                                                        <span class="max-w-[14rem] truncate text-right font-medium">{{
+                                                            staffProfileLabel(assignmentSelectedStaff)
+                                                        }}</span>
                                                     </div>
-                                                </div>
-                                                <template v-else>
-                                                    <div
-                                                        v-if="assignmentCatalog.length === 0"
-                                                        class="rounded-lg border border-dashed bg-muted/10 p-4 text-sm text-muted-foreground"
-                                                    >
-                                                        No active specialties are available for assignment right now.
+                                                    <div class="flex justify-between gap-4 py-2">
+                                                        <span class="text-muted-foreground">Department</span>
+                                                        <span class="max-w-[14rem] truncate text-right font-medium">{{
+                                                            assignmentSelectedStaff.department || '—'
+                                                        }}</span>
                                                     </div>
-                                                    <label
-                                                        v-for="specialty in assignmentCatalog"
-                                                        :key="`assign-${specialty.id}`"
-                                                        class="flex cursor-pointer items-start gap-3 rounded-lg border border-border/70 bg-background px-3 py-3 transition-colors hover:bg-muted/30"
-                                                        :class="assignmentSelectedIds.includes(String(specialty.id ?? '')) ? 'border-primary/50 bg-primary/5' : ''"
+                                                    <div class="flex justify-between gap-4 py-2">
+                                                        <span class="text-muted-foreground">Title</span>
+                                                        <span class="max-w-[14rem] truncate text-right font-medium">{{
+                                                            assignmentSelectedStaff.jobTitle || '—'
+                                                        }}</span>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                            <Card class="!gap-0 overflow-hidden rounded-md border-border/50 !py-0 shadow-none">
+                                                <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
+                                                    <CardTitle
+                                                        class="text-xs font-semibold tracking-wider text-muted-foreground uppercase"
                                                     >
-                                                        <Checkbox
-                                                            :model-value="assignmentSelectedIds.includes(String(specialty.id ?? ''))"
-                                                            :disabled="!canManageStaffSpecialties"
-                                                            class="mt-0.5"
-                                                            @update:model-value="toggleAssignmentSpecialty(String(specialty.id ?? ''), $event === true)"
-                                                        />
-                                                        <div class="min-w-0 flex-1">
-                                                            <p class="text-sm font-medium">{{ specialtyLabel(specialty) }}</p>
-                                                            <p class="mt-1 text-xs text-muted-foreground">
-                                                                {{ specialty.description || 'No specialty description recorded.' }}
-                                                            </p>
-                                                        </div>
-                                                    </label>
-                                                </template>
+                                                        Coverage
+                                                    </CardTitle>
+                                                </CardHeader>
+                                                <CardContent class="divide-y divide-border/50 px-3 py-1.5 text-sm">
+                                                    <div class="flex justify-between gap-4 py-2">
+                                                        <span class="text-muted-foreground">Selected</span>
+                                                        <span class="font-medium tabular-nums">{{
+                                                            assignmentSelectedIds.length
+                                                        }}</span>
+                                                    </div>
+                                                    <div class="flex justify-between gap-4 py-2">
+                                                        <span class="text-muted-foreground">Primary</span>
+                                                        <span class="max-w-[14rem] truncate text-right font-medium">{{
+                                                            assignmentPrimaryId
+                                                                ? specialtyLabel(
+                                                                      assignmentPrimaryOptions.find(
+                                                                          (row) =>
+                                                                              String(row.id) === assignmentPrimaryId,
+                                                                      ) ?? null,
+                                                                  )
+                                                                : 'None'
+                                                        }}</span>
+                                                    </div>
+                                                    <div class="flex justify-between gap-4 py-2">
+                                                        <span class="text-muted-foreground">Catalog</span>
+                                                        <span class="font-medium tabular-nums">{{
+                                                            assignmentCatalog.length
+                                                        }}
+                                                            active</span>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        </div>
+
+                                        <fieldset class="rounded-lg border p-3">
+                                            <legend class="px-2 text-sm font-medium text-muted-foreground">
+                                                Clinical specialties
+                                            </legend>
+                                            <p class="mb-3 px-2 text-xs text-muted-foreground">
+                                                {{
+                                                    canManageStaffSpecialties
+                                                        ? 'Toggle specialties for this staff member, then choose one primary role.'
+                                                        : 'View-only: you can review assignments but cannot save changes.'
+                                                }}
+                                            </p>
+                                            <div v-if="assignmentCatalogLoading || assignmentLoading" class="space-y-2">
+                                                <Skeleton class="h-12 w-full" />
+                                                <Skeleton class="h-12 w-full" />
+                                                <Skeleton class="h-12 w-full" />
                                             </div>
-                                        </ScrollArea>
-
-                                        <div class="shrink-0 border-t bg-background px-4 py-3">
-                                            <div class="grid gap-2">
+                                            <div
+                                                v-else-if="assignmentCatalog.length === 0"
+                                                class="rounded-md border border-dashed bg-muted/10 px-3 py-6 text-center text-sm text-muted-foreground"
+                                            >
+                                                No active specialties are available for assignment.
+                                            </div>
+                                            <div v-else class="max-h-[min(24rem,50vh)] space-y-2 overflow-y-auto pr-1">
+                                                <label
+                                                    v-for="specialty in assignmentCatalog"
+                                                    :key="`assign-${specialty.id}`"
+                                                    class="flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5 transition-colors hover:bg-muted/30"
+                                                    :class="
+                                                        assignmentSelectedIds.includes(String(specialty.id ?? ''))
+                                                            ? 'border-primary/40 bg-primary/5'
+                                                            : 'border-border/70'
+                                                    "
+                                                >
+                                                    <Checkbox
+                                                        :model-value="
+                                                            assignmentSelectedIds.includes(String(specialty.id ?? ''))
+                                                        "
+                                                        :disabled="!canManageStaffSpecialties"
+                                                        class="mt-0.5"
+                                                        @update:model-value="
+                                                            toggleAssignmentSpecialty(
+                                                                String(specialty.id ?? ''),
+                                                                $event === true,
+                                                            )
+                                                        "
+                                                    />
+                                                    <div class="min-w-0 flex-1">
+                                                        <p class="text-sm font-medium">{{ specialtyLabel(specialty) }}</p>
+                                                        <p class="mt-0.5 text-xs text-muted-foreground">
+                                                            {{
+                                                                specialty.description ||
+                                                                'No specialty description recorded.'
+                                                            }}
+                                                        </p>
+                                                    </div>
+                                                    <Badge
+                                                        v-if="
+                                                            assignmentPrimaryId === String(specialty.id ?? '')
+                                                        "
+                                                        variant="default"
+                                                        class="shrink-0 text-[10px]"
+                                                    >
+                                                        Primary
+                                                    </Badge>
+                                                </label>
+                                            </div>
+                                            <Separator class="my-4" />
+                                            <div class="grid gap-2 px-2">
                                                 <Label for="primary-specialty-sheet">Primary specialty</Label>
                                                 <Select v-model="assignmentPrimarySelect">
                                                     <SelectTrigger
+                                                        id="primary-specialty-sheet"
                                                         class="w-full"
-                                                        :disabled="!canManageStaffSpecialties || assignmentSelectedIds.length === 0"
+                                                        :disabled="
+                                                            !canManageStaffSpecialties ||
+                                                            assignmentSelectedIds.length === 0
+                                                        "
                                                     >
                                                         <SelectValue placeholder="Choose primary specialty" />
                                                     </SelectTrigger>
@@ -1700,39 +1868,66 @@ onMounted(refreshPage);
                                                         </SelectItem>
                                                     </SelectContent>
                                                 </Select>
-                                                <p class="text-xs text-muted-foreground">
-                                                    {{ assignmentSelectedIds.length }} specialties selected
-                                                    <span v-if="assignmentPrimaryId"> · Primary set</span>
-                                                </p>
                                             </div>
-                                        </div>
+                                        </fieldset>
+
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            class="h-8 gap-1.5"
+                                            @click="assignmentSheetTab = 'staff'"
+                                        >
+                                            <AppIcon name="chevron-left" class="size-3.5" />
+                                            Change staff
+                                        </Button>
                                     </template>
                                     <div
                                         v-else
-                                        class="flex min-h-0 flex-1 items-center justify-center px-6 py-10"
+                                        class="flex flex-col items-center gap-3 px-4 py-12 text-center"
                                     >
-                                        <p class="max-w-sm text-center text-sm text-muted-foreground">
-                                            Search and select a staff profile to review specialty assignments and choose a primary specialty.
+                                        <div class="flex size-10 items-center justify-center rounded-lg bg-muted">
+                                            <AppIcon name="user" class="size-4 text-muted-foreground" />
+                                        </div>
+                                        <p class="text-sm font-medium">No staff profile selected</p>
+                                        <p class="max-w-sm text-xs text-muted-foreground">
+                                            Use the Select staff tab to search and choose a profile before assigning specialties.
                                         </p>
+                                        <Button size="sm" class="h-8 gap-1.5" @click="assignmentSheetTab = 'staff'">
+                                            <AppIcon name="search" class="size-3.5" />
+                                            Find staff
+                                        </Button>
                                     </div>
-                                </div>
-                            </div>
-                        </div>
+                                </TabsContent>
+                            </ScrollArea>
+                        </Tabs>
 
-                        <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
-                            <Button type="button" variant="outline" :disabled="assignmentSaving" @click="assignmentSheetOpen = false">
-                                Cancel
-                            </Button>
+                        <SheetFooter
+                            class="shrink-0 flex-col-reverse gap-2 border-t bg-background px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-5"
+                        >
                             <Button
-                                v-if="canManageStaffSpecialties"
                                 type="button"
+                                variant="outline"
+                                size="sm"
                                 class="gap-1.5"
-                                :disabled="assignmentSaving || !assignmentSelectedStaff"
-                                @click="saveStaffAssignments"
+                                :disabled="assignmentSaving"
+                                @click="closeAssignmentSheet"
                             >
-                                <AppIcon name="check-circle" class="size-3.5" />
-                                {{ assignmentSaving ? 'Saving...' : 'Save assignments' }}
+                                <AppIcon name="circle-x" class="size-3.5" />
+                                Close
                             </Button>
+                            <div class="flex flex-col-reverse gap-2 sm:flex-row">
+                                <Button
+                                    v-if="canManageStaffSpecialties && assignmentSelectedStaff"
+                                    type="button"
+                                    size="sm"
+                                    class="gap-1.5"
+                                    :disabled="assignmentSaving"
+                                    @click="saveStaffAssignments"
+                                >
+                                    <AppIcon name="circle-check-big" class="size-3.5" />
+                                    {{ assignmentSaving ? 'Saving...' : 'Save assignments' }}
+                                </Button>
+                            </div>
                         </SheetFooter>
                     </SheetContent>
                 </Sheet>
