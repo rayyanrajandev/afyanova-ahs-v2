@@ -11,7 +11,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Input, SearchInput } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -149,7 +151,11 @@ type CatalogAuditLog = {
 type CatalogAuditLogListResponse = { data: CatalogAuditLog[]; meta: Pagination };
 type ValidationErrorResponse = { message?: string; errors?: Record<string, string[]> };
 
-type ScopeData = { resolvedFrom: string };
+type ScopeData = {
+    resolvedFrom: string;
+    facility?: { name?: string | null; code?: string | null } | null;
+    tenant?: { name?: string | null; code?: string | null } | null;
+};
 
 const serviceTypeOptions = [
     'consultation',
@@ -180,11 +186,11 @@ const clinicalCatalogSources = [
 ] as const satisfies ReadonlyArray<{ type: ClinicalCatalogType; path: string; label: string; defaultServiceType: string }>;
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Billing', href: '/billing-service-catalog' },
-    { title: 'Billable Service Catalog', href: '/billing-service-catalog' },
+    { title: 'Billing', href: '/billing-invoices' },
+    { title: 'Tariffs & services', href: '/billing-service-catalog' },
 ];
 
-const { permissionNames, permissionState, scope: sharedScope, multiTenantIsolationEnabled } = usePlatformAccess();
+const { permissionNames, permissionState, scope: platformScope, multiTenantIsolationEnabled } = usePlatformAccess();
 const { activeCurrencyCode, loadCountryProfile } = usePlatformCountryProfile();
 
 const permissionsResolved = computed(() => permissionNames.value !== null);
@@ -196,8 +202,17 @@ const canViewAudit = computed(() => permissionState('billing.service-catalog.vie
 const canReadPayerContracts = computed(() => permissionState('billing.payer-contracts.read') === 'allowed');
 const defaultCurrencyCode = computed(() => activeCurrencyCode.value || 'TZS');
 
-const scope = computed<ScopeData | null>(() => (sharedScope.value as ScopeData | null) ?? null);
+const scope = computed<ScopeData | null>(() => (platformScope.value as ScopeData | null) ?? null);
 const scopeUnresolved = computed(() => multiTenantIsolationEnabled.value && (scope.value?.resolvedFrom ?? 'none') === 'none');
+const catalogReadOnly = computed(() => canRead.value && !canManagePricing.value);
+const workspaceIntroText = computed(() => {
+    const total = statusCounts.value.total;
+    const base = `${total} billable service${total === 1 ? '' : 's'} in facility scope`;
+
+    return catalogReadOnly.value
+        ? `${base} · browse tariffs linked to clinical services and payer contracts`
+        : `${base} · manage base prices, effective windows, and catalog versions`;
+});
 
 const pageLoading = ref(true);
 const listLoading = ref(false);
@@ -219,9 +234,8 @@ const filters = reactive({
     page: 1,
 });
 
-const catalogWorkspaceView = ref<'queue' | 'register'>('queue');
-const compactCatalogQueueRows = ref(false);
-const showCatalogAdvancedFilters = ref(false);
+const filtersSheetOpen = ref(false);
+const createSheetOpen = ref(false);
 
 const createLoading = ref(false);
 const createErrors = ref<Record<string, string[]>>({});
@@ -326,14 +340,38 @@ const catalogActiveFilterChips = computed(() => {
 const catalogActiveFilterCount = computed(() => catalogActiveFilterChips.value.length);
 const catalogAdvancedFilterCount = computed(() => {
     let count = 0;
-
     if (filters.departmentId.trim()) count += 1;
     if (filters.currencyCode.trim()) count += 1;
+    if (filters.lifecycle) count += 1;
     if (filters.sortBy !== 'serviceName') count += 1;
     if (filters.sortDir !== 'asc') count += 1;
     if (filters.perPage !== 15) count += 1;
-
     return count;
+});
+const listFilterHintText = computed(() =>
+    catalogActiveFilterCount.value > 0 ? `${catalogActiveFilterCount.value} filters applied` : 'Search by code, name, type, or department',
+);
+
+const canPrevPage = computed(() => (pagination.value?.currentPage ?? 1) > 1);
+const canNextPage = computed(() => {
+    if (!pagination.value) return false;
+    return pagination.value.currentPage < pagination.value.lastPage;
+});
+
+const paginationPageNumbers = computed((): (number | '...')[] => {
+    const total = pagination.value?.lastPage ?? 1;
+    const current = pagination.value?.currentPage ?? 1;
+    if (total <= 7) {
+        return Array.from({ length: total }, (_, index) => index + 1);
+    }
+    const pages: (number | '...')[] = [1];
+    if (current > 3) pages.push('...');
+    for (let page = Math.max(2, current - 1); page <= Math.min(total - 1, current + 1); page += 1) {
+        pages.push(page);
+    }
+    if (current < total - 2) pages.push('...');
+    pages.push(total);
+    return pages;
 });
 
 const createTariffChecklist = computed(() => {
@@ -437,7 +475,6 @@ const editSelectedDepartmentOption = computed(
 );
 const filterSelectedDepartmentOption = computed(() => findDepartmentOption(filterDepartmentOptions.value, filters.departmentId));
 
-const createDepartmentSummary = computed(() => createSelectedDepartmentOption.value?.label ?? '');
 const createIdentitySourceTabsValue = computed({
     get: () => createForm.identitySource,
     set: (value: string) => {
@@ -554,6 +591,9 @@ const editDepartmentEmptyText = computed(() => {
 const filterDepartmentSummary = computed(() => filterSelectedDepartmentOption.value?.label ?? '');
 const catalogShowInitialSkeleton = computed(() => pageLoading.value);
 const catalogListRefreshing = computed(() => listLoading.value && !pageLoading.value);
+const detailsClinicalLinkagePending = computed(
+    () => detailsLoading.value && Boolean(selectedItem.value?.clinicalCatalogItemId) && !selectedItem.value?.clinicalCatalogItem,
+);
 
 const createServiceTypeSelectValue = computed({
     get: () => createForm.serviceType || '__none__',
@@ -659,7 +699,6 @@ const createTariffIdentitySummary = computed(() => {
     return code || name;
 });
 
-const createTariffWindowSummary = computed(() => tariffWindowLabel(toApiDateTime(createForm.effectiveFrom), toApiDateTime(createForm.effectiveTo)));
 const createTariffWindowValidationMessage = computed(() => windowRangeValidationMessage(createForm.effectiveFrom, createForm.effectiveTo));
 const editTariffWindowValidationMessage = computed(() => windowRangeValidationMessage(editForm.effectiveFrom, editForm.effectiveTo));
 const revisionWindowValidationMessage = computed(() => windowRangeValidationMessage(revisionForm.effectiveFrom, revisionForm.effectiveTo));
@@ -1235,61 +1274,60 @@ function rotateStatusRequestKey(): void {
     statusRequestKey.value = generateRequestKey('billing-service-catalog-status');
 }
 
-function closeCatalogRegisterWorkspace(): void {
-    catalogWorkspaceView.value = 'queue';
+function closeCreateSheet(): void {
+    createSheetOpen.value = false;
     resetCreateCatalogForm();
     rotateCreateItemRequestKey();
 }
 
-function requestCatalogWorkspaceViewChange(view: 'queue' | 'register'): void {
-    if (view === 'register') {
-        if (!canManagePricing.value) return;
-        if (createLinkedClinicalModeLocked.value) {
-            createForm.identitySource = 'standalone';
-        }
-        if (catalogWorkspaceView.value !== 'register') {
-            resetCreateCatalogForm();
-            if (createLinkedClinicalModeLocked.value) {
-                createForm.identitySource = 'standalone';
-            }
-            rotateCreateItemRequestKey();
-        }
-        catalogWorkspaceView.value = 'register';
+function openCreateSheet(): void {
+    if (!canManagePricing.value) return;
+    resetCreateCatalogForm();
+    if (createLinkedClinicalModeLocked.value) {
+        createForm.identitySource = 'standalone';
+    }
+    rotateCreateItemRequestKey();
+    createSheetOpen.value = true;
+}
+
+function requestCreateSheetOpenChange(open: boolean): void {
+    if (open) {
+        openCreateSheet();
         return;
     }
 
     if (createLoading.value) return;
 
-    if (catalogWorkspaceView.value === 'register' && hasPendingCreateCatalogWorkflow.value) {
+    if (createSheetOpen.value && hasPendingCreateCatalogWorkflow.value) {
         createDiscardConfirmOpen.value = true;
         return;
     }
 
-    closeCatalogRegisterWorkspace();
+    closeCreateSheet();
 }
 
 function confirmCreateCatalogDiscard(): void {
     createDiscardConfirmOpen.value = false;
-    closeCatalogRegisterWorkspace();
+    closeCreateSheet();
 }
 
-function openCatalogQueueWorkspace(): void {
-    requestCatalogWorkspaceViewChange('queue');
+function applyFiltersFromSheet(): void {
+    filtersSheetOpen.value = false;
+    search();
 }
 
-function openCatalogRegisterWorkspace(): void {
-    requestCatalogWorkspaceViewChange('register');
+function resetFiltersFromSheet(): void {
+    filtersSheetOpen.value = false;
+    resetFilters();
 }
 
 function applyCatalogStatusPreset(status: '' | CatalogStatus): void {
-    catalogWorkspaceView.value = 'queue';
     filters.status = status;
     filters.page = 1;
     void loadItems();
 }
 
 function applyCatalogLifecyclePreset(lifecycle: '' | 'effective' | 'scheduled' | 'expired' | 'no_window'): void {
-    catalogWorkspaceView.value = 'queue';
     filters.lifecycle = lifecycle;
     filters.page = 1;
     void loadItems();
@@ -1298,8 +1336,6 @@ function applyCatalogLifecyclePreset(lifecycle: '' | 'effective' | 'scheduled' |
 function applyCatalogListModePreset(
     mode: 'all' | 'active' | 'scheduled' | 'review' | 'retired',
 ): void {
-    catalogWorkspaceView.value = 'queue';
-
     if (mode === 'all') {
         filters.status = '';
         filters.lifecycle = '';
@@ -1343,19 +1379,20 @@ function catalogListModeIsActive(
     return filters.status === 'retired' && filters.lifecycle === '';
 }
 
-function setCatalogQueueDensity(compact: boolean): void {
-    compactCatalogQueueRows.value = compact;
+function catalogStatusDotClass(item: CatalogItem): string {
+    const lifecycle = tariffLifecycleLabel(item.effectiveFrom, item.effectiveTo);
+    if (lifecycle === 'Scheduled') return 'bg-blue-500';
+
+    const status = String(item.status ?? '').toLowerCase();
+    if (status === 'active') return 'bg-emerald-500';
+    if (status === 'inactive') return 'bg-amber-500';
+    if (status === 'retired') return 'bg-rose-500';
+    return 'bg-slate-400';
 }
 
-function catalogQueueAccentClass(item: CatalogItem): string {
-    const status = String(item.status ?? '').toLowerCase();
-    const lifecycle = tariffLifecycleLabel(item.effectiveFrom, item.effectiveTo);
-
-    if (status === 'retired') return 'border-l-4 border-l-destructive bg-muted/20';
-    if (status === 'inactive') return 'border-l-4 border-l-amber-500 bg-muted/20';
-    if (lifecycle === 'Scheduled') return 'border-l-4 border-l-blue-500 bg-muted/20';
-
-    return 'border-l-4 border-l-primary/50 bg-muted/20';
+function goToPage(page: number): void {
+    filters.page = page;
+    void loadItems();
 }
 
 function statusVariant(status: string | null): 'outline' | 'secondary' | 'destructive' {
@@ -1603,7 +1640,7 @@ const {
     cancelLeave: cancelPendingCatalogWorkflowLeave,
 } = usePendingWorkflowLeaveGuard({
     shouldBlock: computed(() => (
-        (catalogWorkspaceView.value === 'register' && hasPendingCreateCatalogWorkflow.value)
+        (createSheetOpen.value && hasPendingCreateCatalogWorkflow.value)
         || (detailsOpen.value && hasPendingCatalogDetailsWorkflow.value)
     )),
     isSubmitting: isSubmittingCatalogWorkflow,
@@ -1639,6 +1676,23 @@ function hydrateRevisionForm(item: CatalogItem): void {
     revisionForm.effectiveTo = '';
     revisionForm.description = item.description ?? '';
     revisionForm.metadataText = JSON.stringify(item.metadata ?? {}, null, 2);
+}
+
+function seedDetailsWorkspace(item: CatalogItem): void {
+    selectedItem.value = { ...item };
+    hydrateEditForm(item);
+    hydrateRevisionForm(item);
+}
+
+function resetDetailsSecondaryData(): void {
+    versionHistory.value = [];
+    versionHistoryError.value = null;
+    payerImpactSummary.value = null;
+    payerImpactError.value = null;
+    auditError.value = null;
+    auditLogs.value = [];
+    auditMeta.value = null;
+    Object.assign(auditFilters, { q: '', action: '', actorType: '', actorId: '', from: '', to: '', perPage: 20, page: 1 });
 }
 
 function syncItemInList(updated: CatalogItem): void {
@@ -1700,7 +1754,6 @@ function openCreateFamilyPreview(): void {
     const candidate = createFamilyPreviewPrimary.value;
     if (!candidate) return;
 
-    catalogWorkspaceView.value = 'queue';
     openDetails(candidate);
 }
 
@@ -1939,7 +1992,7 @@ function resetFilters(): void {
     filters.sortDir = 'asc';
     filters.perPage = 15;
     filters.page = 1;
-    showCatalogAdvancedFilters.value = false;
+    filtersSheetOpen.value = false;
     void loadItems();
 }
 
@@ -2012,7 +2065,7 @@ async function createItem(): Promise<void> {
             requestId: requestKey,
         });
 
-        closeCatalogRegisterWorkspace();
+        closeCreateSheet();
         notifySuccess('Service catalog item created.');
         await loadItems();
     } catch (error) {
@@ -2035,17 +2088,17 @@ async function loadDetails(id: string): Promise<void> {
         selectedItem.value = response.data;
         hydrateEditForm(response.data);
         hydrateRevisionForm(response.data);
-        await loadVersionHistory(id);
-        await loadPayerImpact(id);
-
-        if (canViewAudit.value) {
-            await loadAuditLogs(1);
-        }
     } catch (error) {
-        selectedItem.value = null;
         detailsError.value = messageFromUnknown(error, 'Unable to load service catalog item details.');
     } finally {
         detailsLoading.value = false;
+    }
+
+    void loadVersionHistory(id);
+    void loadPayerImpact(id);
+
+    if (canViewAudit.value) {
+        void loadAuditLogs(1);
     }
 }
 
@@ -2055,20 +2108,13 @@ function openDetails(item: CatalogItem): void {
 
     detailsOpen.value = true;
     detailsTab.value = 'overview';
-    selectedItem.value = null;
-    versionHistory.value = [];
-    versionHistoryError.value = null;
-    payerImpactSummary.value = null;
-    payerImpactError.value = null;
     detailsError.value = null;
     identityErrors.value = {};
     pricingErrors.value = {};
     revisionErrors.value = {};
     statusErrors.value = {};
-    auditError.value = null;
-    auditLogs.value = [];
-    auditMeta.value = null;
-    Object.assign(auditFilters, { q: '', action: '', actorType: '', actorId: '', from: '', to: '', perPage: 20, page: 1 });
+    resetDetailsSecondaryData();
+    seedDetailsWorkspace(item);
     rotateIdentityRequestKey();
     rotatePricingRequestKey();
     rotateRevisionRequestKey();
@@ -2381,6 +2427,9 @@ function openVersionFromHistory(version: CatalogItem): void {
     }
 
     detailsTab.value = 'overview';
+    detailsError.value = null;
+    resetDetailsSecondaryData();
+    seedDetailsWorkspace(version);
     void loadDetails(itemId);
 }
 
@@ -2470,14 +2519,14 @@ onMounted(async () => {
 });
 
 watch(
-    () => [catalogWorkspaceView.value, normalizeServiceCode(createForm.serviceCode)] as const,
-    ([workspaceView, serviceCode]) => {
+    () => [createSheetOpen.value, normalizeServiceCode(createForm.serviceCode)] as const,
+    ([sheetOpen, serviceCode]) => {
         if (createFamilyPreviewDebounceHandle !== null) {
             clearTimeout(createFamilyPreviewDebounceHandle);
             createFamilyPreviewDebounceHandle = null;
         }
 
-        if (workspaceView !== 'register' || !serviceCode) {
+        if (!sheetOpen || !serviceCode) {
             clearCreateFamilyPreview();
             createFamilyPreviewLoading.value = false;
             return;
@@ -2502,10 +2551,10 @@ watch(
 );
 
 watch(
-    () => [catalogWorkspaceView.value, createForm.identitySource] as const,
-    ([workspaceView, identitySource]) => {
+    () => [createSheetOpen.value, createForm.identitySource] as const,
+    ([sheetOpen, identitySource]) => {
         if (
-            workspaceView === 'register'
+            sheetOpen
             && identitySource === 'clinical'
             && !clinicalCatalogLookupLoaded.value
             && !clinicalCatalogLookupLoading.value
@@ -2530,68 +2579,71 @@ watch(
 );
 </script>
 <template>
-    <Head title="Billable Service Catalog" />
+    <Head title="Tariffs & services" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
-            <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                <div class="space-y-1">
-                    <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <AppIcon name="receipt" class="size-7 text-primary" />
-                        Billable Service Catalog
-                    </h1>
-                    <p class="text-sm text-muted-foreground">
-                        Manage billable services, tariffs, future price changes, and payer-contract impact from one place.
-                    </p>
+        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-hidden rounded-lg p-4 md:p-6">
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div
+                            class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20"
+                            aria-hidden="true"
+                        >
+                            <AppIcon name="receipt" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h1 class="text-base font-semibold tracking-tight md:text-lg">Tariffs &amp; services</h1>
+                                <Badge
+                                    v-if="catalogReadOnly"
+                                    variant="outline"
+                                    class="h-5 px-1.5 text-[10px] font-medium"
+                                >
+                                    View only
+                                </Badge>
+                            </div>
+                            <p class="truncate text-xs text-muted-foreground">{{ workspaceIntroText }}</p>
+                            <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
+                                <span class="inline-flex items-center gap-1">
+                                    <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
+                                    <span class="font-medium text-foreground">{{ platformScope?.facility?.name || 'No facility' }}</span>
+                                </span>
+                                <span class="select-none text-border" aria-hidden="true">·</span>
+                                <span>{{ platformScope?.tenant?.name || 'No tenant' }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            :disabled="listLoading"
+                            @click="loadItems()"
+                        >
+                            <AppIcon name="refresh-cw" class="size-3.5" />
+                            {{ listLoading ? 'Refreshing...' : 'Refresh' }}
+                        </Button>
+                        <Button v-if="canManagePricing" size="sm" class="h-8 gap-1.5" @click="openCreateSheet">
+                            <AppIcon name="plus" class="size-3.5" />
+                            Add service price
+                        </Button>
+                        <Button size="sm" variant="outline" as-child class="h-8 gap-1.5">
+                            <Link href="/platform/admin/clinical-catalogs">
+                                <AppIcon name="book-open" class="size-3.5" />
+                                Clinical catalogs
+                            </Link>
+                        </Button>
+                        <Button size="sm" variant="outline" as-child class="h-8 gap-1.5">
+                            <Link href="/billing-payer-contracts">
+                                <AppIcon name="shield-check" class="size-3.5" />
+                                Payer contracts
+                            </Link>
+                        </Button>
+                    </div>
                 </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">
-                        {{ canRead ? 'Ready' : 'Access Restricted' }}
-                    </Badge>
-                    <Button size="sm" variant="outline" class="gap-1.5" :disabled="listLoading" @click="loadItems()">
-                        <AppIcon name="activity" class="size-3.5" />
-                        {{ listLoading ? 'Refreshing...' : 'Refresh' }}
-                    </Button>
-                    <Button
-                        v-if="canRead"
-                        size="sm"
-                        class="gap-1.5"
-                        :variant="catalogWorkspaceView === 'queue' ? 'default' : 'outline'"
-                        @click="openCatalogQueueWorkspace"
-                    >
-                        <AppIcon name="layout-list" class="size-3.5" />
-                        Price List
-                    </Button>
-                    <Button
-                        v-if="canManagePricing"
-                        size="sm"
-                        class="gap-1.5"
-                        :variant="catalogWorkspaceView === 'register' ? 'default' : 'outline'"
-                        @click="openCatalogRegisterWorkspace"
-                    >
-                        <AppIcon name="plus" class="size-3.5" />
-                        Add Service Price
-                    </Button>
-                    <Button size="sm" variant="outline" as-child class="gap-1.5">
-                        <Link href="/platform/admin/clinical-catalogs">
-                            <AppIcon name="book-open" class="size-3.5" />
-                            Clinical Care Catalogs
-                        </Link>
-                    </Button>
-                    <Button size="sm" variant="outline" as-child class="gap-1.5">
-                        <Link href="/billing-payer-contracts">
-                            <AppIcon name="shield-check" class="size-3.5" />
-                            Payer Contracts
-                        </Link>
-                    </Button>
-                    <Button size="sm" variant="outline" as-child class="gap-1.5">
-                        <Link href="/billing-invoices">
-                            <AppIcon name="receipt" class="size-3.5" />
-                            Billing Invoices
-                        </Link>
-                    </Button>
-                </div>
-            </div>
+            </section>
 
             <Alert v-if="!permissionsResolved">
                 <AlertTitle class="flex items-center gap-2">
@@ -2621,705 +2673,547 @@ watch(
                 </AlertDescription>
             </Alert>
 
-            <div v-if="canRead && catalogWorkspaceView === 'queue'" class="space-y-3">
-                <div class="rounded-lg border bg-muted/20 px-3 py-2.5">
-                    <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                        <div class="flex min-w-0 flex-col gap-2 2xl:flex-row 2xl:flex-wrap 2xl:items-center">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <p class="text-sm font-medium">Price list queue</p>
-                                <Badge variant="secondary">{{ catalogQueueStateLabel }}</Badge>
-                                <Badge variant="outline">{{ pagination?.total ?? items.length }} in scope</Badge>
-                            </div>
-                            <div class="flex flex-wrap items-center gap-2 xl:gap-1.5">
-                                <Button size="sm" class="h-8 gap-1.5 xl:h-7 xl:px-2.5" :variant="catalogListModeIsActive('all') ? 'default' : 'outline'" @click="applyCatalogListModePreset('all')">
-                                    <span class="font-medium">{{ statusCounts.total }}</span>
-                                    All prices
-                                </Button>
-                                <Button size="sm" class="h-8 gap-1.5 xl:h-7 xl:px-2.5" :variant="catalogListModeIsActive('active') ? 'default' : 'outline'" @click="applyCatalogListModePreset('active')">
-                                    <span class="font-medium">{{ statusCounts.active }}</span>
-                                    Active
-                                </Button>
-                                <Button size="sm" class="h-8 xl:h-7 xl:px-2.5" :variant="catalogListModeIsActive('scheduled') ? 'default' : 'outline'" @click="applyCatalogListModePreset('scheduled')">
-                                    Scheduled
-                                </Button>
-                                <Button size="sm" class="h-8 gap-1.5 xl:h-7 xl:px-2.5" :variant="catalogListModeIsActive('review') ? 'default' : 'outline'" @click="applyCatalogListModePreset('review')">
-                                    <span class="font-medium">{{ statusCounts.inactive }}</span>
-                                    Needs review
-                                </Button>
-                                <Button size="sm" class="h-8 gap-1.5 xl:h-7 xl:px-2.5" :variant="catalogListModeIsActive('retired') ? 'default' : 'outline'" @click="applyCatalogListModePreset('retired')">
-                                    <span class="font-medium">{{ statusCounts.retired }}</span>
-                                    Retired
-                                </Button>
-                            </div>
-                            <div class="flex flex-wrap items-center gap-2 xl:gap-1.5">
-                                <Button size="sm" class="h-8 xl:h-7 xl:px-2.5" :variant="filters.lifecycle === 'effective' ? 'default' : 'outline'" @click="applyCatalogLifecyclePreset('effective')">
-                                    Effective now
-                                </Button>
-                                <Button size="sm" class="h-8 xl:h-7 xl:px-2.5" :variant="filters.lifecycle === 'expired' ? 'default' : 'outline'" @click="applyCatalogLifecyclePreset('expired')">
-                                    Expired
-                                </Button>
-                                <Button size="sm" class="h-8 xl:h-7 xl:px-2.5" :variant="filters.lifecycle === 'no_window' ? 'default' : 'outline'" @click="applyCatalogLifecyclePreset('no_window')">
-                                    No window
-                                </Button>
-                            </div>
-                        </div>
-                        <div class="flex flex-col gap-2 xl:flex-row xl:flex-wrap xl:items-center xl:justify-end">
-                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                                <span>Showing {{ pagination?.total ?? items.length }} prices</span>
-                                <span class="text-muted-foreground">|</span>
-                                <span>{{ statusCounts.active }} active</span>
-                                <span class="text-muted-foreground">|</span>
-                                <span>{{ compactCatalogQueueRows ? 'Compact rows' : 'Comfortable rows' }}</span>
-                            </div>
-                            <Button size="sm" variant="outline" as-child class="h-8 gap-1.5 xl:h-7">
-                                <Link href="/platform/admin/clinical-catalogs">
-                                    <AppIcon name="book-open" class="size-3.5" />
-                                    Clinical catalogs
-                                </Link>
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <Card v-if="canRead && canManagePricing && catalogWorkspaceView === 'register'" class="rounded-lg border-sidebar-border/70">
-                <CardHeader class="gap-3 pb-3">
-                    <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                        <div class="space-y-1">
-                            <CardTitle class="flex items-center gap-2">
-                                <AppIcon name="plus" class="size-4" />
-                                Add New Price
-                            </CardTitle>
-                            <CardDescription>
-                                Register the billing tariff, set the hospital base price, and define when that price starts or stops without recreating the clinical definition.
-                            </CardDescription>
-                        </div>
-                        <div class="flex flex-wrap items-center gap-2">
+            <Sheet v-if="canManagePricing" :open="createSheetOpen" @update:open="requestCreateSheetOpenChange">
+                <SheetContent
+                    side="right"
+                    variant="workspace"
+                    size="6xl"
+                    class="flex h-full min-h-0 flex-col"
+                >
+                    <SheetHeader class="shrink-0 border-b px-4 py-3 pr-12 text-left sm:px-5">
+                        <SheetTitle class="flex items-center gap-2">
+                            <AppIcon name="plus" class="size-5 text-muted-foreground" />
+                            Add service price
+                        </SheetTitle>
+                        <SheetDescription>
+                            Link a clinical service or enter a standalone code, then set the hospital base price and effective window.
+                        </SheetDescription>
+                        <div class="mt-2 flex flex-wrap items-center gap-2">
                             <Badge :variant="createTariffReady ? 'secondary' : 'outline'">
-                                    {{ createTariffReady ? 'Ready to save' : 'Setup in progress' }}
+                                {{ createTariffReady ? 'Ready to save' : 'Incomplete' }}
                             </Badge>
-                            <Badge variant="outline">{{ createTariffIdentitySummary }}</Badge>
+                            <Badge v-if="createForm.serviceCode.trim()" variant="outline" class="max-w-full truncate font-normal">
+                                {{ createTariffIdentitySummary }}
+                            </Badge>
+                            <Badge
+                                v-if="createForm.serviceCode.trim()"
+                                :variant="createFamilyAlreadyExists ? 'destructive' : 'outline'"
+                                class="font-normal"
+                            >
+                                {{
+                                    createFamilyPreviewLoading
+                                        ? 'Checking code'
+                                        : createFamilyAlreadyExists
+                                            ? 'Family exists'
+                                            : 'New family'
+                                }}
+                            </Badge>
                         </div>
-                    </div>
-                </CardHeader>
-                <CardContent class="space-y-4">
-                    <div class="flex w-full flex-col gap-4">
-                        <div class="space-y-4">
-                            <div class="rounded-lg border p-4">
-                                <div class="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-                                    <div class="space-y-1">
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <p class="text-sm font-medium">1. Service and base tariff</p>
-                                            <Badge variant="outline">
-                                                {{ createForm.identitySource === 'clinical' ? 'Catalog-first' : 'Standalone' }}
-                                            </Badge>
-                                        </div>
-                                        <p class="text-xs text-muted-foreground">
-                                            Select the service, confirm the identity, and register the hospital base tariff in one place.
-                                        </p>
-                                    </div>
-                                    <Badge :variant="createFamilyAlreadyExists ? 'destructive' : createForm.serviceCode.trim() ? 'secondary' : 'outline'">
-                                        {{
-                                            createFamilyPreviewLoading
-                                                ? 'Checking family'
-                                                : createFamilyAlreadyExists
-                                                    ? `${createFamilyVersionCount} version${createFamilyVersionCount === 1 ? '' : 's'} found`
-                                                    : createForm.serviceCode.trim()
-                                                        ? 'New tariff family'
-                                                        : 'Service code pending'
-                                        }}
-                                    </Badge>
-                                </div>
+                    </SheetHeader>
+                    <ScrollArea class="min-h-0 flex-1">
+                        <div class="grid gap-4 px-6 py-4">
+                            <Alert
+                                v-if="createLinkedClinicalModeLocked"
+                                variant="default"
+                                class="border-amber-500/30 bg-amber-500/10"
+                            >
+                                <AlertTitle class="text-amber-900 dark:text-amber-200">Clinical catalog unavailable</AlertTitle>
+                                <AlertDescription class="text-xs text-amber-800 dark:text-amber-300">
+                                    Add care definitions in Clinical Care Catalogs first, or switch to standalone for billing-only services.
+                                </AlertDescription>
+                            </Alert>
 
-                                <Tabs v-model="createIdentitySourceTabsValue" class="mt-4 space-y-4">
-                                    <TabsList class="grid h-auto w-full grid-cols-1 gap-2 rounded-lg bg-muted/20 p-1 sm:grid-cols-2">
-                                        <TabsTrigger
-                                            value="clinical"
-                                            :disabled="createLinkedClinicalModeLocked"
-                                            class="inline-flex h-auto items-start justify-start rounded-lg border border-transparent bg-transparent px-3 py-3 text-left data-[state=active]:border-primary/30 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-                                        >
-                                            <div class="flex w-full items-start gap-3">
-                                                <div class="mt-0.5 rounded-md bg-primary/10 p-2 text-primary">
-                                                    <AppIcon name="stethoscope" class="size-4" />
-                                                </div>
-                                                <div class="min-w-0 space-y-1">
-                                                    <div class="flex flex-wrap items-center gap-2">
-                                                        <span class="text-sm font-medium">Clinical catalog</span>
-                                                        <Badge variant="secondary" class="h-5 px-2 text-[10px]">Recommended</Badge>
-                                                    </div>
-                                                    <p class="text-xs leading-5 text-muted-foreground">
-                                                        Reuse an existing lab, radiology, theatre, or formulary definition.
-                                                    </p>
-                                                </div>
-                                            </div>
+                            <fieldset class="grid gap-3 rounded-lg border p-3">
+                                <legend class="px-2 text-sm font-medium text-muted-foreground">Source</legend>
+                                <Tabs v-model="createIdentitySourceTabsValue" class="space-y-3">
+                                    <TabsList class="grid h-9 w-full grid-cols-2">
+                                        <TabsTrigger value="clinical" :disabled="createLinkedClinicalModeLocked" class="text-xs sm:text-sm">
+                                            Clinical catalog
                                         </TabsTrigger>
-                                        <TabsTrigger
-                                            value="standalone"
-                                            class="inline-flex h-auto items-start justify-start rounded-lg border border-transparent bg-transparent px-3 py-3 text-left data-[state=active]:border-primary/30 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-                                        >
-                                            <div class="flex w-full items-start gap-3">
-                                                <div class="mt-0.5 rounded-md bg-muted p-2 text-muted-foreground">
-                                                    <AppIcon name="receipt" class="size-4" />
-                                                </div>
-                                                <div class="min-w-0 space-y-1">
-                                                    <div class="flex flex-wrap items-center gap-2">
-                                                        <span class="text-sm font-medium">Standalone service</span>
-                                                    </div>
-                                                    <p class="text-xs leading-5 text-muted-foreground">
-                                                        Use only for billing-only items that do not belong to the clinical catalog.
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </TabsTrigger>
+                                        <TabsTrigger value="standalone" class="text-xs sm:text-sm">Standalone</TabsTrigger>
                                     </TabsList>
 
-                                    <div v-if="createLinkedClinicalModeLocked" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                                        Clinical-linked pricing is not ready yet. Create the care definition in Clinical Care Catalogs first, or use standalone mode only for true billing-only services.
-                                    </div>
-
-                                    <TabsContent value="clinical" class="space-y-3">
+                                    <TabsContent value="clinical" class="mt-0 space-y-3">
                                         <ComboboxField
                                             input-id="create-price-clinical-catalog-item"
                                             label="Clinical definition"
                                             required
                                             v-model="createForm.clinicalCatalogItemId"
                                             :options="createClinicalCatalogItemOptions"
-                                            placeholder="Select lab test, radiology procedure, theatre procedure, or formulary item"
-                                            search-placeholder="Search by clinical code, name, or billing code"
+                                            placeholder="Lab, radiology, theatre, or formulary item"
+                                            search-placeholder="Search code, name, or billing code"
                                             :helper-text="createClinicalCatalogHelperText"
                                             :error-message="firstError(createErrors, 'clinicalCatalogItemId')"
                                             :empty-text="createClinicalCatalogEmptyText"
                                         />
-
-                                        <div v-if="clinicalCatalogLookupError" class="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
-                                            <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                                                <p class="text-destructive">{{ clinicalCatalogLookupError }}</p>
-                                                <Button size="sm" variant="outline" @click="loadClinicalCatalogLookupItems">Retry catalog lookup</Button>
-                                            </div>
+                                        <div
+                                            v-if="clinicalCatalogLookupError"
+                                            class="flex flex-col gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
+                                        >
+                                            <p class="text-destructive">{{ clinicalCatalogLookupError }}</p>
+                                            <Button size="sm" variant="outline" @click="loadClinicalCatalogLookupItems">Retry</Button>
                                         </div>
-
-                                        <div v-else-if="createSelectedClinicalCatalogItem" class="rounded-lg border bg-muted/10 p-3">
-                                            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                                <div class="space-y-1">
-                                                    <div class="flex flex-wrap items-center gap-2">
-                                                        <p class="text-sm font-medium">{{ createSelectedClinicalCatalogItem.name || 'Unnamed clinical definition' }}</p>
-                                                        <Badge variant="secondary">{{ clinicalCatalogGroupLabel(createSelectedClinicalCatalogItem.catalogType) }}</Badge>
-                                                    </div>
-                                                    <p class="text-xs text-muted-foreground">
-                                                        {{ createSelectedClinicalCatalogItem.code || 'No clinical code' }}
-                                                        <span v-if="resolvedClinicalCatalogServiceCode(createSelectedClinicalCatalogItem)">
-                                                            | Billing code {{ resolvedClinicalCatalogServiceCode(createSelectedClinicalCatalogItem) }}
-                                                        </span>
-                                                    </p>
-                                                </div>
-                                                <Button size="sm" variant="ghost" @click="clearCreateClinicalCatalogSelection">Clear selection</Button>
+                                        <div
+                                            v-else-if="createSelectedClinicalCatalogItem"
+                                            class="flex items-start justify-between gap-2 rounded-md border bg-muted/30 px-3 py-2"
+                                        >
+                                            <div class="min-w-0 space-y-0.5">
+                                                <p class="truncate text-sm font-medium">
+                                                    {{ createSelectedClinicalCatalogItem.name || 'Unnamed definition' }}
+                                                </p>
+                                                <p class="text-xs text-muted-foreground">
+                                                    {{ createSelectedClinicalCatalogItem.code || 'No code' }}
+                                                    <span class="text-border"> · </span>
+                                                    {{ clinicalCatalogGroupLabel(createSelectedClinicalCatalogItem.catalogType) }}
+                                                    <span v-if="resolvedClinicalCatalogServiceCode(createSelectedClinicalCatalogItem)">
+                                                        <span class="text-border"> · </span>
+                                                        Billing {{ resolvedClinicalCatalogServiceCode(createSelectedClinicalCatalogItem) }}
+                                                    </span>
+                                                </p>
+                                                <p v-if="createClinicalFallbackCodeMessage" class="text-xs text-amber-700 dark:text-amber-300">
+                                                    {{ createClinicalFallbackCodeMessage }}
+                                                </p>
                                             </div>
-                                            <div class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                                                <div class="rounded-lg border bg-background/80 px-3 py-2.5">
-                                                    <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Category</p>
-                                                    <p class="mt-1 text-sm font-medium">{{ createSelectedClinicalCatalogItem.category ? formatEnumLabel(createSelectedClinicalCatalogItem.category) : 'Not set' }}</p>
-                                                </div>
-                                                <div class="rounded-lg border bg-background/80 px-3 py-2.5">
-                                                    <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Unit</p>
-                                                    <p class="mt-1 text-sm font-medium">{{ createSelectedClinicalCatalogItem.unit ? formatEnumLabel(createSelectedClinicalCatalogItem.unit) : 'Not set' }}</p>
-                                                </div>
-                                                <div class="rounded-lg border bg-background/80 px-3 py-2.5">
-                                                    <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Tariff posture</p>
-                                                    <p class="mt-1 text-sm font-medium">
-                                                        {{ createSelectedClinicalCatalogItem.billingLink?.item ? 'Tariff already exists' : 'Ready for first tariff' }}
-                                                    </p>
-                                                </div>
-                                                <div class="rounded-lg border bg-background/80 px-3 py-2.5">
-                                                    <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Billing source</p>
-                                                    <p class="mt-1 text-sm font-medium">
-                                                        {{ resolvedClinicalCatalogServiceCode(createSelectedClinicalCatalogItem) || 'Code pending' }}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <p v-if="createClinicalFallbackCodeMessage" class="mt-3 text-xs text-muted-foreground">
-                                                {{ createClinicalFallbackCodeMessage }}
-                                            </p>
+                                            <Button size="sm" variant="ghost" class="shrink-0" @click="clearCreateClinicalCatalogSelection">
+                                                Clear
+                                            </Button>
                                         </div>
                                     </TabsContent>
 
-                                    <TabsContent value="standalone" class="space-y-3">
-                                        <div class="rounded-lg border bg-muted/10 px-3 py-2.5 text-sm">
-                                            <p class="font-medium">Standalone service mode</p>
-                                            <p class="mt-1 text-xs text-muted-foreground">
-                                                Best for consultation, admission, and administrative charges that do not need a clinical definition.
-                                            </p>
-                                        </div>
+                                    <TabsContent value="standalone" class="mt-0">
+                                        <p class="text-xs text-muted-foreground">
+                                            For consultations, admissions, and other charges without a clinical catalog definition.
+                                        </p>
                                     </TabsContent>
                                 </Tabs>
 
-                                <div class="mt-4 space-y-3">
-                                    <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-12">
-                                        <div class="md:col-span-2 xl:col-span-12">
-                                            <p class="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Identity</p>
-                                        </div>
-                                    </div>
-
-                                    <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-12">
-                                    <FormFieldShell
-                                        input-id="create-price-service-code"
-                                        label="Service code"
-                                        required
-                                        container-class="xl:col-span-3"
-                                        :helper-text="createForm.identitySource === 'clinical' ? 'Filled from the selected clinical definition.' : 'Use one stable code per billable service family.'"
-                                        :error-message="firstError(createErrors, 'serviceCode')"
-                                    >
-                                        <Input
-                                            id="create-price-service-code"
-                                            v-model="createForm.serviceCode"
-                                            placeholder="CONSULT-OPD-001"
-                                            :disabled="createForm.identitySource === 'clinical'"
-                                        />
-                                    </FormFieldShell>
-                                    <FormFieldShell
-                                        input-id="create-price-service-name"
-                                        label="Service name"
-                                        required
-                                        container-class="xl:col-span-3"
-                                        :helper-text="createForm.identitySource === 'clinical' ? 'Filled from the selected clinical definition.' : 'Use the name staff should see on bills and reports.'"
-                                        :error-message="firstError(createErrors, 'serviceName')"
-                                    >
-                                        <Input
-                                            id="create-price-service-name"
-                                            v-model="createForm.serviceName"
-                                            placeholder="OPD Consultation"
-                                            :disabled="createForm.identitySource === 'clinical'"
-                                        />
-                                    </FormFieldShell>
-                                    <FormFieldShell
-                                        input-id="create-price-service-type"
-                                        label="Service type"
-                                        container-class="xl:col-span-2"
-                                        helper-text="Choose the billing family."
-                                    >
-                                        <Select v-model="createServiceTypeSelectValue">
-                                            <SelectTrigger id="create-price-service-type" class="w-full">
-                                                <SelectValue placeholder="Select service type" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="__none__">No service type yet</SelectItem>
-                                                <SelectItem v-for="option in serviceTypeOptions" :key="option" :value="option">
-                                                    {{ formatEnumLabel(option) }}
-                                                </SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </FormFieldShell>
-                                    <ComboboxField
-                                        input-id="create-price-department"
-                                        label="Department"
-                                        v-model="createForm.departmentId"
-                                        :options="createDepartmentOptions"
-                                        container-class="xl:col-span-2"
-                                        placeholder="Select department"
-                                        search-placeholder="Search department code or name"
-                                        :helper-text="createDepartmentHelperText"
-                                        :error-message="firstError(createErrors, 'departmentId')"
-                                        :empty-text="createDepartmentEmptyText"
-                                    />
-                                    <FormFieldShell
-                                        input-id="create-price-unit"
-                                        label="Billing unit"
-                                        container-class="xl:col-span-2"
-                                        helper-text="How this service is counted on the bill."
-                                    >
-                                        <Select v-model="createUnitSelectValue">
-                                            <SelectTrigger id="create-price-unit" class="w-full">
-                                                <SelectValue placeholder="Select billing unit" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="__none__">No billing unit yet</SelectItem>
-                                                <SelectItem v-for="option in unitOptions" :key="option" :value="option">
-                                                    {{ formatEnumLabel(option) }}
-                                                </SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </FormFieldShell>
-                                    </div>
-
-                                    <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-12">
-                                        <div class="md:col-span-2 xl:col-span-12">
-                                            <p class="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Base tariff</p>
-                                        </div>
-                                    </div>
-
-                                    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-12">
-                                        <FormFieldShell
-                                            input-id="create-price-base-price"
-                                            label="Base price"
-                                            required
-                                            container-class="xl:col-span-4"
-                                            :error-message="firstError(createErrors, 'basePrice')"
-                                        >
-                                            <Input id="create-price-base-price" v-model="createForm.basePrice" inputmode="decimal" placeholder="25000" />
-                                        </FormFieldShell>
-                                        <FormFieldShell
-                                            input-id="create-price-currency"
-                                            label="Currency"
-                                            required
-                                            container-class="xl:col-span-2"
-                                            :error-message="firstError(createErrors, 'currencyCode')"
-                                        >
-                                            <Input id="create-price-currency" v-model="createForm.currencyCode" maxlength="3" />
-                                        </FormFieldShell>
-                                        <FormFieldShell
-                                            input-id="create-price-tax-rate"
-                                            label="Tax rate %"
-                                            container-class="xl:col-span-2"
-                                            :error-message="firstError(createErrors, 'taxRatePercent')"
-                                        >
-                                            <Input id="create-price-tax-rate" v-model="createForm.taxRatePercent" inputmode="decimal" placeholder="0" />
-                                        </FormFieldShell>
-                                        <FormFieldShell
-                                            input-id="create-price-taxable"
-                                            label="Taxable"
-                                            container-class="xl:col-span-4"
-                                        >
-                                            <Select v-model="createTaxableSelectValue">
-                                                <SelectTrigger id="create-price-taxable" class="w-full">
-                                                    <SelectValue placeholder="Select tax posture" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="__none__">Not decided yet</SelectItem>
-                                                    <SelectItem value="true">Yes</SelectItem>
-                                                    <SelectItem value="false">No</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </FormFieldShell>
-                                    </div>
-
-                                    <div class="rounded-lg border bg-muted/10 p-3">
-                                        <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                                            <div>
-                                                <p class="text-sm font-medium">Tariff family check</p>
-                                                <p class="text-xs text-muted-foreground">
-                                                    Existing families must be changed through versioning, not by creating another base record.
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <div v-if="createFamilyPreviewError" class="mt-3 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                                            {{ createFamilyPreviewError }}
-                                        </div>
-                                        <div v-else-if="createFamilyPreviewLoading" class="mt-3 space-y-2">
-                                            <Skeleton class="h-12 w-full" />
-                                        </div>
-                                        <div v-else-if="createFamilyAlreadyExists" class="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-                                            <p class="text-sm font-medium text-destructive">Service code {{ normalizeServiceCode(createForm.serviceCode) }} already exists.</p>
-                                            <p class="mt-1 text-xs text-muted-foreground">
-                                                This scope already has {{ createFamilyVersionCount }} tariff version{{ createFamilyVersionCount === 1 ? '' : 's' }} for this family.
-                                            </p>
-                                            <p class="mt-2 text-xs text-muted-foreground">
-                                                Existing family: {{ createFamilyPreviewPrimary?.serviceName || 'Unnamed service' }}
-                                                <span v-if="createFamilyPreviewPrimary?.clinicalCatalogItem"> | {{ createFamilyPreviewPrimary?.clinicalCatalogItem?.name }}</span>
-                                            </p>
-                                            <div class="mt-3 flex flex-wrap items-center gap-2">
-                                                <Button size="sm" variant="outline" @click="openCreateFamilyPreview">Open existing family</Button>
-                                                <span class="text-xs text-muted-foreground">Use `New Price Version` inside that family when the amount or active window changes.</span>
-                                            </div>
-                                        </div>
-                                        <div v-else class="mt-3 rounded-lg border bg-background/80 px-3 py-2.5 text-sm">
-                                            <p class="font-medium">{{ createForm.serviceCode.trim() ? 'This draft will create the first tariff family for this service code.' : 'Enter or inherit a service code to verify family posture.' }}</p>
-                                        </div>
-                                    </div>
-
-                                    <details class="rounded-lg border bg-muted/10 p-3">
-                                        <summary class="cursor-pointer text-sm font-medium">Advanced / Standards</summary>
-                                        <div class="mt-3 space-y-3">
-                                            <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                                <FormFieldShell input-id="create-price-facility-tier" label="Minimum facility tier">
-                                                    <Select
-                                                        :model-value="createForm.facilityTier || '__none__'"
-                                                        @update:model-value="(value) => { createForm.facilityTier = value === '__none__' ? '' : String(value); }"
-                                                    >
-                                                        <SelectTrigger id="create-price-facility-tier" class="w-full">
-                                                            <SelectValue placeholder="All tiers" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="__none__">All tiers</SelectItem>
-                                                            <SelectItem v-for="tier in facilityTierOptions" :key="tier.value" :value="tier.value">{{ tier.label }}</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </FormFieldShell>
-                                                <FormFieldShell input-id="create-price-local-code" label="Local code"><Input id="create-price-local-code" v-model="createForm.standardsLocal" placeholder="Internal code" /></FormFieldShell>
-                                                <FormFieldShell input-id="create-price-nhif-code" label="NHIF code"><Input id="create-price-nhif-code" v-model="createForm.standardsNhif" placeholder="NHIF tariff code" /></FormFieldShell>
-                                                <FormFieldShell input-id="create-price-msd-code" label="MSD code"><Input id="create-price-msd-code" v-model="createForm.standardsMsd" placeholder="MSD reference" /></FormFieldShell>
-                                                <FormFieldShell input-id="create-price-loinc-code" label="LOINC"><Input id="create-price-loinc-code" v-model="createForm.standardsLoinc" placeholder="Lab standard" /></FormFieldShell>
-                                                <FormFieldShell input-id="create-price-snomed-code" label="SNOMED CT"><Input id="create-price-snomed-code" v-model="createForm.standardsSnomedCt" placeholder="Clinical concept" /></FormFieldShell>
-                                                <FormFieldShell input-id="create-price-cpt-code" label="CPT"><Input id="create-price-cpt-code" v-model="createForm.standardsCpt" placeholder="Optional procedure code" /></FormFieldShell>
-                                                <FormFieldShell input-id="create-price-icd-code" label="ICD"><Input id="create-price-icd-code" v-model="createForm.standardsIcd" placeholder="Optional diagnosis link" /></FormFieldShell>
-                                            </div>
-                                            <FormFieldShell input-id="create-price-metadata" label="Additional metadata JSON" :error-message="firstError(createErrors, 'metadata')">
-                                                <Textarea id="create-price-metadata" v-model="createForm.metadataText" class="min-h-20 font-mono text-xs" />
+                                <div class="space-y-4 border-t border-border/60 pt-4">
+                                    <div class="space-y-3">
+                                        <p class="text-xs font-medium text-muted-foreground">Service</p>
+                                        <div class="grid grid-cols-6 gap-3">
+                                            <FormFieldShell
+                                                input-id="create-price-service-code"
+                                                label="Service code"
+                                                required
+                                                container-class="col-span-6 sm:col-span-2"
+                                                :helper-text="createForm.identitySource === 'clinical' ? 'From clinical definition.' : 'One stable code per service family.'"
+                                                :error-message="firstError(createErrors, 'serviceCode')"
+                                            >
+                                                <Input
+                                                    id="create-price-service-code"
+                                                    v-model="createForm.serviceCode"
+                                                    placeholder="CONSULT-OPD-001"
+                                                    :disabled="createForm.identitySource === 'clinical'"
+                                                />
+                                            </FormFieldShell>
+                                            <FormFieldShell
+                                                input-id="create-price-service-name"
+                                                label="Service name"
+                                                required
+                                                container-class="col-span-6 sm:col-span-2"
+                                                :helper-text="createForm.identitySource === 'clinical' ? 'From clinical definition.' : 'Name on bills and reports.'"
+                                                :error-message="firstError(createErrors, 'serviceName')"
+                                            >
+                                                <Input
+                                                    id="create-price-service-name"
+                                                    v-model="createForm.serviceName"
+                                                    placeholder="OPD Consultation"
+                                                    :disabled="createForm.identitySource === 'clinical'"
+                                                />
+                                            </FormFieldShell>
+                                            <FormFieldShell
+                                                input-id="create-price-service-type"
+                                                label="Service type"
+                                                container-class="col-span-6 sm:col-span-2"
+                                            >
+                                                <Select v-model="createServiceTypeSelectValue">
+                                                    <SelectTrigger id="create-price-service-type" class="w-full">
+                                                        <SelectValue placeholder="Select service type" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="__none__">No service type yet</SelectItem>
+                                                        <SelectItem v-for="option in serviceTypeOptions" :key="option" :value="option">
+                                                            {{ formatEnumLabel(option) }}
+                                                        </SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </FormFieldShell>
+                                            <ComboboxField
+                                                input-id="create-price-department"
+                                                label="Department"
+                                                v-model="createForm.departmentId"
+                                                :options="createDepartmentOptions"
+                                                container-class="col-span-6 sm:col-span-3"
+                                                placeholder="Select department"
+                                                search-placeholder="Search department code or name"
+                                                :helper-text="createDepartmentHelperText"
+                                                :error-message="firstError(createErrors, 'departmentId')"
+                                                :empty-text="createDepartmentEmptyText"
+                                            />
+                                            <FormFieldShell
+                                                input-id="create-price-unit"
+                                                label="Billing unit"
+                                                container-class="col-span-6 sm:col-span-3"
+                                            >
+                                                <Select v-model="createUnitSelectValue">
+                                                    <SelectTrigger id="create-price-unit" class="w-full">
+                                                        <SelectValue placeholder="Select billing unit" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="__none__">No billing unit yet</SelectItem>
+                                                        <SelectItem v-for="option in unitOptions" :key="option" :value="option">
+                                                            {{ formatEnumLabel(option) }}
+                                                        </SelectItem>
+                                                    </SelectContent>
+                                                </Select>
                                             </FormFieldShell>
                                         </div>
-                                    </details>
-                                </div>
-                            </div>
 
-                            <div class="rounded-lg border p-4">
-                                    <div class="mb-3">
-                                        <p class="text-sm font-medium">2. Lifecycle and notes</p>
-                                        <p class="text-xs text-muted-foreground">
-                                            Set the active window and keep only the notes staff need during registration and audit review.
-                                        </p>
-                                    </div>
-                                    <div class="grid gap-3 xl:grid-cols-12">
-                                        <div class="xl:col-span-3">
-                                            <SingleDatePopoverField
-                                                input-id="create-price-effective-from-date"
-                                                label="Effective from"
-                                                v-model="createEffectiveFromDate"
-                                                helper-text="Choose the start date."
-                                                :error-message="firstError(createErrors, 'effectiveFrom')"
-                                            />
+                                        <Alert v-if="createFamilyPreviewError" variant="destructive" class="text-sm">
+                                            <AlertDescription>{{ createFamilyPreviewError }}</AlertDescription>
+                                        </Alert>
+                                        <div
+                                            v-else-if="createFamilyPreviewLoading && createForm.serviceCode.trim()"
+                                            class="flex items-center gap-2 text-xs text-muted-foreground"
+                                        >
+                                            <AppIcon name="loader-circle" class="size-3.5 animate-spin" />
+                                            Checking whether this service code already has a tariff family…
                                         </div>
-                                        <div class="xl:col-span-3">
-                                            <TimePopoverField
-                                                input-id="create-price-effective-from-time"
-                                                label="Start time"
-                                                v-model="createEffectiveFromTime"
-                                                helper-text="Set the start time."
-                                                :disabled="!createEffectiveFromDate"
-                                            />
-                                        </div>
-                                        <div class="xl:col-span-3">
-                                            <SingleDatePopoverField
-                                                input-id="create-price-effective-to-date"
-                                                label="Effective to"
-                                                v-model="createEffectiveToDate"
-                                                helper-text="Leave blank for an open-ended price."
-                                                :error-message="firstError(createErrors, 'effectiveTo')"
-                                            />
-                                        </div>
-                                        <div class="xl:col-span-3">
-                                            <TimePopoverField
-                                                input-id="create-price-effective-to-time"
-                                                label="End time"
-                                                v-model="createEffectiveToTime"
-                                                helper-text="Leave empty for an open-ended price."
-                                                :disabled="!createEffectiveToDate"
-                                            />
-                                        </div>
-                                        <div v-if="createTariffWindowValidationMessage" class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive xl:col-span-4">
-                                            {{ createTariffWindowValidationMessage }}
-                                        </div>
-                                        <FormFieldShell input-id="create-price-description" label="Description" container-class="xl:col-span-12">
-                                            <Textarea id="create-price-description" v-model="createForm.description" class="min-h-24" />
-                                        </FormFieldShell>
-                                    </div>
-                            </div>
-
-                        </div>
-
-                        <div class="space-y-4">
-                            <div class="rounded-lg border bg-background/95 p-4 shadow-sm">
-                                <div class="space-y-4">
-                                    <div class="space-y-1">
-                                        <div class="flex items-center justify-between gap-2">
-                                            <p class="text-sm font-medium">Review and save</p>
-                                            <Badge :variant="createTariffReady ? 'secondary' : 'outline'">
-                                                {{ createTariffReady ? 'Ready' : 'Incomplete' }}
-                                            </Badge>
-                                        </div>
-                                        <p class="text-xs text-muted-foreground">Final check before saving the new base tariff.</p>
-                                    </div>
-
-                                    <div class="grid gap-3 xl:grid-cols-12">
-                                        <div class="rounded-lg border bg-muted/20 px-3 py-2.5 xl:col-span-5">
-                                            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Service</p>
-                                            <p class="mt-1 text-sm font-medium">{{ createTariffIdentitySummary }}</p>
-                                            <p class="mt-1 text-xs text-muted-foreground">
-                                                {{ createForm.serviceType ? formatEnumLabel(createForm.serviceType) : 'Service type pending' }}
-                                                <span v-if="createDepartmentSummary"> | {{ createDepartmentSummary }}</span>
-                                                <span v-if="createForm.unit.trim()"> | {{ formatEnumLabel(createForm.unit) }}</span>
-                                            </p>
-                                        </div>
-                                        <div class="rounded-lg border bg-muted/20 px-3 py-2.5 xl:col-span-3">
-                                            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Tariff</p>
-                                            <div class="mt-1 flex items-center justify-between gap-3">
-                                                <p class="text-sm font-medium">{{ formatMoney(createForm.basePrice || null, createForm.currencyCode || null) }}</p>
-                                                <p class="text-xs text-muted-foreground">
-                                                    Taxable {{ createForm.isTaxable === '' ? 'N/A' : createForm.isTaxable === 'true' ? 'Yes' : 'No' }}
+                                        <Alert v-else-if="createFamilyAlreadyExists" variant="destructive">
+                                            <AlertTitle>Service code already in use</AlertTitle>
+                                            <AlertDescription class="space-y-2 text-xs">
+                                                <p>
+                                                    {{ createFamilyPreviewPrimary?.serviceName || 'Unnamed service' }} already has
+                                                    {{ createFamilyVersionCount }} version{{ createFamilyVersionCount === 1 ? '' : 's' }}.
+                                                    Create a new version instead of another base record.
                                                 </p>
+                                                <Button size="sm" variant="outline" class="h-8" @click="openCreateFamilyPreview">
+                                                    Open existing family
+                                                </Button>
+                                            </AlertDescription>
+                                        </Alert>
+                                    </div>
+
+                                    <div class="space-y-3">
+                                        <p class="text-xs font-medium text-muted-foreground">Base price</p>
+                                        <div class="grid grid-cols-6 gap-3">
+                                            <FormFieldShell
+                                                input-id="create-price-base-price"
+                                                label="Amount"
+                                                required
+                                                container-class="col-span-6 sm:col-span-3"
+                                                :error-message="firstError(createErrors, 'basePrice')"
+                                            >
+                                                <Input
+                                                    id="create-price-base-price"
+                                                    v-model="createForm.basePrice"
+                                                    inputmode="decimal"
+                                                    placeholder="25000"
+                                                />
+                                            </FormFieldShell>
+                                            <FormFieldShell
+                                                input-id="create-price-currency"
+                                                label="Currency"
+                                                required
+                                                container-class="col-span-6 sm:col-span-3"
+                                                :error-message="firstError(createErrors, 'currencyCode')"
+                                            >
+                                                <Input id="create-price-currency" v-model="createForm.currencyCode" maxlength="3" />
+                                            </FormFieldShell>
+                                            <FormFieldShell
+                                                input-id="create-price-tax-rate"
+                                                label="Tax rate %"
+                                                container-class="col-span-6 sm:col-span-3"
+                                                :error-message="firstError(createErrors, 'taxRatePercent')"
+                                            >
+                                                <Input
+                                                    id="create-price-tax-rate"
+                                                    v-model="createForm.taxRatePercent"
+                                                    inputmode="decimal"
+                                                    placeholder="0"
+                                                />
+                                            </FormFieldShell>
+                                            <FormFieldShell
+                                                input-id="create-price-taxable"
+                                                label="Taxable"
+                                                container-class="col-span-6 sm:col-span-3"
+                                            >
+                                                <Select v-model="createTaxableSelectValue">
+                                                    <SelectTrigger id="create-price-taxable" class="w-full">
+                                                        <SelectValue placeholder="Tax posture" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="__none__">Not set</SelectItem>
+                                                        <SelectItem value="true">Yes</SelectItem>
+                                                        <SelectItem value="false">No</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </FormFieldShell>
+                                        </div>
+                                    </div>
+
+                                    <div class="space-y-3">
+                                        <p class="text-xs font-medium text-muted-foreground">Effective window</p>
+                                        <div class="grid grid-cols-6 gap-3">
+                                            <div class="col-span-6 sm:col-span-3">
+                                                <SingleDatePopoverField
+                                                    input-id="create-price-effective-from-date"
+                                                    label="Start date"
+                                                    v-model="createEffectiveFromDate"
+                                                    :error-message="firstError(createErrors, 'effectiveFrom')"
+                                                />
                                             </div>
+                                            <div class="col-span-6 sm:col-span-3">
+                                                <TimePopoverField
+                                                    input-id="create-price-effective-from-time"
+                                                    label="Start time"
+                                                    v-model="createEffectiveFromTime"
+                                                    :disabled="!createEffectiveFromDate"
+                                                />
+                                            </div>
+                                            <div class="col-span-6 sm:col-span-3">
+                                                <SingleDatePopoverField
+                                                    input-id="create-price-effective-to-date"
+                                                    label="End date"
+                                                    v-model="createEffectiveToDate"
+                                                    helper-text="Leave blank for open-ended."
+                                                    :error-message="firstError(createErrors, 'effectiveTo')"
+                                                />
+                                            </div>
+                                            <div class="col-span-6 sm:col-span-3">
+                                                <TimePopoverField
+                                                    input-id="create-price-effective-to-time"
+                                                    label="End time"
+                                                    v-model="createEffectiveToTime"
+                                                    :disabled="!createEffectiveToDate"
+                                                />
+                                            </div>
+                                            <FormFieldShell
+                                                input-id="create-price-description"
+                                                label="Notes (optional)"
+                                                container-class="col-span-6"
+                                            >
+                                                <Textarea
+                                                    id="create-price-description"
+                                                    v-model="createForm.description"
+                                                    class="min-h-20"
+                                                    placeholder="Registration or audit context"
+                                                />
+                                            </FormFieldShell>
                                         </div>
-                                        <div class="rounded-lg border bg-muted/20 px-3 py-2.5 xl:col-span-4">
-                                            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Window</p>
-                                            <p class="mt-1 text-sm font-medium">{{ createTariffWindowSummary }}</p>
-                                            <p class="mt-1 text-xs text-muted-foreground">
-                                                {{ createForm.description.trim() || 'No registration notes yet.' }}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div v-if="createTariffBlockers.length > 0" class="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-                                        <p class="text-sm font-medium text-destructive">Save is blocked</p>
-                                        <div class="mt-2 space-y-1 text-xs text-destructive">
-                                            <p v-for="blocker in createTariffBlockers" :key="blocker">{{ blocker }}</p>
-                                        </div>
-                                    </div>
-
-                                    <div class="space-y-2">
-                                        <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                                            <Button class="w-full sm:w-auto sm:min-w-[160px]" :disabled="createLoading || !createTariffReady" @click="createItem">
-                                            {{ createLoading ? 'Saving...' : 'Save new price' }}
-                                            </Button>
-                                            <Button class="w-full sm:w-auto" variant="outline" :disabled="createLoading" @click="openCatalogQueueWorkspace">
-                                                Back to list
-                                            </Button>
-                                        </div>
-                                        <p class="text-xs text-muted-foreground">
-                                            {{ createTariffReady ? 'The new price is ready to save.' : createTariffBlockers.length > 0 ? 'Resolve the governance blockers before saving.' : 'Finish the remaining required sections before saving.' }}
+                                        <p v-if="createTariffWindowValidationMessage" class="text-xs text-destructive">
+                                            {{ createTariffWindowValidationMessage }}
                                         </p>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-            <Card v-if="canRead && catalogWorkspaceView === 'queue'" class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col">
-                <CardHeader class="gap-2 pb-2">
-                    <div class="space-y-1">
-                        <CardTitle class="flex items-center gap-2">
-                            <AppIcon name="layout-list" class="size-5 text-muted-foreground" />
-                            Price List Queue
-                        </CardTitle>
-                    </div>
-                    <div class="flex w-full flex-col gap-2">
-                        <div class="flex w-full flex-col gap-2 xl:flex-row xl:items-center">
-                            <div class="min-w-0 flex-1">
-                                <label for="catalog-q" class="sr-only">Search prices</label>
-                                <div class="relative min-w-0">
-                                    <AppIcon
-                                        name="search"
-                                        class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                                    />
-                                    <Input
-                                        id="catalog-q"
-                                        v-model="filters.q"
-                                        placeholder="Search service code, service name, type, or department"
-                                        class="h-9 pl-9"
-                                        @keyup.enter="search"
-                                    />
-                                </div>
-                            </div>
-                            <div class="flex flex-wrap items-center gap-2">
-                                <div class="min-w-[180px] sm:min-w-[220px]">
-                                    <label for="catalog-type" class="sr-only">Service type</label>
-                                    <Select
-                                        :model-value="filterServiceTypeSelectValue"
-                                        @update:model-value="updateCatalogServiceTypeFilter"
+                            </fieldset>
+
+                            <details class="rounded-lg border p-3">
+                                <summary class="cursor-pointer text-sm font-medium text-muted-foreground">Standards and metadata (optional)</summary>
+                                <div class="mt-3 grid grid-cols-6 gap-3">
+                                    <FormFieldShell
+                                        input-id="create-price-facility-tier"
+                                        label="Minimum facility tier"
+                                        container-class="col-span-6 sm:col-span-2"
                                     >
-                                        <SelectTrigger id="catalog-type" class="h-9 w-full">
-                                            <SelectValue placeholder="All types" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="__none__">All types</SelectItem>
-                                            <SelectItem v-for="option in serviceTypeOptions" :key="option" :value="option">{{ formatEnumLabel(option) }}</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                        <Select
+                                            :model-value="createForm.facilityTier || '__none__'"
+                                            @update:model-value="(value) => { createForm.facilityTier = value === '__none__' ? '' : String(value); }"
+                                        >
+                                            <SelectTrigger id="create-price-facility-tier" class="w-full">
+                                                <SelectValue placeholder="All tiers" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="__none__">All tiers</SelectItem>
+                                                <SelectItem v-for="tier in facilityTierOptions" :key="tier.value" :value="tier.value">
+                                                    {{ tier.label }}
+                                                </SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </FormFieldShell>
+                                    <FormFieldShell
+                                        input-id="create-price-local-code"
+                                        label="Local code"
+                                        container-class="col-span-6 sm:col-span-2"
+                                    >
+                                        <Input id="create-price-local-code" v-model="createForm.standardsLocal" />
+                                    </FormFieldShell>
+                                    <FormFieldShell
+                                        input-id="create-price-nhif-code"
+                                        label="NHIF code"
+                                        container-class="col-span-6 sm:col-span-2"
+                                    >
+                                        <Input id="create-price-nhif-code" v-model="createForm.standardsNhif" />
+                                    </FormFieldShell>
+                                    <FormFieldShell
+                                        input-id="create-price-msd-code"
+                                        label="MSD code"
+                                        container-class="col-span-6 sm:col-span-2"
+                                    >
+                                        <Input id="create-price-msd-code" v-model="createForm.standardsMsd" />
+                                    </FormFieldShell>
+                                    <FormFieldShell
+                                        input-id="create-price-loinc-code"
+                                        label="LOINC"
+                                        container-class="col-span-6 sm:col-span-2"
+                                    >
+                                        <Input id="create-price-loinc-code" v-model="createForm.standardsLoinc" />
+                                    </FormFieldShell>
+                                    <FormFieldShell
+                                        input-id="create-price-snomed-code"
+                                        label="SNOMED CT"
+                                        container-class="col-span-6 sm:col-span-2"
+                                    >
+                                        <Input id="create-price-snomed-code" v-model="createForm.standardsSnomedCt" />
+                                    </FormFieldShell>
+                                    <FormFieldShell
+                                        input-id="create-price-cpt-code"
+                                        label="CPT"
+                                        container-class="col-span-6 sm:col-span-2"
+                                    >
+                                        <Input id="create-price-cpt-code" v-model="createForm.standardsCpt" />
+                                    </FormFieldShell>
+                                    <FormFieldShell
+                                        input-id="create-price-icd-code"
+                                        label="ICD"
+                                        container-class="col-span-6 sm:col-span-2"
+                                    >
+                                        <Input id="create-price-icd-code" v-model="createForm.standardsIcd" />
+                                    </FormFieldShell>
+                                    <FormFieldShell
+                                        input-id="create-price-metadata"
+                                        label="Metadata JSON"
+                                        container-class="col-span-6"
+                                        :error-message="firstError(createErrors, 'metadata')"
+                                    >
+                                        <Textarea id="create-price-metadata" v-model="createForm.metadataText" class="min-h-20 font-mono text-xs" />
+                                    </FormFieldShell>
                                 </div>
-                                <Button variant="outline" size="sm" class="h-9 gap-1.5" @click="search">
-                                    <AppIcon name="search" class="size-3.5" />
-                                    {{ listLoading ? 'Searching...' : 'Search' }}
-                                </Button>
+                            </details>
+                        </div>
+                    </ScrollArea>
+                    <SheetFooter class="shrink-0 gap-2 border-t bg-background px-4 py-3 sm:px-5">
+                        <Button type="button" variant="outline" :disabled="createLoading" @click="requestCreateSheetOpenChange(false)">
+                            Cancel
+                        </Button>
+                        <Button type="button" :disabled="createLoading || !createTariffReady" class="gap-1.5" @click="createItem">
+                            <AppIcon name="plus" class="size-3.5" />
+                            {{ createLoading ? 'Saving...' : 'Save new price' }}
+                        </Button>
+                    </SheetFooter>
+                </SheetContent>
+            </Sheet>
+
+            <div v-if="canRead" class="flex min-w-0 flex-col gap-4">
+                <Card class="flex flex-col rounded-lg border-sidebar-border/70 shadow-sm">
+                    <div class="flex flex-col gap-3 border-b px-4 py-3">
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div class="min-w-0">
+                                <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
+                                    <AppIcon name="receipt" class="size-4 text-primary" />
+                                    Billable services
+                                </h3>
+                                <p class="mt-1 text-xs text-muted-foreground">
+                                    {{ pagination?.total ?? items.length }} in scope · {{ listFilterHintText }}
+                                </p>
+                            </div>
+                            <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
+                                <SearchInput
+                                    v-model="filters.q"
+                                    placeholder="Search code, name, type, or department"
+                                    class="min-w-0 flex-1 text-xs [&_input]:h-8"
+                                    @keyup.enter="search"
+                                />
+                                <Select
+                                    :model-value="filterServiceTypeSelectValue"
+                                    @update:model-value="updateCatalogServiceTypeFilter"
+                                >
+                                    <SelectTrigger class="h-8 w-full min-w-[10rem] text-xs sm:w-[11rem]">
+                                        <SelectValue placeholder="All types" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="__none__">All types</SelectItem>
+                                        <SelectItem v-for="option in serviceTypeOptions" :key="option" :value="option">
+                                            {{ formatEnumLabel(option) }}
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    class="h-9 gap-1.5"
-                                    @click="showCatalogAdvancedFilters = !showCatalogAdvancedFilters"
+                                    class="h-8 gap-1.5 rounded-lg text-xs"
+                                    @click="filtersSheetOpen = true"
                                 >
-                                    {{ showCatalogAdvancedFilters ? 'Hide more filters' : 'More filters' }}
-                                    <Badge v-if="catalogAdvancedFilterCount > 0" variant="secondary">{{ catalogAdvancedFilterCount }}</Badge>
+                                    <AppIcon name="sliders-horizontal" class="size-3.5" />
+                                    Filters
+                                    <Badge v-if="catalogActiveFilterCount > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">
+                                        {{ catalogActiveFilterCount }}
+                                    </Badge>
                                 </Button>
-                                <div class="flex items-center gap-1 rounded-lg border bg-muted/10 p-1">
-                                    <Button size="sm" class="h-7 px-2.5" :variant="compactCatalogQueueRows ? 'ghost' : 'default'" @click="setCatalogQueueDensity(false)">Comfortable</Button>
-                                    <Button size="sm" class="h-7 px-2.5" :variant="compactCatalogQueueRows ? 'default' : 'ghost'" @click="setCatalogQueueDensity(true)">Compact</Button>
-                                </div>
-                                <Button v-if="catalogActiveFilterCount > 0" variant="ghost" size="sm" class="h-9 gap-1.5" @click="resetFilters">Clear</Button>
                             </div>
                         </div>
-                        <div v-if="showCatalogAdvancedFilters" class="grid gap-2 rounded-lg border bg-muted/10 p-3 md:grid-cols-2 xl:grid-cols-5">
-                            <ComboboxField
-                                input-id="catalog-department"
-                                label="Department"
-                                :model-value="filters.departmentId"
-                                @update:model-value="updateCatalogDepartmentFilter"
-                                :options="filterDepartmentOptions"
-                                placeholder="All departments"
-                                search-placeholder="Search department code or name"
-                                helper-text="Narrow this list to one hospital department."
-                                :empty-text="createDepartmentEmptyText"
-                            />
-                            <FormFieldShell input-id="catalog-currency" label="Currency">
-                                <Input id="catalog-currency" v-model="filters.currencyCode" maxlength="3" :placeholder="defaultCurrencyCode" @keyup.enter="search" />
-                            </FormFieldShell>
-                            <FormFieldShell input-id="catalog-sort-by" label="Sort by">
-                                <Select
-                                    :model-value="filterSortBySelectValue"
-                                    @update:model-value="updateCatalogSortByFilter"
-                                >
-                                    <SelectTrigger id="catalog-sort-by" class="w-full">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="serviceName">Service name</SelectItem>
-                                        <SelectItem value="serviceCode">Service code</SelectItem>
-                                        <SelectItem value="serviceType">Service type</SelectItem>
-                                        <SelectItem value="department">Department</SelectItem>
-                                        <SelectItem value="basePrice">Base price</SelectItem>
-                                        <SelectItem value="currencyCode">Currency</SelectItem>
-                                        <SelectItem value="status">Status</SelectItem>
-                                        <SelectItem value="effectiveFrom">Effective from</SelectItem>
-                                        <SelectItem value="updatedAt">Updated</SelectItem>
-                                        <SelectItem value="createdAt">Created</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </FormFieldShell>
-                            <FormFieldShell input-id="catalog-sort-dir" label="Direction">
-                                <Select
-                                    :model-value="filterSortDirSelectValue"
-                                    @update:model-value="updateCatalogSortDirFilter"
-                                >
-                                    <SelectTrigger id="catalog-sort-dir" class="w-full">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="asc">Ascending</SelectItem>
-                                        <SelectItem value="desc">Descending</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </FormFieldShell>
-                            <FormFieldShell input-id="catalog-per-page" label="Rows">
-                                <Select
-                                    :model-value="filterPerPageSelectValue"
-                                    @update:model-value="updateCatalogPerPageFilter"
-                                >
-                                    <SelectTrigger id="catalog-per-page" class="w-full">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="10">10</SelectItem>
-                                        <SelectItem value="15">15</SelectItem>
-                                        <SelectItem value="25">25</SelectItem>
-                                        <SelectItem value="50">50</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </FormFieldShell>
-                        </div>
-                        <div v-if="catalogActiveFilterChips.length > 0" class="flex flex-wrap items-center gap-2 border-t pt-2">
-                            <Badge v-for="chip in catalogActiveFilterChips" :key="`catalog-filter-${chip}`" variant="outline">
-                                {{ chip }}
-                            </Badge>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': catalogListModeIsActive('all') }"
+                                @click="applyCatalogListModePreset('all')"
+                            >
+                                <span class="inline-block h-2 w-2 rounded-full bg-slate-400" />
+                                <span class="font-medium tabular-nums">{{ statusCounts.total }}</span>
+                                <span class="text-muted-foreground">All</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': catalogListModeIsActive('active') }"
+                                @click="applyCatalogListModePreset('active')"
+                            >
+                                <span class="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                                <span class="font-medium tabular-nums">{{ statusCounts.active }}</span>
+                                <span class="text-muted-foreground">Active</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': catalogListModeIsActive('scheduled') }"
+                                @click="applyCatalogListModePreset('scheduled')"
+                            >
+                                <span class="inline-block h-2 w-2 rounded-full bg-blue-500" />
+                                <span class="text-muted-foreground">Scheduled</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': catalogListModeIsActive('review') }"
+                                @click="applyCatalogListModePreset('review')"
+                            >
+                                <span class="inline-block h-2 w-2 rounded-full bg-amber-500" />
+                                <span class="font-medium tabular-nums">{{ statusCounts.inactive }}</span>
+                                <span class="text-muted-foreground">Review</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': catalogListModeIsActive('retired') }"
+                                @click="applyCatalogListModePreset('retired')"
+                            >
+                                <span class="inline-block h-2 w-2 rounded-full bg-rose-500" />
+                                <span class="font-medium tabular-nums">{{ statusCounts.retired }}</span>
+                                <span class="text-muted-foreground">Retired</span>
+                            </button>
                         </div>
                     </div>
-                </CardHeader>
-                <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+                    <div v-if="catalogActiveFilterChips.length > 0" class="flex flex-wrap items-center gap-1.5 border-b px-4 py-2">
+                        <span class="text-[11px] text-muted-foreground">Filters:</span>
+                        <Badge v-for="chip in catalogActiveFilterChips" :key="`catalog-filter-${chip}`" variant="outline" class="text-[11px]">
+                            {{ chip }}
+                        </Badge>
+                        <button class="ml-1 text-[11px] text-muted-foreground underline-offset-2 hover:underline" @click="resetFilters">
+                            Clear all
+                        </button>
+                    </div>
+                    <CardContent class="flex flex-col overflow-hidden p-0">
                     <div v-if="listError" class="p-4">
                         <Alert variant="destructive">
                             <AlertTitle>Price list load issue</AlertTitle>
@@ -3327,118 +3221,283 @@ watch(
                         </Alert>
                     </div>
 
-                    <ScrollArea v-else class="min-h-0 flex-1">
-                        <div class="min-h-[12rem] p-4" :class="compactCatalogQueueRows ? 'space-y-2' : 'space-y-3'">
-                            <div v-if="catalogShowInitialSkeleton" class="space-y-2">
-                                <Skeleton class="h-24 w-full rounded-lg" />
-                                <Skeleton class="h-24 w-full rounded-lg" />
-                                <Skeleton class="h-24 w-full rounded-lg" />
+                    <ScrollArea v-else class="max-h-[min(70vh,42rem)]">
+                        <div>
+                            <div v-if="catalogShowInitialSkeleton" class="divide-y px-4">
+                                <div v-for="index in 6" :key="`catalog-skeleton-${index}`" class="flex items-center gap-3 py-3">
+                                    <Skeleton class="size-2 shrink-0 rounded-full" />
+                                    <div class="min-w-0 flex-1 space-y-2">
+                                        <Skeleton class="h-4 w-48" />
+                                        <Skeleton class="h-3.5 w-72 max-w-full" />
+                                    </div>
+                                    <Skeleton class="hidden h-5 w-16 shrink-0 rounded-full sm:block" />
+                                    <Skeleton class="h-8 w-16 shrink-0 rounded-md" />
+                                </div>
                             </div>
 
-                            <template v-else>
-                                <div v-if="catalogListRefreshing" class="sticky top-0 z-10 -mb-1 flex justify-end pb-2">
-                                    <Badge variant="secondary" class="gap-1.5 shadow-sm">
-                                        <AppIcon name="loader-circle" class="size-3.5 animate-spin" />
-                                        Refreshing list
-                                    </Badge>
+                            <div
+                                v-else-if="items.length === 0"
+                                class="flex flex-col items-center gap-3 px-4 py-10 text-center"
+                                :class="{ 'opacity-60': catalogListRefreshing }"
+                            >
+                                <div class="flex size-10 items-center justify-center rounded-lg bg-muted">
+                                    <AppIcon name="receipt" class="size-4 text-muted-foreground" />
                                 </div>
-
-                                <div
-                                    v-if="items.length === 0"
-                                    class="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground"
-                                >
-                                    <div v-if="catalogListRefreshing" class="flex flex-col items-center gap-2">
-                                        <AppIcon name="loader-circle" class="size-4 animate-spin" />
-                                        <span>Refreshing filtered prices...</span>
-                                    </div>
-                                    <span v-else-if="catalogActiveFilterChips.length === 0 && (pagination?.total ?? 0) === 0">
-                                        No service prices exist yet. The modern path is Clinical Care Catalog first, then linked tariffs here so finance does not recreate service names and codes.
-                                    </span>
-                                    <span v-else>No prices matched the current list filters.</span>
+                                <div class="space-y-1">
+                                    <p class="text-sm font-medium">
+                                        {{ catalogListRefreshing ? 'Refreshing prices…' : 'No service prices found' }}
+                                    </p>
+                                    <p class="text-xs text-muted-foreground">
+                                        <template v-if="catalogListRefreshing">
+                                            Updating the list with your current filters.
+                                        </template>
+                                        <template v-else-if="catalogActiveFilterCount === 0 && (pagination?.total ?? 0) === 0">
+                                            Start from Clinical Care Catalog, then register linked tariffs here so finance does not duplicate service codes.
+                                        </template>
+                                        <template v-else>
+                                            Adjust or clear filters to widen the catalog.
+                                        </template>
+                                    </p>
                                 </div>
-
-                                <div
-                                    v-else
-                                    :class="[
-                                        compactCatalogQueueRows ? 'space-y-2' : 'space-y-3',
-                                        catalogListRefreshing ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity',
-                                    ]"
-                                >
-                                    <div
-                                        v-for="item in items"
-                                        :key="String(item.id)"
-                                        :class="[compactCatalogQueueRows ? 'p-2.5' : 'p-3', 'rounded-lg border bg-background/70', catalogQueueAccentClass(item)]"
+                                <div class="flex flex-wrap justify-center gap-2">
+                                    <Button
+                                        v-if="catalogActiveFilterCount > 0"
+                                        variant="outline"
+                                        size="sm"
+                                        class="h-8 gap-1.5"
+                                        @click="resetFilters"
                                     >
-                                        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                            <div :class="compactCatalogQueueRows ? 'space-y-1.5' : 'space-y-2'" class="min-w-0 flex-1">
-                                                <div class="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
-                                                    <div class="min-w-0 space-y-1">
-                                                        <div class="flex flex-wrap items-start justify-between gap-2">
-                                                            <p class="min-w-0 text-sm font-semibold">
-                                                                {{ item.serviceName || 'Unnamed service' }}
-                                                            </p>
-                                                            <div class="shrink-0 text-right">
-                                                                <p class="whitespace-nowrap text-base font-semibold leading-none">{{ formatMoney(item.basePrice, item.currencyCode) }}</p>
-                                                            </div>
-                                                        </div>
-                                                        <div class="flex flex-wrap items-center gap-2">
-                                                            <Badge variant="outline">{{ item.serviceCode || 'NO-CODE' }}</Badge>
-                                                            <Badge variant="outline">v{{ item.versionNumber || 1 }}</Badge>
-                                                            <Badge :variant="statusVariant(item.status)">{{ formatEnumLabel(item.status) }}</Badge>
-                                                            <Badge :variant="tariffLifecycleVariant(item.effectiveFrom, item.effectiveTo)">
-                                                                {{ tariffLifecycleLabel(item.effectiveFrom, item.effectiveTo) }}
-                                                            </Badge>
-                                                            <Badge :variant="item.clinicalCatalogItemId ? 'secondary' : 'outline'">
-                                                                {{ clinicalCatalogLinkLabel(item) }}
-                                                            </Badge>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                                                    <span>{{ item.serviceType ? formatEnumLabel(item.serviceType) : 'Type not set' }}</span>
-                                                    <span>|</span>
-                                                    <span>{{ item.department || 'Department not set' }}</span>
-                                                    <span>|</span>
-                                                    <span>{{ item.unit ? formatEnumLabel(item.unit) : 'Unit not set' }}</span>
-                                                </div>
-                                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                                                    <span>Window {{ tariffWindowLabel(item.effectiveFrom, item.effectiveTo) }}</span>
-                                                    <span>|</span>
-                                                    <span>Taxable {{ boolLabel(item.isTaxable) }}</span>
-                                                    <span>|</span>
-                                                    <span>Updated {{ formatDateTime(item.updatedAt) }}</span>
-                                                </div>
-                                                <div class="rounded-md border border-dashed bg-muted/10 px-2.5 py-2 text-xs text-muted-foreground">
-                                                    {{ clinicalCatalogLinkDetail(item) }}
-                                                </div>
-                                                <div
-                                                    v-if="item.statusReason"
-                                                    class="rounded-md border border-dashed bg-muted/10 px-2.5 py-2 text-xs text-muted-foreground"
-                                                >
-                                                    Status note: {{ item.statusReason }}
-                                                </div>
-                                            </div>
-                                            <div class="flex shrink-0 items-center gap-2">
-                                                <Button size="sm" variant="outline" @click="openDetails(item)">Open price</Button>
-                                            </div>
+                                        <AppIcon name="x" class="size-3.5" />
+                                        Clear filters
+                                    </Button>
+                                    <Button v-if="canManagePricing" size="sm" class="h-8 gap-1.5" @click="openCreateSheet">
+                                        <AppIcon name="plus" class="size-3.5" />
+                                        Add service price
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <div
+                                v-else
+                                class="divide-y px-4"
+                                :class="catalogListRefreshing ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'"
+                            >
+                                <div
+                                    v-for="item in items"
+                                    :key="String(item.id)"
+                                    class="flex items-center gap-3 py-3 transition-colors hover:bg-muted/30"
+                                >
+                                    <span
+                                        class="size-2 shrink-0 rounded-full"
+                                        :class="catalogStatusDotClass(item)"
+                                        :title="`${formatEnumLabel(item.status)} · ${tariffLifecycleLabel(item.effectiveFrom, item.effectiveTo)}`"
+                                    />
+                                    <button
+                                        type="button"
+                                        class="min-w-0 flex-1 space-y-0.5 text-left"
+                                        @click="openDetails(item)"
+                                    >
+                                        <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                            <span class="truncate text-sm font-medium transition-colors hover:text-primary">
+                                                {{ item.serviceName || 'Unnamed service' }}
+                                            </span>
+                                            <span class="shrink-0 text-xs text-muted-foreground">{{ item.serviceCode || 'No code' }}</span>
+                                            <span class="shrink-0 text-xs font-medium tabular-nums text-foreground">
+                                                {{ formatMoney(item.basePrice, item.currencyCode) }}
+                                            </span>
                                         </div>
+                                        <p class="truncate text-xs text-muted-foreground">
+                                            {{ item.serviceType ? formatEnumLabel(item.serviceType) : 'Type not set' }}
+                                            <span class="text-border"> · </span>
+                                            {{ item.department || 'No department' }}
+                                            <span class="text-border"> · </span>
+                                            v{{ item.versionNumber || 1 }}
+                                            <span class="text-border"> · </span>
+                                            {{ tariffLifecycleLabel(item.effectiveFrom, item.effectiveTo) }}
+                                            <span class="text-border"> · </span>
+                                            {{ clinicalCatalogLinkLabel(item) }}
+                                        </p>
+                                    </button>
+                                    <Badge :variant="statusVariant(item.status)" class="hidden shrink-0 capitalize sm:inline-flex">
+                                        {{ formatEnumLabel(item.status) }}
+                                    </Badge>
+                                    <div class="flex shrink-0 items-center gap-1.5">
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            class="h-8 rounded-lg text-xs"
+                                            @click="openDetails(item)"
+                                        >
+                                            Details
+                                        </Button>
                                     </div>
                                 </div>
-                            </template>
+                            </div>
                         </div>
                     </ScrollArea>
 
-                    <div class="flex items-center justify-between border-t px-4 py-3">
-                        <Button variant="outline" size="sm" :disabled="listLoading || (pagination?.currentPage ?? 1) <= 1" @click="prevPage">Previous</Button>
+                    <footer class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
                         <p class="text-xs text-muted-foreground">
-                            Showing {{ items.length }} on this page
-                            <span v-if="pagination">| {{ pagination.total }} total</span>
-                            | Page {{ pagination?.currentPage ?? 1 }} of {{ pagination?.lastPage ?? 1 }}
+                            <template v-if="pagination">
+                                Showing {{ items.length }} of {{ pagination.total }} · Page {{ pagination.currentPage }} of
+                                {{ pagination.lastPage }}
+                            </template>
+                            <template v-else>No pagination data</template>
                         </p>
-                        <Button variant="outline" size="sm" :disabled="listLoading || !pagination || pagination.currentPage >= pagination.lastPage" @click="nextPage">Next</Button>
-                    </div>
+                        <div class="flex items-center gap-1">
+                            <Button variant="outline" size="icon" class="size-8" :disabled="!canPrevPage || listLoading" @click="prevPage">
+                                <AppIcon name="chevron-left" class="size-4" />
+                            </Button>
+                            <template v-for="page in paginationPageNumbers" :key="`catalog-page-${String(page)}`">
+                                <span v-if="page === '...'" class="px-1 text-xs text-muted-foreground">…</span>
+                                <Button
+                                    v-else
+                                    :variant="page === pagination?.currentPage ? 'default' : 'ghost'"
+                                    size="icon"
+                                    class="size-8 text-xs"
+                                    :disabled="listLoading"
+                                    @click="goToPage(page as number)"
+                                >
+                                    {{ page }}
+                                </Button>
+                            </template>
+                            <Button variant="outline" size="icon" class="size-8" :disabled="!canNextPage || listLoading" @click="nextPage">
+                                <AppIcon name="chevron-right" class="size-4" />
+                            </Button>
+                        </div>
+                    </footer>
                 </CardContent>
             </Card>
+
+            <Sheet :open="filtersSheetOpen" @update:open="filtersSheetOpen = $event">
+                <SheetContent side="right" variant="form" size="2xl" class="flex h-full min-h-0 flex-col">
+                    <SheetHeader>
+                        <SheetTitle class="flex items-center gap-2">
+                            <AppIcon name="sliders-horizontal" class="size-4 text-muted-foreground" />
+                            Catalog filters
+                        </SheetTitle>
+                        <SheetDescription>Narrow the price list without crowding the registry.</SheetDescription>
+                    </SheetHeader>
+                    <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+                        <div class="rounded-lg border p-3">
+                            <div class="grid gap-3">
+                                <div class="grid gap-2">
+                                    <Label for="catalog-filter-q">Search</Label>
+                                    <Input
+                                        id="catalog-filter-q"
+                                        v-model="filters.q"
+                                        placeholder="Code, name, type, department"
+                                        @keyup.enter="applyFiltersFromSheet"
+                                    />
+                                </div>
+                                <div class="grid gap-2">
+                                    <Label for="catalog-filter-type">Service type</Label>
+                                    <Select
+                                        :model-value="filterServiceTypeSelectValue"
+                                        @update:model-value="updateCatalogServiceTypeFilter"
+                                    >
+                                        <SelectTrigger id="catalog-filter-type" class="w-full">
+                                            <SelectValue placeholder="All types" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="__none__">All types</SelectItem>
+                                            <SelectItem v-for="option in serviceTypeOptions" :key="option" :value="option">
+                                                {{ formatEnumLabel(option) }}
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <ComboboxField
+                                    input-id="catalog-filter-department"
+                                    label="Department"
+                                    :model-value="filters.departmentId"
+                                    @update:model-value="updateCatalogDepartmentFilter"
+                                    :options="filterDepartmentOptions"
+                                    placeholder="All departments"
+                                    search-placeholder="Search department code or name"
+                                    helper-text="Limit results to one hospital department."
+                                    :empty-text="createDepartmentEmptyText"
+                                />
+                                <div class="grid gap-2">
+                                    <Label for="catalog-filter-currency">Currency</Label>
+                                    <Input
+                                        id="catalog-filter-currency"
+                                        v-model="filters.currencyCode"
+                                        maxlength="3"
+                                        :placeholder="defaultCurrencyCode"
+                                        @keyup.enter="applyFiltersFromSheet"
+                                    />
+                                </div>
+                                <Separator />
+                                <div class="grid gap-2">
+                                    <Label for="catalog-filter-sort-by">Sort by</Label>
+                                    <Select
+                                        :model-value="filterSortBySelectValue"
+                                        @update:model-value="updateCatalogSortByFilter"
+                                    >
+                                        <SelectTrigger id="catalog-filter-sort-by" class="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="serviceName">Service name</SelectItem>
+                                            <SelectItem value="serviceCode">Service code</SelectItem>
+                                            <SelectItem value="serviceType">Service type</SelectItem>
+                                            <SelectItem value="department">Department</SelectItem>
+                                            <SelectItem value="basePrice">Base price</SelectItem>
+                                            <SelectItem value="currencyCode">Currency</SelectItem>
+                                            <SelectItem value="status">Status</SelectItem>
+                                            <SelectItem value="effectiveFrom">Effective from</SelectItem>
+                                            <SelectItem value="updatedAt">Updated</SelectItem>
+                                            <SelectItem value="createdAt">Created</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div class="grid gap-2">
+                                    <Label for="catalog-filter-sort-dir">Direction</Label>
+                                    <Select
+                                        :model-value="filterSortDirSelectValue"
+                                        @update:model-value="updateCatalogSortDirFilter"
+                                    >
+                                        <SelectTrigger id="catalog-filter-sort-dir" class="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="asc">Ascending</SelectItem>
+                                            <SelectItem value="desc">Descending</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div class="grid gap-2">
+                                    <Label for="catalog-filter-per-page">Results per page</Label>
+                                    <Select
+                                        :model-value="filterPerPageSelectValue"
+                                        @update:model-value="updateCatalogPerPageFilter"
+                                    >
+                                        <SelectTrigger id="catalog-filter-per-page" class="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="10">10</SelectItem>
+                                            <SelectItem value="15">15</SelectItem>
+                                            <SelectItem value="25">25</SelectItem>
+                                            <SelectItem value="50">50</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <SheetFooter class="gap-2 border-t px-4 py-3">
+                        <Button :disabled="listLoading" class="gap-1.5" @click="applyFiltersFromSheet">
+                            <AppIcon name="search" class="size-3.5" />
+                            Apply filters
+                        </Button>
+                        <Button variant="outline" :disabled="listLoading && catalogActiveFilterCount === 0" @click="resetFiltersFromSheet">
+                            Reset filters
+                        </Button>
+                    </SheetFooter>
+                </SheetContent>
+            </Sheet>
 
             <Sheet :open="detailsOpen" @update:open="requestDetailsOpenChange">
                 <SheetContent side="right" variant="workspace" size="6xl">
@@ -3452,6 +3511,10 @@ watch(
                                 </SheetDescription>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
+                                <Badge v-if="detailsLoading" variant="secondary" class="gap-1.5">
+                                    <AppIcon name="loader-circle" class="size-3 animate-spin" />
+                                    Syncing
+                                </Badge>
                                 <Badge variant="outline">Version {{ selectedItem?.versionNumber || 1 }}</Badge>
                                 <Badge v-if="selectedItem" :variant="statusVariant(selectedItem.status)">{{ formatEnumLabel(selectedItem.status) }}</Badge>
                                 <Badge v-if="selectedItem" :variant="tariffLifecycleVariant(selectedItem.effectiveFrom, selectedItem.effectiveTo)">
@@ -3485,17 +3548,7 @@ watch(
                     </SheetHeader>
 
                     <div class="min-h-0 flex-1 overflow-hidden">
-                        <div v-if="detailsLoading" class="space-y-2 p-4">
-                            <Skeleton class="h-14 w-full" />
-                            <Skeleton class="h-14 w-full" />
-                        </div>
-
-                        <Alert v-else-if="detailsError" variant="destructive" class="m-4">
-                            <AlertTitle>Details load issue</AlertTitle>
-                            <AlertDescription>{{ detailsError }}</AlertDescription>
-                        </Alert>
-
-                        <Tabs v-else-if="selectedItem" v-model="detailsTab" class="flex h-full min-h-0 flex-col">
+                        <Tabs v-if="selectedItem" v-model="detailsTab" class="flex h-full min-h-0 flex-col">
                             <div class="border-b bg-muted/5 px-4 py-2.5">
                                 <TabsList class="flex h-auto w-full flex-wrap justify-start gap-2 bg-transparent p-0">
                                     <TabsTrigger value="overview" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Overview</TabsTrigger>
@@ -3509,6 +3562,11 @@ watch(
 
                             <ScrollArea class="min-h-0 flex-1">
                                 <div class="space-y-4 p-4">
+                                    <Alert v-if="detailsError" variant="destructive">
+                                        <AlertTitle>Details sync issue</AlertTitle>
+                                        <AlertDescription>{{ detailsError }}</AlertDescription>
+                                    </Alert>
+
                                     <TabsContent value="overview" class="space-y-3">
                                         <div class="space-y-3">
                                             <div class="rounded-lg border border-dashed bg-muted/10 p-3">
@@ -3521,11 +3579,17 @@ watch(
                                                         {{ clinicalCatalogLinkLabel(selectedItem) }}
                                                     </Badge>
                                                 </div>
-                                                <p class="mt-3 text-sm font-medium">{{ selectedItem?.clinicalCatalogItem?.name || 'No linked clinical definition' }}</p>
-                                                <p class="mt-1 text-xs text-muted-foreground">{{ clinicalCatalogLinkDetail(selectedItem) }}</p>
+                                                <div v-if="detailsClinicalLinkagePending" class="mt-3 space-y-2">
+                                                    <Skeleton class="h-4 w-56" />
+                                                    <Skeleton class="h-3 w-full max-w-md" />
+                                                </div>
+                                                <template v-else>
+                                                    <p class="mt-3 text-sm font-medium">{{ selectedItem?.clinicalCatalogItem?.name || 'No linked clinical definition' }}</p>
+                                                    <p class="mt-1 text-xs text-muted-foreground">{{ clinicalCatalogLinkDetail(selectedItem) }}</p>
+                                                </template>
                                             </div>
 
-                                            <Alert v-if="selectedItem?.linkWarning || (selectedItem?.standardsWarnings?.length ?? 0) > 0">
+                                            <Alert v-if="!detailsLoading && (selectedItem?.linkWarning || (selectedItem?.standardsWarnings?.length ?? 0) > 0)">
                                                 <AlertTitle>Governance review</AlertTitle>
                                                 <AlertDescription class="space-y-1">
                                                     <p v-if="selectedItem?.linkWarning">{{ selectedItem.linkWarning }}</p>
@@ -4138,6 +4202,7 @@ watch(
                     </SheetFooter>
                 </SheetContent>
             </Sheet>
+            </div>
 
             <LeaveWorkflowDialog
                 :open="leaveConfirmOpen"
