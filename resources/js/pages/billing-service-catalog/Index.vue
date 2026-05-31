@@ -273,7 +273,7 @@ const createForm = reactive({
     standardsSnomedCt: '',
     standardsCpt: '',
     standardsIcd: '',
-    metadataText: '{}',
+    metadataText: '',
 });
 
 const detailsOpen = ref(false);
@@ -748,7 +748,7 @@ const hasPendingCreateCatalogWorkflow = computed(() => Boolean(
     || createForm.standardsSnomedCt.trim()
     || createForm.standardsCpt.trim()
     || createForm.standardsIcd.trim()
-    || createForm.metadataText.trim() !== '{}'
+    || createForm.metadataText.trim() !== ''
 ));
 
 const revisionGovernanceMessage = computed(() => {
@@ -978,7 +978,7 @@ const editForm = reactive({
     standardsSnomedCt: '',
     standardsCpt: '',
     standardsIcd: '',
-    metadataText: '{}',
+    metadataText: '',
 });
 
 type StandardsForm = {
@@ -1026,7 +1026,7 @@ const revisionForm = reactive({
     effectiveFrom: '',
     effectiveTo: '',
     description: '',
-    metadataText: '{}',
+    metadataText: '',
 });
 
 const statusLoading = ref(false);
@@ -1249,7 +1249,7 @@ function resetCreateCatalogForm(): void {
     createForm.description = '';
     createForm.facilityTier = '';
     applyStandardsCodesToForm(createForm, null);
-    createForm.metadataText = '{}';
+    createForm.metadataText = '';
     clearCreateFamilyPreview();
     createErrors.value = {};
 }
@@ -1421,6 +1421,33 @@ function parseDecimalOrNull(value: string): number | null | 'invalid' {
     return parsed;
 }
 
+function metadataObject(value: unknown): Record<string, unknown> | null {
+    if (value === null || value === undefined) return null;
+    if (Array.isArray(value)) return null;
+    if (typeof value !== 'object') return null;
+    if (Object.keys(value as Record<string, unknown>).length === 0) return null;
+
+    return value as Record<string, unknown>;
+}
+
+function metadataHasContent(value: unknown): boolean {
+    return metadataObject(value) !== null;
+}
+
+function metadataToFormText(value: unknown): string {
+    const object = metadataObject(value);
+    if (!object) return '';
+
+    return JSON.stringify(object, null, 2);
+}
+
+function metadataValuesEqual(stored: unknown, formText: string): boolean {
+    const parsed = parseMetadata(formText);
+    if (parsed === 'invalid') return false;
+
+    return JSON.stringify(metadataObject(stored)) === JSON.stringify(parsed);
+}
+
 function parseMetadata(value: string): Record<string, unknown> | null | 'invalid' {
     const normalized = value.trim();
     if (!normalized) return null;
@@ -1590,9 +1617,17 @@ const hasPendingPricingWorkflow = computed(() => {
         || editForm.effectiveFrom.trim() !== toDateTimeInput(item.effectiveFrom)
         || editForm.effectiveTo.trim() !== toDateTimeInput(item.effectiveTo)
         || editForm.description.trim() !== String(item.description ?? '').trim()
-        || editForm.metadataText.trim() !== JSON.stringify(item.metadata ?? {}, null, 2)
+        || !metadataValuesEqual(item.metadata, editForm.metadataText)
     );
 });
+
+const showEditTechnicalMetadata = computed(() => (
+    metadataHasContent(selectedItem.value?.metadata) || editForm.metadataText.trim() !== ''
+));
+
+const showRevisionTechnicalMetadata = computed(() => (
+    metadataHasContent(selectedItem.value?.metadata) || revisionForm.metadataText.trim() !== ''
+));
 
 const hasPendingRevisionWorkflow = computed(() => {
     const item = selectedItem.value;
@@ -1605,7 +1640,7 @@ const hasPendingRevisionWorkflow = computed(() => {
         || revisionForm.effectiveFrom.trim()
         || revisionForm.effectiveTo.trim()
         || revisionForm.description.trim() !== String(item.description ?? '').trim()
-        || revisionForm.metadataText.trim() !== JSON.stringify(item.metadata ?? {}, null, 2)
+        || !metadataValuesEqual(item.metadata, revisionForm.metadataText)
     );
 });
 
@@ -1662,7 +1697,7 @@ function hydrateEditForm(item: CatalogItem): void {
     editForm.description = item.description ?? '';
     editForm.facilityTier = item.facilityTier ?? '';
     applyStandardsCodesToForm(editForm, item.codes);
-    editForm.metadataText = JSON.stringify(item.metadata ?? {}, null, 2);
+    editForm.metadataText = metadataToFormText(item.metadata);
 
     statusForm.status = (item.status ?? 'active') as CatalogStatus;
     statusForm.reason = item.statusReason ?? '';
@@ -1675,7 +1710,7 @@ function hydrateRevisionForm(item: CatalogItem): void {
     revisionForm.effectiveFrom = '';
     revisionForm.effectiveTo = '';
     revisionForm.description = item.description ?? '';
-    revisionForm.metadataText = JSON.stringify(item.metadata ?? {}, null, 2);
+    revisionForm.metadataText = metadataToFormText(item.metadata);
 }
 
 function seedDetailsWorkspace(item: CatalogItem): void {
@@ -2027,7 +2062,7 @@ async function createItem(): Promise<void> {
     if (basePrice === null || basePrice === 'invalid') localErrors.basePrice = ['Base price must be a valid non-negative number.'];
     if (!createForm.currencyCode.trim()) localErrors.currencyCode = ['Currency code is required.'];
     if (taxRatePercent === 'invalid') localErrors.taxRatePercent = ['Tax rate must be a valid non-negative number.'];
-    if (metadata === 'invalid') localErrors.metadata = ['Metadata must be a valid JSON object.'];
+    if (metadata === 'invalid') localErrors.metadata = ['System integration notes must be a valid JSON object.'];
     if (createFamilyAlreadyExists.value) localErrors.serviceCode = ['Service code already exists in the current scope. Open the existing tariff family and create a new version instead.'];
     if (createTariffWindowValidationMessage.value) localErrors.effectiveTo = [createTariffWindowValidationMessage.value];
 
@@ -2231,7 +2266,7 @@ async function savePricing(): Promise<void> {
     if (basePrice === null || basePrice === 'invalid') localErrors.basePrice = ['Base price must be a valid non-negative number.'];
     if (!editForm.currencyCode.trim()) localErrors.currencyCode = ['Currency code is required.'];
     if (taxRatePercent === 'invalid') localErrors.taxRatePercent = ['Tax rate must be a valid non-negative number.'];
-    if (metadata === 'invalid') localErrors.metadata = ['Metadata must be a valid JSON object.'];
+    if (metadata === 'invalid') localErrors.metadata = ['System integration notes must be a valid JSON object.'];
     if (editTariffWindowValidationMessage.value) localErrors.effectiveTo = [editTariffWindowValidationMessage.value];
 
     if (Object.keys(localErrors).length > 0) {
@@ -2337,7 +2372,7 @@ async function createRevision(): Promise<void> {
     if (basePrice === null || basePrice === 'invalid') localErrors.basePrice = ['Revision base price must be a valid non-negative number.'];
     if (!revisionForm.effectiveFrom.trim()) localErrors.effectiveFrom = ['Revision effective from is required.'];
     if (taxRatePercent === 'invalid') localErrors.taxRatePercent = ['Tax rate must be a valid non-negative number.'];
-    if (metadata === 'invalid') localErrors.metadata = ['Metadata must be a valid JSON object.'];
+    if (metadata === 'invalid') localErrors.metadata = ['System integration notes must be a valid JSON object.'];
     if (revisionWindowValidationMessage.value) localErrors.effectiveTo = [revisionWindowValidationMessage.value];
 
     if (Object.keys(localErrors).length > 0) {
@@ -3009,7 +3044,7 @@ watch(
                             </fieldset>
 
                             <details class="rounded-lg border p-3">
-                                <summary class="cursor-pointer text-sm font-medium text-muted-foreground">Standards and metadata (optional)</summary>
+                                <summary class="cursor-pointer text-sm font-medium text-muted-foreground">Billing standards (optional)</summary>
                                 <div class="mt-3 grid grid-cols-6 gap-3">
                                     <FormFieldShell
                                         input-id="create-price-facility-tier"
@@ -3079,14 +3114,6 @@ watch(
                                         container-class="col-span-6 sm:col-span-2"
                                     >
                                         <Input id="create-price-icd-code" v-model="createForm.standardsIcd" />
-                                    </FormFieldShell>
-                                    <FormFieldShell
-                                        input-id="create-price-metadata"
-                                        label="Metadata JSON"
-                                        container-class="col-span-6"
-                                        :error-message="firstError(createErrors, 'metadata')"
-                                    >
-                                        <Textarea id="create-price-metadata" v-model="createForm.metadataText" class="min-h-20 font-mono text-xs" />
                                     </FormFieldShell>
                                 </div>
                             </details>
@@ -3789,9 +3816,23 @@ watch(
                                                 <FormFieldShell input-id="edit-price-description" label="Description" container-class="md:col-span-4">
                                                     <Textarea id="edit-price-description" v-model="editForm.description" class="min-h-20" :disabled="!canManagePricing" />
                                                 </FormFieldShell>
-                                                <FormFieldShell input-id="edit-price-metadata" label="Metadata (JSON object)" container-class="md:col-span-4" :error-message="firstError(pricingErrors, 'metadata')">
-                                                    <Textarea id="edit-price-metadata" v-model="editForm.metadataText" class="min-h-24 font-mono text-xs" :disabled="!canManagePricing" />
-                                                </FormFieldShell>
+                                                <details
+                                                    v-if="showEditTechnicalMetadata"
+                                                    class="rounded-lg border border-dashed bg-muted/10 p-3 md:col-span-4"
+                                                >
+                                                    <summary class="cursor-pointer text-sm font-medium">System integration notes (technical)</summary>
+                                                    <p class="mt-2 text-xs text-muted-foreground">
+                                                        For IT or integration teams only. Hospital billing staff can ignore this section.
+                                                    </p>
+                                                    <FormFieldShell
+                                                        input-id="edit-price-metadata"
+                                                        label="Integration payload"
+                                                        container-class="mt-3"
+                                                        :error-message="firstError(pricingErrors, 'metadata')"
+                                                    >
+                                                        <Textarea id="edit-price-metadata" v-model="editForm.metadataText" class="min-h-24 font-mono text-xs" :disabled="!canManagePricing" />
+                                                    </FormFieldShell>
+                                                </details>
                                             </div>
                                         </div>
                                         <div class="flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
@@ -3877,15 +3918,23 @@ watch(
                                                     <Textarea id="revision-description" v-model="revisionForm.description" class="min-h-16" />
                                                 </FormFieldShell>
                                             </div>
-                                            <div class="mt-3 rounded-lg border bg-muted/10 p-3">
-                                                <div class="mb-2">
-                                                    <p class="text-sm font-medium">Advanced details</p>
-                                                    <p class="text-xs text-muted-foreground">Use metadata only when this price version needs extra system context.</p>
-                                                </div>
-                                                <FormFieldShell input-id="revision-metadata" label="Change metadata (JSON object)" :error-message="firstError(revisionErrors, 'metadata')">
+                                            <details
+                                                v-if="showRevisionTechnicalMetadata"
+                                                class="mt-3 rounded-lg border border-dashed bg-muted/10 p-3"
+                                            >
+                                                <summary class="cursor-pointer text-sm font-medium">System integration notes (technical)</summary>
+                                                <p class="mt-2 text-xs text-muted-foreground">
+                                                    Leave blank unless IT needs to carry integration data into the new price version.
+                                                </p>
+                                                <FormFieldShell
+                                                    input-id="revision-metadata"
+                                                    label="Integration payload"
+                                                    container-class="mt-3"
+                                                    :error-message="firstError(revisionErrors, 'metadata')"
+                                                >
                                                     <Textarea id="revision-metadata" v-model="revisionForm.metadataText" class="min-h-20 font-mono text-xs" />
                                                 </FormFieldShell>
-                                            </div>
+                                            </details>
                                             <div class="mt-3 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
                                                 <p class="text-xs text-muted-foreground">This keeps the current price auditable while preparing the next billing window.</p>
                                                 <Button :disabled="revisionLoading || Boolean(revisionWindowValidationMessage)" @click="createRevision">{{ revisionLoading ? 'Creating version...' : 'Create new version' }}</Button>
