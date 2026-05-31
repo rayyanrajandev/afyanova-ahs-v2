@@ -366,9 +366,6 @@ const credentialingQueueSummaryText = computed(() => {
     const filterText = staffFilterBadgeCount.value > 0 ? ` | ${staffFilterBadgeCount.value} active filters` : '';
     return `${staffQueueTotalCount.value} ${status} staff in ${roleScope}${filterText}`;
 });
-const credentialingQueueSnapshotText = computed(
-    () => `${queueStatusCounts.value.active} active | ${queueStatusCounts.value.suspended} suspended | ${queueStatusCounts.value.inactive} inactive`,
-);
 const staffFilterBadgeCount = computed(
     () =>
         Number(Boolean(staffFilters.q.trim()))
@@ -377,10 +374,6 @@ const staffFilterBadgeCount = computed(
         + Number(Boolean(staffFilters.perPage !== 12)),
 );
 const hasActiveStaffQueueFilters = computed(() => staffFilterBadgeCount.value > 0);
-const workspaceIntroText = computed(() => {
-    const total = staffQueueTotalCount.value;
-    return `${total} staff profiles for credentialing review · regulatory profiles, registrations, alerts, and audit evidence`;
-});
 const staffQueuePaginationPageNumbers = computed((): (number | '...')[] => {
     const total = staffMeta.value?.lastPage ?? 1;
     const current = staffMeta.value?.currentPage ?? 1;
@@ -459,11 +452,6 @@ const showCredentialingWorkspaceLoading = computed(
     () => !staffQueueReady.value || workspaceSyncLoading.value,
 );
 
-const scopeLabel = computed(() => {
-    if (!scope.value) return 'Scope Unavailable';
-    return scope.value.resolvedFrom === 'none' ? 'Scope Unresolved' : 'Scope Ready';
-});
-
 const selectedStaffContextLabel = computed(() => {
     if (!selectedStaff.value) {
         return 'Choose a staff profile from the queue to load credentialing data.';
@@ -476,63 +464,6 @@ const selectedStaffContextLabel = computed(() => {
     ].join(' / ');
 });
 const selectedStaffCredentialingNotApplicable = computed(() => credentialingStateNotApplicable(summary.value?.credentialingState ?? null));
-const workspaceHeaderMetaText = computed(() => {
-    const parts = [scopeLabel.value];
-    if (selectedStaff.value) {
-        parts.push(`Viewing ${staffDisplayName(selectedStaff.value)}`);
-    }
-    if (summary.value?.credentialingState) {
-        parts.push(credentialingStateLabel(summary.value.credentialingState, summary.value.blockingReasons));
-    }
-
-    return parts.join(' | ');
-});
-const selectedStaffStatusLine = computed(() => {
-    if (!selectedStaff.value) {
-        return 'Select a staff profile to open credentialing details.';
-    }
-
-    const parts = [] as string[];
-    if (selectedStaff.value.status) {
-        parts.push(formatLabel(selectedStaff.value.status));
-    }
-    if (summary.value?.credentialingState) {
-        parts.push(credentialingStateLabel(summary.value.credentialingState, summary.value.blockingReasons));
-    }
-    parts.push(selectedStaffHasVerifiedLinkedUser.value ? 'Email verified' : 'Email unverified');
-
-    return parts.join(' | ');
-});
-
-const activeTabMeta = computed(() => {
-    switch (activeTab.value) {
-        case 'regulatory':
-            return {
-                label: 'Regulatory Profile',
-                description: 'Primary regulator, authority level, supervision state, and local professional standing.',
-            };
-        case 'registrations':
-            return {
-                label: 'Registrations',
-                description: 'Practice registration, license cycles, CPD points, and verification evidence.',
-            };
-        case 'alerts':
-            return {
-                label: 'Alerts',
-                description: 'Cross-staff blockers, watch windows, and pending verification work.',
-            };
-        case 'audit':
-            return {
-                label: 'Audit',
-                description: 'Who changed regulatory data, registrations, and verification decisions.',
-            };
-        default:
-            return {
-                label: 'Summary',
-                description: 'Current readiness, blockers, and the best available verified registration.',
-            };
-    }
-});
 
 const selectedStaffHasVerifiedLinkedUser = computed(() => Boolean(selectedStaff.value?.userId) && Boolean(selectedStaff.value?.userEmailVerifiedAt));
 const selectedStaffGovernanceBlockerMessage = computed(() => {
@@ -715,13 +646,8 @@ const selectedStaffSnapshotCards = computed(() => {
             tone: selectedStaffCredentialingComplete.value ? 'text-emerald-600' : 'text-amber-600',
         },
         {
-            label: 'Verified',
-            value: String(summary.value.registrationSummary.verified),
-            tone: 'text-foreground',
-        },
-        {
-            label: 'Pending',
-            value: String(summary.value.registrationSummary.pendingVerification),
+            label: 'Registrations',
+            value: `${summary.value.registrationSummary.verified} verified / ${summary.value.registrationSummary.pendingVerification} pending`,
             tone: summary.value.registrationSummary.pendingVerification > 0 ? 'text-amber-600' : 'text-muted-foreground',
         },
         {
@@ -1623,9 +1549,6 @@ onBeforeUnmount(() => {
                                 <h1 class="text-base font-semibold tracking-tight md:text-lg">
                                     Staff Credentialing
                                 </h1>
-                                <Badge variant="outline" class="h-5 px-1.5 text-[10px] font-medium">
-                                    Credentialing registry
-                                </Badge>
                             </div>
                             <p class="truncate text-xs text-muted-foreground">
                                 Review readiness, expiry risk, verification blockers, and audit evidence.
@@ -1639,10 +1562,7 @@ onBeforeUnmount(() => {
                                 </span>
                                 <span class="select-none text-border" aria-hidden="true">·</span>
                                 <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
-                                <template v-if="selectedStaff">
                                     <span class="select-none text-border" aria-hidden="true">·</span>
-                                    <span>Viewing {{ staffDisplayName(selectedStaff) }}</span>
-                                </template>
                             </div>
                         </div>
                     </div>

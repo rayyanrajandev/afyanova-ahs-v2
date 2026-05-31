@@ -17,22 +17,15 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import {
-    Drawer,
-    DrawerContent,
-    DrawerDescription,
-    DrawerFooter,
-    DrawerHeader,
-    DrawerTitle,
-} from '@/components/ui/drawer';
-import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
@@ -54,7 +47,12 @@ import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
 
 type AccessibleFacility = { id?: string | null; code?: string | null; name?: string | null };
-type ScopeData = { resolvedFrom: string; facility?: AccessibleFacility | null; userAccess?: { facilities?: AccessibleFacility[]; accessibleFacilityCount?: number } };
+type ScopeData = {
+    resolvedFrom: string;
+    tenant?: { code?: string | null; name?: string | null } | null;
+    facility?: AccessibleFacility | null;
+    userAccess?: { facilities?: AccessibleFacility[]; accessibleFacilityCount?: number };
+};
 type PlatformRole = { id: string | null; name: string | null; code: string | null };
 type PlatformUserFacilityAssignment = { facilityId: string | null; role?: string | null; isPrimary?: boolean; isActive?: boolean };
 type PlatformUserPrivilegedContext = {
@@ -252,7 +250,8 @@ const createDialogOpen = ref(false);
 
 const showAdvancedFilters = useLocalStorageBoolean('platform.users.filters.advanced', false);
 const compactQueueRows = useLocalStorageBoolean('platform.users.queueRows.compact', false);
-const mobileFiltersDrawerOpen = ref(false);
+const userFiltersSheetOpen = ref(false);
+const isFacilityScopedView = computed(() => Boolean(scopedFacilityLabel.value));
 const selectedUserIds = ref<number[]>([]);
 const bulkStatusDialogOpen = ref(false);
 const bulkStatusDialogTarget = ref<'active' | 'inactive' | null>(null);
@@ -344,31 +343,74 @@ const hasAdvancedFilters = computed(() =>
         searchForm.perPage !== 12,
     ),
 );
-const hasAnyFilters = computed(() => Boolean(searchForm.q.trim() || searchForm.status || hasAdvancedFilters.value));
-const filterBadgeCount = computed(() => {
-    let count = 0;
-    if (searchForm.q.trim()) count += 1;
-    if (searchForm.status) count += 1;
-    if (searchForm.verification) count += 1;
-    if (searchForm.roleId) count += 1;
-    if (searchForm.facilityId) count += 1;
-    if (searchForm.sortBy !== 'name') count += 1;
-    if (searchForm.sortDir !== 'asc') count += 1;
-    if (searchForm.perPage !== 12) count += 1;
-    return count;
+const userSortByLabels: Record<string, string> = {
+    name: 'Name',
+    email: 'Email',
+    status: 'Status',
+    createdAt: 'Created',
+    updatedAt: 'Updated',
+};
+const userFilterChips = computed(() => {
+    const chips: Array<{ key: string; label: string }> = [];
+
+    if (searchForm.q.trim()) {
+        chips.push({ key: 'q', label: `Search: ${searchForm.q.trim()}` });
+    }
+    if (searchForm.status) {
+        chips.push({ key: 'status', label: `Status: ${searchForm.status}` });
+    }
+    if (searchForm.verification) {
+        chips.push({
+            key: 'verification',
+            label: `Verification: ${searchForm.verification === 'verified' ? 'Verified' : 'Unverified'}`,
+        });
+    }
+    if (searchForm.roleId) {
+        const role = roles.value.find((entry) => String(entry.id ?? '') === searchForm.roleId);
+        chips.push({
+            key: 'roleId',
+            label: `Role: ${role?.name || role?.code || searchForm.roleId}`,
+        });
+    }
+    if (!isFacilityScopedView.value && searchForm.facilityId) {
+        chips.push({
+            key: 'facilityId',
+            label: `Facility: ${facilityLabel(searchForm.facilityId)}`,
+        });
+    }
+    if (searchForm.sortBy !== 'name' || searchForm.sortDir !== 'asc') {
+        chips.push({
+            key: 'sort',
+            label: `Sort: ${userSortByLabels[searchForm.sortBy] ?? searchForm.sortBy}, ${searchForm.sortDir === 'asc' ? 'Ascending' : 'Descending'}`,
+        });
+    }
+    if (searchForm.perPage !== 12) {
+        chips.push({ key: 'perPage', label: `${searchForm.perPage} rows` });
+    }
+
+    return chips;
 });
-const userQueueSummaryText = computed(() => {
-    const segments = [`${statusCounts.value.active} active`, `${statusCounts.value.inactive} inactive`];
-
-    if (statusCounts.value.other > 0) {
-        segments.push(`${statusCounts.value.other} other`);
+const filterBadgeCount = computed(() => userFilterChips.value.length);
+const hasActiveUserFilters = computed(() => userFilterChips.value.length > 0);
+const canPrev = computed(() => (pagination.value?.currentPage ?? 1) > 1);
+const canNext = computed(() => {
+    if (!pagination.value) return false;
+    return pagination.value.currentPage < pagination.value.lastPage;
+});
+const paginationPageNumbers = computed((): (number | '...')[] => {
+    const total = pagination.value?.lastPage ?? 1;
+    const current = pagination.value?.currentPage ?? 1;
+    if (total <= 7) {
+        return Array.from({ length: total }, (_, index) => index + 1);
     }
-
-    if (filterBadgeCount.value > 0) {
-        segments.push(`${filterBadgeCount.value} filters applied`);
+    const pages: (number | '...')[] = [1];
+    if (current > 3) pages.push('...');
+    for (let page = Math.max(2, current - 1); page <= Math.min(total - 1, current + 1); page += 1) {
+        pages.push(page);
     }
-
-    return segments.join(' | ');
+    if (current < total - 2) pages.push('...');
+    pages.push(total);
+    return pages;
 });
 const queueDensityValue = computed({
     get: () => (compactQueueRows.value ? 'compact' : 'comfortable'),
@@ -1129,9 +1171,55 @@ function submitSearch() {
     void Promise.all([loadUsers(), loadStatusCounts()]);
 }
 
-function submitSearchFromMobileDrawer() {
+function submitSearchFromFiltersSheet() {
     submitSearch();
-    mobileFiltersDrawerOpen.value = false;
+    userFiltersSheetOpen.value = false;
+}
+
+function toggleColumnSort(field: string) {
+    if (searchForm.sortBy === field) {
+        searchForm.sortDir = searchForm.sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        searchForm.sortBy = field;
+        searchForm.sortDir = field === 'name' ? 'asc' : 'desc';
+    }
+    submitSearch();
+}
+
+function goToPage(page: number) {
+    clearSearchDebounce();
+    searchForm.page = page;
+    void loadUsers();
+}
+
+function removeFilterChip(key: string) {
+    clearSearchDebounce();
+    switch (key) {
+        case 'q':
+            searchForm.q = '';
+            break;
+        case 'status':
+            searchForm.status = '';
+            break;
+        case 'verification':
+            searchForm.verification = '';
+            break;
+        case 'roleId':
+            searchForm.roleId = '';
+            break;
+        case 'facilityId':
+            searchForm.facilityId = '';
+            break;
+        case 'sort':
+            searchForm.sortBy = 'name';
+            searchForm.sortDir = 'asc';
+            break;
+        case 'perPage':
+            searchForm.perPage = 12;
+            break;
+    }
+    searchForm.page = 1;
+    void Promise.all([loadUsers(), loadStatusCounts()]);
 }
 
 function resetFilters() {
@@ -1150,9 +1238,9 @@ function resetFilters() {
     void Promise.all([loadUsers(), loadStatusCounts()]);
 }
 
-function resetFiltersFromMobileDrawer() {
+function resetFiltersFromFiltersSheet() {
     resetFilters();
-    mobileFiltersDrawerOpen.value = false;
+    userFiltersSheetOpen.value = false;
 }
 
 function updateCreateSendInvite(checked: CheckboxCheckedState): void {
@@ -1759,24 +1847,59 @@ onMounted(async () => {
 <template>
     <Head :title="usersWorkspaceTitle" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
+        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto p-3 md:p-5 lg:p-6">
 
             <!-- Page header -->
-            <div class="min-w-0">
-                <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                    <AppIcon name="users" class="size-7 text-primary" />
-                    {{ usersWorkspaceTitle }}
-                </h1>
-                <p class="mt-1 text-sm text-muted-foreground">
-                    {{ usersWorkspaceDescription }}
-                </p>
-            </div>
-
-            <!-- Alerts -->
-            <Alert v-if="scopeUnresolved" variant="destructive">
-                <AlertTitle>Scope warning</AlertTitle>
-                <AlertDescription>No tenant/facility scope is resolved. User create/search may be blocked by tenant isolation controls.</AlertDescription>
-            </Alert>
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div
+                            class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20"
+                            aria-hidden="true"
+                        >
+                            <AppIcon name="users" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <h1 class="text-base font-semibold tracking-tight md:text-lg">
+                                {{ usersWorkspaceTitle }}
+                            </h1>
+                            <p class="truncate text-xs text-muted-foreground">
+                                {{ usersWorkspaceDescription }}
+                            </p>
+                            <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
+                                <span class="inline-flex items-center gap-1">
+                                    <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
+                                    <span class="font-medium text-foreground">{{ scope?.facility?.name || scopedFacilityLabel || 'No facility' }}</span>
+                                </span>
+                                <span class="text-border select-none" aria-hidden="true">·</span>
+                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button
+                            v-if="canReadApprovalCases"
+                            variant="outline"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            as-child
+                        >
+                            <Link href="/platform/admin/user-approval-cases">
+                                <AppIcon name="clipboard-list" class="size-3.5" />
+                                Approval Cases
+                            </Link>
+                        </Button>
+                        <Button variant="outline" size="sm" :disabled="listLoading" class="h-8 gap-1.5" @click="refreshPage">
+                            <AppIcon name="activity" class="size-3.5" />
+                            {{ listLoading ? 'Refreshing...' : 'Refresh' }}
+                        </Button>
+                        <Button v-if="canCreate" size="sm" class="h-8 gap-1.5" @click="openCreateUserDialog">
+                            <AppIcon name="plus" class="size-3.5" />
+                            Create User
+                        </Button>
+                    </div>
+                </div>
+            </section>
 
             <Alert
                 v-if="platformMailWarning"
@@ -1820,19 +1943,13 @@ onMounted(async () => {
             </Alert>
 
             <template v-else>
-                <Alert v-if="listErrors.length" variant="destructive">
-                    <AlertTitle>Request error</AlertTitle>
-                    <AlertDescription>{{ listErrors[0] }}</AlertDescription>
-                </Alert>
-
-                <div class="min-w-0 space-y-3">
-                    <div class="flex flex-col gap-3 rounded-lg border border-sidebar-border/70 bg-muted/20 px-4 py-3 md:flex-row md:items-center md:justify-between">
+                <Card class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70">
+                    <div class="flex flex-col gap-3 border-b px-4 py-3">
                         <div class="flex flex-wrap items-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                class="gap-2 bg-background"
-                                :class="{ 'border-primary bg-primary/5 hover:bg-primary/10': searchForm.status === 'active' }"
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': searchForm.status === 'active' }"
                                 @click="searchForm.status = 'active'"
                             >
                                 <span class="inline-block h-2 w-2 rounded-full bg-emerald-500" />
@@ -1844,12 +1961,11 @@ onMounted(async () => {
                                     <span class="font-medium">{{ statusCounts.active }}</span>
                                     <span class="text-muted-foreground">Active</span>
                                 </template>
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                class="gap-2 bg-background"
-                                :class="{ 'border-primary bg-primary/5 hover:bg-primary/10': searchForm.status === 'inactive' }"
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': searchForm.status === 'inactive' }"
                                 @click="searchForm.status = 'inactive'"
                             >
                                 <span class="inline-block h-2 w-2 rounded-full bg-rose-500" />
@@ -1861,12 +1977,11 @@ onMounted(async () => {
                                     <span class="font-medium">{{ statusCounts.inactive }}</span>
                                     <span class="text-muted-foreground">Inactive</span>
                                 </template>
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                class="gap-2 bg-background"
-                                :class="{ 'border-primary bg-primary/5 hover:bg-primary/10': searchForm.status === '' }"
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': searchForm.status === '' }"
                                 @click="searchForm.status = ''"
                             >
                                 <span class="inline-block h-2 w-2 rounded-full bg-slate-400" />
@@ -1878,226 +1993,63 @@ onMounted(async () => {
                                     <span class="font-medium">{{ statusCounts.total }}</span>
                                     <span class="text-muted-foreground">All</span>
                                 </template>
+                            </button>
+                            <div class="ml-auto flex items-center gap-2">
+                                <Badge variant="secondary" class="hidden sm:inline-flex">
+                                    {{ pagination?.total ?? 0 }} users
+                                </Badge>
+                                <Button
+                                    v-if="hasActiveUserFilters"
+                                    variant="ghost"
+                                    size="sm"
+                                    class="h-7 gap-1.5 text-xs"
+                                    :disabled="listLoading"
+                                    @click="resetFilters"
+                                >
+                                    <AppIcon name="sliders-horizontal" class="size-3" />
+                                    Reset
+                                </Button>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <div class="relative min-w-0 flex-1">
+                                <AppIcon
+                                    name="search"
+                                    class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground"
+                                />
+                                <Input
+                                    id="user-search-q"
+                                    v-model="searchForm.q"
+                                    placeholder="Search name, email, role, or facility…"
+                                    class="h-8 pl-9 text-sm"
+                                    @keyup.enter="submitSearch"
+                                />
+                            </div>
+                            <Button variant="outline" size="sm" class="h-8 gap-1.5" @click="userFiltersSheetOpen = true">
+                                <AppIcon name="sliders-horizontal" class="size-3.5" />
+                                Filters
+                                <Badge
+                                    v-if="filterBadgeCount > 0"
+                                    variant="secondary"
+                                    class="ml-1 h-5 px-1.5 text-[10px]"
+                                >
+                                    {{ filterBadgeCount }}
+                                </Badge>
                             </Button>
                         </div>
-                        <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground md:justify-end">
-                            <Skeleton v-if="!queueReady" class="h-3.5 w-52" />
-                            <template v-else>
-                                <span>{{ pagination?.total ?? users.length }} users in scope | {{ userQueueSummaryText }}</span>
-                                <Badge :variant="scopeUnresolved ? 'destructive' : 'secondary'">
-                                    {{ scopeUnresolved ? 'Scope Unresolved' : 'Scope Ready' }}
-                                </Badge>
-                            </template>
-                            <Button
-                                v-if="hasAnyFilters"
-                                variant="outline"
-                                size="sm"
-                                :disabled="listLoading"
-                                @click="resetFilters"
+                        <div v-if="userFilterChips.length > 0" class="flex flex-wrap gap-1.5">
+                            <button
+                                v-for="chip in userFilterChips"
+                                :key="chip.key"
+                                type="button"
+                                class="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                                @click="removeFilterChip(chip.key)"
                             >
-                                Reset
-                            </Button>
-                            <Button variant="outline" size="sm" :disabled="listLoading" class="gap-1.5" @click="refreshPage">
-                                <AppIcon name="activity" class="size-3.5" />
-                                {{ listLoading ? 'Refreshing...' : 'Refresh' }}
-                            </Button>
-                            <Button v-if="canReadApprovalCases" variant="outline" size="sm" class="gap-1.5" as-child>
-                                <Link href="/platform/admin/user-approval-cases">
-                                    <AppIcon name="clipboard-list" class="size-3.5" />
-                                    Approval Cases
-                                </Link>
-                            </Button>
-                            <Button v-if="canCreate" size="sm" class="gap-1.5" @click="openCreateUserDialog">
-                                <AppIcon name="plus" class="size-3.5" />
-                                Create User
-                            </Button>
+                                {{ chip.label }}
+                                <AppIcon name="x" class="size-3 text-muted-foreground" />
+                            </button>
                         </div>
                     </div>
-
-                    <div class="space-y-4">
-
-                    <Card class="flex min-h-0 flex-1 flex-col gap-0 rounded-lg border-sidebar-border/70 py-0">
-                        <CardHeader class="shrink-0 border-b bg-muted/10 px-4 py-3">
-                            <div class="flex flex-col gap-3">
-                                <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                                    <div class="min-w-0 space-y-1">
-                                        <CardTitle class="flex items-center gap-2 text-sm">
-                                            <AppIcon name="layout-list" class="size-4 text-muted-foreground" />
-                                            Select user
-                                        </CardTitle>
-                                        <div>
-                                            <Skeleton v-if="!queueReady" class="h-3.5 w-44" />
-                                            <p v-else class="text-xs text-muted-foreground">
-                                                {{ users.length }} users on this page | Page {{ pagination?.currentPage ?? 1 }} of {{ pagination?.lastPage ?? 1 }}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div class="sm:max-w-[13rem] sm:text-right">
-                                        <Skeleton v-if="!queueReady" class="ml-auto h-3.5 w-28" />
-                                        <p v-else class="text-xs text-muted-foreground">
-                                            {{ userQueueSummaryText }}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                    <div class="relative min-w-0 flex-1">
-                                        <AppIcon
-                                            name="search"
-                                            class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                                        />
-                                        <Input
-                                            id="user-search-q"
-                                            v-model="searchForm.q"
-                                            placeholder="Search name, email, role, or facility"
-                                            class="h-9 pl-9"
-                                            @keyup.enter="submitSearch"
-                                        />
-                                    </div>
-                                    <div class="flex items-center gap-2">
-                                        <Popover>
-                                            <PopoverTrigger as-child>
-                                                <Button variant="outline" size="sm" class="hidden gap-1.5 md:inline-flex">
-                                                    <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                                    Queue options
-                                                    <Badge v-if="filterBadgeCount > 0" variant="secondary" class="ml-1 text-[10px]">{{ filterBadgeCount }}</Badge>
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent align="end" class="w-80 rounded-lg">
-                                                <div class="grid gap-3">
-                                                    <p class="flex items-center gap-2 text-sm font-medium">
-                                                        <AppIcon name="sliders-horizontal" class="size-4 text-muted-foreground" />
-                                                        Queue options
-                                                    </p>
-                                                    <p class="text-xs text-muted-foreground">
-                                                        Filter the user queue and tune how much detail the list shows while you work.
-                                                    </p>
-                                                    <div class="grid gap-2">
-                                                        <Label for="user-status-popover">Status</Label>
-                                                        <Select v-model="searchStatusSelectValue">
-                                                            <SelectTrigger class="w-full">
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                            <SelectItem :value="allSelectValue">All statuses</SelectItem>
-                                                            <SelectItem value="active">Active</SelectItem>
-                                                            <SelectItem value="inactive">Inactive</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div class="grid gap-2">
-                                                        <Label for="user-verification-popover">Verification</Label>
-                                                        <Select v-model="searchVerificationSelectValue">
-                                                            <SelectTrigger class="w-full">
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                            <SelectItem :value="allSelectValue">All users</SelectItem>
-                                                            <SelectItem value="verified">Verified only</SelectItem>
-                                                            <SelectItem value="unverified">Unverified only</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div class="grid gap-2">
-                                                        <Label for="user-role-popover">Role</Label>
-                                                        <Select v-model="searchRoleSelectValue">
-                                                            <SelectTrigger class="w-full">
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                            <SelectItem :value="allSelectValue">All roles</SelectItem>
-                                                            <SelectItem
-                                                                v-for="role in roles"
-                                                                :key="`filter-role-${String(role.id)}`"
-                                                                :value="String(role.id ?? '')"
-                                                            >
-                                                                {{ role.name || role.code || 'Role' }}
-                                                            </SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div class="grid gap-2">
-                                                        <Label for="user-facility-popover">Facility</Label>
-                                                        <Select v-model="searchFacilitySelectValue">
-                                                            <SelectTrigger class="w-full">
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                            <SelectItem :value="allSelectValue">All facilities</SelectItem>
-                                                            <SelectItem v-for="facility in availableFacilities" :key="String(facility.id)" :value="String(facility.id)">{{ facility.code || 'FAC' }} - {{ facility.name || 'Facility' }}</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div class="grid gap-2">
-                                                        <Label for="user-sort-by-popover">Sort by</Label>
-                                                        <Select v-model="searchForm.sortBy">
-                                                            <SelectTrigger class="w-full">
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                            <SelectItem value="name">Name</SelectItem>
-                                                            <SelectItem value="email">Email</SelectItem>
-                                                            <SelectItem value="status">Status</SelectItem>
-                                                            <SelectItem value="createdAt">Created</SelectItem>
-                                                            <SelectItem value="updatedAt">Updated</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div class="grid gap-2">
-                                                        <Label for="user-sort-dir-popover">Sort direction</Label>
-                                                        <Select v-model="searchForm.sortDir">
-                                                            <SelectTrigger class="w-full">
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                            <SelectItem value="asc">Ascending</SelectItem>
-                                                            <SelectItem value="desc">Descending</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div class="grid gap-2">
-                                                        <Label for="user-per-page-popover">Rows per page</Label>
-                                                        <Select v-model="searchForm.perPage">
-                                                            <SelectTrigger class="w-full">
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                            <SelectItem value="12">12</SelectItem>
-                                                            <SelectItem value="24">24</SelectItem>
-                                                            <SelectItem value="48">48</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div class="grid gap-2">
-                                                        <Label for="user-density-popover">Row density</Label>
-                                                        <Select v-model="queueDensityValue">
-                                                            <SelectTrigger class="w-full">
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                            <SelectItem value="comfortable">Comfortable</SelectItem>
-                                                            <SelectItem value="compact">Compact</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div class="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-                                                        <Button variant="outline" size="sm" class="gap-1.5" @click="resetFilters">Reset</Button>
-                                                        <Button size="sm" class="gap-1.5" :disabled="listLoading" @click="submitSearch">
-                                                            <AppIcon name="search" class="size-3.5" />
-                                                            Search
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            </PopoverContent>
-                                        </Popover>
-                                        <Button variant="outline" size="sm" class="w-full gap-1.5 md:hidden" @click="mobileFiltersDrawerOpen = true">
-                                            <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                            Queue options
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-                        </CardHeader>
                         <div v-if="canUseBulkSelection" class="border-b bg-muted/20 px-4 py-2.5">
                             <div class="flex flex-wrap items-center justify-between gap-2">
                                 <label class="flex items-center gap-2 text-xs text-muted-foreground">
@@ -2167,65 +2119,96 @@ onMounted(async () => {
                                 </div>
                             </div>
                         </div>
-                        <CardContent class="p-0">
-                            <div
-                                v-if="!queueReady || users.length > 0"
-                                class="hidden border-b bg-muted/30 px-4 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground md:grid md:grid-cols-[minmax(0,2.4fr)_minmax(0,0.75fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_minmax(0,auto)] md:items-center md:gap-2.5"
+                    <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden px-0 pb-0">
+                        <div v-if="scopeUnresolved || listErrors.length" class="space-y-2 px-4 pt-3">
+                            <Alert v-if="scopeUnresolved" variant="destructive" class="py-2">
+                                <AppIcon name="alert-triangle" class="size-4" />
+                                <AlertTitle class="text-xs font-medium">Scope warning</AlertTitle>
+                                <AlertDescription class="text-xs">
+                                    No tenant/facility scope is resolved. User create/search may be blocked by tenant isolation controls.
+                                </AlertDescription>
+                            </Alert>
+                            <Alert v-if="listErrors.length" variant="destructive" class="py-2">
+                                <AppIcon name="circle-x" class="size-4" />
+                                <AlertTitle class="text-xs font-medium">Request error</AlertTitle>
+                                <AlertDescription class="text-xs">
+                                    <p v-for="errorMessage in listErrors" :key="errorMessage">{{ errorMessage }}</p>
+                                </AlertDescription>
+                            </Alert>
+                        </div>
+                        <div
+                            class="hidden shrink-0 border-b bg-muted/30 px-4 py-2 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[minmax(0,2.4fr)_minmax(0,0.85fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,auto)] md:items-center md:gap-3"
+                        >
+                            <button
+                                type="button"
+                                class="inline-flex items-center gap-1 transition-colors hover:text-foreground"
+                                @click="toggleColumnSort('name')"
                             >
-                                <span>User</span>
-                                <span>Status</span>
-                                <span>Verification</span>
-                                <span>Roles</span>
-                                <span class="text-right">Actions</span>
-                            </div>
-                            <div v-if="!queueReady" class="divide-y">
-                                <div
-                                    v-for="index in 6"
-                                    :key="`platform-user-skeleton-${index}`"
-                                    class="grid items-center gap-2.5 px-4 md:grid-cols-[minmax(0,2.4fr)_minmax(0,0.75fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_minmax(0,auto)]"
-                                    :class="compactQueueRows ? 'py-2' : 'py-2.5'"
-                                >
-                                    <div class="flex min-w-0 items-center gap-3">
-                                        <Skeleton v-if="canUseBulkSelection" class="h-4 w-4 rounded-sm" />
-                                        <Skeleton class="h-8 w-8 shrink-0 rounded-full" />
-                                        <div class="min-w-0 flex-1 space-y-1.5">
-                                            <Skeleton class="h-4 w-36" />
-                                            <Skeleton class="h-3 w-52 max-w-full" />
-                                        </div>
-                                    </div>
-                                    <div class="hidden md:flex items-center gap-2">
-                                        <Skeleton class="h-5 w-16 rounded-full" />
-                                    </div>
-                                    <div class="hidden md:flex items-center gap-2">
-                                        <Skeleton class="h-5 w-24 rounded-full" />
-                                    </div>
-                                    <div class="hidden md:block min-w-0">
-                                        <Skeleton class="h-3.5 w-32" />
-                                    </div>
-                                    <div class="flex items-center justify-end gap-2">
-                                        <Skeleton class="hidden h-8 w-16 rounded-md lg:block" />
-                                        <Skeleton class="h-8 w-8 rounded-md" />
-                                    </div>
-                                    <div class="col-span-full flex flex-wrap items-center gap-2 text-[11px] md:hidden">
-                                        <Skeleton class="h-5 w-16 rounded-full" />
-                                        <Skeleton class="h-5 w-24 rounded-full" />
-                                        <Skeleton class="h-3.5 w-28" />
+                                User
+                                <AppIcon
+                                    :name="
+                                        searchForm.sortBy === 'name'
+                                            ? searchForm.sortDir === 'asc'
+                                                ? 'chevron-up'
+                                                : 'chevron-down'
+                                            : 'chevrons-up-down'
+                                    "
+                                    class="size-3.5"
+                                />
+                            </button>
+                            <button
+                                type="button"
+                                class="inline-flex items-center gap-1 transition-colors hover:text-foreground"
+                                @click="toggleColumnSort('status')"
+                            >
+                                Status
+                                <AppIcon
+                                    :name="
+                                        searchForm.sortBy === 'status'
+                                            ? searchForm.sortDir === 'asc'
+                                                ? 'chevron-up'
+                                                : 'chevron-down'
+                                            : 'chevrons-up-down'
+                                    "
+                                    class="size-3.5"
+                                />
+                            </button>
+                            <span>Verification</span>
+                            <span>Roles</span>
+                            <span class="text-right">Actions</span>
+                        </div>
+                        <ScrollArea class="min-h-0 flex-1">
+                            <div v-if="!queueReady || listLoading" class="space-y-0 divide-y">
+                                <div v-for="index in 5" :key="`platform-user-skeleton-${index}`" class="flex items-center gap-4 px-4 py-3">
+                                    <Skeleton v-if="canUseBulkSelection" class="h-4 w-4 rounded-sm" />
+                                    <Skeleton class="h-9 w-9 rounded-full" />
+                                    <div class="flex-1 space-y-2">
+                                        <Skeleton class="h-4 w-1/3" />
+                                        <Skeleton class="h-3 w-1/5" />
                                     </div>
                                 </div>
                             </div>
-                            <div v-else-if="users.length === 0" class="px-4 py-6">
-                                <div class="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                                    No users found for the current queue options.
+                            <div v-else-if="users.length === 0" class="flex flex-col items-center justify-center py-16 text-center">
+                                <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                                    <AppIcon name="users" class="size-6 text-muted-foreground" />
                                 </div>
+                                <p class="text-sm font-medium">No users found</p>
+                                <p class="mt-1 max-w-sm text-xs text-muted-foreground">
+                                    Try adjusting your search or filters, or create a new user account.
+                                </p>
+                                <Button v-if="canCreate" size="sm" variant="outline" class="mt-4 gap-1.5" @click="openCreateUserDialog">
+                                    <AppIcon name="plus" class="size-3.5" />
+                                    Create User
+                                </Button>
                             </div>
                             <div v-else class="divide-y">
                                 <div
                                     v-for="user in users"
                                     :key="String(user.id ?? user.email)"
-                                    class="group grid items-center gap-2.5 border-l-2 px-4 transition-colors hover:bg-muted/30 md:grid-cols-[minmax(0,2.4fr)_minmax(0,0.75fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_minmax(0,auto)]"
+                                    class="group grid items-center gap-3 px-4 transition-colors hover:bg-muted/30 md:grid-cols-[minmax(0,2.4fr)_minmax(0,0.85fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,auto)]"
                                     :class="[
-                                        compactQueueRows ? 'py-2' : 'py-2.5',
-                                        detailsOpen && detailsUser?.id === user.id ? 'border-primary bg-primary/5' : 'border-transparent',
+                                        compactQueueRows ? 'py-2' : 'py-3',
+                                        detailsOpen && detailsUser?.id === user.id ? 'bg-primary/5' : '',
                                         canUseBulkSelection && user.id !== null && selectedUserIds.includes(Number(user.id)) ? 'bg-muted/20' : '',
                                     ]"
                                 >
@@ -2237,108 +2220,131 @@ onMounted(async () => {
                                             :disabled="bulkActionLoading"
                                             @update:model-value="updateUserSelection(Number(user.id), $event)"
                                         />
-                                        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+                                        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                                             {{ userInitials(user) }}
                                         </div>
                                         <div class="min-w-0">
-                                            <button class="truncate text-left text-sm font-medium hover:text-primary hover:underline" @click="openDetails(user)">
+                                            <button
+                                                class="truncate text-sm font-medium hover:text-primary hover:underline"
+                                                @click="openDetails(user)"
+                                            >
                                                 {{ user.name || 'Unnamed user' }}
                                             </button>
                                             <p class="truncate text-xs text-muted-foreground">{{ user.email || 'No email address' }}</p>
                                         </div>
                                     </div>
-                                    <div class="hidden items-center gap-2 md:flex">
-                                        <Badge :variant="statusVariant(user.status)" class="text-[10px] leading-none">{{ user.status || 'unknown' }}</Badge>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-xs text-muted-foreground md:hidden">Status:</span>
+                                        <Badge :variant="statusVariant(user.status)" class="text-xs leading-none">
+                                            {{ user.status || 'unknown' }}
+                                        </Badge>
                                     </div>
-                                    <div class="hidden items-center gap-2 md:flex">
-                                        <Badge :variant="verificationVariant(user)" class="text-[10px] leading-none">{{ verificationLabel(user) }}</Badge>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-xs text-muted-foreground md:hidden">Verification:</span>
+                                        <Badge :variant="verificationVariant(user)" class="text-xs leading-none">
+                                            {{ verificationLabel(user) }}
+                                        </Badge>
                                     </div>
-                                    <div class="hidden min-w-0 md:block">
-                                        <p class="truncate text-xs text-muted-foreground">{{ userRoleSummary(user) }}</p>
+                                    <div class="min-w-0 text-xs text-muted-foreground">
+                                        <span class="font-medium text-foreground md:hidden">Roles: </span>
+                                        <span class="line-clamp-2 md:truncate">{{ userRoleSummary(user) }}</span>
                                     </div>
                                     <div class="flex items-center justify-end gap-2">
                                         <Button
-                                            size="sm"
                                             variant="ghost"
-                                            class="hidden gap-1.5 lg:inline-flex"
+                                            size="sm"
+                                            class="hidden h-7 gap-1.5 text-xs lg:inline-flex"
                                             :disabled="bulkActionLoading"
                                             @click="openDetails(user)"
                                         >
                                             <AppIcon name="eye" class="size-3.5" />
-                                            Open
+                                            View
                                         </Button>
                                         <DropdownMenu v-if="canReadApprovalCases || canResetPassword || canUpdateStatus || canUpdate">
                                             <DropdownMenuTrigger as-child>
-                                                <Button variant="ghost" size="icon-sm" class="shrink-0">
+                                                <Button variant="ghost" size="sm" class="h-7 w-7 p-0">
+                                                    <span class="sr-only">Actions</span>
                                                     <AppIcon name="ellipsis-vertical" class="size-4" />
-                                                    <span class="sr-only">More actions</span>
                                                 </Button>
                                             </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end" class="w-44 rounded-lg">
+                                            <DropdownMenuContent align="end" class="w-56">
+                                                <DropdownMenuLabel class="text-xs">User Actions</DropdownMenuLabel>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem class="flex items-center gap-2" @click="openDetails(user)">
+                                                    <AppIcon name="eye" class="size-3.5" />
+                                                    View Details
+                                                </DropdownMenuItem>
                                                 <DropdownMenuItem
                                                     v-if="canUpdate"
-                                                    class="gap-2"
+                                                    class="flex items-center gap-2"
                                                     @select="openEditDialog(user)"
                                                 >
-                                                    <AppIcon name="pencil" class="size-4" />
-                                                    Edit user
+                                                    <AppIcon name="pencil" class="size-3.5" />
+                                                    Edit User
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem
                                                     v-if="canReadApprovalCases && user.id !== null"
-                                                    class="gap-2"
+                                                    class="flex items-center gap-2"
                                                     @select="openApprovalCases(user)"
                                                 >
-                                                    <AppIcon name="clipboard-list" class="size-4" />
-                                                    Approval cases
+                                                    <AppIcon name="clipboard-list" class="size-3.5" />
+                                                    Approval Cases
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem
                                                     v-if="canResetPassword"
-                                                    class="gap-2"
+                                                    class="flex items-center gap-2"
                                                     :disabled="actionLoadingId === user.id || bulkActionLoading"
                                                     @select="sendCredentialLink(user)"
                                                 >
-                                                    <AppIcon name="log-in" class="size-4" />
+                                                    <AppIcon name="log-in" class="size-3.5" />
                                                     {{ credentialLinkActionLabel(user) }}
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem
                                                     v-if="canUpdateStatus"
-                                                    class="gap-2"
+                                                    class="flex items-center gap-2"
                                                     :disabled="actionLoadingId === user.id || bulkActionLoading"
                                                     @select="openStatusDialog(user, (user.status ?? '').toLowerCase() === 'active' ? 'inactive' : 'active')"
                                                 >
-                                                    <AppIcon name="activity" class="size-4" />
+                                                    <AppIcon name="activity" class="size-3.5" />
                                                     {{ (user.status ?? '').toLowerCase() === 'active' ? 'Deactivate' : 'Activate' }}
                                                 </DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </div>
-                                    <div class="col-span-full flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground md:hidden">
-                                        <Badge :variant="statusVariant(user.status)" class="text-[10px] leading-none">{{ user.status || 'unknown' }}</Badge>
-                                        <Badge :variant="verificationVariant(user)" class="text-[10px] leading-none">{{ verificationLabel(user) }}</Badge>
-                                        <span class="truncate">{{ userRoleSummary(user) }}</span>
-                                    </div>
                                 </div>
                             </div>
-                            <footer class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-4 py-3">
-                                <p class="text-xs text-muted-foreground">
-                                    Showing {{ users.length }} of {{ pagination?.total ?? users.length }} results | Page {{ pagination?.currentPage ?? 1 }} of {{ pagination?.lastPage ?? 1 }}
-                                </p>
-                                <div v-if="(pagination?.lastPage ?? 1) > 1" class="flex items-center gap-2">
-                                    <Button variant="outline" size="sm" class="gap-1.5" :disabled="!pagination || pagination.currentPage <= 1 || listLoading" @click="prevPage">
-                                        <AppIcon name="chevron-left" class="size-3.5" />
-                                        Previous
+                        </ScrollArea>
+                        <div class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+                            <p class="text-xs text-muted-foreground">
+                                <template v-if="pagination">
+                                    Showing {{ users.length }} of {{ pagination.total }} &middot; Page {{ pagination.currentPage }} of {{ pagination.lastPage }}
+                                </template>
+                                <template v-else>No pagination data</template>
+                            </p>
+                            <div class="flex items-center gap-1">
+                                <Button variant="outline" size="icon" class="size-8" :disabled="!canPrev || listLoading" @click="prevPage">
+                                    <AppIcon name="chevron-left" class="size-4" />
+                                </Button>
+                                <template v-for="page in paginationPageNumbers" :key="String(page)">
+                                    <span v-if="page === '...'" class="px-1 text-xs text-muted-foreground">…</span>
+                                    <Button
+                                        v-else
+                                        :variant="page === pagination?.currentPage ? 'default' : 'ghost'"
+                                        size="icon"
+                                        class="size-8 text-xs"
+                                        :disabled="listLoading"
+                                        @click="goToPage(page as number)"
+                                    >
+                                        {{ page }}
                                     </Button>
-                                    <Button variant="outline" size="sm" class="gap-1.5" :disabled="!pagination || pagination.currentPage >= pagination.lastPage || listLoading" @click="nextPage">
-                                        Next
-                                        <AppIcon name="chevron-right" class="size-3.5" />
-                                    </Button>
-                                </div>
-                            </footer>
-                        </CardContent>
-                    </Card>
-
-                    </div>
-                </div>
+                                </template>
+                                <Button variant="outline" size="icon" class="size-8" :disabled="!canNext || listLoading" @click="nextPage">
+                                    <AppIcon name="chevron-right" class="size-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
             </template>
 
             <Dialog :open="createDialogOpen" @update:open="(open) => (open ? (createDialogOpen = true) : closeCreateUserDialog())">
@@ -3020,7 +3026,7 @@ onMounted(async () => {
                                     </Card>
 
                                     <!-- Facility Assignments -->
-                                    <Card class="rounded-lg !gap-4 !py-4">
+                                    <Card v-if="canManageFacilities" class="rounded-lg !gap-4 !py-4">
                                         <CardHeader class="px-4 pb-1 pt-0">
                                             <CardTitle class="flex items-center gap-2 text-sm font-medium">
                                                 <AppIcon name="building-2" class="size-4 text-muted-foreground" />
@@ -3029,11 +3035,7 @@ onMounted(async () => {
                                             <CardDescription class="text-xs">Assign operational facilities and one primary site. Facility posting is optional and separate from platform roles.</CardDescription>
                                         </CardHeader>
                                         <CardContent class="px-4 pt-0">
-                                            <Alert v-if="!canManageFacilities" variant="destructive">
-                                                <AlertTitle>Facility assignment restricted</AlertTitle>
-                                                <AlertDescription>Request <code>platform.users.manage-facilities</code> permission.</AlertDescription>
-                                            </Alert>
-                                            <div v-else class="space-y-3">
+                                            <div class="space-y-3">
                                                 <Alert v-if="detailsUserRequiresApprovalCase" class="rounded-lg border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
                                                     <AlertTitle>Approval case required</AlertTitle>
                                                     <AlertDescription class="space-y-1 text-xs">
@@ -3338,159 +3340,165 @@ onMounted(async () => {
                 </SheetContent>
             </Sheet>
 
-            <Drawer v-if="canRead" :open="mobileFiltersDrawerOpen" @update:open="mobileFiltersDrawerOpen = $event">
-                <DrawerContent class="max-h-[90vh]">
-                    <DrawerHeader>
-                        <DrawerTitle class="flex items-center gap-2">
+            <Sheet v-if="canRead" :open="userFiltersSheetOpen" @update:open="userFiltersSheetOpen = $event">
+                <SheetContent side="right" variant="form" size="md" class="flex h-full min-h-0 flex-col">
+                    <SheetHeader>
+                        <SheetTitle class="flex items-center gap-2">
                             <AppIcon name="sliders-horizontal" class="size-4 text-muted-foreground" />
-                            Queue options
-                        </DrawerTitle>
-                        <DrawerDescription>Adjust user queue filters on mobile without leaving the workspace.</DrawerDescription>
-                    </DrawerHeader>
-                    <div class="space-y-4 overflow-y-auto px-4 pb-2">
+                            User Filters
+                        </SheetTitle>
+                        <SheetDescription>
+                            Filter by status, verification, role, sorting, and how many rows appear in the list.
+                        </SheetDescription>
+                    </SheetHeader>
+                    <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
                         <div class="rounded-lg border p-3">
-                            <div class="grid gap-3">
-                                <div class="grid gap-2">
-                                    <Label for="user-search-q-mobile">Search</Label>
-                                    <Input
-                                        id="user-search-q-mobile"
-                                        v-model="searchForm.q"
-                                        placeholder="Name or email"
-                                        @keyup.enter="submitSearchFromMobileDrawer"
-                                    />
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="user-search-status-mobile">Status</Label>
-                                    <Select v-model="searchStatusSelectValue">
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                        <SelectItem :value="allSelectValue">All statuses</SelectItem>
-                                        <SelectItem value="active">Active</SelectItem>
-                                        <SelectItem value="inactive">Inactive</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="user-search-verification-mobile">Verification</Label>
-                                    <Select v-model="searchVerificationSelectValue">
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                        <SelectItem :value="allSelectValue">All users</SelectItem>
-                                        <SelectItem value="verified">Verified only</SelectItem>
-                                        <SelectItem value="unverified">Unverified only</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="user-search-role-mobile">Role</Label>
-                                    <Select v-model="searchRoleSelectValue">
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                        <SelectItem :value="allSelectValue">All roles</SelectItem>
-                                        <SelectItem
-                                            v-for="role in roles"
-                                            :key="`mobile-role-${String(role.id)}`"
-                                            :value="String(role.id ?? '')"
-                                        >
-                                            {{ role.name || role.code || 'Role' }}
-                                        </SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="user-search-per-page-mobile">Results per page</Label>
-                                    <Select :model-value="String(searchForm.perPage)" @update:model-value="searchForm.perPage = Number($event)">
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                        <SelectItem value="12">12 / page</SelectItem>
-                                        <SelectItem value="24">24 / page</SelectItem>
-                                        <SelectItem value="48">48 / page</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="user-search-density-mobile">Row density</Label>
-                                    <Select v-model="queueDensityValue">
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                        <SelectItem value="comfortable">Comfortable</SelectItem>
-                                        <SelectItem value="compact">Compact</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                            <div class="mb-3">
+                                <p class="text-sm font-medium">Find user accounts</p>
+                                <p class="text-xs text-muted-foreground">Search across name, email, role, and facility assignment.</p>
                             </div>
-                        </div>
-                        <div class="rounded-lg border p-3">
-                            <div class="grid gap-3">
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <div class="grid gap-2 sm:col-span-2">
+                                    <Label for="user-search-q-sheet">Search</Label>
+                                    <div class="relative">
+                                        <AppIcon name="search" class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                                        <Input
+                                            id="user-search-q-sheet"
+                                            v-model="searchForm.q"
+                                            placeholder="Name, email, role, or facility"
+                                            class="pl-9"
+                                            :disabled="listLoading"
+                                            @keyup.enter="submitSearchFromFiltersSheet"
+                                        />
+                                    </div>
+                                </div>
                                 <div class="grid gap-2">
-                                    <Label for="user-search-facility-mobile">Facility</Label>
+                                    <Label for="user-search-status-sheet">Status</Label>
+                                    <Select v-model="searchStatusSelectValue">
+                                        <SelectTrigger id="user-search-status-sheet" class="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem :value="allSelectValue">All statuses</SelectItem>
+                                            <SelectItem value="active">Active</SelectItem>
+                                            <SelectItem value="inactive">Inactive</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div class="grid gap-2">
+                                    <Label for="user-search-verification-sheet">Verification</Label>
+                                    <Select v-model="searchVerificationSelectValue">
+                                        <SelectTrigger id="user-search-verification-sheet" class="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem :value="allSelectValue">All users</SelectItem>
+                                            <SelectItem value="verified">Verified only</SelectItem>
+                                            <SelectItem value="unverified">Unverified only</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div class="grid gap-2 sm:col-span-2">
+                                    <Label for="user-search-role-sheet">Role</Label>
+                                    <Select v-model="searchRoleSelectValue">
+                                        <SelectTrigger id="user-search-role-sheet" class="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem :value="allSelectValue">All roles</SelectItem>
+                                            <SelectItem
+                                                v-for="role in roles"
+                                                :key="`sheet-role-${String(role.id)}`"
+                                                :value="String(role.id ?? '')"
+                                            >
+                                                {{ role.name || role.code || 'Role' }}
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div v-if="!isFacilityScopedView" class="grid gap-2 sm:col-span-2">
+                                    <Label for="user-search-facility-sheet">Facility</Label>
                                     <Select v-model="searchFacilitySelectValue">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="user-search-facility-sheet" class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                        <SelectItem :value="allSelectValue">All facilities</SelectItem>
-                                        <SelectItem
-                                            v-for="facility in availableFacilities"
-                                            :key="`mobile-${String(facility.id)}`"
-                                            :value="String(facility.id)"
-                                        >
-                                            {{ facility.code || 'FAC' }} - {{ facility.name || 'Facility' }}
-                                        </SelectItem>
+                                            <SelectItem :value="allSelectValue">All facilities</SelectItem>
+                                            <SelectItem
+                                                v-for="facility in availableFacilities"
+                                                :key="`sheet-${String(facility.id)}`"
+                                                :value="String(facility.id)"
+                                            >
+                                                {{ facility.code || 'FAC' }} - {{ facility.name || 'Facility' }}
+                                            </SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
                                 <div class="grid gap-2">
-                                    <Label for="user-search-sort-by-mobile">Sort by</Label>
+                                    <Label for="user-search-sort-by-sheet">Sort by</Label>
                                     <Select v-model="searchForm.sortBy">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="user-search-sort-by-sheet" class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                        <SelectItem value="name">Name</SelectItem>
-                                        <SelectItem value="email">Email</SelectItem>
-                                        <SelectItem value="status">Status</SelectItem>
-                                        <SelectItem value="createdAt">Created</SelectItem>
-                                        <SelectItem value="updatedAt">Updated</SelectItem>
+                                            <SelectItem value="name">Name</SelectItem>
+                                            <SelectItem value="email">Email</SelectItem>
+                                            <SelectItem value="status">Status</SelectItem>
+                                            <SelectItem value="createdAt">Created</SelectItem>
+                                            <SelectItem value="updatedAt">Updated</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
                                 <div class="grid gap-2">
-                                    <Label for="user-search-sort-dir-mobile">Sort direction</Label>
+                                    <Label for="user-search-sort-dir-sheet">Sort direction</Label>
                                     <Select v-model="searchForm.sortDir">
-                                        <SelectTrigger>
+                                        <SelectTrigger id="user-search-sort-dir-sheet" class="w-full">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                        <SelectItem value="asc">Ascending</SelectItem>
-                                        <SelectItem value="desc">Descending</SelectItem>
+                                            <SelectItem value="asc">Ascending</SelectItem>
+                                            <SelectItem value="desc">Descending</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div class="grid gap-2">
+                                    <Label for="user-search-per-page-sheet">Rows per page</Label>
+                                    <Select :model-value="String(searchForm.perPage)" @update:model-value="searchForm.perPage = Number($event)">
+                                        <SelectTrigger id="user-search-per-page-sheet" class="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="12">12</SelectItem>
+                                            <SelectItem value="24">24</SelectItem>
+                                            <SelectItem value="48">48</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div class="grid gap-2">
+                                    <Label for="user-search-density-sheet">Row density</Label>
+                                    <Select v-model="queueDensityValue">
+                                        <SelectTrigger id="user-search-density-sheet" class="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="comfortable">Comfortable</SelectItem>
+                                            <SelectItem value="compact">Compact</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <DrawerFooter class="gap-2">
-                        <Button :disabled="listLoading" @click="submitSearchFromMobileDrawer">
-                            <AppIcon name="search" class="mr-1.5 size-4" />
-                            Search
+                    <SheetFooter class="gap-2 border-t px-4 py-3">
+                        <Button variant="outline" :disabled="listLoading && !hasActiveUserFilters" @click="resetFiltersFromFiltersSheet">
+                            Reset
                         </Button>
-                        <Button variant="outline" :disabled="listLoading && !hasAnyFilters" @click="resetFiltersFromMobileDrawer">
-                            Reset queue
+                        <Button :disabled="listLoading" @click="submitSearchFromFiltersSheet">
+                            Apply Filters
                         </Button>
-                    </DrawerFooter>
-                </DrawerContent>
-            </Drawer>
+                    </SheetFooter>
+                </SheetContent>
+            </Sheet>
         </div>
     </AppLayout>
 </template>
