@@ -68,7 +68,6 @@ import BillingCreateLineItemsFallback from './components/BillingCreateLineItemsF
 import BillingCreateLineItemsSidebar from './components/BillingCreateLineItemsSidebar.vue';
 import BillingCreateSelectedLineEditor from './components/BillingCreateSelectedLineEditor.vue';
 import BillingCreateStageActions from './components/BillingCreateStageActions.vue';
-import BillingCreateWorkflowLinksBar from './components/BillingCreateWorkflowLinksBar.vue';
 import BillingCreateWorkspaceHeader from './components/BillingCreateWorkspaceHeader.vue';
 import BillingQueueControlBar from './components/BillingQueueControlBar.vue';
 import BillingQueueFiltersPanels from './components/BillingQueueFiltersPanels.vue';
@@ -214,7 +213,6 @@ import type {
     CreateContextLinkSource,
     CreateContextEditorTab,
     InvoiceDetailsTab,
-    InvoiceWorkflowLink,
     InvoiceDetailsOperationalCard,
     InvoiceDetailsOperationalPanel,
     InvoiceDetailsOperationalAction,
@@ -11961,173 +11959,6 @@ const invoiceDetailsWorkflowSummaryCards = computed(() => {
     ];
 });
 
-const invoiceDetailsWorkflowLinks = computed<InvoiceWorkflowLink[]>(() => {
-    const invoice = invoiceDetailsInvoice.value;
-    if (!invoice) return [];
-
-    const links: InvoiceWorkflowLink[] = [];
-
-    if (invoice.patientId && canReadMedicalRecords.value) {
-        links.push({
-            key: 'medical-records',
-            label: 'Medical Records',
-            helper: 'Review consultation and documentation before settlement decisions.',
-            href: invoiceContextHref(invoice, '/medical-records', { includeTabNew: true }),
-            icon: 'stethoscope',
-        });
-    }
-
-    if (invoice.appointmentId && canReadAppointments.value) {
-        links.push({
-            key: 'appointment',
-            label: 'Appointment',
-            helper: 'Return to the originating appointment workflow.',
-            href: invoiceBackToAppointmentsHref(invoice),
-            icon: 'calendar-clock',
-        });
-    }
-
-    if (invoice.admissionId && canReadAdmissions.value) {
-        links.push({
-            key: 'admission',
-            label: 'Admission',
-            helper: 'Open the linked admission for inpatient billing context.',
-            href: invoiceContextHref(invoice, '/admissions'),
-            icon: 'bed-double',
-        });
-    }
-
-    if (canCreateClaimsInsurance.value && invoiceClaimWorkflowIsAvailable(invoice)) {
-        links.push({
-            key: 'create-claim',
-            label: invoice.claimReadiness?.ready ? 'Create Claim' : 'Prepare Claim',
-            helper: invoice.claimReadiness?.ready
-                ? 'Open Claims with this invoice and payer context already filled.'
-                : 'Open a draft claim path while authorization or payer requirements are finished.',
-            href: invoiceClaimCreateHref(invoice),
-            icon: 'receipt',
-        });
-    } else if (
-        canReadClaimsInsurance.value
-        && billingInvoiceSettlementMode(invoice) === 'third_party'
-    ) {
-        links.push({
-            key: 'claims-queue',
-            label: 'Claims Queue',
-            helper: 'Review claim work and reconciliation activity already linked to this payer-responsible invoice.',
-            href: invoiceClaimsQueueHref(invoice),
-            icon: 'receipt',
-        });
-    }
-
-    if (canReadBillingPayerContracts.value) {
-        links.push({
-            key: 'payer-contracts',
-            label: 'Payer Contracts',
-            helper: 'Review payer contracts, authorization rules, and coverage conditions.',
-            href: '/billing-payer-contracts',
-            icon: 'badge-check',
-        });
-    }
-
-    if (
-        canReadBillingInvoices.value
-        && ['issued', 'partially_paid'].includes((invoice.status ?? '').trim().toLowerCase())
-    ) {
-        links.push({
-            key: 'payment-plan',
-            label: 'Payment Plan',
-            helper: 'Open payment plans with this invoice preselected for installment setup.',
-            href: invoicePaymentPlanCreateHref(invoice),
-            icon: 'calendar-range',
-        });
-    }
-
-    if (
-        canReadBillingPayerContracts.value
-        && ['issued', 'partially_paid'].includes((invoice.status ?? '').trim().toLowerCase())
-        && (invoice.billingPayerContractId ?? '').trim() !== ''
-    ) {
-        links.push({
-            key: 'corporate-billing',
-            label: 'Corporate Billing',
-            helper: 'Open corporate billing with this payer contract and invoice date prefilled for a run.',
-            href: invoiceCorporateRunHref(invoice),
-            icon: 'building-2',
-        });
-    }
-
-    return links;
-});
-
-const billingCreateWorkflowLinks = computed<InvoiceWorkflowLink[]>(() => {
-    const links: InvoiceWorkflowLink[] = [];
-
-    if (canReadMedicalRecords.value) {
-        links.push({
-            key: 'medical-records',
-            label: consultationWorkflowLabel.value,
-            helper: hasCreateMedicalRecordContext.value
-                ? 'Return to the same consultation note with billing context preserved.'
-                : 'Continue clinical documentation with the current billing context.',
-            href: consultationContextHref.value,
-            icon: 'stethoscope',
-        });
-    }
-
-    if (canReadBillingServiceCatalog.value) {
-        links.push({
-            key: 'service-catalog',
-            label: 'Service Catalog',
-            helper: 'Validate tariffs and service codes before finalizing pricing.',
-            href: '/billing-service-catalog',
-            icon: 'list-check',
-        });
-    }
-
-    if (canReadBillingPayerContracts.value) {
-        links.push({
-            key: 'payer-contracts',
-            label: 'Payer Contracts',
-            helper: 'Confirm payer rules, pre-authorization, and contract terms.',
-            href: '/billing-payer-contracts',
-            icon: 'badge-check',
-        });
-    }
-
-    if (canCreateLaboratoryOrders.value) {
-        links.push({
-            key: 'laboratory-orders',
-            label: 'New Lab Order',
-            helper: 'Open laboratory ordering without re-searching the patient.',
-            href: contextCreateHref('/laboratory-orders', { includeTabNew: true }),
-            icon: 'flask-conical',
-        });
-    }
-
-    if (canCreatePharmacyOrders.value) {
-        links.push({
-            key: 'pharmacy-orders',
-            label: 'New Pharmacy Order',
-            helper: 'Open medication ordering from the same patient context.',
-            href: contextCreateHref('/pharmacy-orders', { includeTabNew: true }),
-            icon: 'pill',
-        });
-    }
-
-    if (canCreateTheatreProcedures.value) {
-        links.push({
-            key: 'theatre-procedures',
-            label: 'Schedule Procedure',
-            helper: 'Carry the same patient and encounter context into theatre scheduling.',
-            href: contextCreateHref('/theatre-procedures', { includeTabNew: true }),
-            icon: 'scissors',
-        });
-    }
-
-    return links;
-});
-
 const invoiceDetailsWorkflowStepCards = computed(() => {
     const invoice = invoiceDetailsInvoice.value;
     if (!invoice) return [];
@@ -14487,7 +14318,6 @@ const invoiceDetailsView = {
     invoiceDetailsPayments,
     invoiceDetailsPaymentsFilters,
     paymentReversalSubmitting,
-    invoiceDetailsWorkflowLinks,
     invoiceDetailsAuditSummary,
     invoiceDetailsAuditHasActiveFilters,
     invoiceDetailsAuditActiveFilters,
@@ -15215,8 +15045,6 @@ onMounted(refreshPage);
                 :view="createContextDialogView"
                 :actions="createContextDialogActions"
             />
-
-            <BillingCreateWorkflowLinksBar :links="billingCreateWorkflowLinks" />
 
             <BillingQueueFiltersPanels
                 :state="billingQueueFiltersPanelsState"

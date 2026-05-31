@@ -115,7 +115,6 @@ const invoiceDetailsPaymentsError = view.invoiceDetailsPaymentsError;
 const invoiceDetailsPayments = view.invoiceDetailsPayments;
 const invoiceDetailsPaymentsFilters = view.invoiceDetailsPaymentsFilters;
 const paymentReversalSubmitting = view.paymentReversalSubmitting;
-const invoiceDetailsWorkflowLinks = view.invoiceDetailsWorkflowLinks;
 const invoiceDetailsAuditSummary = view.invoiceDetailsAuditSummary;
 const invoiceDetailsAuditHasActiveFilters =
     view.invoiceDetailsAuditHasActiveFilters;
@@ -512,7 +511,6 @@ function printCurrentInvoice(): void {
                                 :payment-reversal-submitting="
                                     paymentReversalSubmitting
                                 "
-                                :workflow-links="invoiceDetailsWorkflowLinks"
                                 :format-money="formatMoney"
                                 :preview-text="previewText"
                                 :short-id="shortId"

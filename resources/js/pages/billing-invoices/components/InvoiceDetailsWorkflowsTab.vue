@@ -32,7 +32,6 @@ import type {
     InvoiceDetailsOperationalCard,
     InvoiceDetailsOperationalPanel,
     InvoiceDetailsPaymentsFilterForm,
-    InvoiceWorkflowLink,
 } from '../types';
 
 type BadgeVariant = 'default' | 'secondary' | 'outline' | 'destructive';
@@ -83,7 +82,6 @@ interface Props {
     paymentsFilters: InvoiceDetailsPaymentsFilterForm;
     paymentsFiltersOpen: boolean;
     paymentReversalSubmitting: boolean;
-    workflowLinks: InvoiceWorkflowLink[];
     formatMoney: (
         value: number | string | null | undefined,
         currencyCode?: string | null | undefined,
@@ -623,45 +621,6 @@ function updatePaymentsPerPage(value: string | number | undefined): void {
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <div class="rounded-lg border p-4">
-            <div>
-                <p class="text-sm font-medium">Related workflows</p>
-                <p class="mt-1 text-xs text-muted-foreground">
-                    Open only the modules that are available in your current access scope.
-                </p>
-            </div>
-
-            <div
-                v-if="workflowLinks.length === 0"
-                class="mt-4 rounded-md border border-dashed p-3 text-xs text-muted-foreground"
-            >
-                No related workflow links are available for this invoice in your current access scope.
-            </div>
-            <div v-else class="mt-4 space-y-2">
-                <Link
-                    v-for="link in workflowLinks"
-                    :key="`bil-workflow-link-${link.key}`"
-                    :href="link.href"
-                    class="flex items-start justify-between gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/40"
-                >
-                    <div class="flex min-w-0 items-start gap-3">
-                        <span class="mt-0.5 rounded-md border bg-muted/40 p-1.5 text-muted-foreground">
-                            <AppIcon :name="link.icon" class="size-4" />
-                        </span>
-                        <div class="min-w-0">
-                            <p class="text-sm font-medium text-foreground">
-                                {{ link.label }}
-                            </p>
-                            <p class="mt-1 text-xs text-muted-foreground">
-                                {{ link.helper }}
-                            </p>
-                        </div>
-                    </div>
-                    <AppIcon name="arrow-up-right" class="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                </Link>
             </div>
         </div>
     </TabsContent>
