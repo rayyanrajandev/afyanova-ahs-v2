@@ -223,6 +223,8 @@ const facilityTierOptions = [
     { value: 'regional_hospital', label: 'Regional hospital' },
     { value: 'zonal_referral', label: 'Zonal referral' },
 ] as const;
+const inventoryStoreItemsHref = '/inventory-procurement?section=inventory';
+
 const consumptionStageOptions = [
     { value: 'per_order', label: 'When service is ordered' },
     { value: 'sample_collection', label: 'At sample collection' },
@@ -2397,14 +2399,30 @@ onMounted(() => {
                                                 <Badge variant="outline">{{ consumptionRecipeSummary }}</Badge>
                                             </div>
                                         </CardHeader>
-                                        <CardContent class="flex flex-wrap items-center justify-between gap-3 px-3 py-3">
+                                        <CardContent class="space-y-3 px-3 py-3">
                                             <p class="text-sm text-muted-foreground">
-                                                Items deducted from store when this {{ domains[selectedCatalogKey].singular.toLowerCase() }} is completed.
+                                                Map store items (tubes, reagents, gloves, etc.) and quantities deducted when this
+                                                {{ domains[selectedCatalogKey].singular.toLowerCase() }} is completed. Create items in
+                                                Inventory &amp; Procurement first.
                                             </p>
-                                            <Button v-if="canManage" size="sm" variant="outline" class="gap-1.5" @click="openRecipeSheet">
-                                                <AppIcon name="package" class="size-3.5" />
-                                                Set consumables
-                                            </Button>
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <Button size="sm" variant="outline" class="gap-1.5" as-child>
+                                                    <Link :href="inventoryStoreItemsHref">
+                                                        <AppIcon name="warehouse" class="size-3.5" />
+                                                        Manage store items
+                                                    </Link>
+                                                </Button>
+                                                <Button
+                                                    v-if="canManage"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    class="gap-1.5"
+                                                    @click="openRecipeSheet"
+                                                >
+                                                    <AppIcon name="package" class="size-3.5" />
+                                                    Set consumables
+                                                </Button>
+                                            </div>
                                         </CardContent>
                                     </Card>
                                 </TabsContent>
@@ -2663,6 +2681,18 @@ onMounted(() => {
                         <SheetDescription v-if="selected">
                             List store items used each time {{ selected.name || 'this service' }} is completed (tubes, reagents, gloves, etc.).
                         </SheetDescription>
+                        <div class="mt-3 rounded-lg border border-dashed bg-muted/10 px-3 py-2.5">
+                            <p class="text-xs text-muted-foreground">
+                                New consumables are created in Inventory &amp; Procurement (item master), then selected here. Use categories such as
+                                Medical consumable, Laboratory, or Radiology so they appear in the list below.
+                            </p>
+                            <Button size="sm" variant="outline" class="mt-2 h-8 gap-1.5" as-child>
+                                <Link :href="inventoryStoreItemsHref">
+                                    <AppIcon name="warehouse" class="size-3.5" />
+                                    Open Inventory &amp; Procurement
+                                </Link>
+                            </Button>
+                        </div>
                     </SheetHeader>
                     <ScrollArea class="min-h-0 flex-1">
                         <div class="space-y-4 px-4 py-4">
@@ -2679,8 +2709,17 @@ onMounted(() => {
                                 <Skeleton class="h-12 w-full" />
                             </div>
                             <template v-else>
-                                <div v-if="consumptionRecipeItems.length === 0" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                                    No consumables listed yet. Add each store item and how much is used per service.
+                                <div
+                                    v-if="consumptionRecipeItems.length === 0"
+                                    class="space-y-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground"
+                                >
+                                    <p>No consumables listed yet. Add each store item and how much is used per service.</p>
+                                    <Button size="sm" variant="outline" class="h-8 gap-1.5" as-child>
+                                        <Link :href="inventoryStoreItemsHref">
+                                            <AppIcon name="warehouse" class="size-3.5" />
+                                            Create store items first
+                                        </Link>
+                                    </Button>
                                 </div>
                                 <div v-else class="space-y-2">
                                     <div v-for="line in consumptionRecipeItems" :key="line.inventoryItemId" class="rounded-lg border p-3">
