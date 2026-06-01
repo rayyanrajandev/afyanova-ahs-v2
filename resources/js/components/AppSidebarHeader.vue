@@ -21,6 +21,7 @@ import {
     setScopeCookies,
     usePlatformAccess,
 } from '@/composables/usePlatformAccess';
+import { formatEnumLabel } from '@/lib/labels';
 import {
     isOperationalFacilityScopePath,
     isPlatformAdminPath,
@@ -39,6 +40,7 @@ withDefaults(
 
 const {
     scope,
+    subscriptionAccess,
     hasUniversalAdminAccess,
 } = usePlatformAccess();
 
@@ -144,8 +146,6 @@ const scopeMode = computed(() => {
 const facilityTriggerLabel = computed(() => {
     const facility = scope.value?.facility;
     if (facility?.name && facility?.code) return `${facility.name} (${facility.code})`;
-    const tenant = scope.value?.tenant;
-    if (tenant?.name && tenant?.code) return `${tenant.name} (${tenant.code})`;
     if (hasUniversalAdminAccess.value && isPlatformAdminPage.value) return 'Global admin mode';
     if (hasUniversalAdminAccess.value) return 'All facilities';
 
@@ -155,7 +155,17 @@ const facilityTriggerLabel = computed(() => {
 const facilityTriggerMeta = computed(() => {
     const count = accessibleFacilities.value.length;
     if (hasSelectedFacility.value) {
-        return scope.value?.tenant?.name || scope.value?.tenant?.code || 'Facility scope';
+        const facilityCode = String(scope.value?.facility?.code ?? '').trim().toUpperCase();
+        const planName = String(subscriptionAccess.value?.subscription?.planName ?? '').trim();
+        const status = String(subscriptionAccess.value?.subscription?.status ?? '').trim();
+        const accessState = String(subscriptionAccess.value?.accessState ?? '').trim();
+        const planLabel = planName
+            ? `${planName}${status ? ` / ${formatEnumLabel(status)}` : ''}`
+            : accessState
+                ? formatEnumLabel(accessState)
+                : 'Facility scope';
+
+        return [facilityCode, planLabel].filter(Boolean).join(' | ');
     }
     if (hasUniversalAdminAccess.value && isPlatformAdminPage.value) return 'All facilities visible';
     if (count === 0) return 'No facilities available';
@@ -260,7 +270,7 @@ function selectScope(key: string) {
                             <div class="min-w-0">
                                 <p class="truncate text-sm font-medium">{{ facility.facilityName }}</p>
                                 <p class="truncate text-xs text-muted-foreground">
-                                    {{ facility.tenantCode }} / {{ facility.facilityCode }} - {{ facility.tenantName }}
+                                    {{ facility.facilityCode }}{{ facility.isPrimary ? ' | Primary facility' : '' }}
                                 </p>
                             </div>
                         </div>

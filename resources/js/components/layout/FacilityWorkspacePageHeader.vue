@@ -2,6 +2,7 @@
 import { Link } from '@inertiajs/vue3';
 import AppIcon from '@/components/AppIcon.vue';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 
 const props = withDefaults(
@@ -10,12 +11,16 @@ const props = withDefaults(
         description: string;
         icon?: string;
         showScope?: boolean;
+        departmentName?: string | null;
+        departmentLoading?: boolean;
         backHref?: string | null;
         backLabel?: string;
     }>(),
     {
         icon: 'package',
         showScope: true,
+        departmentName: null,
+        departmentLoading: false,
         backHref: null,
         backLabel: 'Back',
     },
@@ -59,14 +64,23 @@ const { scope } = usePlatformAccess();
                                 {{ scope?.facility?.name || 'No facility' }}
                             </span>
                         </span>
-                        <span class="select-none text-border" aria-hidden="true">·</span>
-                        <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
+                        <template v-if="props.departmentLoading || props.departmentName">
+                            <span class="select-none text-border" aria-hidden="true">·</span>
+                            <span v-if="props.departmentLoading" class="inline-flex items-center gap-1">
+                                <AppIcon name="users" class="size-3 opacity-75" aria-hidden="true" />
+                                <Skeleton class="h-3 w-24" />
+                            </span>
+                            <span v-else class="inline-flex items-center gap-1">
+                                <AppIcon name="users" class="size-3 opacity-75" aria-hidden="true" />
+                                <span class="font-medium text-foreground">{{ props.departmentName }}</span>
+                            </span>
+                        </template>
                     </div>
                 </div>
             </div>
             <div
                 v-if="$slots.actions || props.backHref"
-                class="flex shrink-0 flex-wrap items-center justify-end gap-2"
+                class="flex w-full shrink-0 flex-wrap items-center justify-end gap-2 md:w-auto"
             >
                 <slot name="actions" />
                 <Button

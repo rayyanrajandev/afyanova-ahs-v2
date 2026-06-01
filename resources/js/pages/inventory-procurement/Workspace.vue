@@ -39,6 +39,10 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
 import { generateRequestKey } from '@/lib/idempotency';
 import { formatEnumLabel } from '@/lib/labels';
+import {
+    departmentDisplayName,
+    departmentRequesterHeaderDescription,
+} from '@/lib/departmentRequisitionContext';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
 import {
@@ -2793,6 +2797,19 @@ const reqForm = reactive({
 
 const canSelectAnyRequisitionDepartment = computed(() => requisitionContext.value?.canSelectAnyDepartment ?? isFacilitySuperAdmin.value);
 const lockedRequisitionDepartment = computed(() => requisitionContext.value?.lockedDepartment ?? null);
+
+const workspaceDepartmentName = computed(() => departmentDisplayName(requisitionContext.value));
+const workspaceHeaderDescription = computed(() =>
+    isDepartmentRequester.value
+        ? departmentRequesterHeaderDescription(requisitionContext.value)
+        : 'Supervisor control center for requisitions, shortages, stock, procurement, MSD, and governance.',
+);
+const showDepartmentInWorkspaceHeader = computed(
+    () => isDepartmentRequester.value && canCreateRequest.value,
+);
+const workspaceDepartmentHeaderLoading = computed(
+    () => showDepartmentInWorkspaceHeader.value && workspaceDepartmentName.value === null && loading.value,
+);
 const requisitionDepartmentOptions = computed(() => {
     const options = [...departments.value];
     const lockedDepartment = lockedRequisitionDepartment.value;
@@ -5877,10 +5894,10 @@ onMounted(async () => {
 
             <FacilityWorkspacePageHeader
                 title="Workspace"
-                :description="isDepartmentRequester
-                    ? 'Request and track department supplies — requisitions, procurement, item lookup, and department stock.'
-                    : 'Supervisor control center for requisitions, shortages, stock, procurement, MSD, and governance.'"
+                :description="workspaceHeaderDescription"
                 icon="package"
+                :department-name="showDepartmentInWorkspaceHeader ? workspaceDepartmentName : null"
+                :department-loading="workspaceDepartmentHeaderLoading"
                 :back-href="INVENTORY_PROCUREMENT_HOME_PATH"
                 back-label="Supply chain home"
             >
@@ -5973,54 +5990,36 @@ onMounted(async () => {
                 </Select>
             </div>
 
-            <Card v-if="canRead && (canManageSuppliers || canManageWarehouses)" class="rounded-lg border-sidebar-border/70">
-                <CardHeader class="pb-2">
-                    <CardTitle class="flex items-center gap-2 text-base">
-                        <AppIcon name="layout-grid" class="size-4.5 text-muted-foreground" />
-                        Registry Administration
-                    </CardTitle>
-                    <CardDescription>
-                        Open supplier and warehouse registries for inventory master-data maintenance.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent class="grid gap-3 pt-0 md:grid-cols-2">
-                    <div class="rounded-lg border bg-muted/20 p-3">
-                        <div class="flex items-start gap-2">
-                            <AppIcon name="package" class="mt-0.5 size-4 text-muted-foreground" />
-                            <div class="min-w-0 flex-1">
-                                <p class="text-sm font-medium">Supplier Registry</p>
-                                <p class="mt-1 text-xs text-muted-foreground">
-                                    Vendor contacts, activation status, and supplier audit trail.
-                                </p>
-                            </div>
-                        </div>
-                        <div class="mt-3 flex items-center justify-between gap-2">
-                            <Badge variant="outline">{{ canManageSuppliers ? 'Manage access' : 'Read-only access' }}</Badge>
-                            <Button size="sm" variant="outline" as-child>
-                                <Link href="/inventory-procurement/suppliers">Open</Link>
-                            </Button>
-                        </div>
-                    </div>
-
-                    <div class="rounded-lg border bg-muted/20 p-3">
-                        <div class="flex items-start gap-2">
-                            <AppIcon name="building-2" class="mt-0.5 size-4 text-muted-foreground" />
-                            <div class="min-w-0 flex-1">
-                                <p class="text-sm font-medium">Warehouse Registry</p>
-                                <p class="mt-1 text-xs text-muted-foreground">
-                                    Warehouse locations, lifecycle state, and warehouse audit trail.
-                                </p>
-                            </div>
-                        </div>
-                        <div class="mt-3 flex items-center justify-between gap-2">
-                            <Badge variant="outline">{{ canManageWarehouses ? 'Manage access' : 'Read-only access' }}</Badge>
-                            <Button size="sm" variant="outline" as-child>
-                                <Link href="/inventory-procurement/warehouses">Open</Link>
-                            </Button>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
+            <div
+                v-if="canRead && (canManageSuppliers || canManageWarehouses)"
+                class="flex min-h-9 flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-4 py-2"
+            >
+                <span class="text-xs font-medium text-muted-foreground">Registries:</span>
+                <Button
+                    v-if="canManageSuppliers"
+                    size="sm"
+                    variant="outline"
+                    class="h-8 gap-1.5"
+                    as-child
+                >
+                    <Link href="/inventory-procurement/suppliers">
+                        <AppIcon name="package" class="size-3.5" />
+                        Suppliers
+                    </Link>
+                </Button>
+                <Button
+                    v-if="canManageWarehouses"
+                    size="sm"
+                    variant="outline"
+                    class="h-8 gap-1.5"
+                    as-child
+                >
+                    <Link href="/inventory-procurement/warehouses">
+                        <AppIcon name="building-2" class="size-3.5" />
+                        Warehouses
+                    </Link>
+                </Button>
+            </div>
 
             <!-- Errors -->
             <Alert v-if="queueError" variant="destructive">

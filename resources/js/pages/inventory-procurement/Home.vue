@@ -6,6 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePageHeader.vue';
 import SupplyChainStatCard from '@/pages/inventory-procurement/components/SupplyChainStatCard.vue';
@@ -28,6 +29,12 @@ import {
     visibleInventoryWorkspaceSections,
     type InventoryProcurementAccess,
 } from '@/lib/inventoryProcurementAccess';
+import {
+    type DepartmentRequisitionContext,
+    departmentCardDescription,
+    departmentDisplayName,
+    departmentRequesterHeaderDescription,
+} from '@/lib/departmentRequisitionContext';
 import { messageFromUnknown } from '@/lib/notify';
 import type { BreadcrumbItem } from '@/types';
 
@@ -59,7 +66,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Supply chain', href: INVENTORY_PROCUREMENT_HOME_PATH },
 ];
 
-const { permissionNames: sharedPermissionNames, isFacilitySuperAdmin } = usePlatformAccess();
+const { permissionNames: sharedPermissionNames, isFacilitySuperAdmin, scope } = usePlatformAccess();
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -72,11 +79,22 @@ const canUpdateRequestStatus = ref(false);
 const canManageSuppliers = ref(false);
 const canManageWarehouses = ref(false);
 const canReconcileStock = ref(false);
+const canViewAudit = ref(false);
 
 const stockCounts = ref<StockAlertCounts>({ outOfStock: 0, lowStock: 0, healthy: 0, total: 0 });
 const shortageMeta = ref<ShortageQueueMeta | null>(null);
 const pendingApprovalCount = ref(0);
 const approvedAwaitingOrderCount = ref(0);
+
+const supplyChainPageTitle = computed(() => {
+    const facilityName = String(scope.value?.facility?.name ?? '').trim();
+    const facilityCode = String(scope.value?.facility?.code ?? '').trim().toUpperCase();
+
+    if (facilityName) return `${facilityName} supply chain`;
+    if (facilityCode) return `${facilityCode} supply chain`;
+
+    return 'Supply chain';
+});
 
 function resolvePermissions(names: Iterable<string>, hasSuperAdmin: boolean): void {
     const set = new Set(
@@ -95,6 +113,7 @@ function resolvePermissions(names: Iterable<string>, hasSuperAdmin: boolean): vo
     canReconcileStock.value = hasSuperAdmin
         || set.has('inventory.procurement.reconcile-stock')
         || set.has('inventory.procurement.create-movement');
+    canViewAudit.value = hasSuperAdmin || set.has('inventory.procurement.view-audit-logs');
 }
 
 async function loadPermissions(): Promise<void> {
@@ -309,14 +328,88 @@ const sectionQuickLinks = computed(() =>
 
 const visibleStoreTasks = computed(() => storeTasks.value.filter((entry) => entry.permission));
 
+const showMasterDataCard = computed(() => masterDataTasks.value.some((entry) => entry.permission));
+const showPlanningCard = computed(() => planningTasks.value.some((entry) => entry.permission));
+
+const registryRowGridClass = computed(() =>
+    showMasterDataCard.value && showPlanningCard.value ? 'grid gap-4 lg:grid-cols-2' : 'grid gap-4 grid-cols-1',
+);
+
+const showPrimaryOperationsCard = computed(
+    () => isDepartmentRequester.value || visibleStoreTasks.value.length > 0,
+);
+const showProcurementSignalsCard = computed(() => isStoreOperations.value || canCreateRequest.value);
+
+const operationsRowGridClass = computed(() =>
+    showPrimaryOperationsCard.value && showProcurementSignalsCard.value
+        ? 'grid gap-4 lg:grid-cols-3'
+        : 'grid gap-4 grid-cols-1',
+);
+
+const primaryOperationsCardClass = computed(() =>
+    showProcurementSignalsCard.value && showPrimaryOperationsCard.value ? 'lg:col-span-2' : '',
+);
+
 function storeTaskGridClass(index: number, total: number): string {
     const isLastOdd = total % 2 === 1 && index === total - 1;
 
     return isLastOdd ? 'sm:col-span-2' : '';
 }
 
+const departmentContext = ref<DepartmentRequisitionContext | null>(null);
+const departmentContextLoading = ref(false);
+
+const resolvedDepartmentName = computed(() => departmentDisplayName(departmentContext.value));
+
+const departmentSectionTitle = computed(() => resolvedDepartmentName.value ?? 'Your department');
+
+const departmentSectionDescription = computed(() => departmentCardDescription(departmentContext.value));
+
+const headerDescription = computed(() =>
+    isDepartmentRequester.value
+        ? departmentRequesterHeaderDescription(departmentContext.value)
+        : 'Stores, procurement, and clinical consumables — start with a task below or open the full workspace.',
+);
+
+const showDepartmentInHeader = computed(
+    () => isDepartmentRequester.value && canCreateRequest.value,
+);
+
+async function loadDepartmentContext(): Promise<void> {
+    if (!canCreateRequest.value) {
+        departmentContext.value = null;
+
+        return;
+    }
+
+    try {
+        const response = await apiRequestJson<{ data: DepartmentRequisitionContext }>(
+            'GET',
+            '/inventory-procurement/department-requisitions/context',
+        );
+        departmentContext.value = response.data ?? null;
+    } catch {
+        departmentContext.value = null;
+    }
+}
+
 onMounted(async () => {
     await loadPermissions();
+
+    if (showDepartmentInHeader.value) {
+        departmentContextLoading.value = true;
+        try {
+            await loadDepartmentContext();
+        } finally {
+            departmentContextLoading.value = false;
+        }
+    } else {
+        departmentContextLoading.value = false;
+        if (canCreateRequest.value) {
+            void loadDepartmentContext();
+        }
+    }
+
     await loadDashboard();
 });
 </script>
@@ -327,19 +420,28 @@ onMounted(async () => {
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
             <FacilityWorkspacePageHeader
-                title="Hospital supply chain"
-                :description="isDepartmentRequester
-                    ? 'Request lab and department supplies — browse items, raise requisitions, and track procurement.'
-                    : 'Stores, procurement, and clinical consumables — start with a task below or open the full workspace.'"
+                :title="supplyChainPageTitle"
+                :description="headerDescription"
                 icon="package"
+                :department-name="showDepartmentInHeader ? resolvedDepartmentName : null"
+                :department-loading="showDepartmentInHeader && departmentContextLoading"
             >
                 <template #actions>
-                    <Button variant="outline" size="sm" class="h-8 gap-1.5" :disabled="loading" @click="loadDashboard">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-8 min-w-0 gap-1.5 max-md:flex-1"
+                        :disabled="loading"
+                        @click="loadDashboard"
+                    >
                         <AppIcon name="refresh-cw" class="size-3.5" />
                         {{ loading ? 'Refreshing…' : 'Refresh' }}
                     </Button>
-                    <Button v-if="canRead" size="sm" class="h-8 gap-1.5" as-child>
-                        <Link :href="INVENTORY_PROCUREMENT_WORKSPACE_PATH">
+                    <Button v-if="canRead" size="sm" class="h-8 min-w-0 gap-1.5 max-md:flex-1" as-child>
+                        <Link
+                            :href="INVENTORY_PROCUREMENT_WORKSPACE_PATH"
+                            class="inline-flex min-w-0 items-center justify-center gap-1.5 max-md:w-full"
+                        >
                             <AppIcon name="layout-grid" class="size-3.5" />
                             Full workspace
                         </Link>
@@ -392,11 +494,17 @@ onMounted(async () => {
                     </AlertDescription>
                 </Alert>
 
-                <div class="grid gap-4 lg:grid-cols-3">
-                    <Card v-if="isDepartmentRequester" class="rounded-lg shadow-sm lg:col-span-2">
+                <div :class="operationsRowGridClass">
+                    <Card v-if="isDepartmentRequester" class="rounded-lg shadow-sm" :class="primaryOperationsCardClass">
                         <CardHeader class="pb-2">
-                            <CardTitle class="text-base">Your department</CardTitle>
-                            <CardDescription>Requisitions and item lookup for lab and clinical units.</CardDescription>
+                            <CardTitle class="text-base">
+                                <Skeleton v-if="departmentContextLoading" class="h-5 w-32" />
+                                <template v-else>{{ departmentSectionTitle }}</template>
+                            </CardTitle>
+                            <CardDescription>
+                                <Skeleton v-if="departmentContextLoading" class="mt-1 h-4 w-full max-w-md" />
+                                <template v-else>{{ departmentSectionDescription }}</template>
+                            </CardDescription>
                         </CardHeader>
                         <CardContent class="grid gap-3 sm:grid-cols-2">
                             <Link
@@ -419,7 +527,7 @@ onMounted(async () => {
                         </CardContent>
                     </Card>
 
-                    <Card v-else-if="visibleStoreTasks.length > 0" class="rounded-lg shadow-sm lg:col-span-2">
+                    <Card v-else-if="visibleStoreTasks.length > 0" class="rounded-lg shadow-sm" :class="primaryOperationsCardClass">
                         <CardHeader class="pb-2">
                             <CardTitle class="text-base">Store operations</CardTitle>
                             <CardDescription>Daily tasks for storekeepers and issuing clerks.</CardDescription>
@@ -448,7 +556,7 @@ onMounted(async () => {
                         </CardContent>
                     </Card>
 
-                    <Card v-if="isStoreOperations || canCreateRequest" class="rounded-lg shadow-sm" :class="isDepartmentRequester ? '' : ''">
+                    <Card v-if="showProcurementSignalsCard" class="rounded-lg shadow-sm">
                         <CardHeader class="pb-2">
                             <CardTitle class="text-base">{{ isDepartmentRequester ? 'Request status' : 'Procurement signals' }}</CardTitle>
                             <CardDescription>
@@ -486,8 +594,8 @@ onMounted(async () => {
                     </Card>
                 </div>
 
-                <div v-if="masterDataTasks.some((entry) => entry.permission) || planningTasks.some((entry) => entry.permission)" class="grid gap-4 lg:grid-cols-2">
-                    <Card v-if="masterDataTasks.some((entry) => entry.permission)" class="rounded-lg shadow-sm">
+                <div v-if="showMasterDataCard || showPlanningCard" :class="registryRowGridClass">
+                    <Card v-if="showMasterDataCard" class="rounded-lg shadow-sm">
                         <CardHeader class="pb-2">
                             <CardTitle class="text-base">Master data</CardTitle>
                             <CardDescription>Items, suppliers, and warehouses.</CardDescription>
@@ -506,7 +614,7 @@ onMounted(async () => {
                         </CardContent>
                     </Card>
 
-                    <Card v-if="planningTasks.some((entry) => entry.permission)" class="rounded-lg shadow-sm">
+                    <Card v-if="showPlanningCard" class="rounded-lg shadow-sm">
                         <CardHeader class="pb-2">
                             <CardTitle class="text-base">Planning & national supply</CardTitle>
                             <CardDescription>MSD, analytics, and inter-store transfers.</CardDescription>
@@ -526,25 +634,21 @@ onMounted(async () => {
                     </Card>
                 </div>
 
-                <Card v-if="sectionQuickLinks.length > 0" class="rounded-lg border-dashed shadow-sm">
-                    <CardHeader class="pb-2">
-                        <CardTitle class="text-sm font-medium text-muted-foreground">Workspace areas for your role</CardTitle>
-                    </CardHeader>
-                    <CardContent
-                        class="grid w-full gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,9.5rem),1fr))]"
+                <div
+                    v-if="sectionQuickLinks.length > 0"
+                    class="grid w-full gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,9.5rem),1fr))]"
+                >
+                    <Button
+                        v-for="link in sectionQuickLinks"
+                        :key="link.section"
+                        variant="outline"
+                        size="sm"
+                        class="h-8 w-full min-w-0 justify-center px-2"
+                        as-child
                     >
-                        <Button
-                            v-for="link in sectionQuickLinks"
-                            :key="link.section"
-                            variant="outline"
-                            size="sm"
-                            class="h-8 w-full min-w-0 justify-center px-2"
-                            as-child
-                        >
-                            <Link :href="link.href" class="truncate">{{ link.label }}</Link>
-                        </Button>
-                    </CardContent>
-                </Card>
+                        <Link :href="link.href" class="truncate">{{ link.label }}</Link>
+                    </Button>
+                </div>
             </template>
         </div>
     </AppLayout>
