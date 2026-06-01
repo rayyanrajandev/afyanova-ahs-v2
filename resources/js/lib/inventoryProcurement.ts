@@ -6,6 +6,12 @@ export const INVENTORY_PROCUREMENT_HOME_PATH = '/inventory-procurement';
 
 export const INVENTORY_PROCUREMENT_WORKSPACE_PATH = '/inventory-procurement/workspace';
 
+export const INVENTORY_PROCUREMENT_RECEIVE_PATH = '/inventory-procurement/receive';
+
+export const INVENTORY_PROCUREMENT_ISSUE_PATH = '/inventory-procurement/issue';
+
+export const INVENTORY_PROCUREMENT_COUNT_PATH = '/inventory-procurement/count';
+
 export const inventoryWorkspaceSections = [
     'inventory',
     'procurement',

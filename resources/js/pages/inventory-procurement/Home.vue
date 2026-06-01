@@ -11,7 +11,10 @@ import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
 import {
+    INVENTORY_PROCUREMENT_COUNT_PATH,
     INVENTORY_PROCUREMENT_HOME_PATH,
+    INVENTORY_PROCUREMENT_ISSUE_PATH,
+    INVENTORY_PROCUREMENT_RECEIVE_PATH,
     INVENTORY_PROCUREMENT_WORKSPACE_PATH,
     inventoryWorkspaceHref,
     inventoryWorkspaceSectionLabels,
@@ -60,6 +63,7 @@ const canCreateRequest = ref(false);
 const canUpdateRequestStatus = ref(false);
 const canManageSuppliers = ref(false);
 const canManageWarehouses = ref(false);
+const canReconcileStock = ref(false);
 
 const stockCounts = ref<StockAlertCounts>({ outOfStock: 0, lowStock: 0, healthy: 0, total: 0 });
 const shortageMeta = ref<ShortageQueueMeta | null>(null);
@@ -80,6 +84,9 @@ function resolvePermissions(names: Iterable<string>, hasSuperAdmin: boolean): vo
     canUpdateRequestStatus.value = hasSuperAdmin || set.has('inventory.procurement.update-request-status');
     canManageSuppliers.value = hasSuperAdmin || set.has('inventory.procurement.manage-suppliers');
     canManageWarehouses.value = hasSuperAdmin || set.has('inventory.procurement.manage-warehouses');
+    canReconcileStock.value = hasSuperAdmin
+        || set.has('inventory.procurement.reconcile-stock')
+        || set.has('inventory.procurement.create-movement');
 }
 
 async function loadPermissions(): Promise<void> {
@@ -138,31 +145,27 @@ function workspaceSection(section: InventoryWorkspaceSection, extra: Record<stri
 const storeTasks = computed<TaskCard[]>(() => [
     {
         id: 'receive',
-        title: 'Receive & procure',
-        description: 'Approve requests, place orders, and receive deliveries into store stock.',
+        title: 'Receive deliveries',
+        description: 'Step-by-step receipt from purchase orders or direct delivery into store.',
         icon: 'clipboard-list',
-        href: workspaceSection('procurement'),
-        badge: pendingApprovalCount.value + approvedAwaitingOrderCount.value || null,
-        badgeVariant: pendingApprovalCount.value > 0 ? 'destructive' : 'secondary',
-        permission: canRead.value,
+        href: INVENTORY_PROCUREMENT_RECEIVE_PATH,
+        permission: canCreateMovement.value,
     },
     {
         id: 'issue',
-        title: 'Issue to departments',
-        description: 'Fulfill ward requisitions and monitor department stock positions.',
+        title: 'Issue to ward',
+        description: 'Issue stock to departments with reason and traceability.',
         icon: 'package',
-        href: workspaceSection('requisitions'),
-        badge: shortageMeta.value?.readyLineCount ?? null,
-        badgeVariant: (shortageMeta.value?.readyLineCount ?? 0) > 0 ? 'destructive' : 'outline',
-        permission: canRead.value,
+        href: INVENTORY_PROCUREMENT_ISSUE_PATH,
+        permission: canCreateMovement.value,
     },
     {
-        id: 'movements',
-        title: 'Stock ledger',
-        description: 'Record movements, reconcile counts, and trace clinical consumption.',
-        icon: 'activity',
-        href: workspaceSection('ledger'),
-        permission: canCreateMovement.value || canRead.value,
+        id: 'count',
+        title: 'Cycle count',
+        description: 'Physical count and post variance to match store on-hand.',
+        icon: 'check-circle',
+        href: INVENTORY_PROCUREMENT_COUNT_PATH,
+        permission: canReconcileStock.value,
     },
     {
         id: 'shortage',
@@ -172,6 +175,14 @@ const storeTasks = computed<TaskCard[]>(() => [
         href: workspaceSection('shortage-queue'),
         badge: shortageMeta.value?.readyLineCount ?? null,
         badgeVariant: 'destructive',
+        permission: canRead.value,
+    },
+    {
+        id: 'ledger',
+        title: 'Stock ledger',
+        description: 'Full movement history, exports, and clinical consumption trace.',
+        icon: 'activity',
+        href: workspaceSection('ledger'),
         permission: canRead.value,
     },
 ]);
@@ -390,7 +401,13 @@ onMounted(async () => {
                             <Button v-if="canCreateRequest" size="sm" variant="outline" class="mt-1 w-full gap-1.5" as-child>
                                 <Link :href="workspaceSection('procurement')">
                                     <AppIcon name="plus" class="size-3.5" />
-                                    New procurement request
+                                    Procurement workspace
+                                </Link>
+                            </Button>
+                            <Button v-if="canCreateMovement" size="sm" variant="outline" class="w-full gap-1.5" as-child>
+                                <Link :href="INVENTORY_PROCUREMENT_RECEIVE_PATH">
+                                    <AppIcon name="package" class="size-3.5" />
+                                    Receive wizard
                                 </Link>
                             </Button>
                         </CardContent>

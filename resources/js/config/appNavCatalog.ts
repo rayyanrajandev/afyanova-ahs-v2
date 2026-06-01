@@ -232,6 +232,22 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Full inventory, procurement, ledger, and analytics workspace',
     },
     {
+        title: 'Receive stock',
+        href: '/inventory-procurement/receive',
+        iconName: 'package',
+        section: 'stores',
+        permissionPrefixes: ['inventory.procurement.create-movement'],
+        helpNote: 'Receive deliveries and post store stock',
+    },
+    {
+        title: 'Issue stock',
+        href: '/inventory-procurement/issue',
+        iconName: 'package',
+        section: 'stores',
+        permissionPrefixes: ['inventory.procurement.create-movement'],
+        helpNote: 'Issue stock to wards and departments',
+    },
+    {
         title: 'Warehouses',
         href: '/inventory-procurement/warehouses',
         iconName: 'building-2',

@@ -10,19 +10,36 @@ Staff complete store work in minutes with full traceability: receipt → storage
 
 | Phase | Focus | Status |
 |-------|--------|--------|
-| **0** | Personas, metrics, contract refresh | This document |
-| **1** | Supply chain **home** + **workspace** routes, deep links | **In progress** |
-| **2** | Cycle counting, PAR levels, GRN, barcode wizards | Planned |
+| **0** | Personas, metrics, contract refresh | Done (this document) |
+| **1** | Supply chain **home** + **workspace** routes, deep links | **Shipped** |
+| **2** | Task wizards (receive, issue, count), barcode, PAR | **In progress** |
 | **3** | Pharmacy lane, MSD depth, finance GRN export, clinical history | Planned |
 | **4** | Analytics actions, SoD, notifications | Planned |
 | **5** | CSSD, consignment, CMMS (tier-dependent) | Optional |
 
-## Phase 1 (shipped increment)
+## Shipped routes
 
-- `/inventory-procurement` — **Supply chain home** (queues, KPIs, task cards)
-- `/inventory-procurement/workspace?section=` — full operational workspace (former single page)
-- `/inventory-procurement?section=` — backward compatible (opens workspace)
-- Shared helpers: `resources/js/lib/inventoryProcurement.ts`
+| Route | Purpose |
+|-------|---------|
+| `/inventory-procurement` | Supply chain home — KPIs and task cards |
+| `/inventory-procurement/workspace?section=` | Full operational workspace |
+| `/inventory-procurement/receive` | Receive wizard (PO + direct receipt) |
+| `/inventory-procurement/issue` | Issue-to-department wizard |
+| `/inventory-procurement/count` | Cycle count / reconciliation wizard |
+| `/inventory-procurement/suppliers` | Supplier registry |
+| `/inventory-procurement/warehouses` | Warehouse registry |
+
+Backward compatible: `/inventory-procurement?section=` opens the workspace.
+
+Shared helpers: `resources/js/lib/inventoryProcurement.ts`  
+Access / lookups: `useInventoryProcurementAccess`, `useInventoryMasterLookups`
+
+## Phase 2 remaining
+
+- Barcode scan-to-receive on receive wizard
+- Scheduled cycle count programs (by warehouse / ABC class)
+- PAR levels per department with auto-requisition
+- Procurement approval thresholds and printable GRN
 
 ## Success metrics (pilot facility)
 
@@ -45,5 +62,5 @@ Staff complete store work in minutes with full traceability: receipt → storage
 ## Technical notes
 
 - Backend remains `app/Modules/InventoryProcurement` (no split).
-- Frontend: decompose `Workspace.vue` over time into route-level pages (`/items`, `/receive`, …).
-- Entitlements already split (`inventory.items`, `inventory.procurement`, …) — map to home cards by permission.
+- Decompose `Workspace.vue` over time; task pages already extract high-frequency flows.
+- Entitlements map to routes (`inventory.stock_movements`, `inventory.stock_issue`, …).
