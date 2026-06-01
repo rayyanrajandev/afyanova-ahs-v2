@@ -70,6 +70,7 @@ const { permissionNames: sharedPermissionNames, isFacilitySuperAdmin, scope } = 
 
 const loading = ref(true);
 const error = ref<string | null>(null);
+const dashboardWarnings = ref<string[]>([]);
 
 const canRead = ref(false);
 const canManageItems = ref(false);
@@ -137,32 +138,59 @@ async function loadDashboard(): Promise<void> {
 
     loading.value = true;
     error.value = null;
+    dashboardWarnings.value = [];
 
-    try {
-        const [countsResponse, shortageResponse, pendingResponse, approvedResponse] = await Promise.all([
-            apiRequestJson<{ data: StockAlertCounts }>('GET', '/inventory-procurement/stock-alert-counts', {
-                query: { limit: 1 },
-            }),
-            apiRequestJson<{ data: unknown[]; meta: ShortageQueueMeta }>('GET', '/inventory-procurement/shortage-queue', {
-                query: { page: 1, perPage: 1, readiness: 'all' },
-            }),
-            apiRequestJson<{ data: unknown[]; meta: { total?: number } }>('GET', '/inventory-procurement/procurement-requests', {
-                query: { status: 'pending_approval', page: 1, perPage: 1 },
-            }),
-            apiRequestJson<{ data: unknown[]; meta: { total?: number } }>('GET', '/inventory-procurement/procurement-requests', {
-                query: { status: 'approved', page: 1, perPage: 1 },
-            }),
-        ]);
+    const results = await Promise.allSettled([
+        apiRequestJson<{ data: StockAlertCounts }>('GET', '/inventory-procurement/stock-alert-counts', {
+            query: { limit: 1 },
+        }),
+        apiRequestJson<{ data: unknown[]; meta: ShortageQueueMeta }>('GET', '/inventory-procurement/shortage-queue', {
+            query: { page: 1, perPage: 1, readiness: 'all' },
+        }),
+        apiRequestJson<{ data: unknown[]; meta: { total?: number } }>('GET', '/inventory-procurement/procurement-requests', {
+            query: { status: 'pending_approval', page: 1, perPage: 1 },
+        }),
+        apiRequestJson<{ data: unknown[]; meta: { total?: number } }>('GET', '/inventory-procurement/procurement-requests', {
+            query: { status: 'approved', page: 1, perPage: 1 },
+        }),
+    ] as const);
 
-        stockCounts.value = countsResponse.data ?? stockCounts.value;
-        shortageMeta.value = shortageResponse.meta ?? null;
-        pendingApprovalCount.value = pendingResponse.meta?.total ?? 0;
-        approvedAwaitingOrderCount.value = approvedResponse.meta?.total ?? 0;
-    } catch (loadError) {
-        error.value = messageFromUnknown(loadError, 'Unable to load supply chain overview.');
-    } finally {
-        loading.value = false;
+    const warnings: string[] = [];
+    const [countsResult, shortageResult, pendingResult, approvedResult] = results;
+
+    if (countsResult.status === 'fulfilled') {
+        stockCounts.value = countsResult.value.data ?? stockCounts.value;
+    } else {
+        warnings.push(`Stock alerts: ${messageFromUnknown(countsResult.reason, 'Unavailable')}`);
     }
+
+    if (shortageResult.status === 'fulfilled') {
+        shortageMeta.value = shortageResult.value.meta ?? null;
+    } else {
+        shortageMeta.value = null;
+        warnings.push(`Shortage queue: ${messageFromUnknown(shortageResult.reason, 'Unavailable')}`);
+    }
+
+    if (pendingResult.status === 'fulfilled') {
+        pendingApprovalCount.value = pendingResult.value.meta?.total ?? 0;
+    } else {
+        pendingApprovalCount.value = 0;
+        warnings.push(`Pending approvals: ${messageFromUnknown(pendingResult.reason, 'Unavailable')}`);
+    }
+
+    if (approvedResult.status === 'fulfilled') {
+        approvedAwaitingOrderCount.value = approvedResult.value.meta?.total ?? 0;
+    } else {
+        approvedAwaitingOrderCount.value = 0;
+        warnings.push(`Approved orders: ${messageFromUnknown(approvedResult.reason, 'Unavailable')}`);
+    }
+
+    dashboardWarnings.value = warnings;
+    if (warnings.length === results.length) {
+        error.value = 'All supply chain overview services returned an error.';
+    }
+
+    loading.value = false;
 }
 
 function workspaceSection(section: InventoryWorkspaceSection, extra: Record<string, string> = {}): string {
@@ -456,10 +484,26 @@ onMounted(async () => {
 
             <Alert v-else-if="error" variant="destructive">
                 <AlertTitle>Overview unavailable</AlertTitle>
-                <AlertDescription>{{ error }}</AlertDescription>
+                <AlertDescription>
+                    <span class="block">{{ error }}</span>
+                    <span
+                        v-for="warning in dashboardWarnings"
+                        :key="warning"
+                        class="block"
+                    >
+                        {{ warning }}
+                    </span>
+                </AlertDescription>
             </Alert>
 
             <template v-if="canRead">
+                <Alert v-if="dashboardWarnings.length > 0 && !error" class="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                    <AlertTitle>Some supply chain signals are unavailable</AlertTitle>
+                    <AlertDescription>
+                        <span class="block" v-for="warning in dashboardWarnings" :key="warning">{{ warning }}</span>
+                    </AlertDescription>
+                </Alert>
+
                 <SupplyChainStatGrid :loading="loading">
                     <SupplyChainStatCard
                         label="Store out"
