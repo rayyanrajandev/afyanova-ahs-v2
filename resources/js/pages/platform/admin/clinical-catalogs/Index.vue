@@ -2408,7 +2408,7 @@ onMounted(() => {
                                             <div class="flex flex-wrap items-center gap-2">
                                                 <Button size="sm" variant="outline" class="gap-1.5" as-child>
                                                     <Link :href="inventoryStoreItemsHref">
-                                                        <AppIcon name="warehouse" class="size-3.5" />
+                                                        <AppIcon name="building-2" class="size-3.5" />
                                                         Manage store items
                                                     </Link>
                                                 </Button>
@@ -2688,7 +2688,7 @@ onMounted(() => {
                             </p>
                             <Button size="sm" variant="outline" class="mt-2 h-8 gap-1.5" as-child>
                                 <Link :href="inventoryStoreItemsHref">
-                                    <AppIcon name="warehouse" class="size-3.5" />
+                                    <AppIcon name="building-2" class="size-3.5" />
                                     Open Inventory &amp; Procurement
                                 </Link>
                             </Button>
@@ -2716,7 +2716,7 @@ onMounted(() => {
                                     <p>No consumables listed yet. Add each store item and how much is used per service.</p>
                                     <Button size="sm" variant="outline" class="h-8 gap-1.5" as-child>
                                         <Link :href="inventoryStoreItemsHref">
-                                            <AppIcon name="warehouse" class="size-3.5" />
+                                            <AppIcon name="building-2" class="size-3.5" />
                                             Create store items first
                                         </Link>
                                     </Button>
