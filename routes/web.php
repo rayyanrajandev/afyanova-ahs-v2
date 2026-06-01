@@ -277,9 +277,21 @@ Route::get('claims-insurance', function () {
     return Inertia::render('claims-insurance/Index');
 })->middleware(['auth', 'verified', 'can:claims.insurance.read', 'facility.entitlement:claims.insurance'])->name('claims-insurance.page');
 
-Route::get('inventory-procurement', function () {
-    return Inertia::render('inventory-procurement/Index');
+Route::get('inventory-procurement', function (Request $request) {
+    if (
+        $request->filled('section')
+        || $request->filled('itemId')
+        || $request->filled('movementType')
+    ) {
+        return Inertia::render('inventory-procurement/Workspace');
+    }
+
+    return Inertia::render('inventory-procurement/Home');
 })->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])->name('inventory-procurement.page');
+
+Route::get('inventory-procurement/workspace', function () {
+    return Inertia::render('inventory-procurement/Workspace');
+})->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])->name('inventory-procurement-workspace.page');
 
 Route::get('inventory-procurement/suppliers', function () {
     return Inertia::render('inventory-procurement/suppliers/Index');

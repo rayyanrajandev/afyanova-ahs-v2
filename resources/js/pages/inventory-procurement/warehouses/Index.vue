@@ -53,7 +53,7 @@ type StatusResponse = { data: StatusCounts };
 type AuditResponse = { data: AuditLog[]; meta: Pagination };
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Inventory & Procurement', href: '/inventory-procurement' },
+    { title: 'Supply chain', href: '/inventory-procurement' },
     { title: 'Warehouses', href: '/inventory-procurement/warehouses' },
 ];
 

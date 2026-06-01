@@ -56,7 +56,7 @@ type AuditResponse = { data: AuditLog[]; meta: Pagination };
 type SupplierCountryOption = { code: string; name: string };
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Inventory & Procurement', href: '/inventory-procurement' },
+    { title: 'Supply chain', href: '/inventory-procurement' },
     { title: 'Suppliers', href: '/inventory-procurement/suppliers' },
 ];
 

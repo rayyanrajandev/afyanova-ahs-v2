@@ -50,7 +50,7 @@ export const buildSupplySurface: WorkflowSurfaceBuilder = ({ counts, lists, help
 
     return {
         kpis,
-        actions: [{ label: 'Inventory', icon: 'package', variant: 'default', href: '/inventory-procurement' }],
+        actions: [{ label: 'Supply chain', icon: 'package', variant: 'default', href: '/inventory-procurement' }],
         queueRows,
         handoff: {
             title: 'Supply chain handoff',
@@ -81,7 +81,7 @@ export const buildSupplySurface: WorkflowSurfaceBuilder = ({ counts, lists, help
                 label: Number(outOfStock ?? 0) > 0 ? 'Open stock alerts' : 'Open procurement',
                 href: '/inventory-procurement',
             },
-            secondaryAction: { label: 'Inventory dashboard', href: '/inventory-procurement' },
+            secondaryAction: { label: 'Supply chain workspace', href: '/inventory-procurement/workspace' },
             chips: [
                 { label: 'Low stock', value: lowStock },
                 { label: 'Out of stock', value: outOfStock },

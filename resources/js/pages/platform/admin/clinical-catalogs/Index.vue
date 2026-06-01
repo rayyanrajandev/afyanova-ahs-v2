@@ -23,6 +23,7 @@ import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { CLINICAL_CATALOG_BULK_MAX_STATUS_IDS } from '@/lib/clinicalCatalogBulk';
 import { formatEnumLabel } from '@/lib/labels';
+import { inventoryWorkspaceHref } from '@/lib/inventoryProcurement';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
 import { type BreadcrumbItem } from '@/types';
@@ -223,7 +224,8 @@ const facilityTierOptions = [
     { value: 'regional_hospital', label: 'Regional hospital' },
     { value: 'zonal_referral', label: 'Zonal referral' },
 ] as const;
-const inventoryStoreItemsHref = '/inventory-procurement?section=inventory';
+
+const inventoryStoreItemsHref = inventoryWorkspaceHref({ section: 'inventory' });
 
 const consumptionStageOptions = [
     { value: 'per_order', label: 'When service is ordered' },

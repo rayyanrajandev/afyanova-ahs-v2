@@ -216,12 +216,20 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Financial controls and management reports',
     },
     {
-        title: 'Stores & procurement',
+        title: 'Supply chain',
         href: '/inventory-procurement',
         iconName: 'package',
         section: 'stores',
         permissionPrefixes: ['inventory.procurement.'],
-        helpNote: 'Stock, requisitions, and procurement workflow',
+        helpNote: 'Hospital stores, procurement, and stock tasks',
+    },
+    {
+        title: 'Supply chain workspace',
+        href: '/inventory-procurement/workspace',
+        iconName: 'layout-grid',
+        section: 'stores',
+        permissionPrefixes: ['inventory.procurement.'],
+        helpNote: 'Full inventory, procurement, ledger, and analytics workspace',
     },
     {
         title: 'Warehouses',

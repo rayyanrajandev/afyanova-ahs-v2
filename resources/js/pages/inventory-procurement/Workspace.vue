@@ -40,6 +40,11 @@ import { generateRequestKey } from '@/lib/idempotency';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
+import {
+    INVENTORY_PROCUREMENT_HOME_PATH,
+    inventoryWorkspaceHref,
+    normalizeInventoryWorkspaceSection,
+} from '@/lib/inventoryProcurement';
 import { type BreadcrumbItem } from '@/types';
 
 type ApiError = Error & {
@@ -112,7 +117,8 @@ type StockMovementLookupItem = {
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Inventory & Procurement', href: '/inventory-procurement' },
+    { title: 'Supply chain', href: INVENTORY_PROCUREMENT_HOME_PATH },
+    { title: 'Workspace', href: inventoryWorkspaceHref() },
 ];
 
 const POLLING_INTERVAL_MS = 30_000;
@@ -176,7 +182,7 @@ const inventoryWorkspaceTabs = ['inventory', 'procurement', 'ledger', 'departmen
 type InventoryWorkspaceTab = (typeof inventoryWorkspaceTabs)[number];
 
 function normalizeInventoryWorkspaceTab(value: string): InventoryWorkspaceTab {
-    return inventoryWorkspaceTabs.includes(value as InventoryWorkspaceTab) ? (value as InventoryWorkspaceTab) : 'inventory';
+    return normalizeInventoryWorkspaceSection(value) as InventoryWorkspaceTab;
 }
 
 const activeTab = ref<InventoryWorkspaceTab>('inventory');
@@ -611,9 +617,19 @@ function confirmProcurementDiscard(): void {
     closeCreateProcurementDialog();
 }
 
+function syncWorkspaceUrl(tab: InventoryWorkspaceTab): void {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    const nextUrl = inventoryWorkspaceHref({ section: tab });
+    window.history.replaceState(window.history.state, '', nextUrl);
+}
+
 function onTabChange(value: string) {
     const nextTab = normalizeInventoryWorkspaceTab(value);
     activeTab.value = nextTab;
+    syncWorkspaceUrl(nextTab);
     if (nextTab === 'ledger') {
         void loadStockLedger();
     }
@@ -2522,7 +2538,8 @@ function hydrateWorkspaceTabFromUrl(): void {
         return;
     }
 
-    activeTab.value = normalizeInventoryWorkspaceTab(section);
+    const nextTab = normalizeInventoryWorkspaceTab(section);
+    activeTab.value = nextTab;
 }
 
 function goToStockLedgerPage(page: number) {
@@ -5446,6 +5463,7 @@ onMounted(async () => {
     document.addEventListener('keydown', handleKeyboardShortcut);
     const shouldFocusStockLedger = hydrateStockLedgerFiltersFromUrl();
     hydrateWorkspaceTabFromUrl();
+    syncWorkspaceUrl(activeTab.value);
     await loadPermissions();
     await reloadAll();
     startPolling();
@@ -5458,7 +5476,7 @@ onMounted(async () => {
 </script>
 
 <template>
-    <Head title="Inventory & Procurement" />
+    <Head title="Supply chain workspace" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
@@ -5466,12 +5484,20 @@ onMounted(async () => {
             <!-- Page header -->
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div class="min-w-0">
+                    <div class="mb-2">
+                        <Button variant="ghost" size="sm" class="h-8 gap-1.5 px-2 text-muted-foreground" as-child>
+                            <Link :href="INVENTORY_PROCUREMENT_HOME_PATH">
+                                <AppIcon name="chevron-left" class="size-3.5" />
+                                Supply chain home
+                            </Link>
+                        </Button>
+                    </div>
                     <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
                         <AppIcon name="package" class="size-7 text-primary" />
-                        Inventory & Procurement
+                        Supply chain workspace
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        Stock alerting, stock movement ledger, and procurement request lifecycle.
+                        Item master, procurement, stock ledger, requisitions, MSD, and analytics in one operational surface.
                     </p>
                 </div>
                 <div class="flex flex-shrink-0 items-center gap-2">
