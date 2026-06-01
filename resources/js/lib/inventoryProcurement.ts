@@ -88,13 +88,13 @@ export function shouldOpenInventoryWorkspace(search: string): boolean {
 
 export const inventoryWorkspaceSectionLabels: Record<InventoryWorkspaceSection, string> = {
     overview: 'Overview',
-    requisitions: 'Requisitions',
-    'shortage-queue': 'Shortage queue',
+    requisitions: 'Department requests',
+    'shortage-queue': 'Shortages',
     transfers: 'Transfers',
     inventory: 'Item master',
     ledger: 'Stock ledger',
     'department-stock': 'Department stock',
-    procurement: 'Procurement',
+    procurement: 'Purchase requests',
     'msd-orders': 'MSD orders',
     'lead-times': 'Lead times',
     claims: 'Claims',

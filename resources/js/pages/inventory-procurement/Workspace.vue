@@ -5481,7 +5481,7 @@ async function submitReceiveGoods() {
         const pendingCount = replenishment?.pendingLineCount ?? 0;
         if (pendingCount > 0) {
             shortageQueueReplenishmentBanner.value = replenishment;
-            notifySuccess(`Goods received. ${pendingCount} shortage line${pendingCount === 1 ? '' : 's'} for this item can now be reviewed in the Shortage Queue.`);
+            notifySuccess(`Goods received. ${pendingCount} shortage line${pendingCount === 1 ? '' : 's'} for this item can now be reviewed in Shortages.`);
         } else {
             notifySuccess(receiveRequest.value.sourceDepartmentRequisitionId
                 ? 'Goods received into store. Source requisition can now be completed if stock is sufficient.'
@@ -6034,7 +6034,7 @@ onMounted(async () => {
             <Tabs :model-value="activeTab" class="flex min-h-0 flex-1 flex-col gap-4" @update:model-value="onTabChange">
                 <TabsList class="flex h-auto w-full flex-wrap justify-start gap-2 rounded-lg bg-muted/30 p-1">
                     <template v-if="workspaceTabVisible('overview') || workspaceTabVisible('requisitions') || workspaceTabVisible('shortage-queue') || workspaceTabVisible('transfers')">
-                        <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Operations</span>
+                        <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Requests &amp; Fulfilment</span>
                     </template>
                     <TabsTrigger v-if="workspaceTabVisible('overview')" value="overview" class="gap-1.5">
                         <AppIcon name="layout-grid" class="size-3.5" />
@@ -6042,11 +6042,11 @@ onMounted(async () => {
                     </TabsTrigger>
                     <TabsTrigger v-if="workspaceTabVisible('requisitions')" value="requisitions" class="gap-1.5">
                         <AppIcon name="clipboard-list" class="size-3.5" />
-                        Requisitions
+                        Department Requests
                     </TabsTrigger>
                     <TabsTrigger v-if="workspaceTabVisible('shortage-queue')" value="shortage-queue" class="gap-1.5">
                         <AppIcon name="alert-triangle" class="size-3.5" />
-                        Shortage Queue
+                        Shortages
                         <Badge
                             v-if="(shortageQueueMeta?.readyLineCount ?? 0) > 0"
                             variant="destructive"
@@ -6060,7 +6060,7 @@ onMounted(async () => {
                         Transfers
                     </TabsTrigger>
                     <template v-if="workspaceTabVisible('inventory') || workspaceTabVisible('ledger') || workspaceTabVisible('department-stock')">
-                        <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Stock</span>
+                        <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Stock Control</span>
                     </template>
                     <TabsTrigger v-if="workspaceTabVisible('inventory')" value="inventory" class="gap-1.5">
                         <AppIcon name="package" class="size-3.5" />
@@ -6079,7 +6079,7 @@ onMounted(async () => {
                     </template>
                     <TabsTrigger v-if="workspaceTabVisible('procurement')" value="procurement" class="gap-1.5">
                         <AppIcon name="clipboard-list" class="size-3.5" />
-                        Requests
+                        Purchase Requests
                     </TabsTrigger>
                     <TabsTrigger v-if="workspaceTabVisible('msd-orders')" value="msd-orders" class="gap-1.5">
                         <AppIcon name="package" class="size-3.5" />
@@ -6090,7 +6090,7 @@ onMounted(async () => {
                         Lead Times
                     </TabsTrigger>
                     <template v-if="workspaceTabVisible('claims') || workspaceTabVisible('analytics')">
-                        <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Governance</span>
+                        <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Review</span>
                     </template>
                     <TabsTrigger v-if="workspaceTabVisible('claims')" value="claims" class="gap-1.5">
                         <AppIcon name="shield-check" class="size-3.5" />
@@ -11542,7 +11542,7 @@ onMounted(async () => {
                     <AppIcon name="activity" class="size-4" />
                     <AlertTitle>Department shortage handoff</AlertTitle>
                     <AlertDescription>
-                        This receipt replenishes {{ procurementSourceLabel(receiveRequest) }}. Once saved, use Complete Issue from the procurement row or Shortage Queue to issue the remaining quantity.
+                        This receipt replenishes {{ procurementSourceLabel(receiveRequest) }}. Once saved, use Complete Issue from the procurement row or Shortages to issue the remaining quantity.
                     </AlertDescription>
                 </Alert>
 
