@@ -186,33 +186,35 @@ onMounted(async () => {
                     back-label="Supply chain home"
                 />
 
-                <div class="grid gap-4 xl:grid-cols-3">
-                <Card class="h-fit rounded-lg shadow-sm">
+                <div class="grid gap-4 lg:grid-cols-2 lg:items-stretch">
+                <Card class="flex h-full min-h-0 flex-col rounded-lg shadow-sm">
                     <CardHeader class="pb-2">
                         <CardTitle class="text-base">Ready requisitions</CardTitle>
                         <CardDescription>Default issue flow — open an approved request for line-level pick, pack, and dispatch control.</CardDescription>
                     </CardHeader>
-                    <CardContent class="space-y-2">
-                        <div v-if="requisitionsLoading" class="space-y-2">
-                            <Skeleton v-for="n in 4" :key="n" class="h-12 w-full" />
-                        </div>
-                        <p v-else-if="pendingRequisitions.length === 0" class="text-sm text-muted-foreground">
-                            No approved requisitions in the first page of results.
-                        </p>
-                        <div v-else class="space-y-2">
-                            <div
-                                v-for="req in pendingRequisitions"
-                                :key="String(req.id)"
-                                class="rounded-md border px-3 py-2 text-sm"
-                            >
-                                <div class="flex items-center justify-between gap-2">
-                                    <span class="font-medium">{{ req.requisitionNumber ?? 'Requisition' }}</span>
-                                    <Badge variant="outline">{{ formatEnumLabel(String(req.status ?? '')) }}</Badge>
+                    <CardContent class="flex min-h-0 flex-1 flex-col gap-3">
+                        <div class="min-h-0 flex-1 space-y-2 overflow-y-auto">
+                            <div v-if="requisitionsLoading" class="space-y-2">
+                                <Skeleton v-for="n in 4" :key="n" class="h-12 w-full" />
+                            </div>
+                            <p v-else-if="pendingRequisitions.length === 0" class="text-sm text-muted-foreground">
+                                No approved requisitions in the first page of results.
+                            </p>
+                            <div v-else class="space-y-2">
+                                <div
+                                    v-for="req in pendingRequisitions"
+                                    :key="String(req.id)"
+                                    class="rounded-md border px-3 py-2 text-sm"
+                                >
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="font-medium">{{ req.requisitionNumber ?? 'Requisition' }}</span>
+                                        <Badge variant="outline">{{ formatEnumLabel(String(req.status ?? '')) }}</Badge>
+                                    </div>
+                                    <p class="text-xs text-muted-foreground">{{ req.requestingDepartment ?? 'Department' }}</p>
                                 </div>
-                                <p class="text-xs text-muted-foreground">{{ req.requestingDepartment ?? 'Department' }}</p>
                             </div>
                         </div>
-                        <Button size="sm" class="mt-2 w-full gap-1.5" as-child>
+                        <Button size="sm" class="mt-auto w-full shrink-0 gap-1.5" as-child>
                             <Link :href="inventoryWorkspaceHref({ section: 'requisitions' })">
                                 <AppIcon name="clipboard-list" class="size-3.5" />
                                 Open requisitions
@@ -221,8 +223,7 @@ onMounted(async () => {
                     </CardContent>
                 </Card>
 
-                <div class="xl:col-span-2">
-                    <Card class="rounded-lg shadow-sm">
+                    <Card class="flex h-full min-h-0 flex-col rounded-lg shadow-sm">
                     <CardHeader class="border-b pb-3">
                         <div class="flex flex-wrap items-start justify-between gap-3">
                             <div>
@@ -235,7 +236,7 @@ onMounted(async () => {
                             </Button>
                         </div>
                     </CardHeader>
-                    <CardContent class="space-y-4 pt-6">
+                    <CardContent class="flex min-h-0 flex-1 flex-col space-y-4 pt-6">
                         <div v-if="!canCreateMovement" class="text-sm text-muted-foreground">
                             Stock movement permission is required to issue items.
                         </div>
@@ -245,7 +246,7 @@ onMounted(async () => {
                                 Use approved requisitions for normal ward fulfillment. Open this form only when stock must move before a requisition exists, and record a clear reason.
                             </AlertDescription>
                         </Alert>
-                        <div v-else class="space-y-4">
+                        <div v-else class="flex min-h-0 flex-1 flex-col gap-4">
                             <InventoryBarcodeScanField
                                 input-id="issue-barcode"
                                 label="Scan item barcode"
@@ -316,14 +317,13 @@ onMounted(async () => {
                                 <AlertDescription>{{ formError }}</AlertDescription>
                             </Alert>
 
-                            <Button class="gap-1.5" :disabled="submitting || !canSubmit" @click="submitIssue">
+                            <Button class="mt-auto shrink-0 gap-1.5" :disabled="submitting || !canSubmit" @click="submitIssue">
                                 <AppIcon name="check-circle" class="size-4" />
                                 {{ submitting ? 'Issuing…' : 'Confirm exception issue' }}
                             </Button>
                         </div>
                     </CardContent>
                     </Card>
-                </div>
 
                 </div>
             </template>

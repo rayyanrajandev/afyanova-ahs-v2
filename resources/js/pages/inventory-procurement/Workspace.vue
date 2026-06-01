@@ -4392,6 +4392,17 @@ const requisitionsReadyCount = computed(() => shortageQueueMeta.value?.readyLine
 const requisitionsWaitingCount = computed(() => shortageQueueMeta.value?.waitingLineCount ?? 0);
 const stockAlertCount = computed(() => Number(itemCounts.value.outOfStock ?? 0) + Number(itemCounts.value.lowStock ?? 0));
 const msdDraftSignalCount = computed(() => shortageMsdDraftLines.value.length + lowStockMsdDraftLines.value.length);
+const requestPipelineCounts = ref({
+    submitted: 0,
+    approved: 0,
+    partiallyIssued: 0,
+    shortageWaiting: 0,
+    procurementPending: 0,
+    procurementApproved: 0,
+    procurementOrdered: 0,
+    procurementReceived: 0,
+    issued: 0,
+});
 
 type WorkspaceNextAction = {
     key: string;
@@ -4448,6 +4459,163 @@ function nextActionClass(tone: WorkspaceNextAction['tone']): string {
     if (tone === 'success') return 'border-green-200 bg-green-50 text-green-900 dark:border-green-900 dark:bg-green-950/30 dark:text-green-100';
 
     return 'border-sidebar-border/70 bg-card text-foreground';
+}
+
+type RequestPipelineStage = {
+    key: string;
+    label: string;
+    value: number;
+    helper: string;
+    icon: string;
+    target: InventoryWorkspaceTab;
+    status?: string;
+    readiness?: 'all' | 'ready' | 'waiting';
+    kind: 'requisition' | 'shortage' | 'procurement';
+};
+
+const requestPipelineStages = computed<RequestPipelineStage[]>(() => [
+    {
+        key: 'submitted',
+        label: 'Submitted',
+        value: requestPipelineCounts.value.submitted,
+        helper: 'Departments waiting for store review.',
+        icon: 'clipboard-list',
+        target: 'requisitions',
+        status: 'submitted',
+        kind: 'requisition',
+    },
+    {
+        key: 'approved',
+        label: 'Approved',
+        value: requestPipelineCounts.value.approved,
+        helper: 'Ready for stock issue decision.',
+        icon: 'check-circle',
+        target: 'requisitions',
+        status: 'approved',
+        kind: 'requisition',
+    },
+    {
+        key: 'shortage',
+        label: 'Shortage',
+        value: requestPipelineCounts.value.partiallyIssued + requestPipelineCounts.value.shortageWaiting,
+        helper: 'Approved demand not fully issued.',
+        icon: 'alert-triangle',
+        target: 'shortage-queue',
+        readiness: 'all',
+        kind: 'shortage',
+    },
+    {
+        key: 'procurement',
+        label: 'In procurement',
+        value: requestPipelineCounts.value.procurementPending + requestPipelineCounts.value.procurementApproved,
+        helper: 'Needs approval or purchase order.',
+        icon: 'package',
+        target: 'procurement',
+        status: 'pending_approval',
+        kind: 'procurement',
+    },
+    {
+        key: 'ordered',
+        label: 'Ordered',
+        value: requestPipelineCounts.value.procurementOrdered,
+        helper: 'Waiting for supplier/MSD delivery.',
+        icon: 'truck',
+        target: 'procurement',
+        status: 'ordered',
+        kind: 'procurement',
+    },
+    {
+        key: 'received',
+        label: 'Received',
+        value: requestPipelineCounts.value.procurementReceived,
+        helper: 'Stock received; complete linked issues.',
+        icon: 'archive',
+        target: 'procurement',
+        status: 'received',
+        kind: 'procurement',
+    },
+    {
+        key: 'issued',
+        label: 'Issued',
+        value: requestPipelineCounts.value.issued,
+        helper: 'Departments have received items.',
+        icon: 'check-circle',
+        target: 'requisitions',
+        status: 'issued',
+        kind: 'requisition',
+    },
+]);
+
+function metaTotal(response: { meta?: { total?: number } } | null | undefined): number {
+    return Number(response?.meta?.total ?? 0);
+}
+
+async function loadRequestPipelineCounts(): Promise<void> {
+    try {
+        const [
+            submitted,
+            approved,
+            partiallyIssued,
+            issued,
+            shortageWaiting,
+            procurementPending,
+            procurementApproved,
+            procurementOrdered,
+            procurementReceived,
+        ] = await Promise.all([
+            apiRequest<{ meta?: { total?: number } }>('GET', '/inventory-procurement/department-requisitions', { query: { status: 'submitted', page: 1, perPage: 1 } }),
+            apiRequest<{ meta?: { total?: number } }>('GET', '/inventory-procurement/department-requisitions', { query: { status: 'approved', page: 1, perPage: 1 } }),
+            apiRequest<{ meta?: { total?: number } }>('GET', '/inventory-procurement/department-requisitions', { query: { status: 'partially_issued', page: 1, perPage: 1 } }),
+            apiRequest<{ meta?: { total?: number } }>('GET', '/inventory-procurement/department-requisitions', { query: { status: 'issued', page: 1, perPage: 1 } }),
+            apiRequest<{ meta?: { waitingLineCount?: number } }>('GET', '/inventory-procurement/shortage-queue', { query: { readiness: 'waiting', page: 1, perPage: 1 } }),
+            apiRequest<{ meta?: { total?: number } }>('GET', '/inventory-procurement/procurement-requests', { query: { status: 'pending_approval', page: 1, perPage: 1 } }),
+            apiRequest<{ meta?: { total?: number } }>('GET', '/inventory-procurement/procurement-requests', { query: { status: 'approved', page: 1, perPage: 1 } }),
+            apiRequest<{ meta?: { total?: number } }>('GET', '/inventory-procurement/procurement-requests', { query: { status: 'ordered', page: 1, perPage: 1 } }),
+            apiRequest<{ meta?: { total?: number } }>('GET', '/inventory-procurement/procurement-requests', { query: { status: 'received', page: 1, perPage: 1 } }),
+        ]);
+
+        requestPipelineCounts.value = {
+            submitted: metaTotal(submitted),
+            approved: metaTotal(approved),
+            partiallyIssued: metaTotal(partiallyIssued),
+            shortageWaiting: Number(shortageWaiting.meta?.waitingLineCount ?? 0),
+            procurementPending: metaTotal(procurementPending),
+            procurementApproved: metaTotal(procurementApproved),
+            procurementOrdered: metaTotal(procurementOrdered),
+            procurementReceived: metaTotal(procurementReceived),
+            issued: metaTotal(issued),
+        };
+    } catch {
+        requestPipelineCounts.value = {
+            submitted: 0,
+            approved: 0,
+            partiallyIssued: 0,
+            shortageWaiting: 0,
+            procurementPending: 0,
+            procurementApproved: 0,
+            procurementOrdered: 0,
+            procurementReceived: 0,
+            issued: 0,
+        };
+    }
+}
+
+function openRequestPipelineStage(stage: RequestPipelineStage): void {
+    if (stage.kind === 'requisition') {
+        deptReqSearch.status = stage.status ?? '';
+        deptReqSearch.page = 1;
+        void loadDeptRequisitions();
+    } else if (stage.kind === 'shortage') {
+        shortageQueueFilters.readiness = stage.readiness ?? 'all';
+        shortageQueueFilters.page = 1;
+        void loadShortageQueue();
+    } else if (stage.kind === 'procurement') {
+        procurementSearch.status = stage.status ?? '';
+        procurementSearch.page = 1;
+        void loadProcurementRequests();
+    }
+
+    onTabChange(stage.target);
 }
 
 function openMsdOrderFromDraft(lines: MsdDraftLine[], sourceLabel: string): void {
@@ -4602,7 +4770,7 @@ async function loadActiveWorkspaceTab(tab: InventoryWorkspaceTab = activeTab.val
 
     switch (tab) {
         case 'overview':
-            await Promise.all([loadItems(), loadProcurementRequests(), loadDeptRequisitions(), loadShortageQueue()]);
+            await Promise.all([loadItems(), loadProcurementRequests(), loadDeptRequisitions(), loadShortageQueue(), loadRequestPipelineCounts()]);
             break;
         case 'inventory':
             await loadItems();
@@ -5889,6 +6057,41 @@ onMounted(async () => {
                             <p class="mt-1 text-xs leading-relaxed opacity-80">{{ action.helper }}</p>
                         </button>
                     </div>
+
+                    <Card class="rounded-lg border-sidebar-border/70 shadow-sm">
+                        <CardHeader class="pb-3">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                    <CardTitle class="text-base">Request Pipeline</CardTitle>
+                                    <CardDescription>Follow department demand from request, to issue, to procurement, to final receipt.</CardDescription>
+                                </div>
+                                <Button size="sm" variant="outline" class="h-8 gap-1.5 text-xs" @click="loadRequestPipelineCounts">
+                                    <AppIcon name="refresh-cw" class="size-3.5" />
+                                    Refresh pipeline
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-7">
+                                <button
+                                    v-for="stage in requestPipelineStages"
+                                    :key="stage.key"
+                                    type="button"
+                                    class="group relative rounded-lg border bg-card p-3 text-left transition hover:border-primary/40 hover:bg-muted/20"
+                                    @click="openRequestPipelineStage(stage)"
+                                >
+                                    <div class="flex items-start justify-between gap-2">
+                                        <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground group-hover:text-foreground">
+                                            <AppIcon :name="stage.icon" class="size-4" />
+                                        </span>
+                                        <span class="text-xl font-bold leading-none tabular-nums">{{ stage.value }}</span>
+                                    </div>
+                                    <p class="mt-3 text-sm font-semibold leading-tight">{{ stage.label }}</p>
+                                    <p class="mt-1 min-h-8 text-xs leading-relaxed text-muted-foreground">{{ stage.helper }}</p>
+                                </button>
+                            </div>
+                        </CardContent>
+                    </Card>
 
                     <div class="grid gap-4 xl:grid-cols-3">
                         <Card class="rounded-lg border-sidebar-border/70 shadow-sm xl:col-span-2">

@@ -23,6 +23,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { usePlatformCountryProfile } from '@/composables/usePlatformCountryProfile';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { apiRequestJson } from '@/lib/apiClient';
 import type { AppIconName } from '@/lib/icons';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
@@ -959,18 +960,7 @@ async function loadSubscriptionWorkspace(id: string): Promise<void> {
 function syncInQueue(f: Facility): void { const i = facilities.value.findIndex((x) => x.id === f.id); if (i >= 0) facilities.value[i] = f; }
 
 async function api<T>(method: 'GET' | 'POST' | 'PATCH', path: string, options?: { query?: Record<string, string | number | null>; body?: Record<string, unknown> }): Promise<T> {
-  const url = new URL(`/api/v1${path}`, window.location.origin);
-  Object.entries(options?.query ?? {}).forEach(([k, v]) => { if (v !== null && v !== '') url.searchParams.set(k, String(v)); });
-  const headers: Record<string, string> = { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
-  let body: string | undefined;
-  if (method !== 'GET') { headers['Content-Type'] = 'application/json'; const token = csrfToken(); if (token) headers['X-CSRF-TOKEN'] = token; body = JSON.stringify(options?.body ?? {}); }
-  const res = await fetch(url.toString(), { method, credentials: 'same-origin', headers, body });
-  const payload = (await res.json().catch(() => ({}))) as VError;
-  if (!res.ok) {
-    const err = new Error(payload.message ?? `${res.status} ${res.statusText}`) as Error & { status?: number; payload?: VError };
-    err.status = res.status; err.payload = payload; throw err;
-  }
-  return payload as T;
+  return apiRequestJson<T>(method, path, options);
 }
 async function loadList(): Promise<void> {
   if (!canRead.value) { facilities.value = []; page.value = null; loading.value = false; return; }
