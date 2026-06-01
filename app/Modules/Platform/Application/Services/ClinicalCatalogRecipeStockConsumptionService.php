@@ -167,7 +167,7 @@ class ClinicalCatalogRecipeStockConsumptionService
                 'supported' => true,
                 'status' => 'no_recipe',
                 'blocking' => false,
-                'summary' => 'No stock recipe is configured yet. Completion can continue, but no inventory will be deducted automatically.',
+                'summary' => 'No consumables are mapped yet. Completion can continue, but store stock will not be deducted automatically.',
                 'lineCount' => 0,
                 'insufficientLineCount' => 0,
                 'lines' => [],
@@ -222,13 +222,13 @@ class ClinicalCatalogRecipeStockConsumptionService
 
         if (! $inventoryItem instanceof InventoryItemModel) {
             throw ValidationException::withMessages([
-                'consumptionRecipe' => ['A recipe stock item is no longer available in inventory.'],
+                'consumptionRecipe' => ['A mapped store item is no longer available in inventory.'],
             ]);
         }
 
         if ((string) ($inventoryItem->status ?? '') !== 'active') {
             throw ValidationException::withMessages([
-                'consumptionRecipe' => [sprintf('%s is not active and cannot be consumed automatically.', $inventoryItem->item_name ?? 'Recipe stock item')],
+                'consumptionRecipe' => [sprintf('%s is not active and cannot be consumed automatically.', $inventoryItem->item_name ?? 'Mapped store item')],
             ]);
         }
 
@@ -260,7 +260,7 @@ class ClinicalCatalogRecipeStockConsumptionService
             throw ValidationException::withMessages([
                 'consumptionRecipe' => [sprintf(
                     'Insufficient stock for %s. Required %.3f %s, available %.3f.',
-                    $inventoryItem->item_name ?? 'recipe stock item',
+                    $inventoryItem->item_name ?? 'mapped store item',
                     $quantity,
                     $recipeItem->unit ?: ($inventoryItem->unit ?? 'unit'),
                     $this->inventoryBatchStockService->availability(
@@ -378,14 +378,14 @@ class ClinicalCatalogRecipeStockConsumptionService
         int $insufficientLineCount,
     ): string {
         if ($status === 'insufficient') {
-            $label = $insufficientLineCount === 1 ? '1 stock line is short' : sprintf('%d stock lines are short', $insufficientLineCount);
+            $label = $insufficientLineCount === 1 ? '1 consumable line is short' : sprintf('%d consumable lines are short', $insufficientLineCount);
 
-            return $label.' and completion will fail until stock is replenished.';
+            return $label.' and completion will fail until store stock is replenished.';
         }
 
-        $label = $lineCount === 1 ? '1 stock line is ready' : sprintf('%d stock lines are ready', $lineCount);
+        $label = $lineCount === 1 ? '1 consumable line is ready' : sprintf('%d consumable lines are ready', $lineCount);
 
-        return $label.' for automatic deduction at completion.';
+        return $label.' for automatic store deduction at completion.';
     }
 
     /**

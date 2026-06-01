@@ -55,14 +55,14 @@ export function clinicalStockPrecheckTitle(
 ): string {
     switch (precheck?.status) {
         case 'insufficient':
-            return 'Stock not ready for completion';
+            return 'Store stock not ready for completion';
         case 'ready':
-            return 'Stock ready for completion';
+            return 'Store stock ready for completion';
         case 'no_recipe':
-            return 'No stock recipe configured';
+            return 'No consumables mapped';
         case 'no_catalog_item':
             return 'Catalog link missing';
         default:
-            return 'Stock readiness';
+            return 'Store consumables';
     }
 }

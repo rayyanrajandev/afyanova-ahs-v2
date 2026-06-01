@@ -7348,7 +7348,7 @@ onMounted(async () => {
                                         Checking live stock readiness
                                     </AlertTitle>
                                     <AlertDescription>
-                                        Refreshing the latest recipe stock position before completion.
+                                        Refreshing store stock for mapped consumables before completion.
                                     </AlertDescription>
                                 </Alert>
                                 <Alert

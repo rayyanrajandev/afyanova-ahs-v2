@@ -224,12 +224,12 @@ const facilityTierOptions = [
     { value: 'zonal_referral', label: 'Zonal referral' },
 ] as const;
 const consumptionStageOptions = [
-    { value: 'per_order', label: 'Per order' },
-    { value: 'sample_collection', label: 'Sample collection' },
-    { value: 'processing', label: 'Processing' },
-    { value: 'result_release', label: 'Result release' },
-    { value: 'procedure_completion', label: 'Procedure completion' },
-    { value: 'manual', label: 'Manual' },
+    { value: 'per_order', label: 'When service is ordered' },
+    { value: 'sample_collection', label: 'At sample collection' },
+    { value: 'processing', label: 'During processing' },
+    { value: 'result_release', label: 'When result is released' },
+    { value: 'procedure_completion', label: 'When procedure is completed' },
+    { value: 'manual', label: 'Manual stock issue only' },
 ] as const;
 const filters = reactive({ q: '', status: '', category: '', perPage: 15, page: 1 });
 const filtersSheetOpen = ref(false);
@@ -883,9 +883,9 @@ const consumptionRecipePayload = computed(() => consumptionRecipeItems.value.map
 })));
 const consumptionRecipeSummary = computed(() => {
     const count = consumptionRecipeItems.value.length;
-    if (count === 0) return 'No stock recipe defined yet';
+    if (count === 0) return 'No consumables mapped yet';
 
-    return `${count} stock line${count === 1 ? '' : 's'} defined`;
+    return `${count} consumable line${count === 1 ? '' : 's'} mapped`;
 });
 const consumptionRecipeValidationMessage = computed(() => {
     const errors = consumptionRecipeErrors.value;
@@ -1026,14 +1026,14 @@ function addConsumptionRecipeLine(): void {
     const selectedInventoryItem = selectedConsumptionInventoryItem.value;
     if (!selectedInventoryItem || !consumptionRecipeForm.quantityPerOrder.trim()) {
         consumptionRecipeErrors.value = {
-            recipeForm: ['Select an eligible stock item and enter quantity per order.'],
+            recipeForm: ['Select a store item and enter the quantity used per service.'],
         };
         return;
     }
 
     if (consumptionRecipeItems.value.some((item) => item.inventoryItemId === selectedInventoryItem.id)) {
         consumptionRecipeErrors.value = {
-            recipeForm: ['This stock item is already in the recipe. Update the existing line or remove it first.'],
+            recipeForm: ['This store item is already listed. Update the existing line or remove it first.'],
         };
         return;
     }
@@ -1088,7 +1088,7 @@ async function loadConsumptionRecipe(item: Item): Promise<void> {
         consumptionRecipeItems.value = recipeResponse.data.items ?? [];
         consumptionInventoryOptions.value = optionsResponse.data ?? [];
     } catch (error) {
-        consumptionRecipeError.value = messageFromUnknown(error, 'Unable to load consumption recipe.');
+        consumptionRecipeError.value = messageFromUnknown(error, 'Unable to load consumables mapping.');
         consumptionRecipeItems.value = [];
         consumptionInventoryOptions.value = [];
     } finally {
@@ -1111,7 +1111,7 @@ async function saveConsumptionRecipe(): Promise<void> {
         });
         consumptionRecipeItems.value = response.data.items ?? [];
         recipeSheetOpen.value = false;
-        notifySuccess('Consumption recipe saved.');
+        notifySuccess('Consumables mapping saved.');
         if (canAudit.value) {
             auditLogs.value = [];
             auditPager.value = null;
@@ -1120,7 +1120,7 @@ async function saveConsumptionRecipe(): Promise<void> {
     } catch (error) {
         const apiError = error as ApiError;
         if (apiError.status === 422 && apiError.payload?.errors) consumptionRecipeErrors.value = apiError.payload.errors;
-        else consumptionRecipeError.value = messageFromUnknown(error, 'Unable to save consumption recipe.');
+        else consumptionRecipeError.value = messageFromUnknown(error, 'Unable to save consumables mapping.');
     } finally {
         consumptionRecipeSaving.value = false;
     }
@@ -2392,18 +2392,18 @@ onMounted(() => {
                                         <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
                                             <div class="flex items-center justify-between gap-2">
                                                 <CardTitle class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                                                    Stock recipe
+                                                    Store consumables
                                                 </CardTitle>
                                                 <Badge variant="outline">{{ consumptionRecipeSummary }}</Badge>
                                             </div>
                                         </CardHeader>
                                         <CardContent class="flex flex-wrap items-center justify-between gap-3 px-3 py-3">
                                             <p class="text-sm text-muted-foreground">
-                                                Physical stock consumed when this {{ domains[selectedCatalogKey].singular.toLowerCase() }} is performed.
+                                                Items deducted from store when this {{ domains[selectedCatalogKey].singular.toLowerCase() }} is completed.
                                             </p>
                                             <Button v-if="canManage" size="sm" variant="outline" class="gap-1.5" @click="openRecipeSheet">
                                                 <AppIcon name="package" class="size-3.5" />
-                                                Manage recipe
+                                                Set consumables
                                             </Button>
                                         </CardContent>
                                     </Card>
@@ -2658,20 +2658,20 @@ onMounted(() => {
                     <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
                         <SheetTitle class="flex items-center gap-2">
                             <AppIcon name="package" class="size-5 text-muted-foreground" />
-                            Stock consumption recipe
+                            Consumables for this service
                         </SheetTitle>
                         <SheetDescription v-if="selected">
-                            Define inventory consumed when {{ selected.name || 'this procedure' }} is performed.
+                            List store items used each time {{ selected.name || 'this service' }} is completed (tubes, reagents, gloves, etc.).
                         </SheetDescription>
                     </SheetHeader>
                     <ScrollArea class="min-h-0 flex-1">
                         <div class="space-y-4 px-4 py-4">
                             <Alert v-if="consumptionRecipeError" variant="destructive">
-                                <AlertTitle>Recipe load issue</AlertTitle>
+                                <AlertTitle>Could not load consumables</AlertTitle>
                                 <AlertDescription>{{ consumptionRecipeError }}</AlertDescription>
                             </Alert>
                             <Alert v-if="consumptionRecipeValidationMessage" variant="destructive">
-                                <AlertTitle>Recipe needs review</AlertTitle>
+                                <AlertTitle>Check consumables list</AlertTitle>
                                 <AlertDescription>{{ consumptionRecipeValidationMessage }}</AlertDescription>
                             </Alert>
                             <div v-if="consumptionRecipeLoading" class="space-y-2">
@@ -2680,20 +2680,20 @@ onMounted(() => {
                             </div>
                             <template v-else>
                                 <div v-if="consumptionRecipeItems.length === 0" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                                    No stock lines yet. Add inventory consumed per order or stage.
+                                    No consumables listed yet. Add each store item and how much is used per service.
                                 </div>
                                 <div v-else class="space-y-2">
                                     <div v-for="line in consumptionRecipeItems" :key="line.inventoryItemId" class="rounded-lg border p-3">
                                         <div class="grid gap-3 md:grid-cols-2">
                                             <div class="grid gap-1.5 md:col-span-2">
-                                                <Label>Stock item</Label>
+                                                <Label>Store item</Label>
                                                 <p class="rounded-md border bg-muted/20 px-3 py-2 text-sm font-medium">{{ inventoryOptionLabel(line.inventoryItem) }}</p>
                                             </div>
-                                            <div class="grid gap-1.5"><Label>Qty/order</Label><Input v-model="line.quantityPerOrder" inputmode="decimal" /></div>
+                                            <div class="grid gap-1.5"><Label>Qty per service</Label><Input v-model="line.quantityPerOrder" inputmode="decimal" /></div>
                                             <div class="grid gap-1.5"><Label>Unit</Label><Input v-model="line.unit" /></div>
                                             <div class="grid gap-1.5"><Label>Waste %</Label><Input v-model="line.wasteFactorPercent" inputmode="decimal" /></div>
                                             <div class="grid gap-1.5">
-                                                <Label>Stage</Label>
+                                                <Label>When to deduct</Label>
                                                 <Select
                                                     :model-value="line.consumptionStage || 'per_order'"
                                                     @update:model-value="(value) => { line.consumptionStage = String(value); }"
@@ -2706,30 +2706,30 @@ onMounted(() => {
                                             </div>
                                             <div class="grid gap-1.5 md:col-span-2"><Label>Notes</Label><Textarea v-model="line.notes" class="min-h-16" /></div>
                                         </div>
-                                        <Button type="button" variant="outline" size="sm" class="mt-3" @click="removeConsumptionRecipeLine(line.inventoryItemId)">Remove line</Button>
+                                        <Button type="button" variant="outline" size="sm" class="mt-3" @click="removeConsumptionRecipeLine(line.inventoryItemId)">Remove</Button>
                                     </div>
                                 </div>
                                 <fieldset class="grid gap-3 rounded-lg border p-3">
-                                    <legend class="px-2 text-sm font-medium text-muted-foreground">Add stock line</legend>
+                                    <legend class="px-2 text-sm font-medium text-muted-foreground">Add consumable</legend>
                                     <div class="grid gap-3 md:grid-cols-2">
                                         <div class="grid gap-1.5 md:col-span-2">
-                                            <Label>Stock item</Label>
+                                            <Label>Store item</Label>
                                             <Select
                                                 :model-value="consumptionRecipeForm.inventoryItemId || SELECT_NOT_SPECIFIED_VALUE"
                                                 @update:model-value="updateConsumptionInventorySelection"
                                             >
-                                                <SelectTrigger class="w-full"><SelectValue placeholder="Select eligible stock" /></SelectTrigger>
+                                                <SelectTrigger class="w-full"><SelectValue placeholder="Select store item" /></SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Select eligible stock</SelectItem>
+                                                    <SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Select store item</SelectItem>
                                                     <SelectItem v-for="option in consumptionInventoryOptions" :key="option.id" :value="option.id">{{ inventoryOptionLabel(option) }}</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                         </div>
-                                        <div class="grid gap-1.5"><Label>Qty/order</Label><Input v-model="consumptionRecipeForm.quantityPerOrder" inputmode="decimal" placeholder="1" /></div>
+                                        <div class="grid gap-1.5"><Label>Qty per service</Label><Input v-model="consumptionRecipeForm.quantityPerOrder" inputmode="decimal" placeholder="1" /></div>
                                         <div class="grid gap-1.5"><Label>Unit</Label><Input v-model="consumptionRecipeForm.unit" placeholder="kit" /></div>
                                         <div class="grid gap-1.5"><Label>Waste %</Label><Input v-model="consumptionRecipeForm.wasteFactorPercent" inputmode="decimal" placeholder="0" /></div>
                                         <div class="grid gap-1.5">
-                                            <Label>Stage</Label>
+                                            <Label>When to deduct</Label>
                                             <Select v-model="consumptionRecipeForm.consumptionStage">
                                                 <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
                                                 <SelectContent>
@@ -2739,14 +2739,14 @@ onMounted(() => {
                                         </div>
                                         <div class="grid gap-1.5 md:col-span-2"><Label>Notes</Label><Textarea v-model="consumptionRecipeForm.notes" class="min-h-16" /></div>
                                     </div>
-                                    <Button type="button" variant="outline" size="sm" class="w-fit" @click="addConsumptionRecipeLine">Add line</Button>
+                                    <Button type="button" variant="outline" size="sm" class="w-fit" @click="addConsumptionRecipeLine">Add consumable</Button>
                                 </fieldset>
                             </template>
                         </div>
                     </ScrollArea>
                     <SheetFooter class="shrink-0 gap-2 border-t px-4 py-3">
                         <Button variant="outline" :disabled="consumptionRecipeSaving" @click="closeRecipeSheet()">Cancel</Button>
-                        <Button :disabled="consumptionRecipeSaving" @click="saveConsumptionRecipe">{{ consumptionRecipeSaving ? 'Saving...' : 'Save recipe' }}</Button>
+                        <Button :disabled="consumptionRecipeSaving" @click="saveConsumptionRecipe">{{ consumptionRecipeSaving ? 'Saving...' : 'Save consumables' }}</Button>
                     </SheetFooter>
                 </SheetContent>
             </Sheet>

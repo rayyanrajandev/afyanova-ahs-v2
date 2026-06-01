@@ -78,7 +78,7 @@ class ClinicalCatalogConsumptionRecipeService
 
         if (! $this->supportsRecipes((string) $catalogItem->catalog_type)) {
             throw ValidationException::withMessages([
-                'catalogItemId' => ['Consumption recipes are for stock-consuming clinical definitions. Medicines use the formulary-to-pharmaceutical inventory bridge instead.'],
+                'catalogItemId' => ['Consumables mapping is for lab tests, radiology, and theatre procedures. Medicines use the formulary-to-pharmaceutical inventory bridge instead.'],
             ]);
         }
 
@@ -209,7 +209,7 @@ class ClinicalCatalogConsumptionRecipeService
     {
         if (count($items) > 50) {
             throw ValidationException::withMessages([
-                'items' => ['A recipe can contain at most 50 stock lines. Split complex protocols into operational recipes before go-live.'],
+                'items' => ['You can map at most 50 consumable lines per service. Split complex protocols into separate catalog items if needed.'],
             ]);
         }
 
@@ -222,13 +222,13 @@ class ClinicalCatalogConsumptionRecipeService
             $inventoryItemId = $this->nullableText($item['inventoryItemId'] ?? $item['inventory_item_id'] ?? null);
             if ($inventoryItemId === null) {
                 throw ValidationException::withMessages([
-                    $fieldPrefix.'.inventoryItemId' => ['Select an inventory item for this recipe line.'],
+                    $fieldPrefix.'.inventoryItemId' => ['Select a store item for this consumable line.'],
                 ]);
             }
 
             if (in_array($inventoryItemId, $seenInventoryItemIds, true)) {
                 throw ValidationException::withMessages([
-                    $fieldPrefix.'.inventoryItemId' => ['This inventory item is already in the recipe. Adjust the existing line instead of duplicating it.'],
+                    $fieldPrefix.'.inventoryItemId' => ['This store item is already listed. Adjust the existing line instead of duplicating it.'],
                 ]);
             }
             $seenInventoryItemIds[] = $inventoryItemId;
@@ -236,7 +236,7 @@ class ClinicalCatalogConsumptionRecipeService
             $inventoryItem = $this->eligibleInventoryItem($inventoryItemId, $allowedCategories);
             if ($inventoryItem === null) {
                 throw ValidationException::withMessages([
-                    $fieldPrefix.'.inventoryItemId' => ['This stock item is not eligible for the selected clinical recipe. Lab tests use lab reagents and consumables; medicines stay on the formulary bridge.'],
+                    $fieldPrefix.'.inventoryItemId' => ['This store item is not eligible for this service type. Lab tests use lab reagents and consumables; medicines stay on the formulary bridge.'],
                 ]);
             }
 
