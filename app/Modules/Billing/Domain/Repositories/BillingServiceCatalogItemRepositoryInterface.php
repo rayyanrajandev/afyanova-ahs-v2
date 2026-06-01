@@ -38,6 +38,15 @@ interface BillingServiceCatalogItemRepositoryInterface
         ?string $facilityId = null
     ): array;
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function listVersionsByClinicalCatalogItemId(
+        string $clinicalCatalogItemId,
+        ?string $tenantId = null,
+        ?string $facilityId = null,
+    ): array;
+
     public function search(
         ?string $query,
         ?string $serviceType,

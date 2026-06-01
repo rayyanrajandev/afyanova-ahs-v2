@@ -175,6 +175,41 @@ class EloquentBillingServiceCatalogItemRepository implements BillingServiceCatal
             ->all();
     }
 
+    public function listVersionsByClinicalCatalogItemId(
+        string $clinicalCatalogItemId,
+        ?string $tenantId = null,
+        ?string $facilityId = null,
+    ): array {
+        if (! $this->supportsClinicalCatalogLink()) {
+            return [];
+        }
+
+        $query = BillingServiceCatalogItemModel::query()
+            ->where('clinical_catalog_item_id', $clinicalCatalogItemId)
+            ->when(
+                $tenantId !== null,
+                fn (Builder $builder) => $builder->where('tenant_id', $tenantId),
+            )
+            ->when(
+                $facilityId !== null,
+                fn (Builder $builder) => $builder->where('facility_id', $facilityId),
+            );
+
+        if ($this->supportsTariffVersioning()) {
+            $query->orderByDesc('tariff_version');
+        }
+
+        $query->with('clinicalCatalogItem');
+        $this->applyFacilityTierAvailability($query);
+
+        return $query
+            ->orderByDesc('effective_from')
+            ->orderByDesc('updated_at')
+            ->get()
+            ->map(static fn (BillingServiceCatalogItemModel $item): array => $item->toArray())
+            ->all();
+    }
+
     public function search(
         ?string $query,
         ?string $serviceType,

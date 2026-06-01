@@ -22,14 +22,37 @@ class ClinicalCatalogBillingLinkEnricher
      */
     public function enrich(array $item): array
     {
-        $billingServiceCode = $this->extractBillingServiceCode($item['metadata'] ?? null);
-        $billingItem = $billingServiceCode === null
-            ? null
-            : $this->resolveBillingServiceItem(
-                $billingServiceCode,
-                $this->nullableTrimmedValue($item['tenant_id'] ?? null),
-                $this->nullableTrimmedValue($item['facility_id'] ?? null),
+        $tenantId = $this->nullableTrimmedValue($item['tenant_id'] ?? null);
+        $facilityId = $this->nullableTrimmedValue($item['facility_id'] ?? null);
+        $clinicalCatalogItemId = $this->nullableTrimmedValue($item['id'] ?? null);
+
+        $billingItem = null;
+        $billingServiceCode = null;
+
+        if ($clinicalCatalogItemId !== null) {
+            $billingItem = $this->pickPreferredBillingVersion(
+                $this->billingServiceCatalogRepository->listVersionsByClinicalCatalogItemId(
+                    $clinicalCatalogItemId,
+                    $tenantId,
+                    $facilityId,
+                ),
             );
+        }
+
+        if ($billingItem !== null) {
+            $billingServiceCode = $this->normalizeServiceCode($billingItem['service_code'] ?? null);
+        }
+
+        if ($billingItem === null) {
+            $billingServiceCode = $this->extractBillingServiceCode($item['metadata'] ?? null);
+            if ($billingServiceCode !== null) {
+                $billingItem = $this->resolveBillingServiceItem(
+                    $billingServiceCode,
+                    $tenantId,
+                    $facilityId,
+                );
+            }
+        }
 
         $item['billing_link'] = [
             'status' => $this->billingLinkStatus($billingServiceCode, $billingItem),
@@ -64,9 +87,9 @@ class ClinicalCatalogBillingLinkEnricher
         ];
 
         foreach ($candidateCodes as $candidateCode) {
-            $normalized = $this->nullableTrimmedValue($candidateCode);
+            $normalized = $this->normalizeServiceCode($candidateCode);
             if ($normalized !== null) {
-                return strtoupper($normalized);
+                return $normalized;
             }
         }
 
@@ -81,7 +104,17 @@ class ClinicalCatalogBillingLinkEnricher
         ?string $tenantId,
         ?string $facilityId,
     ): ?array {
-        $versions = $this->loadServiceFamilyVersions($serviceCode, $tenantId, $facilityId);
+        return $this->pickPreferredBillingVersion(
+            $this->loadServiceFamilyVersions($serviceCode, $tenantId, $facilityId),
+        );
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $versions
+     * @return array<string, mixed>|null
+     */
+    private function pickPreferredBillingVersion(array $versions): ?array
+    {
         if ($versions === []) {
             return null;
         }
@@ -127,17 +160,17 @@ class ClinicalCatalogBillingLinkEnricher
      */
     private function billingLinkStatus(?string $billingServiceCode, ?array $billingItem): string
     {
-        if ($billingServiceCode === null) {
-            return 'not_linked';
+        if ($billingItem !== null) {
+            return $this->isCurrentActiveVersion($billingItem, CarbonImmutable::now())
+                ? 'linked'
+                : 'review_required';
         }
 
-        if ($billingItem === null) {
+        if ($billingServiceCode !== null) {
             return 'pending_price';
         }
 
-        return $this->isCurrentActiveVersion($billingItem, CarbonImmutable::now())
-            ? 'linked'
-            : 'review_required';
+        return 'not_linked';
     }
 
     /**
@@ -181,6 +214,13 @@ class ClinicalCatalogBillingLinkEnricher
         }
 
         return true;
+    }
+
+    private function normalizeServiceCode(mixed $value): ?string
+    {
+        $normalized = $this->nullableTrimmedValue($value);
+
+        return $normalized === null ? null : strtoupper($normalized);
     }
 
     private function normalizeNullableDateTime(mixed $value): ?CarbonImmutable

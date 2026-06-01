@@ -450,7 +450,7 @@ function billingLinkDetail(item: Item | null): string {
         return `Billing code ${link?.serviceCode || item?.billingServiceCode || 'not set'} exists, but the tariff is inactive, expired, or not yet live.`;
     }
 
-    return 'This clinical item is still standalone and will not price automatically until a shared billing service code is linked.';
+    return 'No hospital price is linked yet. Add one in Tariffs & services by selecting this clinical item when you create a service price.';
 }
 
 function createClinicalDefinitionForm() {
@@ -2132,7 +2132,7 @@ onMounted(() => {
                             {{ createButtonLabel }}
                         </SheetTitle>
                         <SheetDescription>
-                            Register the clinical definition first. Link a billing service code only when automatic pricing is required.
+                            Register what care teams order. Hospital prices are added separately in Tariffs &amp; services.
                         </SheetDescription>
                     </SheetHeader>
                     <ScrollArea class="min-h-0 flex-1">
@@ -2167,12 +2167,6 @@ onMounted(() => {
                                 <div class="grid gap-1.5">
                                     <Label>{{ catalog.unitLabel }}</Label>
                                     <Input v-model="createForm.unit" :placeholder="catalog.unitPlaceholder" />
-                                </div>
-                                <div class="grid gap-1.5 md:col-span-3">
-                                    <Label>Linked billing service code</Label>
-                                    <Input v-model="createForm.billingServiceCode" placeholder="Shared code from Billable Service Catalog" />
-                                    <p class="text-xs text-muted-foreground">Links to an existing billing service. Does not create a duplicate billing record.</p>
-                                    <p v-if="firstError(createErrors, 'billingServiceCode')" class="text-xs text-destructive">{{ firstError(createErrors, 'billingServiceCode') }}</p>
                                 </div>
                                 <div class="grid gap-1.5 md:col-span-3">
                                     <Label>Description</Label>
@@ -2479,7 +2473,7 @@ onMounted(() => {
                             {{ editSheetTitle }}
                         </SheetTitle>
                         <SheetDescription v-if="selected">
-                            Update {{ selected.code }} while keeping billing and audit history aligned.
+                            Update clinical details here. Change hospital prices in Tariffs &amp; services.
                         </SheetDescription>
                     </SheetHeader>
                     <ScrollArea class="min-h-0 flex-1">
@@ -2515,12 +2509,30 @@ onMounted(() => {
                                     <Label>{{ catalog.unitLabel }}</Label>
                                     <Input v-model="editForm.unit" :placeholder="catalog.unitPlaceholder" />
                                 </div>
-                                <div class="grid gap-1.5 md:col-span-3">
-                                    <Label>Linked billing service code</Label>
-                                    <Input v-model="editForm.billingServiceCode" placeholder="Shared code from Billable Service Catalog" />
-                                    <p class="text-xs text-muted-foreground">Links to an existing billing service. Does not create a duplicate billing record.</p>
-                                    <p v-if="firstError(editErrors, 'billingServiceCode')" class="text-xs text-destructive">{{ firstError(editErrors, 'billingServiceCode') }}</p>
+                                <div v-if="selected" class="md:col-span-3 rounded-lg border border-dashed bg-muted/10 p-3">
+                                    <p class="text-sm font-medium">Hospital pricing</p>
+                                    <p class="mt-1 text-xs text-muted-foreground">{{ billingLinkDetail(selected) }}</p>
+                                    <Button size="sm" variant="outline" class="mt-2 h-8 gap-1.5" as-child>
+                                        <Link href="/billing-service-catalog">
+                                            <AppIcon name="receipt" class="size-3.5" />
+                                            Open tariffs &amp; services
+                                        </Link>
+                                    </Button>
                                 </div>
+                                <details
+                                    v-if="editForm.billingServiceCode.trim()"
+                                    class="md:col-span-3 rounded-lg border bg-muted/10 p-3"
+                                >
+                                    <summary class="cursor-pointer text-sm font-medium text-muted-foreground">Legacy billing code (optional)</summary>
+                                    <p class="mt-2 text-xs text-muted-foreground">
+                                        Only needed for older imports. Prefer linking prices from Tariffs &amp; services instead of typing a code.
+                                    </p>
+                                    <div class="mt-3 grid gap-1.5">
+                                        <Label>Billing service code</Label>
+                                        <Input v-model="editForm.billingServiceCode" placeholder="e.g. LAB-CBC-001" />
+                                        <p v-if="firstError(editErrors, 'billingServiceCode')" class="text-xs text-destructive">{{ firstError(editErrors, 'billingServiceCode') }}</p>
+                                    </div>
+                                </details>
                                 <div class="grid gap-1.5 md:col-span-3">
                                     <Label>Description</Label>
                                     <Textarea v-model="editForm.description" class="min-h-20" placeholder="Operational guidance for care teams" />
