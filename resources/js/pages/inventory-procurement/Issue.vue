@@ -2,8 +2,10 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import InventoryBarcodeScanField from '@/components/inventory/InventoryBarcodeScanField.vue';
 import InventoryItemLookupField from '@/components/inventory/InventoryItemLookupField.vue';
-import SupplyChainTaskShell from '@/pages/inventory-procurement/components/SupplyChainTaskShell.vue';
+import type { InventoryBarcodeItem } from '@/composables/useInventoryBarcodeLookup';
+import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePageHeader.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -45,6 +47,7 @@ const itemId = ref('');
 const selectedItem = ref<LookupItem | null>(null);
 const pendingRequisitions = ref<DepartmentRequisition[]>([]);
 const requisitionsLoading = ref(false);
+const manualIssueOpen = ref(false);
 
 const submitting = ref(false);
 const formError = ref<string | null>(null);
@@ -73,6 +76,7 @@ function fieldError(key: string): string | null {
 
 const canSubmit = computed(() => (
     canCreateMovement.value
+    && manualIssueOpen.value
     && itemId.value.trim() !== ''
     && issueForm.quantity.trim() !== ''
     && issueForm.reason.trim() !== ''
@@ -86,9 +90,11 @@ const unitLabel = computed(() => {
 async function loadPendingRequisitions(): Promise<void> {
     requisitionsLoading.value = true;
     try {
-        const response = await apiRequestJson<{ data: DepartmentRequisition[] }>('GET', '/inventory-procurement/department-requisitions', {
-            query: { status: 'approved', perPage: 15 },
-        });
+        const response = await apiRequestJson<{ data: DepartmentRequisition[]; meta?: { total?: number } }>(
+            'GET',
+            '/inventory-procurement/department-requisitions',
+            { query: { status: 'approved', perPage: 15 } },
+        );
         pendingRequisitions.value = response.data ?? [];
     } catch {
         pendingRequisitions.value = [];
@@ -99,6 +105,17 @@ async function loadPendingRequisitions(): Promise<void> {
 
 function onItemSelected(item: LookupItem | null): void {
     selectedItem.value = item;
+}
+
+function onBarcodeItemResolved(item: InventoryBarcodeItem): void {
+    itemId.value = item.id;
+    selectedItem.value = {
+        id: item.id,
+        itemName: item.itemName,
+        unit: item.unit,
+        currentStock: item.currentStock,
+        category: item.category,
+    };
 }
 
 async function submitIssue(): Promise<void> {
@@ -154,24 +171,87 @@ onMounted(async () => {
     <Head title="Issue stock" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-full flex-1 flex-col gap-4 p-4 md:p-6">
+        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
             <Alert v-if="!canRead" variant="destructive">
                 <AlertTitle>Access restricted</AlertTitle>
                 <AlertDescription>You do not have permission to issue stock.</AlertDescription>
             </Alert>
 
-            <div v-else class="grid gap-4 xl:grid-cols-3">
+            <template v-else>
+                <FacilityWorkspacePageHeader
+                    title="Issue stock"
+                    description="Fulfill approved ward requisitions first; use manual issue only for audited exception stock movement."
+                    icon="package"
+                    :back-href="INVENTORY_PROCUREMENT_HOME_PATH"
+                    back-label="Supply chain home"
+                />
+
+                <div class="grid gap-4 xl:grid-cols-3">
+                <Card class="h-fit rounded-lg shadow-sm">
+                    <CardHeader class="pb-2">
+                        <CardTitle class="text-base">Ready requisitions</CardTitle>
+                        <CardDescription>Default issue flow — open an approved request for line-level pick, pack, and dispatch control.</CardDescription>
+                    </CardHeader>
+                    <CardContent class="space-y-2">
+                        <div v-if="requisitionsLoading" class="space-y-2">
+                            <Skeleton v-for="n in 4" :key="n" class="h-12 w-full" />
+                        </div>
+                        <p v-else-if="pendingRequisitions.length === 0" class="text-sm text-muted-foreground">
+                            No approved requisitions in the first page of results.
+                        </p>
+                        <div v-else class="space-y-2">
+                            <div
+                                v-for="req in pendingRequisitions"
+                                :key="String(req.id)"
+                                class="rounded-md border px-3 py-2 text-sm"
+                            >
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="font-medium">{{ req.requisitionNumber ?? 'Requisition' }}</span>
+                                    <Badge variant="outline">{{ formatEnumLabel(String(req.status ?? '')) }}</Badge>
+                                </div>
+                                <p class="text-xs text-muted-foreground">{{ req.requestingDepartment ?? 'Department' }}</p>
+                            </div>
+                        </div>
+                        <Button size="sm" class="mt-2 w-full gap-1.5" as-child>
+                            <Link :href="inventoryWorkspaceHref({ section: 'requisitions' })">
+                                <AppIcon name="clipboard-list" class="size-3.5" />
+                                Open requisitions
+                            </Link>
+                        </Button>
+                    </CardContent>
+                </Card>
+
                 <div class="xl:col-span-2">
-                    <SupplyChainTaskShell
-                        title="Issue to department"
-                        description="Remove stock from the central store for ward use, procedures, or direct patient care."
-                        icon="package"
-                        :breadcrumbs="breadcrumbs"
-                    >
+                    <Card class="rounded-lg shadow-sm">
+                    <CardHeader class="border-b pb-3">
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <CardTitle class="text-base">Manual exception issue</CardTitle>
+                                <CardDescription>For emergency, theatre, or corrected stock movement outside an approved requisition.</CardDescription>
+                            </div>
+                            <Button variant="outline" size="sm" class="h-8 gap-1.5" @click="manualIssueOpen = !manualIssueOpen">
+                                <AppIcon :name="manualIssueOpen ? 'chevron-up' : 'chevron-down'" class="size-3.5" />
+                                {{ manualIssueOpen ? 'Hide exception form' : 'Use exception issue' }}
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent class="space-y-4 pt-6">
                         <div v-if="!canCreateMovement" class="text-sm text-muted-foreground">
                             Stock movement permission is required to issue items.
                         </div>
+                        <Alert v-else-if="!manualIssueOpen" class="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                            <AlertTitle>Manual issue is an exception</AlertTitle>
+                            <AlertDescription>
+                                Use approved requisitions for normal ward fulfillment. Open this form only when stock must move before a requisition exists, and record a clear reason.
+                            </AlertDescription>
+                        </Alert>
                         <div v-else class="space-y-4">
+                            <InventoryBarcodeScanField
+                                input-id="issue-barcode"
+                                label="Scan item barcode"
+                                helper-text="Scan labelled stock or search the item master below."
+                                @resolved="onBarcodeItemResolved"
+                            />
                             <InventoryItemLookupField
                                 v-model="itemId"
                                 input-id="issue-item"
@@ -238,43 +318,15 @@ onMounted(async () => {
 
                             <Button class="gap-1.5" :disabled="submitting || !canSubmit" @click="submitIssue">
                                 <AppIcon name="check-circle" class="size-4" />
-                                {{ submitting ? 'Issuing…' : 'Confirm issue' }}
+                                {{ submitting ? 'Issuing…' : 'Confirm exception issue' }}
                             </Button>
                         </div>
-                    </SupplyChainTaskShell>
+                    </CardContent>
+                    </Card>
                 </div>
 
-                <Card class="h-fit rounded-lg shadow-sm">
-                    <CardHeader class="pb-2">
-                        <CardTitle class="text-base">Ward requisitions</CardTitle>
-                        <CardDescription>Approved requests — fulfill in the full workspace for line-level control.</CardDescription>
-                    </CardHeader>
-                    <CardContent class="space-y-2">
-                        <div v-if="requisitionsLoading" class="space-y-2">
-                            <Skeleton v-for="n in 4" :key="n" class="h-12 w-full" />
-                        </div>
-                        <p v-else-if="pendingRequisitions.length === 0" class="text-sm text-muted-foreground">
-                            No approved requisitions in the first page of results.
-                        </p>
-                        <div v-else class="space-y-2">
-                            <div
-                                v-for="req in pendingRequisitions"
-                                :key="String(req.id)"
-                                class="rounded-md border px-3 py-2 text-sm"
-                            >
-                                <div class="flex items-center justify-between gap-2">
-                                    <span class="font-medium">{{ req.requisitionNumber ?? 'Requisition' }}</span>
-                                    <Badge variant="outline">{{ formatEnumLabel(String(req.status ?? '')) }}</Badge>
-                                </div>
-                                <p class="text-xs text-muted-foreground">{{ req.requestingDepartment ?? 'Department' }}</p>
-                            </div>
-                        </div>
-                        <Button variant="outline" size="sm" class="mt-2 w-full" as-child>
-                            <Link :href="inventoryWorkspaceHref({ section: 'requisitions' })">Open requisitions workspace</Link>
-                        </Button>
-                    </CardContent>
-                </Card>
-            </div>
+                </div>
+            </template>
         </div>
     </AppLayout>
 </template>

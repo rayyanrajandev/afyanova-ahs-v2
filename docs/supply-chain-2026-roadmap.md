@@ -12,7 +12,7 @@ Staff complete store work in minutes with full traceability: receipt → storage
 |-------|--------|--------|
 | **0** | Personas, metrics, contract refresh | Done (this document) |
 | **1** | Supply chain **home** + **workspace** routes, deep links | **Shipped** |
-| **2** | Task wizards (receive, issue, count), barcode, PAR | **In progress** |
+| **2** | Task wizards (receive, issue, count), barcode, GRN, PAR | **In progress** |
 | **3** | Pharmacy lane, MSD depth, finance GRN export, clinical history | Planned |
 | **4** | Analytics actions, SoD, notifications | Planned |
 | **5** | CSSD, consignment, CMMS (tier-dependent) | Optional |
@@ -26,6 +26,7 @@ Staff complete store work in minutes with full traceability: receipt → storage
 | `/inventory-procurement/receive` | Receive wizard (PO + direct receipt) |
 | `/inventory-procurement/issue` | Issue-to-department wizard |
 | `/inventory-procurement/count` | Cycle count / reconciliation wizard |
+| `/inventory-procurement/procurement-requests/{id}/grn` | Printable goods received note (after PO receipt) |
 | `/inventory-procurement/suppliers` | Supplier registry |
 | `/inventory-procurement/warehouses` | Warehouse registry |
 
@@ -34,12 +35,18 @@ Backward compatible: `/inventory-procurement?section=` opens the workspace.
 Shared helpers: `resources/js/lib/inventoryProcurement.ts`  
 Access / lookups: `useInventoryProcurementAccess`, `useInventoryMasterLookups`
 
+## Phase 2 shipped (partial)
+
+- Shared **facility workspace header** (`FacilityWorkspacePageHeader`) aligned with Clinical Care Catalogs; KPI cards on home only
+- Barcode scan field on **Receive** (direct), **Issue**, and **Count** wizards (`InventoryBarcodeScanField`, `useInventoryBarcodeLookup`)
+- Printable **GRN** after procurement receive (`ProcurementGrnPrint`, PDF via `inventory-procurement-grn` blade)
+
 ## Phase 2 remaining
 
-- Barcode scan-to-receive on receive wizard
+- Barcode on procurement PO receive line matching (multi-SKU deliveries)
 - Scheduled cycle count programs (by warehouse / ABC class)
 - PAR levels per department with auto-requisition
-- Procurement approval thresholds and printable GRN
+- Procurement approval thresholds
 
 ## Success metrics (pilot facility)
 

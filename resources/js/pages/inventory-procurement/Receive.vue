@@ -3,8 +3,10 @@ import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vue';
+import InventoryBarcodeScanField from '@/components/inventory/InventoryBarcodeScanField.vue';
 import InventoryItemLookupField from '@/components/inventory/InventoryItemLookupField.vue';
-import SupplyChainTaskShell from '@/pages/inventory-procurement/components/SupplyChainTaskShell.vue';
+import type { InventoryBarcodeItem } from '@/composables/useInventoryBarcodeLookup';
+import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePageHeader.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,7 +21,7 @@ import { useInventoryMasterLookups } from '@/composables/useInventoryMasterLooku
 import { useInventoryProcurementAccess } from '@/composables/useInventoryProcurementAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
-import { INVENTORY_PROCUREMENT_HOME_PATH, inventoryWorkspaceHref } from '@/lib/inventoryProcurement';
+import { INVENTORY_PROCUREMENT_HOME_PATH, inventoryWorkspaceHref, procurementGrnPrintHref } from '@/lib/inventoryProcurement';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { BreadcrumbItem } from '@/types';
@@ -69,6 +71,7 @@ const directItem = ref<LookupItem | null>(null);
 const submitting = ref(false);
 const formError = ref<string | null>(null);
 const fieldErrors = ref<Record<string, string[]>>({});
+const lastGrnRequestId = ref<string | null>(null);
 
 const receiveForm = reactive({
     receivedQuantity: '',
@@ -118,14 +121,17 @@ const canSubmitDirect = computed(() => (
     canCreateMovement.value
     && directItemId.value.trim() !== ''
     && receiveForm.receivedQuantity.trim() !== ''
+    && receiveForm.reason.trim() !== ''
 ));
 
 async function loadOrderedRequests(): Promise<void> {
     requestsLoading.value = true;
     try {
-        const response = await apiRequestJson<{ data: ProcurementRequest[] }>('GET', '/inventory-procurement/procurement-requests', {
-            query: { status: 'ordered', perPage: 25, sortBy: 'neededBy', sortDir: 'asc' },
-        });
+        const response = await apiRequestJson<{ data: ProcurementRequest[]; meta?: { total?: number } }>(
+            'GET',
+            '/inventory-procurement/procurement-requests',
+            { query: { status: 'ordered', perPage: 25, sortBy: 'neededBy', sortDir: 'asc' } },
+        );
         orderedRequests.value = response.data ?? [];
     } catch (error) {
         notifyError(messageFromUnknown(error, 'Unable to load orders awaiting receipt.'));
@@ -173,6 +179,18 @@ function onDirectItemSelected(item: LookupItem | null): void {
     }
 }
 
+function onBarcodeItemResolved(item: InventoryBarcodeItem): void {
+    directItemId.value = item.id;
+    directItem.value = {
+        id: item.id,
+        itemName: item.itemName,
+        category: item.category,
+        unit: item.unit,
+        currentStock: item.currentStock,
+    };
+    step.value = 2;
+}
+
 async function submitProcurementReceive(): Promise<void> {
     if (!selectedRequest.value || !canSubmitProcurement.value || submitting.value) {
         return;
@@ -183,21 +201,27 @@ async function submitProcurementReceive(): Promise<void> {
     fieldErrors.value = {};
 
     try {
-        await apiRequestJson('POST', `/inventory-procurement/procurement-requests/${selectedRequest.value.id}/receive`, {
-            body: {
-                receivedQuantity: Number(receiveForm.receivedQuantity),
-                receivedUnitCost: receiveForm.receivedUnitCost.trim() === '' ? null : Number(receiveForm.receivedUnitCost),
-                warehouseId: receiveForm.warehouseId.trim() || null,
-                batchNumber: receiveForm.batchNumber.trim() || null,
-                lotNumber: receiveForm.lotNumber.trim() || null,
-                manufactureDate: receiveForm.manufactureDate || null,
-                expiryDate: receiveForm.expiryDate || null,
-                binLocation: receiveForm.binLocation.trim() || null,
-                reason: receiveForm.reason.trim() || null,
-                notes: receiveForm.notes.trim() || null,
-                occurredAt: receiveForm.occurredAt || null,
+        const response = await apiRequestJson<{ data: ProcurementRequest }>(
+            'POST',
+            `/inventory-procurement/procurement-requests/${selectedRequest.value.id}/receive`,
+            {
+                body: {
+                    receivedQuantity: Number(receiveForm.receivedQuantity),
+                    receivedUnitCost: receiveForm.receivedUnitCost.trim() === '' ? null : Number(receiveForm.receivedUnitCost),
+                    warehouseId: receiveForm.warehouseId.trim() || null,
+                    batchNumber: receiveForm.batchNumber.trim() || null,
+                    lotNumber: receiveForm.lotNumber.trim() || null,
+                    manufactureDate: receiveForm.manufactureDate || null,
+                    expiryDate: receiveForm.expiryDate || null,
+                    binLocation: receiveForm.binLocation.trim() || null,
+                    reason: receiveForm.reason.trim() || null,
+                    notes: receiveForm.notes.trim() || null,
+                    occurredAt: receiveForm.occurredAt || null,
+                },
             },
-        });
+        );
+        const receivedId = String(response.data?.id ?? selectedRequest.value.id ?? '').trim();
+        lastGrnRequestId.value = receivedId || null;
         notifySuccess('Goods received into store stock.');
         selectedRequest.value = null;
         step.value = 1;
@@ -257,6 +281,7 @@ watch(receiveMode, () => {
     resetDirectItem();
     formError.value = null;
     fieldErrors.value = {};
+    lastGrnRequestId.value = null;
 });
 
 onMounted(async () => {
@@ -273,23 +298,34 @@ onMounted(async () => {
     <Head title="Receive stock" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-full flex-1 flex-col gap-4 p-4 md:p-6">
+        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
             <Alert v-if="!canRead" variant="destructive">
                 <AlertTitle>Access restricted</AlertTitle>
                 <AlertDescription>You do not have permission to receive stock.</AlertDescription>
             </Alert>
 
-            <SupplyChainTaskShell
-                v-else
-                title="Receive stock"
-                description="Confirm deliveries against purchase orders or post a direct store receipt with full traceability."
-                icon="package"
-                :breadcrumbs="breadcrumbs"
-            >
+            <template v-else>
+                <FacilityWorkspacePageHeader
+                    title="Receive stock"
+                    description="Confirm deliveries against purchase orders first; use exception receipt only when stock arrives outside the procurement queue."
+                    icon="clipboard-list"
+                    :back-href="INVENTORY_PROCUREMENT_HOME_PATH"
+                    back-label="Supply chain home"
+                >
+                    <template #actions>
+                        <Button variant="outline" size="sm" class="h-8 gap-1.5" :disabled="requestsLoading" @click="loadOrderedRequests">
+                            <AppIcon name="refresh-cw" class="size-3.5" />
+                            {{ requestsLoading ? 'Refreshing…' : 'Refresh' }}
+                        </Button>
+                    </template>
+                </FacilityWorkspacePageHeader>
+
+                <Card class="rounded-lg shadow-sm">
+                <CardContent class="pt-6">
                 <Tabs v-model="receiveMode" class="gap-4">
                     <TabsList class="grid h-auto w-full max-w-md grid-cols-2">
-                        <TabsTrigger value="procurement" class="text-xs sm:text-sm">From purchase order</TabsTrigger>
-                        <TabsTrigger value="direct" class="text-xs sm:text-sm">Direct receipt</TabsTrigger>
+                        <TabsTrigger value="procurement" class="text-xs sm:text-sm">Orders awaiting receipt</TabsTrigger>
+                        <TabsTrigger value="direct" class="text-xs sm:text-sm">Exception receipt</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="procurement" class="mt-0 space-y-4">
@@ -298,6 +334,17 @@ onMounted(async () => {
                         </div>
 
                         <template v-else>
+                            <Alert v-if="lastGrnRequestId" class="border-primary/30 bg-primary/5">
+                                <AlertTitle>Receipt recorded</AlertTitle>
+                                <AlertDescription class="flex flex-wrap items-center gap-2">
+                                    Print a goods received note for filing with the delivery paperwork.
+                                    <Button variant="outline" size="sm" class="h-8" as-child>
+                                        <Link :href="procurementGrnPrintHref(lastGrnRequestId)">Open GRN</Link>
+                                    </Button>
+                                    <Button variant="ghost" size="sm" class="h-8" @click="lastGrnRequestId = null">Dismiss</Button>
+                                </AlertDescription>
+                            </Alert>
+
                             <div v-if="step === 1" class="space-y-3">
                                 <p class="text-sm text-muted-foreground">Select an order in <strong>Ordered</strong> status awaiting delivery.</p>
                                 <div v-if="requestsLoading" class="space-y-2">
@@ -390,7 +437,19 @@ onMounted(async () => {
                             You need stock movement permission to post direct receipts.
                         </div>
                         <template v-else>
+                            <Alert class="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                                <AlertTitle>Exception receipt</AlertTitle>
+                                <AlertDescription>
+                                    Use this only for donations, opening balances, emergency replenishment, or deliveries not yet represented by a purchase order. A reason is required for audit.
+                                </AlertDescription>
+                            </Alert>
                             <div v-if="step === 1" class="max-w-xl space-y-3">
+                                <InventoryBarcodeScanField
+                                    input-id="receive-direct-barcode"
+                                    label="Scan item barcode"
+                                    helper-text="Fast path for labelled stock — or search the item master below."
+                                    @resolved="onBarcodeItemResolved"
+                                />
                                 <InventoryItemLookupField
                                     v-model="directItemId"
                                     input-id="receive-direct-item"
@@ -408,7 +467,7 @@ onMounted(async () => {
                                 <Card>
                                     <CardHeader class="pb-2">
                                         <CardTitle class="text-base">{{ directItem?.itemName ?? 'Direct receipt' }}</CardTitle>
-                                        <CardDescription>Posts a receive movement to increase on-hand stock.</CardDescription>
+                                        <CardDescription>Posts an audited exception receive movement to increase on-hand stock.</CardDescription>
                                     </CardHeader>
                                     <CardContent class="grid gap-4 sm:grid-cols-2">
                                         <div class="grid gap-1.5">
@@ -451,8 +510,8 @@ onMounted(async () => {
                                             <SingleDatePopoverField v-model="receiveForm.expiryDate" input-id="direct-expiry" label="Expiry date *" />
                                         </template>
                                         <div class="grid gap-1.5 sm:col-span-2">
-                                            <Label>Reason</Label>
-                                            <Input v-model="receiveForm.reason" placeholder="Delivery note, donation, opening balance…" />
+                                        <Label>Exception reason *</Label>
+                                        <Input v-model="receiveForm.reason" placeholder="Donation, opening balance, emergency supply…" />
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -464,7 +523,9 @@ onMounted(async () => {
                         </template>
                     </TabsContent>
                 </Tabs>
-            </SupplyChainTaskShell>
+                </CardContent>
+                </Card>
+            </template>
         </div>
     </AppLayout>
 </template>

@@ -12,17 +12,26 @@ export const INVENTORY_PROCUREMENT_ISSUE_PATH = '/inventory-procurement/issue';
 
 export const INVENTORY_PROCUREMENT_COUNT_PATH = '/inventory-procurement/count';
 
+export function procurementGrnPrintHref(procurementRequestId: string): string {
+    return `/inventory-procurement/procurement-requests/${encodeURIComponent(procurementRequestId)}/grn`;
+}
+
+export function procurementGrnPdfHref(procurementRequestId: string): string {
+    return `/inventory-procurement/procurement-requests/${encodeURIComponent(procurementRequestId)}/grn.pdf`;
+}
+
 export const inventoryWorkspaceSections = [
-    'inventory',
-    'procurement',
-    'ledger',
-    'department-stock',
+    'overview',
     'requisitions',
     'shortage-queue',
-    'lead-times',
     'transfers',
-    'claims',
+    'inventory',
+    'ledger',
+    'department-stock',
+    'procurement',
     'msd-orders',
+    'lead-times',
+    'claims',
     'analytics',
 ] as const;
 
@@ -31,7 +40,7 @@ export type InventoryWorkspaceSection = (typeof inventoryWorkspaceSections)[numb
 export function normalizeInventoryWorkspaceSection(value: string): InventoryWorkspaceSection {
     return inventoryWorkspaceSections.includes(value as InventoryWorkspaceSection)
         ? (value as InventoryWorkspaceSection)
-        : 'inventory';
+        : 'overview';
 }
 
 export type InventoryWorkspaceQuery = {
@@ -78,15 +87,16 @@ export function shouldOpenInventoryWorkspace(search: string): boolean {
 }
 
 export const inventoryWorkspaceSectionLabels: Record<InventoryWorkspaceSection, string> = {
-    inventory: 'Item master',
-    procurement: 'Procurement',
-    ledger: 'Stock ledger',
-    'department-stock': 'Department stock',
+    overview: 'Overview',
     requisitions: 'Requisitions',
     'shortage-queue': 'Shortage queue',
-    'lead-times': 'Lead times',
     transfers: 'Transfers',
-    claims: 'Claims',
+    inventory: 'Item master',
+    ledger: 'Stock ledger',
+    'department-stock': 'Department stock',
+    procurement: 'Procurement',
     'msd-orders': 'MSD orders',
+    'lead-times': 'Lead times',
+    claims: 'Claims',
     analytics: 'Analytics',
 };

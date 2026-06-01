@@ -18,7 +18,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { usePlatformCountryProfile } from '@/composables/usePlatformCountryProfile';
+import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePageHeader.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { INVENTORY_PROCUREMENT_HOME_PATH } from '@/lib/inventoryProcurement';
 import { apiRequestJson } from '@/lib/apiClient';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
@@ -366,44 +368,27 @@ onMounted(() => {
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
 
-            <!-- Page header -->
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div class="min-w-0">
-                    <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <AppIcon name="package" class="size-7 text-primary" />
-                        Supplier Registry
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">Manage supplier master data and status.</p>
-                </div>
-                <div class="flex flex-shrink-0 items-center gap-2">
-                    <Button variant="outline" size="sm" :disabled="listLoading" class="gap-1.5" @click="refreshPage">
-                        <AppIcon name="activity" class="size-3.5" />
-                        {{ listLoading ? 'Refreshing...' : 'Refresh' }}
+            <FacilityWorkspacePageHeader
+                title="Supplier registry"
+                description="Manage vendor master data, contacts, activation status, and audit trail."
+                icon="package"
+                :back-href="INVENTORY_PROCUREMENT_HOME_PATH"
+                back-label="Supply chain home"
+            >
+                <template #actions>
+                    <Button variant="outline" size="sm" :disabled="listLoading" class="h-8 gap-1.5" @click="refreshPage">
+                        <AppIcon name="refresh-cw" class="size-3.5" />
+                        {{ listLoading ? 'Refreshing…' : 'Refresh' }}
                     </Button>
-                    <Button size="sm" class="h-8 gap-1.5" @click="createOpen = true">
+                    <Button v-if="canManage" size="sm" class="h-8 gap-1.5" @click="createOpen = true">
                         <AppIcon name="plus" class="size-3.5" />
-                        Create Supplier
+                        Create supplier
                     </Button>
-                </div>
-            </div>
+                </template>
+            </FacilityWorkspacePageHeader>
 
-            <!-- Queue bar -->
             <div v-if="canRead" class="flex min-h-9 flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-4 py-2">
-                <span class="text-xs font-medium text-muted-foreground">Queue:</span>
-                <span class="flex items-center gap-1 rounded-md border bg-background px-2.5 py-1 text-xs">
-                    <span class="font-medium text-foreground">{{ counts.active }}</span>
-                    <span class="text-muted-foreground">Active</span>
-                </span>
-                <span class="flex items-center gap-1 rounded-md border bg-background px-2.5 py-1 text-xs">
-                    <span class="font-medium text-foreground">{{ counts.inactive }}</span>
-                    <span class="text-muted-foreground">Inactive</span>
-                </span>
-                <span class="flex items-center gap-1 rounded-md border bg-background px-2.5 py-1 text-xs">
-                    <span class="font-medium text-foreground">{{ counts.total }}</span>
-                    <span class="text-muted-foreground">Total</span>
-                </span>
-                <Separator orientation="vertical" class="mx-1 hidden h-6 sm:block" />
-                <span class="text-xs font-medium text-muted-foreground">Presets:</span>
+                <span class="text-xs font-medium text-muted-foreground">Quick filter:</span>
                 <Button size="sm" class="h-8" :variant="filters.status === '' ? 'default' : 'outline'" @click="setStatus('')">All</Button>
                 <Button size="sm" class="h-8" :variant="filters.status === 'active' ? 'default' : 'outline'" @click="setStatus('active')">Active</Button>
                 <Button size="sm" class="h-8" :variant="filters.status === 'inactive' ? 'default' : 'outline'" @click="setStatus('inactive')">Inactive</Button>

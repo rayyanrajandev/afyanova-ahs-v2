@@ -6,8 +6,10 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
+import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePageHeader.vue';
+import SupplyChainStatCard from '@/pages/inventory-procurement/components/SupplyChainStatCard.vue';
+import SupplyChainStatGrid from '@/pages/inventory-procurement/components/SupplyChainStatGrid.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
 import {
@@ -249,6 +251,14 @@ const sectionQuickLinks = computed(() =>
     })),
 );
 
+const visibleStoreTasks = computed(() => storeTasks.value.filter((entry) => entry.permission));
+
+function storeTaskGridClass(index: number, total: number): string {
+    const isLastOdd = total % 2 === 1 && index === total - 1;
+
+    return isLastOdd ? 'sm:col-span-2' : '';
+}
+
 onMounted(async () => {
     await loadPermissions();
     await loadDashboard();
@@ -260,36 +270,24 @@ onMounted(async () => {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
-            <section class="rounded-lg border border-border bg-card shadow-sm">
-                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
-                    <div class="flex min-w-0 items-center gap-3">
-                        <div
-                            class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20"
-                            aria-hidden="true"
-                        >
-                            <AppIcon name="package" class="size-5" />
-                        </div>
-                        <div class="min-w-0 space-y-0.5">
-                            <h1 class="text-base font-semibold tracking-tight md:text-lg">Hospital supply chain</h1>
-                            <p class="text-xs text-muted-foreground">
-                                Stores, procurement, and clinical consumables — start with a task below or open the full workspace.
-                            </p>
-                        </div>
-                    </div>
-                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
-                        <Button variant="outline" size="sm" class="h-8 gap-1.5" :disabled="loading" @click="loadDashboard">
-                            <AppIcon name="refresh-cw" class="size-3.5" />
-                            {{ loading ? 'Refreshing…' : 'Refresh' }}
-                        </Button>
-                        <Button v-if="canRead" size="sm" class="h-8 gap-1.5" as-child>
-                            <Link :href="INVENTORY_PROCUREMENT_WORKSPACE_PATH">
-                                <AppIcon name="layout-grid" class="size-3.5" />
-                                Full workspace
-                            </Link>
-                        </Button>
-                    </div>
-                </div>
-            </section>
+            <FacilityWorkspacePageHeader
+                title="Hospital supply chain"
+                description="Stores, procurement, and clinical consumables — start with a task below or open the full workspace."
+                icon="package"
+            >
+                <template #actions>
+                    <Button variant="outline" size="sm" class="h-8 gap-1.5" :disabled="loading" @click="loadDashboard">
+                        <AppIcon name="refresh-cw" class="size-3.5" />
+                        {{ loading ? 'Refreshing…' : 'Refresh' }}
+                    </Button>
+                    <Button v-if="canRead" size="sm" class="h-8 gap-1.5" as-child>
+                        <Link :href="INVENTORY_PROCUREMENT_WORKSPACE_PATH">
+                            <AppIcon name="layout-grid" class="size-3.5" />
+                            Full workspace
+                        </Link>
+                    </Button>
+                </template>
+            </FacilityWorkspacePageHeader>
 
             <Alert v-if="!canRead && !loading" variant="destructive">
                 <AlertTitle>Access restricted</AlertTitle>
@@ -302,54 +300,32 @@ onMounted(async () => {
             </Alert>
 
             <template v-if="canRead">
-                <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                    <template v-if="loading">
-                        <Card v-for="n in 4" :key="n" class="rounded-lg shadow-sm">
-                            <CardContent class="px-4 py-4">
-                                <Skeleton class="h-4 w-24" />
-                                <Skeleton class="mt-2 h-8 w-16" />
-                            </CardContent>
-                        </Card>
-                    </template>
-                    <template v-else>
-                        <Card class="rounded-lg border-destructive/25 bg-destructive/5 shadow-sm">
-                            <CardContent class="flex items-center gap-3 px-4 py-3">
-                                <AppIcon name="alert-triangle" class="size-5 text-destructive" />
-                                <div>
-                                    <p class="text-[11px] font-medium uppercase tracking-wider text-destructive/80">Store out</p>
-                                    <p class="text-2xl font-bold tabular-nums text-destructive">{{ stockCounts.outOfStock }}</p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                        <Card class="rounded-lg border-amber-200/70 bg-amber-50/50 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/20">
-                            <CardContent class="flex items-center gap-3 px-4 py-3">
-                                <AppIcon name="activity" class="size-5 text-amber-600 dark:text-amber-400" />
-                                <div>
-                                    <p class="text-[11px] font-medium uppercase tracking-wider text-amber-700/80 dark:text-amber-400/80">Store low</p>
-                                    <p class="text-2xl font-bold tabular-nums text-amber-700 dark:text-amber-300">{{ stockCounts.lowStock }}</p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                        <Card class="rounded-lg border-green-200/70 bg-green-50/50 shadow-sm dark:border-green-900/40 dark:bg-green-950/20">
-                            <CardContent class="flex items-center gap-3 px-4 py-3">
-                                <AppIcon name="check-circle" class="size-5 text-green-600 dark:text-green-400" />
-                                <div>
-                                    <p class="text-[11px] font-medium uppercase tracking-wider text-green-700/80 dark:text-green-400/80">Store healthy</p>
-                                    <p class="text-2xl font-bold tabular-nums text-green-700 dark:text-green-300">{{ stockCounts.healthy }}</p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                        <Card class="rounded-lg shadow-sm">
-                            <CardContent class="flex items-center gap-3 px-4 py-3">
-                                <AppIcon name="package" class="size-5 text-muted-foreground" />
-                                <div>
-                                    <p class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Active items</p>
-                                    <p class="text-2xl font-bold tabular-nums">{{ stockCounts.total }}</p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </template>
-                </div>
+                <SupplyChainStatGrid :loading="loading">
+                    <SupplyChainStatCard
+                        label="Store out"
+                        :value="stockCounts.outOfStock"
+                        icon="alert-triangle"
+                        :tone="stockCounts.outOfStock > 0 ? 'destructive' : 'green'"
+                    />
+                    <SupplyChainStatCard
+                        label="Store low"
+                        :value="stockCounts.lowStock"
+                        icon="activity"
+                        :tone="stockCounts.lowStock > 0 ? 'amber' : 'green'"
+                    />
+                    <SupplyChainStatCard
+                        label="Store healthy"
+                        :value="stockCounts.healthy"
+                        icon="check-circle"
+                        tone="green"
+                    />
+                    <SupplyChainStatCard
+                        label="Active items"
+                        :value="stockCounts.total"
+                        icon="package"
+                        tone="primary"
+                    />
+                </SupplyChainStatGrid>
 
                 <div class="grid gap-4 lg:grid-cols-3">
                     <Card class="rounded-lg shadow-sm lg:col-span-2">
@@ -359,10 +335,13 @@ onMounted(async () => {
                         </CardHeader>
                         <CardContent class="grid gap-3 sm:grid-cols-2">
                             <Link
-                                v-for="task in storeTasks.filter((entry) => entry.permission)"
+                                v-for="(task, index) in visibleStoreTasks"
                                 :key="task.id"
                                 :href="task.href"
-                                class="group flex flex-col rounded-lg border bg-muted/15 p-3 transition-colors hover:border-primary/40 hover:bg-muted/30"
+                                :class="[
+                                    'group flex flex-col rounded-lg border bg-muted/15 p-3 transition-colors hover:border-primary/40 hover:bg-muted/30',
+                                    storeTaskGridClass(index, visibleStoreTasks.length),
+                                ]"
                             >
                                 <div class="flex items-start justify-between gap-2">
                                     <div class="flex items-center gap-2">
@@ -458,16 +437,18 @@ onMounted(async () => {
                     <CardHeader class="pb-2">
                         <CardTitle class="text-sm font-medium text-muted-foreground">All workspace areas</CardTitle>
                     </CardHeader>
-                    <CardContent class="flex flex-wrap gap-2">
+                    <CardContent
+                        class="grid w-full gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,9.5rem),1fr))]"
+                    >
                         <Button
                             v-for="link in sectionQuickLinks"
                             :key="link.section"
                             variant="outline"
                             size="sm"
-                            class="h-8"
+                            class="h-8 w-full min-w-0 justify-center px-2"
                             as-child
                         >
-                            <Link :href="link.href">{{ link.label }}</Link>
+                            <Link :href="link.href" class="truncate">{{ link.label }}</Link>
                         </Button>
                     </CardContent>
                 </Card>

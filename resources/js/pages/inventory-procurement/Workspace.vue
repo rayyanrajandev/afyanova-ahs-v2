@@ -34,6 +34,7 @@ import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
 import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersistence';
+import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePageHeader.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
 import { generateRequestKey } from '@/lib/idempotency';
@@ -178,7 +179,7 @@ const stockLedgerSourceOptions = [
     { value: 'system_generated', label: 'Other system' },
 ] as const;
 
-const inventoryWorkspaceTabs = ['inventory', 'procurement', 'ledger', 'department-stock', 'requisitions', 'shortage-queue', 'lead-times', 'transfers', 'claims', 'msd-orders', 'analytics'] as const;
+const inventoryWorkspaceTabs = ['overview', 'requisitions', 'shortage-queue', 'transfers', 'inventory', 'ledger', 'department-stock', 'procurement', 'msd-orders', 'lead-times', 'claims', 'analytics'] as const;
 type InventoryWorkspaceTab = (typeof inventoryWorkspaceTabs)[number];
 
 function normalizeInventoryWorkspaceTab(value: string): InventoryWorkspaceTab {
@@ -630,12 +631,7 @@ function onTabChange(value: string) {
     const nextTab = normalizeInventoryWorkspaceTab(value);
     activeTab.value = nextTab;
     syncWorkspaceUrl(nextTab);
-    if (nextTab === 'ledger') {
-        void loadStockLedger();
-    }
-    if (nextTab === 'department-stock') {
-        void loadDepartmentStock();
-    }
+    void loadActiveWorkspaceTab(nextTab);
 }
 
 function switchToStockLedger() {
@@ -4288,6 +4284,8 @@ const msdOrderForm = reactive({
     lines: [{ msdCode: '', itemName: '', quantity: '', unit: '', unitCost: '' }] as Array<{ msdCode: string; itemName: string; quantity: string; unit: string; unitCost: string }>,
 });
 
+type MsdDraftLine = { msdCode: string; itemName: string; quantity: string; unit: string; unitCost: string; source: string };
+
 const MSD_ORDER_STATUSES = [
     { value: 'draft', label: 'Draft' },
     { value: 'submitted', label: 'Submitted to MSD' },
@@ -4319,12 +4317,155 @@ function resetMsdOrderForm() {
     msdOrderForm.lines = [{ msdCode: '', itemName: '', quantity: '', unit: '', unitCost: '' }];
 }
 
+function openBlankMsdOrder(): void {
+    resetMsdOrderForm();
+    msdOrderErrors.value = {};
+    createMsdOrderDialogOpen.value = true;
+}
+
 function addMsdOrderLine() {
     msdOrderForm.lines.push({ msdCode: '', itemName: '', quantity: '', unit: '', unitCost: '' });
 }
 
 function removeMsdOrderLine(index: number) {
     if (msdOrderForm.lines.length > 1) msdOrderForm.lines.splice(index, 1);
+}
+
+function numericInventoryValue(value: unknown, fallback = 0): number {
+    const numeric = Number(value ?? fallback);
+    return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function msdCodeForItem(item: Record<string, unknown> | null | undefined): string {
+    return String(item?.msdCode ?? item?.msd_code ?? '').trim();
+}
+
+function msdDraftQuantityForItem(item: Record<string, unknown>): number {
+    const currentStock = numericInventoryValue(item.currentStock);
+    const reorderLevel = numericInventoryValue(item.reorderLevel);
+    const maxStockLevel = numericInventoryValue(item.maxStockLevel);
+
+    if (maxStockLevel > currentStock) return Math.max(maxStockLevel - currentStock, 1);
+    if (reorderLevel > 0) return Math.max(reorderLevel * 2 - currentStock, reorderLevel, 1);
+
+    return Math.max(1 - currentStock, 1);
+}
+
+const lowStockMsdDraftLines = computed<MsdDraftLine[]>(() => items.value
+    .filter((item) => ['out_of_stock', 'low_stock'].includes(String(item.stockState ?? '')))
+    .map((item) => ({
+        msdCode: msdCodeForItem(item),
+        itemName: String(item.itemName ?? item.name ?? ''),
+        quantity: String(msdDraftQuantityForItem(item)),
+        unit: String(item.unit ?? 'units'),
+        unitCost: '',
+        source: stockStateLabel(String(item.stockState ?? 'low_stock')),
+    }))
+    .filter((line) => line.msdCode !== '' && line.itemName !== '')
+    .slice(0, 12));
+
+const shortageMsdDraftLines = computed<MsdDraftLine[]>(() => shortageQueueItems.value
+    .flatMap((req) => (req.lines ?? [])
+        .filter((line: any) => !line.canIssueNow)
+        .map((line: any) => {
+            const item = items.value.find((entry) => entry.id === line.itemId) ?? null;
+            const shortageQuantity = Math.max(
+                numericInventoryValue(line.shortageQuantity, requisitionLineShortageQuantity(line)),
+                1,
+            );
+
+            return {
+                msdCode: msdCodeForItem(item ?? line),
+                itemName: String(line.itemName ?? item?.itemName ?? item?.name ?? ''),
+                quantity: String(shortageQuantity),
+                unit: String(line.unit ?? item?.unit ?? 'units'),
+                unitCost: '',
+                source: `${req.requisitionNumber ?? 'Shortage'}${req.requestingDepartment ? ` | ${req.requestingDepartment}` : ''}`,
+            };
+        }))
+    .filter((line) => line.msdCode !== '' && line.itemName !== '')
+    .slice(0, 12));
+
+const procurementAwaitingReceiptCount = computed(() => procurementRequests.value.filter((request) => String(request.status ?? '') === 'ordered').length);
+const procurementNeedsActionCount = computed(() => procurementRequests.value.filter((request) => ['pending_approval', 'approved', 'ordered'].includes(String(request.status ?? ''))).length);
+const requisitionsReadyCount = computed(() => shortageQueueMeta.value?.readyLineCount ?? 0);
+const requisitionsWaitingCount = computed(() => shortageQueueMeta.value?.waitingLineCount ?? 0);
+const stockAlertCount = computed(() => Number(itemCounts.value.outOfStock ?? 0) + Number(itemCounts.value.lowStock ?? 0));
+const msdDraftSignalCount = computed(() => shortageMsdDraftLines.value.length + lowStockMsdDraftLines.value.length);
+
+type WorkspaceNextAction = {
+    key: string;
+    label: string;
+    value: string | number;
+    helper: string;
+    icon: string;
+    tone: 'danger' | 'warning' | 'success' | 'neutral';
+    target: InventoryWorkspaceTab;
+};
+
+const workspaceNextActions = computed<WorkspaceNextAction[]>(() => [
+    {
+        key: 'ready-requisitions',
+        label: 'Ready to issue',
+        value: requisitionsReadyCount.value,
+        helper: 'Approved department lines with stock available now.',
+        icon: 'clipboard-list',
+        tone: requisitionsReadyCount.value > 0 ? 'success' : 'neutral',
+        target: 'shortage-queue',
+    },
+    {
+        key: 'awaiting-receipt',
+        label: 'Awaiting receipt',
+        value: procurementAwaitingReceiptCount.value,
+        helper: 'Purchase orders ready for physical goods receipt.',
+        icon: 'package',
+        tone: procurementAwaitingReceiptCount.value > 0 ? 'warning' : 'neutral',
+        target: 'procurement',
+    },
+    {
+        key: 'stock-alerts',
+        label: 'Stock alerts',
+        value: stockAlertCount.value,
+        helper: 'Store items currently out or below reorder level.',
+        icon: 'alert-triangle',
+        tone: stockAlertCount.value > 0 ? 'danger' : 'neutral',
+        target: 'inventory',
+    },
+    {
+        key: 'msd-drafts',
+        label: 'MSD draft signals',
+        value: msdDraftSignalCount.value,
+        helper: 'Shortage or low-stock lines with known MSD codes.',
+        icon: 'package',
+        tone: msdDraftSignalCount.value > 0 ? 'warning' : 'neutral',
+        target: 'msd-orders',
+    },
+]);
+
+function nextActionClass(tone: WorkspaceNextAction['tone']): string {
+    if (tone === 'danger') return 'border-destructive/30 bg-destructive/5 text-destructive';
+    if (tone === 'warning') return 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100';
+    if (tone === 'success') return 'border-green-200 bg-green-50 text-green-900 dark:border-green-900 dark:bg-green-950/30 dark:text-green-100';
+
+    return 'border-sidebar-border/70 bg-card text-foreground';
+}
+
+function openMsdOrderFromDraft(lines: MsdDraftLine[], sourceLabel: string): void {
+    resetMsdOrderForm();
+    msdOrderErrors.value = {};
+    msdOrderForm.lines = lines.length > 0
+        ? lines.map((line) => ({
+            msdCode: line.msdCode,
+            itemName: line.itemName,
+            quantity: line.quantity,
+            unit: line.unit,
+            unitCost: line.unitCost,
+        }))
+        : [{ msdCode: '', itemName: '', quantity: '', unit: '', unitCost: '' }];
+    msdOrderForm.notes = lines.length > 0
+        ? `Draft generated from ${sourceLabel}. Review quantities, MSD codes, and submit when ready.`
+        : '';
+    createMsdOrderDialogOpen.value = true;
 }
 
 async function loadMsdOrders() {
@@ -4453,24 +4594,63 @@ async function loadAllAnalytics() {
     } catch { /* handled individually */ } finally { analyticsLoading.value = false; }
 }
 
+const loadedWorkspaceTabs = new Set<InventoryWorkspaceTab>();
+
+async function loadActiveWorkspaceTab(tab: InventoryWorkspaceTab = activeTab.value, options: { force?: boolean } = {}): Promise<void> {
+    if (!canRead.value) return;
+    if (!options.force && loadedWorkspaceTabs.has(tab)) return;
+
+    switch (tab) {
+        case 'overview':
+            await Promise.all([loadItems(), loadProcurementRequests(), loadDeptRequisitions(), loadShortageQueue()]);
+            break;
+        case 'inventory':
+            await loadItems();
+            break;
+        case 'procurement':
+            await Promise.all([loadProcurementRequests(), loadSuppliersAndWarehouses()]);
+            break;
+        case 'ledger':
+            await loadStockLedger();
+            break;
+        case 'department-stock':
+            await loadDepartmentStock();
+            break;
+        case 'requisitions':
+            await Promise.all([loadDeptRequisitions(), loadSuppliersAndWarehouses()]);
+            break;
+        case 'shortage-queue':
+            await loadShortageQueue();
+            break;
+        case 'lead-times':
+            await Promise.all([loadSuppliersAndWarehouses(), loadLeadTimes()]);
+            break;
+        case 'transfers':
+            await Promise.all([loadWarehouseTransfers(), loadSuppliersAndWarehouses()]);
+            break;
+        case 'claims':
+            await loadClaimLinks();
+            break;
+        case 'msd-orders':
+            await Promise.all([loadMsdOrders(), loadShortageQueue(), loadItems()]);
+            break;
+        case 'analytics':
+            await loadAllAnalytics();
+            break;
+    }
+
+    loadedWorkspaceTabs.add(tab);
+}
+
 async function reloadAll() {
     if (!canRead.value) return;
     loading.value = true;
     queueError.value = null;
     try {
-        const tasks = [loadReferenceData(), loadItems(), loadProcurementRequests(), loadStockLedger(), loadDepartmentStock(), loadDeptRequisitions(), loadWarehouseTransfers(), loadSuppliersAndWarehouses(), loadClaimLinks(), loadMsdOrders()];
-        if (activeTab.value === 'shortage-queue') {
-            tasks.push(loadShortageQueue());
-        }
-        await Promise.all(tasks);
+        await loadReferenceData();
+        await loadActiveWorkspaceTab(activeTab.value, { force: true });
     } catch (error) {
         queueError.value = messageFromUnknown(error, 'Unable to load inventory/procurement data.');
-        items.value = [];
-        itemPagination.value = null;
-        procurementRequests.value = [];
-        procurementPagination.value = null;
-        stockMovements.value = [];
-        stockMovementPagination.value = null;
     } finally {
         loading.value = false;
     }
@@ -5452,13 +5632,6 @@ onBeforeUnmount(() => {
     document.removeEventListener('keydown', handleKeyboardShortcut);
 });
 
-// Load shortage queue on demand when its tab is selected.
-watch(activeTab, (tab) => {
-    if (tab === 'shortage-queue' && shortageQueueItems.value.length === 0 && !shortageQueueLoading.value) {
-        void loadShortageQueue();
-    }
-});
-
 onMounted(async () => {
     document.addEventListener('keydown', handleKeyboardShortcut);
     const shouldFocusStockLedger = hydrateStockLedgerFiltersFromUrl();
@@ -5481,45 +5654,33 @@ onMounted(async () => {
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
 
-            <!-- Page header -->
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div class="min-w-0">
-                    <div class="mb-2">
-                        <Button variant="ghost" size="sm" class="h-8 gap-1.5 px-2 text-muted-foreground" as-child>
-                            <Link :href="INVENTORY_PROCUREMENT_HOME_PATH">
-                                <AppIcon name="chevron-left" class="size-3.5" />
-                                Supply chain home
-                            </Link>
-                        </Button>
-                    </div>
-                    <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <AppIcon name="package" class="size-7 text-primary" />
-                        Supply chain workspace
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Item master, procurement, stock ledger, requisitions, MSD, and analytics in one operational surface.
-                    </p>
-                </div>
-                <div class="flex flex-shrink-0 items-center gap-2">
+            <FacilityWorkspacePageHeader
+                title="Workspace"
+                description="Supervisor control center for requisitions, shortages, stock, procurement, MSD, and governance."
+                icon="package"
+                :back-href="INVENTORY_PROCUREMENT_HOME_PATH"
+                back-label="Supply chain home"
+            >
+                <template #actions>
                     <Button variant="outline" size="sm" :disabled="loading" class="h-8 gap-1.5" @click="reloadAll()">
-                        <AppIcon name="activity" class="size-3.5" />
-                        {{ loading ? 'Refreshing...' : 'Refresh' }}
+                        <AppIcon name="refresh-cw" class="size-3.5" />
+                        {{ loading ? 'Refreshing…' : 'Refresh section' }}
                     </Button>
                     <Button v-if="canManageItems" size="sm" variant="outline" class="h-8 gap-1.5" :disabled="!canLaunchCreateItem" @click="openCreateItemDialog">
                         <AppIcon name="layout-list" class="size-3.5" />
-                        Catalog Item
+                        Catalog item
                     </Button>
                     <Button v-if="canCreateMovement" size="sm" variant="outline" class="h-8 gap-1.5" :disabled="!canLaunchStockMovement" @click="openStockMovementDialog">
                         <AppIcon name="arrow-up-down" class="size-3.5" />
-                        Record Movement
+                        Record movement
                     </Button>
                     <Button v-if="canReconcileStock" size="sm" variant="outline" class="h-8 gap-1.5" :disabled="!canLaunchReconciliation" @click="openReconcileDialog">
                         <AppIcon name="shield-check" class="size-3.5" />
-                        Reconcile Stock
+                        Reconcile stock
                     </Button>
                     <Button v-if="canCreateRequest" size="sm" class="h-8 gap-1.5" :disabled="!canLaunchProcurementRequest" @click="openCreateProcurementDialog">
                         <AppIcon name="plus" class="size-3.5" />
-                        Procurement Request
+                        Procurement request
                     </Button>
                     <Button size="sm" variant="outline" class="h-8 gap-1.5" @click="barcodeScannerOpen = true">
                         <AppIcon name="search" class="size-3.5" />
@@ -5544,7 +5705,42 @@ onMounted(async () => {
                             </div>
                         </PopoverContent>
                     </Popover>
-                </div>
+                </template>
+            </FacilityWorkspacePageHeader>
+
+            <div
+                v-if="canRead"
+                class="flex min-h-9 flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-4 py-2"
+            >
+                <span class="text-xs font-medium text-muted-foreground">Store stock:</span>
+                <span :class="['flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs', stockAlertCountClass('outOfStock')]">
+                    <span class="font-medium text-foreground">{{ itemCounts.outOfStock }}</span>
+                    <span class="text-muted-foreground">Out</span>
+                </span>
+                <span :class="['flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs', stockAlertCountClass('lowStock')]">
+                    <span class="font-medium text-foreground">{{ itemCounts.lowStock }}</span>
+                    <span class="text-muted-foreground">Low</span>
+                </span>
+                <span :class="['flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs', stockAlertCountClass('healthy')]">
+                    <span class="font-medium text-foreground">{{ itemCounts.healthy }}</span>
+                    <span class="text-muted-foreground">Healthy</span>
+                </span>
+                <span class="flex items-center gap-1 rounded-md border bg-background px-2.5 py-1 text-xs">
+                    <span class="font-medium text-foreground">{{ itemCounts.total }}</span>
+                    <span class="text-muted-foreground">Items</span>
+                </span>
+                <Separator orientation="vertical" class="mx-1 hidden h-6 sm:block" />
+                <Select :model-value="toSelectValue(stockStateSelectValue)" @update:model-value="stockStateSelectValue = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
+                    <SelectTrigger class="h-8 w-36 shrink-0" size="sm">
+                        <SelectValue placeholder="Stock state" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="out_of_stock">Store out</SelectItem>
+                        <SelectItem value="low_stock">Store low</SelectItem>
+                        <SelectItem value="healthy">Store healthy</SelectItem>
+                    </SelectContent>
+                </Select>
             </div>
 
             <Card v-if="canRead" class="rounded-lg border-sidebar-border/70">
@@ -5596,71 +5792,6 @@ onMounted(async () => {
                 </CardContent>
             </Card>
 
-            <!-- Queue bar -->
-            <div
-                v-if="canRead"
-                class="flex min-h-9 flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-4 py-2"
-            >
-                <span class="text-xs font-medium text-muted-foreground">Store Stock Alerts:</span>
-                <span :class="['flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs', stockAlertCountClass('outOfStock')]">
-                    <span class="font-medium text-foreground">{{ itemCounts.outOfStock }}</span>
-                    <span class="text-muted-foreground">Store out</span>
-                </span>
-                <span :class="['flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs', stockAlertCountClass('lowStock')]">
-                    <span class="font-medium text-foreground">{{ itemCounts.lowStock }}</span>
-                    <span class="text-muted-foreground">Store low</span>
-                </span>
-                <span :class="['flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs', stockAlertCountClass('healthy')]">
-                    <span class="font-medium text-foreground">{{ itemCounts.healthy }}</span>
-                    <span class="text-muted-foreground">Store healthy</span>
-                </span>
-                <span class="flex items-center gap-1 rounded-md border bg-background px-2.5 py-1 text-xs">
-                    <span class="font-medium text-foreground">{{ itemCounts.total }}</span>
-                    <span class="text-muted-foreground">Total</span>
-                </span>
-
-                <Separator orientation="vertical" class="mx-1 hidden h-6 sm:block" />
-                <span class="text-xs font-medium text-muted-foreground">Store status:</span>
-                <Select :model-value="toSelectValue(stockStateSelectValue)" @update:model-value="stockStateSelectValue = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
-                    <SelectTrigger class="h-8 w-36 shrink-0" size="sm">
-                        <SelectValue placeholder="All" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All</SelectItem>
-                        <SelectItem value="out_of_stock">Store out</SelectItem>
-                        <SelectItem value="low_stock">Store low</SelectItem>
-                        <SelectItem value="healthy">Store healthy</SelectItem>
-                    </SelectContent>
-                </Select>
-
-                <Separator orientation="vertical" class="mx-1 hidden h-6 sm:block" />
-                <span class="text-xs font-medium text-muted-foreground">Presets:</span>
-                <Button
-                    size="sm"
-                    class="h-8"
-                    :variant="itemSearch.stockState === 'out_of_stock' ? 'default' : 'outline'"
-                    @click="itemSearch.stockState = 'out_of_stock'; itemSearch.page = 1; reloadAll()"
-                >
-                    Store out
-                </Button>
-                <Button
-                    size="sm"
-                    class="h-8"
-                    :variant="itemSearch.stockState === 'low_stock' ? 'default' : 'outline'"
-                    @click="itemSearch.stockState = 'low_stock'; itemSearch.page = 1; reloadAll()"
-                >
-                    Store low
-                </Button>
-                <Button
-                    size="sm"
-                    class="h-8"
-                    :variant="itemSearch.stockState === 'healthy' ? 'default' : 'outline'"
-                    @click="itemSearch.stockState = 'healthy'; itemSearch.page = 1; reloadAll()"
-                >
-                    Store healthy
-                </Button>
-            </div>
-
             <!-- Errors -->
             <Alert v-if="queueError" variant="destructive">
                 <AlertTitle class="flex items-center gap-2">
@@ -5672,23 +5803,12 @@ onMounted(async () => {
 
             <!-- Tab layout -->
             <Tabs :model-value="activeTab" class="flex min-h-0 flex-1 flex-col gap-4" @update:model-value="onTabChange">
-                <TabsList class="w-full justify-start">
-                    <TabsTrigger value="inventory" class="gap-1.5">
-                        <AppIcon name="package" class="size-3.5" />
-                        Inventory
+                <TabsList class="flex h-auto w-full flex-wrap justify-start gap-2 rounded-lg bg-muted/30 p-1">
+                    <TabsTrigger value="overview" class="gap-1.5">
+                        <AppIcon name="layout-grid" class="size-3.5" />
+                        Overview
                     </TabsTrigger>
-                    <TabsTrigger value="procurement" class="gap-1.5">
-                        <AppIcon name="clipboard-list" class="size-3.5" />
-                        Procurement
-                    </TabsTrigger>
-                    <TabsTrigger value="ledger" class="gap-1.5">
-                        <AppIcon name="activity" class="size-3.5" />
-                        Stock Ledger
-                    </TabsTrigger>
-                    <TabsTrigger value="department-stock" class="gap-1.5">
-                        <AppIcon name="package" class="size-3.5" />
-                        Department Stock
-                    </TabsTrigger>
+                    <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Operations</span>
                     <TabsTrigger value="requisitions" class="gap-1.5">
                         <AppIcon name="clipboard-list" class="size-3.5" />
                         Requisitions
@@ -5704,21 +5824,40 @@ onMounted(async () => {
                             {{ shortageQueueMeta!.readyLineCount }}
                         </Badge>
                     </TabsTrigger>
-                    <TabsTrigger value="lead-times" class="gap-1.5">
-                        <AppIcon name="activity" class="size-3.5" />
-                        Lead Times
-                    </TabsTrigger>
                     <TabsTrigger value="transfers" class="gap-1.5">
                         <AppIcon name="activity" class="size-3.5" />
                         Transfers
                     </TabsTrigger>
-                    <TabsTrigger value="claims" class="gap-1.5">
-                        <AppIcon name="shield-check" class="size-3.5" />
-                        Claims
+                    <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Stock</span>
+                    <TabsTrigger value="inventory" class="gap-1.5">
+                        <AppIcon name="package" class="size-3.5" />
+                        Items
+                    </TabsTrigger>
+                    <TabsTrigger value="ledger" class="gap-1.5">
+                        <AppIcon name="activity" class="size-3.5" />
+                        Ledger
+                    </TabsTrigger>
+                    <TabsTrigger value="department-stock" class="gap-1.5">
+                        <AppIcon name="building-2" class="size-3.5" />
+                        Department Stock
+                    </TabsTrigger>
+                    <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Procurement</span>
+                    <TabsTrigger value="procurement" class="gap-1.5">
+                        <AppIcon name="clipboard-list" class="size-3.5" />
+                        Requests
                     </TabsTrigger>
                     <TabsTrigger value="msd-orders" class="gap-1.5">
                         <AppIcon name="package" class="size-3.5" />
                         MSD Orders
+                    </TabsTrigger>
+                    <TabsTrigger value="lead-times" class="gap-1.5">
+                        <AppIcon name="activity" class="size-3.5" />
+                        Lead Times
+                    </TabsTrigger>
+                    <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Governance</span>
+                    <TabsTrigger value="claims" class="gap-1.5">
+                        <AppIcon name="shield-check" class="size-3.5" />
+                        Claims
                     </TabsTrigger>
                     <TabsTrigger value="analytics" class="gap-1.5">
                         <AppIcon name="activity" class="size-3.5" />
@@ -5727,6 +5866,81 @@ onMounted(async () => {
                 </TabsList>
 
             <div class="flex min-w-0 flex-col gap-4">
+
+                <TabsContent value="overview" class="mt-0 flex flex-col gap-4">
+                    <div class="grid gap-3 lg:grid-cols-4">
+                        <button
+                            v-for="action in workspaceNextActions"
+                            :key="action.key"
+                            type="button"
+                            :class="[
+                                'rounded-lg border px-4 py-3 text-left shadow-sm transition hover:border-primary/40',
+                                nextActionClass(action.tone),
+                            ]"
+                            @click="onTabChange(action.target)"
+                        >
+                            <div class="flex items-start justify-between gap-3">
+                                <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background/70">
+                                    <AppIcon :name="action.icon" class="size-4" />
+                                </span>
+                                <span class="text-2xl font-bold leading-none tabular-nums">{{ action.value }}</span>
+                            </div>
+                            <p class="mt-3 text-sm font-semibold">{{ action.label }}</p>
+                            <p class="mt-1 text-xs leading-relaxed opacity-80">{{ action.helper }}</p>
+                        </button>
+                    </div>
+
+                    <div class="grid gap-4 xl:grid-cols-3">
+                        <Card class="rounded-lg border-sidebar-border/70 shadow-sm xl:col-span-2">
+                            <CardHeader class="pb-2">
+                                <CardTitle class="text-base">Operations Queue</CardTitle>
+                                <CardDescription>Start with work that changes patient-facing stock availability.</CardDescription>
+                            </CardHeader>
+                            <CardContent class="grid gap-3 sm:grid-cols-3">
+                                <button type="button" class="rounded-lg border bg-muted/10 p-3 text-left transition hover:border-primary/40" @click="onTabChange('shortage-queue')">
+                                    <AppIcon name="alert-triangle" class="mb-2 size-4 text-muted-foreground" />
+                                    <p class="text-sm font-medium">Shortage queue</p>
+                                    <p class="mt-1 text-xs text-muted-foreground">{{ requisitionsReadyCount }} ready, {{ requisitionsWaitingCount }} waiting.</p>
+                                </button>
+                                <button type="button" class="rounded-lg border bg-muted/10 p-3 text-left transition hover:border-primary/40" @click="onTabChange('requisitions')">
+                                    <AppIcon name="clipboard-list" class="mb-2 size-4 text-muted-foreground" />
+                                    <p class="text-sm font-medium">Department requisitions</p>
+                                    <p class="mt-1 text-xs text-muted-foreground">{{ deptReqPagination?.total ?? deptRequisitions.length }} request{{ (deptReqPagination?.total ?? deptRequisitions.length) === 1 ? '' : 's' }} in view.</p>
+                                </button>
+                                <button type="button" class="rounded-lg border bg-muted/10 p-3 text-left transition hover:border-primary/40" @click="onTabChange('transfers')">
+                                    <AppIcon name="activity" class="mb-2 size-4 text-muted-foreground" />
+                                    <p class="text-sm font-medium">Transfers</p>
+                                    <p class="mt-1 text-xs text-muted-foreground">Pack, dispatch, receive, and review variance.</p>
+                                </button>
+                            </CardContent>
+                        </Card>
+
+                        <Card class="rounded-lg border-sidebar-border/70 shadow-sm">
+                            <CardHeader class="pb-2">
+                                <CardTitle class="text-base">Supervisor Tools</CardTitle>
+                                <CardDescription>Use these after the immediate queues are under control.</CardDescription>
+                            </CardHeader>
+                            <CardContent class="grid gap-2">
+                                <Button variant="outline" class="justify-start gap-2" @click="onTabChange('inventory')">
+                                    <AppIcon name="package" class="size-4" />
+                                    Item master and stock alerts
+                                </Button>
+                                <Button variant="outline" class="justify-start gap-2" @click="onTabChange('procurement')">
+                                    <AppIcon name="clipboard-list" class="size-4" />
+                                    Procurement requests
+                                </Button>
+                                <Button variant="outline" class="justify-start gap-2" @click="onTabChange('msd-orders')">
+                                    <AppIcon name="package" class="size-4" />
+                                    MSD order drafts
+                                </Button>
+                                <Button variant="outline" class="justify-start gap-2" @click="onTabChange('analytics')">
+                                    <AppIcon name="activity" class="size-4" />
+                                    Analytics
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </TabsContent>
 
                 <TabsContent value="inventory" class="mt-0 flex flex-col gap-4">
                     <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -8035,10 +8249,32 @@ onMounted(async () => {
                             </h3>
                             <p class="mt-1 text-xs text-muted-foreground">Create, submit, synchronize, and monitor Medical Stores Department supply orders.</p>
                         </div>
-                        <Button size="sm" class="h-9 shrink-0 gap-1.5 rounded-lg text-xs" @click="createMsdOrderDialogOpen = true">
-                            <AppIcon name="plus" class="size-3.5" />
-                            New MSD Order
-                        </Button>
+                        <div class="flex shrink-0 flex-wrap items-center gap-2">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                class="h-9 gap-1.5 rounded-lg text-xs"
+                                :disabled="shortageMsdDraftLines.length === 0"
+                                @click="openMsdOrderFromDraft(shortageMsdDraftLines, 'shortage queue')"
+                            >
+                                <AppIcon name="alert-triangle" class="size-3.5" />
+                                Draft shortages
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                class="h-9 gap-1.5 rounded-lg text-xs"
+                                :disabled="lowStockMsdDraftLines.length === 0"
+                                @click="openMsdOrderFromDraft(lowStockMsdDraftLines, 'low-stock reorder policy')"
+                            >
+                                <AppIcon name="package" class="size-3.5" />
+                                Draft low stock
+                            </Button>
+                            <Button size="sm" class="h-9 gap-1.5 rounded-lg text-xs" @click="openBlankMsdOrder">
+                                <AppIcon name="plus" class="size-3.5" />
+                                Blank order
+                            </Button>
+                        </div>
                     </div>
 
                     <div class="flex items-center gap-2 border-b px-4 py-3">
@@ -8089,9 +8325,9 @@ onMounted(async () => {
                                 <p class="text-sm font-semibold">No MSD orders found</p>
                                 <p class="max-w-xs text-xs text-muted-foreground">MSD orders appear after public-sector procurement orders are created, submitted, or synchronized.</p>
                             </div>
-                            <Button size="sm" class="mt-1 h-8 gap-1.5 rounded-lg text-xs" @click="createMsdOrderDialogOpen = true">
+                            <Button size="sm" class="mt-1 h-8 gap-1.5 rounded-lg text-xs" @click="openBlankMsdOrder">
                                 <AppIcon name="plus" class="size-3.5" />
-                                New MSD Order
+                                Blank MSD order
                             </Button>
                         </div>
                         <div v-else-if="msdOrders.length > 0" class="divide-y">
@@ -12308,7 +12544,7 @@ onMounted(async () => {
         <SheetContent side="right" variant="form" size="4xl">
             <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
                 <SheetTitle>Create MSD Electronic Order</SheetTitle>
-                <SheetDescription>Submit an order to the Medical Stores Department (MSD) e-ordering system.</SheetDescription>
+                <SheetDescription>Start from shortages or reorder signals, then review MSD codes and quantities before submission.</SheetDescription>
             </SheetHeader>
             <ScrollArea class="min-h-0 flex-1">
             <div class="px-6 py-4 grid gap-4">
@@ -12327,6 +12563,35 @@ onMounted(async () => {
                 <SingleDatePopoverField input-id="msd-expected-date" label="Expected Delivery Date" v-model="msdOrderForm.expectedDeliveryDate" />
 
                 <Separator />
+                <div class="grid gap-2 rounded-lg border bg-muted/10 p-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <p class="text-sm font-medium">Draft from live supply signals</p>
+                            <p class="text-xs text-muted-foreground">Use known MSD item codes from shortages or reorder policy instead of typing every line manually.</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                class="h-8 text-xs"
+                                :disabled="shortageMsdDraftLines.length === 0"
+                                @click="openMsdOrderFromDraft(shortageMsdDraftLines, 'shortage queue')"
+                            >
+                                Shortages ({{ shortageMsdDraftLines.length }})
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                class="h-8 text-xs"
+                                :disabled="lowStockMsdDraftLines.length === 0"
+                                @click="openMsdOrderFromDraft(lowStockMsdDraftLines, 'low-stock reorder policy')"
+                            >
+                                Low stock ({{ lowStockMsdDraftLines.length }})
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="flex items-center justify-between">
                     <Label class="text-sm font-medium">Order Lines</Label>
                     <Button variant="outline" size="sm" class="h-7 text-xs" @click="addMsdOrderLine">+ Add Line</Button>

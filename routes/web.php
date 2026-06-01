@@ -3,6 +3,7 @@
 use App\Modules\Billing\Presentation\Http\Controllers\BillingInvoiceDocumentController;
 use App\Modules\ClaimsInsurance\Presentation\Http\Controllers\ClaimsInsuranceDocumentController;
 use App\Modules\InpatientWard\Presentation\Http\Controllers\InpatientWardDischargeChecklistDocumentController;
+use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryProcurementDocumentController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryWarehouseTransferDocumentController;
 use App\Modules\Encounter\Presentation\Http\Controllers\EncounterDocumentController;
 use App\Modules\MedicalRecord\Presentation\Http\Controllers\MedicalRecordDocumentController;
@@ -312,6 +313,14 @@ Route::get('inventory-procurement/suppliers', function () {
 Route::get('inventory-procurement/warehouses', function () {
     return Inertia::render('inventory-procurement/warehouses/Index');
 })->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.warehouses'])->name('inventory-procurement-warehouses.page');
+
+Route::get('inventory-procurement/procurement-requests/{id}/grn', [InventoryProcurementDocumentController::class, 'showGoodsReceivedNote'])
+    ->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])
+    ->name('inventory-procurement-procurement-requests.grn.page');
+
+Route::get('inventory-procurement/procurement-requests/{id}/grn.pdf', [InventoryProcurementDocumentController::class, 'downloadGoodsReceivedNotePdf'])
+    ->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])
+    ->name('inventory-procurement-procurement-requests.grn.pdf.download');
 
 Route::get('inventory-procurement/warehouse-transfers/{id}/pick-slip', [InventoryWarehouseTransferDocumentController::class, 'showPickSlip'])
     ->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.transfers'])

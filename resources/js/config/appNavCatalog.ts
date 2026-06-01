@@ -224,14 +224,6 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Hospital stores, procurement, and stock tasks',
     },
     {
-        title: 'Supply chain workspace',
-        href: '/inventory-procurement/workspace',
-        iconName: 'layout-grid',
-        section: 'stores',
-        permissionPrefixes: ['inventory.procurement.'],
-        helpNote: 'Full inventory, procurement, ledger, and analytics workspace',
-    },
-    {
         title: 'Receive stock',
         href: '/inventory-procurement/receive',
         iconName: 'package',
@@ -246,6 +238,25 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         section: 'stores',
         permissionPrefixes: ['inventory.procurement.create-movement'],
         helpNote: 'Issue stock to wards and departments',
+    },
+    {
+        title: 'Cycle count',
+        href: '/inventory-procurement/count',
+        iconName: 'shield-check',
+        section: 'stores',
+        permissionPrefixes: [
+            'inventory.procurement.reconcile-stock',
+            'inventory.procurement.create-movement',
+        ],
+        helpNote: 'Count physical stock and post governed variances',
+    },
+    {
+        title: 'Workspace',
+        href: '/inventory-procurement/workspace',
+        iconName: 'layout-grid',
+        section: 'stores',
+        permissionPrefixes: ['inventory.procurement.'],
+        helpNote: 'Supervisor workspace for item master, procurement, ledger, requisitions, MSD, and analytics',
     },
     {
         title: 'Warehouses',
