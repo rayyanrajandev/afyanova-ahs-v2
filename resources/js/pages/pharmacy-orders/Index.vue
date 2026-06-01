@@ -15,6 +15,7 @@ import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextB
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycleActionDialog.vue';
+import OrdersWorkspacePageHeader from '@/components/orders/OrdersWorkspacePageHeader.vue';
 import PatientOrderGroupList from '@/components/orders/PatientOrderGroupList.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import WalkInServiceRequestsPanel from '@/components/service-requests/WalkInServiceRequestsPanel.vue';
@@ -91,6 +92,7 @@ import { useConfirmationDialog } from '@/composables/useConfirmationDialog';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
 import { usePatientOrderGroups } from '@/composables/usePatientOrderGroups';
 import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
+import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersistence';
 import AppLayout from '@/layouts/AppLayout.vue';
 import EncounterReturnBanner from '@/components/domain/clinical/EncounterReturnBanner.vue';
@@ -819,27 +821,44 @@ const actionMessage = ref<string | null>(null);
 const createMessage = ref<string | null>(null);
 const createServerDraftId = ref('');
 const createErrors = ref<Record<string, string[]>>({});
-const scope = ref<ScopeData | null>(null);
+const {
+    isFacilitySuperAdmin,
+    permissionState,
+    scope: sharedScope,
+} = usePlatformAccess();
+const scope = ref<ScopeData | null>(
+    (sharedScope.value as ScopeData | null) ?? null,
+);
 const orders = ref<PharmacyOrder[]>([]);
 const pagination = ref<PharmacyOrderListResponse['meta'] | null>(null);
 const pharmacyOrderStatusCounts = ref<PharmacyOrderStatusCounts | null>(null);
 const patientDirectory = ref<Record<string, PatientSummary>>({});
 const appointmentDirectory = ref<Record<string, AppointmentSummary>>({});
 const admissionDirectory = ref<Record<string, AdmissionSummary>>({});
-const canReadPharmacyOrders = ref(false);
-const canCreatePharmacyOrders = ref(false);
-const canReadApprovedMedicinesCatalog = ref(false);
-const canReadInventoryProcurement = ref(false);
-const canReadAppointments = ref(false);
-const canReadAdmissions = ref(false);
-const canReadMedicalRecords = ref(false);
-const canReadLaboratoryOrders = ref(false);
-const canReadTheatreProcedures = ref(false);
-const canCreateTheatreProcedures = ref(false);
-const canReadBillingInvoices = ref(false);
-const canUpdatePharmacyOrderStatus = ref(false);
-const canVerifyPharmacyDispense = ref(false);
-const canUpdateServiceRequestStatus = ref(false);
+const canReadPharmacyOrders = ref(permissionState('pharmacy.orders.read') === 'allowed');
+const canCreatePharmacyOrders = ref(permissionState('pharmacy.orders.create') === 'allowed');
+const canReadApprovedMedicinesCatalog = ref(
+    [
+        'platform.clinical-catalog.read',
+        'pharmacy.orders.read',
+        'pharmacy.orders.create',
+        'pharmacy.orders.manage-policy',
+        'pharmacy.orders.update-status',
+        'pharmacy.orders.verify-dispense',
+        'pharmacy.orders.reconcile',
+    ].some((permission) => permissionState(permission) === 'allowed'),
+);
+const canReadInventoryProcurement = ref(permissionState('inventory.procurement.read') === 'allowed');
+const canReadAppointments = ref(permissionState('appointments.read') === 'allowed');
+const canReadAdmissions = ref(permissionState('admissions.read') === 'allowed');
+const canReadMedicalRecords = ref(permissionState('medical.records.read') === 'allowed');
+const canReadLaboratoryOrders = ref(permissionState('laboratory.orders.read') === 'allowed');
+const canReadTheatreProcedures = ref(permissionState('theatre.procedures.read') === 'allowed');
+const canCreateTheatreProcedures = ref(permissionState('theatre.procedures.create') === 'allowed');
+const canReadBillingInvoices = ref(permissionState('billing.invoices.read') === 'allowed');
+const canUpdatePharmacyOrderStatus = ref(permissionState('pharmacy.orders.update-status') === 'allowed');
+const canVerifyPharmacyDispense = ref(permissionState('pharmacy.orders.verify-dispense') === 'allowed');
+const canUpdateServiceRequestStatus = ref(permissionState('service.requests.update-status') === 'allowed');
 const pharmacyWalkInPanelRef = ref<InstanceType<
     typeof WalkInServiceRequestsPanel
 > | null>(null);
@@ -870,8 +889,8 @@ const inventoryStockMovementHistoryLoading = reactive<Record<string, boolean>>({
 const inventoryStockMovementHistoryErrors = reactive<
     Record<string, string | null | undefined>
 >({});
-const canManagePharmacyPolicy = ref(false);
-const canReconcilePharmacyOrders = ref(false);
+const canManagePharmacyPolicy = ref(permissionState('pharmacy.orders.manage-policy') === 'allowed');
+const canReconcilePharmacyOrders = ref(permissionState('pharmacy.orders.reconcile') === 'allowed');
 const advancedFiltersSheetOpen = ref(false);
 const mobileFiltersDrawerOpen = ref(false);
 const compactQueueRows = useLocalStorageBoolean('opd.queueRows.compact', false);
@@ -922,7 +941,10 @@ const detailsSheetAuditExportJobsFilters = reactive<DetailsAuditExportJobsFilter
     perPage: 8,
     page: 1,
 });
-const canViewPharmacyOrderAuditLogs = ref(false);
+const canViewPharmacyOrderAuditLogs = ref(
+    permissionState('pharmacy-orders.view-audit-logs') === 'allowed' ||
+    permissionState('pharmacy.orders.view-audit-logs') === 'allowed',
+);
 const canOperatePharmacyWorkflow = computed(
     () =>
         canUpdatePharmacyOrderStatus.value ||
@@ -3550,9 +3572,11 @@ async function loadPharmacyPermissions() {
                 .map((permission) => permission.name?.trim())
                 .filter((name): name is string => Boolean(name)),
         );
-        canReadPharmacyOrders.value = names.has('pharmacy.orders.read');
-        canCreatePharmacyOrders.value = names.has('pharmacy.orders.create');
+        const hasSuperAdminAccess = isFacilitySuperAdmin.value;
+        canReadPharmacyOrders.value = hasSuperAdminAccess || names.has('pharmacy.orders.read');
+        canCreatePharmacyOrders.value = hasSuperAdminAccess || names.has('pharmacy.orders.create');
         canReadApprovedMedicinesCatalog.value =
+            hasSuperAdminAccess ||
             names.has('platform.clinical-catalog.read') ||
             names.has('pharmacy.orders.read') ||
             names.has('pharmacy.orders.create') ||
@@ -3560,26 +3584,27 @@ async function loadPharmacyPermissions() {
             names.has('pharmacy.orders.update-status') ||
             names.has('pharmacy.orders.verify-dispense') ||
             names.has('pharmacy.orders.reconcile');
-        canReadInventoryProcurement.value = names.has(
+        canReadInventoryProcurement.value = hasSuperAdminAccess || names.has(
             'inventory.procurement.read',
         );
-        canReadAppointments.value = names.has('appointments.read');
-        canReadAdmissions.value = names.has('admissions.read');
-        canReadMedicalRecords.value = names.has('medical.records.read');
-        canReadLaboratoryOrders.value = names.has('laboratory.orders.read');
-        canReadTheatreProcedures.value = names.has('theatre.procedures.read');
-        canCreateTheatreProcedures.value = names.has('theatre.procedures.create');
-        canReadBillingInvoices.value = names.has('billing.invoices.read');
-        canUpdatePharmacyOrderStatus.value = names.has('pharmacy.orders.update-status');
-        canVerifyPharmacyDispense.value = names.has('pharmacy.orders.verify-dispense');
+        canReadAppointments.value = hasSuperAdminAccess || names.has('appointments.read');
+        canReadAdmissions.value = hasSuperAdminAccess || names.has('admissions.read');
+        canReadMedicalRecords.value = hasSuperAdminAccess || names.has('medical.records.read');
+        canReadLaboratoryOrders.value = hasSuperAdminAccess || names.has('laboratory.orders.read');
+        canReadTheatreProcedures.value = hasSuperAdminAccess || names.has('theatre.procedures.read');
+        canCreateTheatreProcedures.value = hasSuperAdminAccess || names.has('theatre.procedures.create');
+        canReadBillingInvoices.value = hasSuperAdminAccess || names.has('billing.invoices.read');
+        canUpdatePharmacyOrderStatus.value = hasSuperAdminAccess || names.has('pharmacy.orders.update-status');
+        canVerifyPharmacyDispense.value = hasSuperAdminAccess || names.has('pharmacy.orders.verify-dispense');
         isApprovedMedicinesCatalogReadPermissionResolved.value = true;
         approvedMedicinesCatalogAccessDenied.value = false;
-        canManagePharmacyPolicy.value = names.has('pharmacy.orders.manage-policy');
-        canReconcilePharmacyOrders.value = names.has('pharmacy.orders.reconcile');
+        canManagePharmacyPolicy.value = hasSuperAdminAccess || names.has('pharmacy.orders.manage-policy');
+        canReconcilePharmacyOrders.value = hasSuperAdminAccess || names.has('pharmacy.orders.reconcile');
         canViewPharmacyOrderAuditLogs.value =
+            hasSuperAdminAccess ||
             names.has('pharmacy-orders.view-audit-logs') ||
             names.has('pharmacy.orders.view-audit-logs');
-        canUpdateServiceRequestStatus.value = names.has('service.requests.update-status');
+        canUpdateServiceRequestStatus.value = hasSuperAdminAccess || names.has('service.requests.update-status');
 
     } catch {
         canReadPharmacyOrders.value = false;
@@ -8385,28 +8410,6 @@ const canShowPharmacyWorkloadBoard = computed(
     () => canOperatePharmacyWorkflow.value && pharmacyWorkloadCards.value.length > 0,
 );
 
-const showPharmacyCareWorkflowFooter = computed(
-    () =>
-        canCreatePharmacyOrders.value ||
-        canReadMedicalRecords.value ||
-        canReadLaboratoryOrders.value ||
-        canCreateTheatreProcedures.value ||
-        canReadBillingInvoices.value,
-);
-
-const pharmacyDetailsSheetHasRelatedWorkflows = computed(() => {
-    const order = detailsSheetOrder.value;
-    if (!order) return false;
-
-    return Boolean(
-        (canReadAppointments.value && order.appointmentId) ||
-            (canReadMedicalRecords.value && order.patientId) ||
-            (canReadLaboratoryOrders.value && order.patientId) ||
-            (canCreateTheatreProcedures.value && order.patientId) ||
-            (canReadBillingInvoices.value && order.patientId),
-    );
-});
-
 const pharmacyAuditExportPollAttempts = 20;
 const pharmacyAuditExportPollDelayMs = 1500;
 
@@ -8634,6 +8637,20 @@ const scopeWarning = computed(() => {
     }
     return null;
 });
+
+const pharmacyWorkspaceIntroText = computed(() =>
+    'Create and track medication dispense orders from outpatient and consultation workflows.',
+);
+
+function togglePharmacyWorkspaceFromHeader(): void {
+    if (pharmacyWorkspaceView.value === 'new') {
+        setPharmacyWorkspaceView('queue', { focusSearch: true });
+
+        return;
+    }
+
+    setPharmacyWorkspaceView('new', { focusCreate: true });
+}
 
 const scopeStatusLabel = computed(() => {
     if (!scope.value) return 'Scope Unavailable';
@@ -10030,42 +10047,24 @@ onMounted(async () => {
     <Head title="Pharmacy Orders" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto p-4 md:p-6">
+        <div class="flex flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
             <EncounterReturnBanner
                 v-if="encounterReturnTo"
                 :return-to="encounterReturnTo"
             />
-            <!-- Page header -->
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div class="min-w-0">
-                    <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <AppIcon name="pill" class="size-7 text-primary" />
-                        Pharmacy Orders
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Create and track medication dispense orders from outpatient and consultation workflows.
-                    </p>
-                </div>
-                <div class="flex flex-shrink-0 items-center gap-2">
-                    <Popover>
-                        <PopoverTrigger as-child>
-                            <Button variant="outline" size="sm" class="h-8 px-2.5">
-                                <Badge :variant="scopeWarning ? 'destructive' : 'secondary'">
-                                    {{ scopeStatusLabel }}
-                                </Badge>
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent align="end" class="w-72 space-y-1 text-xs">
-                            <p v-if="scope?.tenant">Tenant: {{ scope.tenant.name }} ({{ scope.tenant.code }})</p>
-                            <p v-if="scope?.facility">Facility: {{ scope.facility.name }} ({{ scope.facility.code }})</p>
-                            <p>Accessible facilities: {{ scope?.userAccess?.accessibleFacilityCount ?? 'N/A' }}</p>
-                            <p v-if="!scope" class="text-destructive">Scope could not be loaded.</p>
-                        </PopoverContent>
-                    </Popover>
-                    <Button variant="outline" size="sm" :disabled="listLoading" class="h-8 gap-1.5" @click="refreshPage">
-                        <AppIcon name="activity" class="size-3.5" />
-                        {{ listLoading ? 'Refreshing...' : 'Refresh' }}
-                    </Button>
+            <OrdersWorkspacePageHeader
+                title="Pharmacy Orders"
+                icon="pill"
+                :intro="pharmacyWorkspaceIntroText"
+                :list-loading="listLoading"
+                :workspace-view="pharmacyWorkspaceView"
+                :can-create="canCreatePharmacyOrders"
+                queue-action-label="Pharmacy queue"
+                create-action-label="Create order"
+                @refresh="refreshPage"
+                @toggle-workspace="togglePharmacyWorkspaceFromHeader"
+            >
+                <template #actions>
                     <Popover v-model:open="shortcutHintOpen">
                         <PopoverTrigger as-child>
                             <Button variant="outline" size="sm" class="h-8 w-8 p-0" title="Keyboard shortcuts (?)">
@@ -10113,98 +10112,8 @@ onMounted(async () => {
                             </div>
                         </PopoverContent>
                     </Popover>
-                    <Button
-                        v-if="
-                            pharmacyWorkspaceView === 'new' ||
-                            canCreatePharmacyOrders
-                        "
-                        :variant="
-                            pharmacyWorkspaceView === 'new'
-                                ? 'outline'
-                                : 'default'
-                        "
-                        size="sm"
-                        class="h-8 gap-1.5"
-                        @click="
-                            pharmacyWorkspaceView === 'new'
-                                ? setPharmacyWorkspaceView('queue', {
-                                      focusSearch: true,
-                                  })
-                                : setPharmacyWorkspaceView('new', {
-                                      focusCreate: true,
-                                  })
-                        "
-                    >
-                        <AppIcon
-                            :name="
-                                pharmacyWorkspaceView === 'new'
-                                    ? 'layout-list'
-                                    : 'plus'
-                            "
-                            class="size-3.5"
-                        />
-                        {{
-                            pharmacyWorkspaceView === 'new'
-                                ? 'Pharmacy Queue'
-                                : 'Create order'
-                        }}
-                    </Button>
-                </div>
-            </div>
-
-            <Alert v-if="scopeWarning" variant="destructive">
-                <AlertTitle>Scope warning</AlertTitle>
-                <AlertDescription>{{ scopeWarning }}</AlertDescription>
-            </Alert>
-            <Alert v-if="listErrors.length" variant="destructive">
-                <AlertTitle>Request error</AlertTitle>
-                <AlertDescription>
-                    <div class="space-y-1">
-                        <p v-for="errorMessage in listErrors" :key="errorMessage" class="text-xs">{{ errorMessage }}</p>
-                    </div>
-                </AlertDescription>
-            </Alert>
-            <Alert v-if="canViewPharmacyOrderAuditLogs && lastPharmacyAuditExportRetryHandoff">
-                <AlertTitle>Resume last handoff target</AlertTitle>
-                <AlertDescription>
-                    <div class="space-y-2">
-                        <p class="text-xs">
-                            Last pharmacy handoff: order {{ lastPharmacyAuditExportRetryHandoff.targetOrderId }}
-                            | export job {{ lastPharmacyAuditExportRetryHandoff.jobId }} | saved
-                            {{ formatDateTime(lastPharmacyAuditExportRetryHandoff.savedAt) }}
-                        </p>
-                        <p class="text-[11px] text-muted-foreground">
-                            Resume telemetry: attempts {{ pharmacyAuditExportRetryResumeTelemetry.attempts }} |
-                            success {{ pharmacyAuditExportRetryResumeTelemetry.successes }} |
-                            failure {{ pharmacyAuditExportRetryResumeTelemetry.failures }}
-                        </p>
-                        <p v-if="pharmacyAuditExportRetryResumeTelemetry.lastFailureReason" class="text-[11px] text-muted-foreground">
-                            Last failure: {{ pharmacyAuditExportRetryResumeTelemetry.lastFailureReason }}
-                        </p>
-                        <div class="flex flex-wrap gap-2">
-                            <Button type="button" size="sm" :disabled="resumingPharmacyAuditExportRetryHandoff" @click="resumeLastPharmacyAuditExportRetryHandoff">
-                                {{ resumingPharmacyAuditExportRetryHandoff ? 'Resuming...' : 'Resume Last Handoff' }}
-                            </Button>
-                            <Button type="button" size="sm" variant="ghost" @click="clearLastPharmacyAuditExportRetryHandoff">Clear</Button>
-                            <Button type="button" size="sm" variant="ghost" @click="resetPharmacyAuditExportRetryResumeTelemetry">Reset Telemetry</Button>
-                        </div>
-                    </div>
-                </AlertDescription>
-            </Alert>
-            <Alert v-if="canViewPharmacyOrderAuditLogs && auditExportRetryHandoffCompletedMessage">
-                <AlertTitle>Retry handoff ready</AlertTitle>
-                <AlertDescription>
-                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <p class="text-xs">{{ auditExportRetryHandoffCompletedMessage }}</p>
-                        <Button type="button" size="sm" variant="ghost" @click="auditExportRetryHandoffCompletedMessage = null">Dismiss</Button>
-                    </div>
-                </AlertDescription>
-            </Alert>
-
-            <Alert v-if="!pageLoading && !canReadPharmacyOrders" variant="destructive">
-                <AlertTitle>Queue read access restricted</AlertTitle>
-                <AlertDescription>Request <code>pharmacy.orders.read</code> permission to view queue metrics and list results.</AlertDescription>
-            </Alert>
+                </template>
+            </OrdersWorkspacePageHeader>
 
             <WalkInServiceRequestsPanel
                 ref="pharmacyWalkInPanelRef"
@@ -10220,7 +10129,7 @@ onMounted(async () => {
                     canReadPharmacyOrders &&
                     pharmacyWorkspaceView === 'queue'
                 "
-                class="rounded-lg border bg-muted/30 px-3 py-2"
+                class="rounded-lg border bg-muted/30 px-3 py-2.5"
             >
                 <div v-if="pageLoading" class="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
                     <div class="flex flex-wrap items-center gap-2">
@@ -10341,14 +10250,68 @@ onMounted(async () => {
                 </div>
             </div>
 
+            <Alert v-if="scopeWarning" variant="destructive">
+                <AlertTitle>Scope warning</AlertTitle>
+                <AlertDescription>{{ scopeWarning }}</AlertDescription>
+            </Alert>
+            <Alert v-if="listErrors.length" variant="destructive">
+                <AlertTitle>Request error</AlertTitle>
+                <AlertDescription>
+                    <div class="space-y-1">
+                        <p v-for="errorMessage in listErrors" :key="errorMessage" class="text-xs">{{ errorMessage }}</p>
+                    </div>
+                </AlertDescription>
+            </Alert>
+            <Alert v-if="canViewPharmacyOrderAuditLogs && lastPharmacyAuditExportRetryHandoff">
+                <AlertTitle>Resume last handoff target</AlertTitle>
+                <AlertDescription>
+                    <div class="space-y-2">
+                        <p class="text-xs">
+                            Last pharmacy handoff: order {{ lastPharmacyAuditExportRetryHandoff.targetOrderId }}
+                            | export job {{ lastPharmacyAuditExportRetryHandoff.jobId }} | saved
+                            {{ formatDateTime(lastPharmacyAuditExportRetryHandoff.savedAt) }}
+                        </p>
+                        <p class="text-[11px] text-muted-foreground">
+                            Resume telemetry: attempts {{ pharmacyAuditExportRetryResumeTelemetry.attempts }} |
+                            success {{ pharmacyAuditExportRetryResumeTelemetry.successes }} |
+                            failure {{ pharmacyAuditExportRetryResumeTelemetry.failures }}
+                        </p>
+                        <p v-if="pharmacyAuditExportRetryResumeTelemetry.lastFailureReason" class="text-[11px] text-muted-foreground">
+                            Last failure: {{ pharmacyAuditExportRetryResumeTelemetry.lastFailureReason }}
+                        </p>
+                        <div class="flex flex-wrap gap-2">
+                            <Button type="button" size="sm" :disabled="resumingPharmacyAuditExportRetryHandoff" @click="resumeLastPharmacyAuditExportRetryHandoff">
+                                {{ resumingPharmacyAuditExportRetryHandoff ? 'Resuming...' : 'Resume Last Handoff' }}
+                            </Button>
+                            <Button type="button" size="sm" variant="ghost" @click="clearLastPharmacyAuditExportRetryHandoff">Clear</Button>
+                            <Button type="button" size="sm" variant="ghost" @click="resetPharmacyAuditExportRetryResumeTelemetry">Reset Telemetry</Button>
+                        </div>
+                    </div>
+                </AlertDescription>
+            </Alert>
+            <Alert v-if="canViewPharmacyOrderAuditLogs && auditExportRetryHandoffCompletedMessage">
+                <AlertTitle>Retry handoff ready</AlertTitle>
+                <AlertDescription>
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p class="text-xs">{{ auditExportRetryHandoffCompletedMessage }}</p>
+                        <Button type="button" size="sm" variant="ghost" @click="auditExportRetryHandoffCompletedMessage = null">Dismiss</Button>
+                    </div>
+                </AlertDescription>
+            </Alert>
+            <Alert v-if="!pageLoading && !canReadPharmacyOrders" variant="destructive">
+                <AlertTitle>Queue read access restricted</AlertTitle>
+                <AlertDescription>Request <code>pharmacy.orders.read</code> permission to view queue metrics and list results.</AlertDescription>
+            </Alert>
+
             <!-- Main list card -->
             <Card
                 v-if="
                     canReadPharmacyOrders &&
                     pharmacyWorkspaceView === 'queue'
                 "
+                id="pharmacy-order-queue"
                 ref="pharmacyQueueCardRef"
-                class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col"
+                class="rounded-lg border-sidebar-border/70"
             >
                 <CardHeader class="shrink-0 gap-2 pb-2">
                     <div class="space-y-3">
@@ -10625,7 +10588,7 @@ onMounted(async () => {
                             </div>
                         </div>
                     </div>
-                    <div class="min-h-[12rem]">
+                    <div :class="pageLoading || listLoading || orders.length > 0 ? 'min-h-[12rem]' : ''">
                         <div v-if="pageLoading || listLoading" class="space-y-2 px-4">
                                 <Skeleton class="h-24 w-full" />
                                 <Skeleton class="h-24 w-full" />
@@ -10982,55 +10945,6 @@ onMounted(async () => {
                     </Alert>
                 </CardContent>
             </Card>
-
-            <!-- Care workflow footer -->
-            <div
-                v-if="pharmacyWorkspaceView === 'queue' && showPharmacyCareWorkflowFooter"
-                class="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-4 py-2.5"
-            >
-                <span class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                    <AppIcon name="activity" class="size-3.5" />
-                    Related workflows
-                </span>
-                <Button
-                    v-if="canCreatePharmacyOrders"
-                    size="sm"
-                    variant="outline"
-                    class="gap-1.5"
-                    @click="
-                        setPharmacyWorkspaceView('new', {
-                            focusCreate: true,
-                        })
-                    "
-                >
-                    <AppIcon name="plus" class="size-3.5" />
-                    Place Pharmacy Order
-                </Button>
-                <Button v-if="canReadMedicalRecords" size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="consultationContextHref">
-                        <AppIcon name="stethoscope" class="size-3.5" />
-                        {{ consultationReturnLabel }}
-                    </Link>
-                </Button>
-                <Button v-if="canReadLaboratoryOrders" size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="contextCreateHref('/laboratory-orders', { includeTabNew: true })">
-                        <AppIcon name="flask-conical" class="size-3.5" />
-                        New Lab Order
-                    </Link>
-                </Button>
-                <Button v-if="canCreateTheatreProcedures" size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="contextCreateHref('/theatre-procedures', { includeTabNew: true })">
-                        <AppIcon name="scissors" class="size-3.5" />
-                        Schedule Procedure
-                    </Link>
-                </Button>
-                <Button v-if="canReadBillingInvoices" size="sm" variant="outline" as-child class="gap-1.5">
-                    <Link :href="contextCreateHref('/billing-invoices', { includeTabNew: true })">
-                        <AppIcon name="receipt" class="size-3.5" />
-                        New Billing Invoice
-                    </Link>
-                </Button>
-            </div>
 
             <Card
                 v-if="pharmacyWorkspaceView === 'new'"
@@ -13682,107 +13596,6 @@ onMounted(async () => {
                                     </div>
                                 </div>
 
-                                <div v-if="pharmacyDetailsSheetHasRelatedWorkflows" class="rounded-lg border p-4">
-                                    <p class="text-sm font-medium">Related workflows</p>
-                                    <p class="mb-3 text-xs text-muted-foreground">
-                                        Open related workflows with patient and order context carried forward.
-                                    </p>
-                                    <div class="grid gap-2 sm:grid-cols-2">
-                                        <Button
-                                            v-if="canReadAppointments && detailsSheetOrder.appointmentId"
-                                            variant="outline"
-                                            class="justify-start"
-                                            as-child
-                                        >
-                                            <Link
-                                                :href="
-                                                    orderDetailsWorkflowHref(
-                                                        '/appointments',
-                                                        detailsSheetOrder,
-                                                        { focusAppointmentOnReturn: true },
-                                                    )
-                                                "
-                                            >
-                                                Back to Appointments
-                                            </Link>
-                                        </Button>
-                                        <Button
-                                            v-if="
-                                                canReadMedicalRecords &&
-                                                detailsSheetOrder.patientId
-                                            "
-                                            variant="outline"
-                                            class="justify-start"
-                                            as-child
-                                        >
-                                            <Link
-                                                :href="
-                                                    orderDetailsWorkflowHref(
-                                                        '/medical-records',
-                                                        detailsSheetOrder,
-                                                        { includeTabNew: true },
-                                                    )
-                                                "
-                                            >
-                                                {{ consultationReturnLabel }}
-                                            </Link>
-                                        </Button>
-                                        <Button
-                                            v-if="canReadLaboratoryOrders && detailsSheetOrder.patientId"
-                                            variant="outline"
-                                            class="justify-start"
-                                            as-child
-                                        >
-                                            <Link
-                                                :href="
-                                                    orderDetailsWorkflowHref(
-                                                        '/laboratory-orders',
-                                                        detailsSheetOrder,
-                                                        { includeTabNew: true },
-                                                    )
-                                                "
-                                            >
-                                                New Lab Order
-                                            </Link>
-                                        </Button>
-                                        <Button
-                                            v-if="canCreateTheatreProcedures && detailsSheetOrder.patientId"
-                                            variant="outline"
-                                            class="justify-start"
-                                            as-child
-                                        >
-                                            <Link
-                                                :href="
-                                                    orderDetailsWorkflowHref(
-                                                        '/theatre-procedures',
-                                                        detailsSheetOrder,
-                                                        { includeTabNew: true },
-                                                    )
-                                                "
-                                            >
-                                                Schedule Procedure
-                                            </Link>
-                                        </Button>
-                                        <Button
-                                            v-if="canReadBillingInvoices && detailsSheetOrder.patientId"
-                                            variant="outline"
-                                            class="justify-start"
-                                            as-child
-                                        >
-                                            <Link
-                                                :href="
-                                                    orderDetailsWorkflowHref(
-                                                        '/billing-invoices',
-                                                        detailsSheetOrder,
-                                                        { includeTabNew: true },
-                                                    )
-                                                "
-                                            >
-                                                New Billing Invoice
-                                            </Link>
-                                        </Button>
-                                    </div>
-                                </div>
                                     </TabsContent>
                                 </Tabs>
                             </TabsContent>

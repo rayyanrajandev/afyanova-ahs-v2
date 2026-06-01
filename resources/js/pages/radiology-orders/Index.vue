@@ -7,6 +7,7 @@ import LinkedContextLookupField from '@/components/context/LinkedContextLookupFi
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycleActionDialog.vue';
+import OrdersWorkspacePageHeader from '@/components/orders/OrdersWorkspacePageHeader.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import WalkInServiceRequestsPanel from '@/components/service-requests/WalkInServiceRequestsPanel.vue';
 import PatientOrderGroupList from '@/components/orders/PatientOrderGroupList.vue';
@@ -38,6 +39,7 @@ import { useConfirmationDialog } from '@/composables/useConfirmationDialog';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
 import { usePatientOrderGroups } from '@/composables/usePatientOrderGroups';
 import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
+import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersistence';
 import AppLayout from '@/layouts/AppLayout.vue';
 import EncounterReturnBanner from '@/components/domain/clinical/EncounterReturnBanner.vue';
@@ -280,22 +282,32 @@ const auditActorTypeOptions = [
 ];
 
 const today = new Date().toISOString().slice(0, 10);
+const {
+    isFacilitySuperAdmin,
+    permissionState,
+    scope: sharedScope,
+} = usePlatformAccess();
 
-const canRead = ref(false);
-const canCreate = ref(false);
-const canUpdateStatus = ref(false);
-const canViewAudit = ref(false);
-const canReadAppointments = ref(false);
-const canReadAdmissions = ref(false);
-const canReadMedicalRecords = ref(false);
-const canReadLaboratoryOrders = ref(false);
-const canReadTheatreProcedures = ref(false);
-const canCreateTheatreProcedures = ref(false);
-const canReadBillingInvoices = ref(false);
-const canReadRadiologyProcedureCatalog = ref(false);
+const canRead = ref(permissionState('radiology.orders.read') === 'allowed');
+const canCreate = ref(permissionState('radiology.orders.create') === 'allowed');
+const canUpdateStatus = ref(permissionState('radiology.orders.update-status') === 'allowed');
+const canViewAudit = ref(
+    permissionState('radiology.orders.view-audit-logs') === 'allowed' ||
+    permissionState('radiology-orders.view-audit-logs') === 'allowed',
+);
+const canReadAppointments = ref(permissionState('appointments.read') === 'allowed');
+const canReadAdmissions = ref(permissionState('admissions.read') === 'allowed');
+const canReadMedicalRecords = ref(permissionState('medical.records.read') === 'allowed');
+const canReadLaboratoryOrders = ref(permissionState('laboratory.orders.read') === 'allowed');
+const canReadTheatreProcedures = ref(permissionState('theatre.procedures.read') === 'allowed');
+const canCreateTheatreProcedures = ref(permissionState('theatre.procedures.create') === 'allowed');
+const canReadBillingInvoices = ref(permissionState('billing.invoices.read') === 'allowed');
+const canReadRadiologyProcedureCatalog = ref(
+    permissionState('platform.clinical-catalog.read') === 'allowed',
+);
 const isRadiologyCreatePermissionResolved = ref(false);
 const isRadiologyProcedureCatalogReadPermissionResolved = ref(false);
-const canUpdateServiceRequestStatus = ref(false);
+const canUpdateServiceRequestStatus = ref(permissionState('service.requests.update-status') === 'allowed');
 
 const radiologyWalkInPanelRef = ref<InstanceType<
     typeof WalkInServiceRequestsPanel
@@ -311,7 +323,7 @@ const actionLoadingId = ref<string | null>(null);
 const orders = ref<RadiologyOrder[]>([]);
 const pagination = ref<RadiologyOrderListResponse['meta'] | null>(null);
 const counts = ref({ ordered: 0, scheduled: 0, in_progress: 0, completed: 0, cancelled: 0, other: 0, total: 0 });
-const scope = ref<ScopeData | null>(null);
+const scope = ref<ScopeData | null>((sharedScope.value as ScopeData | null) ?? null);
 
 const compactQueueRows = useLocalStorageBoolean('opd.queueRows.compact', false);
 const mobileFiltersDrawerOpen = ref(false);
@@ -944,6 +956,20 @@ const radiologyWorklistByModality = computed(() =>
             return right.total - left.total;
         }),
 );
+
+const radiologyWorkspaceIntroText = computed(() =>
+    'Create and track radiology orders across imaging modalities.',
+);
+
+function toggleRadiologyWorkspaceFromHeader(): void {
+    if (radiologyWorkspaceView.value === 'create') {
+        setRadiologyWorkspaceView('queue', { focusSearch: true, scroll: true });
+
+        return;
+    }
+
+    openCreateRadiologyWorkspace();
+}
 
 const scopeStatusLabel = computed(() => {
     if (!scope.value) return 'Scope Unavailable';
@@ -2706,29 +2732,6 @@ const detailsAuditHasActiveFilters = computed(
     () => detailsAuditActiveFilters.value.length > 0,
 );
 
-const showRadiologyCareWorkflowFooter = computed(
-    () =>
-        canCreate.value ||
-        canReadMedicalRecords.value ||
-        canReadLaboratoryOrders.value ||
-        canCreateTheatreProcedures.value ||
-        canReadBillingInvoices.value,
-);
-
-const radiologyDetailsSheetHasRelatedWorkflows = computed(() => {
-    const order = detailsOrder.value;
-    if (!order) return false;
-
-    return Boolean(
-        (canReadAppointments.value && order.appointmentId) ||
-            (canReadAdmissions.value && order.admissionId) ||
-            (canReadMedicalRecords.value && order.patientId) ||
-            (canReadLaboratoryOrders.value && order.patientId) ||
-            (canCreateTheatreProcedures.value && order.patientId) ||
-            (canReadBillingInvoices.value && order.patientId),
-    );
-});
-
 const detailsAuditActiveFilters = computed(() => {
     const filters: Array<{ key: string; label: string }> = [];
     const query = detailsAuditFilters.q.trim();
@@ -2769,21 +2772,22 @@ async function loadPermissions() {
     try {
         const response = await apiRequest<AuthPermissionsResponse>('GET', '/auth/me/permissions');
         const names = new Set((response.data ?? []).map((permission) => permission.name?.trim()).filter((name): name is string => Boolean(name)));
-        canRead.value = names.has('radiology.orders.read');
-        canCreate.value = names.has('radiology.orders.create');
-        canUpdateStatus.value = names.has('radiology.orders.update-status');
-        canViewAudit.value = names.has('radiology.orders.view-audit-logs') || names.has('radiology-orders.view-audit-logs');
-        canReadAppointments.value = names.has('appointments.read');
-        canReadAdmissions.value = names.has('admissions.read');
-        canReadMedicalRecords.value = names.has('medical.records.read');
-        canReadLaboratoryOrders.value = names.has('laboratory.orders.read');
-        canReadTheatreProcedures.value = names.has('theatre.procedures.read');
-        canCreateTheatreProcedures.value = names.has('theatre.procedures.create');
-        canReadBillingInvoices.value = names.has('billing.invoices.read');
-        canReadRadiologyProcedureCatalog.value = names.has(
+        const hasSuperAdminAccess = isFacilitySuperAdmin.value;
+        canRead.value = hasSuperAdminAccess || names.has('radiology.orders.read');
+        canCreate.value = hasSuperAdminAccess || names.has('radiology.orders.create');
+        canUpdateStatus.value = hasSuperAdminAccess || names.has('radiology.orders.update-status');
+        canViewAudit.value = hasSuperAdminAccess || names.has('radiology.orders.view-audit-logs') || names.has('radiology-orders.view-audit-logs');
+        canReadAppointments.value = hasSuperAdminAccess || names.has('appointments.read');
+        canReadAdmissions.value = hasSuperAdminAccess || names.has('admissions.read');
+        canReadMedicalRecords.value = hasSuperAdminAccess || names.has('medical.records.read');
+        canReadLaboratoryOrders.value = hasSuperAdminAccess || names.has('laboratory.orders.read');
+        canReadTheatreProcedures.value = hasSuperAdminAccess || names.has('theatre.procedures.read');
+        canCreateTheatreProcedures.value = hasSuperAdminAccess || names.has('theatre.procedures.create');
+        canReadBillingInvoices.value = hasSuperAdminAccess || names.has('billing.invoices.read');
+        canReadRadiologyProcedureCatalog.value = hasSuperAdminAccess || names.has(
             'platform.clinical-catalog.read',
         );
-        canUpdateServiceRequestStatus.value = names.has('service.requests.update-status');
+        canUpdateServiceRequestStatus.value = hasSuperAdminAccess || names.has('service.requests.update-status');
         isRadiologyCreatePermissionResolved.value = true;
         isRadiologyProcedureCatalogReadPermissionResolved.value = true;
     } catch {
@@ -4335,57 +4339,24 @@ onMounted(async () => {
     <Head title="Radiology Orders" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
+        <div class="flex flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
             <EncounterReturnBanner
                 v-if="encounterReturnTo"
                 :return-to="encounterReturnTo"
             />
 
-            <!-- Page header -->
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div class="min-w-0">
-                    <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <AppIcon name="scan-line" class="size-7 text-primary" />
-                        Radiology Orders
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Create and track radiology orders across imaging modalities.
-                    </p>
-                </div>
-                <div class="flex flex-shrink-0 items-center gap-2">
-                    <Badge :variant="scopeWarning ? 'destructive' : 'outline'">
-                        {{ scopeStatusLabel }}
-                    </Badge>
-                    <Button variant="outline" size="sm" :disabled="listLoading" class="gap-1.5" @click="refreshPage">
-                        <AppIcon name="activity" class="size-3.5" />
-                        {{ listLoading ? 'Refreshing...' : 'Refresh' }}
-                    </Button>
-                    <Button
-                        v-if="canCreate && radiologyWorkspaceView === 'queue'"
-                        size="sm"
-                        class="h-8 gap-1.5"
-                        @click="openCreateRadiologyWorkspace"
-                    >
-                        <AppIcon name="plus" class="size-3.5" />
-                        Create order
-                    </Button>
-                    <Button
-                        v-else-if="radiologyWorkspaceView === 'create'"
-                        variant="outline"
-                        size="sm"
-                        class="h-8 gap-1.5"
-                        @click="setRadiologyWorkspaceView('queue', { focusSearch: true, scroll: true })"
-                    >
-                        <AppIcon name="layout-list" class="size-3.5" />
-                        Radiology Queue
-                    </Button>
-                </div>
-            </div>
-
-            <Alert v-if="scopeWarning" variant="destructive">
-                <AlertTitle>Scope warning</AlertTitle>
-                <AlertDescription>{{ scopeWarning }}</AlertDescription>
-            </Alert>
+            <OrdersWorkspacePageHeader
+                title="Radiology Orders"
+                icon="scan-line"
+                :intro="radiologyWorkspaceIntroText"
+                :list-loading="listLoading"
+                :workspace-view="radiologyWorkspaceView"
+                :can-create="canCreate"
+                queue-action-label="Radiology queue"
+                create-action-label="Create radiology order"
+                @refresh="refreshPage"
+                @toggle-workspace="toggleRadiologyWorkspaceFromHeader"
+            />
 
             <WalkInServiceRequestsPanel
                 ref="radiologyWalkInPanelRef"
@@ -4399,9 +4370,9 @@ onMounted(async () => {
             <!-- Queue bar -->
             <div
                 v-if="canRead && radiologyWorkspaceView === 'queue'"
-                class="rounded-lg border bg-muted/30 px-3 py-2"
+                class="rounded-lg border bg-muted/30 px-3 py-2.5"
             >
-                <div class="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+                <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                     <div class="flex flex-wrap items-center gap-2">
                         <button
                             type="button"
@@ -4508,6 +4479,14 @@ onMounted(async () => {
                 </div>
             </div>
 
+            <Alert v-if="scopeWarning" variant="destructive">
+                <AlertTitle class="flex items-center gap-2">
+                    <AppIcon name="alert-triangle" class="size-4" />
+                    Scope warning
+                </AlertTitle>
+                <AlertDescription>{{ scopeWarning }}</AlertDescription>
+            </Alert>
+
             <!-- Errors -->
             <Alert v-if="radiologyWorkspaceView === 'queue' && listErrors.length" variant="destructive">
                 <AlertTitle class="flex items-center gap-2">
@@ -4526,8 +4505,8 @@ onMounted(async () => {
             <!-- Radiology queue card -->
             <Card
                 v-if="canRead && radiologyWorkspaceView === 'queue'"
-                id="radiology-queue-card"
-                class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col"
+                id="radiology-order-queue"
+                class="rounded-lg border-sidebar-border/70"
             >
                 <CardHeader class="shrink-0 gap-3 pb-3">
                     <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -4735,7 +4714,7 @@ onMounted(async () => {
                         </Button>
                     </div>
                 </CardHeader>
-                <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+                <CardContent class="overflow-hidden p-0">
                         <div v-if="showRadiologyOperatorDashboard" class="border-y bg-muted/20 px-4 py-3">
                             <div class="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
                                 <div class="rounded-lg border bg-background p-3">
@@ -4854,7 +4833,13 @@ onMounted(async () => {
                             </div>
                         </div>
                         <ScrollArea class="min-h-0 flex-1">
-                            <div class="min-h-[12rem] p-4" :class="compactQueueRows ? 'space-y-2' : 'space-y-3'">
+                            <div
+                                class="p-4"
+                                :class="[
+                                    compactQueueRows ? 'space-y-2' : 'space-y-3',
+                                    pageLoading || listLoading || orders.length > 0 ? 'min-h-[12rem]' : '',
+                                ]"
+                            >
                                 <div v-if="pageLoading || listLoading" class="space-y-2">
                                     <Skeleton class="h-24 w-full" />
                                     <Skeleton class="h-24 w-full" />
@@ -5974,69 +5959,6 @@ onMounted(async () => {
                     </CardContent>
                 </Card>
 
-            <!-- Care workflow footer -->
-            <div
-                v-if="
-                    canRead &&
-                    radiologyWorkspaceView === 'queue' &&
-                    showRadiologyCareWorkflowFooter
-                "
-                class="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-4 py-2.5"
-            >
-                <span class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                    <AppIcon name="activity" class="size-3.5" />
-                    Related workflows
-                </span>
-                <Button
-                    v-if="canReadMedicalRecords && createForm.patientId.trim()"
-                    size="sm"
-                    variant="outline"
-                    as-child
-                    class="gap-1.5"
-                >
-                    <Link :href="consultationContextHref">
-                        <AppIcon name="stethoscope" class="size-3.5" />
-                        {{ consultationReturnLabel }}
-                    </Link>
-                </Button>
-                <Button
-                    v-if="canReadLaboratoryOrders && createForm.patientId.trim()"
-                    size="sm"
-                    variant="outline"
-                    as-child
-                    class="gap-1.5"
-                >
-                    <Link :href="contextCreateHref('/laboratory-orders', { includeTabNew: true })">
-                        <AppIcon name="flask-conical" class="size-3.5" />
-                        New Lab Order
-                    </Link>
-                </Button>
-                <Button
-                    v-if="canCreateTheatreProcedures && createForm.patientId.trim()"
-                    size="sm"
-                    variant="outline"
-                    as-child
-                    class="gap-1.5"
-                >
-                    <Link :href="contextCreateHref('/theatre-procedures', { includeTabNew: true })">
-                        <AppIcon name="scissors" class="size-3.5" />
-                        Schedule Procedure
-                    </Link>
-                </Button>
-                <Button
-                    v-if="canReadBillingInvoices && createForm.patientId.trim()"
-                    size="sm"
-                    variant="outline"
-                    as-child
-                    class="gap-1.5"
-                >
-                    <Link :href="contextCreateHref('/billing-invoices', { includeTabNew: true })">
-                        <AppIcon name="receipt" class="size-3.5" />
-                        New Billing Invoice
-                    </Link>
-                </Button>
-            </div>
-
             <Sheet
                 v-if="canRead && radiologyWorkspaceView === 'queue'"
                 :open="advancedFiltersSheetOpen"
@@ -6737,91 +6659,6 @@ onMounted(async () => {
                                                         </Button>
                                                     </div>
                                                 </div>
-                                                <div
-                                                    v-if="radiologyDetailsSheetHasRelatedWorkflows"
-                                                    class="rounded-lg border p-4"
-                                                >
-                                                    <div class="flex flex-col gap-1">
-                                                        <p class="text-sm font-medium">Related workflows</p>
-                                                        <p class="text-xs text-muted-foreground">
-                                                            Open the next connected module only when your role can actually continue that work.
-                                                        </p>
-                                                    </div>
-                                                    <div class="mt-4 flex flex-wrap gap-2">
-                                                        <Button
-                                                            v-if="canReadAppointments && detailsOrder.appointmentId"
-                                                            size="sm"
-                                                            variant="outline"
-                                                            as-child
-                                                            class="gap-1.5"
-                                                        >
-                                                            <Link :href="radiologyOrderContextHref('/appointments', detailsOrder)">
-                                                                <AppIcon name="calendar-check-2" class="size-3.5" />
-                                                                Back to Appointments
-                                                            </Link>
-                                                        </Button>
-                                                        <Button
-                                                            v-if="canReadAdmissions && detailsOrder.admissionId"
-                                                            size="sm"
-                                                            variant="outline"
-                                                            as-child
-                                                            class="gap-1.5"
-                                                        >
-                                                            <Link :href="radiologyOrderContextHref('/admissions', detailsOrder)">
-                                                                <AppIcon name="bed-double" class="size-3.5" />
-                                                                Back to Admissions
-                                                            </Link>
-                                                        </Button>
-                                                        <Button
-                                                            v-if="canReadMedicalRecords && detailsOrder.patientId"
-                                                            size="sm"
-                                                            variant="outline"
-                                                            as-child
-                                                            class="gap-1.5"
-                                                        >
-                                                            <Link :href="radiologyOrderContextHref('/medical-records', detailsOrder, { includeTabNew: true })">
-                                                                <AppIcon name="stethoscope" class="size-3.5" />
-                                                                {{ consultationReturnLabel }}
-                                                            </Link>
-                                                        </Button>
-                                                        <Button
-                                                            v-if="canReadLaboratoryOrders && detailsOrder.patientId"
-                                                            size="sm"
-                                                            variant="outline"
-                                                            as-child
-                                                            class="gap-1.5"
-                                                        >
-                                                            <Link :href="radiologyOrderContextHref('/laboratory-orders', detailsOrder, { includeTabNew: true })">
-                                                                <AppIcon name="flask-conical" class="size-3.5" />
-                                                                New Lab Order
-                                                            </Link>
-                                                        </Button>
-                                                        <Button
-                                                            v-if="canCreateTheatreProcedures && detailsOrder.patientId"
-                                                            size="sm"
-                                                            variant="outline"
-                                                            as-child
-                                                            class="gap-1.5"
-                                                        >
-                                                            <Link :href="radiologyOrderContextHref('/theatre-procedures', detailsOrder, { includeTabNew: true })">
-                                                                <AppIcon name="scissors" class="size-3.5" />
-                                                                Schedule Procedure
-                                                            </Link>
-                                                        </Button>
-                                                        <Button
-                                                            v-if="canReadBillingInvoices && detailsOrder.patientId"
-                                                            size="sm"
-                                                            variant="outline"
-                                                            as-child
-                                                            class="gap-1.5"
-                                                        >
-                                                            <Link :href="radiologyOrderContextHref('/billing-invoices', detailsOrder, { includeTabNew: true })">
-                                                                <AppIcon name="receipt" class="size-3.5" />
-                                                                Create Invoice
-                                                            </Link>
-                                                        </Button>
-                                                    </div>
-                                                </div>
                                                 <div class="rounded-lg border p-4">
                                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                                         <div>
@@ -7497,7 +7334,6 @@ onMounted(async () => {
             />
     </AppLayout>
 </template>
-
 
 
 
