@@ -22,6 +22,12 @@ import {
     inventoryWorkspaceSectionLabels,
     type InventoryWorkspaceSection,
 } from '@/lib/inventoryProcurement';
+import {
+    isInventoryDepartmentRequester,
+    isInventoryStoreOperations,
+    visibleInventoryWorkspaceSections,
+    type InventoryProcurementAccess,
+} from '@/lib/inventoryProcurementAccess';
 import { messageFromUnknown } from '@/lib/notify';
 import type { BreadcrumbItem } from '@/types';
 
@@ -42,7 +48,7 @@ type TaskCard = {
     id: string;
     title: string;
     description: string;
-    icon: 'package' | 'clipboard-list' | 'activity' | 'alert-triangle' | 'building-2' | 'shield-check';
+    icon: 'package' | 'clipboard-list' | 'activity' | 'alert-triangle' | 'building-2' | 'shield-check' | 'search' | 'check-circle';
     href: string;
     badge?: string | number | null;
     badgeVariant?: 'default' | 'secondary' | 'destructive' | 'outline';
@@ -189,6 +195,56 @@ const storeTasks = computed<TaskCard[]>(() => [
     },
 ]);
 
+const inventoryAccess = computed<InventoryProcurementAccess>(() => ({
+    canRead: canRead.value,
+    canManageItems: canManageItems.value,
+    canCreateMovement: canCreateMovement.value,
+    canReconcileStock: canReconcileStock.value,
+    canCreateRequest: canCreateRequest.value,
+    canUpdateRequestStatus: canUpdateRequestStatus.value,
+    canViewAudit: canViewAudit.value,
+    canManageSuppliers: canManageSuppliers.value,
+    canManageWarehouses: canManageWarehouses.value,
+}));
+
+const isStoreOperations = computed(() => isInventoryStoreOperations(inventoryAccess.value));
+const isDepartmentRequester = computed(() => isInventoryDepartmentRequester(inventoryAccess.value));
+
+const departmentTasks = computed<TaskCard[]>(() => [
+    {
+        id: 'requisitions',
+        title: 'Department requisitions',
+        description: 'Request lab consumables and supplies for your unit.',
+        icon: 'clipboard-list',
+        href: workspaceSection('requisitions'),
+        permission: canCreateRequest.value,
+    },
+    {
+        id: 'procurement',
+        title: 'Procurement requests',
+        description: 'Raise purchase requests when central store approval is required.',
+        icon: 'package',
+        href: workspaceSection('procurement'),
+        permission: canCreateRequest.value,
+    },
+    {
+        id: 'dept-stock',
+        title: 'Department stock',
+        description: 'See on-hand balances allocated to your department.',
+        icon: 'building-2',
+        href: workspaceSection('department-stock'),
+        permission: canRead.value,
+    },
+    {
+        id: 'item-lookup',
+        title: 'Find items',
+        description: 'Search the item catalog to pick the right product code.',
+        icon: 'package',
+        href: workspaceSection('inventory'),
+        permission: canRead.value,
+    },
+]);
+
 const masterDataTasks = computed<TaskCard[]>(() => [
     {
         id: 'items',
@@ -196,7 +252,7 @@ const masterDataTasks = computed<TaskCard[]>(() => [
         description: 'Create consumables, medicines, lab reagents, and set reorder defaults.',
         icon: 'package',
         href: workspaceSection('inventory'),
-        permission: canRead.value,
+        permission: canRead.value && (canManageItems.value || isStoreOperations.value),
     },
     {
         id: 'suppliers',
@@ -204,7 +260,7 @@ const masterDataTasks = computed<TaskCard[]>(() => [
         description: 'Vendor registry, contacts, and supplier performance.',
         icon: 'building-2',
         href: '/inventory-procurement/suppliers',
-        permission: canRead.value,
+        permission: canManageSuppliers.value,
     },
     {
         id: 'warehouses',
@@ -212,7 +268,7 @@ const masterDataTasks = computed<TaskCard[]>(() => [
         description: 'Store locations, transfers, and warehouse lifecycle.',
         icon: 'building-2',
         href: '/inventory-procurement/warehouses',
-        permission: canRead.value,
+        permission: canManageWarehouses.value,
     },
 ]);
 
@@ -223,7 +279,7 @@ const planningTasks = computed<TaskCard[]>(() => [
         description: 'National Medical Store e-ordering and delivery sync.',
         icon: 'clipboard-list',
         href: workspaceSection('msd-orders'),
-        permission: canRead.value && canCreateRequest.value,
+        permission: canCreateRequest.value,
     },
     {
         id: 'analytics',
@@ -231,7 +287,7 @@ const planningTasks = computed<TaskCard[]>(() => [
         description: 'ABC/VEN matrix, expiry wastage, turnover, and consumption trends.',
         icon: 'activity',
         href: workspaceSection('analytics'),
-        permission: canRead.value,
+        permission: isStoreOperations.value,
     },
     {
         id: 'transfers',
@@ -239,12 +295,12 @@ const planningTasks = computed<TaskCard[]>(() => [
         description: 'Move stock between warehouses with pick slips and variance review.',
         icon: 'package',
         href: workspaceSection('transfers'),
-        permission: canRead.value,
+        permission: canCreateMovement.value,
     },
 ]);
 
 const sectionQuickLinks = computed(() =>
-    (Object.keys(inventoryWorkspaceSectionLabels) as InventoryWorkspaceSection[]).map((section) => ({
+    visibleInventoryWorkspaceSections(inventoryAccess.value).map((section) => ({
         section,
         label: inventoryWorkspaceSectionLabels[section],
         href: workspaceSection(section),
@@ -272,7 +328,9 @@ onMounted(async () => {
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
             <FacilityWorkspacePageHeader
                 title="Hospital supply chain"
-                description="Stores, procurement, and clinical consumables — start with a task below or open the full workspace."
+                :description="isDepartmentRequester
+                    ? 'Request lab and department supplies — browse items, raise requisitions, and track procurement.'
+                    : 'Stores, procurement, and clinical consumables — start with a task below or open the full workspace.'"
                 icon="package"
             >
                 <template #actions>
@@ -327,8 +385,41 @@ onMounted(async () => {
                     />
                 </SupplyChainStatGrid>
 
+                <Alert v-if="isDepartmentRequester" class="border-primary/30 bg-primary/5">
+                    <AlertTitle>Department supply access</AlertTitle>
+                    <AlertDescription>
+                        You can request stock for your unit. Central store tasks such as receive, issue, and cycle count are reserved for storekeepers.
+                    </AlertDescription>
+                </Alert>
+
                 <div class="grid gap-4 lg:grid-cols-3">
-                    <Card class="rounded-lg shadow-sm lg:col-span-2">
+                    <Card v-if="isDepartmentRequester" class="rounded-lg shadow-sm lg:col-span-2">
+                        <CardHeader class="pb-2">
+                            <CardTitle class="text-base">Your department</CardTitle>
+                            <CardDescription>Requisitions and item lookup for lab and clinical units.</CardDescription>
+                        </CardHeader>
+                        <CardContent class="grid gap-3 sm:grid-cols-2">
+                            <Link
+                                v-for="(task, index) in departmentTasks.filter((entry) => entry.permission)"
+                                :key="task.id"
+                                :href="task.href"
+                                :class="[
+                                    'group flex flex-col rounded-lg border bg-muted/15 p-3 transition-colors hover:border-primary/40 hover:bg-muted/30',
+                                    storeTaskGridClass(index, departmentTasks.filter((entry) => entry.permission).length),
+                                ]"
+                            >
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="flex items-center gap-2">
+                                        <AppIcon :name="task.icon" class="size-4 text-muted-foreground group-hover:text-primary" />
+                                        <span class="text-sm font-medium">{{ task.title }}</span>
+                                    </div>
+                                </div>
+                                <p class="mt-2 text-xs leading-relaxed text-muted-foreground">{{ task.description }}</p>
+                            </Link>
+                        </CardContent>
+                    </Card>
+
+                    <Card v-else-if="visibleStoreTasks.length > 0" class="rounded-lg shadow-sm lg:col-span-2">
                         <CardHeader class="pb-2">
                             <CardTitle class="text-base">Store operations</CardTitle>
                             <CardDescription>Daily tasks for storekeepers and issuing clerks.</CardDescription>
@@ -357,21 +448,23 @@ onMounted(async () => {
                         </CardContent>
                     </Card>
 
-                    <Card class="rounded-lg shadow-sm">
+                    <Card v-if="isStoreOperations || canCreateRequest" class="rounded-lg shadow-sm" :class="isDepartmentRequester ? '' : ''">
                         <CardHeader class="pb-2">
-                            <CardTitle class="text-base">Procurement signals</CardTitle>
-                            <CardDescription>Queues needing officer attention.</CardDescription>
+                            <CardTitle class="text-base">{{ isDepartmentRequester ? 'Request status' : 'Procurement signals' }}</CardTitle>
+                            <CardDescription>
+                                {{ isDepartmentRequester ? 'Track procurement queues that affect your department.' : 'Queues needing officer attention.' }}
+                            </CardDescription>
                         </CardHeader>
                         <CardContent class="space-y-3 text-sm">
-                            <div class="flex items-center justify-between rounded-md border px-3 py-2">
+                            <div v-if="canUpdateRequestStatus" class="flex items-center justify-between rounded-md border px-3 py-2">
                                 <span class="text-muted-foreground">Pending approval</span>
                                 <Badge :variant="pendingApprovalCount > 0 ? 'destructive' : 'outline'">{{ pendingApprovalCount }}</Badge>
                             </div>
-                            <div class="flex items-center justify-between rounded-md border px-3 py-2">
+                            <div v-if="canUpdateRequestStatus" class="flex items-center justify-between rounded-md border px-3 py-2">
                                 <span class="text-muted-foreground">Approved — place order</span>
                                 <Badge variant="secondary">{{ approvedAwaitingOrderCount }}</Badge>
                             </div>
-                            <div class="flex items-center justify-between rounded-md border px-3 py-2">
+                            <div v-if="isStoreOperations" class="flex items-center justify-between rounded-md border px-3 py-2">
                                 <span class="text-muted-foreground">Shortage — ready lines</span>
                                 <Badge :variant="(shortageMeta?.readyLineCount ?? 0) > 0 ? 'destructive' : 'outline'">
                                     {{ shortageMeta?.readyLineCount ?? 0 }}
@@ -393,8 +486,8 @@ onMounted(async () => {
                     </Card>
                 </div>
 
-                <div class="grid gap-4 lg:grid-cols-2">
-                    <Card class="rounded-lg shadow-sm">
+                <div v-if="masterDataTasks.some((entry) => entry.permission) || planningTasks.some((entry) => entry.permission)" class="grid gap-4 lg:grid-cols-2">
+                    <Card v-if="masterDataTasks.some((entry) => entry.permission)" class="rounded-lg shadow-sm">
                         <CardHeader class="pb-2">
                             <CardTitle class="text-base">Master data</CardTitle>
                             <CardDescription>Items, suppliers, and warehouses.</CardDescription>
@@ -413,7 +506,7 @@ onMounted(async () => {
                         </CardContent>
                     </Card>
 
-                    <Card class="rounded-lg shadow-sm">
+                    <Card v-if="planningTasks.some((entry) => entry.permission)" class="rounded-lg shadow-sm">
                         <CardHeader class="pb-2">
                             <CardTitle class="text-base">Planning & national supply</CardTitle>
                             <CardDescription>MSD, analytics, and inter-store transfers.</CardDescription>
@@ -433,9 +526,9 @@ onMounted(async () => {
                     </Card>
                 </div>
 
-                <Card class="rounded-lg border-dashed shadow-sm">
+                <Card v-if="sectionQuickLinks.length > 0" class="rounded-lg border-dashed shadow-sm">
                     <CardHeader class="pb-2">
-                        <CardTitle class="text-sm font-medium text-muted-foreground">All workspace areas</CardTitle>
+                        <CardTitle class="text-sm font-medium text-muted-foreground">Workspace areas for your role</CardTitle>
                     </CardHeader>
                     <CardContent
                         class="grid w-full gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,9.5rem),1fr))]"

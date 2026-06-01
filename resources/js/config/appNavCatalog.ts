@@ -263,10 +263,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         href: '/inventory-procurement/warehouses',
         iconName: 'building-2',
         section: 'stores',
-        permissionPrefixes: [
-            'inventory.procurement.read',
-            'inventory.procurement.manage-warehouses',
-        ],
+        permissionPrefixes: ['inventory.procurement.manage-warehouses'],
         helpNote: 'Warehouse registry and status management',
     },
     {
@@ -274,10 +271,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         href: '/inventory-procurement/suppliers',
         iconName: 'package',
         section: 'stores',
-        permissionPrefixes: [
-            'inventory.procurement.read',
-            'inventory.procurement.manage-suppliers',
-        ],
+        permissionPrefixes: ['inventory.procurement.manage-suppliers'],
         helpNote: 'Supplier registry and vendor management',
     },
     {

@@ -46,6 +46,13 @@ import {
     inventoryWorkspaceHref,
     normalizeInventoryWorkspaceSection,
 } from '@/lib/inventoryProcurement';
+import {
+    canAccessInventoryWorkspaceSection,
+    defaultInventoryWorkspaceSection,
+    isInventoryDepartmentRequester,
+    isInventoryStoreOperations,
+    type InventoryProcurementAccess,
+} from '@/lib/inventoryProcurementAccess';
 import { type BreadcrumbItem } from '@/types';
 
 type ApiError = Error & {
@@ -200,6 +207,36 @@ const canViewAudit = ref(false);
 const canManageSuppliers = ref(false);
 const canManageWarehouses = ref(false);
 const { permissionNames: sharedPermissionNames, isFacilitySuperAdmin } = usePlatformAccess();
+
+const inventoryAccess = computed<InventoryProcurementAccess>(() => ({
+    canRead: canRead.value,
+    canManageItems: canManageItems.value,
+    canCreateMovement: canCreateMovement.value,
+    canReconcileStock: canReconcileStock.value,
+    canCreateRequest: canCreateRequest.value,
+    canUpdateRequestStatus: canUpdateRequestStatus.value,
+    canViewAudit: canViewAudit.value,
+    canManageSuppliers: canManageSuppliers.value,
+    canManageWarehouses: canManageWarehouses.value,
+}));
+
+const isDepartmentRequester = computed(() => isInventoryDepartmentRequester(inventoryAccess.value));
+const isStoreOperations = computed(() => isInventoryStoreOperations(inventoryAccess.value));
+
+function workspaceTabVisible(tab: InventoryWorkspaceTab): boolean {
+    return canAccessInventoryWorkspaceSection(
+        inventoryAccess.value,
+        normalizeInventoryWorkspaceSection(tab),
+    );
+}
+
+function syncActiveTabWithAccess(): void {
+    if (!workspaceTabVisible(activeTab.value)) {
+        const next = defaultInventoryWorkspaceSection(inventoryAccess.value) as InventoryWorkspaceTab;
+        activeTab.value = next;
+        syncWorkspaceUrl(next);
+    }
+}
 
 const items = ref<any[]>([]);
 const itemPagination = ref<{ currentPage: number; lastPage: number; total?: number } | null>(null);
@@ -629,6 +666,13 @@ function syncWorkspaceUrl(tab: InventoryWorkspaceTab): void {
 
 function onTabChange(value: string) {
     const nextTab = normalizeInventoryWorkspaceTab(value);
+
+    if (!workspaceTabVisible(nextTab)) {
+        syncActiveTabWithAccess();
+        void loadActiveWorkspaceTab(activeTab.value);
+        return;
+    }
+
     activeTab.value = nextTab;
     syncWorkspaceUrl(nextTab);
     void loadActiveWorkspaceTab(nextTab);
@@ -2290,6 +2334,8 @@ async function loadPermissions() {
     } catch {
         applyResolvedPermissions(sharedPermissionNames.value ?? [], isFacilitySuperAdmin.value);
     }
+
+    syncActiveTabWithAccess();
 }
 
 async function loadItems() {
@@ -4414,44 +4460,48 @@ type WorkspaceNextAction = {
     target: InventoryWorkspaceTab;
 };
 
-const workspaceNextActions = computed<WorkspaceNextAction[]>(() => [
-    {
-        key: 'ready-requisitions',
-        label: 'Ready to issue',
-        value: requisitionsReadyCount.value,
-        helper: 'Approved department lines with stock available now.',
-        icon: 'clipboard-list',
-        tone: requisitionsReadyCount.value > 0 ? 'success' : 'neutral',
-        target: 'shortage-queue',
-    },
-    {
-        key: 'awaiting-receipt',
-        label: 'Awaiting receipt',
-        value: procurementAwaitingReceiptCount.value,
-        helper: 'Purchase orders ready for physical goods receipt.',
-        icon: 'package',
-        tone: procurementAwaitingReceiptCount.value > 0 ? 'warning' : 'neutral',
-        target: 'procurement',
-    },
-    {
-        key: 'stock-alerts',
-        label: 'Stock alerts',
-        value: stockAlertCount.value,
-        helper: 'Store items currently out or below reorder level.',
-        icon: 'alert-triangle',
-        tone: stockAlertCount.value > 0 ? 'danger' : 'neutral',
-        target: 'inventory',
-    },
-    {
-        key: 'msd-drafts',
-        label: 'MSD draft signals',
-        value: msdDraftSignalCount.value,
-        helper: 'Shortage or low-stock lines with known MSD codes.',
-        icon: 'package',
-        tone: msdDraftSignalCount.value > 0 ? 'warning' : 'neutral',
-        target: 'msd-orders',
-    },
-]);
+const workspaceNextActions = computed<WorkspaceNextAction[]>(() => {
+    const actions: WorkspaceNextAction[] = [
+        {
+            key: 'ready-requisitions',
+            label: 'Ready to issue',
+            value: requisitionsReadyCount.value,
+            helper: 'Approved department lines with stock available now.',
+            icon: 'clipboard-list',
+            tone: requisitionsReadyCount.value > 0 ? 'success' : 'neutral',
+            target: 'shortage-queue',
+        },
+        {
+            key: 'awaiting-receipt',
+            label: 'Awaiting receipt',
+            value: procurementAwaitingReceiptCount.value,
+            helper: 'Purchase orders ready for physical goods receipt.',
+            icon: 'package',
+            tone: procurementAwaitingReceiptCount.value > 0 ? 'warning' : 'neutral',
+            target: 'procurement',
+        },
+        {
+            key: 'stock-alerts',
+            label: 'Stock alerts',
+            value: stockAlertCount.value,
+            helper: 'Store items currently out or below reorder level.',
+            icon: 'alert-triangle',
+            tone: stockAlertCount.value > 0 ? 'danger' : 'neutral',
+            target: 'inventory',
+        },
+        {
+            key: 'msd-drafts',
+            label: 'MSD draft signals',
+            value: msdDraftSignalCount.value,
+            helper: 'Shortage or low-stock lines with known MSD codes.',
+            icon: 'package',
+            tone: msdDraftSignalCount.value > 0 ? 'warning' : 'neutral',
+            target: 'msd-orders',
+        },
+    ];
+
+    return actions.filter((action) => workspaceTabVisible(action.target));
+});
 
 function nextActionClass(tone: WorkspaceNextAction['tone']): string {
     if (tone === 'danger') return 'border-destructive/30 bg-destructive/5 text-destructive';
@@ -5806,13 +5856,16 @@ onMounted(async () => {
     hydrateWorkspaceTabFromUrl();
     syncWorkspaceUrl(activeTab.value);
     await loadPermissions();
-    await reloadAll();
-    startPolling();
 
-    if (shouldFocusStockLedger) {
+    if (shouldFocusStockLedger && workspaceTabVisible('ledger')) {
         await nextTick();
         switchToStockLedger();
+    } else {
+        syncActiveTabWithAccess();
     }
+
+    await reloadAll();
+    startPolling();
 });
 </script>
 
@@ -5824,7 +5877,9 @@ onMounted(async () => {
 
             <FacilityWorkspacePageHeader
                 title="Workspace"
-                description="Supervisor control center for requisitions, shortages, stock, procurement, MSD, and governance."
+                :description="isDepartmentRequester
+                    ? 'Request and track department supplies — requisitions, procurement, item lookup, and department stock.'
+                    : 'Supervisor control center for requisitions, shortages, stock, procurement, MSD, and governance.'"
                 icon="package"
                 :back-href="INVENTORY_PROCUREMENT_HOME_PATH"
                 back-label="Supply chain home"
@@ -5850,7 +5905,7 @@ onMounted(async () => {
                         <AppIcon name="plus" class="size-3.5" />
                         Procurement request
                     </Button>
-                    <Button size="sm" variant="outline" class="h-8 gap-1.5" @click="barcodeScannerOpen = true">
+                    <Button v-if="isStoreOperations" size="sm" variant="outline" class="h-8 gap-1.5" @click="barcodeScannerOpen = true">
                         <AppIcon name="search" class="size-3.5" />
                         Barcode
                     </Button>
@@ -5876,8 +5931,15 @@ onMounted(async () => {
                 </template>
             </FacilityWorkspacePageHeader>
 
+            <Alert v-if="isDepartmentRequester" class="border-primary/30 bg-primary/5">
+                <AlertTitle>Department supply workspace</AlertTitle>
+                <AlertDescription>
+                    Tabs are limited to what your role can do: requisitions, procurement requests, item lookup, and department stock. Store receive, issue, and cycle count are not available for lab users.
+                </AlertDescription>
+            </Alert>
+
             <div
-                v-if="canRead"
+                v-if="canRead && isStoreOperations"
                 class="flex min-h-9 flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-4 py-2"
             >
                 <span class="text-xs font-medium text-muted-foreground">Store stock:</span>
@@ -5911,7 +5973,7 @@ onMounted(async () => {
                 </Select>
             </div>
 
-            <Card v-if="canRead" class="rounded-lg border-sidebar-border/70">
+            <Card v-if="canRead && (canManageSuppliers || canManageWarehouses)" class="rounded-lg border-sidebar-border/70">
                 <CardHeader class="pb-2">
                     <CardTitle class="flex items-center gap-2 text-base">
                         <AppIcon name="layout-grid" class="size-4.5 text-muted-foreground" />
@@ -5972,16 +6034,18 @@ onMounted(async () => {
             <!-- Tab layout -->
             <Tabs :model-value="activeTab" class="flex min-h-0 flex-1 flex-col gap-4" @update:model-value="onTabChange">
                 <TabsList class="flex h-auto w-full flex-wrap justify-start gap-2 rounded-lg bg-muted/30 p-1">
-                    <TabsTrigger value="overview" class="gap-1.5">
+                    <template v-if="workspaceTabVisible('overview') || workspaceTabVisible('requisitions') || workspaceTabVisible('shortage-queue') || workspaceTabVisible('transfers')">
+                        <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Operations</span>
+                    </template>
+                    <TabsTrigger v-if="workspaceTabVisible('overview')" value="overview" class="gap-1.5">
                         <AppIcon name="layout-grid" class="size-3.5" />
                         Overview
                     </TabsTrigger>
-                    <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Operations</span>
-                    <TabsTrigger value="requisitions" class="gap-1.5">
+                    <TabsTrigger v-if="workspaceTabVisible('requisitions')" value="requisitions" class="gap-1.5">
                         <AppIcon name="clipboard-list" class="size-3.5" />
                         Requisitions
                     </TabsTrigger>
-                    <TabsTrigger value="shortage-queue" class="gap-1.5">
+                    <TabsTrigger v-if="workspaceTabVisible('shortage-queue')" value="shortage-queue" class="gap-1.5">
                         <AppIcon name="alert-triangle" class="size-3.5" />
                         Shortage Queue
                         <Badge
@@ -5992,42 +6056,48 @@ onMounted(async () => {
                             {{ shortageQueueMeta!.readyLineCount }}
                         </Badge>
                     </TabsTrigger>
-                    <TabsTrigger value="transfers" class="gap-1.5">
+                    <TabsTrigger v-if="workspaceTabVisible('transfers')" value="transfers" class="gap-1.5">
                         <AppIcon name="activity" class="size-3.5" />
                         Transfers
                     </TabsTrigger>
-                    <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Stock</span>
-                    <TabsTrigger value="inventory" class="gap-1.5">
+                    <template v-if="workspaceTabVisible('inventory') || workspaceTabVisible('ledger') || workspaceTabVisible('department-stock')">
+                        <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Stock</span>
+                    </template>
+                    <TabsTrigger v-if="workspaceTabVisible('inventory')" value="inventory" class="gap-1.5">
                         <AppIcon name="package" class="size-3.5" />
                         Items
                     </TabsTrigger>
-                    <TabsTrigger value="ledger" class="gap-1.5">
+                    <TabsTrigger v-if="workspaceTabVisible('ledger')" value="ledger" class="gap-1.5">
                         <AppIcon name="activity" class="size-3.5" />
                         Ledger
                     </TabsTrigger>
-                    <TabsTrigger value="department-stock" class="gap-1.5">
+                    <TabsTrigger v-if="workspaceTabVisible('department-stock')" value="department-stock" class="gap-1.5">
                         <AppIcon name="building-2" class="size-3.5" />
                         Department Stock
                     </TabsTrigger>
-                    <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Procurement</span>
-                    <TabsTrigger value="procurement" class="gap-1.5">
+                    <template v-if="workspaceTabVisible('procurement') || workspaceTabVisible('msd-orders') || workspaceTabVisible('lead-times')">
+                        <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Procurement</span>
+                    </template>
+                    <TabsTrigger v-if="workspaceTabVisible('procurement')" value="procurement" class="gap-1.5">
                         <AppIcon name="clipboard-list" class="size-3.5" />
                         Requests
                     </TabsTrigger>
-                    <TabsTrigger value="msd-orders" class="gap-1.5">
+                    <TabsTrigger v-if="workspaceTabVisible('msd-orders')" value="msd-orders" class="gap-1.5">
                         <AppIcon name="package" class="size-3.5" />
                         MSD Orders
                     </TabsTrigger>
-                    <TabsTrigger value="lead-times" class="gap-1.5">
+                    <TabsTrigger v-if="workspaceTabVisible('lead-times')" value="lead-times" class="gap-1.5">
                         <AppIcon name="activity" class="size-3.5" />
                         Lead Times
                     </TabsTrigger>
-                    <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Governance</span>
-                    <TabsTrigger value="claims" class="gap-1.5">
+                    <template v-if="workspaceTabVisible('claims') || workspaceTabVisible('analytics')">
+                        <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Governance</span>
+                    </template>
+                    <TabsTrigger v-if="workspaceTabVisible('claims')" value="claims" class="gap-1.5">
                         <AppIcon name="shield-check" class="size-3.5" />
                         Claims
                     </TabsTrigger>
-                    <TabsTrigger value="analytics" class="gap-1.5">
+                    <TabsTrigger v-if="workspaceTabVisible('analytics')" value="analytics" class="gap-1.5">
                         <AppIcon name="activity" class="size-3.5" />
                         Analytics
                     </TabsTrigger>

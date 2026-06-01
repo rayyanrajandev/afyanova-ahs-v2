@@ -1146,13 +1146,28 @@ async function loadDetails(id: string): Promise<void> {
       loadSubscriptionWorkspace(id),
       canViewAudit.value ? loadAudit(1) : Promise.resolve(),
     ]);
-  } catch (e) { selected.value = null; detailsError.value = messageFromUnknown(e, 'Unable to load facility details.'); }
+  } catch (e) {
+    detailsError.value = messageFromUnknown(e, 'Unable to refresh facility details.');
+  }
   finally { detailsLoading.value = false; }
 }
 function openDetails(f: Facility): void {
   const id = String(f.id ?? '').trim(); if (!id) return;
-  detailsOpen.value = true; detailsWorkspaceTab.value = 'profile'; detailsError.value = null; selected.value = null;
-  configErrors.value = {}; tenantPolicyErrors.value = {}; statusErrors.value = {}; ownerErrors.value = {}; subscriptionErrors.value = {}; subscriptionError.value = null; subscription.value = null; audit.value = []; auditMeta.value = null; auditError.value = null;
+  detailsOpen.value = true;
+  detailsWorkspaceTab.value = 'profile';
+  detailsError.value = null;
+  selected.value = f;
+  hydrate(f);
+  configErrors.value = {};
+  tenantPolicyErrors.value = {};
+  statusErrors.value = {};
+  ownerErrors.value = {};
+  subscriptionErrors.value = {};
+  subscriptionError.value = null;
+  subscription.value = null;
+  audit.value = [];
+  auditMeta.value = null;
+  auditError.value = null;
   ownerSlots.forEach((slot) => {
     ownerUsers[slot.key] = null;
     resetOwnerSearchState(slot.key);
@@ -1863,15 +1878,23 @@ onBeforeUnmount(() => {
               <AppIcon name="building-2" class="size-5 text-muted-foreground" />
               <span class="min-w-0 truncate">{{ selected?.name || selected?.code || 'Facility Details' }}</span>
               <Badge v-if="selected?.code" variant="outline" class="shrink-0 font-normal">{{ selected.code }}</Badge>
+              <AppIcon
+                v-if="detailsLoading"
+                name="refresh-cw"
+                class="size-4 shrink-0 animate-spin text-muted-foreground"
+                aria-hidden="true"
+              />
             </SheetTitle>
             <SheetDescription>
               {{ selected?.tenantName || 'Organization not set' }} | {{ selected?.facilityType ? formatEnumLabel(selected.facilityType) : 'Facility type not set' }} | {{ selected?.timezone || 'Timezone not set' }}
             </SheetDescription>
           </SheetHeader>
           <div class="min-h-0 flex flex-1 flex-col overflow-hidden">
-            <div v-if="detailsLoading" class="space-y-2 p-4"><Skeleton class="h-14 w-full" /><Skeleton class="h-14 w-full" /></div>
-            <Alert v-else-if="detailsError" variant="destructive" class="m-4"><AlertTitle>Details load issue</AlertTitle><AlertDescription>{{ detailsError }}</AlertDescription></Alert>
-            <Tabs v-else-if="selected" v-model="detailsWorkspaceTab" class="flex h-full min-h-0 flex-col">
+            <Alert v-if="detailsError" variant="destructive" class="mx-4 mt-4 shrink-0">
+              <AlertTitle>Details refresh issue</AlertTitle>
+              <AlertDescription>{{ detailsError }}</AlertDescription>
+            </Alert>
+            <Tabs v-if="selected" v-model="detailsWorkspaceTab" class="flex h-full min-h-0 flex-col">
               <div class="shrink-0 border-b bg-muted/5 px-4 py-2.5">
                 <div class="space-y-4">
                   <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
@@ -1934,23 +1957,23 @@ onBeforeUnmount(() => {
                         Keep the facility code, display name, type, and timezone aligned with the real site before clinical testing starts.
                       </p>
                     </div>
-                    <Button v-if="canUpdate" size="sm" class="gap-1.5" :disabled="configSaving" @click="saveConfig">
+                    <Button v-if="canUpdate" size="sm" class="gap-1.5" :disabled="detailsLoading || configSaving" @click="saveConfig">
                       <AppIcon name="circle-check-big" class="size-3.5" />
                       {{ configSaving ? 'Saving...' : 'Save Identity' }}
                     </Button>
                   </div>
                   <div class="grid gap-3 sm:grid-cols-2">
                     <FormFieldShell input-id="details-facility-code" label="Facility code" required :error-message="firstError(configErrors, 'code')">
-                      <Input id="details-facility-code" v-model="configForm.code" :disabled="!canUpdate || configSaving" />
+                      <Input id="details-facility-code" v-model="configForm.code" :disabled="!canUpdate || detailsLoading || configSaving" />
                     </FormFieldShell>
                     <FormFieldShell input-id="details-facility-name" label="Facility name" required :error-message="firstError(configErrors, 'name')">
-                      <Input id="details-facility-name" v-model="configForm.name" :disabled="!canUpdate || configSaving" />
+                      <Input id="details-facility-name" v-model="configForm.name" :disabled="!canUpdate || detailsLoading || configSaving" />
                     </FormFieldShell>
                     <FormFieldShell input-id="details-facility-type" label="Facility type">
-                      <Input id="details-facility-type" v-model="configForm.facilityType" placeholder="hospital, dispensary, clinic" :disabled="!canUpdate || configSaving" />
+                      <Input id="details-facility-type" v-model="configForm.facilityType" placeholder="hospital, dispensary, clinic" :disabled="!canUpdate || detailsLoading || configSaving" />
                     </FormFieldShell>
                     <FormFieldShell input-id="details-facility-timezone" label="Timezone">
-                      <Input id="details-facility-timezone" v-model="configForm.timezone" placeholder="Africa/Dar_es_Salaam" :disabled="!canUpdate || configSaving" />
+                      <Input id="details-facility-timezone" v-model="configForm.timezone" placeholder="Africa/Dar_es_Salaam" :disabled="!canUpdate || detailsLoading || configSaving" />
                     </FormFieldShell>
                   </div>
                 </fieldset>
@@ -1967,7 +1990,7 @@ onBeforeUnmount(() => {
                         Tenant code {{ selected.tenantCode || 'N/A' }} | Base country {{ selected.tenantCountryCode || 'N/A' }}
                       </p>
                     </div>
-                    <Button v-if="canUpdate" size="sm" class="gap-1.5" :disabled="tenantPolicySaving" @click="saveTenantPolicy">
+                    <Button v-if="canUpdate" size="sm" class="gap-1.5" :disabled="detailsLoading || tenantPolicySaving" @click="saveTenantPolicy">
                       <AppIcon name="shield-check" class="size-3.5" />
                       {{ tenantPolicySaving ? 'Saving...' : 'Save Policy' }}
                     </Button>
@@ -1985,13 +2008,13 @@ onBeforeUnmount(() => {
                       v-for="option in tenantCountryOptions"
                       :key="option.code"
                       class="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm transition-colors hover:bg-muted/40"
-                      :class="{ 'cursor-not-allowed opacity-60': !canUpdate || tenantPolicySaving }"
+                        :class="{ 'cursor-not-allowed opacity-60': !canUpdate || detailsLoading || tenantPolicySaving }"
                     >
                       <Checkbox
                         :id="`tenant-policy-country-${option.code}`"
                         :model-value="tenantPolicyForm.allowedCountryCodes.includes(option.code)"
                         class="mt-1"
-                        :disabled="!canUpdate || tenantPolicySaving"
+                        :disabled="!canUpdate || detailsLoading || tenantPolicySaving"
                         @update:model-value="(checked) => setTenantPolicyCountryAllowed(option.code, checked === true)"
                       />
                       <span class="space-y-1">
@@ -2021,7 +2044,7 @@ onBeforeUnmount(() => {
                     <div class="grid h-full gap-3 rounded-lg border bg-background p-3">
                       <FormFieldShell input-id="details-status-target" label="Target status">
                         <Select v-model="statusForm.status">
-                          <SelectTrigger id="details-status-target" class="w-full" :disabled="!canUpdateStatus || statusSaving"><SelectValue /></SelectTrigger>
+                          <SelectTrigger id="details-status-target" class="w-full" :disabled="!canUpdateStatus || detailsLoading || statusSaving"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="active">Active</SelectItem>
                             <SelectItem value="inactive">Inactive</SelectItem>
@@ -2029,12 +2052,12 @@ onBeforeUnmount(() => {
                         </Select>
                       </FormFieldShell>
                       <FormFieldShell input-id="details-status-reason" label="Reason" :error-message="firstError(statusErrors, 'reason')">
-                        <Textarea id="details-status-reason" v-model="statusForm.reason" class="min-h-24" :disabled="!canUpdateStatus || statusSaving" placeholder="Required when inactivating a facility" />
+                        <Textarea id="details-status-reason" v-model="statusForm.reason" class="min-h-24" :disabled="!canUpdateStatus || detailsLoading || statusSaving" placeholder="Required when inactivating a facility" />
                       </FormFieldShell>
                     </div>
                   </div>
                   <div class="flex justify-end border-t pt-3">
-                    <Button v-if="canUpdateStatus" size="sm" class="gap-1.5" :disabled="statusSaving" @click="saveStatus">
+                    <Button v-if="canUpdateStatus" size="sm" class="gap-1.5" :disabled="detailsLoading || statusSaving" @click="saveStatus">
                       <AppIcon name="circle-check-big" class="size-3.5" />
                       {{ statusSaving ? 'Saving...' : 'Save Status' }}
                     </Button>
@@ -2052,7 +2075,7 @@ onBeforeUnmount(() => {
                         Assign active users to the operational, clinical, and administrative owner slots. Search starts after two characters.
                       </p>
                     </div>
-                    <Button v-if="canManageOwners" size="sm" class="gap-1.5" :disabled="ownersSaving" @click="saveOwners">
+                    <Button v-if="canManageOwners" size="sm" class="gap-1.5" :disabled="detailsLoading || ownersSaving" @click="saveOwners">
                       <AppIcon name="users" class="size-3.5" />
                       {{ ownersSaving ? 'Saving...' : 'Save Owners' }}
                     </Button>

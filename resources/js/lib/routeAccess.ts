@@ -11,12 +11,31 @@ type RouteAccessRule = {
 
 const routeAccessRules: RouteAccessRule[] = [
     {
+        pathPrefix: '/inventory-procurement/receive',
+        requiredPermissions: ['inventory.procurement.create-movement'],
+    },
+    {
+        pathPrefix: '/inventory-procurement/issue',
+        requiredPermissions: ['inventory.procurement.create-movement'],
+    },
+    {
+        pathPrefix: '/inventory-procurement/count',
+        requiredPermissions: [
+            'inventory.procurement.reconcile-stock',
+            'inventory.procurement.create-movement',
+        ],
+    },
+    {
         pathPrefix: '/inventory-procurement/suppliers',
-        requiredPermissions: ['inventory.procurement.read'],
+        requiredPermissions: [
+            'inventory.procurement.manage-suppliers',
+        ],
     },
     {
         pathPrefix: '/inventory-procurement/warehouses',
-        requiredPermissions: ['inventory.procurement.read'],
+        requiredPermissions: [
+            'inventory.procurement.manage-warehouses',
+        ],
     },
     {
         pathPrefix: '/platform/admin/user-approval-cases',

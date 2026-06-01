@@ -296,23 +296,23 @@ Route::get('inventory-procurement/workspace', function () {
 
 Route::get('inventory-procurement/receive', function () {
     return Inertia::render('inventory-procurement/Receive');
-})->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.stock_movements'])->name('inventory-procurement-receive.page');
+})->middleware(['auth', 'verified', 'can:inventory.procurement.create-movement', 'facility.entitlement:inventory.stock_movements'])->name('inventory-procurement-receive.page');
 
 Route::get('inventory-procurement/issue', function () {
     return Inertia::render('inventory-procurement/Issue');
-})->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.stock_issue'])->name('inventory-procurement-issue.page');
+})->middleware(['auth', 'verified', 'can:inventory.procurement.create-movement', 'facility.entitlement:inventory.stock_issue'])->name('inventory-procurement-issue.page');
 
 Route::get('inventory-procurement/count', function () {
     return Inertia::render('inventory-procurement/Count');
-})->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.stock_movements'])->name('inventory-procurement-count.page');
+})->middleware(['auth', 'verified', 'can:inventory.procurement.reconcile-stock', 'facility.entitlement:inventory.stock_movements'])->name('inventory-procurement-count.page');
 
 Route::get('inventory-procurement/suppliers', function () {
     return Inertia::render('inventory-procurement/suppliers/Index');
-})->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.suppliers'])->name('inventory-procurement-suppliers.page');
+})->middleware(['auth', 'verified', 'can:inventory.procurement.manage-suppliers', 'facility.entitlement:inventory.suppliers'])->name('inventory-procurement-suppliers.page');
 
 Route::get('inventory-procurement/warehouses', function () {
     return Inertia::render('inventory-procurement/warehouses/Index');
-})->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.warehouses'])->name('inventory-procurement-warehouses.page');
+})->middleware(['auth', 'verified', 'can:inventory.procurement.manage-warehouses', 'facility.entitlement:inventory.warehouses'])->name('inventory-procurement-warehouses.page');
 
 Route::get('inventory-procurement/procurement-requests/{id}/grn', [InventoryProcurementDocumentController::class, 'showGoodsReceivedNote'])
     ->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])
