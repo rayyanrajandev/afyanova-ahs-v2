@@ -2,6 +2,13 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import OrdersWorkspacePageHeader from '@/components/orders/OrdersWorkspacePageHeader.vue';
+import PosCheckoutSection from '@/components/pos/PosCheckoutSection.vue';
+import PosFilterBar from '@/components/pos/PosFilterBar.vue';
+import PosFilterField from '@/components/pos/PosFilterField.vue';
+import PosFormGrid from '@/components/pos/PosFormGrid.vue';
+import PosKpiStrip from '@/components/pos/PosKpiStrip.vue';
+import PosLaneWorkspace from '@/components/pos/PosLaneWorkspace.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,7 +20,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { csrfRequestHeaders, refreshCsrfToken } from '@/lib/csrf';
+import { type AppIconName } from '@/lib/icons';
 import { type BreadcrumbItem } from '@/types';
+
+type PosTab =
+    | 'overview'
+    | 'sessions'
+    | 'pharmacy-otc'
+    | 'cafeteria'
+    | 'general-retail'
+    | 'lab-quick'
+    | 'operations';
 
 type Pager<T> = {
     data: T[];
@@ -401,6 +418,76 @@ const readinessLabel = computed(() => totalRegisters.value === 0
     : totalOpenSessions.value === 0
       ? 'Registers configured, sessions closed'
       : 'Cashier sessions active');
+const posWorkspaceIntro = computed(() => {
+    if (totalRegisters.value === 0) {
+        return 'Configure registers and open a cashier session before taking counter payments.';
+    }
+    if (totalOpenSessions.value === 0) {
+        return 'Open a cashier session, then choose OTC, cafeteria, retail, or lab quick settlement.';
+    }
+    return 'Counter sales for OTC pharmacy, cafeteria, miscellaneous retail, and lab quick settlement.';
+});
+const posQuickLanes = computed(() => {
+    const lanes: Array<{
+        tab: PosTab;
+        label: string;
+        icon: AppIconName;
+        visible: boolean;
+        badge: string | null;
+        emphasis: boolean;
+    }> = [
+        {
+            tab: 'sessions',
+            label: 'Sessions',
+            icon: 'clock-3',
+            visible: canReadSessions.value || canManageSessions.value,
+            badge: totalOpenSessions.value > 0 ? String(totalOpenSessions.value) : null,
+            emphasis: totalRegisters.value > 0 && totalOpenSessions.value === 0,
+        },
+        {
+            tab: 'pharmacy-otc',
+            label: 'OTC',
+            icon: 'pill',
+            visible: canReadPharmacyOtc.value,
+            badge: basketItems.value.length > 0 ? String(basketItems.value.length) : null,
+            emphasis: false,
+        },
+        {
+            tab: 'cafeteria',
+            label: 'Cafeteria',
+            icon: 'shopping-cart',
+            visible: canReadCafeteria.value,
+            badge: cafeteriaBasketItems.value.length > 0 ? String(cafeteriaBasketItems.value.length) : null,
+            emphasis: false,
+        },
+        {
+            tab: 'general-retail',
+            label: 'Retail',
+            icon: 'scan-line',
+            visible: canCreateSales.value,
+            badge: retailLineItems.value.length > 0 ? String(retailLineItems.value.length) : null,
+            emphasis: false,
+        },
+        {
+            tab: 'lab-quick',
+            label: 'Lab payment',
+            icon: 'flask-conical',
+            visible: canReadLabQuick.value,
+            badge: labQuickBasketItems.value.length > 0 ? String(labQuickBasketItems.value.length) : null,
+            emphasis: false,
+        },
+        {
+            tab: 'operations',
+            label: 'History',
+            icon: 'briefcase-business',
+            visible: canReadSales.value || canVoidSales.value || canRefundSales.value,
+            badge: null,
+            emphasis: false,
+        },
+    ];
+
+    return lanes.filter((lane) => lane.visible);
+});
 const recentGrossAmount = computed(() => recentSales.value.reduce((sum, sale) => sum + Number(sale.totalAmount ?? 0), 0));
 const readyRegisters = computed(() => registerRows.value.filter((row) => Boolean(row.currentOpenSession)));
 const availableSessionRegisters = computed(() =>
@@ -434,6 +521,22 @@ const labQuickBasketPatientLabel = computed(() => {
     if (!firstItem) return 'No patient selected yet';
     return [firstItem.patientName, firstItem.patientNumber].filter(Boolean).join(' / ') || 'Patient basket';
 });
+const labQuickBasketPatientId = computed(() => labQuickBasketItems.value[0]?.patientId ?? null);
+const labQuickFilteredCandidates = computed(() => {
+    const lockedPatientId = labQuickBasketPatientId.value;
+    if (!lockedPatientId) return labQuickCandidates.value;
+    return labQuickCandidates.value.filter((candidate) => candidate.patientId === lockedPatientId);
+});
+const labQuickPaymentBalance = computed(() =>
+    roundMoney(labQuickBasketTotal.value - labQuickPaymentTotal.value));
+const labQuickRegisterLabel = computed(() => {
+    const register = labQuickReadyRegisters.value.find((row) => row.id === selectedLabRegisterId.value);
+    if (!register) return 'Choose a register with an open session';
+    return [register.registerName, register.registerCode].filter(Boolean).join(' · ');
+});
+function labQuickOrderInBasket(orderId: string): boolean {
+    return labQuickBasketItems.value.some((item) => item.orderId === orderId);
+}
 const labQuickStatusCounts = computed<Record<string, number>>(() =>
     labQuickCandidates.value.reduce((counts, candidate) => {
         const key = String(candidate.sourceStatus || 'unknown');
@@ -1094,18 +1197,27 @@ async function loadCafeteriaCatalog(force = false): Promise<void> {
         cafeteriaLoading.value = false;
     }
 }
-function addLabQuickToBasket(): void {
+function addLabQuickOrder(candidate: LabQuickCandidate, noteOverride?: string | null): boolean {
     clearLabQuickMessages();
-    const candidate = selectedLabCandidate.value;
-    if (!candidate) return labQuickError.value = 'Select one laboratory order before adding it to the basket.';
-    if (!candidate.patientId) return labQuickError.value = 'This laboratory order is missing a patient link and cannot be settled through quick cashier.';
-    if (labQuickBasketItems.value.some((item) => item.orderId === candidate.id)) return labQuickError.value = 'This laboratory order is already in the basket.';
-    if (labQuickBasketItems.value[0]?.patientId && labQuickBasketItems.value[0].patientId !== candidate.patientId) {
-        return labQuickError.value = 'Lab quick checkout can only hold one patient at a time.';
+    if (!candidate.patientId) {
+        labQuickError.value = 'This order is not linked to a patient and cannot be paid here.';
+        return false;
+    }
+    if (labQuickOrderInBasket(candidate.id)) {
+        labQuickError.value = 'This order is already in the basket.';
+        return false;
+    }
+    if (labQuickBasketPatientId.value && labQuickBasketPatientId.value !== candidate.patientId) {
+        labQuickError.value = 'Clear the basket or finish checkout before paying for a different patient.';
+        return false;
     }
     const lineTotal = Number(candidate.lineTotal ?? candidate.unitPrice ?? 0);
-    if (!Number.isFinite(lineTotal) || lineTotal <= 0) return labQuickError.value = 'This laboratory order has no payable amount in the selected currency.';
+    if (!Number.isFinite(lineTotal) || lineTotal <= 0) {
+        labQuickError.value = 'This order has no payable amount for the selected register.';
+        return false;
+    }
 
+    const note = noteOverride !== undefined ? noteOverride : labQuickLineNote.value.trim() || null;
     labQuickBasketItems.value = [...labQuickBasketItems.value, {
         clientId: `${candidate.id}-${Date.now()}-${labQuickBasketItems.value.length + 1}`,
         orderId: candidate.id,
@@ -1117,9 +1229,23 @@ function addLabQuickToBasket(): void {
         serviceCode: candidate.serviceCode,
         serviceName: candidate.serviceName,
         lineTotal: roundMoney(lineTotal),
-        note: labQuickLineNote.value.trim() || null,
+        note,
     }];
     labQuickLineNote.value = '';
+    selectedLabOrderId.value = '';
+    return true;
+}
+function addLabQuickToBasket(): void {
+    const candidate = selectedLabCandidate.value;
+    if (!candidate) {
+        labQuickError.value = 'Select an order from the list, or use Add on the order row.';
+        return;
+    }
+    addLabQuickOrder(candidate);
+}
+function addLabQuickOrderFromList(candidate: LabQuickCandidate): void {
+    selectedLabOrderId.value = candidate.id;
+    addLabQuickOrder(candidate);
 }
 function removeLabQuickBasketItem(clientId: string): void {
     labQuickBasketItems.value = labQuickBasketItems.value.filter((item) => item.clientId !== clientId);
@@ -1687,43 +1813,81 @@ onMounted(refreshPage);
 <template>
     <Head title="POS Operations" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-full flex-1 flex-col overflow-x-auto">
-            <div class="border-b px-4 py-4 md:px-6">
-            <section class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                <div class="min-w-0 space-y-2">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <h1 class="text-lg font-semibold tracking-tight md:text-xl">POS Operations</h1>
-                        <Badge variant="outline">{{ readinessLabel }}</Badge>
-                        <Badge v-if="canReadPharmacyOtc" variant="secondary">Pharmacy OTC</Badge>
-                        <Badge v-if="canReadCafeteria" variant="secondary">Cafeteria</Badge>
-                        <Badge v-if="canCreateSales" variant="secondary">General Retail</Badge>
-                        <Badge v-if="canVoidSales || canRefundSales" variant="secondary">Sale Controls</Badge>
-                    </div>
-                    <p class="text-sm text-muted-foreground">Use this workspace for counter sales only: OTC pharmacy, cafeteria, cashier sessions, receipts, refunds, and miscellaneous retail. Clinical orders stay in Billing.</p>
-                </div>
+        <div class="flex flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
+            <OrdersWorkspacePageHeader
+                title="POS Operations"
+                icon="scan-line"
+                :intro="posWorkspaceIntro"
+                :list-loading="loading"
+                :show-tenant-in-scope="false"
+                @refresh="refreshPage"
+            >
+                <template #actions>
+                    <Badge variant="outline">{{ readinessLabel }}</Badge>
+                </template>
+            </OrdersWorkspacePageHeader>
 
-                <div class="flex flex-wrap items-center gap-2">
-                    <div class="rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-sm shadow-sm">
-                        <div class="text-[11px] uppercase tracking-wide text-muted-foreground">Registers</div>
-                        <div class="font-semibold">{{ totalRegisters }}</div>
-                    </div>
-                    <div class="rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-sm shadow-sm">
-                        <div class="text-[11px] uppercase tracking-wide text-muted-foreground">Open Sessions</div>
-                        <div class="font-semibold">{{ totalOpenSessions }}</div>
-                    </div>
-                    <div class="rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-sm shadow-sm">
-                        <div class="text-[11px] uppercase tracking-wide text-muted-foreground">Recent Gross</div>
-                        <div class="font-semibold">{{ formatCurrency(recentGrossAmount, recentSales[0]?.currencyCode ?? 'TZS') }}</div>
-                    </div>
-                    <Button size="sm" variant="outline" @click="refreshPage">Refresh</Button>
-                </div>
-            </section>
-
-            <div v-if="errorMessage" class="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{{ errorMessage }}</div>
+            <div
+                v-if="errorMessage"
+                class="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+            >
+                {{ errorMessage }}
             </div>
 
-            <Tabs v-model="activeTab" class="flex flex-1 flex-col gap-4 p-4 md:p-6">
-            <TabsList class="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-3 xl:grid-cols-6">
+            <div
+                v-if="posQuickLanes.length > 0"
+                class="rounded-lg border bg-muted/30 px-3 py-2.5"
+            >
+                <div class="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <Button
+                            v-for="lane in posQuickLanes"
+                            :key="lane.tab"
+                            size="sm"
+                            class="h-8 gap-1.5"
+                            :variant="activeTab === lane.tab ? 'default' : lane.emphasis ? 'default' : 'outline'"
+                            @click="activeTab = lane.tab"
+                        >
+                            <AppIcon :name="lane.icon" class="size-3.5" />
+                            {{ lane.label }}
+                            <Badge
+                                v-if="lane.badge"
+                                class="ml-0.5 h-4 min-w-4 rounded-full px-1 text-[10px]"
+                                :class="lane.tab === 'sessions' ? 'bg-emerald-600 text-white dark:bg-emerald-500' : ''"
+                            >
+                                {{ lane.badge }}
+                            </Badge>
+                        </Button>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 text-sm">
+                        <div class="rounded-md border border-border/70 bg-background px-2.5 py-1.5 shadow-sm">
+                            <span class="text-[11px] uppercase tracking-wide text-muted-foreground">Registers</span>
+                            <span class="ml-2 font-semibold tabular-nums">{{ totalRegisters }}</span>
+                        </div>
+                        <div class="rounded-md border border-border/70 bg-background px-2.5 py-1.5 shadow-sm">
+                            <span class="text-[11px] uppercase tracking-wide text-muted-foreground">Open</span>
+                            <span class="ml-2 font-semibold tabular-nums">{{ totalOpenSessions }}</span>
+                        </div>
+                        <div class="rounded-md border border-border/70 bg-background px-2.5 py-1.5 shadow-sm">
+                            <span class="text-[11px] uppercase tracking-wide text-muted-foreground">Recent gross</span>
+                            <span class="ml-2 font-semibold tabular-nums">{{ formatCurrency(recentGrossAmount, recentSales[0]?.currencyCode ?? 'TZS') }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div
+                v-if="totalRegisters > 0 && totalOpenSessions === 0 && (canReadSessions || canManageSessions)"
+                class="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm dark:border-amber-900 dark:bg-amber-950/30 sm:flex-row sm:items-center sm:justify-between"
+            >
+                <p class="text-amber-900 dark:text-amber-100">
+                    No open cashier session. Open a session before OTC, cafeteria, retail, or lab quick lanes can issue receipts.
+                </p>
+                <Button size="sm" class="shrink-0" @click="activeTab = 'sessions'">Open session</Button>
+            </div>
+
+            <Tabs v-model="activeTab" class="flex flex-col gap-4">
+            <TabsList class="grid h-auto w-full gap-1 [grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr))]">
                 <TabsTrigger value="overview" class="inline-flex min-h-10 items-center gap-1.5 text-xs sm:text-sm">
                     <AppIcon name="layout-dashboard" class="size-3.5" />
                     Cashier Home
@@ -1743,6 +1907,15 @@ onMounted(refreshPage);
                     Retail Desk
                     <Badge v-if="retailLineItems.length > 0" class="ml-0.5 h-4 min-w-4 rounded-full px-1 text-[10px]">{{ retailLineItems.length }}</Badge>
                 </TabsTrigger>
+                <TabsTrigger
+                    v-if="canReadLabQuick"
+                    value="lab-quick"
+                    class="inline-flex min-h-10 items-center gap-1.5 text-xs sm:text-sm"
+                >
+                    <AppIcon name="flask-conical" class="size-3.5" />
+                    Lab payment
+                    <Badge v-if="labQuickBasketItems.length > 0" class="ml-0.5 h-4 min-w-4 rounded-full px-1 text-[10px]">{{ labQuickBasketItems.length }}</Badge>
+                </TabsTrigger>
                 <TabsTrigger value="sessions" class="inline-flex min-h-10 items-center gap-1.5 text-xs sm:text-sm">
                     <AppIcon name="clock-3" class="size-3.5" />
                     Sessions & Closeout
@@ -1754,242 +1927,246 @@ onMounted(refreshPage);
                 </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="lab-quick" class="mt-0 space-y-4">
-            <section class="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+            <TabsContent value="lab-quick" class="mt-0">
                 <Card class="border-sidebar-border/70 rounded-lg">
                     <CardHeader class="pb-3">
                         <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                             <div>
-                                <CardTitle class="flex items-center gap-2 text-base"><AppIcon name="flask-conical" class="size-5 text-cyan-600 dark:text-cyan-400" />Lab Quick Cashier</CardTitle>
-                                <CardDescription>Patient-linked laboratory order settlement using governed billing prices and the shared POS cash controls.</CardDescription>
+                                <CardTitle class="flex items-center gap-2 text-base">
+                                    <AppIcon name="flask-conical" class="size-5 text-cyan-600 dark:text-cyan-400" />
+                                    Lab counter payment
+                                </CardTitle>
+                                <CardDescription>
+                                    Collect payment for laboratory orders at the counter. Add one or more tests for the same patient, then take payment and print the receipt.
+                                </CardDescription>
                             </div>
-                            <div class="flex flex-wrap gap-2">
-                                <Badge variant="outline">{{ labQuickBasketItems.length }} basket lines</Badge>
-                                <Badge variant="secondary">{{ formatCurrency(labQuickBasketTotal, labQuickSelectedCurrency) }}</Badge>
+                            <div v-if="labQuickBasketItems.length > 0" class="flex flex-wrap items-center gap-2">
+                                <Badge variant="secondary">{{ formatCurrency(labQuickBasketTotal, labQuickSelectedCurrency) }} due</Badge>
+                                <Badge variant="outline">{{ labQuickBasketItems.length }} test{{ labQuickBasketItems.length === 1 ? '' : 's' }}</Badge>
                             </div>
                         </div>
                     </CardHeader>
                     <CardContent class="space-y-4 pt-0">
-                        <div v-if="!canReadLabQuick" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Lab quick cashier is permission-scoped. This account can still use the shared POS workspace, but the laboratory quick lane stays hidden until `pos.lab-quick.read` is granted.</div>
+                        <div v-if="!canReadLabQuick" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                            You do not have access to lab counter payment. Ask a supervisor for the lab quick cashier permission.
+                        </div>
                         <template v-else>
-                            <div class="grid gap-3 md:grid-cols-[1fr_1.2fr_0.8fr_auto]">
-                                <div class="grid gap-2">
-                                    <Label for="lab-quick-register">Checkout Register</Label>
-                                    <Select v-model="selectedLabRegisterId">
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select register with open session" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                        <SelectItem v-for="register in labQuickReadyRegisters" :key="register.id" :value="register.id">{{ `${register.registerName || 'Register'} (${register.registerCode || 'No Code'})` }}</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                            <ol class="grid gap-2 text-sm sm:grid-cols-3">
+                                <li class="flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                                    <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-cyan-600 text-xs font-semibold text-white">1</span>
+                                    <span><span class="font-medium">Find orders</span> — search by patient name, order number, or test.</span>
+                                </li>
+                                <li class="flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                                    <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-cyan-600 text-xs font-semibold text-white">2</span>
+                                    <span><span class="font-medium">Add to basket</span> — same patient only; use Add on each test.</span>
+                                </li>
+                                <li class="flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                                    <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-cyan-600 text-xs font-semibold text-white">3</span>
+                                    <span><span class="font-medium">Take payment</span> — enter amount and record sale for a receipt.</span>
+                                </li>
+                            </ol>
+
+                            <div
+                                v-if="labQuickBasketPatientId"
+                                class="flex flex-col gap-2 rounded-lg border border-cyan-200 bg-cyan-50/80 px-4 py-3 text-sm dark:border-cyan-900 dark:bg-cyan-950/40 sm:flex-row sm:items-center sm:justify-between"
+                            >
+                                <div>
+                                    <p class="font-medium text-cyan-950 dark:text-cyan-100">Paying for: {{ labQuickBasketPatientLabel }}</p>
+                                    <p class="text-xs text-cyan-800 dark:text-cyan-200">Only more tests for this patient can be added. Clear the basket to switch patients.</p>
                                 </div>
-                                <div class="grid gap-2">
-                                    <Label for="lab-quick-search">Order / Patient Search</Label>
-                                    <Input id="lab-quick-search" v-model="labQuickSearch" placeholder="Search by order number, patient, or test" @keydown.enter.prevent="loadLabQuickCandidates(true)" />
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="lab-quick-status">Status</Label>
-                                    <Select v-model="labQuickStatusFilter">
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                        <SelectItem value="all">All payable statuses</SelectItem>
-                                        <SelectItem value="ordered">Ordered</SelectItem>
-                                        <SelectItem value="collected">Collected</SelectItem>
-                                        <SelectItem value="in_progress">In progress</SelectItem>
-                                        <SelectItem value="completed">Completed</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div class="flex items-end">
-                                    <Button variant="outline" :disabled="labQuickLoading" @click="loadLabQuickCandidates(true)">{{ labQuickLoading ? 'Loading...' : 'Refresh Queue' }}</Button>
-                                </div>
+                                <Button size="sm" variant="outline" class="shrink-0 border-cyan-300 bg-background" @click="resetLabQuickCheckout">Change patient</Button>
                             </div>
-                            <div class="grid gap-3 lg:grid-cols-[0.95fr_1.05fr]">
-                                <div class="space-y-3 rounded-lg border bg-muted/20 p-4">
-                                    <div v-if="labQuickCandidates.length === 0" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">No payable laboratory orders matched this search. Orders already invoiced or already settled through lab quick are excluded automatically.</div>
-                                    <div v-for="candidate in labQuickCandidates" :key="candidate.id" class="rounded-lg border px-4 py-3" :class="selectedLabOrderId === candidate.id ? 'border-cyan-300 bg-cyan-50/50 dark:border-cyan-800 dark:bg-cyan-950/30' : 'bg-background'">
-                                        <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                            <div class="space-y-1">
-                                                <div class="flex flex-wrap items-center gap-2">
-                                                    <p class="text-sm font-semibold">{{ candidate.serviceName || candidate.testName || 'Laboratory order' }}</p>
-                                                    <Badge variant="outline">{{ candidate.orderNumber || 'No Order Number' }}</Badge>
-                                                    <Badge variant="secondary">{{ formatEnumLabel(candidate.sourceStatus) }}</Badge>
-                                                </div>
-                                                <p class="text-xs text-muted-foreground">{{ [candidate.patientName, candidate.patientNumber].filter(Boolean).join(' / ') || 'Patient-linked order' }}</p>
-                                                <p class="text-xs text-muted-foreground">{{ [candidate.testCode, candidate.serviceCode].filter(Boolean).join(' / ') || 'Governed laboratory service' }}</p>
-                                                <p class="text-xs text-muted-foreground">Ordered {{ formatDateTime(candidate.orderedAt) }}<span v-if="candidate.resultedAt"> / Resulted {{ formatDateTime(candidate.resultedAt) }}</span></p>
+
+                            <PosFilterBar>
+                                <PosFilterField :xl-span="4">
+                                    <Label for="lab-quick-register">Your register</Label>
+                                    <Select v-model="selectedLabRegisterId">
+                                        <SelectTrigger><SelectValue placeholder="Select register" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem v-for="register in labQuickReadyRegisters" :key="register.id" :value="register.id">{{ `${register.registerName || 'Register'} (${register.registerCode || 'No Code'})` }}</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <p v-if="!selectedLabRegisterId" class="text-xs text-amber-700 dark:text-amber-300">Open a cashier session first (Sessions tab).</p>
+                                </PosFilterField>
+                                <PosFilterField :xl-span="5">
+                                    <Label for="lab-quick-search">Find patient or order</Label>
+                                    <Input id="lab-quick-search" v-model="labQuickSearch" placeholder="Patient name, order #, test name" @keydown.enter.prevent="loadLabQuickCandidates(true)" />
+                                </PosFilterField>
+                                <PosFilterField :xl-span="3">
+                                    <Label for="lab-quick-status">Order status</Label>
+                                    <Select v-model="labQuickStatusFilter">
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">Any payable status</SelectItem>
+                                            <SelectItem value="ordered">Ordered</SelectItem>
+                                            <SelectItem value="collected">Collected</SelectItem>
+                                            <SelectItem value="in_progress">In progress</SelectItem>
+                                            <SelectItem value="completed">Completed</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </PosFilterField>
+                                <PosFilterField :xl-span="12">
+                                    <Button variant="outline" size="sm" :disabled="labQuickLoading" @click="loadLabQuickCandidates(true)">{{ labQuickLoading ? 'Searching…' : 'Search orders' }}</Button>
+                                    <span class="ml-2 text-xs text-muted-foreground">{{ labQuickFilteredCandidates.length }} order{{ labQuickFilteredCandidates.length === 1 ? '' : 's' }} shown</span>
+                                </PosFilterField>
+                            </PosFilterBar>
+
+                            <PosLaneWorkspace>
+                                <template #catalog>
+                                    <PosCheckoutSection
+                                        :title="labQuickBasketPatientId ? 'More tests for this patient' : 'Orders waiting for payment'"
+                                        :description="labQuickBasketPatientId ? 'Already invoiced or paid orders are hidden.' : 'Tap Add to put a test in the basket. One patient per checkout.'"
+                                    >
+                                        <div class="max-h-[min(28rem,50vh)] space-y-2 overflow-y-auto pr-1">
+                                            <div v-if="labQuickLoading" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Loading orders…</div>
+                                            <div v-else-if="labQuickFilteredCandidates.length === 0" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                                                {{ labQuickCandidates.length === 0 ? 'No unpaid lab orders match your search. Try another name or order number.' : 'No other orders for this patient in the current search.' }}
                                             </div>
-                                            <div class="flex shrink-0 flex-col items-start gap-2 md:items-end">
-                                                <p class="text-sm font-medium">{{ formatCurrency(candidate.lineTotal, candidate.currencyCode || labQuickSelectedCurrency) }}</p>
-                                                <Button size="sm" variant="outline" @click="selectedLabOrderId = candidate.id">{{ selectedLabOrderId === candidate.id ? 'Selected' : 'Prepare line' }}</Button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="space-y-3 rounded-lg border bg-background p-4">
-                                    <div class="rounded-lg border bg-muted/20 p-4">
-                                        <p class="text-sm font-semibold">{{ selectedLabCandidate?.serviceName || 'Select one laboratory order' }}</p>
-                                        <p class="text-xs text-muted-foreground">{{ selectedLabCandidate ? [selectedLabCandidate.patientName, selectedLabCandidate.patientNumber, selectedLabCandidate.orderNumber].filter(Boolean).join(' / ') : 'Choose a payable lab order, confirm the patient basket, then add it to checkout.' }}</p>
-                                        <div class="mt-4 grid gap-3 sm:grid-cols-2">
-                                            <div class="rounded-lg border bg-background px-3 py-2 text-sm">
-                                                <p class="text-xs text-muted-foreground">Test / Service Code</p>
-                                                <p class="font-medium">{{ [selectedLabCandidate?.testCode, selectedLabCandidate?.serviceCode].filter(Boolean).join(' / ') || 'Pending selection' }}</p>
-                                            </div>
-                                            <div class="rounded-lg border bg-background px-3 py-2 text-sm">
-                                                <p class="text-xs text-muted-foreground">Payable Amount</p>
-                                                <p class="font-medium">{{ selectedLabCandidate ? formatCurrency(selectedLabCandidate.lineTotal, selectedLabCandidate.currencyCode || labQuickSelectedCurrency) : formatCurrency(0, labQuickSelectedCurrency) }}</p>
-                                            </div>
-                                        </div>
-                                        <div class="mt-3 grid gap-2">
-                                            <Label for="lab-quick-line-note">Line Note</Label>
-                                            <Textarea id="lab-quick-line-note" v-model="labQuickLineNote" rows="2" placeholder="Optional lab quick line note" :disabled="!selectedLabCandidate" />
-                                        </div>
-                                        <div class="mt-4 flex flex-wrap gap-2">
-                                            <Button :disabled="!selectedLabCandidate" @click="addLabQuickToBasket">Add To Basket</Button>
-                                            <Button variant="outline" :disabled="!selectedLabOrderId" @click="selectedLabOrderId = ''">Clear Selection</Button>
-                                        </div>
-                                    </div>
-                                    <div class="space-y-3 rounded-lg border bg-muted/20 p-4">
-                                        <div class="flex items-center justify-between gap-3"><p class="text-sm font-semibold">Lab Basket</p><Badge variant="outline">{{ labQuickBasketItems.length }} lines</Badge></div>
-                                        <div v-if="labQuickBasketItems.length === 0" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Basket is empty. Add patient-linked lab orders here before checkout.</div>
-                                        <div v-for="item in labQuickBasketItems" v-else :key="item.clientId" class="rounded-lg border bg-background px-4 py-3">
-                                            <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                                <div>
-                                                    <p class="text-sm font-semibold">{{ item.serviceName || 'Laboratory order' }}</p>
-                                                    <p class="text-xs text-muted-foreground">{{ [item.patientName, item.patientNumber, item.orderNumber].filter(Boolean).join(' / ') }}</p>
-                                                    <p class="text-xs text-muted-foreground">{{ [item.testCode, item.serviceCode].filter(Boolean).join(' / ') || 'Governed laboratory service' }}</p>
-                                                    <p v-if="item.note" class="text-xs text-muted-foreground">{{ item.note }}</p>
-                                                </div>
-                                                <div class="flex items-center gap-2">
-                                                    <p class="text-sm font-medium">{{ formatCurrency(item.lineTotal, labQuickSelectedCurrency) }}</p>
-                                                    <Button size="sm" variant="outline" @click="removeLabQuickBasketItem(item.clientId)">Remove</Button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="space-y-3 rounded-lg border bg-background p-4">
-                                        <div class="rounded-lg border bg-muted/20 px-4 py-3 text-sm">
-                                            <div class="flex flex-wrap items-center justify-between gap-2">
-                                                <p class="font-medium">Patient lock</p>
-                                                <p class="text-right font-medium">{{ labQuickBasketPatientLabel }}</p>
-                                            </div>
-                                            <p class="mt-1 text-xs text-muted-foreground">One patient per basket keeps cashier settlement aligned with the underlying lab encounter trail.</p>
-                                        </div>
-                                        <div class="space-y-3 rounded-lg border bg-muted/20 p-4">
-                                            <div class="flex items-center justify-between gap-3">
-                                                <p class="text-sm font-semibold">Payment Split</p>
-                                                <Button size="sm" variant="outline" @click="addLabQuickPaymentEntry">Add Payment</Button>
-                                            </div>
-                                            <div v-for="entry in labQuickPayments" :key="entry.clientId" class="rounded-lg border bg-background p-4">
-                                                <div class="grid gap-3 sm:grid-cols-2">
-                                                    <div class="grid gap-2">
-                                                        <Label>Method</Label>
-                                                        <Select v-model="entry.paymentMethod">
-                                                            <SelectTrigger>
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem v-for="option in paymentMethods" :key="option.value" :value="option.value">{{ option.label }}</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
+                                            <div
+                                                v-for="candidate in labQuickFilteredCandidates"
+                                                v-else
+                                                :key="candidate.id"
+                                                class="flex flex-col gap-2 rounded-lg border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+                                                :class="selectedLabOrderId === candidate.id ? 'border-cyan-300 bg-cyan-50/50 dark:border-cyan-800 dark:bg-cyan-950/30' : 'bg-background'"
+                                            >
+                                                <button
+                                                    type="button"
+                                                    class="min-w-0 flex-1 text-left"
+                                                    @click="selectedLabOrderId = candidate.id"
+                                                >
+                                                    <div class="flex flex-wrap items-center gap-1.5">
+                                                        <p class="text-sm font-semibold">{{ candidate.serviceName || candidate.testName || 'Lab test' }}</p>
+                                                        <Badge variant="outline" class="text-[10px]">{{ formatEnumLabel(candidate.sourceStatus) }}</Badge>
+                                                        <Badge v-if="labQuickOrderInBasket(candidate.id)" variant="secondary" class="text-[10px]">In basket</Badge>
                                                     </div>
-                                                    <div class="grid gap-2">
-                                                        <Label>{{ entry.paymentMethod === 'cash' ? 'Amount Tendered' : 'Amount To Apply' }}</Label>
-                                                        <Input v-model="entry.amount" inputmode="decimal" placeholder="0.00" />
+                                                    <p class="mt-0.5 text-xs text-muted-foreground">
+                                                        {{ [candidate.patientName, candidate.patientNumber, candidate.orderNumber].filter(Boolean).join(' · ') }}
+                                                    </p>
+                                                    <p class="text-sm font-medium">{{ formatCurrency(candidate.lineTotal, candidate.currencyCode || labQuickSelectedCurrency) }}</p>
+                                                </button>
+                                                <Button
+                                                    size="sm"
+                                                    class="shrink-0"
+                                                    :variant="labQuickOrderInBasket(candidate.id) ? 'outline' : 'default'"
+                                                    :disabled="labQuickOrderInBasket(candidate.id)"
+                                                    @click="addLabQuickOrderFromList(candidate)"
+                                                >
+                                                    {{ labQuickOrderInBasket(candidate.id) ? 'Added' : 'Add' }}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </PosCheckoutSection>
+                                </template>
+                                <template #checkout>
+                                    <PosCheckoutSection
+                                        title="Checkout"
+                                        :description="labQuickRegisterLabel"
+                                    >
+                                        <div v-if="labQuickBasketItems.length === 0" class="rounded-lg border border-dashed bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
+                                            <p class="font-medium text-foreground">Basket is empty</p>
+                                            <p class="mt-1">Use <span class="font-medium">Add</span> on the left for each lab test you are collecting payment for.</p>
+                                        </div>
+                                        <template v-else>
+                                            <ul class="space-y-2">
+                                                <li
+                                                    v-for="item in labQuickBasketItems"
+                                                    :key="item.clientId"
+                                                    class="flex items-start justify-between gap-2 rounded-lg border bg-background px-3 py-2"
+                                                >
+                                                    <div class="min-w-0">
+                                                        <p class="text-sm font-semibold">{{ item.serviceName || 'Lab test' }}</p>
+                                                        <p class="text-xs text-muted-foreground">{{ item.orderNumber }}</p>
+                                                        <p class="text-sm tabular-nums">{{ formatCurrency(item.lineTotal, labQuickSelectedCurrency) }}</p>
                                                     </div>
-                                                    <div class="grid gap-2">
-                                                        <Label>Reference</Label>
-                                                        <Input v-model="entry.paymentReference" placeholder="Wallet, bank, or card reference" />
-                                                    </div>
-                                                    <div class="grid gap-2">
-                                                        <Label>Payment Note</Label>
-                                                        <Input v-model="entry.note" placeholder="Optional payment note" />
-                                                    </div>
-                                                </div>
-                                                <div class="mt-3 flex justify-end">
-                                                    <Button size="sm" variant="outline" @click="removeLabQuickPaymentEntry(entry.clientId)">Remove Payment</Button>
+                                                    <Button size="sm" variant="ghost" @click="removeLabQuickBasketItem(item.clientId)">Remove</Button>
+                                                </li>
+                                            </ul>
+                                            <div class="border-t pt-3">
+                                                <div class="flex items-center justify-between text-sm">
+                                                    <span class="text-muted-foreground">Amount due</span>
+                                                    <span class="text-lg font-semibold tabular-nums">{{ formatCurrency(labQuickBasketTotal, labQuickSelectedCurrency) }}</span>
                                                 </div>
                                             </div>
+                                        </template>
+                                    </PosCheckoutSection>
+
+                                    <PosCheckoutSection
+                                        v-if="labQuickBasketItems.length > 0"
+                                        title="Payment"
+                                        description="Cash may be more than the total for change."
+                                    >
+                                        <template #actions>
+                                            <Button size="sm" variant="outline" @click="addLabQuickPaymentEntry">Split payment</Button>
+                                        </template>
+                                        <div v-for="entry in labQuickPayments" :key="entry.clientId" class="rounded-lg border bg-background p-3">
+                                            <PosFormGrid>
+                                                <div class="grid gap-2">
+                                                    <Label>Payment method</Label>
+                                                    <Select v-model="entry.paymentMethod">
+                                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem v-for="option in paymentMethods" :key="option.value" :value="option.value">{{ option.label }}</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div class="grid gap-2">
+                                                    <Label>{{ entry.paymentMethod === 'cash' ? 'Cash tendered' : 'Amount' }}</Label>
+                                                    <Input v-model="entry.amount" inputmode="decimal" placeholder="0.00" />
+                                                </div>
+                                            </PosFormGrid>
+                                            <Button
+                                                v-if="labQuickPayments.length > 1"
+                                                size="sm"
+                                                variant="ghost"
+                                                class="mt-1"
+                                                @click="removeLabQuickPaymentEntry(entry.clientId)"
+                                            >
+                                                Remove
+                                            </Button>
                                         </div>
                                         <div class="grid gap-2">
-                                            <Label for="lab-quick-note">Checkout Note</Label>
-                                            <Textarea id="lab-quick-note" v-model="labQuickCheckoutNote" rows="2" placeholder="Optional cashier or lab collection note" />
+                                            <Label for="lab-quick-note">Receipt note (optional)</Label>
+                                            <Textarea id="lab-quick-note" v-model="labQuickCheckoutNote" rows="2" placeholder="e.g. sample collection desk" />
                                         </div>
-                                        <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                            <div class="grid gap-2 text-sm sm:grid-cols-2">
-                                                <div class="flex items-center justify-between gap-2 sm:block"><p class="text-muted-foreground">Basket total</p><p class="text-lg font-semibold">{{ formatCurrency(labQuickBasketTotal, labQuickSelectedCurrency) }}</p></div>
-                                                <div class="flex items-center justify-between gap-2 sm:block"><p class="text-muted-foreground">Payments entered</p><p class="font-medium">{{ formatCurrency(labQuickPaymentTotal, labQuickSelectedCurrency) }}</p></div>
+                                        <div class="rounded-lg border bg-muted/20 px-3 py-2 text-sm">
+                                            <div class="flex justify-between gap-2">
+                                                <span class="text-muted-foreground">Entered</span>
+                                                <span class="font-medium tabular-nums">{{ formatCurrency(labQuickPaymentTotal, labQuickSelectedCurrency) }}</span>
                                             </div>
-                                            <p class="mt-1 text-xs text-muted-foreground">Cash payments may exceed the basket total for change. Non-cash entries should stay within the remaining balance.</p>
-                                        </div>
-                                        <div v-if="labQuickError" class="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{{ labQuickError }}</div>
-                                        <div v-if="labQuickSuccess" class="rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200">
-                                            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                                                <p>{{ labQuickSuccess }}</p>
-                                                <div v-if="labQuickLatestSaleId" class="flex flex-wrap gap-2">
-                                                    <Button as-child size="sm" variant="outline" class="border-cyan-300 bg-background text-cyan-700 hover:bg-cyan-50 dark:border-cyan-800 dark:text-cyan-200 dark:hover:bg-cyan-950/40">
-                                                        <Link :href="saleReceiptHref(labQuickLatestSaleId)">Open Receipt</Link>
-                                                    </Button>
-                                                    <Button as-child size="sm" variant="outline" class="border-cyan-300 bg-background text-cyan-700 hover:bg-cyan-50 dark:border-cyan-800 dark:text-cyan-200 dark:hover:bg-cyan-950/40">
-                                                        <a :href="saleReceiptPdfHref(labQuickLatestSaleId)">Receipt PDF</a>
-                                                    </Button>
-                                                </div>
+                                            <div v-if="labQuickPaymentBalance > 0" class="mt-1 flex justify-between gap-2 text-amber-800 dark:text-amber-200">
+                                                <span>Still owed</span>
+                                                <span class="font-medium tabular-nums">{{ formatCurrency(labQuickPaymentBalance, labQuickSelectedCurrency) }}</span>
+                                            </div>
+                                            <div v-else-if="labQuickPaymentBalance < 0" class="mt-1 flex justify-between gap-2 text-emerald-800 dark:text-emerald-200">
+                                                <span>Change</span>
+                                                <span class="font-medium tabular-nums">{{ formatCurrency(Math.abs(labQuickPaymentBalance), labQuickSelectedCurrency) }}</span>
                                             </div>
                                         </div>
-                                        <div class="flex flex-wrap gap-2">
-                                            <Button :disabled="labQuickSubmitting || labQuickBasketItems.length === 0 || !selectedLabRegisterId" @click="submitLabQuickSale">{{ labQuickSubmitting ? 'Recording Lab Sale...' : 'Record Lab Sale' }}</Button>
-                                            <Button variant="outline" :disabled="labQuickBasketItems.length === 0" @click="resetLabQuickCheckout">Clear Basket</Button>
+                                    </PosCheckoutSection>
+
+                                    <div v-if="labQuickError" class="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{{ labQuickError }}</div>
+                                    <div v-if="labQuickSuccess" class="rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-100">
+                                        <p>{{ labQuickSuccess }}</p>
+                                        <div v-if="labQuickLatestSaleId" class="mt-2 flex flex-wrap gap-2">
+                                            <Button as-child size="sm" variant="outline"><Link :href="saleReceiptHref(labQuickLatestSaleId)">View receipt</Link></Button>
+                                            <Button as-child size="sm" variant="outline"><a :href="saleReceiptPdfHref(labQuickLatestSaleId)">Print PDF</a></Button>
                                         </div>
                                     </div>
-                                </div>
-                            </div>
+                                    <div class="flex flex-wrap gap-2">
+                                        <Button
+                                            class="flex-1 sm:flex-none"
+                                            :disabled="labQuickSubmitting || labQuickBasketItems.length === 0 || !selectedLabRegisterId"
+                                            @click="submitLabQuickSale"
+                                        >
+                                            {{ labQuickSubmitting ? 'Processing…' : 'Complete payment' }}
+                                        </Button>
+                                        <Button variant="outline" :disabled="labQuickBasketItems.length === 0" @click="resetLabQuickCheckout">Clear basket</Button>
+                                    </div>
+                                </template>
+                            </PosLaneWorkspace>
                         </template>
                     </CardContent>
                 </Card>
-                <Card class="border-sidebar-border/70 rounded-lg">
-                    <CardHeader class="pb-3">
-                        <CardTitle class="flex items-center gap-2 text-base"><AppIcon name="activity" class="size-5 text-cyan-600 dark:text-cyan-400" />Lab Queue Snapshot</CardTitle>
-                        <CardDescription>Operational summary for the current payable laboratory quick queue.</CardDescription>
-                    </CardHeader>
-                    <CardContent class="space-y-4 pt-0">
-                        <div v-if="!canReadLabQuick" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Queue analytics stay hidden until `pos.lab-quick.read` is granted.</div>
-                        <template v-else>
-                            <div class="grid gap-3 sm:grid-cols-2">
-                                <div class="rounded-lg border border-cyan-200 bg-cyan-50/70 px-4 py-3 dark:border-cyan-900 dark:bg-cyan-950/30">
-                                    <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">Payable Orders</p>
-                                    <p class="mt-2 text-2xl font-semibold">{{ labQuickCandidates.length }}</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">Visible in the current register currency and search scope.</p>
-                                </div>
-                                <div class="rounded-lg border border-border/70 bg-muted/40 px-4 py-3">
-                                    <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">Patients</p>
-                                    <p class="mt-2 text-2xl font-semibold">{{ labQuickVisiblePatients }}</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">Distinct patients represented in the visible payable queue.</p>
-                                </div>
-                            </div>
-                            <div class="rounded-lg border bg-muted/20 px-4 py-3 text-sm">
-                                <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <p class="font-medium">Checkout context</p>
-                                    <Badge variant="outline">{{ labQuickSelectedCurrency }}</Badge>
-                                </div>
-                                <p class="mt-2 text-muted-foreground">{{ selectedLabRegisterId ? `${labQuickReadyRegisters.find((row) => row.id === selectedLabRegisterId)?.registerName || 'Register'} is selected for cashier settlement.` : 'Select an open register to anchor cashier settlement and currency.' }}</p>
-                            </div>
-                            <div class="rounded-lg border bg-muted/20 px-4 py-3 text-sm">
-                                <p class="font-medium">Status mix</p>
-                                <div class="mt-3 flex flex-wrap gap-2">
-                                    <Badge v-for="([status, count]) in Object.entries(labQuickStatusCounts)" :key="status" variant="outline">{{ `${formatEnumLabel(status)}: ${count}` }}</Badge>
-                                    <Badge v-if="Object.keys(labQuickStatusCounts).length === 0" variant="outline">No visible orders</Badge>
-                                </div>
-                            </div>
-                            <div class="rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-                                Orders already invoiced in billing or already settled through the lab quick lane are automatically removed from this queue so the cashier workboard stays reconciliation-safe.
-                            </div>
-                        </template>
-                    </CardContent>
-                </Card>
-            </section>
             </TabsContent>
 
             <TabsContent value="pharmacy-otc" class="mt-0">
@@ -2009,49 +2186,33 @@ onMounted(refreshPage);
                     <CardContent class="space-y-4 pt-0">
                         <div v-if="!canReadPharmacyOtc" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Pharmacy OTC is permission-scoped. This account can still use the shared POS workspace, but the OTC medicine counter stays hidden until `pos.pharmacy-otc.read` is granted.</div>
                         <template v-else>
-                            <div class="grid gap-3 lg:grid-cols-3">
-                                <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                    <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">Step 1</p>
-                                    <p class="mt-2 text-sm font-semibold">Choose register</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">OTC checkout needs one open cashier session before medicines can be sold.</p>
-                                </div>
-                                <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                    <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">Step 2</p>
-                                    <p class="mt-2 text-sm font-semibold">Build medicine basket</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">Search approved OTC medicines, confirm stock, then add the requested quantity.</p>
-                                </div>
-                                <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                    <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">Step 3</p>
-                                    <p class="mt-2 text-sm font-semibold">Identify customer and collect payment</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">Link to a patient when needed, otherwise capture walk-in traceability and finish the split payment.</p>
-                                </div>
-                            </div>
-                            <div class="rounded-lg border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
-                                <p class="font-medium">Use this lane only for direct OTC counter sales.</p>
-                                <p class="mt-1 text-xs text-emerald-800 dark:text-emerald-200">Prescribed medicines and patient treatment orders should continue through clinical workflow plus Billing, not POS.</p>
-                            </div>
-                            <div class="grid gap-3 sm:grid-cols-2">
-                                <div class="grid gap-2">
-                                    <Label for="otc-register">Checkout Register</Label>
+                            <p class="rounded-lg border border-emerald-200 bg-emerald-50/70 px-4 py-2.5 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
+                                Direct OTC counter sales only — prescribed medicines stay in clinical workflow and Billing.
+                            </p>
+                            <PosFilterBar>
+                                <PosFilterField :xl-span="4">
+                                    <Label for="otc-register">Checkout register</Label>
                                     <Select v-model="selectedRegisterId">
                                         <SelectTrigger>
-                                            <SelectValue placeholder="Select register with open session" />
+                                            <SelectValue placeholder="Register with open session" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                        <SelectItem v-for="register in otcReadyRegisters" :key="register.id" :value="register.id">{{ `${register.registerName || 'Register'} (${register.registerCode || 'No Code'})` }}</SelectItem>
+                                            <SelectItem v-for="register in otcReadyRegisters" :key="register.id" :value="register.id">{{ `${register.registerName || 'Register'} (${register.registerCode || 'No Code'})` }}</SelectItem>
                                         </SelectContent>
                                     </Select>
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="otc-search">Approved Medicine Search</Label>
+                                </PosFilterField>
+                                <PosFilterField :xl-span="8">
+                                    <Label for="otc-search">Medicine search</Label>
                                     <div class="flex gap-2">
-                                        <Input id="otc-search" v-model="otcSearch" placeholder="Search by medicine name, code, or category" @keydown.enter.prevent="loadOtcCatalog(true)" />
-                                        <Button variant="outline" :disabled="otcLoading" @click="loadOtcCatalog(true)">{{ otcLoading ? 'Loading...' : 'Search' }}</Button>
+                                        <Input id="otc-search" v-model="otcSearch" class="min-w-0 flex-1" placeholder="Name, code, or category" @keydown.enter.prevent="loadOtcCatalog(true)" />
+                                        <Button variant="outline" class="shrink-0" :disabled="otcLoading" @click="loadOtcCatalog(true)">{{ otcLoading ? 'Loading…' : 'Search' }}</Button>
                                     </div>
-                                </div>
-                            </div>
-                            <div class="grid gap-3 lg:grid-cols-[0.95fr_1.05fr]">
-                                <div class="space-y-3 rounded-lg border bg-muted/20 p-4">
+                                </PosFilterField>
+                            </PosFilterBar>
+                            <PosLaneWorkspace>
+                                <template #catalog>
+                                <PosCheckoutSection title="Approved medicines" description="Select a line, set quantity and price, then add to basket.">
+                                <div class="max-h-[min(28rem,50vh)] space-y-3 overflow-y-auto pr-1">
                                     <div v-if="otcCatalogItems.length === 0" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">No in-stock OTC medicines matched this search.</div>
                                     <div v-for="item in otcCatalogItems" :key="item.id" class="rounded-lg border px-4 py-3" :class="selectedCatalogItemId === item.id ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/30' : 'bg-background'">
                                         <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -2072,98 +2233,135 @@ onMounted(refreshPage);
                                         </div>
                                     </div>
                                 </div>
-                                <div class="space-y-3 rounded-lg border bg-background p-4">
+                                </PosCheckoutSection>
+                                </template>
+                                <template #checkout>
+                                    <PosCheckoutSection title="Add line" :description="selectedCatalogItem?.name || 'Select a medicine from the list'">
+                                        <PosFormGrid>
+                                            <div class="grid gap-2">
+                                                <Label for="otc-quantity">Quantity</Label>
+                                                <Input id="otc-quantity" v-model="otcQuantity" inputmode="decimal" placeholder="1" :disabled="!selectedCatalogItem" />
+                                            </div>
+                                            <div class="grid gap-2">
+                                                <Label for="otc-unit-price">Unit price</Label>
+                                                <Input id="otc-unit-price" v-model="otcUnitPrice" inputmode="decimal" placeholder="Price" :disabled="!selectedCatalogItem" />
+                                            </div>
+                                            <div class="grid gap-2 sm:col-span-2">
+                                                <Label for="otc-line-note">Line note</Label>
+                                                <Textarea id="otc-line-note" v-model="otcLineNote" rows="2" placeholder="Optional" :disabled="!selectedCatalogItem" />
+                                            </div>
+                                        </PosFormGrid>
+                                        <p v-if="selectedCatalogItem" class="text-xs text-muted-foreground">{{ selectedRemainingStock }} remaining after basket quantities.</p>
+                                        <div class="flex flex-wrap gap-2">
+                                            <Button :disabled="!selectedCatalogItem" @click="addToBasket">Add to basket</Button>
+                                            <Button variant="outline" :disabled="!selectedCatalogItemId" @click="selectedCatalogItemId = ''">Clear</Button>
+                                        </div>
+                                    </PosCheckoutSection>
+                                    <PosCheckoutSection title="Basket">
+                                        <template #actions>
+                                            <Badge variant="outline">{{ basketItems.length }} lines</Badge>
+                                        </template>
+                                        <div v-if="basketItems.length === 0" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Basket is empty.</div>
+                                        <div v-for="item in basketItems" v-else :key="item.clientId" class="flex items-start justify-between gap-3 rounded-lg border bg-background px-3 py-2">
+                                            <div class="min-w-0">
+                                                <p class="text-sm font-semibold">{{ item.name || 'Item' }}</p>
+                                                <p class="text-xs text-muted-foreground">Qty {{ item.quantity }} × {{ formatCurrency(item.unitPrice, otcSelectedCurrency) }}</p>
+                                            </div>
+                                            <div class="flex shrink-0 items-center gap-2">
+                                                <p class="text-sm font-medium">{{ formatCurrency(item.quantity * item.unitPrice, otcSelectedCurrency) }}</p>
+                                                <Button size="sm" variant="outline" @click="removeBasketItem(item.clientId)">Remove</Button>
+                                            </div>
+                                        </div>
+                                    </PosCheckoutSection>
+                                    <PosCheckoutSection title="Customer">
+                                        <div class="grid gap-2">
+                                            <Label for="otc-customer-mode">Checkout mode</Label>
+                                            <Select v-model="otcCustomerMode">
+                                                <SelectTrigger id="otc-customer-mode"><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="walk_in">Walk-in</SelectItem>
+                                                    <SelectItem value="patient">Existing patient</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <PosFormGrid v-if="otcCustomerMode === 'patient'" class="mt-4">
+                                            <div class="sm:col-span-2">
+                                                <PatientLookupField input-id="otc-patient-id" v-model="otcPatientId" label="Patient" helper-text="Links sale to chart." />
+                                            </div>
+                                            <div class="grid gap-2">
+                                                <Label for="otc-customer-reference">Reference</Label>
+                                                <Input id="otc-customer-reference" v-model="checkoutCustomerReference" placeholder="Phone or pickup note" />
+                                            </div>
+                                        </PosFormGrid>
+                                        <PosFormGrid v-else class="mt-4">
+                                            <div class="grid gap-2">
+                                                <Label for="otc-customer-name">Name</Label>
+                                                <Input id="otc-customer-name" v-model="checkoutCustomerName" placeholder="Walk-in name" />
+                                            </div>
+                                            <div class="grid gap-2">
+                                                <Label for="otc-customer-reference-walkin">Reference</Label>
+                                                <Input id="otc-customer-reference-walkin" v-model="checkoutCustomerReference" placeholder="Phone or counter ref" />
+                                            </div>
+                                        </PosFormGrid>
+                                    </PosCheckoutSection>
+                                    <PosCheckoutSection title="Payment">
+                                        <template #actions>
+                                            <Button size="sm" variant="outline" @click="addOtcPaymentEntry">Add payment</Button>
+                                        </template>
+                                        <div v-for="entry in otcPayments" :key="entry.clientId" class="rounded-lg border bg-background p-3">
+                                            <PosFormGrid>
+                                                <div class="grid gap-2">
+                                                    <Label>Method</Label>
+                                                    <Select v-model="entry.paymentMethod"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="option in paymentMethods" :key="option.value" :value="option.value">{{ option.label }}</SelectItem></SelectContent></Select>
+                                                </div>
+                                                <div class="grid gap-2">
+                                                    <Label>{{ entry.paymentMethod === 'cash' ? 'Tendered' : 'Amount' }}</Label>
+                                                    <Input v-model="entry.amount" inputmode="decimal" placeholder="0.00" />
+                                                </div>
+                                                <div class="grid gap-2">
+                                                    <Label>Reference</Label>
+                                                    <Input v-model="entry.paymentReference" placeholder="Card / wallet ref" />
+                                                </div>
+                                                <div class="grid gap-2">
+                                                    <Label>Note</Label>
+                                                    <Input v-model="entry.note" placeholder="Optional" />
+                                                </div>
+                                            </PosFormGrid>
+                                            <div class="mt-2 flex justify-end">
+                                                <Button size="sm" variant="ghost" @click="removeOtcPaymentEntry(entry.clientId)">Remove</Button>
+                                            </div>
+                                        </div>
+                                        <div class="grid gap-2">
+                                            <Label for="otc-note">Checkout note</Label>
+                                            <Textarea id="otc-note" v-model="checkoutNote" rows="2" placeholder="Optional" />
+                                        </div>
+                                    </PosCheckoutSection>
                                     <div class="rounded-lg border bg-muted/20 p-4">
-                                        <p class="text-sm font-semibold">{{ selectedCatalogItem?.name || 'Select one approved medicine' }}</p>
-                                        <p class="text-xs text-muted-foreground">{{ selectedCatalogItem ? `${selectedRemainingStock} remaining in basket view` : 'Search the approved medicines list, then set quantity and price before adding to basket.' }}</p>
-                                        <div class="mt-4 grid gap-3 sm:grid-cols-2">
-                                            <div class="grid gap-2"><Label for="otc-quantity">Quantity</Label><Input id="otc-quantity" v-model="otcQuantity" inputmode="decimal" placeholder="1" :disabled="!selectedCatalogItem" /></div>
-                                            <div class="grid gap-2"><Label for="otc-unit-price">Unit Price</Label><Input id="otc-unit-price" v-model="otcUnitPrice" inputmode="decimal" placeholder="Enter OTC price" :disabled="!selectedCatalogItem" /></div>
-                                        </div>
-                                        <div class="mt-3 grid gap-2"><Label for="otc-line-note">Line Note</Label><Textarea id="otc-line-note" v-model="otcLineNote" rows="2" placeholder="Optional OTC line note" :disabled="!selectedCatalogItem" /></div>
-                                        <div class="mt-4 flex flex-wrap gap-2"><Button :disabled="!selectedCatalogItem" @click="addToBasket">Add To Basket</Button><Button variant="outline" :disabled="!selectedCatalogItemId" @click="selectedCatalogItemId = ''">Clear Selection</Button></div>
+                                        <PosFormGrid columns="2">
+                                            <div>
+                                                <p class="text-xs text-muted-foreground">Basket total</p>
+                                                <p class="text-lg font-semibold">{{ formatCurrency(basketTotal, otcSelectedCurrency) }}</p>
+                                            </div>
+                                            <div>
+                                                <p class="text-xs text-muted-foreground">Payments</p>
+                                                <p class="text-lg font-semibold">{{ formatCurrency(otcPaymentTotal, otcSelectedCurrency) }}</p>
+                                            </div>
+                                        </PosFormGrid>
                                     </div>
-                                    <div class="space-y-3 rounded-lg border bg-muted/20 p-4">
-                                        <div class="flex items-center justify-between gap-3"><p class="text-sm font-semibold">OTC Basket</p><Badge variant="outline">{{ basketItems.length }} lines</Badge></div>
-                                        <div v-if="basketItems.length === 0" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Basket is empty. Add medicines here before checkout.</div>
-                                        <div v-for="item in basketItems" v-else :key="item.clientId" class="rounded-lg border bg-background px-4 py-3">
-                                            <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                                <div><p class="text-sm font-semibold">{{ item.name || 'OTC basket item' }}</p><p class="text-xs text-muted-foreground">Qty {{ item.quantity }} x {{ formatCurrency(item.unitPrice, otcSelectedCurrency) }}</p><p v-if="item.note" class="text-xs text-muted-foreground">{{ item.note }}</p></div>
-                                                <div class="flex items-center gap-2"><p class="text-sm font-medium">{{ formatCurrency(item.quantity * item.unitPrice, otcSelectedCurrency) }}</p><Button size="sm" variant="outline" @click="removeBasketItem(item.clientId)">Remove</Button></div>
-                                            </div>
+                                    <div v-if="otcError" class="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{{ otcError }}</div>
+                                    <div v-if="otcSuccess" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+                                        <p>{{ otcSuccess }}</p>
+                                        <div v-if="otcLatestSaleId" class="mt-2 flex flex-wrap gap-2">
+                                            <Button as-child size="sm" variant="outline"><Link :href="saleReceiptHref(otcLatestSaleId)">Receipt</Link></Button>
+                                            <Button as-child size="sm" variant="outline"><a :href="saleReceiptPdfHref(otcLatestSaleId)">PDF</a></Button>
                                         </div>
                                     </div>
-                                    <div class="space-y-3 rounded-lg border bg-background p-4">
-                                        <div class="grid gap-3 sm:grid-cols-2">
-                                            <div class="grid gap-2">
-                                                <Label for="otc-customer-mode">Checkout Mode</Label>
-                                                <Select v-model="otcCustomerMode">
-                                                    <SelectTrigger id="otc-customer-mode"><SelectValue /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="walk_in">Walk-in customer</SelectItem>
-                                                        <SelectItem value="patient">Existing patient</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div class="rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-                                                {{ otcCustomerMode === 'patient'
-                                                    ? 'Patient-linked OTC keeps medication history and counseling traceable to the chart.'
-                                                    : 'Walk-in OTC keeps the counter fast while still capturing who was served.' }}
-                                            </div>
-                                        </div>
-                                        <div v-if="otcCustomerMode === 'patient'" class="grid gap-3 sm:grid-cols-2">
-                                            <PatientLookupField
-                                                input-id="otc-patient-id"
-                                                v-model="otcPatientId"
-                                                label="Patient"
-                                                helper-text="Link the OTC sale to an existing patient record for continuity."
-                                            />
-                                            <div class="grid gap-2">
-                                                <Label for="otc-customer-reference">Collection Reference</Label>
-                                                <Input id="otc-customer-reference" v-model="checkoutCustomerReference" placeholder="Optional phone, pickup note, or visit reference" />
-                                            </div>
-                                        </div>
-                                        <div v-else class="grid gap-3 sm:grid-cols-2">
-                                            <div class="grid gap-2"><Label for="otc-customer-name">Customer Name</Label><Input id="otc-customer-name" v-model="checkoutCustomerName" placeholder="Walk-in customer name" /></div>
-                                            <div class="grid gap-2"><Label for="otc-customer-reference">Customer Reference</Label><Input id="otc-customer-reference" v-model="checkoutCustomerReference" placeholder="Phone number or counter reference" /></div>
-                                        </div>
-                                        <div class="space-y-3 rounded-lg border bg-muted/20 p-4">
-                                            <div class="flex items-center justify-between gap-3">
-                                                <p class="text-sm font-semibold">Payment Split</p>
-                                                <Button size="sm" variant="outline" @click="addOtcPaymentEntry">Add Payment</Button>
-                                            </div>
-                                            <div v-for="entry in otcPayments" :key="entry.clientId" class="rounded-lg border bg-background p-4">
-                                                <div class="grid gap-3 sm:grid-cols-2">
-                                                    <div class="grid gap-2"><Label>Method</Label><Select v-model="entry.paymentMethod"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="option in paymentMethods" :key="option.value" :value="option.value">{{ option.label }}</SelectItem></SelectContent></Select></div>
-                                                    <div class="grid gap-2"><Label>{{ entry.paymentMethod === 'cash' ? 'Amount Tendered' : 'Amount To Apply' }}</Label><Input v-model="entry.amount" inputmode="decimal" placeholder="0.00" /></div>
-                                                    <div class="grid gap-2"><Label>Reference</Label><Input v-model="entry.paymentReference" placeholder="Wallet, bank, or card reference" /></div>
-                                                    <div class="grid gap-2"><Label>Payment Note</Label><Input v-model="entry.note" placeholder="Optional payment note" /></div>
-                                                </div>
-                                                <div class="mt-3 flex justify-end">
-                                                    <Button size="sm" variant="outline" @click="removeOtcPaymentEntry(entry.clientId)">Remove Payment</Button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="grid gap-2"><Label for="otc-note">Checkout Note</Label><Textarea id="otc-note" v-model="checkoutNote" rows="2" placeholder="Optional shift or OTC checkout note" /></div>
-                                        <div class="rounded-lg border bg-muted/20 px-4 py-3"><div class="grid gap-2 text-sm sm:grid-cols-2"><div class="flex items-center justify-between gap-2 sm:block"><p class="text-muted-foreground">Basket total</p><p class="text-lg font-semibold">{{ formatCurrency(basketTotal, otcSelectedCurrency) }}</p></div><div class="flex items-center justify-between gap-2 sm:block"><p class="text-muted-foreground">Payments entered</p><p class="font-medium">{{ formatCurrency(otcPaymentTotal, otcSelectedCurrency) }}</p></div></div><p class="mt-1 text-xs text-muted-foreground">Cash payments may exceed the basket total for change. Non-cash entries should stay within the remaining balance.</p></div>
-                                        <div v-if="otcError" class="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{{ otcError }}</div>
-                                        <div v-if="otcSuccess" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
-                                            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                                                <p>{{ otcSuccess }}</p>
-                                                <div v-if="otcLatestSaleId" class="flex flex-wrap gap-2">
-                                                    <Button as-child size="sm" variant="outline" class="border-emerald-300 bg-background text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-200 dark:hover:bg-emerald-950/40">
-                                                        <Link :href="saleReceiptHref(otcLatestSaleId)">Open Receipt</Link>
-                                                    </Button>
-                                                    <Button as-child size="sm" variant="outline" class="border-emerald-300 bg-background text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-200 dark:hover:bg-emerald-950/40">
-                                                        <a :href="saleReceiptPdfHref(otcLatestSaleId)">Receipt PDF</a>
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="flex flex-wrap gap-2"><Button :disabled="otcSubmitting || basketItems.length === 0 || !selectedRegisterId" @click="submitOtcSale">{{ otcSubmitting ? 'Recording OTC Sale...' : 'Record OTC Sale' }}</Button><Button variant="outline" :disabled="basketItems.length === 0" @click="resetCheckout">Clear Basket</Button></div>
+                                    <div class="flex flex-wrap gap-2">
+                                        <Button class="flex-1 sm:flex-none" :disabled="otcSubmitting || basketItems.length === 0 || !selectedRegisterId" @click="submitOtcSale">{{ otcSubmitting ? 'Recording…' : 'Record sale' }}</Button>
+                                        <Button variant="outline" :disabled="basketItems.length === 0" @click="resetCheckout">Clear basket</Button>
                                     </div>
-                                </div>
-                            </div>
+                                </template>
+                            </PosLaneWorkspace>
                         </template>
                     </CardContent>
                 </Card>
@@ -2186,141 +2384,102 @@ onMounted(refreshPage);
                     <CardContent class="space-y-4 pt-0">
                         <div v-if="!canCreateSales" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">General retail capture stays hidden until `pos.sales.create` is granted.</div>
                         <template v-else>
-                            <div class="grid gap-3 lg:grid-cols-3">
-                                <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                    <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">Step 1</p>
-                                    <p class="mt-2 text-sm font-semibold">Choose register</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">Pick the active counter that will own the receipt, session totals, and any refund later.</p>
-                                </div>
-                                <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                    <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">Step 2</p>
-                                    <p class="mt-2 text-sm font-semibold">Enter retail lines</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">Capture free-form items such as parking, lost cards, shop items, or staff sales.</p>
-                                </div>
-                                <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                    <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">Step 3</p>
-                                    <p class="mt-2 text-sm font-semibold">Take payment and issue receipt</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">Complete the split payment, save the sale, and use the receipt links immediately.</p>
-                                </div>
-                            </div>
-                            <div class="rounded-lg border border-violet-200 bg-violet-50/70 px-4 py-3 text-sm text-violet-900 dark:border-violet-900 dark:bg-violet-950/30 dark:text-violet-100">
-                                <p class="font-medium">Use Retail Desk for non-clinical cashier charges.</p>
-                                <p class="mt-1 text-xs text-violet-800 dark:text-violet-200">This is the right place for miscellaneous counter revenue that does not belong to a clinical order or invoice workflow.</p>
-                            </div>
-                            <div class="grid gap-3 md:grid-cols-[0.9fr_1.1fr]">
-                                <div class="space-y-3 rounded-lg border bg-muted/20 p-4">
-                                    <div class="grid gap-3 sm:grid-cols-2">
-                                        <div class="grid gap-2">
-                                            <Label for="retail-register">Checkout Register</Label>
-                                            <Select v-model="selectedRetailRegisterId">
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Select register with open session" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem v-for="register in retailReadyRegisters" :key="register.id" :value="register.id">{{ `${register.registerName || 'Register'} (${register.registerCode || 'No Code'})` }}</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div class="grid gap-2">
-                                            <Label for="retail-customer-type">Customer Type</Label>
-                                            <Select v-model="retailCustomerType">
-                                                <SelectTrigger>
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="anonymous">Anonymous</SelectItem>
-                                                    <SelectItem value="staff">Staff</SelectItem>
-                                                    <SelectItem value="visitor">Visitor</SelectItem>
-                                                    <SelectItem value="other">Other</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    </div>
-                                    <div class="grid gap-3 sm:grid-cols-2">
-                                        <div class="grid gap-2">
-                                            <Label for="retail-customer-name">Customer Name</Label>
-                                            <Input id="retail-customer-name" v-model="retailCustomerName" placeholder="Optional unless non-anonymous" />
-                                        </div>
-                                        <div class="grid gap-2">
-                                            <Label for="retail-customer-reference">Customer Reference</Label>
-                                            <Input id="retail-customer-reference" v-model="retailCustomerReference" placeholder="Phone, badge, or receipt ref" />
-                                        </div>
-                                    </div>
-                                    <div class="rounded-lg border bg-background p-4">
-                                        <div class="grid gap-3 sm:grid-cols-2">
-                                            <div class="grid gap-2">
-                                                <Label for="retail-item-name">Item Name</Label>
-                                                <Input id="retail-item-name" v-model="retailDraftItemName" placeholder="Lost card, parking fee, snack pack" />
+                            <p class="rounded-lg border border-violet-200 bg-violet-50/70 px-4 py-2.5 text-sm text-violet-900 dark:border-violet-900 dark:bg-violet-950/30 dark:text-violet-100">
+                                Miscellaneous counter charges only — not clinical invoices.
+                            </p>
+                            <PosFilterBar>
+                                <PosFilterField :xl-span="4">
+                                    <Label for="retail-register">Register</Label>
+                                    <Select v-model="selectedRetailRegisterId">
+                                        <SelectTrigger><SelectValue placeholder="Open session" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem v-for="register in retailReadyRegisters" :key="register.id" :value="register.id">{{ `${register.registerName || 'Register'} (${register.registerCode || 'No Code'})` }}</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </PosFilterField>
+                                <PosFilterField :xl-span="4">
+                                    <Label for="retail-customer-type">Customer type</Label>
+                                    <Select v-model="retailCustomerType">
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="anonymous">Anonymous</SelectItem>
+                                            <SelectItem value="staff">Staff</SelectItem>
+                                            <SelectItem value="visitor">Visitor</SelectItem>
+                                            <SelectItem value="other">Other</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </PosFilterField>
+                                <PosFilterField :xl-span="4">
+                                    <Label for="retail-customer-name">Customer name</Label>
+                                    <Input id="retail-customer-name" v-model="retailCustomerName" placeholder="Optional" />
+                                </PosFilterField>
+                            </PosFilterBar>
+                            <PosLaneWorkspace>
+                                <template #catalog>
+                                    <PosCheckoutSection title="New line" description="Add items to the basket before payment.">
+                                        <PosFormGrid>
+                                            <div class="grid gap-2 sm:col-span-2">
+                                                <Label for="retail-item-name">Item name</Label>
+                                                <Input id="retail-item-name" v-model="retailDraftItemName" placeholder="Parking, lost card, snack" />
                                             </div>
                                             <div class="grid gap-2">
-                                                <Label for="retail-item-code">Item Code</Label>
-                                                <Input id="retail-item-code" v-model="retailDraftItemCode" placeholder="Optional short code" />
+                                                <Label for="retail-item-code">Code</Label>
+                                                <Input id="retail-item-code" v-model="retailDraftItemCode" placeholder="Optional" />
                                             </div>
                                             <div class="grid gap-2">
-                                                <Label for="retail-item-quantity">Quantity</Label>
+                                                <Label for="retail-item-quantity">Qty</Label>
                                                 <Input id="retail-item-quantity" v-model="retailDraftQuantity" inputmode="decimal" placeholder="1" />
                                             </div>
                                             <div class="grid gap-2">
-                                                <Label for="retail-item-unit-price">Unit Price</Label>
+                                                <Label for="retail-item-unit-price">Unit price</Label>
                                                 <Input id="retail-item-unit-price" v-model="retailDraftUnitPrice" inputmode="decimal" placeholder="0.00" />
                                             </div>
                                             <div class="grid gap-2">
                                                 <Label for="retail-item-discount">Discount</Label>
-                                                <Input id="retail-item-discount" v-model="retailDraftDiscount" inputmode="decimal" placeholder="0.00" />
+                                                <Input id="retail-item-discount" v-model="retailDraftDiscount" inputmode="decimal" placeholder="0" />
                                             </div>
                                             <div class="grid gap-2">
                                                 <Label for="retail-item-tax">Tax</Label>
-                                                <Input id="retail-item-tax" v-model="retailDraftTax" inputmode="decimal" placeholder="0.00" />
+                                                <Input id="retail-item-tax" v-model="retailDraftTax" inputmode="decimal" placeholder="0" />
+                                            </div>
+                                            <div class="grid gap-2 sm:col-span-2">
+                                                <Label for="retail-customer-reference">Customer reference</Label>
+                                                <Input id="retail-customer-reference" v-model="retailCustomerReference" placeholder="Phone or badge" />
+                                            </div>
+                                            <div class="grid gap-2 sm:col-span-2">
+                                                <Label for="retail-item-note">Line note</Label>
+                                                <Input id="retail-item-note" v-model="retailDraftNote" placeholder="Optional" />
+                                            </div>
+                                        </PosFormGrid>
+                                        <Button @click="addRetailLineItem">Add line</Button>
+                                    </PosCheckoutSection>
+                                    <PosCheckoutSection title="Basket lines">
+                                        <template #actions>
+                                            <Badge variant="outline">{{ retailLineItems.length }}</Badge>
+                                        </template>
+                                        <div v-if="retailLineItems.length === 0" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">No lines yet.</div>
+                                        <div v-for="item in retailLineItems" v-else :key="item.clientId" class="flex items-start justify-between gap-3 rounded-lg border px-3 py-2">
+                                            <div class="min-w-0">
+                                                <p class="text-sm font-semibold">{{ item.itemName }}</p>
+                                                <p class="text-xs text-muted-foreground">{{ [item.itemCode, `Qty ${item.quantity}`].filter(Boolean).join(' · ') }}</p>
+                                            </div>
+                                            <div class="flex shrink-0 items-center gap-2">
+                                                <p class="text-sm font-medium">{{ formatCurrency(retailLineTotal(item), retailSelectedCurrency) }}</p>
+                                                <Button size="sm" variant="outline" @click="removeRetailLineItem(item.clientId)">Remove</Button>
                                             </div>
                                         </div>
-                                        <div class="mt-3 grid gap-2">
-                                            <Label for="retail-item-note">Line Note</Label>
-                                            <Input id="retail-item-note" v-model="retailDraftNote" placeholder="Optional note for this line" />
-                                        </div>
-                                        <div class="mt-4 flex flex-wrap gap-2">
-                                            <Button @click="addRetailLineItem">Add Retail Line</Button>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="space-y-3 rounded-lg border bg-background p-4">
-                                    <div class="space-y-3 rounded-lg border bg-muted/20 p-4">
-                                        <div class="flex items-center justify-between gap-3">
-                                            <p class="text-sm font-semibold">Retail Basket</p>
-                                            <Badge variant="outline">{{ retailLineItems.length }} lines</Badge>
-                                        </div>
-                                        <div v-if="retailLineItems.length === 0" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">No retail lines yet. Add one or more direct-sale lines before checkout.</div>
-                                        <div v-for="item in retailLineItems" v-else :key="item.clientId" class="rounded-lg border bg-background px-4 py-3">
-                                            <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                                <div>
-                                                    <p class="text-sm font-semibold">{{ item.itemName }}</p>
-                                                    <p class="text-xs text-muted-foreground">{{ [item.itemCode, `Qty ${item.quantity}`, formatCurrency(item.unitPrice, retailSelectedCurrency)].filter(Boolean).join(' / ') }}</p>
-                                                    <p class="text-xs text-muted-foreground">Discount {{ formatCurrency(item.discountAmount, retailSelectedCurrency) }} / Tax {{ formatCurrency(item.taxAmount, retailSelectedCurrency) }}</p>
-                                                    <p v-if="item.note" class="text-xs text-muted-foreground">{{ item.note }}</p>
-                                                </div>
-                                                <div class="flex items-center gap-2">
-                                                    <p class="text-sm font-medium">{{ formatCurrency(retailLineTotal(item), retailSelectedCurrency) }}</p>
-                                                    <Button size="sm" variant="outline" @click="removeRetailLineItem(item.clientId)">Remove</Button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="space-y-3 rounded-lg border bg-background p-4">
-                                        <div class="flex items-center justify-between gap-3">
-                                            <p class="text-sm font-semibold">Payment Split</p>
-                                            <Button size="sm" variant="outline" @click="addRetailPaymentEntry">Add Payment</Button>
-                                        </div>
-                                        <div v-for="entry in retailPayments" :key="entry.clientId" class="rounded-lg border bg-muted/20 p-4">
-                                            <div class="grid gap-3 sm:grid-cols-2">
+                                    </PosCheckoutSection>
+                                </template>
+                                <template #checkout>
+                                    <PosCheckoutSection title="Payment">
+                                        <template #actions>
+                                            <Button size="sm" variant="outline" @click="addRetailPaymentEntry">Add payment</Button>
+                                        </template>
+                                        <div v-for="entry in retailPayments" :key="entry.clientId" class="rounded-lg border bg-background p-3">
+                                            <PosFormGrid>
                                                 <div class="grid gap-2">
                                                     <Label>Method</Label>
-                                                    <Select v-model="entry.paymentMethod">
-                                                        <SelectTrigger>
-                                                            <SelectValue />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem v-for="option in paymentMethods" :key="option.value" :value="option.value">{{ option.label }}</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
+                                                    <Select v-model="entry.paymentMethod"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="option in paymentMethods" :key="option.value" :value="option.value">{{ option.label }}</SelectItem></SelectContent></Select>
                                                 </div>
                                                 <div class="grid gap-2">
                                                     <Label>Amount</Label>
@@ -2328,50 +2487,44 @@ onMounted(refreshPage);
                                                 </div>
                                                 <div class="grid gap-2">
                                                     <Label>Reference</Label>
-                                                    <Input v-model="entry.paymentReference" placeholder="Wallet, bank, or card reference" />
+                                                    <Input v-model="entry.paymentReference" placeholder="Optional" />
                                                 </div>
                                                 <div class="grid gap-2">
-                                                    <Label>Payment Note</Label>
-                                                    <Input v-model="entry.note" placeholder="Optional payment note" />
+                                                    <Label>Note</Label>
+                                                    <Input v-model="entry.note" placeholder="Optional" />
                                                 </div>
-                                            </div>
-                                            <div class="mt-3 flex justify-end">
-                                                <Button size="sm" variant="outline" @click="removeRetailPaymentEntry(entry.clientId)">Remove Payment</Button>
+                                            </PosFormGrid>
+                                            <div class="mt-2 flex justify-end">
+                                                <Button size="sm" variant="ghost" @click="removeRetailPaymentEntry(entry.clientId)">Remove</Button>
                                             </div>
                                         </div>
                                         <div class="grid gap-2">
-                                            <Label for="retail-note">Checkout Note</Label>
-                                            <Textarea id="retail-note" v-model="retailCheckoutNote" rows="2" placeholder="Optional direct-sale or shift note" />
+                                            <Label for="retail-note">Checkout note</Label>
+                                            <Textarea id="retail-note" v-model="retailCheckoutNote" rows="2" placeholder="Optional" />
                                         </div>
-                                        <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                            <div class="grid gap-2 text-sm sm:grid-cols-4">
-                                                <div class="flex items-center justify-between gap-2 sm:block"><p class="text-muted-foreground">Subtotal</p><p class="font-medium">{{ formatCurrency(retailSubtotal, retailSelectedCurrency) }}</p></div>
-                                                <div class="flex items-center justify-between gap-2 sm:block"><p class="text-muted-foreground">Discount</p><p class="font-medium">{{ formatCurrency(retailDiscountAmount, retailSelectedCurrency) }}</p></div>
-                                                <div class="flex items-center justify-between gap-2 sm:block"><p class="text-muted-foreground">Tax</p><p class="font-medium">{{ formatCurrency(retailTaxAmount, retailSelectedCurrency) }}</p></div>
-                                                <div class="flex items-center justify-between gap-2 sm:block"><p class="text-muted-foreground">Total</p><p class="text-lg font-semibold">{{ formatCurrency(retailTotal, retailSelectedCurrency) }}</p></div>
-                                            </div>
-                                        </div>
-                                        <div v-if="retailError" class="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{{ retailError }}</div>
-                                        <div v-if="retailSuccess" class="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200">
-                                            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                                                <p>{{ retailSuccess }}</p>
-                                                <div v-if="retailLatestSaleId" class="flex flex-wrap gap-2">
-                                                    <Button as-child size="sm" variant="outline" class="border-violet-300 bg-background text-violet-700 hover:bg-violet-50 dark:border-violet-800 dark:text-violet-200 dark:hover:bg-violet-950/40">
-                                                        <Link :href="saleReceiptHref(retailLatestSaleId)">Open Receipt</Link>
-                                                    </Button>
-                                                    <Button as-child size="sm" variant="outline" class="border-violet-300 bg-background text-violet-700 hover:bg-violet-50 dark:border-violet-800 dark:text-violet-200 dark:hover:bg-violet-950/40">
-                                                        <a :href="saleReceiptPdfHref(retailLatestSaleId)">Receipt PDF</a>
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="flex flex-wrap gap-2">
-                                            <Button :disabled="retailSubmitting || retailLineItems.length === 0 || !selectedRetailRegisterId" @click="submitRetailSale">{{ retailSubmitting ? 'Recording Retail Sale...' : 'Record Retail Sale' }}</Button>
-                                            <Button variant="outline" :disabled="retailLineItems.length === 0" @click="resetRetailCheckout">Clear Retail Basket</Button>
+                                    </PosCheckoutSection>
+                                    <div class="rounded-lg border bg-muted/20 p-4">
+                                        <PosFormGrid :columns="4">
+                                            <div><p class="text-xs text-muted-foreground">Subtotal</p><p class="font-medium">{{ formatCurrency(retailSubtotal, retailSelectedCurrency) }}</p></div>
+                                            <div><p class="text-xs text-muted-foreground">Discount</p><p class="font-medium">{{ formatCurrency(retailDiscountAmount, retailSelectedCurrency) }}</p></div>
+                                            <div><p class="text-xs text-muted-foreground">Tax</p><p class="font-medium">{{ formatCurrency(retailTaxAmount, retailSelectedCurrency) }}</p></div>
+                                            <div><p class="text-xs text-muted-foreground">Total</p><p class="text-lg font-semibold">{{ formatCurrency(retailTotal, retailSelectedCurrency) }}</p></div>
+                                        </PosFormGrid>
+                                    </div>
+                                    <div v-if="retailError" class="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{{ retailError }}</div>
+                                    <div v-if="retailSuccess" class="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200">
+                                        <p>{{ retailSuccess }}</p>
+                                        <div v-if="retailLatestSaleId" class="mt-2 flex gap-2">
+                                            <Button as-child size="sm" variant="outline"><Link :href="saleReceiptHref(retailLatestSaleId)">Receipt</Link></Button>
+                                            <Button as-child size="sm" variant="outline"><a :href="saleReceiptPdfHref(retailLatestSaleId)">PDF</a></Button>
                                         </div>
                                     </div>
-                                </div>
-                            </div>
+                                    <div class="flex flex-wrap gap-2">
+                                        <Button :disabled="retailSubmitting || retailLineItems.length === 0 || !selectedRetailRegisterId" @click="submitRetailSale">{{ retailSubmitting ? 'Recording…' : 'Record sale' }}</Button>
+                                        <Button variant="outline" :disabled="retailLineItems.length === 0" @click="resetRetailCheckout">Clear</Button>
+                                    </div>
+                                </template>
+                            </PosLaneWorkspace>
                         </template>
                     </CardContent>
                 </Card>
@@ -2386,23 +2539,21 @@ onMounted(refreshPage);
                     <CardContent class="space-y-4 pt-0">
                         <div v-if="!canReadSessions" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Cashier session detail stays hidden until `pos.sessions.read` is granted.</div>
                         <template v-else>
-                            <div class="grid gap-3 sm:grid-cols-3">
+                            <PosKpiStrip>
                                 <div class="rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-3 dark:border-emerald-900 dark:bg-emerald-950/30">
-                                    <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">Live Sessions</p>
-                                    <p class="mt-2 text-2xl font-semibold">{{ totalOpenSessions }}</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">Registers currently able to capture sales right now.</p>
+                                    <p class="text-xs uppercase tracking-wide text-muted-foreground">Live sessions</p>
+                                    <p class="mt-1 text-2xl font-semibold tabular-nums">{{ totalOpenSessions }}</p>
                                 </div>
-                                <div class="rounded-lg border border-border/70 bg-muted/40 px-4 py-3">
-                                    <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">Recent Closeouts</p>
-                                    <p class="mt-2 text-2xl font-semibold">{{ totalClosedSessions }}</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">{{ balancedClosedSessionCount }} balanced closeout{{ balancedClosedSessionCount === 1 ? '' : 's' }} in the current recent view.</p>
+                                <div class="rounded-lg border bg-muted/40 px-4 py-3">
+                                    <p class="text-xs uppercase tracking-wide text-muted-foreground">Recent closeouts</p>
+                                    <p class="mt-1 text-2xl font-semibold tabular-nums">{{ totalClosedSessions }}</p>
+                                    <p class="mt-0.5 text-xs text-muted-foreground">{{ balancedClosedSessionCount }} balanced</p>
                                 </div>
                                 <div class="rounded-lg border border-amber-200 bg-amber-50/70 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/30">
-                                    <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">Variance Alerts</p>
-                                    <p class="mt-2 text-2xl font-semibold">{{ closedSessionVarianceCount }}</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">{{ closedSessionVarianceCount === 0 ? 'Recent closeouts are balanced.' : `${sessionDiscrepancyLabel(closedSessionNetDiscrepancy, 'TZS')} across recent closeouts.` }}</p>
+                                    <p class="text-xs uppercase tracking-wide text-muted-foreground">Variance alerts</p>
+                                    <p class="mt-1 text-2xl font-semibold tabular-nums">{{ closedSessionVarianceCount }}</p>
                                 </div>
-                            </div>
+                            </PosKpiStrip>
 
                             <div v-if="sessionActionError" class="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{{ sessionActionError }}</div>
                             <div v-if="sessionActionSuccess" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">{{ sessionActionSuccess }}</div>
@@ -2416,29 +2567,29 @@ onMounted(refreshPage);
                                     <Badge variant="outline">{{ availableSessionRegisters.length }} register{{ availableSessionRegisters.length === 1 ? '' : 's' }} ready</Badge>
                                 </div>
                                 <div v-if="availableSessionRegisters.length === 0" class="mt-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">All visible registers already have an active session. Close one session before opening another.</div>
-                                <div v-else class="mt-4 grid gap-3 sm:grid-cols-2">
+                                <div v-else class="mt-4">
+                                <PosFormGrid>
                                     <div class="grid gap-2">
                                         <Label for="session-open-register">Register</Label>
                                         <Select v-model="sessionOpenRegisterId">
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Select register" />
-                                            </SelectTrigger>
+                                            <SelectTrigger><SelectValue placeholder="Select register" /></SelectTrigger>
                                             <SelectContent>
-                                            <SelectItem v-for="register in availableSessionRegisters" :key="register.id" :value="register.id">{{ `${register.registerName || 'Register'} (${register.registerCode || 'No Code'})` }}</SelectItem>
+                                                <SelectItem v-for="register in availableSessionRegisters" :key="register.id" :value="register.id">{{ `${register.registerName || 'Register'} (${register.registerCode || 'No Code'})` }}</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
                                     <div class="grid gap-2">
-                                        <Label for="session-opening-cash">Opening Cash</Label>
+                                        <Label for="session-opening-cash">Opening cash</Label>
                                         <Input id="session-opening-cash" v-model="sessionOpeningCashAmount" inputmode="decimal" placeholder="100" />
                                     </div>
                                     <div class="grid gap-2 sm:col-span-2">
-                                        <Label for="session-opening-note">Opening Note</Label>
-                                        <Textarea id="session-opening-note" v-model="sessionOpeningNote" rows="2" placeholder="Optional shift or drawer handover note" />
+                                        <Label for="session-opening-note">Opening note</Label>
+                                        <Textarea id="session-opening-note" v-model="sessionOpeningNote" rows="2" placeholder="Optional handover note" />
                                     </div>
-                                </div>
+                                </PosFormGrid>
                                 <div v-if="availableSessionRegisters.length > 0" class="mt-4 flex flex-wrap gap-2">
                                     <Button :disabled="sessionOpenSubmitting || !sessionOpenRegisterId" @click="submitOpenSession">{{ sessionOpenSubmitting ? 'Opening Session...' : 'Open Session' }}</Button>
+                                </div>
                                 </div>
                             </div>
 
@@ -2584,8 +2735,7 @@ onMounted(refreshPage);
                 </Card>
             </TabsContent>
 
-            <TabsContent value="cafeteria" class="mt-0">
-            <section class="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+            <TabsContent value="cafeteria" class="mt-0 space-y-4">
                 <Card class="border-sidebar-border/70 rounded-lg">
                     <CardHeader class="pb-3">
                         <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -2602,63 +2752,43 @@ onMounted(refreshPage);
                     <CardContent class="space-y-4 pt-0">
                         <div v-if="!canReadCafeteria" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Cafeteria POS is permission-scoped. This account can still use the shared POS shell, but the cafeteria counter stays hidden until `pos.cafeteria.read` is granted.</div>
                         <template v-else>
-                            <div class="grid gap-3 lg:grid-cols-3">
-                                <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                    <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">Step 1</p>
-                                    <p class="mt-2 text-sm font-semibold">Choose register</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">The cafeteria lane uses the same session and receipt foundation as the other cashier counters.</p>
-                                </div>
-                                <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                    <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">Step 2</p>
-                                    <p class="mt-2 text-sm font-semibold">Build tray</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">Search the menu, select active items, add quantity, and attach kitchen notes if needed.</p>
-                                </div>
-                                <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                    <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">Step 3</p>
-                                    <p class="mt-2 text-sm font-semibold">Collect payment</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">Take split payment, save the sale, and open the receipt or PDF for service handoff.</p>
-                                </div>
-                            </div>
-                            <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                <div class="grid gap-2">
-                                    <Label for="cafeteria-register">Checkout Register</Label>
+                            <PosFilterBar>
+                                <PosFilterField :xl-span="3">
+                                    <Label for="cafeteria-register">Register</Label>
                                     <Select v-model="selectedCafeteriaRegisterId">
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select register with open session" />
-                                        </SelectTrigger>
+                                        <SelectTrigger><SelectValue placeholder="Open session" /></SelectTrigger>
                                         <SelectContent>
-                                        <SelectItem v-for="register in cafeteriaReadyRegisters" :key="register.id" :value="register.id">{{ `${register.registerName || 'Register'} (${register.registerCode || 'No Code'})` }}</SelectItem>
+                                            <SelectItem v-for="register in cafeteriaReadyRegisters" :key="register.id" :value="register.id">{{ `${register.registerName || 'Register'} (${register.registerCode || 'No Code'})` }}</SelectItem>
                                         </SelectContent>
                                     </Select>
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="cafeteria-search">Menu Search</Label>
-                                    <Input id="cafeteria-search" v-model="cafeteriaSearch" placeholder="Search by name, code, or category" @keydown.enter.prevent="loadCafeteriaCatalog(true)" />
-                                </div>
-                                <div class="grid gap-2">
+                                </PosFilterField>
+                                <PosFilterField :xl-span="4">
+                                    <Label for="cafeteria-search">Menu search</Label>
+                                    <Input id="cafeteria-search" v-model="cafeteriaSearch" placeholder="Name, code, category" @keydown.enter.prevent="loadCafeteriaCatalog(true)" />
+                                </PosFilterField>
+                                <PosFilterField :xl-span="3">
                                     <Label for="cafeteria-category">Category</Label>
-                                    <Input id="cafeteria-category" v-model="cafeteriaCategory" placeholder="Beverages, snacks, meals" @keydown.enter.prevent="loadCafeteriaCatalog(true)" />
-                                </div>
-                                <div class="grid gap-2">
+                                    <Input id="cafeteria-category" v-model="cafeteriaCategory" placeholder="Filter category" @keydown.enter.prevent="loadCafeteriaCatalog(true)" />
+                                </PosFilterField>
+                                <PosFilterField :xl-span="2">
                                     <Label for="cafeteria-status">Status</Label>
                                     <Select v-model="cafeteriaStatusFilter">
-                                        <SelectTrigger :disabled="!canManageCafeteriaCatalog">
-                                            <SelectValue />
-                                        </SelectTrigger>
+                                        <SelectTrigger :disabled="!canManageCafeteriaCatalog"><SelectValue /></SelectTrigger>
                                         <SelectContent>
-                                        <SelectItem value="active">Active only</SelectItem>
-                                        <SelectItem value="inactive">Inactive only</SelectItem>
-                                        <SelectItem value="all">All statuses</SelectItem>
+                                            <SelectItem value="active">Active</SelectItem>
+                                            <SelectItem value="inactive">Inactive</SelectItem>
+                                            <SelectItem value="all">All</SelectItem>
                                         </SelectContent>
                                     </Select>
-                                </div>
-                            </div>
-                            <div class="flex flex-wrap gap-2">
-                                <Button variant="outline" :disabled="cafeteriaLoading" @click="loadCafeteriaCatalog(true)">{{ cafeteriaLoading ? 'Loading...' : 'Refresh Menu' }}</Button>
-                                <Badge variant="outline">Only active items can be sold</Badge>
-                            </div>
-                            <div class="grid gap-3 lg:grid-cols-[0.95fr_1.05fr]">
-                                <div class="space-y-3 rounded-lg border bg-muted/20 p-4">
+                                </PosFilterField>
+                                <PosFilterField :xl-span="12">
+                                    <Button variant="outline" size="sm" :disabled="cafeteriaLoading" @click="loadCafeteriaCatalog(true)">{{ cafeteriaLoading ? 'Loading…' : 'Refresh menu' }}</Button>
+                                </PosFilterField>
+                            </PosFilterBar>
+                            <PosLaneWorkspace>
+                                <template #catalog>
+                                <PosCheckoutSection title="Menu" description="Active items only at checkout.">
+                                <div class="max-h-[min(28rem,50vh)] space-y-3 overflow-y-auto pr-1">
                                     <div v-if="cafeteriaCatalogItems.length === 0" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">No cafeteria menu items matched the current search.</div>
                                     <div v-for="item in cafeteriaCatalogItems" :key="item.id" class="rounded-lg border px-4 py-3" :class="selectedCafeteriaMenuItemId === item.id ? 'border-sky-300 bg-sky-50/50 dark:border-sky-800 dark:bg-sky-950/30' : 'bg-background'">
                                         <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -2680,73 +2810,61 @@ onMounted(refreshPage);
                                         </div>
                                     </div>
                                 </div>
-                                <div class="space-y-3 rounded-lg border bg-background p-4">
+                                </PosCheckoutSection>
+                                </template>
+                                <template #checkout>
+                                    <PosCheckoutSection title="Add to tray" :description="selectedCafeteriaMenuItem?.itemName || 'Select a menu item'">
+                                        <PosFormGrid>
+                                            <div class="grid gap-2"><Label for="cafeteria-quantity">Qty</Label><Input id="cafeteria-quantity" v-model="cafeteriaQuantity" inputmode="decimal" placeholder="1" :disabled="!selectedCafeteriaMenuItem" /></div>
+                                            <div class="grid gap-2"><Label for="cafeteria-line-note">Kitchen note</Label><Input id="cafeteria-line-note" v-model="cafeteriaLineNote" placeholder="Optional" :disabled="!selectedCafeteriaMenuItem" /></div>
+                                        </PosFormGrid>
+                                        <div class="flex gap-2">
+                                            <Button :disabled="!selectedCafeteriaMenuItem" @click="addCafeteriaToBasket">Add to tray</Button>
+                                            <Button variant="outline" :disabled="!selectedCafeteriaMenuItemId" @click="selectedCafeteriaMenuItemId = ''">Clear</Button>
+                                        </div>
+                                    </PosCheckoutSection>
+                                    <PosCheckoutSection title="Tray">
+                                        <template #actions><Badge variant="outline">{{ cafeteriaBasketItems.length }}</Badge></template>
+                                        <div v-if="cafeteriaBasketItems.length === 0" class="text-sm text-muted-foreground">Tray is empty.</div>
+                                        <div v-for="item in cafeteriaBasketItems" v-else :key="item.clientId" class="flex justify-between gap-2 rounded-lg border px-3 py-2">
+                                            <div class="min-w-0"><p class="text-sm font-semibold">{{ item.itemName }}</p><p class="text-xs text-muted-foreground">Qty {{ item.quantity }} × {{ formatCurrency(item.unitPrice, cafeteriaSelectedCurrency) }}</p></div>
+                                            <Button size="sm" variant="outline" @click="removeCafeteriaBasketItem(item.clientId)">Remove</Button>
+                                        </div>
+                                    </PosCheckoutSection>
+                                    <PosCheckoutSection title="Customer & payment">
+                                        <PosFormGrid>
+                                            <div class="grid gap-2"><Label for="cafeteria-customer-name">Name</Label><Input id="cafeteria-customer-name" v-model="cafeteriaCustomerName" placeholder="Optional" /></div>
+                                            <div class="grid gap-2"><Label for="cafeteria-customer-reference">Reference</Label><Input id="cafeteria-customer-reference" v-model="cafeteriaCustomerReference" placeholder="Phone or badge" /></div>
+                                        </PosFormGrid>
+                                        <div class="mt-4 flex items-center justify-between">
+                                            <p class="text-sm font-medium">Payments</p>
+                                            <Button size="sm" variant="outline" @click="addCafeteriaPaymentEntry">Add</Button>
+                                        </div>
+                                        <div v-for="entry in cafeteriaPayments" :key="entry.clientId" class="mt-2 rounded-lg border p-3">
+                                            <PosFormGrid>
+                                                <div class="grid gap-2"><Label>Method</Label><Select v-model="entry.paymentMethod"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="option in paymentMethods" :key="option.value" :value="option.value">{{ option.label }}</SelectItem></SelectContent></Select></div>
+                                                <div class="grid gap-2"><Label>Amount</Label><Input v-model="entry.amount" inputmode="decimal" /></div>
+                                            </PosFormGrid>
+                                            <Button size="sm" variant="ghost" class="mt-1" @click="removeCafeteriaPaymentEntry(entry.clientId)">Remove</Button>
+                                        </div>
+                                        <div class="mt-3 grid gap-2"><Label for="cafeteria-note">Note</Label><Textarea id="cafeteria-note" v-model="cafeteriaCheckoutNote" rows="2" /></div>
+                                    </PosCheckoutSection>
                                     <div class="rounded-lg border bg-muted/20 p-4">
-                                        <p class="text-sm font-semibold">{{ selectedCafeteriaMenuItem?.itemName || 'Select one cafeteria menu item' }}</p>
-                                        <p class="text-xs text-muted-foreground">{{ selectedCafeteriaMenuItem ? `${formatCurrency(selectedCafeteriaMenuItem.unitPrice, cafeteriaSelectedCurrency)} / ${selectedCafeteriaMenuItem.unitLabel || 'unit'} / Tax ${Number(selectedCafeteriaMenuItem.taxRatePercent ?? 0).toFixed(2)}%` : 'Search the cafeteria menu, then set quantity before adding to the tray.' }}</p>
-                                        <div class="mt-4 grid gap-3 sm:grid-cols-2">
-                                            <div class="grid gap-2"><Label for="cafeteria-quantity">Quantity</Label><Input id="cafeteria-quantity" v-model="cafeteriaQuantity" inputmode="decimal" placeholder="1" :disabled="!selectedCafeteriaMenuItem" /></div>
-                                            <div class="grid gap-2"><Label for="cafeteria-line-note">Line Note</Label><Input id="cafeteria-line-note" v-model="cafeteriaLineNote" placeholder="Optional kitchen note" :disabled="!selectedCafeteriaMenuItem" /></div>
-                                        </div>
-                                        <div class="mt-4 flex flex-wrap gap-2"><Button :disabled="!selectedCafeteriaMenuItem" @click="addCafeteriaToBasket">Add To Tray</Button><Button variant="outline" :disabled="!selectedCafeteriaMenuItemId" @click="selectedCafeteriaMenuItemId = ''">Clear Selection</Button></div>
+                                        <PosFormGrid :columns="4">
+                                            <div><p class="text-xs text-muted-foreground">Subtotal</p><p class="font-medium">{{ formatCurrency(cafeteriaBasketSubtotal, cafeteriaSelectedCurrency) }}</p></div>
+                                            <div><p class="text-xs text-muted-foreground">Tax</p><p class="font-medium">{{ formatCurrency(cafeteriaBasketTax, cafeteriaSelectedCurrency) }}</p></div>
+                                            <div><p class="text-xs text-muted-foreground">Total</p><p class="text-lg font-semibold">{{ formatCurrency(cafeteriaBasketTotal, cafeteriaSelectedCurrency) }}</p></div>
+                                            <div><p class="text-xs text-muted-foreground">Paid</p><p class="font-medium">{{ formatCurrency(cafeteriaPaymentTotal, cafeteriaSelectedCurrency) }}</p></div>
+                                        </PosFormGrid>
                                     </div>
-                                    <div class="space-y-3 rounded-lg border bg-muted/20 p-4">
-                                        <div class="flex items-center justify-between gap-3"><p class="text-sm font-semibold">Cafeteria Tray</p><Badge variant="outline">{{ cafeteriaBasketItems.length }} lines</Badge></div>
-                                        <div v-if="cafeteriaBasketItems.length === 0" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Tray is empty. Add menu items here before checkout.</div>
-                                        <div v-for="item in cafeteriaBasketItems" v-else :key="item.clientId" class="rounded-lg border bg-background px-4 py-3">
-                                            <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                                <div><p class="text-sm font-semibold">{{ item.itemName || 'Tray item' }}</p><p class="text-xs text-muted-foreground">Qty {{ item.quantity }} x {{ formatCurrency(item.unitPrice, cafeteriaSelectedCurrency) }}<span v-if="item.taxRatePercent > 0"> / Tax {{ item.taxRatePercent.toFixed(2) }}%</span></p><p v-if="item.note" class="text-xs text-muted-foreground">{{ item.note }}</p></div>
-                                                <div class="flex items-center gap-2"><p class="text-sm font-medium">{{ formatCurrency(cafeteriaLineTotal(item), cafeteriaSelectedCurrency) }}</p><Button size="sm" variant="outline" @click="removeCafeteriaBasketItem(item.clientId)">Remove</Button></div>
-                                            </div>
-                                        </div>
+                                    <div v-if="cafeteriaError" class="text-sm text-destructive">{{ cafeteriaError }}</div>
+                                    <div v-if="cafeteriaSuccess" class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm dark:border-sky-800 dark:bg-sky-950/40">{{ cafeteriaSuccess }}</div>
+                                    <div class="flex gap-2">
+                                        <Button :disabled="cafeteriaSubmitting || cafeteriaBasketItems.length === 0 || !selectedCafeteriaRegisterId" @click="submitCafeteriaSale">{{ cafeteriaSubmitting ? 'Recording…' : 'Record sale' }}</Button>
+                                        <Button variant="outline" :disabled="cafeteriaBasketItems.length === 0" @click="resetCafeteriaCheckout">Clear</Button>
                                     </div>
-                                    <div class="space-y-3 rounded-lg border bg-background p-4">
-                                        <div class="grid gap-3 sm:grid-cols-2"><div class="grid gap-2"><Label for="cafeteria-customer-name">Customer Name</Label><Input id="cafeteria-customer-name" v-model="cafeteriaCustomerName" placeholder="Optional visitor or staff name" /></div><div class="grid gap-2"><Label for="cafeteria-customer-reference">Customer Reference</Label><Input id="cafeteria-customer-reference" v-model="cafeteriaCustomerReference" placeholder="Optional phone or badge number" /></div></div>
-                                        <div class="space-y-3 rounded-lg border bg-muted/20 p-4">
-                                            <div class="flex items-center justify-between gap-3">
-                                                <p class="text-sm font-semibold">Payment Split</p>
-                                                <Button size="sm" variant="outline" @click="addCafeteriaPaymentEntry">Add Payment</Button>
-                                            </div>
-                                            <div v-for="entry in cafeteriaPayments" :key="entry.clientId" class="rounded-lg border bg-background p-4">
-                                                <div class="grid gap-3 sm:grid-cols-2">
-                                                    <div class="grid gap-2"><Label>Method</Label><Select v-model="entry.paymentMethod"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="option in paymentMethods" :key="option.value" :value="option.value">{{ option.label }}</SelectItem></SelectContent></Select></div>
-                                                    <div class="grid gap-2"><Label>{{ entry.paymentMethod === 'cash' ? 'Amount Tendered' : 'Amount To Apply' }}</Label><Input v-model="entry.amount" inputmode="decimal" placeholder="0.00" /></div>
-                                                    <div class="grid gap-2"><Label>Reference</Label><Input v-model="entry.paymentReference" placeholder="Wallet, bank, or card reference" /></div>
-                                                    <div class="grid gap-2"><Label>Payment Note</Label><Input v-model="entry.note" placeholder="Optional payment note" /></div>
-                                                </div>
-                                                <div class="mt-3 flex justify-end">
-                                                    <Button size="sm" variant="outline" @click="removeCafeteriaPaymentEntry(entry.clientId)">Remove Payment</Button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="grid gap-2"><Label for="cafeteria-note">Checkout Note</Label><Textarea id="cafeteria-note" v-model="cafeteriaCheckoutNote" rows="2" placeholder="Optional kitchen or shift note" /></div>
-                                        <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                            <div class="grid gap-2 text-sm sm:grid-cols-4">
-                                                <div class="flex items-center justify-between gap-2 sm:block"><p class="text-muted-foreground">Subtotal</p><p class="font-medium">{{ formatCurrency(cafeteriaBasketSubtotal, cafeteriaSelectedCurrency) }}</p></div>
-                                                <div class="flex items-center justify-between gap-2 sm:block"><p class="text-muted-foreground">Tax</p><p class="font-medium">{{ formatCurrency(cafeteriaBasketTax, cafeteriaSelectedCurrency) }}</p></div>
-                                                <div class="flex items-center justify-between gap-2 sm:block"><p class="text-muted-foreground">Total</p><p class="text-lg font-semibold">{{ formatCurrency(cafeteriaBasketTotal, cafeteriaSelectedCurrency) }}</p></div>
-                                                <div class="flex items-center justify-between gap-2 sm:block"><p class="text-muted-foreground">Payments entered</p><p class="font-medium">{{ formatCurrency(cafeteriaPaymentTotal, cafeteriaSelectedCurrency) }}</p></div>
-                                            </div>
-                                            <p class="mt-2 text-xs text-muted-foreground">Cash payments may exceed the tray total for change. Non-cash entries should stay within the remaining balance.</p>
-                                        </div>
-                                        <div v-if="cafeteriaError" class="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{{ cafeteriaError }}</div>
-                                        <div v-if="cafeteriaSuccess" class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
-                                            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                                                <p>{{ cafeteriaSuccess }}</p>
-                                                <div v-if="cafeteriaLatestSaleId" class="flex flex-wrap gap-2">
-                                                    <Button as-child size="sm" variant="outline" class="border-sky-300 bg-background text-sky-700 hover:bg-sky-50 dark:border-sky-800 dark:text-sky-200 dark:hover:bg-sky-950/40">
-                                                        <Link :href="saleReceiptHref(cafeteriaLatestSaleId)">Open Receipt</Link>
-                                                    </Button>
-                                                    <Button as-child size="sm" variant="outline" class="border-sky-300 bg-background text-sky-700 hover:bg-sky-50 dark:border-sky-800 dark:text-sky-200 dark:hover:bg-sky-950/40">
-                                                        <a :href="saleReceiptPdfHref(cafeteriaLatestSaleId)">Receipt PDF</a>
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="flex flex-wrap gap-2"><Button :disabled="cafeteriaSubmitting || cafeteriaBasketItems.length === 0 || !selectedCafeteriaRegisterId" @click="submitCafeteriaSale">{{ cafeteriaSubmitting ? 'Recording Cafeteria Sale...' : 'Record Cafeteria Sale' }}</Button><Button variant="outline" :disabled="cafeteriaBasketItems.length === 0" @click="resetCafeteriaCheckout">Clear Tray</Button></div>
-                                    </div>
-                                </div>
-                            </div>
+                                </template>
+                            </PosLaneWorkspace>
                         </template>
                     </CardContent>
                 </Card>
@@ -2758,7 +2876,7 @@ onMounted(refreshPage);
                     <CardContent class="space-y-4 pt-0">
                         <div v-if="!canManageCafeteriaCatalog" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Menu catalog management stays hidden until `pos.cafeteria.manage-catalog` is granted.</div>
                         <template v-else>
-                            <div class="grid gap-3 sm:grid-cols-2">
+                            <PosFormGrid>
                                 <div class="grid gap-2"><Label for="cafeteria-editor-code">Item Code</Label><Input id="cafeteria-editor-code" v-model="cafeteriaEditorItemCode" placeholder="CAF-COFFEE" /></div>
                                 <div class="grid gap-2"><Label for="cafeteria-editor-name">Item Name</Label><Input id="cafeteria-editor-name" v-model="cafeteriaEditorItemName" placeholder="House Coffee" /></div>
                                 <div class="grid gap-2"><Label for="cafeteria-editor-category">Category</Label><Input id="cafeteria-editor-category" v-model="cafeteriaEditorCategory" placeholder="Beverages" /></div>
@@ -2767,9 +2885,9 @@ onMounted(refreshPage);
                                 <div class="grid gap-2"><Label for="cafeteria-editor-tax">Tax Rate %</Label><Input id="cafeteria-editor-tax" v-model="cafeteriaEditorTaxRatePercent" inputmode="decimal" placeholder="0" /></div>
                                 <div class="grid gap-2"><Label for="cafeteria-editor-status">Status</Label><Select v-model="cafeteriaEditorStatus"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select></div>
                                 <div class="grid gap-2"><Label for="cafeteria-editor-sort">Sort Order</Label><Input id="cafeteria-editor-sort" v-model="cafeteriaEditorSortOrder" inputmode="numeric" placeholder="0" /></div>
-                            </div>
-                            <div class="grid gap-2"><Label for="cafeteria-editor-status-reason">Status Reason</Label><Input id="cafeteria-editor-status-reason" v-model="cafeteriaEditorStatusReason" placeholder="Why this item is inactive or constrained" /></div>
-                            <div class="grid gap-2"><Label for="cafeteria-editor-description">Description</Label><Textarea id="cafeteria-editor-description" v-model="cafeteriaEditorDescription" rows="3" placeholder="Short service or kitchen note for this menu item" /></div>
+                                <div class="grid gap-2 sm:col-span-2"><Label for="cafeteria-editor-status-reason">Status Reason</Label><Input id="cafeteria-editor-status-reason" v-model="cafeteriaEditorStatusReason" placeholder="Why inactive" /></div>
+                                <div class="grid gap-2 sm:col-span-2"><Label for="cafeteria-editor-description">Description</Label><Textarea id="cafeteria-editor-description" v-model="cafeteriaEditorDescription" rows="2" placeholder="Kitchen note" /></div>
+                            </PosFormGrid>
                             <div class="flex flex-wrap gap-2"><Button :disabled="cafeteriaCatalogSaving" @click="submitCafeteriaCatalogItem">{{ cafeteriaCatalogSaving ? 'Saving...' : (isEditingCafeteriaCatalogItem ? 'Update Menu Item' : 'Create Menu Item') }}</Button><Button variant="outline" @click="resetCafeteriaCatalogEditor">Reset Form</Button></div>
                             <div class="space-y-3 rounded-lg border bg-muted/20 p-4">
                                 <div class="flex items-center justify-between gap-3"><p class="text-sm font-semibold">Loaded Menu Items</p><Badge variant="outline">{{ cafeteriaCatalogItems.length }} visible</Badge></div>
@@ -2784,7 +2902,6 @@ onMounted(refreshPage);
                         </template>
                     </CardContent>
                 </Card>
-            </section>
             </TabsContent>
 
             <TabsContent value="overview" class="mt-0 space-y-4">
@@ -2799,32 +2916,12 @@ onMounted(refreshPage);
                         </div>
                     </CardHeader>
                     <CardContent class="space-y-4 pt-0">
-                        <div class="grid gap-3 lg:grid-cols-4">
-                            <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">1. Ready Counter</p>
-                                <p class="mt-2 text-sm font-semibold">Check register and session</p>
-                                <p class="mt-1 text-xs text-muted-foreground">A cashier session must be open before any POS lane can issue receipts.</p>
-                                <div class="mt-3">
-                                    <Button size="sm" variant="outline" @click="activeTab = 'sessions'">Open Sessions</Button>
-                                </div>
-                            </div>
-                            <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">2. Choose Lane</p>
-                                <p class="mt-2 text-sm font-semibold">Pick the right counter workflow</p>
-                                <p class="mt-1 text-xs text-muted-foreground">OTC pharmacy, cafeteria, and retail are separate because they serve different operational rules.</p>
-                            </div>
-                            <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">3. Capture Sale</p>
-                                <p class="mt-2 text-sm font-semibold">Build basket and take payment</p>
-                                <p class="mt-1 text-xs text-muted-foreground">Each lane keeps basket building and payment capture in one place to reduce cashier backtracking.</p>
-                            </div>
-                            <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">4. Review History</p>
-                                <p class="mt-2 text-sm font-semibold">Receipt, refund, and closeout</p>
-                                <p class="mt-1 text-xs text-muted-foreground">Use POS sales history and session closeout when reconciling drawer activity or correcting mistakes.</p>
-                            </div>
-                        </div>
-                        <div class="grid gap-3 lg:grid-cols-4">
+                        <p class="rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+                            <span class="font-medium text-foreground">Cashier flow:</span>
+                            open a session → pick a lane → build basket → take payment → use History for receipts and refunds.
+                            <Button size="sm" variant="link" class="h-auto p-0 align-baseline" @click="activeTab = 'sessions'">Open sessions</Button>
+                        </p>
+                        <div class="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))]">
                             <div class="rounded-lg border bg-background px-4 py-3 shadow-sm">
                                 <div class="flex items-center justify-between gap-2">
                                     <div>
@@ -2862,6 +2959,22 @@ onMounted(refreshPage);
                                 <p class="mt-3 text-xs text-muted-foreground">{{ cafeteriaCatalogItems.length }} menu item{{ cafeteriaCatalogItems.length === 1 ? '' : 's' }} currently loaded.</p>
                                 <div class="mt-3">
                                     <Button size="sm" :disabled="!canReadCafeteria" @click="activeTab = 'cafeteria'">Open Cafeteria</Button>
+                                </div>
+                            </div>
+                            <div
+                                v-if="canReadLabQuick"
+                                class="rounded-lg border border-cyan-200 bg-cyan-50/50 px-4 py-3 shadow-sm dark:border-cyan-900 dark:bg-cyan-950/30"
+                            >
+                                <div class="flex items-center justify-between gap-2">
+                                    <div>
+                                        <p class="text-sm font-semibold">Lab payment</p>
+                                        <p class="mt-1 text-xs text-muted-foreground">Pay for lab tests at the counter (same patient per checkout).</p>
+                                    </div>
+                                    <Badge variant="secondary">POS lane</Badge>
+                                </div>
+                                <p class="mt-3 text-xs text-muted-foreground">{{ labQuickBasketItems.length }} test{{ labQuickBasketItems.length === 1 ? '' : 's' }} in basket if you started one.</p>
+                                <div class="mt-3">
+                                    <Button size="sm" @click="activeTab = 'lab-quick'">Open lab payment</Button>
                                 </div>
                             </div>
                             <div class="rounded-lg border border-rose-200 bg-rose-50/70 px-4 py-3 shadow-sm dark:border-rose-900 dark:bg-rose-950/30">
@@ -2916,34 +3029,8 @@ onMounted(refreshPage);
             </TabsContent>
 
             <TabsContent value="operations" class="mt-0 space-y-4">
-                <Card class="border-sidebar-border/70 rounded-lg">
-                    <CardHeader class="pb-3">
-                        <div class="flex items-center justify-between gap-3">
-                            <div>
-                                <CardTitle class="flex items-center gap-2 text-base"><AppIcon name="briefcase-business" class="size-5 text-sky-600 dark:text-sky-400" />Supervisor Operations</CardTitle>
-                                <CardDescription>Use this area for register setup, sales search, receipt history, refunds, void review, and closeout investigation without crowding the cashier lane.</CardDescription>
-                            </div>
-                            <Badge variant="outline">Backoffice controls</Badge>
-                        </div>
-                    </CardHeader>
-                    <CardContent class="pt-0">
-                        <div class="grid gap-3 lg:grid-cols-3">
-                            <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                <p class="text-sm font-semibold">Register administration</p>
-                                <p class="mt-1 text-sm text-muted-foreground">Create, edit, activate, and monitor counter endpoints used by cashiers.</p>
-                            </div>
-                            <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                <p class="text-sm font-semibold">Sales investigation</p>
-                                <p class="mt-1 text-sm text-muted-foreground">Search by sale, receipt, customer, channel, date, register, and cashier session.</p>
-                            </div>
-                            <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                <p class="text-sm font-semibold">Audit-safe controls</p>
-                                <p class="mt-1 text-sm text-muted-foreground">Handle refunds and voids from a dedicated supervisor surface with receipt history still visible.</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                <div class="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+                <p class="text-sm text-muted-foreground">Register setup, sales search, refunds, and void review for supervisors.</p>
+                <div class="flex flex-col gap-4">
                 <Card class="border-sidebar-border/70 rounded-lg">
                     <CardHeader class="pb-3">
                         <div class="flex items-center justify-between gap-3">
@@ -2955,28 +3042,26 @@ onMounted(refreshPage);
                         </div>
                     </CardHeader>
                     <CardContent class="space-y-4 pt-0">
-                        <div class="grid gap-3 md:grid-cols-[1fr_220px_auto]">
-                            <div class="grid gap-2">
-                                <Label for="register-search">Register Search</Label>
-                                <Input id="register-search" v-model="registerSearch" placeholder="Search by code, name, or location" @keydown.enter.prevent="loadRegisters" />
-                            </div>
-                            <div class="grid gap-2">
+                        <PosFilterBar>
+                            <PosFilterField :xl-span="8">
+                                <Label for="register-search">Register search</Label>
+                                <Input id="register-search" v-model="registerSearch" placeholder="Code, name, location" @keydown.enter.prevent="loadRegisters" />
+                            </PosFilterField>
+                            <PosFilterField :xl-span="4">
                                 <Label for="register-status-filter">Status</Label>
                                 <Select v-model="registerStatusFilter">
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="all">All registers</SelectItem>
+                                        <SelectItem value="all">All</SelectItem>
                                         <SelectItem value="active">Active</SelectItem>
                                         <SelectItem value="inactive">Inactive</SelectItem>
                                     </SelectContent>
                                 </Select>
-                            </div>
-                            <div class="flex items-end gap-2">
-                                <Button variant="outline" @click="loadRegisters">Refresh Registers</Button>
-                            </div>
-                        </div>
+                            </PosFilterField>
+                            <PosFilterField :xl-span="12">
+                                <Button variant="outline" size="sm" @click="loadRegisters">Refresh registers</Button>
+                            </PosFilterField>
+                        </PosFilterBar>
                         <div v-if="canManageRegisters" class="rounded-lg border bg-muted/20 p-4">
                             <div class="flex flex-wrap items-center justify-between gap-3">
                                 <div>
@@ -2985,17 +3070,16 @@ onMounted(refreshPage);
                                 </div>
                                 <Button v-if="isEditingRegister" size="sm" variant="outline" @click="resetRegisterEditor">New Register</Button>
                             </div>
-                            <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                <div class="grid gap-2"><Label for="register-editor-code">Register Code</Label><Input id="register-editor-code" v-model="registerEditorCode" placeholder="POS-ER-01" /></div>
-                                <div class="grid gap-2"><Label for="register-editor-name">Register Name</Label><Input id="register-editor-name" v-model="registerEditorName" placeholder="Emergency Counter" /></div>
-                                <div class="grid gap-2"><Label for="register-editor-location">Location</Label><Input id="register-editor-location" v-model="registerEditorLocation" placeholder="Emergency, Pharmacy, Cafeteria" /></div>
-                                <div class="grid gap-2"><Label for="register-editor-currency">Default Currency</Label><Input id="register-editor-currency" v-model="registerEditorCurrency" placeholder="TZS" /></div>
+                            <div class="mt-4">
+                            <PosFormGrid>
+                                <div class="grid gap-2"><Label for="register-editor-code">Code</Label><Input id="register-editor-code" v-model="registerEditorCode" placeholder="POS-ER-01" /></div>
+                                <div class="grid gap-2"><Label for="register-editor-name">Name</Label><Input id="register-editor-name" v-model="registerEditorName" placeholder="Emergency counter" /></div>
+                                <div class="grid gap-2"><Label for="register-editor-location">Location</Label><Input id="register-editor-location" v-model="registerEditorLocation" placeholder="Building / desk" /></div>
+                                <div class="grid gap-2"><Label for="register-editor-currency">Currency</Label><Input id="register-editor-currency" v-model="registerEditorCurrency" placeholder="TZS" /></div>
                                 <div class="grid gap-2"><Label for="register-editor-status">Status</Label><Select v-model="registerEditorStatus"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select></div>
-                                <div class="grid gap-2"><Label for="register-editor-status-reason">Status Reason</Label><Input id="register-editor-status-reason" v-model="registerEditorStatusReason" placeholder="Required when inactive" /></div>
-                            </div>
-                            <div class="mt-3 grid gap-2">
-                                <Label for="register-editor-notes">Notes</Label>
-                                <Textarea id="register-editor-notes" v-model="registerEditorNotes" rows="2" placeholder="Optional audit-safe note for this counter" />
+                                <div class="grid gap-2"><Label for="register-editor-status-reason">Status reason</Label><Input id="register-editor-status-reason" v-model="registerEditorStatusReason" placeholder="If inactive" /></div>
+                                <div class="grid gap-2 sm:col-span-2"><Label for="register-editor-notes">Notes</Label><Textarea id="register-editor-notes" v-model="registerEditorNotes" rows="2" placeholder="Optional" /></div>
+                            </PosFormGrid>
                             </div>
                             <div v-if="registerError" class="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{{ registerError }}</div>
                             <div v-if="registerSuccess" class="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">{{ registerSuccess }}</div>
@@ -3041,16 +3125,40 @@ onMounted(refreshPage);
                     <CardContent class="space-y-4 pt-0">
                         <div v-if="!canReadSales" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Sales search and receipt history stay hidden until `pos.sales.read` is granted.</div>
                         <template v-else>
-                            <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                <div class="grid gap-2"><Label for="sales-search">Search</Label><Input id="sales-search" v-model="salesSearch" placeholder="Sale, receipt, customer, reference" @keydown.enter.prevent="applySalesFilters" /></div>
-                                <div class="grid gap-2"><Label for="sales-channel">Channel</Label><Select :model-value="salesChannelFilter || '__all__'" @update:model-value="salesChannelFilter = $event === '__all__' ? '' : String($event)"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__all__">All channels</SelectItem><SelectItem value="general_retail">General retail</SelectItem><SelectItem value="pharmacy_otc">Pharmacy OTC</SelectItem><SelectItem value="cafeteria">Cafeteria</SelectItem><SelectItem value="lab_quick">Legacy lab quick</SelectItem></SelectContent></Select></div>
-                                <div class="grid gap-2"><Label for="sales-status">Status</Label><Select :model-value="salesStatusFilter || '__all__'" @update:model-value="salesStatusFilter = $event === '__all__' ? '' : String($event)"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__all__">All statuses</SelectItem><SelectItem value="completed">Completed</SelectItem><SelectItem value="voided">Voided</SelectItem><SelectItem value="refunded">Refunded</SelectItem></SelectContent></Select></div>
-                                <div class="grid gap-2"><Label for="sales-payment-method">Payment Method</Label><Select :model-value="salesPaymentMethodFilter || '__all__'" @update:model-value="salesPaymentMethodFilter = $event === '__all__' ? '' : String($event)"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__all__">All methods</SelectItem><SelectItem v-for="option in paymentMethods" :key="option.value" :value="option.value">{{ option.label }}</SelectItem></SelectContent></Select></div>
-                                <div class="grid gap-2"><Label for="sales-register-filter">Register</Label><Select :model-value="salesRegisterFilter || '__all__'" @update:model-value="salesRegisterFilter = $event === '__all__' ? '' : String($event)"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__all__">All registers</SelectItem><SelectItem v-for="register in registerRows" :key="register.id" :value="register.id">{{ `${register.registerName || 'Register'} (${register.registerCode || 'No Code'})` }}</SelectItem></SelectContent></Select></div>
-                                <div class="grid gap-2"><Label for="sales-date-from">Date From</Label><Input id="sales-date-from" v-model="salesDateFrom" type="date" /></div>
-                                <div class="grid gap-2"><Label for="sales-date-to">Date To</Label><Input id="sales-date-to" v-model="salesDateTo" type="date" /></div>
-                                <div class="grid gap-2"><Label for="sales-session-filter">Session Scope</Label><Input id="sales-session-filter" :model-value="salesSessionFilter" readonly placeholder="Set from Sessions tab or clear below" /></div>
-                            </div>
+                            <PosFilterBar>
+                                <PosFilterField :xl-span="6">
+                                    <Label for="sales-search">Search</Label>
+                                    <Input id="sales-search" v-model="salesSearch" placeholder="Sale, receipt, customer" @keydown.enter.prevent="applySalesFilters" />
+                                </PosFilterField>
+                                <PosFilterField :xl-span="3">
+                                    <Label for="sales-channel">Channel</Label>
+                                    <Select :model-value="salesChannelFilter || '__all__'" @update:model-value="salesChannelFilter = $event === '__all__' ? '' : String($event)"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__all__">All</SelectItem><SelectItem value="general_retail">Retail</SelectItem><SelectItem value="pharmacy_otc">OTC</SelectItem><SelectItem value="cafeteria">Cafeteria</SelectItem><SelectItem value="lab_quick">Lab quick</SelectItem></SelectContent></Select>
+                                </PosFilterField>
+                                <PosFilterField :xl-span="3">
+                                    <Label for="sales-status">Status</Label>
+                                    <Select :model-value="salesStatusFilter || '__all__'" @update:model-value="salesStatusFilter = $event === '__all__' ? '' : String($event)"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__all__">All</SelectItem><SelectItem value="completed">Completed</SelectItem><SelectItem value="voided">Voided</SelectItem><SelectItem value="refunded">Refunded</SelectItem></SelectContent></Select>
+                                </PosFilterField>
+                                <PosFilterField :xl-span="3">
+                                    <Label for="sales-payment-method">Payment</Label>
+                                    <Select :model-value="salesPaymentMethodFilter || '__all__'" @update:model-value="salesPaymentMethodFilter = $event === '__all__' ? '' : String($event)"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__all__">All</SelectItem><SelectItem v-for="option in paymentMethods" :key="option.value" :value="option.value">{{ option.label }}</SelectItem></SelectContent></Select>
+                                </PosFilterField>
+                                <PosFilterField :xl-span="3">
+                                    <Label for="sales-register-filter">Register</Label>
+                                    <Select :model-value="salesRegisterFilter || '__all__'" @update:model-value="salesRegisterFilter = $event === '__all__' ? '' : String($event)"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__all__">All</SelectItem><SelectItem v-for="register in registerRows" :key="register.id" :value="register.id">{{ register.registerCode || register.registerName }}</SelectItem></SelectContent></Select>
+                                </PosFilterField>
+                                <PosFilterField :xl-span="3">
+                                    <Label for="sales-date-from">From</Label>
+                                    <Input id="sales-date-from" v-model="salesDateFrom" type="date" />
+                                </PosFilterField>
+                                <PosFilterField :xl-span="3">
+                                    <Label for="sales-date-to">To</Label>
+                                    <Input id="sales-date-to" v-model="salesDateTo" type="date" />
+                                </PosFilterField>
+                                <PosFilterField :xl-span="6">
+                                    <Label for="sales-session-filter">Session</Label>
+                                    <Input id="sales-session-filter" :model-value="salesSessionFilter" readonly placeholder="From Sessions tab" />
+                                </PosFilterField>
+                            </PosFilterBar>
                             <div class="flex flex-wrap gap-2">
                                 <Button variant="outline" :disabled="salesLoading" @click="applySalesFilters">{{ salesLoading ? 'Loading...' : 'Apply Filters' }}</Button>
                                 <Button variant="outline" :disabled="salesLoading" @click="clearSalesFilters">Clear Filters</Button>
@@ -3058,8 +3166,8 @@ onMounted(refreshPage);
                             <div v-if="salesLoading" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Loading filtered POS sales...</div>
                             <div v-else-if="salesRows.length === 0" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">No POS sales matched the current filters.</div>
                             <div v-for="sale in salesRows" v-else :key="sale.id" class="space-y-3 rounded-lg border bg-background px-4 py-3 shadow-sm">
-                                <div class="grid gap-3 md:grid-cols-[1.1fr_0.7fr_0.8fr]">
-                                    <div>
+                                <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                    <div class="min-w-0 flex-1">
                                         <div class="flex flex-wrap items-center gap-2">
                                             <p class="text-sm font-semibold">{{ sale.saleNumber || 'POS Sale' }}</p>
                                             <Badge variant="outline">{{ sale.receiptNumber || 'No Receipt' }}</Badge>
