@@ -98,7 +98,12 @@ class InventoryExtendedController extends Controller
         $filters = $request->all();
         $context = $departmentScopeResolver->contextForUser($request->user());
         if (! (bool) ($context['canSelectAnyDepartment'] ?? false)) {
-            $filters['departmentId'] = $context['lockedDepartment']['id'] ?? '__unassigned_department__';
+            $lockedDepartmentId = $context['lockedDepartment']['id'] ?? null;
+            if (! $lockedDepartmentId) {
+                return response()->json($this->emptyDepartmentRequisitionListPayload($request));
+            }
+
+            $filters['departmentId'] = $lockedDepartmentId;
             unset($filters['department']);
         }
 
@@ -173,7 +178,12 @@ class InventoryExtendedController extends Controller
         $filters = $request->all();
         $context = $departmentScopeResolver->contextForUser($request->user());
         if (! (bool) ($context['canSelectAnyDepartment'] ?? false)) {
-            $filters['departmentId'] = $context['lockedDepartment']['id'] ?? '__unassigned_department__';
+            $lockedDepartmentId = $context['lockedDepartment']['id'] ?? null;
+            if (! $lockedDepartmentId) {
+                return response()->json($this->emptyShortageQueuePayload($request));
+            }
+
+            $filters['departmentId'] = $lockedDepartmentId;
         }
 
         $result = $useCase->execute($filters);
@@ -1029,6 +1039,34 @@ class InventoryExtendedController extends Controller
                 'issued_quantity' => $line['issuedQuantity'] ?? null,
             ], $validated['lines']);
         }
+
+        return $payload;
+    }
+
+    private function emptyDepartmentRequisitionListPayload(Request $request): array
+    {
+        $page = max(1, (int) $request->query('page', 1));
+        $perPage = max(1, min(100, (int) $request->query('perPage', 20)));
+
+        return [
+            'data' => [],
+            'meta' => [
+                'currentPage' => $page,
+                'lastPage' => 1,
+                'perPage' => $perPage,
+                'total' => 0,
+            ],
+        ];
+    }
+
+    private function emptyShortageQueuePayload(Request $request): array
+    {
+        $payload = $this->emptyDepartmentRequisitionListPayload($request);
+        $readiness = $request->query('readiness', 'all');
+
+        $payload['meta']['readyLineCount'] = 0;
+        $payload['meta']['waitingLineCount'] = 0;
+        $payload['meta']['readiness'] = in_array($readiness, ['ready', 'waiting'], true) ? $readiness : 'all';
 
         return $payload;
     }
