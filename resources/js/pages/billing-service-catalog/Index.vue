@@ -230,7 +230,7 @@ const filters = reactive({
     lifecycle: '',
     sortBy: 'serviceName',
     sortDir: 'asc' as 'asc' | 'desc',
-    perPage: 15,
+    perPage: 10,
     page: 1,
 });
 
@@ -333,7 +333,7 @@ const catalogActiveFilterChips = computed(() => {
     }
     if (filters.sortBy !== 'serviceName') chips.push(`Sort: ${formatEnumLabel(filters.sortBy)}`);
     if (filters.sortDir !== 'asc') chips.push('Descending');
-    if (filters.perPage !== 15) chips.push(`${filters.perPage} per page`);
+    if (filters.perPage !== 10) chips.push(`${filters.perPage} per page`);
 
     return chips;
 });
@@ -346,7 +346,7 @@ const catalogAdvancedFilterCount = computed(() => {
     if (filters.lifecycle) count += 1;
     if (filters.sortBy !== 'serviceName') count += 1;
     if (filters.sortDir !== 'asc') count += 1;
-    if (filters.perPage !== 15) count += 1;
+    if (filters.perPage !== 10) count += 1;
     return count;
 });
 const listFilterHintText = computed(() =>
@@ -2025,7 +2025,7 @@ function updateCatalogSortDirFilter(value: string): void {
 
 function updateCatalogPerPageFilter(value: string): void {
     const parsed = Number.parseInt(value, 10);
-    filters.perPage = Number.isFinite(parsed) ? parsed : 15;
+    filters.perPage = Number.isFinite(parsed) ? parsed : 10;
     filters.page = 1;
     void loadItems();
 }
@@ -2039,7 +2039,7 @@ function resetFilters(): void {
     filters.lifecycle = '';
     filters.sortBy = 'serviceName';
     filters.sortDir = 'asc';
-    filters.perPage = 15;
+    filters.perPage = 10;
     filters.page = 1;
     filtersSheetOpen.value = false;
     void loadItems();
