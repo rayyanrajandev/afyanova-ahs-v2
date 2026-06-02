@@ -41,6 +41,7 @@ import {
 import type { IconArray } from '@hugeicons/vue';
 import {
     Activity,
+    Archive,
     AlertTriangle,
     ArrowRight,
     ArrowUpRight,
@@ -72,6 +73,7 @@ import {
     Mail,
     MapPin,
     Package,
+    PackageCheck,
     PanelRightOpen,
     Phone,
     Printer,
@@ -86,6 +88,7 @@ import {
     SlidersHorizontal,
     SquarePen,
     Stethoscope,
+    Truck,
     Undo2,
     User,
     UserX,
@@ -97,6 +100,7 @@ import type { IconPack } from '@/types';
 
 export type AppIconName =
     | 'activity'
+    | 'archive'
     | 'alert-triangle'
     | 'arrow-right'
     | 'arrow-up-right'
@@ -131,6 +135,7 @@ export type AppIconName =
     | 'mail'
     | 'map-pin'
     | 'package'
+    | 'package-check'
     | 'panel-right-open'
     | 'pencil'
     | 'phone'
@@ -145,6 +150,7 @@ export type AppIconName =
     | 'shield-check'
     | 'sliders-horizontal'
     | 'stethoscope'
+    | 'truck'
     | 'undo-2'
     | 'user'
     | 'user-x'
@@ -153,6 +159,7 @@ export type AppIconName =
 
 const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     activity: Activity,
+    archive: Archive,
     'alert-triangle': AlertTriangle,
     'arrow-right': ArrowRight,
     'arrow-up-right': ArrowUpRight,
@@ -187,6 +194,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     mail: Mail,
     'map-pin': MapPin,
     package: Package,
+    'package-check': PackageCheck,
     'panel-right-open': PanelRightOpen,
     pencil: SquarePen,
     phone: Phone,
@@ -201,6 +209,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     'shield-check': ShieldCheck,
     'sliders-horizontal': SlidersHorizontal,
     stethoscope: Stethoscope,
+    truck: Truck,
     'undo-2': Undo2,
     user: User,
     'user-x': UserX,
@@ -210,6 +219,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
 
 const HUGE_ICON_MAP = {
     activity: ActivityIcon,
+    archive: Folder01Icon,
     'alert-triangle': Alert01Icon,
     'arrow-right': ArrowRight01Icon,
     'arrow-up-right': ArrowRight01Icon,
@@ -244,6 +254,7 @@ const HUGE_ICON_MAP = {
     mail: Mail01Icon,
     'map-pin': MapPinIcon,
     package: PackageIcon,
+    'package-check': CheckmarkCircle01Icon,
     'panel-right-open': EyeIcon,
     pencil: Pen01Icon,
     phone: UserIcon,
@@ -258,6 +269,7 @@ const HUGE_ICON_MAP = {
     'shield-check': SecurityCheckIcon,
     'sliders-horizontal': SlidersHorizontalIcon,
     stethoscope: StethoscopeIcon,
+    truck: PackageIcon,
     'undo-2': ArrowLeft01Icon,
     user: UserIcon,
     'user-x': UserRemove01Icon,

@@ -11,6 +11,7 @@ import SearchableSelectField from '@/components/forms/SearchableSelectField.vue'
 import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vue';
 import InventoryEmptyState from '@/components/inventory/InventoryEmptyState.vue';
 import InventoryItemLookupField from '@/components/inventory/InventoryItemLookupField.vue';
+import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePageHeader.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -34,7 +35,6 @@ import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
 import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersistence';
-import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePageHeader.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
 import { generateRequestKey } from '@/lib/idempotency';
@@ -5902,25 +5902,9 @@ onMounted(async () => {
                 back-label="Supply chain home"
             >
                 <template #actions>
-                    <Button variant="outline" size="sm" :disabled="loading" class="h-8 gap-1.5" @click="reloadAll()">
-                        <AppIcon name="refresh-cw" class="size-3.5" />
-                        {{ loading ? 'Refreshing…' : 'Refresh section' }}
-                    </Button>
-                    <Button v-if="canManageItems" size="sm" variant="outline" class="h-8 gap-1.5" :disabled="!canLaunchCreateItem" @click="openCreateItemDialog">
-                        <AppIcon name="layout-list" class="size-3.5" />
-                        Catalog item
-                    </Button>
-                    <Button v-if="canCreateMovement" size="sm" variant="outline" class="h-8 gap-1.5" :disabled="!canLaunchStockMovement" @click="openStockMovementDialog">
-                        <AppIcon name="arrow-up-down" class="size-3.5" />
-                        Record movement
-                    </Button>
                     <Button v-if="canReconcileStock" size="sm" variant="outline" class="h-8 gap-1.5" :disabled="!canLaunchReconciliation" @click="openReconcileDialog">
                         <AppIcon name="shield-check" class="size-3.5" />
                         Reconcile stock
-                    </Button>
-                    <Button v-if="canCreateRequest" size="sm" class="h-8 gap-1.5" :disabled="!canLaunchProcurementRequest" @click="openCreateProcurementDialog">
-                        <AppIcon name="plus" class="size-3.5" />
-                        Procurement request
                     </Button>
                     <Button v-if="isStoreOperations" size="sm" variant="outline" class="h-8 gap-1.5" @click="barcodeScannerOpen = true">
                         <AppIcon name="search" class="size-3.5" />
@@ -5942,6 +5926,7 @@ onMounted(async () => {
                                 <div class="flex items-center justify-between"><span>Stock movement</span><KbdGroup><Kbd>M</Kbd></KbdGroup></div>
                                 <div class="flex items-center justify-between"><span>Procurement request</span><KbdGroup><Kbd>P</Kbd></KbdGroup></div>
                                 <div class="flex items-center justify-between"><span>Stock ledger</span><KbdGroup><Kbd>L</Kbd></KbdGroup></div>
+                                <div class="flex items-center justify-between"><span>Barcode lookup</span><KbdGroup><Kbd>B</Kbd></KbdGroup></div>
                             </div>
                         </PopoverContent>
                     </Popover>
@@ -5954,72 +5939,6 @@ onMounted(async () => {
                     Tabs are limited to what your role can do: requisitions, procurement requests, item lookup, and department stock. Store receive, issue, and cycle count are not available for lab users.
                 </AlertDescription>
             </Alert>
-
-            <div
-                v-if="canRead && isStoreOperations"
-                class="flex min-h-9 flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-4 py-2"
-            >
-                <span class="text-xs font-medium text-muted-foreground">Store stock:</span>
-                <span :class="['flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs', stockAlertCountClass('outOfStock')]">
-                    <span class="font-medium text-foreground">{{ itemCounts.outOfStock }}</span>
-                    <span class="text-muted-foreground">Out</span>
-                </span>
-                <span :class="['flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs', stockAlertCountClass('lowStock')]">
-                    <span class="font-medium text-foreground">{{ itemCounts.lowStock }}</span>
-                    <span class="text-muted-foreground">Low</span>
-                </span>
-                <span :class="['flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs', stockAlertCountClass('healthy')]">
-                    <span class="font-medium text-foreground">{{ itemCounts.healthy }}</span>
-                    <span class="text-muted-foreground">Healthy</span>
-                </span>
-                <span class="flex items-center gap-1 rounded-md border bg-background px-2.5 py-1 text-xs">
-                    <span class="font-medium text-foreground">{{ itemCounts.total }}</span>
-                    <span class="text-muted-foreground">Items</span>
-                </span>
-                <Separator orientation="vertical" class="mx-1 hidden h-6 sm:block" />
-                <Select :model-value="toSelectValue(stockStateSelectValue)" @update:model-value="stockStateSelectValue = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
-                    <SelectTrigger class="h-8 w-36 shrink-0" size="sm">
-                        <SelectValue placeholder="Stock state" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All</SelectItem>
-                        <SelectItem value="out_of_stock">Store out</SelectItem>
-                        <SelectItem value="low_stock">Store low</SelectItem>
-                        <SelectItem value="healthy">Store healthy</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-
-            <div
-                v-if="canRead && (canManageSuppliers || canManageWarehouses)"
-                class="flex min-h-9 flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-4 py-2"
-            >
-                <span class="text-xs font-medium text-muted-foreground">Registries:</span>
-                <Button
-                    v-if="canManageSuppliers"
-                    size="sm"
-                    variant="outline"
-                    class="h-8 gap-1.5"
-                    as-child
-                >
-                    <Link href="/inventory-procurement/suppliers">
-                        <AppIcon name="package" class="size-3.5" />
-                        Suppliers
-                    </Link>
-                </Button>
-                <Button
-                    v-if="canManageWarehouses"
-                    size="sm"
-                    variant="outline"
-                    class="h-8 gap-1.5"
-                    as-child
-                >
-                    <Link href="/inventory-procurement/warehouses">
-                        <AppIcon name="building-2" class="size-3.5" />
-                        Warehouses
-                    </Link>
-                </Button>
-            </div>
 
             <!-- Errors -->
             <Alert v-if="queueError" variant="destructive">
@@ -6103,7 +6022,6 @@ onMounted(async () => {
                 </TabsList>
 
             <div class="flex min-w-0 flex-col gap-4">
-
                 <TabsContent value="overview" class="mt-0 flex flex-col gap-4">
                     <div class="grid gap-3 lg:grid-cols-4">
                         <button
@@ -6214,6 +6132,865 @@ onMounted(async () => {
                     </div>
                 </TabsContent>
 
+                <!-- Department Requisitions tab -->
+                <TabsContent value="requisitions" class="mt-0 flex flex-col gap-4">
+                <Card v-if="canRead" class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col shadow-sm">
+
+                    <!-- Header -->
+                    <div class="flex items-center justify-between gap-4 border-b px-4 py-3.5">
+                        <div class="min-w-0">
+                            <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
+                                <AppIcon name="clipboard-list" class="size-4 text-muted-foreground" />
+                                Department Requisitions
+                            </h3>
+                            <p class="mt-1 text-xs text-muted-foreground">Internal requests from hospital departments for inventory items.</p>
+                        </div>
+                        <Button v-if="canCreateRequest" size="sm" class="h-9 shrink-0 gap-1.5" @click="openCreateRequisitionDialog">
+                            <AppIcon name="plus" class="size-3.5" />
+                            New Requisition
+                        </Button>
+                    </div>
+
+                    <!-- Toolbar -->
+                    <div class="flex items-center gap-2 border-b px-4 py-3">
+                        <SearchInput
+                            id="req-search-q"
+                            v-model="deptReqSearch.q"
+                            placeholder="Req # or department…"
+                            class="min-w-0 flex-1"
+                            @keyup.enter="deptReqSearch.page = 1; loadDeptRequisitions()"
+                        />
+                        <Select :model-value="toSelectValue(deptReqSearch.status)" @update:model-value="deptReqSearch.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
+                            <SelectTrigger class="h-9 w-36 text-xs">
+                                <SelectValue placeholder="All statuses" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
+                                <SelectItem v-for="s in REQUISITION_STATUSES" :key="s" :value="s">{{ formatEnumLabel(s) }}</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select
+                            v-if="canSelectAnyRequisitionDepartment"
+                            :model-value="toSelectValue(deptReqSearch.departmentId)"
+                            @update:model-value="deptReqSearch.departmentId = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))"
+                        >
+                            <SelectTrigger class="h-9 w-44 text-xs" :disabled="!canSelectAnyRequisitionDepartment">
+                                <SelectValue placeholder="All departments" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem v-if="canSelectAnyRequisitionDepartment" :value="EMPTY_SELECT_VALUE">All departments</SelectItem>
+                                <SelectItem v-for="department in requisitionDepartmentOptions" :key="department.id" :value="department.id" :text-value="lookupOptionText(department)">
+                                    {{ lookupOptionText(department) }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Button size="sm" variant="outline" class="h-9 gap-1.5 text-xs" @click="deptReqSearch.page = 1; loadDeptRequisitions()">
+                            <AppIcon name="search" class="size-3.5" />
+                            Search
+                        </Button>
+                        <Button v-if="hasAnyDeptReqFilters" size="sm" variant="ghost" class="h-9 gap-1.5 text-xs text-muted-foreground" @click="resetDeptReqFilters">
+                            <AppIcon name="x" class="size-3.5" />
+                            Reset
+                        </Button>
+                    </div>
+
+                    <!-- Active filter chips -->
+                    <div v-if="deptReqFilterChips.length" class="flex flex-wrap gap-1.5 border-b px-4 py-2">
+                        <Badge v-for="chip in deptReqFilterChips" :key="chip" variant="secondary" class="rounded-md text-xs">
+                            {{ chip }}
+                        </Badge>
+                    </div>
+
+                    <CardContent class="flex-1 overflow-auto p-0">
+
+                        <!-- Skeleton loading -->
+                        <div v-if="deptReqLoading" class="divide-y">
+                            <div v-for="n in 5" :key="n" class="flex items-center gap-4 px-4 py-4">
+                                <div class="h-full w-[3px] shrink-0 self-stretch rounded-full bg-muted/50"></div>
+                                <div class="flex-1 space-y-2">
+                                    <div class="flex items-center gap-2">
+                                        <div class="h-3.5 w-24 animate-pulse rounded-md bg-muted/70"></div>
+                                        <div class="h-4 w-14 animate-pulse rounded-full bg-muted/50"></div>
+                                        <div class="h-4 w-16 animate-pulse rounded-full bg-muted/50"></div>
+                                    </div>
+                                    <div class="flex gap-3">
+                                        <div class="h-3 w-28 animate-pulse rounded-md bg-muted/50"></div>
+                                        <div class="h-3 w-20 animate-pulse rounded-md bg-muted/40"></div>
+                                        <div class="h-3 w-20 animate-pulse rounded-md bg-muted/40"></div>
+                                    </div>
+                                </div>
+                                <div class="flex gap-1.5">
+                                    <div class="h-7 w-16 animate-pulse rounded-lg bg-muted/60"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Empty state -->
+                        <div v-else-if="deptRequisitions.length === 0" class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center">
+                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                <AppIcon name="clipboard-list" class="size-5 text-muted-foreground/40" />
+                            </div>
+                            <div class="space-y-1">
+                                <p class="text-sm font-semibold">No department requisitions found</p>
+                                <p class="max-w-xs text-xs text-muted-foreground">
+                                    {{ hasAnyDeptReqFilters ? 'No requisitions match the current filters.' : 'Department requisitions start the live demand workflow before store issue or procurement.' }}
+                                </p>
+                            </div>
+                            <div class="flex gap-2">
+                                <Button v-if="hasAnyDeptReqFilters" variant="outline" size="sm" class="gap-1.5" @click="resetDeptReqFilters">
+                                    <AppIcon name="x" class="size-3.5" />
+                                    Clear filters
+                                </Button>
+                                <Button v-if="canCreateRequest" size="sm" class="gap-1.5" @click="openCreateRequisitionDialog">
+                                    <AppIcon name="plus" class="size-3.5" />
+                                    New requisition
+                                </Button>
+                            </div>
+                        </div>
+
+                        <!-- Requisition rows -->
+                        <div v-else class="divide-y">
+                            <div
+                                v-for="req in deptRequisitions"
+                                :key="req.id"
+                                class="group relative flex cursor-pointer items-start transition-colors hover:bg-muted/20"
+                                @click="openRequisitionDetails(req)"
+                            >
+                                <!-- Status accent stripe -->
+                                <div
+                                    class="absolute inset-y-0 left-0 w-[3px] rounded-r-full"
+                                    :class="{
+                                        'bg-muted-foreground/30':  req.status === 'draft' || req.status === 'cancelled',
+                                        'bg-blue-500':             req.status === 'submitted',
+                                        'bg-green-500':            req.status === 'approved',
+                                        'bg-amber-400':            req.status === 'partially_issued',
+                                        'bg-emerald-600':          req.status === 'issued',
+                                        'bg-destructive':          req.status === 'rejected',
+                                    }"
+                                ></div>
+
+                                <div class="flex w-full items-start gap-4 px-4 py-3.5 pl-6">
+                                    <!-- Left: main content -->
+                                    <div class="min-w-0 flex-1 space-y-1.5">
+                                        <!-- Row 1: Req # + priority + status + dept -->
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span class="font-mono text-xs font-bold tracking-tight">{{ req.requisitionNumber }}</span>
+                                            <Badge
+                                                v-if="req.priority === 'urgent'"
+                                                variant="destructive"
+                                                class="h-4 px-1.5 text-[10px] uppercase tracking-wide"
+                                            >Urgent</Badge>
+                                            <Badge
+                                                v-else-if="req.priority === 'high'"
+                                                class="h-4 bg-orange-100 px-1.5 text-[10px] uppercase tracking-wide text-orange-800 dark:bg-orange-900/40 dark:text-orange-200"
+                                            >High</Badge>
+                                            <span
+                                                class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold"
+                                                :class="reqStatusBadgeClass(req.status)"
+                                            >{{ formatEnumLabel(req.status) }}</span>
+                                            <span class="text-xs text-muted-foreground">{{ req.requestingDepartment }}</span>
+                                        </div>
+
+                                        <!-- Row 2: meta details -->
+                                        <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                                            <span class="flex items-center gap-1">
+                                                <AppIcon name="warehouse" class="size-3 opacity-60" />
+                                                {{ warehouseLabel(req.issuingWarehouseId) ?? req.issuingStore ?? '—' }}
+                                            </span>
+                                            <span class="flex items-center gap-1">
+                                                <AppIcon name="layers" class="size-3 opacity-60" />
+                                                {{ req.lines?.length ?? 0 }} line{{ (req.lines?.length ?? 0) === 1 ? '' : 's' }}
+                                            </span>
+                                            <span v-if="req.neededBy" class="flex items-center gap-1" :class="new Date(req.neededBy) < new Date() && !['issued','cancelled','rejected'].includes(req.status) ? 'font-medium text-red-600 dark:text-red-400' : ''">
+                                                <AppIcon name="calendar" class="size-3 opacity-60" />
+                                                Needed {{ formatDateOnly(req.neededBy) }}
+                                                <span v-if="new Date(req.neededBy) < new Date() && !['issued','cancelled','rejected'].includes(req.status)" class="font-semibold">· Overdue</span>
+                                            </span>
+                                            <span class="flex items-center gap-1 opacity-70">
+                                                <AppIcon name="clock" class="size-3 opacity-60" />
+                                                {{ formatDateTime(req.createdAt) }}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Right: action buttons -->
+                                    <div class="flex shrink-0 items-center gap-1.5" @click.stop>
+                                        <Button size="sm" variant="ghost" class="h-7 px-2.5 text-xs" @click="openRequisitionDetails(req)">
+                                            {{ requisitionPrimaryActionLabel(req) }}
+                                        </Button>
+                                        <Button v-if="req.status === 'draft'" size="sm" variant="outline" class="h-7 text-xs" @click="updateRequisitionStatus(req.id, 'submitted')">Submit</Button>
+                                        <Button v-if="req.status === 'submitted' && canManageItems" size="sm" variant="outline" class="h-7 text-xs" @click="updateRequisitionStatus(req.id, 'approved')">Approve</Button>
+                                        <Button v-if="req.status === 'submitted' && canManageItems" size="sm" variant="destructive" class="h-7 text-xs" @click="updateRequisitionStatus(req.id, 'rejected', { rejectionReason: 'Rejected by store manager' })">Reject</Button>
+                                        <Button v-if="req.status === 'approved' && canManageItems" size="sm" variant="outline" class="h-7 gap-1.5 text-xs" @click="updateRequisitionStatus(req.id, 'issued')">
+                                            <AppIcon name="check" class="size-3" />
+                                            Issue
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pagination -->
+                        <footer v-if="deptReqPagination && deptReqPagination.lastPage > 1" class="flex items-center justify-between border-t px-4 py-3">
+                            <p class="text-xs text-muted-foreground">
+                                Page {{ deptReqPagination.currentPage }} of {{ deptReqPagination.lastPage }}{{ deptReqPagination.total != null ? ` · ${deptReqPagination.total} total` : '' }}
+                            </p>
+                            <div class="flex items-center gap-1">
+                                <Button variant="outline" size="sm" class="h-8 gap-1.5 text-xs" :disabled="deptReqPagination.currentPage <= 1" @click="deptReqSearch.page = deptReqPagination!.currentPage - 1; loadDeptRequisitions()">
+                                    <AppIcon name="chevron-left" class="size-3.5" />
+                                    Previous
+                                </Button>
+                                <Button variant="outline" size="sm" class="h-8 gap-1.5 text-xs" :disabled="deptReqPagination.currentPage >= deptReqPagination.lastPage" @click="deptReqSearch.page = deptReqPagination!.currentPage + 1; loadDeptRequisitions()">
+                                    Next
+                                    <AppIcon name="chevron-right" class="size-3.5" />
+                                </Button>
+                            </div>
+                        </footer>
+                    </CardContent>
+                </Card>
+                </TabsContent>
+                <!-- ─── Shortage Queue Tab ─── -->
+                <TabsContent value="shortage-queue" class="mt-0 flex flex-col gap-4">
+
+                <!-- Replenishment flash banner — sits above the card, full width -->
+                <Transition
+                    enter-active-class="transition-all duration-300 ease-out"
+                    enter-from-class="-translate-y-2 opacity-0"
+                    leave-active-class="transition-all duration-200 ease-in"
+                    leave-to-class="-translate-y-2 opacity-0"
+                >
+                    <div
+                        v-if="shortageQueueReplenishmentBanner && shortageQueueReplenishmentBanner.pendingLineCount > 0"
+                        class="flex items-center gap-3 rounded-lg border border-green-300/60 bg-gradient-to-r from-green-50 to-emerald-50 px-4 py-3 shadow-sm dark:border-green-800/50 dark:from-green-950/40 dark:to-emerald-950/40"
+                    >
+                        <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/60">
+                            <AppIcon name="check-circle" class="size-4 text-green-600 dark:text-green-400" />
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm font-semibold text-green-900 dark:text-green-100">Stock received</p>
+                            <p class="text-xs text-green-700 dark:text-green-300">
+                                {{ shortageQueueReplenishmentBanner.pendingLineCount }}
+                                shortage line{{ shortageQueueReplenishmentBanner.pendingLineCount === 1 ? '' : 's' }} may now be fulfillable — check the queue below.
+                            </p>
+                        </div>
+                        <div class="flex shrink-0 items-center gap-2">
+                            <Button
+                                size="sm"
+                                class="h-7 gap-1.5 bg-green-600 text-xs text-white hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600"
+                                @click="shortageQueueReplenishmentBanner = null; shortageQueueFilters.readiness = 'ready'; shortageQueueFilters.page = 1; loadShortageQueue()"
+                            >
+                                <AppIcon name="arrow-right" class="size-3" />
+                                Show ready
+                            </Button>
+                            <button
+                                class="rounded-md p-1 text-green-600 opacity-60 transition-opacity hover:opacity-100 dark:text-green-400"
+                                @click="shortageQueueReplenishmentBanner = null"
+                            >
+                                <AppIcon name="x" class="size-3.5" />
+                            </button>
+                        </div>
+                    </div>
+                </Transition>
+
+                <!-- KPI stat strip -->
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="flex items-center gap-3 rounded-lg border border-sidebar-border/70 bg-card px-4 py-3 shadow-sm">
+                        <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted/60">
+                            <AppIcon name="list" class="size-4 text-muted-foreground" />
+                        </span>
+                        <div>
+                            <p class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">In queue</p>
+                            <p class="text-xl font-bold leading-tight tabular-nums">
+                                <template v-if="shortageQueueMeta">{{ shortageQueueMeta.total ?? shortageQueueItems.length }}</template>
+                                <template v-else>—</template>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 rounded-lg border border-green-200/70 bg-green-50/50 px-4 py-3 shadow-sm dark:border-green-900/40 dark:bg-green-950/20">
+                        <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/50">
+                            <AppIcon name="check-circle" class="size-4 text-green-600 dark:text-green-400" />
+                        </span>
+                        <div>
+                            <p class="text-[11px] font-medium uppercase tracking-wider text-green-700/70 dark:text-green-400/70">Ready to issue</p>
+                            <p class="text-xl font-bold leading-tight tabular-nums text-green-700 dark:text-green-300">
+                                <template v-if="shortageQueueMeta">{{ shortageQueueMeta.readyLineCount ?? 0 }}</template>
+                                <template v-else>—</template>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 rounded-lg border border-amber-200/70 bg-amber-50/50 px-4 py-3 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/20">
+                        <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/50">
+                            <AppIcon name="clock" class="size-4 text-amber-600 dark:text-amber-400" />
+                        </span>
+                        <div>
+                            <p class="text-[11px] font-medium uppercase tracking-wider text-amber-700/70 dark:text-amber-400/70">Awaiting stock</p>
+                            <p class="text-xl font-bold leading-tight tabular-nums text-amber-700 dark:text-amber-300">
+                                <template v-if="shortageQueueMeta">{{ shortageQueueMeta.waitingLineCount ?? 0 }}</template>
+                                <template v-else>—</template>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <Card v-if="canRead" class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col shadow-sm">
+
+                    <!-- Toolbar -->
+                    <div class="flex items-center gap-2 border-b px-4 py-3">
+                        <!-- Segmented readiness filter -->
+                        <div class="flex rounded-lg border bg-muted/40 p-0.5 text-xs">
+                            <button
+                                class="flex items-center gap-1.5 rounded-md px-3 py-2 font-medium transition-all"
+                                :class="shortageQueueFilters.readiness === 'all'
+                                    ? 'bg-background text-foreground shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'"
+                                @click="shortageQueueFilters.readiness = 'all'; shortageQueueFilters.page = 1; loadShortageQueue()"
+                            >
+                                All
+                                <span
+                                    v-if="shortageQueueMeta"
+                                    class="inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] tabular-nums"
+                                    :class="shortageQueueFilters.readiness === 'all' ? 'bg-muted text-foreground' : 'bg-muted/60 text-muted-foreground'"
+                                >{{ (shortageQueueMeta.readyLineCount ?? 0) + (shortageQueueMeta.waitingLineCount ?? 0) }}</span>
+                            </button>
+                            <button
+                                class="flex items-center gap-1.5 rounded-md px-3 py-2 font-medium transition-all"
+                                :class="shortageQueueFilters.readiness === 'ready'
+                                    ? 'bg-background text-green-700 shadow-sm dark:text-green-300'
+                                    : 'text-muted-foreground hover:text-foreground'"
+                                @click="shortageQueueFilters.readiness = 'ready'; shortageQueueFilters.page = 1; loadShortageQueue()"
+                            >
+                                <span class="size-1.5 rounded-full bg-green-500"></span>
+                                Ready
+                                <span
+                                    v-if="shortageQueueMeta && shortageQueueMeta.readyLineCount > 0"
+                                    class="inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] tabular-nums"
+                                    :class="shortageQueueFilters.readiness === 'ready' ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200' : 'bg-muted/60 text-muted-foreground'"
+                                >{{ shortageQueueMeta.readyLineCount }}</span>
+                            </button>
+                            <button
+                                class="flex items-center gap-1.5 rounded-md px-3 py-2 font-medium transition-all"
+                                :class="shortageQueueFilters.readiness === 'waiting'
+                                    ? 'bg-background text-amber-700 shadow-sm dark:text-amber-300'
+                                    : 'text-muted-foreground hover:text-foreground'"
+                                @click="shortageQueueFilters.readiness = 'waiting'; shortageQueueFilters.page = 1; loadShortageQueue()"
+                            >
+                                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                                Waiting
+                                <span
+                                    v-if="shortageQueueMeta && shortageQueueMeta.waitingLineCount > 0"
+                                    class="inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] tabular-nums"
+                                    :class="shortageQueueFilters.readiness === 'waiting' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200' : 'bg-muted/60 text-muted-foreground'"
+                                >{{ shortageQueueMeta.waitingLineCount }}</span>
+                            </button>
+                        </div>
+
+                        <div class="flex min-w-0 flex-1 items-center gap-2">
+                            <SearchInput
+                                v-model="shortageQueueFilters.q"
+                                placeholder="Search requisition or department…"
+                                class="min-w-0 flex-1 text-xs"
+                                @keyup.enter="shortageQueueFilters.page = 1; loadShortageQueue()"
+                            />
+                            <Select
+                                v-if="canSelectAnyRequisitionDepartment"
+                                :model-value="toSelectValue(shortageQueueFilters.departmentId)"
+                                @update:model-value="(v: string) => { shortageQueueFilters.departmentId = fromSelectValue(v); shortageQueueFilters.page = 1; loadShortageQueue() }"
+                            >
+                                <SelectTrigger class="h-9 w-44 text-xs">
+                                    <SelectValue placeholder="All departments" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem :value="EMPTY_SELECT_VALUE">All departments</SelectItem>
+                                    <SelectItem v-for="dept in departments" :key="dept.id" :value="dept.id">{{ dept.name }}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            class="h-9 gap-1.5 text-xs text-muted-foreground"
+                            :disabled="shortageQueueLoading"
+                            @click="shortageQueueFilters.page = 1; loadShortageQueue()"
+                        >
+                            <AppIcon name="refresh-cw" :class="['size-3.5', shortageQueueLoading && 'animate-spin']" />
+                            Refresh
+                        </Button>
+                    </div>
+
+                    <CardContent class="flex-1 overflow-auto p-0">
+
+                        <!-- Skeleton loading -->
+                        <div v-if="shortageQueueLoading" class="divide-y">
+                            <div v-for="n in 4" :key="n" class="flex items-start gap-4 px-4 py-4">
+                                <div class="mt-0.5 h-full w-1 shrink-0 rounded-full bg-muted/50"></div>
+                                <div class="flex-1 space-y-2">
+                                    <div class="flex items-center gap-2">
+                                        <div class="h-3.5 w-20 animate-pulse rounded-md bg-muted/70"></div>
+                                        <div class="h-4 w-12 animate-pulse rounded-full bg-muted/50"></div>
+                                    </div>
+                                    <div class="h-3 w-32 animate-pulse rounded-md bg-muted/50"></div>
+                                    <div class="flex gap-2">
+                                        <div class="h-5 w-24 animate-pulse rounded-md bg-muted/40"></div>
+                                        <div class="h-5 w-24 animate-pulse rounded-md bg-muted/40"></div>
+                                    </div>
+                                </div>
+                                <div class="mt-1 h-3 w-16 animate-pulse rounded-md bg-muted/50"></div>
+                                <div class="h-7 w-20 animate-pulse rounded-lg bg-muted/60"></div>
+                            </div>
+                        </div>
+
+                        <!-- Error state -->
+                        <div v-else-if="shortageQueueError" class="px-6 py-8">
+                            <div class="rounded-xl border border-destructive/20 bg-destructive/5 p-5">
+                                <div class="flex items-start gap-3">
+                                    <AppIcon name="alert-circle" class="mt-0.5 size-5 shrink-0 text-destructive" />
+                                    <div>
+                                        <p class="text-sm font-semibold text-destructive">Failed to load shortage queue</p>
+                                        <p class="mt-0.5 text-xs text-destructive/80">{{ shortageQueueError }}</p>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            class="mt-3 h-7 gap-1.5 text-xs"
+                                            @click="shortageQueueFilters.page = 1; loadShortageQueue()"
+                                        >
+                                            <AppIcon name="refresh-cw" class="size-3" />
+                                            Retry
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Empty state -->
+                        <div v-else-if="shortageQueueItems.length === 0" class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center">
+                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                <AppIcon
+                                    :name="shortageQueueFilters.readiness === 'ready' ? 'check-circle' : shortageQueueFilters.readiness === 'waiting' ? 'clock' : 'package'"
+                                    class="size-5 text-muted-foreground/40"
+                                />
+                            </div>
+                            <div class="space-y-1">
+                                <p class="text-sm font-semibold text-foreground">
+                                    <template v-if="shortageQueueFilters.readiness === 'ready'">No items are ready to issue</template>
+                                    <template v-else-if="shortageQueueFilters.readiness === 'waiting'">Nothing waiting for stock</template>
+                                    <template v-else>Shortage queue is clear</template>
+                                </p>
+                                <p class="max-w-xs text-xs text-muted-foreground">
+                                    <template v-if="shortageQueueFilters.readiness === 'ready'">
+                                        Stock for pending lines hasn't arrived yet. Switch to <button class="font-medium text-amber-600 underline-offset-2 hover:underline dark:text-amber-400" @click="shortageQueueFilters.readiness = 'waiting'; loadShortageQueue()">Waiting</button> to see what's outstanding.
+                                    </template>
+                                    <template v-else-if="shortageQueueFilters.readiness === 'waiting'">
+                                        All pending lines have sufficient stock available.
+                                    </template>
+                                    <template v-else>
+                                        All partially issued requisitions have been fulfilled, or none exist yet.
+                                    </template>
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Requisition cards -->
+                        <div v-else class="divide-y">
+                            <div
+                                v-for="req in shortageQueueItems"
+                                :key="req.id"
+                                class="group relative flex items-start gap-0 transition-colors hover:bg-muted/20"
+                            >
+                                <!-- Readiness accent stripe -->
+                                <div
+                                    class="absolute inset-y-0 left-0 w-[3px] rounded-r-full transition-colors"
+                                    :class="req.readyLineCount > 0 && req.waitingLineCount === 0
+                                        ? 'bg-green-500'
+                                        : req.readyLineCount > 0
+                                            ? 'bg-amber-400'
+                                            : 'bg-border'"
+                                ></div>
+
+                                <div class="flex w-full cursor-pointer items-start gap-4 px-4 py-4 pl-6" @click="openRequisitionDetails(req)">
+                                    <!-- Left: meta -->
+                                    <div class="min-w-0 flex-1 space-y-2">
+                                        <!-- Row 1: number + priority + department -->
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span class="font-mono text-xs font-bold tracking-tight">{{ req.requisitionNumber ?? '—' }}</span>
+                                            <Badge
+                                                v-if="req.priority === 'urgent'"
+                                                variant="destructive"
+                                                class="h-4 px-1.5 text-[10px] uppercase tracking-wide"
+                                            >Urgent</Badge>
+                                            <Badge
+                                                v-else-if="req.priority === 'high'"
+                                                class="h-4 bg-orange-100 px-1.5 text-[10px] uppercase tracking-wide text-orange-800 dark:bg-orange-900/40 dark:text-orange-200"
+                                            >High</Badge>
+                                            <span class="text-xs text-muted-foreground">{{ req.requestingDepartment ?? '—' }}</span>
+                                            <span
+                                                v-if="req.neededBy"
+                                                class="flex items-center gap-1 text-[11px]"
+                                                :class="new Date(req.neededBy) < new Date() ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground'"
+                                            >
+                                                <AppIcon name="calendar" class="size-3" />
+                                                {{ String(req.neededBy).split('T')[0] }}
+                                                <span v-if="new Date(req.neededBy) < new Date()" class="font-semibold">· Overdue</span>
+                                            </span>
+                                        </div>
+
+                                        <!-- Row 2: pending lines and shortage actions -->
+                                        <div class="grid gap-1">
+                                            <div
+                                                v-for="line in req.pendingLines"
+                                                :key="line.id"
+                                                class="min-w-0 rounded-lg border bg-background/70 px-2.5 py-1.5 text-[11px] transition-colors group-hover:border-border/80"
+                                                :class="line.canIssueNow ? 'border-green-200/70 dark:border-green-900/50' : 'border-amber-200/70 dark:border-amber-900/50'"
+                                            >
+                                                <div class="flex min-w-0 items-center justify-between gap-2">
+                                                    <div class="flex min-w-0 items-center gap-2">
+                                                        <div class="flex min-w-0 items-center gap-1.5">
+                                                            <span
+                                                                class="size-1.5 shrink-0 rounded-full"
+                                                                :class="line.canIssueNow ? 'bg-green-500' : 'bg-amber-500'"
+                                                            ></span>
+                                                            <span class="min-w-0 truncate font-medium text-foreground">{{ line.itemName ?? line.itemCode ?? line.itemId }}</span>
+                                                        </div>
+                                                        <span
+                                                            class="shrink-0 rounded-md px-1.5 py-0.5 font-medium"
+                                                            :class="line.canIssueNow
+                                                                ? 'bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300'
+                                                                : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'"
+                                                        >
+                                                            {{ formatAmount(line.pendingQuantity) }} {{ line.unit ?? '' }}
+                                                        </span>
+                                                    </div>
+                                                    <div class="flex shrink-0 items-center gap-1.5">
+                                                        <Badge
+                                                            v-if="shortageLineProcurementRequest(line)"
+                                                            variant="outline"
+                                                            class="max-w-40 rounded-lg px-1.5 py-0.5 text-[10px] font-normal"
+                                                        >
+                                                            <span class="truncate">
+                                                                {{ shortageLineProcurementRequest(line).requestNumber ?? 'PRQ' }}
+                                                                · {{ formatEnumLabel(shortageLineProcurementRequest(line).status ?? 'n/a') }}
+                                                            </span>
+                                                        </Badge>
+                                                        <Button
+                                                            v-if="!line.canIssueNow && canCreateProcurementFromRequisitionLine(line, req)"
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            class="h-6 rounded-lg px-2 text-[11px] text-amber-700 hover:bg-amber-100 hover:text-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/50"
+                                                            @click.stop="openProcurementFromQueueShortage(req, line)"
+                                                        >
+                                                            Procure
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Row 3: readiness progress bar -->
+                                        <div v-if="(req.readyLineCount ?? 0) + (req.waitingLineCount ?? 0) > 0" class="flex items-center gap-2">
+                                            <div class="h-1.5 w-24 overflow-hidden rounded-full bg-muted/60">
+                                                <div
+                                                    class="h-full rounded-full bg-green-500 transition-all"
+                                                    :style="`width: ${Math.round((req.readyLineCount / ((req.readyLineCount ?? 0) + (req.waitingLineCount ?? 0))) * 100)}%`"
+                                                ></div>
+                                            </div>
+                                            <span class="text-[11px] text-muted-foreground">
+                                                {{ req.readyLineCount ?? 0 }} of {{ (req.readyLineCount ?? 0) + (req.waitingLineCount ?? 0) }} lines ready
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Right: readiness badge + CTA -->
+                                    <div class="flex shrink-0 flex-col items-end gap-2 pt-0.5">
+                                        <div
+                                            class="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                                            :class="req.readyLineCount > 0 && req.waitingLineCount === 0
+                                                ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200'
+                                                : req.readyLineCount > 0
+                                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+                                                    : 'bg-muted text-muted-foreground'"
+                                        >
+                                            <span
+                                                class="size-1.5 rounded-full"
+                                                :class="req.readyLineCount > 0 && req.waitingLineCount === 0
+                                                    ? 'bg-green-500'
+                                                    : req.readyLineCount > 0
+                                                        ? 'bg-amber-500'
+                                                        : 'bg-muted-foreground/50'"
+                                            ></span>
+                                            <template v-if="req.readyLineCount > 0 && req.waitingLineCount === 0">All ready</template>
+                                            <template v-else-if="req.readyLineCount > 0">Partial</template>
+                                            <template v-else>Waiting</template>
+                                        </div>
+                                        <Button
+                                            size="sm"
+                                            :variant="req.readyLineCount > 0 ? 'default' : 'outline'"
+                                            class="h-7 gap-1.5 text-xs"
+                                            @click.stop="openRequisitionDetails(req)"
+                                        >
+                                            <AppIcon v-if="req.readyLineCount > 0" name="arrow-right" class="size-3" />
+                                            {{ req.readyLineCount > 0 ? 'Issue now' : 'View' }}
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pagination -->
+                        <footer v-if="shortageQueueMeta && shortageQueueMeta.lastPage > 1" class="flex items-center justify-between border-t px-4 py-3">
+                            <p class="text-xs text-muted-foreground">
+                                Page {{ shortageQueueMeta.currentPage }} of {{ shortageQueueMeta.lastPage }}
+                            </p>
+                            <div class="flex items-center gap-1">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    class="h-8 gap-1.5 text-xs"
+                                    :disabled="shortageQueueMeta.currentPage <= 1"
+                                    @click="shortageQueueFilters.page = shortageQueueMeta!.currentPage - 1; loadShortageQueue()"
+                                >
+                                    <AppIcon name="chevron-left" class="size-3.5" />
+                                    Previous
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    class="h-8 gap-1.5 text-xs"
+                                    :disabled="shortageQueueMeta.currentPage >= shortageQueueMeta.lastPage"
+                                    @click="shortageQueueFilters.page = shortageQueueMeta!.currentPage + 1; loadShortageQueue()"
+                                >
+                                    Next
+                                    <AppIcon name="chevron-right" class="size-3.5" />
+                                </Button>
+                            </div>
+                        </footer>
+                    </CardContent>
+                </Card>
+                </TabsContent>
+
+                <!-- Warehouse Transfers Tab -->
+                <!-- ─── Warehouse Transfers Tab ─── -->
+                <TabsContent value="transfers" class="mt-0 flex flex-col gap-4">
+
+                    <!-- Attention summary KPI chips (outside card) -->
+                    <div v-if="transferAttentionSummary.length > 0" class="flex flex-wrap gap-2">
+                        <span
+                            v-for="signal in transferAttentionSummary"
+                            :key="signal.label"
+                            class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium shadow-sm"
+                            :class="transferAttentionBadgeClass(signal)"
+                        >
+                            {{ signal.label }}
+                            <span class="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] tabular-nums font-bold">{{ signal.count }}</span>
+                        </span>
+                    </div>
+
+                    <Card v-if="canRead" class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col shadow-sm">
+
+                        <!-- Header -->
+                        <div class="flex items-center justify-between gap-4 border-b px-4 py-3.5">
+                            <div class="min-w-0">
+                                <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
+                                    <AppIcon name="package" class="size-4 text-muted-foreground" />
+                                    Warehouse Transfers
+                                </h3>
+                                <p class="mt-1 text-xs text-muted-foreground">Inter-store stock movement, pick, dispatch, and receipt tracking.</p>
+                            </div>
+                            <Button size="sm" class="h-9 gap-1.5 rounded-lg text-xs" @click="createTransferDialogOpen = true">
+                                <AppIcon name="plus" class="size-3.5" />
+                                New Transfer
+                            </Button>
+                        </div>
+
+                        <!-- Toolbar -->
+                        <div class="flex items-center gap-2 border-b px-4 py-3">
+                            <div class="relative min-w-0 flex-1">
+                                <svg class="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                                <input
+                                    v-model="transferSearch.q"
+                                    class="h-9 w-full rounded-lg border border-input bg-transparent pl-8 pr-3 text-xs shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                                    placeholder="Search transfer number…"
+                                    @keyup.enter="transferSearch.page = 1; loadWarehouseTransfers()"
+                                />
+                            </div>
+                            <Select
+                                :model-value="toSelectValue(transferSearch.status)"
+                                @update:model-value="val => { transferSearch.status = fromSelectValue(String(val ?? EMPTY_SELECT_VALUE)); transferSearch.page = 1; loadWarehouseTransfers() }"
+                            >
+                                <SelectTrigger class="h-9 w-36 shrink-0 rounded-lg text-xs">
+                                    <SelectValue placeholder="All statuses" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
+                                    <SelectItem v-for="s in TRANSFER_STATUSES" :key="s.value" :value="s.value">{{ s.label }}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Select
+                                :model-value="toSelectValue(transferSearch.varianceReview)"
+                                @update:model-value="val => { transferSearch.varianceReview = fromSelectValue(String(val ?? EMPTY_SELECT_VALUE)); transferSearch.page = 1; loadWarehouseTransfers() }"
+                            >
+                                <SelectTrigger class="h-9 w-40 shrink-0 rounded-lg text-xs">
+                                    <SelectValue placeholder="Review queue" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem
+                                        v-for="option in TRANSFER_VARIANCE_REVIEW_FILTER_OPTIONS"
+                                        :key="`trf-vr-${option.value || 'all'}`"
+                                        :value="option.value || EMPTY_SELECT_VALUE"
+                                    >{{ option.label }}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Button variant="ghost" size="sm" class="h-9 gap-1.5 shrink-0 rounded-lg text-xs text-muted-foreground" :disabled="transferLoading" @click="transferSearch.page = 1; loadWarehouseTransfers()">
+                                <AppIcon name="refresh-cw" class="size-3.5" />
+                                Refresh
+                            </Button>
+                        </div>
+
+                        <!-- Skeleton -->
+                        <div v-if="transferLoading" class="divide-y">
+                            <div v-for="n in 4" :key="`sk-tr-${n}`" class="flex items-start gap-3 px-4 py-4">
+                                <div class="min-w-0 flex-1 space-y-2">
+                                    <div class="h-3.5 w-1/4 animate-pulse rounded bg-muted" />
+                                    <div class="h-3 w-1/2 animate-pulse rounded bg-muted" />
+                                    <div class="flex gap-1.5">
+                                        <div class="h-5 w-16 animate-pulse rounded-full bg-muted" />
+                                        <div class="h-5 w-20 animate-pulse rounded-full bg-muted" />
+                                    </div>
+                                </div>
+                                <div class="flex gap-1.5">
+                                    <div class="h-7 w-20 animate-pulse rounded bg-muted" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Empty -->
+                        <div
+                            v-else-if="transfers.length === 0"
+                            class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center"
+                        >
+                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                <AppIcon name="package" class="size-5 text-muted-foreground/40" />
+                            </div>
+                            <div>
+                                <p class="text-sm font-medium text-muted-foreground">No warehouse transfers found</p>
+                                <p class="mt-0.5 text-xs text-muted-foreground/70">Transfers appear after stock is requested, packed, dispatched, and received between store locations.</p>
+                            </div>
+                            <Button size="sm" variant="outline" class="mt-1 h-8 gap-1.5 rounded-lg text-xs" @click="createTransferDialogOpen = true">
+                                <AppIcon name="plus" class="size-3.5" />
+                                New Transfer
+                            </Button>
+                        </div>
+
+                        <!-- Transfer rows -->
+                        <div v-else class="divide-y">
+                            <div
+                                v-for="t in transfers"
+                                :key="t.id"
+                                class="relative flex items-start gap-3 px-4 py-4 transition-colors hover:bg-muted/30"
+                            >
+                                <!-- Status accent stripe -->
+                                <div
+                                    class="absolute inset-y-0 left-0 w-[3px] rounded-l"
+                                    :class="transferStatusBadgeClass(t.status).includes('green') ? 'bg-green-500'
+                                          : transferStatusBadgeClass(t.status).includes('amber') ? 'bg-amber-500'
+                                          : transferStatusBadgeClass(t.status).includes('blue') ? 'bg-blue-500'
+                                          : transferStatusBadgeClass(t.status).includes('red') ? 'bg-red-500'
+                                          : 'bg-muted-foreground/30'"
+                                />
+                                <div class="min-w-0 flex-1">
+                                    <!-- Row 1: number + priority + status badges -->
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="font-mono text-sm font-semibold">{{ t.transfer_number }}</span>
+                                        <span
+                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset"
+                                            :class="transferPriorityBadge(t.priority)"
+                                        >{{ t.priority }}</span>
+                                        <span
+                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset"
+                                            :class="transferStatusBadgeClass(t.status)"
+                                        >{{ (t.status ?? '').replace(/_/g, ' ') }}</span>
+                                        <span
+                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset"
+                                            :class="transferReservationStateBadgeClass(t.reservationSummary?.state)"
+                                        >{{ transferReservationSummaryLabel(t) }}</span>
+                                        <span
+                                            v-if="transferCanOpenVarianceReview(t) && transferVarianceReviewState(t) === 'reviewed'"
+                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset"
+                                            :class="transferVarianceReviewBadgeClass(transferVarianceReviewState(t))"
+                                        >{{ transferVarianceReviewStateLabel(transferVarianceReviewState(t)) }}</span>
+                                    </div>
+                                    <!-- Row 2: route + pick summary -->
+                                    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                                        <span class="font-medium text-foreground">{{ warehouseLabel(t.source_warehouse_id) ?? 'Unknown' }} → {{ warehouseLabel(t.destination_warehouse_id) ?? 'Unknown' }}</span>
+                                        <span v-if="transferPickSummaryLabel(t)">&middot; {{ transferPickSummaryLabel(t) }}</span>
+                                        <span v-if="t.lines?.length">&middot; <strong class="text-foreground">{{ t.lines.length }}</strong> line{{ t.lines.length !== 1 ? 's' : '' }}</span>
+                                        <span v-if="t.reason" class="max-w-xs truncate">&middot; {{ t.reason }}</span>
+                                        <span>&middot; {{ t.created_at ? new Date(t.created_at).toLocaleDateString() : '—' }}</span>
+                                    </div>
+                                    <!-- Row 3: attention signals -->
+                                    <div v-if="transferAttentionSignals(t).length > 0" class="mt-1.5 flex flex-wrap items-center gap-1">
+                                        <span
+                                            v-for="signal in transferAttentionSignals(t)"
+                                            :key="signal.key"
+                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
+                                            :class="transferAttentionBadgeClass(signal)"
+                                        >{{ signal.label }}</span>
+                                    </div>
+                                </div>
+                                <!-- Action buttons -->
+                                <div class="flex shrink-0 flex-wrap items-start gap-1.5">
+                                    <Button
+                                        v-for="ns in (TRANSFER_ACTION_TRANSITIONS[t.status] ?? [])"
+                                        :key="ns"
+                                        size="sm"
+                                        variant="outline"
+                                        class="h-7 rounded-lg px-2.5 text-xs"
+                                        @click="openTransferStatusDialog(t, ns)"
+                                    >{{ transferActionLabel(ns) }}</Button>
+                                    <Button
+                                        v-if="transferCanOpenVarianceReview(t)"
+                                        size="sm"
+                                        variant="outline"
+                                        class="h-7 rounded-lg px-2.5 text-xs"
+                                        @click="openTransferVarianceReviewDialog(t)"
+                                    >{{ transferVarianceReviewButtonLabel(t) }}</Button>
+                                    <DropdownMenu v-if="transferCanOpenPickSlip(t) || transferCanOpenDispatchNote(t)">
+                                        <DropdownMenuTrigger as-child>
+                                            <Button size="sm" variant="ghost" class="h-7 rounded-lg px-2 text-xs">
+                                                <AppIcon name="clipboard-list" class="size-3.5" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" class="w-48">
+                                            <DropdownMenuItem v-if="transferCanOpenPickSlip(t)" @click="openTransferPickSlip(t)">
+                                                <AppIcon name="clipboard-list" class="mr-2 size-3.5" />
+                                                Pick slip
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem v-if="transferCanOpenDispatchNote(t)" @click="openTransferDispatchNote(t)">
+                                                <AppIcon name="file-text" class="mr-2 size-3.5" />
+                                                Dispatch note
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Footer pagination -->
+                        <footer v-if="transferPagination && transferPagination.lastPage > 1" class="flex shrink-0 items-center justify-between border-t bg-muted/20 px-4 py-2.5">
+                            <p class="text-xs text-muted-foreground">Page {{ transferPagination.currentPage }}/{{ transferPagination.lastPage }}{{ transferPagination.total != null ? ` · ${transferPagination.total} total` : '' }}</p>
+                            <div class="flex gap-1">
+                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="transferPagination.currentPage <= 1" @click="transferSearch.page = transferPagination!.currentPage - 1; loadWarehouseTransfers()">
+                                    <AppIcon name="chevron-left" class="size-3.5" />
+                                    Prev
+                                </Button>
+                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="transferPagination.currentPage >= transferPagination.lastPage" @click="transferSearch.page = transferPagination!.currentPage + 1; loadWarehouseTransfers()">
+                                    Next
+                                    <AppIcon name="chevron-right" class="size-3.5" />
+                                </Button>
+                            </div>
+                        </footer>
+                    </Card>
+
+                </TabsContent>
                 <TabsContent value="inventory" class="mt-0 flex flex-col gap-4">
                     <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
                         <div class="flex items-center gap-3 rounded-lg border border-sidebar-border/70 bg-card px-4 py-3 shadow-sm">
@@ -6266,16 +7043,28 @@ onMounted(async () => {
                             </h3>
                             <p class="mt-1 text-xs text-muted-foreground">Physical stock master with category, reorder policy, opening stock, and warehouse operations.</p>
                         </div>
-                        <Button
-                            v-if="canManageItems"
-                            size="sm"
-                            class="h-9 shrink-0 gap-1.5 rounded-lg text-xs"
-                            :disabled="!canLaunchCreateItem"
-                            @click="openCreateItemDialog"
-                        >
-                            <AppIcon name="plus" class="size-3.5" />
-                            Create Item
-                        </Button>
+                        <div class="flex shrink-0 items-center gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                class="h-9 gap-1.5 rounded-lg text-xs"
+                                :disabled="loading"
+                                @click="loadActiveWorkspaceTab('inventory', { force: true })"
+                            >
+                                <AppIcon name="refresh-cw" class="size-3.5" />
+                                Refresh
+                            </Button>
+                            <Button
+                                v-if="canManageItems"
+                                size="sm"
+                                class="h-9 gap-1.5 rounded-lg text-xs"
+                                :disabled="!canLaunchCreateItem"
+                                @click="openCreateItemDialog"
+                            >
+                                <AppIcon name="plus" class="size-3.5" />
+                                Create Item
+                            </Button>
+                        </div>
                     </div>
 
                     <div class="flex items-center gap-2 border-b px-4 py-3">
@@ -6424,272 +7213,6 @@ onMounted(async () => {
                         </footer>
                     </CardContent>
                 </Card>
-                </TabsContent>
-
-                <TabsContent value="procurement" class="mt-0 flex flex-col gap-4">
-
-                    <Card v-if="canRead" class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col shadow-sm">
-
-                        <!-- Header -->
-                        <div class="flex items-center justify-between gap-4 border-b px-4 py-3.5">
-                            <div class="min-w-0">
-                                <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
-                                    <AppIcon name="clipboard-list" class="size-4 text-muted-foreground" />
-                                    Procurement Requests
-                                </h3>
-                                <p class="mt-1 text-xs text-muted-foreground">Track supplier orders from request through receipt.</p>
-                            </div>
-                            <div class="flex shrink-0 items-center gap-2">
-                                <!-- Mobile filters -->
-                                <Button variant="outline" size="sm" class="h-9 gap-1.5 rounded-lg text-xs md:hidden" @click="mobileProcurementDrawerOpen = true">
-                                    <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                    Filters
-                                </Button>
-                                <Button
-                                    v-if="canCreateRequest"
-                                    size="sm"
-                                    class="h-9 gap-1.5 rounded-lg text-xs"
-                                    :disabled="!canLaunchProcurementRequest"
-                                    @click="openCreateProcurementDialog"
-                                >
-                                    <AppIcon name="plus" class="size-3.5" />
-                                    New Request
-                                </Button>
-                            </div>
-                        </div>
-
-                        <!-- Toolbar -->
-                        <div class="flex items-center gap-2 border-b px-4 py-3">
-                            <div class="relative min-w-0 flex-1">
-                                <AppIcon name="search" class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                                <input
-                                    v-model="procurementSearch.q"
-                                    class="h-9 w-full rounded-lg border border-input bg-transparent pl-9 pr-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                    placeholder="Request number, supplier, item…"
-                                    @keydown.enter="procurementSearch.page = 1; loadProcurementRequests()"
-                                />
-                            </div>
-                            <Select
-                                :model-value="toSelectValue(procurementSearch.status)"
-                                @update:model-value="procurementSearch.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))"
-                            >
-                                <SelectTrigger class="h-9 w-44 rounded-lg text-xs">
-                                    <SelectValue placeholder="All statuses" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
-                                    <SelectItem v-for="opt in procurementStatusOptions" :key="`ps-${opt}`" :value="opt">{{ formatEnumLabel(opt) }}</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <Select
-                                :model-value="toSelectValue(procurementSearch.sortBy)"
-                                @update:model-value="procurementSearch.sortBy = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))"
-                            >
-                                <SelectTrigger class="h-9 w-40 rounded-lg text-xs">
-                                    <SelectValue placeholder="Sort by" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="createdAt">Created</SelectItem>
-                                    <SelectItem value="neededBy">Needed By</SelectItem>
-                                    <SelectItem value="requestedQuantity">Quantity</SelectItem>
-                                    <SelectItem value="status">Status</SelectItem>
-                                    <SelectItem value="supplierName">Supplier</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <Button
-                                variant="ghost" size="sm"
-                                class="h-9 gap-1.5 rounded-lg text-xs text-muted-foreground"
-                                :disabled="loading"
-                                @click="procurementSearch.page = 1; loadProcurementRequests()"
-                            >
-                                <AppIcon name="refresh-cw" class="size-3.5" />
-                                Refresh
-                            </Button>
-                        </div>
-
-                        <!-- Active filter chips -->
-                        <div v-if="hasAnyProcurementFilters" class="flex flex-wrap items-center gap-1.5 border-b px-4 py-2">
-                            <span class="text-[11px] text-muted-foreground">Filters:</span>
-                            <button
-                                v-for="chip in procurementFilterChips"
-                                :key="chip"
-                                class="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] hover:bg-muted/80"
-                                @click="resetProcurementFilters()"
-                            >
-                                {{ chip }} <AppIcon name="circle-x" class="size-3" />
-                            </button>
-                            <button class="ml-1 text-[11px] text-muted-foreground underline-offset-2 hover:underline" @click="resetProcurementFilters()">Clear all</button>
-                        </div>
-
-                        <!-- Skeleton loader -->
-                        <div v-if="loading" class="divide-y">
-                            <div v-for="n in 4" :key="`sk-pr-${n}`" class="flex items-start gap-3 px-4 py-4">
-                                <div class="mt-0.5 size-1 w-[3px] self-stretch animate-pulse rounded bg-muted" />
-                                <div class="min-w-0 flex-1 space-y-2">
-                                    <div class="flex items-center gap-2">
-                                        <div class="h-3.5 w-28 animate-pulse rounded bg-muted" />
-                                        <div class="h-5 w-16 animate-pulse rounded-full bg-muted" />
-                                    </div>
-                                    <div class="h-3 w-3/4 animate-pulse rounded bg-muted" />
-                                    <div class="h-3 w-1/2 animate-pulse rounded bg-muted" />
-                                </div>
-                                <div class="h-8 w-20 animate-pulse rounded-lg bg-muted" />
-                            </div>
-                        </div>
-
-                        <!-- Empty state -->
-                        <div
-                            v-else-if="procurementRequests.length === 0"
-                            class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center"
-                        >
-                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                <AppIcon name="clipboard-list" class="size-5 text-muted-foreground/40" />
-                            </div>
-                            <div>
-                                <p class="text-sm font-medium text-muted-foreground">
-                                    {{ hasAnyProcurementFilters ? 'No requests match the current filters' : 'No procurement requests yet' }}
-                                </p>
-                                <p class="mt-0.5 text-xs text-muted-foreground/70">
-                                    {{ hasAnyProcurementFilters ? 'Try adjusting or clearing your filters.' : 'Create requests after stock demand or low-stock need is identified.' }}
-                                </p>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <Button v-if="hasAnyProcurementFilters" variant="outline" size="sm" class="h-8 rounded-lg text-xs" @click="resetProcurementFilters()">
-                                    Clear filters
-                                </Button>
-                                <Button v-if="canCreateRequest" size="sm" class="h-8 gap-1.5 rounded-lg text-xs" :disabled="!canLaunchProcurementRequest" @click="openCreateProcurementDialog">
-                                    <AppIcon name="plus" class="size-3.5" />
-                                    Create request
-                                </Button>
-                            </div>
-                        </div>
-
-                        <!-- Request rows -->
-                        <div v-else class="divide-y">
-                            <div
-                                v-for="request in procurementRequests"
-                                :key="request.id"
-                                class="relative flex items-start gap-3 px-4 py-4 transition-colors hover:bg-muted/30"
-                                :class="flashedRequestId === request.id ? 'animate-inv-row-flash' : ''"
-                            >
-                                <!-- Status accent stripe -->
-                                <div
-                                    class="absolute inset-y-0 left-0 w-[3px] rounded-l"
-                                    :class="request.status === 'draft' ? 'bg-muted-foreground/30' : request.status === 'pending_approval' ? 'bg-blue-400' : request.status === 'approved' ? 'bg-green-500' : request.status === 'ordered' ? 'bg-amber-500' : request.status === 'received' ? 'bg-emerald-500' : request.status === 'rejected' ? 'bg-red-500' : request.status === 'cancelled' ? 'bg-muted-foreground/20' : 'bg-muted-foreground/30'"
-                                />
-                                <!-- Content -->
-                                <div class="min-w-0 flex-1">
-                                    <!-- Row 1: number + badges -->
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <p class="text-sm font-semibold">{{ request.requestNumber }}</p>
-                                        <span
-                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset"
-                                            :class="request.status === 'draft' ? 'bg-muted text-muted-foreground ring-border' : request.status === 'pending_approval' ? 'bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-500/30' : request.status === 'approved' ? 'bg-green-50 text-green-700 ring-green-600/20 dark:bg-green-900/30 dark:text-green-400 dark:ring-green-500/30' : request.status === 'ordered' ? 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-500/30' : request.status === 'received' ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-500/30' : request.status === 'rejected' ? 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-500/30' : 'bg-muted text-muted-foreground ring-border'"
-                                        >
-                                            {{ formatEnumLabel(request.status) }}
-                                        </span>
-                                        <span v-if="request.sourceDepartmentRequisitionId" class="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-900/30 dark:text-sky-400 dark:ring-sky-500/30">
-                                            Dept shortage
-                                        </span>
-                                    </div>
-                                    <!-- Row 2: item · qty · supplier · needed-by -->
-                                    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                                        <span>{{ request.itemName || request.itemId }}</span>
-                                        <span>&middot;</span>
-                                        <span>Qty: <strong class="text-foreground">{{ request.requestedQuantity }}</strong></span>
-                                        <span v-if="request.supplierName || supplierLabel(request.supplierId)">&middot; {{ request.supplierName || supplierLabel(request.supplierId) }}</span>
-                                        <span v-if="request.neededBy">&middot; Needed {{ request.neededBy }}</span>
-                                    </div>
-                                    <!-- Row 3: cost + source -->
-                                    <div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                                        <span v-if="request.unitCostEstimate">Unit: {{ formatAmount(request.unitCostEstimate) }}</span>
-                                        <span v-if="request.totalCostEstimate">&middot; Total est: {{ formatAmount(request.totalCostEstimate) }}</span>
-                                        <span v-if="request.sourceDepartmentRequisitionId" class="text-muted-foreground/70">&middot; {{ procurementSourceLabel(request) }}</span>
-                                    </div>
-                                    <!-- CTAs -->
-                                    <div class="mt-2.5 flex flex-wrap items-center gap-2">
-                                        <Button size="sm" variant="outline" class="h-7 rounded-lg px-2.5 text-xs" @click="openDetails(request)">
-                                            Details
-                                        </Button>
-                                        <Button
-                                            v-if="request.sourceDepartmentRequisitionId && request.status !== 'received'"
-                                            size="sm" variant="outline"
-                                            class="h-7 rounded-lg px-2.5 text-xs"
-                                            :disabled="sourceRequisitionOpeningId === String(request.id)"
-                                            @click="openSourceRequisitionFromProcurement(request)"
-                                        >
-                                            {{ sourceRequisitionOpeningId === String(request.id) ? 'Opening...' : 'Source Req.' }}
-                                        </Button>
-                                        <template v-if="canUpdateRequestStatus">
-                                            <Button
-                                                v-if="procurementPrimaryAction(request)"
-                                                size="sm"
-                                                class="h-7 rounded-lg px-2.5 text-xs"
-                                                :disabled="sourceRequisitionOpeningId === String(request.id)"
-                                                @click="procurementPrimaryAction(request)!.handler()"
-                                            >
-                                                {{ procurementPrimaryAction(request)!.label }}
-                                            </Button>
-                                            <DropdownMenu v-if="procurementOverflowActions(request).length">
-                                                <DropdownMenuTrigger as-child>
-                                                    <Button size="sm" variant="outline" class="h-7 rounded-lg px-2 text-xs">
-                                                        <AppIcon name="ellipsis-vertical" class="size-3.5" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem
-                                                        v-for="act in procurementOverflowActions(request)"
-                                                        :key="act.label"
-                                                        @click="act.handler()"
-                                                    >
-                                                        {{ act.label }}
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </template>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Footer pagination -->
-                        <footer class="flex shrink-0 items-center justify-between gap-2 border-t bg-muted/20 px-4 py-2.5">
-                            <p class="text-xs text-muted-foreground">
-                                {{ procurementRequests.length }} of {{ procurementPagination?.total ?? procurementRequests.length }} &middot; Page {{ procurementPagination?.currentPage ?? 1 }}/{{ procurementPagination?.lastPage ?? 1 }}
-                            </p>
-                            <div class="flex items-center gap-1">
-                                <Button
-                                    variant="outline" size="sm" class="h-8 gap-1.5 rounded-lg text-xs"
-                                    :disabled="!procurementPagination || procurementPagination.currentPage <= 1 || loading"
-                                    @click="procurementSearch.page -= 1; loadProcurementRequests()"
-                                >
-                                    <AppIcon name="chevron-left" class="size-3.5" />
-                                    Prev
-                                </Button>
-                                <template v-for="pg in procurementPages" :key="typeof pg === 'number' ? `pp-${pg}` : `pp-e-${Math.random()}`">
-                                    <span v-if="pg === '...'" class="px-1 text-xs text-muted-foreground">&hellip;</span>
-                                    <Button
-                                        v-else size="sm"
-                                        :variant="pg === (procurementPagination?.currentPage ?? 1) ? 'default' : 'outline'"
-                                        class="h-8 w-8 rounded-lg p-0 text-xs"
-                                        :disabled="loading"
-                                        @click="goToProcurementPage(pg as number)"
-                                    >
-                                        {{ pg }}
-                                    </Button>
-                                </template>
-                                <Button
-                                    variant="outline" size="sm" class="h-8 gap-1.5 rounded-lg text-xs"
-                                    :disabled="!procurementPagination || procurementPagination.currentPage >= procurementPagination.lastPage || loading"
-                                    @click="procurementSearch.page += 1; loadProcurementRequests()"
-                                >
-                                    Next
-                                    <AppIcon name="chevron-right" class="size-3.5" />
-                                </Button>
-                            </div>
-                        </footer>
-                    </Card>
-
                 </TabsContent>
 
                 <TabsContent value="ledger" class="mt-0 flex flex-col gap-4">
@@ -7286,1103 +7809,104 @@ onMounted(async () => {
                 </Card>
                 </TabsContent>
 
-                <!-- Department Requisitions tab -->
-                <TabsContent value="requisitions" class="mt-0 flex flex-col gap-4">
-                <Card v-if="canRead" class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col shadow-sm">
+                <TabsContent value="procurement" class="mt-0 flex flex-col gap-4">
 
-                    <!-- Header -->
-                    <div class="flex items-center justify-between gap-4 border-b px-4 py-3.5">
-                        <div class="min-w-0">
-                            <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
-                                <AppIcon name="clipboard-list" class="size-4 text-muted-foreground" />
-                                Department Requisitions
-                            </h3>
-                            <p class="mt-1 text-xs text-muted-foreground">Internal requests from hospital departments for inventory items.</p>
-                        </div>
-                        <Button v-if="canCreateRequest" size="sm" class="h-9 shrink-0 gap-1.5" @click="openCreateRequisitionDialog">
-                            <AppIcon name="plus" class="size-3.5" />
-                            New Requisition
-                        </Button>
-                    </div>
+                    <Card v-if="canRead" class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col shadow-sm">
 
-                    <!-- Toolbar -->
-                    <div class="flex items-center gap-2 border-b px-4 py-3">
-                        <SearchInput
-                            id="req-search-q"
-                            v-model="deptReqSearch.q"
-                            placeholder="Req # or department…"
-                            class="min-w-0 flex-1"
-                            @keyup.enter="deptReqSearch.page = 1; loadDeptRequisitions()"
-                        />
-                        <Select :model-value="toSelectValue(deptReqSearch.status)" @update:model-value="deptReqSearch.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
-                            <SelectTrigger class="h-9 w-36 text-xs">
-                                <SelectValue placeholder="All statuses" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
-                                <SelectItem v-for="s in REQUISITION_STATUSES" :key="s" :value="s">{{ formatEnumLabel(s) }}</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Select
-                            v-if="canSelectAnyRequisitionDepartment"
-                            :model-value="toSelectValue(deptReqSearch.departmentId)"
-                            @update:model-value="deptReqSearch.departmentId = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))"
-                        >
-                            <SelectTrigger class="h-9 w-44 text-xs" :disabled="!canSelectAnyRequisitionDepartment">
-                                <SelectValue placeholder="All departments" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem v-if="canSelectAnyRequisitionDepartment" :value="EMPTY_SELECT_VALUE">All departments</SelectItem>
-                                <SelectItem v-for="department in requisitionDepartmentOptions" :key="department.id" :value="department.id" :text-value="lookupOptionText(department)">
-                                    {{ lookupOptionText(department) }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Button size="sm" variant="outline" class="h-9 gap-1.5 text-xs" @click="deptReqSearch.page = 1; loadDeptRequisitions()">
-                            <AppIcon name="search" class="size-3.5" />
-                            Search
-                        </Button>
-                        <Button v-if="hasAnyDeptReqFilters" size="sm" variant="ghost" class="h-9 gap-1.5 text-xs text-muted-foreground" @click="resetDeptReqFilters">
-                            <AppIcon name="x" class="size-3.5" />
-                            Reset
-                        </Button>
-                    </div>
-
-                    <!-- Active filter chips -->
-                    <div v-if="deptReqFilterChips.length" class="flex flex-wrap gap-1.5 border-b px-4 py-2">
-                        <Badge v-for="chip in deptReqFilterChips" :key="chip" variant="secondary" class="rounded-md text-xs">
-                            {{ chip }}
-                        </Badge>
-                    </div>
-
-                    <CardContent class="flex-1 overflow-auto p-0">
-
-                        <!-- Skeleton loading -->
-                        <div v-if="deptReqLoading" class="divide-y">
-                            <div v-for="n in 5" :key="n" class="flex items-center gap-4 px-4 py-4">
-                                <div class="h-full w-[3px] shrink-0 self-stretch rounded-full bg-muted/50"></div>
-                                <div class="flex-1 space-y-2">
-                                    <div class="flex items-center gap-2">
-                                        <div class="h-3.5 w-24 animate-pulse rounded-md bg-muted/70"></div>
-                                        <div class="h-4 w-14 animate-pulse rounded-full bg-muted/50"></div>
-                                        <div class="h-4 w-16 animate-pulse rounded-full bg-muted/50"></div>
-                                    </div>
-                                    <div class="flex gap-3">
-                                        <div class="h-3 w-28 animate-pulse rounded-md bg-muted/50"></div>
-                                        <div class="h-3 w-20 animate-pulse rounded-md bg-muted/40"></div>
-                                        <div class="h-3 w-20 animate-pulse rounded-md bg-muted/40"></div>
-                                    </div>
-                                </div>
-                                <div class="flex gap-1.5">
-                                    <div class="h-7 w-16 animate-pulse rounded-lg bg-muted/60"></div>
-                                </div>
+                        <!-- Header -->
+                        <div class="flex items-center justify-between gap-4 border-b px-4 py-3.5">
+                            <div class="min-w-0">
+                                <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
+                                    <AppIcon name="clipboard-list" class="size-4 text-muted-foreground" />
+                                    Procurement Requests
+                                </h3>
+                                <p class="mt-1 text-xs text-muted-foreground">Track supplier orders from request through receipt.</p>
                             </div>
-                        </div>
-
-                        <!-- Empty state -->
-                        <div v-else-if="deptRequisitions.length === 0" class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center">
-                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                <AppIcon name="clipboard-list" class="size-5 text-muted-foreground/40" />
-                            </div>
-                            <div class="space-y-1">
-                                <p class="text-sm font-semibold">No department requisitions found</p>
-                                <p class="max-w-xs text-xs text-muted-foreground">
-                                    {{ hasAnyDeptReqFilters ? 'No requisitions match the current filters.' : 'Department requisitions start the live demand workflow before store issue or procurement.' }}
-                                </p>
-                            </div>
-                            <div class="flex gap-2">
-                                <Button v-if="hasAnyDeptReqFilters" variant="outline" size="sm" class="gap-1.5" @click="resetDeptReqFilters">
-                                    <AppIcon name="x" class="size-3.5" />
-                                    Clear filters
+                            <div class="flex shrink-0 items-center gap-2">
+                                <!-- Mobile filters -->
+                                <Button variant="outline" size="sm" class="h-9 gap-1.5 rounded-lg text-xs md:hidden" @click="mobileProcurementDrawerOpen = true">
+                                    <AppIcon name="sliders-horizontal" class="size-3.5" />
+                                    Filters
                                 </Button>
-                                <Button v-if="canCreateRequest" size="sm" class="gap-1.5" @click="openCreateRequisitionDialog">
+                                <Button
+                                    v-if="canCreateRequest"
+                                    size="sm"
+                                    class="h-9 gap-1.5 rounded-lg text-xs"
+                                    :disabled="!canLaunchProcurementRequest"
+                                    @click="openCreateProcurementDialog"
+                                >
                                     <AppIcon name="plus" class="size-3.5" />
-                                    New requisition
+                                    New Request
                                 </Button>
                             </div>
-                        </div>
-
-                        <!-- Requisition rows -->
-                        <div v-else class="divide-y">
-                            <div
-                                v-for="req in deptRequisitions"
-                                :key="req.id"
-                                class="group relative flex cursor-pointer items-start transition-colors hover:bg-muted/20"
-                                @click="openRequisitionDetails(req)"
-                            >
-                                <!-- Status accent stripe -->
-                                <div
-                                    class="absolute inset-y-0 left-0 w-[3px] rounded-r-full"
-                                    :class="{
-                                        'bg-muted-foreground/30':  req.status === 'draft' || req.status === 'cancelled',
-                                        'bg-blue-500':             req.status === 'submitted',
-                                        'bg-green-500':            req.status === 'approved',
-                                        'bg-amber-400':            req.status === 'partially_issued',
-                                        'bg-emerald-600':          req.status === 'issued',
-                                        'bg-destructive':          req.status === 'rejected',
-                                    }"
-                                ></div>
-
-                                <div class="flex w-full items-start gap-4 px-4 py-3.5 pl-6">
-                                    <!-- Left: main content -->
-                                    <div class="min-w-0 flex-1 space-y-1.5">
-                                        <!-- Row 1: Req # + priority + status + dept -->
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <span class="font-mono text-xs font-bold tracking-tight">{{ req.requisitionNumber }}</span>
-                                            <Badge
-                                                v-if="req.priority === 'urgent'"
-                                                variant="destructive"
-                                                class="h-4 px-1.5 text-[10px] uppercase tracking-wide"
-                                            >Urgent</Badge>
-                                            <Badge
-                                                v-else-if="req.priority === 'high'"
-                                                class="h-4 bg-orange-100 px-1.5 text-[10px] uppercase tracking-wide text-orange-800 dark:bg-orange-900/40 dark:text-orange-200"
-                                            >High</Badge>
-                                            <span
-                                                class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold"
-                                                :class="reqStatusBadgeClass(req.status)"
-                                            >{{ formatEnumLabel(req.status) }}</span>
-                                            <span class="text-xs text-muted-foreground">{{ req.requestingDepartment }}</span>
-                                        </div>
-
-                                        <!-- Row 2: meta details -->
-                                        <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-                                            <span class="flex items-center gap-1">
-                                                <AppIcon name="warehouse" class="size-3 opacity-60" />
-                                                {{ warehouseLabel(req.issuingWarehouseId) ?? req.issuingStore ?? '—' }}
-                                            </span>
-                                            <span class="flex items-center gap-1">
-                                                <AppIcon name="layers" class="size-3 opacity-60" />
-                                                {{ req.lines?.length ?? 0 }} line{{ (req.lines?.length ?? 0) === 1 ? '' : 's' }}
-                                            </span>
-                                            <span v-if="req.neededBy" class="flex items-center gap-1" :class="new Date(req.neededBy) < new Date() && !['issued','cancelled','rejected'].includes(req.status) ? 'font-medium text-red-600 dark:text-red-400' : ''">
-                                                <AppIcon name="calendar" class="size-3 opacity-60" />
-                                                Needed {{ formatDateOnly(req.neededBy) }}
-                                                <span v-if="new Date(req.neededBy) < new Date() && !['issued','cancelled','rejected'].includes(req.status)" class="font-semibold">· Overdue</span>
-                                            </span>
-                                            <span class="flex items-center gap-1 opacity-70">
-                                                <AppIcon name="clock" class="size-3 opacity-60" />
-                                                {{ formatDateTime(req.createdAt) }}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <!-- Right: action buttons -->
-                                    <div class="flex shrink-0 items-center gap-1.5" @click.stop>
-                                        <Button size="sm" variant="ghost" class="h-7 px-2.5 text-xs" @click="openRequisitionDetails(req)">
-                                            {{ requisitionPrimaryActionLabel(req) }}
-                                        </Button>
-                                        <Button v-if="req.status === 'draft'" size="sm" variant="outline" class="h-7 text-xs" @click="updateRequisitionStatus(req.id, 'submitted')">Submit</Button>
-                                        <Button v-if="req.status === 'submitted' && canManageItems" size="sm" variant="outline" class="h-7 text-xs" @click="updateRequisitionStatus(req.id, 'approved')">Approve</Button>
-                                        <Button v-if="req.status === 'submitted' && canManageItems" size="sm" variant="destructive" class="h-7 text-xs" @click="updateRequisitionStatus(req.id, 'rejected', { rejectionReason: 'Rejected by store manager' })">Reject</Button>
-                                        <Button v-if="req.status === 'approved' && canManageItems" size="sm" variant="outline" class="h-7 gap-1.5 text-xs" @click="updateRequisitionStatus(req.id, 'issued')">
-                                            <AppIcon name="check" class="size-3" />
-                                            Issue
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Pagination -->
-                        <footer v-if="deptReqPagination && deptReqPagination.lastPage > 1" class="flex items-center justify-between border-t px-4 py-3">
-                            <p class="text-xs text-muted-foreground">
-                                Page {{ deptReqPagination.currentPage }} of {{ deptReqPagination.lastPage }}{{ deptReqPagination.total != null ? ` · ${deptReqPagination.total} total` : '' }}
-                            </p>
-                            <div class="flex items-center gap-1">
-                                <Button variant="outline" size="sm" class="h-8 gap-1.5 text-xs" :disabled="deptReqPagination.currentPage <= 1" @click="deptReqSearch.page = deptReqPagination!.currentPage - 1; loadDeptRequisitions()">
-                                    <AppIcon name="chevron-left" class="size-3.5" />
-                                    Previous
-                                </Button>
-                                <Button variant="outline" size="sm" class="h-8 gap-1.5 text-xs" :disabled="deptReqPagination.currentPage >= deptReqPagination.lastPage" @click="deptReqSearch.page = deptReqPagination!.currentPage + 1; loadDeptRequisitions()">
-                                    Next
-                                    <AppIcon name="chevron-right" class="size-3.5" />
-                                </Button>
-                            </div>
-                        </footer>
-                    </CardContent>
-                </Card>
-                </TabsContent>
-                <!-- Supplier Lead Times Tab -->
-                <!-- ─── Shortage Queue Tab ─── -->
-                <TabsContent value="shortage-queue" class="mt-0 flex flex-col gap-4">
-
-                <!-- Replenishment flash banner — sits above the card, full width -->
-                <Transition
-                    enter-active-class="transition-all duration-300 ease-out"
-                    enter-from-class="-translate-y-2 opacity-0"
-                    leave-active-class="transition-all duration-200 ease-in"
-                    leave-to-class="-translate-y-2 opacity-0"
-                >
-                    <div
-                        v-if="shortageQueueReplenishmentBanner && shortageQueueReplenishmentBanner.pendingLineCount > 0"
-                        class="flex items-center gap-3 rounded-lg border border-green-300/60 bg-gradient-to-r from-green-50 to-emerald-50 px-4 py-3 shadow-sm dark:border-green-800/50 dark:from-green-950/40 dark:to-emerald-950/40"
-                    >
-                        <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/60">
-                            <AppIcon name="check-circle" class="size-4 text-green-600 dark:text-green-400" />
-                        </span>
-                        <div class="min-w-0 flex-1">
-                            <p class="text-sm font-semibold text-green-900 dark:text-green-100">Stock received</p>
-                            <p class="text-xs text-green-700 dark:text-green-300">
-                                {{ shortageQueueReplenishmentBanner.pendingLineCount }}
-                                shortage line{{ shortageQueueReplenishmentBanner.pendingLineCount === 1 ? '' : 's' }} may now be fulfillable — check the queue below.
-                            </p>
-                        </div>
-                        <div class="flex shrink-0 items-center gap-2">
-                            <Button
-                                size="sm"
-                                class="h-7 gap-1.5 bg-green-600 text-xs text-white hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600"
-                                @click="shortageQueueReplenishmentBanner = null; shortageQueueFilters.readiness = 'ready'; shortageQueueFilters.page = 1; loadShortageQueue()"
-                            >
-                                <AppIcon name="arrow-right" class="size-3" />
-                                Show ready
-                            </Button>
-                            <button
-                                class="rounded-md p-1 text-green-600 opacity-60 transition-opacity hover:opacity-100 dark:text-green-400"
-                                @click="shortageQueueReplenishmentBanner = null"
-                            >
-                                <AppIcon name="x" class="size-3.5" />
-                            </button>
-                        </div>
-                    </div>
-                </Transition>
-
-                <!-- KPI stat strip -->
-                <div class="grid grid-cols-3 gap-3">
-                    <div class="flex items-center gap-3 rounded-lg border border-sidebar-border/70 bg-card px-4 py-3 shadow-sm">
-                        <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted/60">
-                            <AppIcon name="list" class="size-4 text-muted-foreground" />
-                        </span>
-                        <div>
-                            <p class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">In queue</p>
-                            <p class="text-xl font-bold leading-tight tabular-nums">
-                                <template v-if="shortageQueueMeta">{{ shortageQueueMeta.total ?? shortageQueueItems.length }}</template>
-                                <template v-else>—</template>
-                            </p>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-3 rounded-lg border border-green-200/70 bg-green-50/50 px-4 py-3 shadow-sm dark:border-green-900/40 dark:bg-green-950/20">
-                        <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/50">
-                            <AppIcon name="check-circle" class="size-4 text-green-600 dark:text-green-400" />
-                        </span>
-                        <div>
-                            <p class="text-[11px] font-medium uppercase tracking-wider text-green-700/70 dark:text-green-400/70">Ready to issue</p>
-                            <p class="text-xl font-bold leading-tight tabular-nums text-green-700 dark:text-green-300">
-                                <template v-if="shortageQueueMeta">{{ shortageQueueMeta.readyLineCount ?? 0 }}</template>
-                                <template v-else>—</template>
-                            </p>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-3 rounded-lg border border-amber-200/70 bg-amber-50/50 px-4 py-3 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/20">
-                        <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/50">
-                            <AppIcon name="clock" class="size-4 text-amber-600 dark:text-amber-400" />
-                        </span>
-                        <div>
-                            <p class="text-[11px] font-medium uppercase tracking-wider text-amber-700/70 dark:text-amber-400/70">Awaiting stock</p>
-                            <p class="text-xl font-bold leading-tight tabular-nums text-amber-700 dark:text-amber-300">
-                                <template v-if="shortageQueueMeta">{{ shortageQueueMeta.waitingLineCount ?? 0 }}</template>
-                                <template v-else>—</template>
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <Card v-if="canRead" class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col shadow-sm">
-
-                    <!-- Toolbar -->
-                    <div class="flex items-center gap-2 border-b px-4 py-3">
-                        <!-- Segmented readiness filter -->
-                        <div class="flex rounded-lg border bg-muted/40 p-0.5 text-xs">
-                            <button
-                                class="flex items-center gap-1.5 rounded-md px-3 py-2 font-medium transition-all"
-                                :class="shortageQueueFilters.readiness === 'all'
-                                    ? 'bg-background text-foreground shadow-sm'
-                                    : 'text-muted-foreground hover:text-foreground'"
-                                @click="shortageQueueFilters.readiness = 'all'; shortageQueueFilters.page = 1; loadShortageQueue()"
-                            >
-                                All
-                                <span
-                                    v-if="shortageQueueMeta"
-                                    class="inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] tabular-nums"
-                                    :class="shortageQueueFilters.readiness === 'all' ? 'bg-muted text-foreground' : 'bg-muted/60 text-muted-foreground'"
-                                >{{ (shortageQueueMeta.readyLineCount ?? 0) + (shortageQueueMeta.waitingLineCount ?? 0) }}</span>
-                            </button>
-                            <button
-                                class="flex items-center gap-1.5 rounded-md px-3 py-2 font-medium transition-all"
-                                :class="shortageQueueFilters.readiness === 'ready'
-                                    ? 'bg-background text-green-700 shadow-sm dark:text-green-300'
-                                    : 'text-muted-foreground hover:text-foreground'"
-                                @click="shortageQueueFilters.readiness = 'ready'; shortageQueueFilters.page = 1; loadShortageQueue()"
-                            >
-                                <span class="size-1.5 rounded-full bg-green-500"></span>
-                                Ready
-                                <span
-                                    v-if="shortageQueueMeta && shortageQueueMeta.readyLineCount > 0"
-                                    class="inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] tabular-nums"
-                                    :class="shortageQueueFilters.readiness === 'ready' ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200' : 'bg-muted/60 text-muted-foreground'"
-                                >{{ shortageQueueMeta.readyLineCount }}</span>
-                            </button>
-                            <button
-                                class="flex items-center gap-1.5 rounded-md px-3 py-2 font-medium transition-all"
-                                :class="shortageQueueFilters.readiness === 'waiting'
-                                    ? 'bg-background text-amber-700 shadow-sm dark:text-amber-300'
-                                    : 'text-muted-foreground hover:text-foreground'"
-                                @click="shortageQueueFilters.readiness = 'waiting'; shortageQueueFilters.page = 1; loadShortageQueue()"
-                            >
-                                <span class="size-1.5 rounded-full bg-amber-500"></span>
-                                Waiting
-                                <span
-                                    v-if="shortageQueueMeta && shortageQueueMeta.waitingLineCount > 0"
-                                    class="inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] tabular-nums"
-                                    :class="shortageQueueFilters.readiness === 'waiting' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200' : 'bg-muted/60 text-muted-foreground'"
-                                >{{ shortageQueueMeta.waitingLineCount }}</span>
-                            </button>
-                        </div>
-
-                        <div class="flex min-w-0 flex-1 items-center gap-2">
-                            <SearchInput
-                                v-model="shortageQueueFilters.q"
-                                placeholder="Search requisition or department…"
-                                class="min-w-0 flex-1 text-xs"
-                                @keyup.enter="shortageQueueFilters.page = 1; loadShortageQueue()"
-                            />
-                            <Select
-                                v-if="canSelectAnyRequisitionDepartment"
-                                :model-value="toSelectValue(shortageQueueFilters.departmentId)"
-                                @update:model-value="(v: string) => { shortageQueueFilters.departmentId = fromSelectValue(v); shortageQueueFilters.page = 1; loadShortageQueue() }"
-                            >
-                                <SelectTrigger class="h-9 w-44 text-xs">
-                                    <SelectValue placeholder="All departments" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem :value="EMPTY_SELECT_VALUE">All departments</SelectItem>
-                                    <SelectItem v-for="dept in departments" :key="dept.id" :value="dept.id">{{ dept.name }}</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            class="h-9 gap-1.5 text-xs text-muted-foreground"
-                            :disabled="shortageQueueLoading"
-                            @click="shortageQueueFilters.page = 1; loadShortageQueue()"
-                        >
-                            <AppIcon name="refresh-cw" :class="['size-3.5', shortageQueueLoading && 'animate-spin']" />
-                            Refresh
-                        </Button>
-                    </div>
-
-                    <CardContent class="flex-1 overflow-auto p-0">
-
-                        <!-- Skeleton loading -->
-                        <div v-if="shortageQueueLoading" class="divide-y">
-                            <div v-for="n in 4" :key="n" class="flex items-start gap-4 px-4 py-4">
-                                <div class="mt-0.5 h-full w-1 shrink-0 rounded-full bg-muted/50"></div>
-                                <div class="flex-1 space-y-2">
-                                    <div class="flex items-center gap-2">
-                                        <div class="h-3.5 w-20 animate-pulse rounded-md bg-muted/70"></div>
-                                        <div class="h-4 w-12 animate-pulse rounded-full bg-muted/50"></div>
-                                    </div>
-                                    <div class="h-3 w-32 animate-pulse rounded-md bg-muted/50"></div>
-                                    <div class="flex gap-2">
-                                        <div class="h-5 w-24 animate-pulse rounded-md bg-muted/40"></div>
-                                        <div class="h-5 w-24 animate-pulse rounded-md bg-muted/40"></div>
-                                    </div>
-                                </div>
-                                <div class="mt-1 h-3 w-16 animate-pulse rounded-md bg-muted/50"></div>
-                                <div class="h-7 w-20 animate-pulse rounded-lg bg-muted/60"></div>
-                            </div>
-                        </div>
-
-                        <!-- Error state -->
-                        <div v-else-if="shortageQueueError" class="px-6 py-8">
-                            <div class="rounded-xl border border-destructive/20 bg-destructive/5 p-5">
-                                <div class="flex items-start gap-3">
-                                    <AppIcon name="alert-circle" class="mt-0.5 size-5 shrink-0 text-destructive" />
-                                    <div>
-                                        <p class="text-sm font-semibold text-destructive">Failed to load shortage queue</p>
-                                        <p class="mt-0.5 text-xs text-destructive/80">{{ shortageQueueError }}</p>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            class="mt-3 h-7 gap-1.5 text-xs"
-                                            @click="shortageQueueFilters.page = 1; loadShortageQueue()"
-                                        >
-                                            <AppIcon name="refresh-cw" class="size-3" />
-                                            Retry
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Empty state -->
-                        <div v-else-if="shortageQueueItems.length === 0" class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center">
-                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                <AppIcon
-                                    :name="shortageQueueFilters.readiness === 'ready' ? 'check-circle' : shortageQueueFilters.readiness === 'waiting' ? 'clock' : 'package'"
-                                    class="size-5 text-muted-foreground/40"
-                                />
-                            </div>
-                            <div class="space-y-1">
-                                <p class="text-sm font-semibold text-foreground">
-                                    <template v-if="shortageQueueFilters.readiness === 'ready'">No items are ready to issue</template>
-                                    <template v-else-if="shortageQueueFilters.readiness === 'waiting'">Nothing waiting for stock</template>
-                                    <template v-else>Shortage queue is clear</template>
-                                </p>
-                                <p class="max-w-xs text-xs text-muted-foreground">
-                                    <template v-if="shortageQueueFilters.readiness === 'ready'">
-                                        Stock for pending lines hasn't arrived yet. Switch to <button class="font-medium text-amber-600 underline-offset-2 hover:underline dark:text-amber-400" @click="shortageQueueFilters.readiness = 'waiting'; loadShortageQueue()">Waiting</button> to see what's outstanding.
-                                    </template>
-                                    <template v-else-if="shortageQueueFilters.readiness === 'waiting'">
-                                        All pending lines have sufficient stock available.
-                                    </template>
-                                    <template v-else>
-                                        All partially issued requisitions have been fulfilled, or none exist yet.
-                                    </template>
-                                </p>
-                            </div>
-                        </div>
-
-                        <!-- Requisition cards -->
-                        <div v-else class="divide-y">
-                            <div
-                                v-for="req in shortageQueueItems"
-                                :key="req.id"
-                                class="group relative flex items-start gap-0 transition-colors hover:bg-muted/20"
-                            >
-                                <!-- Readiness accent stripe -->
-                                <div
-                                    class="absolute inset-y-0 left-0 w-[3px] rounded-r-full transition-colors"
-                                    :class="req.readyLineCount > 0 && req.waitingLineCount === 0
-                                        ? 'bg-green-500'
-                                        : req.readyLineCount > 0
-                                            ? 'bg-amber-400'
-                                            : 'bg-border'"
-                                ></div>
-
-                                <div class="flex w-full cursor-pointer items-start gap-4 px-4 py-4 pl-6" @click="openRequisitionDetails(req)">
-                                    <!-- Left: meta -->
-                                    <div class="min-w-0 flex-1 space-y-2">
-                                        <!-- Row 1: number + priority + department -->
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <span class="font-mono text-xs font-bold tracking-tight">{{ req.requisitionNumber ?? '—' }}</span>
-                                            <Badge
-                                                v-if="req.priority === 'urgent'"
-                                                variant="destructive"
-                                                class="h-4 px-1.5 text-[10px] uppercase tracking-wide"
-                                            >Urgent</Badge>
-                                            <Badge
-                                                v-else-if="req.priority === 'high'"
-                                                class="h-4 bg-orange-100 px-1.5 text-[10px] uppercase tracking-wide text-orange-800 dark:bg-orange-900/40 dark:text-orange-200"
-                                            >High</Badge>
-                                            <span class="text-xs text-muted-foreground">{{ req.requestingDepartment ?? '—' }}</span>
-                                            <span
-                                                v-if="req.neededBy"
-                                                class="flex items-center gap-1 text-[11px]"
-                                                :class="new Date(req.neededBy) < new Date() ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground'"
-                                            >
-                                                <AppIcon name="calendar" class="size-3" />
-                                                {{ String(req.neededBy).split('T')[0] }}
-                                                <span v-if="new Date(req.neededBy) < new Date()" class="font-semibold">· Overdue</span>
-                                            </span>
-                                        </div>
-
-                                        <!-- Row 2: pending lines and shortage actions -->
-                                        <div class="grid gap-1">
-                                            <div
-                                                v-for="line in req.pendingLines"
-                                                :key="line.id"
-                                                class="min-w-0 rounded-lg border bg-background/70 px-2.5 py-1.5 text-[11px] transition-colors group-hover:border-border/80"
-                                                :class="line.canIssueNow ? 'border-green-200/70 dark:border-green-900/50' : 'border-amber-200/70 dark:border-amber-900/50'"
-                                            >
-                                                <div class="flex min-w-0 items-center justify-between gap-2">
-                                                    <div class="flex min-w-0 items-center gap-2">
-                                                        <div class="flex min-w-0 items-center gap-1.5">
-                                                            <span
-                                                                class="size-1.5 shrink-0 rounded-full"
-                                                                :class="line.canIssueNow ? 'bg-green-500' : 'bg-amber-500'"
-                                                            ></span>
-                                                            <span class="min-w-0 truncate font-medium text-foreground">{{ line.itemName ?? line.itemCode ?? line.itemId }}</span>
-                                                        </div>
-                                                        <span
-                                                            class="shrink-0 rounded-md px-1.5 py-0.5 font-medium"
-                                                            :class="line.canIssueNow
-                                                                ? 'bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300'
-                                                                : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'"
-                                                        >
-                                                            {{ formatAmount(line.pendingQuantity) }} {{ line.unit ?? '' }}
-                                                        </span>
-                                                    </div>
-                                                    <div class="flex shrink-0 items-center gap-1.5">
-                                                        <Badge
-                                                            v-if="shortageLineProcurementRequest(line)"
-                                                            variant="outline"
-                                                            class="max-w-40 rounded-lg px-1.5 py-0.5 text-[10px] font-normal"
-                                                        >
-                                                            <span class="truncate">
-                                                                {{ shortageLineProcurementRequest(line).requestNumber ?? 'PRQ' }}
-                                                                · {{ formatEnumLabel(shortageLineProcurementRequest(line).status ?? 'n/a') }}
-                                                            </span>
-                                                        </Badge>
-                                                        <Button
-                                                            v-if="!line.canIssueNow && canCreateProcurementFromRequisitionLine(line, req)"
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            class="h-6 rounded-lg px-2 text-[11px] text-amber-700 hover:bg-amber-100 hover:text-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/50"
-                                                            @click.stop="openProcurementFromQueueShortage(req, line)"
-                                                        >
-                                                            Procure
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <!-- Row 3: readiness progress bar -->
-                                        <div v-if="(req.readyLineCount ?? 0) + (req.waitingLineCount ?? 0) > 0" class="flex items-center gap-2">
-                                            <div class="h-1.5 w-24 overflow-hidden rounded-full bg-muted/60">
-                                                <div
-                                                    class="h-full rounded-full bg-green-500 transition-all"
-                                                    :style="`width: ${Math.round((req.readyLineCount / ((req.readyLineCount ?? 0) + (req.waitingLineCount ?? 0))) * 100)}%`"
-                                                ></div>
-                                            </div>
-                                            <span class="text-[11px] text-muted-foreground">
-                                                {{ req.readyLineCount ?? 0 }} of {{ (req.readyLineCount ?? 0) + (req.waitingLineCount ?? 0) }} lines ready
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <!-- Right: readiness badge + CTA -->
-                                    <div class="flex shrink-0 flex-col items-end gap-2 pt-0.5">
-                                        <div
-                                            class="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-                                            :class="req.readyLineCount > 0 && req.waitingLineCount === 0
-                                                ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200'
-                                                : req.readyLineCount > 0
-                                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
-                                                    : 'bg-muted text-muted-foreground'"
-                                        >
-                                            <span
-                                                class="size-1.5 rounded-full"
-                                                :class="req.readyLineCount > 0 && req.waitingLineCount === 0
-                                                    ? 'bg-green-500'
-                                                    : req.readyLineCount > 0
-                                                        ? 'bg-amber-500'
-                                                        : 'bg-muted-foreground/50'"
-                                            ></span>
-                                            <template v-if="req.readyLineCount > 0 && req.waitingLineCount === 0">All ready</template>
-                                            <template v-else-if="req.readyLineCount > 0">Partial</template>
-                                            <template v-else>Waiting</template>
-                                        </div>
-                                        <Button
-                                            size="sm"
-                                            :variant="req.readyLineCount > 0 ? 'default' : 'outline'"
-                                            class="h-7 gap-1.5 text-xs"
-                                            @click.stop="openRequisitionDetails(req)"
-                                        >
-                                            <AppIcon v-if="req.readyLineCount > 0" name="arrow-right" class="size-3" />
-                                            {{ req.readyLineCount > 0 ? 'Issue now' : 'View' }}
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Pagination -->
-                        <footer v-if="shortageQueueMeta && shortageQueueMeta.lastPage > 1" class="flex items-center justify-between border-t px-4 py-3">
-                            <p class="text-xs text-muted-foreground">
-                                Page {{ shortageQueueMeta.currentPage }} of {{ shortageQueueMeta.lastPage }}
-                            </p>
-                            <div class="flex items-center gap-1">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    class="h-8 gap-1.5 text-xs"
-                                    :disabled="shortageQueueMeta.currentPage <= 1"
-                                    @click="shortageQueueFilters.page = shortageQueueMeta!.currentPage - 1; loadShortageQueue()"
-                                >
-                                    <AppIcon name="chevron-left" class="size-3.5" />
-                                    Previous
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    class="h-8 gap-1.5 text-xs"
-                                    :disabled="shortageQueueMeta.currentPage >= shortageQueueMeta.lastPage"
-                                    @click="shortageQueueFilters.page = shortageQueueMeta!.currentPage + 1; loadShortageQueue()"
-                                >
-                                    Next
-                                    <AppIcon name="chevron-right" class="size-3.5" />
-                                </Button>
-                            </div>
-                        </footer>
-                    </CardContent>
-                </Card>
-                </TabsContent>
-
-                <TabsContent value="lead-times" class="mt-0 flex flex-col gap-4">
-
-                    <Card v-if="canRead" class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col shadow-sm">
-
-                        <!-- Header -->
-                        <div class="flex items-center justify-between gap-4 border-b px-4 py-3.5">
-                            <div class="min-w-0">
-                                <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
-                                    <AppIcon name="calendar-clock" class="size-4 text-muted-foreground" />
-                                    Supplier Lead Times
-                                </h3>
-                                <p class="mt-1 text-xs text-muted-foreground">Track delivery performance and lead times per supplier.</p>
-                            </div>
-                            <Button size="sm" class="h-9 gap-1.5 rounded-lg text-xs" @click="createLeadTimeDialogOpen = true">
-                                <AppIcon name="plus" class="size-3.5" />
-                                Record Order
-                            </Button>
-                        </div>
-
-                        <!-- Toolbar -->
-                        <div class="flex items-center gap-2 border-b px-4 py-3">
-                            <Select
-                                :model-value="toSelectValue(leadTimeSearch.supplierId)"
-                                @update:model-value="leadTimeSearch.supplierId = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))"
-                            >
-                                <SelectTrigger class="h-9 min-w-0 flex-1 rounded-lg text-xs">
-                                    <SelectValue placeholder="Select supplier…">
-                                        {{ supplierLabel(leadTimeSearch.supplierId) || 'Select supplier…' }}
-                                    </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem :value="EMPTY_SELECT_VALUE">All suppliers</SelectItem>
-                                    <SelectItem v-for="s in (suppliers ?? [])" :key="s.id" :value="s.id" :text-value="lookupOptionText(s)">{{ s.name }}</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <Button variant="ghost" size="sm" class="h-9 gap-1.5 rounded-lg text-xs text-muted-foreground" :disabled="leadTimeLoading" @click="leadTimeSearch.page = 1; loadLeadTimes()">
-                                <AppIcon name="refresh-cw" class="size-3.5" />
-                                Refresh
-                            </Button>
-                        </div>
-
-                        <!-- Supplier performance KPI strip -->
-                        <div v-if="supplierPerformance" class="grid grid-cols-2 gap-3 border-b px-4 py-3 sm:grid-cols-4">
-                            <div class="flex items-center gap-3 rounded-lg border border-sidebar-border/70 bg-card px-3 py-2.5 shadow-sm">
-                                <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/60">
-                                    <AppIcon name="calendar-clock" class="size-3.5 text-muted-foreground" />
-                                </span>
-                                <div>
-                                    <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Avg Lead</p>
-                                    <p class="text-base font-bold tabular-nums">{{ supplierPerformance.avgLeadTimeDays ?? '—' }}<span class="ml-0.5 text-xs font-normal text-muted-foreground">d</span></p>
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-3 rounded-lg border border-sidebar-border/70 bg-card px-3 py-2.5 shadow-sm">
-                                <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/60">
-                                    <AppIcon name="check-circle" class="size-3.5 text-muted-foreground" />
-                                </span>
-                                <div>
-                                    <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Fulfillment</p>
-                                    <p class="text-base font-bold tabular-nums">{{ supplierPerformance.avgFulfillmentRate != null ? supplierPerformance.avgFulfillmentRate + '%' : '—' }}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Skeleton -->
-                        <div v-if="leadTimeLoading" class="divide-y">
-                            <div v-for="n in 4" :key="`sk-lt-${n}`" class="flex items-start gap-3 px-4 py-4">
-                                <div class="min-w-0 flex-1 space-y-2">
-                                    <div class="h-3.5 w-1/3 animate-pulse rounded bg-muted" />
-                                    <div class="h-3 w-2/3 animate-pulse rounded bg-muted" />
-                                </div>
-                                <div class="h-6 w-16 animate-pulse rounded-full bg-muted" />
-                            </div>
-                        </div>
-
-                        <!-- No supplier selected -->
-                        <div
-                            v-else-if="!leadTimeSearch.supplierId"
-                            class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center"
-                        >
-                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                <AppIcon name="calendar-clock" class="size-5 text-muted-foreground/40" />
-                            </div>
-                            <div>
-                                <p class="text-sm font-medium text-muted-foreground">Select a supplier</p>
-                                <p class="mt-0.5 text-xs text-muted-foreground/70">Choose a supplier to review lead-time performance, fulfillment variance, and receiving reliability.</p>
-                            </div>
-                        </div>
-
-                        <!-- Empty -->
-                        <div
-                            v-else-if="leadTimes.length === 0"
-                            class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center"
-                        >
-                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                <AppIcon name="calendar-clock" class="size-5 text-muted-foreground/40" />
-                            </div>
-                            <p class="text-sm font-medium text-muted-foreground">No lead time records found</p>
-                            <p class="text-xs text-muted-foreground/70">Records appear after supplier orders are received and actual delivery dates are captured.</p>
-                        </div>
-
-                        <!-- Lead time rows -->
-                        <div v-else class="divide-y">
-                            <div v-for="lt in leadTimes" :key="lt.id" class="relative flex items-start gap-3 px-4 py-4 transition-colors hover:bg-muted/30">
-                                <!-- Delivery status stripe -->
-                                <div
-                                    class="absolute inset-y-0 left-0 w-[3px] rounded-l"
-                                    :class="lt.delivery_status === 'on_time' ? 'bg-green-500' : lt.delivery_status === 'late' ? 'bg-red-500' : lt.delivery_status === 'early' ? 'bg-sky-500' : 'bg-muted-foreground/30'"
-                                />
-                                <div class="min-w-0 flex-1">
-                                    <!-- Row 1: dates + status badge -->
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <span class="text-sm font-medium">{{ lt.order_date ? new Date(lt.order_date).toLocaleDateString() : '—' }}</span>
-                                        <span class="text-xs text-muted-foreground">→</span>
-                                        <span class="text-sm">{{ lt.actual_delivery_date ? new Date(lt.actual_delivery_date).toLocaleDateString() : lt.expected_delivery_date ? new Date(lt.expected_delivery_date).toLocaleDateString() : '—' }}</span>
-                                        <span
-                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
-                                            :class="deliveryStatusBadge(lt.delivery_status)"
-                                        >
-                                            {{ (lt.delivery_status ?? 'pending').replace(/_/g, ' ') }}
-                                        </span>
-                                    </div>
-                                    <!-- Row 2: lead days · qty · fulfillment -->
-                                    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                                        <span>Lead: <strong class="text-foreground">{{ lt.actual_lead_time_days ?? lt.expected_lead_time_days ?? '—' }}d</strong></span>
-                                        <span v-if="lt.quantity_ordered != null">&middot; Ordered: <strong class="text-foreground">{{ lt.quantity_ordered }}</strong></span>
-                                        <span v-if="lt.quantity_received != null">&middot; Received: <strong class="text-foreground">{{ lt.quantity_received }}</strong></span>
-                                        <span v-if="lt.fulfillment_rate != null">&middot; Fulfillment: <strong class="text-foreground">{{ lt.fulfillment_rate }}%</strong></span>
-                                    </div>
-                                </div>
-                                <Button
-                                    v-if="lt.delivery_status === 'pending'"
-                                    size="sm" variant="outline"
-                                    class="h-7 shrink-0 rounded-lg px-2.5 text-xs"
-                                    @click="openRecordDelivery(lt)"
-                                >
-                                    Record delivery
-                                </Button>
-                            </div>
-                        </div>
-
-                        <!-- Footer pagination -->
-                        <footer v-if="leadTimePagination && leadTimePagination.lastPage > 1" class="flex shrink-0 items-center justify-between border-t bg-muted/20 px-4 py-2.5">
-                            <p class="text-xs text-muted-foreground">Page {{ leadTimePagination.currentPage }}/{{ leadTimePagination.lastPage }}{{ leadTimePagination.total != null ? ` · ${leadTimePagination.total} total` : '' }}</p>
-                            <div class="flex gap-1">
-                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="leadTimePagination.currentPage <= 1" @click="leadTimeSearch.page = leadTimePagination!.currentPage - 1; loadLeadTimes()">
-                                    <AppIcon name="chevron-left" class="size-3.5" />
-                                    Prev
-                                </Button>
-                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="leadTimePagination.currentPage >= leadTimePagination.lastPage" @click="leadTimeSearch.page = leadTimePagination!.currentPage + 1; loadLeadTimes()">
-                                    Next
-                                    <AppIcon name="chevron-right" class="size-3.5" />
-                                </Button>
-                            </div>
-                        </footer>
-                    </Card>
-
-                </TabsContent>
-                <!-- Warehouse Transfers Tab -->
-                <!-- ─── Warehouse Transfers Tab ─── -->
-                <TabsContent value="transfers" class="mt-0 flex flex-col gap-4">
-
-                    <!-- Attention summary KPI chips (outside card) -->
-                    <div v-if="transferAttentionSummary.length > 0" class="flex flex-wrap gap-2">
-                        <span
-                            v-for="signal in transferAttentionSummary"
-                            :key="signal.label"
-                            class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium shadow-sm"
-                            :class="transferAttentionBadgeClass(signal)"
-                        >
-                            {{ signal.label }}
-                            <span class="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] tabular-nums font-bold">{{ signal.count }}</span>
-                        </span>
-                    </div>
-
-                    <Card v-if="canRead" class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col shadow-sm">
-
-                        <!-- Header -->
-                        <div class="flex items-center justify-between gap-4 border-b px-4 py-3.5">
-                            <div class="min-w-0">
-                                <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
-                                    <AppIcon name="package" class="size-4 text-muted-foreground" />
-                                    Warehouse Transfers
-                                </h3>
-                                <p class="mt-1 text-xs text-muted-foreground">Inter-store stock movement, pick, dispatch, and receipt tracking.</p>
-                            </div>
-                            <Button size="sm" class="h-9 gap-1.5 rounded-lg text-xs" @click="createTransferDialogOpen = true">
-                                <AppIcon name="plus" class="size-3.5" />
-                                New Transfer
-                            </Button>
                         </div>
 
                         <!-- Toolbar -->
                         <div class="flex items-center gap-2 border-b px-4 py-3">
                             <div class="relative min-w-0 flex-1">
-                                <svg class="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                                <AppIcon name="search" class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                                 <input
-                                    v-model="transferSearch.q"
-                                    class="h-9 w-full rounded-lg border border-input bg-transparent pl-8 pr-3 text-xs shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                                    placeholder="Search transfer number…"
-                                    @keyup.enter="transferSearch.page = 1; loadWarehouseTransfers()"
+                                    v-model="procurementSearch.q"
+                                    class="h-9 w-full rounded-lg border border-input bg-transparent pl-9 pr-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    placeholder="Request number, supplier, item…"
+                                    @keydown.enter="procurementSearch.page = 1; loadProcurementRequests()"
                                 />
                             </div>
                             <Select
-                                :model-value="toSelectValue(transferSearch.status)"
-                                @update:model-value="val => { transferSearch.status = fromSelectValue(String(val ?? EMPTY_SELECT_VALUE)); transferSearch.page = 1; loadWarehouseTransfers() }"
+                                :model-value="toSelectValue(procurementSearch.status)"
+                                @update:model-value="procurementSearch.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))"
                             >
-                                <SelectTrigger class="h-9 w-36 shrink-0 rounded-lg text-xs">
+                                <SelectTrigger class="h-9 w-44 rounded-lg text-xs">
                                     <SelectValue placeholder="All statuses" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
-                                    <SelectItem v-for="s in TRANSFER_STATUSES" :key="s.value" :value="s.value">{{ s.label }}</SelectItem>
+                                    <SelectItem v-for="opt in procurementStatusOptions" :key="`ps-${opt}`" :value="opt">{{ formatEnumLabel(opt) }}</SelectItem>
                                 </SelectContent>
                             </Select>
                             <Select
-                                :model-value="toSelectValue(transferSearch.varianceReview)"
-                                @update:model-value="val => { transferSearch.varianceReview = fromSelectValue(String(val ?? EMPTY_SELECT_VALUE)); transferSearch.page = 1; loadWarehouseTransfers() }"
+                                :model-value="toSelectValue(procurementSearch.sortBy)"
+                                @update:model-value="procurementSearch.sortBy = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))"
                             >
-                                <SelectTrigger class="h-9 w-40 shrink-0 rounded-lg text-xs">
-                                    <SelectValue placeholder="Review queue" />
+                                <SelectTrigger class="h-9 w-40 rounded-lg text-xs">
+                                    <SelectValue placeholder="Sort by" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem
-                                        v-for="option in TRANSFER_VARIANCE_REVIEW_FILTER_OPTIONS"
-                                        :key="`trf-vr-${option.value || 'all'}`"
-                                        :value="option.value || EMPTY_SELECT_VALUE"
-                                    >{{ option.label }}</SelectItem>
+                                    <SelectItem value="createdAt">Created</SelectItem>
+                                    <SelectItem value="neededBy">Needed By</SelectItem>
+                                    <SelectItem value="requestedQuantity">Quantity</SelectItem>
+                                    <SelectItem value="status">Status</SelectItem>
+                                    <SelectItem value="supplierName">Supplier</SelectItem>
                                 </SelectContent>
                             </Select>
-                            <Button variant="ghost" size="sm" class="h-9 gap-1.5 shrink-0 rounded-lg text-xs text-muted-foreground" :disabled="transferLoading" @click="transferSearch.page = 1; loadWarehouseTransfers()">
+                            <Button
+                                variant="ghost" size="sm"
+                                class="h-9 gap-1.5 rounded-lg text-xs text-muted-foreground"
+                                :disabled="loading"
+                                @click="procurementSearch.page = 1; loadProcurementRequests()"
+                            >
                                 <AppIcon name="refresh-cw" class="size-3.5" />
                                 Refresh
                             </Button>
                         </div>
 
-                        <!-- Skeleton -->
-                        <div v-if="transferLoading" class="divide-y">
-                            <div v-for="n in 4" :key="`sk-tr-${n}`" class="flex items-start gap-3 px-4 py-4">
-                                <div class="min-w-0 flex-1 space-y-2">
-                                    <div class="h-3.5 w-1/4 animate-pulse rounded bg-muted" />
-                                    <div class="h-3 w-1/2 animate-pulse rounded bg-muted" />
-                                    <div class="flex gap-1.5">
-                                        <div class="h-5 w-16 animate-pulse rounded-full bg-muted" />
-                                        <div class="h-5 w-20 animate-pulse rounded-full bg-muted" />
-                                    </div>
-                                </div>
-                                <div class="flex gap-1.5">
-                                    <div class="h-7 w-20 animate-pulse rounded bg-muted" />
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Empty -->
-                        <div
-                            v-else-if="transfers.length === 0"
-                            class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center"
-                        >
-                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                <AppIcon name="package" class="size-5 text-muted-foreground/40" />
-                            </div>
-                            <div>
-                                <p class="text-sm font-medium text-muted-foreground">No warehouse transfers found</p>
-                                <p class="mt-0.5 text-xs text-muted-foreground/70">Transfers appear after stock is requested, packed, dispatched, and received between store locations.</p>
-                            </div>
-                            <Button size="sm" variant="outline" class="mt-1 h-8 gap-1.5 rounded-lg text-xs" @click="createTransferDialogOpen = true">
-                                <AppIcon name="plus" class="size-3.5" />
-                                New Transfer
-                            </Button>
-                        </div>
-
-                        <!-- Transfer rows -->
-                        <div v-else class="divide-y">
-                            <div
-                                v-for="t in transfers"
-                                :key="t.id"
-                                class="relative flex items-start gap-3 px-4 py-4 transition-colors hover:bg-muted/30"
+                        <!-- Active filter chips -->
+                        <div v-if="hasAnyProcurementFilters" class="flex flex-wrap items-center gap-1.5 border-b px-4 py-2">
+                            <span class="text-[11px] text-muted-foreground">Filters:</span>
+                            <button
+                                v-for="chip in procurementFilterChips"
+                                :key="chip"
+                                class="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] hover:bg-muted/80"
+                                @click="resetProcurementFilters()"
                             >
-                                <!-- Status accent stripe -->
-                                <div
-                                    class="absolute inset-y-0 left-0 w-[3px] rounded-l"
-                                    :class="transferStatusBadgeClass(t.status).includes('green') ? 'bg-green-500'
-                                          : transferStatusBadgeClass(t.status).includes('amber') ? 'bg-amber-500'
-                                          : transferStatusBadgeClass(t.status).includes('blue') ? 'bg-blue-500'
-                                          : transferStatusBadgeClass(t.status).includes('red') ? 'bg-red-500'
-                                          : 'bg-muted-foreground/30'"
-                                />
-                                <div class="min-w-0 flex-1">
-                                    <!-- Row 1: number + priority + status badges -->
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <span class="font-mono text-sm font-semibold">{{ t.transfer_number }}</span>
-                                        <span
-                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset"
-                                            :class="transferPriorityBadge(t.priority)"
-                                        >{{ t.priority }}</span>
-                                        <span
-                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset"
-                                            :class="transferStatusBadgeClass(t.status)"
-                                        >{{ (t.status ?? '').replace(/_/g, ' ') }}</span>
-                                        <span
-                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset"
-                                            :class="transferReservationStateBadgeClass(t.reservationSummary?.state)"
-                                        >{{ transferReservationSummaryLabel(t) }}</span>
-                                        <span
-                                            v-if="transferCanOpenVarianceReview(t) && transferVarianceReviewState(t) === 'reviewed'"
-                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset"
-                                            :class="transferVarianceReviewBadgeClass(transferVarianceReviewState(t))"
-                                        >{{ transferVarianceReviewStateLabel(transferVarianceReviewState(t)) }}</span>
-                                    </div>
-                                    <!-- Row 2: route + pick summary -->
-                                    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                                        <span class="font-medium text-foreground">{{ warehouseLabel(t.source_warehouse_id) ?? 'Unknown' }} → {{ warehouseLabel(t.destination_warehouse_id) ?? 'Unknown' }}</span>
-                                        <span v-if="transferPickSummaryLabel(t)">&middot; {{ transferPickSummaryLabel(t) }}</span>
-                                        <span v-if="t.lines?.length">&middot; <strong class="text-foreground">{{ t.lines.length }}</strong> line{{ t.lines.length !== 1 ? 's' : '' }}</span>
-                                        <span v-if="t.reason" class="max-w-xs truncate">&middot; {{ t.reason }}</span>
-                                        <span>&middot; {{ t.created_at ? new Date(t.created_at).toLocaleDateString() : '—' }}</span>
-                                    </div>
-                                    <!-- Row 3: attention signals -->
-                                    <div v-if="transferAttentionSignals(t).length > 0" class="mt-1.5 flex flex-wrap items-center gap-1">
-                                        <span
-                                            v-for="signal in transferAttentionSignals(t)"
-                                            :key="signal.key"
-                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-                                            :class="transferAttentionBadgeClass(signal)"
-                                        >{{ signal.label }}</span>
-                                    </div>
-                                </div>
-                                <!-- Action buttons -->
-                                <div class="flex shrink-0 flex-wrap items-start gap-1.5">
-                                    <Button
-                                        v-for="ns in (TRANSFER_ACTION_TRANSITIONS[t.status] ?? [])"
-                                        :key="ns"
-                                        size="sm"
-                                        variant="outline"
-                                        class="h-7 rounded-lg px-2.5 text-xs"
-                                        @click="openTransferStatusDialog(t, ns)"
-                                    >{{ transferActionLabel(ns) }}</Button>
-                                    <Button
-                                        v-if="transferCanOpenVarianceReview(t)"
-                                        size="sm"
-                                        variant="outline"
-                                        class="h-7 rounded-lg px-2.5 text-xs"
-                                        @click="openTransferVarianceReviewDialog(t)"
-                                    >{{ transferVarianceReviewButtonLabel(t) }}</Button>
-                                    <DropdownMenu v-if="transferCanOpenPickSlip(t) || transferCanOpenDispatchNote(t)">
-                                        <DropdownMenuTrigger as-child>
-                                            <Button size="sm" variant="ghost" class="h-7 rounded-lg px-2 text-xs">
-                                                <AppIcon name="clipboard-list" class="size-3.5" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" class="w-48">
-                                            <DropdownMenuItem v-if="transferCanOpenPickSlip(t)" @click="openTransferPickSlip(t)">
-                                                <AppIcon name="clipboard-list" class="mr-2 size-3.5" />
-                                                Pick slip
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem v-if="transferCanOpenDispatchNote(t)" @click="openTransferDispatchNote(t)">
-                                                <AppIcon name="file-text" class="mr-2 size-3.5" />
-                                                Dispatch note
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </div>
-                            </div>
+                                {{ chip }} <AppIcon name="circle-x" class="size-3" />
+                            </button>
+                            <button class="ml-1 text-[11px] text-muted-foreground underline-offset-2 hover:underline" @click="resetProcurementFilters()">Clear all</button>
                         </div>
 
-                        <!-- Footer pagination -->
-                        <footer v-if="transferPagination && transferPagination.lastPage > 1" class="flex shrink-0 items-center justify-between border-t bg-muted/20 px-4 py-2.5">
-                            <p class="text-xs text-muted-foreground">Page {{ transferPagination.currentPage }}/{{ transferPagination.lastPage }}{{ transferPagination.total != null ? ` · ${transferPagination.total} total` : '' }}</p>
-                            <div class="flex gap-1">
-                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="transferPagination.currentPage <= 1" @click="transferSearch.page = transferPagination!.currentPage - 1; loadWarehouseTransfers()">
-                                    <AppIcon name="chevron-left" class="size-3.5" />
-                                    Prev
-                                </Button>
-                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="transferPagination.currentPage >= transferPagination.lastPage" @click="transferSearch.page = transferPagination!.currentPage + 1; loadWarehouseTransfers()">
-                                    Next
-                                    <AppIcon name="chevron-right" class="size-3.5" />
-                                </Button>
-                            </div>
-                        </footer>
-                    </Card>
-
-                </TabsContent>
-                <TabsContent value="claims" class="mt-0 flex flex-col gap-4">
-                    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                        <div class="flex items-center gap-3 rounded-lg border border-sidebar-border/70 bg-card px-4 py-3 shadow-sm">
-                            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted/60">
-                                <AppIcon name="receipt" class="size-4 text-muted-foreground" />
-                            </span>
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Claim Links</p>
-                                <p class="text-xl font-bold leading-tight tabular-nums">{{ claimLinkPagination?.total ?? claimLinks.length }}</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-3 rounded-lg border border-blue-200/70 bg-blue-50/50 px-4 py-3 shadow-sm dark:border-blue-900/40 dark:bg-blue-950/20">
-                            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/50">
-                                <AppIcon name="activity" class="size-4 text-blue-600 dark:text-blue-400" />
-                            </span>
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-medium uppercase tracking-wider text-blue-700/70 dark:text-blue-400/70">Submitted</p>
-                                <p class="text-xl font-bold leading-tight tabular-nums text-blue-700 dark:text-blue-300">{{ claimLinks.filter((link) => link.claim_status === 'submitted').length }}</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-3 rounded-lg border border-green-200/70 bg-green-50/50 px-4 py-3 shadow-sm dark:border-green-900/40 dark:bg-green-950/20">
-                            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/50">
-                                <AppIcon name="check-circle" class="size-4 text-green-600 dark:text-green-400" />
-                            </span>
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-medium uppercase tracking-wider text-green-700/70 dark:text-green-400/70">Accepted</p>
-                                <p class="text-xl font-bold leading-tight tabular-nums text-green-700 dark:text-green-300">{{ claimLinks.filter((link) => ['accepted', 'approved', 'paid'].includes(link.claim_status)).length }}</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 shadow-sm">
-                            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
-                                <AppIcon name="alert-triangle" class="size-4 text-destructive" />
-                            </span>
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-medium uppercase tracking-wider text-destructive/80">Rejected</p>
-                                <p class="text-xl font-bold leading-tight tabular-nums text-destructive">{{ claimLinks.filter((link) => ['rejected', 'failed'].includes(link.claim_status)).length }}</p>
-                            </div>
-                        </div>
-                    </div>
-                <!-- Claims Tab (Feature 5) -->
-                <Card class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col shadow-sm">
-                    <div class="flex items-center justify-between gap-4 border-b px-4 py-3.5">
-                        <div class="min-w-0">
-                            <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
-                                <AppIcon name="receipt" class="size-4 text-muted-foreground" />
-                                Dispensing Claim Links
-                            </h3>
-                            <p class="mt-1 text-xs text-muted-foreground">Connect dispensed stock to payer claims, NHIF references, invoice traceability, and reimbursement follow-up.</p>
-                        </div>
-                        <Button size="sm" class="h-9 shrink-0 gap-1.5 rounded-lg text-xs" @click="createClaimLinkDialogOpen = true">
-                            <AppIcon name="plus" class="size-3.5" />
-                            Link Dispensing
-                        </Button>
-                    </div>
-
-                    <div class="flex items-center gap-2 border-b px-4 py-3">
-                        <SearchInput
-                            v-model="claimLinkSearch.q"
-                            placeholder="Search NHIF code, payer..."
-                            class="min-w-0 flex-1 text-xs"
-                            @keyup.enter="claimLinkSearch.page = 1; loadClaimLinks()"
-                        />
-                        <Select :model-value="toSelectValue(claimLinkSearch.claimStatus)" @update:model-value="val => { claimLinkSearch.claimStatus = fromSelectValue(String(val ?? EMPTY_SELECT_VALUE)); claimLinkSearch.page = 1; loadClaimLinks() }">
-                            <SelectTrigger class="h-9 w-44 rounded-lg text-xs">
-                                <SelectValue placeholder="All statuses" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
-                                <SelectItem v-for="s in CLAIM_STATUSES" :key="s.value" :value="s.value">{{ s.label }}</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Button variant="ghost" size="sm" class="h-9 gap-1.5 rounded-lg text-xs text-muted-foreground" @click="claimLinkSearch.page = 1; loadClaimLinks()">
-                            <AppIcon name="refresh-cw" class="size-3.5" />
-                            Refresh
-                        </Button>
-                    </div>
-
-                    <CardContent class="flex min-h-0 flex-1 flex-col p-0">
-                        <div v-if="claimLinkLoading" class="divide-y">
-                            <div v-for="n in 4" :key="`claim-skeleton-${n}`" class="flex items-start gap-3 px-4 py-4">
+                        <!-- Skeleton loader -->
+                        <div v-if="loading" class="divide-y">
+                            <div v-for="n in 4" :key="`sk-pr-${n}`" class="flex items-start gap-3 px-4 py-4">
                                 <div class="mt-0.5 size-1 w-[3px] self-stretch animate-pulse rounded bg-muted" />
                                 <div class="min-w-0 flex-1 space-y-2">
                                     <div class="flex items-center gap-2">
@@ -8395,82 +7919,162 @@ onMounted(async () => {
                                 <div class="h-8 w-20 animate-pulse rounded-lg bg-muted" />
                             </div>
                         </div>
+
+                        <!-- Empty state -->
                         <div
-                            v-else-if="claimLinks.length === 0"
+                            v-else-if="procurementRequests.length === 0"
                             class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center"
                         >
                             <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                <AppIcon name="receipt" class="size-5 text-muted-foreground/40" />
+                                <AppIcon name="clipboard-list" class="size-5 text-muted-foreground/40" />
                             </div>
-                            <div class="space-y-1">
-                                <p class="text-sm font-semibold">No dispensing claim links found</p>
-                                <p class="max-w-xs text-xs text-muted-foreground">Claim links appear when dispensed stock is connected to payer, invoice, NHIF, or reimbursement workflows.</p>
+                            <div>
+                                <p class="text-sm font-medium text-muted-foreground">
+                                    {{ hasAnyProcurementFilters ? 'No requests match the current filters' : 'No procurement requests yet' }}
+                                </p>
+                                <p class="mt-0.5 text-xs text-muted-foreground/70">
+                                    {{ hasAnyProcurementFilters ? 'Try adjusting or clearing your filters.' : 'Create requests after stock demand or low-stock need is identified.' }}
+                                </p>
                             </div>
-                            <Button size="sm" class="mt-1 h-8 gap-1.5 rounded-lg text-xs" @click="createClaimLinkDialogOpen = true">
-                                <AppIcon name="plus" class="size-3.5" />
-                                Link Dispensing
-                            </Button>
+                            <div class="flex items-center gap-2">
+                                <Button v-if="hasAnyProcurementFilters" variant="outline" size="sm" class="h-8 rounded-lg text-xs" @click="resetProcurementFilters()">
+                                    Clear filters
+                                </Button>
+                                <Button v-if="canCreateRequest" size="sm" class="h-8 gap-1.5 rounded-lg text-xs" :disabled="!canLaunchProcurementRequest" @click="openCreateProcurementDialog">
+                                    <AppIcon name="plus" class="size-3.5" />
+                                    Create request
+                                </Button>
+                            </div>
                         </div>
-                        <div v-else-if="claimLinks.length > 0" class="divide-y">
-                            <div v-for="link in claimLinks" :key="link.id" class="relative flex flex-col gap-3 px-4 py-4 transition-colors hover:bg-muted/30 md:flex-row md:items-start md:justify-between">
-                                <div class="absolute inset-y-0 left-0 w-[3px]" :class="claimStatusBadgeClass(link.claim_status).includes('red') ? 'bg-destructive' : claimStatusBadgeClass(link.claim_status).includes('green') ? 'bg-green-500' : claimStatusBadgeClass(link.claim_status).includes('blue') ? 'bg-blue-500' : 'bg-muted-foreground/30'" />
+
+                        <!-- Request rows -->
+                        <div v-else class="divide-y">
+                            <div
+                                v-for="request in procurementRequests"
+                                :key="request.id"
+                                class="relative flex items-start gap-3 px-4 py-4 transition-colors hover:bg-muted/30"
+                                :class="flashedRequestId === request.id ? 'animate-inv-row-flash' : ''"
+                            >
+                                <!-- Status accent stripe -->
+                                <div
+                                    class="absolute inset-y-0 left-0 w-[3px] rounded-l"
+                                    :class="request.status === 'draft' ? 'bg-muted-foreground/30' : request.status === 'pending_approval' ? 'bg-blue-400' : request.status === 'approved' ? 'bg-green-500' : request.status === 'ordered' ? 'bg-amber-500' : request.status === 'received' ? 'bg-emerald-500' : request.status === 'rejected' ? 'bg-red-500' : request.status === 'cancelled' ? 'bg-muted-foreground/20' : 'bg-muted-foreground/30'"
+                                />
+                                <!-- Content -->
                                 <div class="min-w-0 flex-1">
+                                    <!-- Row 1: number + badges -->
                                     <div class="flex flex-wrap items-center gap-2">
-                                        <p class="font-mono text-sm font-semibold">{{ link.nhif_code || link.id }}</p>
-                                        <Badge :class="claimStatusBadgeClass(link.claim_status)">{{ formatEnumLabel(link.claim_status) }}</Badge>
+                                        <p class="text-sm font-semibold">{{ request.requestNumber }}</p>
+                                        <span
+                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset"
+                                            :class="request.status === 'draft' ? 'bg-muted text-muted-foreground ring-border' : request.status === 'pending_approval' ? 'bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-500/30' : request.status === 'approved' ? 'bg-green-50 text-green-700 ring-green-600/20 dark:bg-green-900/30 dark:text-green-400 dark:ring-green-500/30' : request.status === 'ordered' ? 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-500/30' : request.status === 'received' ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-500/30' : request.status === 'rejected' ? 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-500/30' : 'bg-muted text-muted-foreground ring-border'"
+                                        >
+                                            {{ formatEnumLabel(request.status) }}
+                                        </span>
+                                        <span v-if="request.sourceDepartmentRequisitionId" class="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-900/30 dark:text-sky-400 dark:ring-sky-500/30">
+                                            Dept shortage
+                                        </span>
                                     </div>
-                                    <p class="mt-1 text-xs text-muted-foreground">
-                                        {{ link.payer_name || link.payer_type || 'No payer recorded' }} &middot; Qty {{ formatAmount(link.quantity_dispensed) }} {{ link.unit || '' }}
-                                    </p>
-                                    <div class="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-3">
-                                        <p>Item <span class="font-mono text-foreground">{{ link.item_id?.substring(0, 8) || 'N/A' }}</span></p>
-                                        <p>Patient <span class="font-mono text-foreground">{{ link.patient_id?.substring(0, 8) || 'N/A' }}</span></p>
-                                        <p>Created <span class="text-foreground">{{ link.created_at?.substring(0, 10) || 'N/A' }}</span></p>
+                                    <!-- Row 2: item · qty · supplier · needed-by -->
+                                    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                                        <span>{{ request.itemName || request.itemId }}</span>
+                                        <span>&middot;</span>
+                                        <span>Qty: <strong class="text-foreground">{{ request.requestedQuantity }}</strong></span>
+                                        <span v-if="request.supplierName || supplierLabel(request.supplierId)">&middot; {{ request.supplierName || supplierLabel(request.supplierId) }}</span>
+                                        <span v-if="request.neededBy">&middot; Needed {{ request.neededBy }}</span>
                                     </div>
-                                </div>
-                                <div class="flex shrink-0 items-center gap-1.5">
-                                    <Badge variant="outline" class="rounded-lg">{{ link.payer_type || 'payer' }}</Badge>
+                                    <!-- Row 3: cost + source -->
+                                    <div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                                        <span v-if="request.unitCostEstimate">Unit: {{ formatAmount(request.unitCostEstimate) }}</span>
+                                        <span v-if="request.totalCostEstimate">&middot; Total est: {{ formatAmount(request.totalCostEstimate) }}</span>
+                                        <span v-if="request.sourceDepartmentRequisitionId" class="text-muted-foreground/70">&middot; {{ procurementSourceLabel(request) }}</span>
+                                    </div>
+                                    <!-- CTAs -->
+                                    <div class="mt-2.5 flex flex-wrap items-center gap-2">
+                                        <Button size="sm" variant="outline" class="h-7 rounded-lg px-2.5 text-xs" @click="openDetails(request)">
+                                            Details
+                                        </Button>
+                                        <Button
+                                            v-if="request.sourceDepartmentRequisitionId && request.status !== 'received'"
+                                            size="sm" variant="outline"
+                                            class="h-7 rounded-lg px-2.5 text-xs"
+                                            :disabled="sourceRequisitionOpeningId === String(request.id)"
+                                            @click="openSourceRequisitionFromProcurement(request)"
+                                        >
+                                            {{ sourceRequisitionOpeningId === String(request.id) ? 'Opening...' : 'Source Req.' }}
+                                        </Button>
+                                        <template v-if="canUpdateRequestStatus">
+                                            <Button
+                                                v-if="procurementPrimaryAction(request)"
+                                                size="sm"
+                                                class="h-7 rounded-lg px-2.5 text-xs"
+                                                :disabled="sourceRequisitionOpeningId === String(request.id)"
+                                                @click="procurementPrimaryAction(request)!.handler()"
+                                            >
+                                                {{ procurementPrimaryAction(request)!.label }}
+                                            </Button>
+                                            <DropdownMenu v-if="procurementOverflowActions(request).length">
+                                                <DropdownMenuTrigger as-child>
+                                                    <Button size="sm" variant="outline" class="h-7 rounded-lg px-2 text-xs">
+                                                        <AppIcon name="ellipsis-vertical" class="size-3.5" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem
+                                                        v-for="act in procurementOverflowActions(request)"
+                                                        :key="act.label"
+                                                        @click="act.handler()"
+                                                    >
+                                                        {{ act.label }}
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </template>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <div v-if="false" class="overflow-auto">
-                            <table class="w-full text-sm">
-                                <thead>
-                                    <tr class="border-b text-left text-xs text-muted-foreground">
-                                        <th class="pb-2 pr-4 font-medium">Item ID</th>
-                                        <th class="pb-2 pr-4 font-medium">Patient ID</th>
-                                        <th class="pb-2 pr-4 font-medium">NHIF Code</th>
-                                        <th class="pb-2 pr-4 font-medium">Qty</th>
-                                        <th class="pb-2 pr-4 font-medium">Payer</th>
-                                        <th class="pb-2 pr-4 font-medium">Status</th>
-                                        <th class="pb-2 pr-4 font-medium">Created</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="link in claimLinks" :key="link.id" class="border-b last:border-0">
-                                        <td class="py-2 pr-4 font-mono text-xs">{{ link.item_id?.substring(0, 8) }}...</td>
-                                        <td class="py-2 pr-4 font-mono text-xs">{{ link.patient_id?.substring(0, 8) }}...</td>
-                                        <td class="py-2 pr-4">{{ link.nhif_code || '—' }}</td>
-                                        <td class="py-2 pr-4">{{ link.quantity_dispensed }} {{ link.unit || '' }}</td>
-                                        <td class="py-2 pr-4">{{ link.payer_name || link.payer_type || '—' }}</td>
-                                        <td class="py-2 pr-4">
-                                            <Badge :class="claimStatusBadgeClass(link.claim_status)">{{ formatEnumLabel(link.claim_status) }}</Badge>
-                                        </td>
-                                        <td class="py-2 pr-4 text-xs text-muted-foreground">{{ link.created_at?.substring(0, 10) }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <footer v-if="claimLinkPagination && claimLinkPagination.lastPage > 1" class="flex shrink-0 items-center justify-between border-t bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground">
-                            <span>Page {{ claimLinkPagination.currentPage }} of {{ claimLinkPagination.lastPage }}{{ claimLinkPagination.total != null ? ` (${claimLinkPagination.total} total)` : '' }}</span>
-                            <div class="flex gap-1">
-                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="claimLinkPagination.currentPage <= 1" @click="claimLinkSearch.page = claimLinkPagination!.currentPage - 1; loadClaimLinks()">Prev</Button>
-                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="claimLinkPagination.currentPage >= claimLinkPagination.lastPage" @click="claimLinkSearch.page = claimLinkPagination!.currentPage + 1; loadClaimLinks()">Next</Button>
+
+                        <!-- Footer pagination -->
+                        <footer class="flex shrink-0 items-center justify-between gap-2 border-t bg-muted/20 px-4 py-2.5">
+                            <p class="text-xs text-muted-foreground">
+                                {{ procurementRequests.length }} of {{ procurementPagination?.total ?? procurementRequests.length }} &middot; Page {{ procurementPagination?.currentPage ?? 1 }}/{{ procurementPagination?.lastPage ?? 1 }}
+                            </p>
+                            <div class="flex items-center gap-1">
+                                <Button
+                                    variant="outline" size="sm" class="h-8 gap-1.5 rounded-lg text-xs"
+                                    :disabled="!procurementPagination || procurementPagination.currentPage <= 1 || loading"
+                                    @click="procurementSearch.page -= 1; loadProcurementRequests()"
+                                >
+                                    <AppIcon name="chevron-left" class="size-3.5" />
+                                    Prev
+                                </Button>
+                                <template v-for="pg in procurementPages" :key="typeof pg === 'number' ? `pp-${pg}` : `pp-e-${Math.random()}`">
+                                    <span v-if="pg === '...'" class="px-1 text-xs text-muted-foreground">&hellip;</span>
+                                    <Button
+                                        v-else size="sm"
+                                        :variant="pg === (procurementPagination?.currentPage ?? 1) ? 'default' : 'outline'"
+                                        class="h-8 w-8 rounded-lg p-0 text-xs"
+                                        :disabled="loading"
+                                        @click="goToProcurementPage(pg as number)"
+                                    >
+                                        {{ pg }}
+                                    </Button>
+                                </template>
+                                <Button
+                                    variant="outline" size="sm" class="h-8 gap-1.5 rounded-lg text-xs"
+                                    :disabled="!procurementPagination || procurementPagination.currentPage >= procurementPagination.lastPage || loading"
+                                    @click="procurementSearch.page += 1; loadProcurementRequests()"
+                                >
+                                    Next
+                                    <AppIcon name="chevron-right" class="size-3.5" />
+                                </Button>
                             </div>
                         </footer>
-                    </CardContent>
-                </Card>
+                    </Card>
+
                 </TabsContent>
+
                 <!-- MSD Orders Tab (Feature 6) -->
                 <TabsContent value="msd-orders" class="mt-0 flex flex-col gap-4">
                     <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -8665,6 +8269,332 @@ onMounted(async () => {
                             <div class="flex gap-1">
                                 <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="msdOrderPagination.currentPage <= 1" @click="msdOrderSearch.page = msdOrderPagination!.currentPage - 1; loadMsdOrders()">Prev</Button>
                                 <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="msdOrderPagination.currentPage >= msdOrderPagination.lastPage" @click="msdOrderSearch.page = msdOrderPagination!.currentPage + 1; loadMsdOrders()">Next</Button>
+                            </div>
+                        </footer>
+                    </CardContent>
+                </Card>
+                </TabsContent>
+                <!-- Supplier Lead Times Tab -->
+                <TabsContent value="lead-times" class="mt-0 flex flex-col gap-4">
+
+                    <Card v-if="canRead" class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col shadow-sm">
+
+                        <!-- Header -->
+                        <div class="flex items-center justify-between gap-4 border-b px-4 py-3.5">
+                            <div class="min-w-0">
+                                <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
+                                    <AppIcon name="calendar-clock" class="size-4 text-muted-foreground" />
+                                    Supplier Lead Times
+                                </h3>
+                                <p class="mt-1 text-xs text-muted-foreground">Track delivery performance and lead times per supplier.</p>
+                            </div>
+                            <Button size="sm" class="h-9 gap-1.5 rounded-lg text-xs" @click="createLeadTimeDialogOpen = true">
+                                <AppIcon name="plus" class="size-3.5" />
+                                Record Order
+                            </Button>
+                        </div>
+
+                        <!-- Toolbar -->
+                        <div class="flex items-center gap-2 border-b px-4 py-3">
+                            <Select
+                                :model-value="toSelectValue(leadTimeSearch.supplierId)"
+                                @update:model-value="leadTimeSearch.supplierId = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))"
+                            >
+                                <SelectTrigger class="h-9 min-w-0 flex-1 rounded-lg text-xs">
+                                    <SelectValue placeholder="Select supplier…">
+                                        {{ supplierLabel(leadTimeSearch.supplierId) || 'Select supplier…' }}
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem :value="EMPTY_SELECT_VALUE">All suppliers</SelectItem>
+                                    <SelectItem v-for="s in (suppliers ?? [])" :key="s.id" :value="s.id" :text-value="lookupOptionText(s)">{{ s.name }}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Button variant="ghost" size="sm" class="h-9 gap-1.5 rounded-lg text-xs text-muted-foreground" :disabled="leadTimeLoading" @click="leadTimeSearch.page = 1; loadLeadTimes()">
+                                <AppIcon name="refresh-cw" class="size-3.5" />
+                                Refresh
+                            </Button>
+                        </div>
+
+                        <!-- Supplier performance KPI strip -->
+                        <div v-if="supplierPerformance" class="grid grid-cols-2 gap-3 border-b px-4 py-3 sm:grid-cols-4">
+                            <div class="flex items-center gap-3 rounded-lg border border-sidebar-border/70 bg-card px-3 py-2.5 shadow-sm">
+                                <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/60">
+                                    <AppIcon name="calendar-clock" class="size-3.5 text-muted-foreground" />
+                                </span>
+                                <div>
+                                    <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Avg Lead</p>
+                                    <p class="text-base font-bold tabular-nums">{{ supplierPerformance.avgLeadTimeDays ?? '—' }}<span class="ml-0.5 text-xs font-normal text-muted-foreground">d</span></p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3 rounded-lg border border-sidebar-border/70 bg-card px-3 py-2.5 shadow-sm">
+                                <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/60">
+                                    <AppIcon name="check-circle" class="size-3.5 text-muted-foreground" />
+                                </span>
+                                <div>
+                                    <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Fulfillment</p>
+                                    <p class="text-base font-bold tabular-nums">{{ supplierPerformance.avgFulfillmentRate != null ? supplierPerformance.avgFulfillmentRate + '%' : '—' }}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Skeleton -->
+                        <div v-if="leadTimeLoading" class="divide-y">
+                            <div v-for="n in 4" :key="`sk-lt-${n}`" class="flex items-start gap-3 px-4 py-4">
+                                <div class="min-w-0 flex-1 space-y-2">
+                                    <div class="h-3.5 w-1/3 animate-pulse rounded bg-muted" />
+                                    <div class="h-3 w-2/3 animate-pulse rounded bg-muted" />
+                                </div>
+                                <div class="h-6 w-16 animate-pulse rounded-full bg-muted" />
+                            </div>
+                        </div>
+
+                        <!-- No supplier selected -->
+                        <div
+                            v-else-if="!leadTimeSearch.supplierId"
+                            class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center"
+                        >
+                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                <AppIcon name="calendar-clock" class="size-5 text-muted-foreground/40" />
+                            </div>
+                            <div>
+                                <p class="text-sm font-medium text-muted-foreground">Select a supplier</p>
+                                <p class="mt-0.5 text-xs text-muted-foreground/70">Choose a supplier to review lead-time performance, fulfillment variance, and receiving reliability.</p>
+                            </div>
+                        </div>
+
+                        <!-- Empty -->
+                        <div
+                            v-else-if="leadTimes.length === 0"
+                            class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center"
+                        >
+                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                <AppIcon name="calendar-clock" class="size-5 text-muted-foreground/40" />
+                            </div>
+                            <p class="text-sm font-medium text-muted-foreground">No lead time records found</p>
+                            <p class="text-xs text-muted-foreground/70">Records appear after supplier orders are received and actual delivery dates are captured.</p>
+                        </div>
+
+                        <!-- Lead time rows -->
+                        <div v-else class="divide-y">
+                            <div v-for="lt in leadTimes" :key="lt.id" class="relative flex items-start gap-3 px-4 py-4 transition-colors hover:bg-muted/30">
+                                <!-- Delivery status stripe -->
+                                <div
+                                    class="absolute inset-y-0 left-0 w-[3px] rounded-l"
+                                    :class="lt.delivery_status === 'on_time' ? 'bg-green-500' : lt.delivery_status === 'late' ? 'bg-red-500' : lt.delivery_status === 'early' ? 'bg-sky-500' : 'bg-muted-foreground/30'"
+                                />
+                                <div class="min-w-0 flex-1">
+                                    <!-- Row 1: dates + status badge -->
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="text-sm font-medium">{{ lt.order_date ? new Date(lt.order_date).toLocaleDateString() : '—' }}</span>
+                                        <span class="text-xs text-muted-foreground">→</span>
+                                        <span class="text-sm">{{ lt.actual_delivery_date ? new Date(lt.actual_delivery_date).toLocaleDateString() : lt.expected_delivery_date ? new Date(lt.expected_delivery_date).toLocaleDateString() : '—' }}</span>
+                                        <span
+                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
+                                            :class="deliveryStatusBadge(lt.delivery_status)"
+                                        >
+                                            {{ (lt.delivery_status ?? 'pending').replace(/_/g, ' ') }}
+                                        </span>
+                                    </div>
+                                    <!-- Row 2: lead days · qty · fulfillment -->
+                                    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                                        <span>Lead: <strong class="text-foreground">{{ lt.actual_lead_time_days ?? lt.expected_lead_time_days ?? '—' }}d</strong></span>
+                                        <span v-if="lt.quantity_ordered != null">&middot; Ordered: <strong class="text-foreground">{{ lt.quantity_ordered }}</strong></span>
+                                        <span v-if="lt.quantity_received != null">&middot; Received: <strong class="text-foreground">{{ lt.quantity_received }}</strong></span>
+                                        <span v-if="lt.fulfillment_rate != null">&middot; Fulfillment: <strong class="text-foreground">{{ lt.fulfillment_rate }}%</strong></span>
+                                    </div>
+                                </div>
+                                <Button
+                                    v-if="lt.delivery_status === 'pending'"
+                                    size="sm" variant="outline"
+                                    class="h-7 shrink-0 rounded-lg px-2.5 text-xs"
+                                    @click="openRecordDelivery(lt)"
+                                >
+                                    Record delivery
+                                </Button>
+                            </div>
+                        </div>
+
+                        <!-- Footer pagination -->
+                        <footer v-if="leadTimePagination && leadTimePagination.lastPage > 1" class="flex shrink-0 items-center justify-between border-t bg-muted/20 px-4 py-2.5">
+                            <p class="text-xs text-muted-foreground">Page {{ leadTimePagination.currentPage }}/{{ leadTimePagination.lastPage }}{{ leadTimePagination.total != null ? ` · ${leadTimePagination.total} total` : '' }}</p>
+                            <div class="flex gap-1">
+                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="leadTimePagination.currentPage <= 1" @click="leadTimeSearch.page = leadTimePagination!.currentPage - 1; loadLeadTimes()">
+                                    <AppIcon name="chevron-left" class="size-3.5" />
+                                    Prev
+                                </Button>
+                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="leadTimePagination.currentPage >= leadTimePagination.lastPage" @click="leadTimeSearch.page = leadTimePagination!.currentPage + 1; loadLeadTimes()">
+                                    Next
+                                    <AppIcon name="chevron-right" class="size-3.5" />
+                                </Button>
+                            </div>
+                        </footer>
+                    </Card>
+
+                </TabsContent>
+                <TabsContent value="claims" class="mt-0 flex flex-col gap-4">
+                    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                        <div class="flex items-center gap-3 rounded-lg border border-sidebar-border/70 bg-card px-4 py-3 shadow-sm">
+                            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted/60">
+                                <AppIcon name="receipt" class="size-4 text-muted-foreground" />
+                            </span>
+                            <div class="min-w-0">
+                                <p class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Claim Links</p>
+                                <p class="text-xl font-bold leading-tight tabular-nums">{{ claimLinkPagination?.total ?? claimLinks.length }}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 rounded-lg border border-blue-200/70 bg-blue-50/50 px-4 py-3 shadow-sm dark:border-blue-900/40 dark:bg-blue-950/20">
+                            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/50">
+                                <AppIcon name="activity" class="size-4 text-blue-600 dark:text-blue-400" />
+                            </span>
+                            <div class="min-w-0">
+                                <p class="text-[11px] font-medium uppercase tracking-wider text-blue-700/70 dark:text-blue-400/70">Submitted</p>
+                                <p class="text-xl font-bold leading-tight tabular-nums text-blue-700 dark:text-blue-300">{{ claimLinks.filter((link) => link.claim_status === 'submitted').length }}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 rounded-lg border border-green-200/70 bg-green-50/50 px-4 py-3 shadow-sm dark:border-green-900/40 dark:bg-green-950/20">
+                            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/50">
+                                <AppIcon name="check-circle" class="size-4 text-green-600 dark:text-green-400" />
+                            </span>
+                            <div class="min-w-0">
+                                <p class="text-[11px] font-medium uppercase tracking-wider text-green-700/70 dark:text-green-400/70">Accepted</p>
+                                <p class="text-xl font-bold leading-tight tabular-nums text-green-700 dark:text-green-300">{{ claimLinks.filter((link) => ['accepted', 'approved', 'paid'].includes(link.claim_status)).length }}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 shadow-sm">
+                            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
+                                <AppIcon name="alert-triangle" class="size-4 text-destructive" />
+                            </span>
+                            <div class="min-w-0">
+                                <p class="text-[11px] font-medium uppercase tracking-wider text-destructive/80">Rejected</p>
+                                <p class="text-xl font-bold leading-tight tabular-nums text-destructive">{{ claimLinks.filter((link) => ['rejected', 'failed'].includes(link.claim_status)).length }}</p>
+                            </div>
+                        </div>
+                    </div>
+                <!-- Claims Tab (Feature 5) -->
+                <Card class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col shadow-sm">
+                    <div class="flex items-center justify-between gap-4 border-b px-4 py-3.5">
+                        <div class="min-w-0">
+                            <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
+                                <AppIcon name="receipt" class="size-4 text-muted-foreground" />
+                                Dispensing Claim Links
+                            </h3>
+                            <p class="mt-1 text-xs text-muted-foreground">Connect dispensed stock to payer claims, NHIF references, invoice traceability, and reimbursement follow-up.</p>
+                        </div>
+                        <Button size="sm" class="h-9 shrink-0 gap-1.5 rounded-lg text-xs" @click="createClaimLinkDialogOpen = true">
+                            <AppIcon name="plus" class="size-3.5" />
+                            Link Dispensing
+                        </Button>
+                    </div>
+
+                    <div class="flex items-center gap-2 border-b px-4 py-3">
+                        <SearchInput
+                            v-model="claimLinkSearch.q"
+                            placeholder="Search NHIF code, payer..."
+                            class="min-w-0 flex-1 text-xs"
+                            @keyup.enter="claimLinkSearch.page = 1; loadClaimLinks()"
+                        />
+                        <Select :model-value="toSelectValue(claimLinkSearch.claimStatus)" @update:model-value="val => { claimLinkSearch.claimStatus = fromSelectValue(String(val ?? EMPTY_SELECT_VALUE)); claimLinkSearch.page = 1; loadClaimLinks() }">
+                            <SelectTrigger class="h-9 w-44 rounded-lg text-xs">
+                                <SelectValue placeholder="All statuses" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
+                                <SelectItem v-for="s in CLAIM_STATUSES" :key="s.value" :value="s.value">{{ s.label }}</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Button variant="ghost" size="sm" class="h-9 gap-1.5 rounded-lg text-xs text-muted-foreground" @click="claimLinkSearch.page = 1; loadClaimLinks()">
+                            <AppIcon name="refresh-cw" class="size-3.5" />
+                            Refresh
+                        </Button>
+                    </div>
+
+                    <CardContent class="flex min-h-0 flex-1 flex-col p-0">
+                        <div v-if="claimLinkLoading" class="divide-y">
+                            <div v-for="n in 4" :key="`claim-skeleton-${n}`" class="flex items-start gap-3 px-4 py-4">
+                                <div class="mt-0.5 size-1 w-[3px] self-stretch animate-pulse rounded bg-muted" />
+                                <div class="min-w-0 flex-1 space-y-2">
+                                    <div class="flex items-center gap-2">
+                                        <div class="h-3.5 w-28 animate-pulse rounded bg-muted" />
+                                        <div class="h-5 w-16 animate-pulse rounded-full bg-muted" />
+                                    </div>
+                                    <div class="h-3 w-3/4 animate-pulse rounded bg-muted" />
+                                    <div class="h-3 w-1/2 animate-pulse rounded bg-muted" />
+                                </div>
+                                <div class="h-8 w-20 animate-pulse rounded-lg bg-muted" />
+                            </div>
+                        </div>
+                        <div
+                            v-else-if="claimLinks.length === 0"
+                            class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center"
+                        >
+                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                <AppIcon name="receipt" class="size-5 text-muted-foreground/40" />
+                            </div>
+                            <div class="space-y-1">
+                                <p class="text-sm font-semibold">No dispensing claim links found</p>
+                                <p class="max-w-xs text-xs text-muted-foreground">Claim links appear when dispensed stock is connected to payer, invoice, NHIF, or reimbursement workflows.</p>
+                            </div>
+                            <Button size="sm" class="mt-1 h-8 gap-1.5 rounded-lg text-xs" @click="createClaimLinkDialogOpen = true">
+                                <AppIcon name="plus" class="size-3.5" />
+                                Link Dispensing
+                            </Button>
+                        </div>
+                        <div v-else-if="claimLinks.length > 0" class="divide-y">
+                            <div v-for="link in claimLinks" :key="link.id" class="relative flex flex-col gap-3 px-4 py-4 transition-colors hover:bg-muted/30 md:flex-row md:items-start md:justify-between">
+                                <div class="absolute inset-y-0 left-0 w-[3px]" :class="claimStatusBadgeClass(link.claim_status).includes('red') ? 'bg-destructive' : claimStatusBadgeClass(link.claim_status).includes('green') ? 'bg-green-500' : claimStatusBadgeClass(link.claim_status).includes('blue') ? 'bg-blue-500' : 'bg-muted-foreground/30'" />
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <p class="font-mono text-sm font-semibold">{{ link.nhif_code || link.id }}</p>
+                                        <Badge :class="claimStatusBadgeClass(link.claim_status)">{{ formatEnumLabel(link.claim_status) }}</Badge>
+                                    </div>
+                                    <p class="mt-1 text-xs text-muted-foreground">
+                                        {{ link.payer_name || link.payer_type || 'No payer recorded' }} &middot; Qty {{ formatAmount(link.quantity_dispensed) }} {{ link.unit || '' }}
+                                    </p>
+                                    <div class="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-3">
+                                        <p>Item <span class="font-mono text-foreground">{{ link.item_id?.substring(0, 8) || 'N/A' }}</span></p>
+                                        <p>Patient <span class="font-mono text-foreground">{{ link.patient_id?.substring(0, 8) || 'N/A' }}</span></p>
+                                        <p>Created <span class="text-foreground">{{ link.created_at?.substring(0, 10) || 'N/A' }}</span></p>
+                                    </div>
+                                </div>
+                                <div class="flex shrink-0 items-center gap-1.5">
+                                    <Badge variant="outline" class="rounded-lg">{{ link.payer_type || 'payer' }}</Badge>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="false" class="overflow-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="border-b text-left text-xs text-muted-foreground">
+                                        <th class="pb-2 pr-4 font-medium">Item ID</th>
+                                        <th class="pb-2 pr-4 font-medium">Patient ID</th>
+                                        <th class="pb-2 pr-4 font-medium">NHIF Code</th>
+                                        <th class="pb-2 pr-4 font-medium">Qty</th>
+                                        <th class="pb-2 pr-4 font-medium">Payer</th>
+                                        <th class="pb-2 pr-4 font-medium">Status</th>
+                                        <th class="pb-2 pr-4 font-medium">Created</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="link in claimLinks" :key="link.id" class="border-b last:border-0">
+                                        <td class="py-2 pr-4 font-mono text-xs">{{ link.item_id?.substring(0, 8) }}...</td>
+                                        <td class="py-2 pr-4 font-mono text-xs">{{ link.patient_id?.substring(0, 8) }}...</td>
+                                        <td class="py-2 pr-4">{{ link.nhif_code || '—' }}</td>
+                                        <td class="py-2 pr-4">{{ link.quantity_dispensed }} {{ link.unit || '' }}</td>
+                                        <td class="py-2 pr-4">{{ link.payer_name || link.payer_type || '—' }}</td>
+                                        <td class="py-2 pr-4">
+                                            <Badge :class="claimStatusBadgeClass(link.claim_status)">{{ formatEnumLabel(link.claim_status) }}</Badge>
+                                        </td>
+                                        <td class="py-2 pr-4 text-xs text-muted-foreground">{{ link.created_at?.substring(0, 10) }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <footer v-if="claimLinkPagination && claimLinkPagination.lastPage > 1" class="flex shrink-0 items-center justify-between border-t bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground">
+                            <span>Page {{ claimLinkPagination.currentPage }} of {{ claimLinkPagination.lastPage }}{{ claimLinkPagination.total != null ? ` (${claimLinkPagination.total} total)` : '' }}</span>
+                            <div class="flex gap-1">
+                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="claimLinkPagination.currentPage <= 1" @click="claimLinkSearch.page = claimLinkPagination!.currentPage - 1; loadClaimLinks()">Prev</Button>
+                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="claimLinkPagination.currentPage >= claimLinkPagination.lastPage" @click="claimLinkSearch.page = claimLinkPagination!.currentPage + 1; loadClaimLinks()">Next</Button>
                             </div>
                         </footer>
                     </CardContent>
