@@ -5952,8 +5952,47 @@ onMounted(async () => {
             <!-- Tab layout -->
             <Tabs :model-value="activeTab" class="flex min-h-0 flex-1 flex-col gap-4" @update:model-value="onTabChange">
                 <TabsList class="flex h-auto w-full flex-wrap justify-start gap-2 rounded-lg bg-muted/30 p-1">
+                    <template v-if="workspaceTabVisible('inventory') || workspaceTabVisible('ledger') || workspaceTabVisible('department-stock')">
+                        <span class="pointer-events-none inline-flex h-8 select-none items-center gap-1.5 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300" aria-hidden="true">
+                            <span class="h-3 w-px bg-emerald-300 dark:bg-emerald-700"></span>
+                            Stock Control
+                        </span>
+                    </template>
+                    <TabsTrigger v-if="workspaceTabVisible('inventory')" value="inventory" class="gap-1.5">
+                        <AppIcon name="package" class="size-3.5" />
+                        Items
+                    </TabsTrigger>
+                    <TabsTrigger v-if="workspaceTabVisible('ledger')" value="ledger" class="gap-1.5">
+                        <AppIcon name="activity" class="size-3.5" />
+                        Ledger
+                    </TabsTrigger>
+                    <TabsTrigger v-if="workspaceTabVisible('department-stock')" value="department-stock" class="gap-1.5">
+                        <AppIcon name="building-2" class="size-3.5" />
+                        Department Stock
+                    </TabsTrigger>
+                    <template v-if="workspaceTabVisible('procurement') || workspaceTabVisible('msd-orders') || workspaceTabVisible('lead-times')">
+                        <span class="pointer-events-none inline-flex h-8 select-none items-center gap-1.5 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300" aria-hidden="true">
+                            <span class="h-3 w-px bg-amber-300 dark:bg-amber-700"></span>
+                            Procurement
+                        </span>
+                    </template>
+                    <TabsTrigger v-if="workspaceTabVisible('procurement')" value="procurement" class="gap-1.5">
+                        <AppIcon name="clipboard-list" class="size-3.5" />
+                        Purchase Requests
+                    </TabsTrigger>
+                    <TabsTrigger v-if="workspaceTabVisible('msd-orders')" value="msd-orders" class="gap-1.5">
+                        <AppIcon name="package" class="size-3.5" />
+                        MSD Orders
+                    </TabsTrigger>
+                    <TabsTrigger v-if="workspaceTabVisible('lead-times')" value="lead-times" class="gap-1.5">
+                        <AppIcon name="activity" class="size-3.5" />
+                        Lead Times
+                    </TabsTrigger>
                     <template v-if="workspaceTabVisible('overview') || workspaceTabVisible('requisitions') || workspaceTabVisible('shortage-queue') || workspaceTabVisible('transfers')">
-                        <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Requests &amp; Fulfilment</span>
+                        <span class="pointer-events-none inline-flex h-8 select-none items-center gap-1.5 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300" aria-hidden="true">
+                            <span class="h-3 w-px bg-sky-300 dark:bg-sky-700"></span>
+                            Requests &amp; Fulfilment
+                        </span>
                     </template>
                     <TabsTrigger v-if="workspaceTabVisible('overview')" value="overview" class="gap-1.5">
                         <AppIcon name="layout-grid" class="size-3.5" />
@@ -5978,38 +6017,11 @@ onMounted(async () => {
                         <AppIcon name="activity" class="size-3.5" />
                         Transfers
                     </TabsTrigger>
-                    <template v-if="workspaceTabVisible('inventory') || workspaceTabVisible('ledger') || workspaceTabVisible('department-stock')">
-                        <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Stock Control</span>
-                    </template>
-                    <TabsTrigger v-if="workspaceTabVisible('inventory')" value="inventory" class="gap-1.5">
-                        <AppIcon name="package" class="size-3.5" />
-                        Items
-                    </TabsTrigger>
-                    <TabsTrigger v-if="workspaceTabVisible('ledger')" value="ledger" class="gap-1.5">
-                        <AppIcon name="activity" class="size-3.5" />
-                        Ledger
-                    </TabsTrigger>
-                    <TabsTrigger v-if="workspaceTabVisible('department-stock')" value="department-stock" class="gap-1.5">
-                        <AppIcon name="building-2" class="size-3.5" />
-                        Department Stock
-                    </TabsTrigger>
-                    <template v-if="workspaceTabVisible('procurement') || workspaceTabVisible('msd-orders') || workspaceTabVisible('lead-times')">
-                        <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Procurement</span>
-                    </template>
-                    <TabsTrigger v-if="workspaceTabVisible('procurement')" value="procurement" class="gap-1.5">
-                        <AppIcon name="clipboard-list" class="size-3.5" />
-                        Purchase Requests
-                    </TabsTrigger>
-                    <TabsTrigger v-if="workspaceTabVisible('msd-orders')" value="msd-orders" class="gap-1.5">
-                        <AppIcon name="package" class="size-3.5" />
-                        MSD Orders
-                    </TabsTrigger>
-                    <TabsTrigger v-if="workspaceTabVisible('lead-times')" value="lead-times" class="gap-1.5">
-                        <AppIcon name="activity" class="size-3.5" />
-                        Lead Times
-                    </TabsTrigger>
                     <template v-if="workspaceTabVisible('claims') || workspaceTabVisible('analytics')">
-                        <span class="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Review</span>
+                        <span class="pointer-events-none inline-flex h-8 select-none items-center gap-1.5 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-300" aria-hidden="true">
+                            <span class="h-3 w-px bg-violet-300 dark:bg-violet-700"></span>
+                            Review
+                        </span>
                     </template>
                     <TabsTrigger v-if="workspaceTabVisible('claims')" value="claims" class="gap-1.5">
                         <AppIcon name="shield-check" class="size-3.5" />
