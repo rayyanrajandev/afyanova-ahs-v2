@@ -1836,9 +1836,9 @@ onMounted(() => {
                                 v-for="tab in clinicalCatalogTabs"
                                 :key="tab.key"
                                 :value="tab.key"
-                                class="h-8 min-w-0 gap-1.5 rounded-md px-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                                class="h-8 min-w-0 gap-1.5 rounded-md border border-transparent px-2.5 text-muted-foreground data-[state=active]:border-primary/40 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-sm dark:data-[state=active]:border-primary/60 dark:data-[state=active]:bg-primary/25 dark:data-[state=active]:text-primary-foreground"
                             >
-                                <AppIcon :name="tab.icon" class="size-3.5 shrink-0 text-muted-foreground" />
+                                <AppIcon :name="tab.icon" class="size-3.5 shrink-0 text-current" />
                                 <span class="truncate text-xs font-medium">{{ tab.label }}</span>
                             </TabsTrigger>
                         </TabsList>
