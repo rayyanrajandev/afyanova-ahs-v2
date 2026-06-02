@@ -2367,6 +2367,11 @@ onMounted(() => {
                                                 </SelectContent>
                                             </Select>
                                         </div>
+                                        <div class="grid gap-1.5">
+                                            <Label>Billing service code</Label>
+                                            <Input v-model="createForm.billingServiceCode" placeholder="e.g. LAB-CBC-001" />
+                                            <p v-if="firstError(createErrors, 'billingServiceCode')" class="text-xs text-destructive">{{ firstError(createErrors, 'billingServiceCode') }}</p>
+                                        </div>
                                         <div class="grid gap-1.5"><Label>Local code</Label><Input v-model="createForm.standardsLocal" placeholder="Internal code" /></div>
                                         <div class="grid gap-1.5"><Label>NHIF code</Label><Input v-model="createForm.standardsNhif" placeholder="NHIF tariff code" /></div>
                                         <div class="grid gap-1.5"><Label>MSD code</Label><Input v-model="createForm.standardsMsd" placeholder="MSD reference" /></div>
@@ -2681,13 +2686,10 @@ onMounted(() => {
                                         </Link>
                                     </Button>
                                 </div>
-                                <details
-                                    v-if="editForm.billingServiceCode.trim()"
-                                    class="md:col-span-3 rounded-lg border bg-muted/10 p-3"
-                                >
-                                    <summary class="cursor-pointer text-sm font-medium text-muted-foreground">Legacy billing code (optional)</summary>
+                                <details class="md:col-span-3 rounded-lg border bg-muted/10 p-3">
+                                    <summary class="cursor-pointer text-sm font-medium text-muted-foreground">Billing service code (optional)</summary>
                                     <p class="mt-2 text-xs text-muted-foreground">
-                                        Only needed for older imports. Prefer linking prices from Tariffs &amp; services instead of typing a code.
+                                        Use this when the billing/tariff code should differ from the clinical definition code. Tariffs &amp; services will use it when creating prices from this definition.
                                     </p>
                                     <div class="mt-3 grid gap-1.5">
                                         <Label>Billing service code</Label>
