@@ -32,6 +32,7 @@ type Supplier = {
     supplierCode: string | null;
     supplierName: string | null;
     tinNumber: string | null;
+    tin_number?: string | null;
     bankAccountNumber: string | null;
     lipaNumber: string | null;
     contactPerson: string | null;
@@ -190,6 +191,10 @@ function supplierRowKey(item: Supplier, index: number): string {
     return item.id || item.supplierCode || item.supplierName || `supplier-row-${index}`;
 }
 
+function supplierTinNumber(item: Supplier): string {
+    return item.tinNumber || item.tin_number || '';
+}
+
 function statusVariant(status: string | null): 'outline' | 'secondary' | 'destructive' {
     const normalized = (status ?? '').toLowerCase();
     if (normalized === 'active') return 'secondary';
@@ -283,7 +288,7 @@ function openEdit(item: Supplier) {
     Object.assign(editForm, {
         supplierCode: item.supplierCode || '',
         supplierName: item.supplierName || '',
-        tinNumber: item.tinNumber || '',
+        tinNumber: supplierTinNumber(item),
         bankAccountNumber: item.bankAccountNumber || '',
         lipaNumber: item.lipaNumber || '',
         contactPerson: item.contactPerson || '',
@@ -718,7 +723,7 @@ onMounted(() => {
                                         <Label for="cs-address">Address</Label>
                                         <Textarea id="cs-address" v-model="createForm.addressLine" :disabled="createLoading" class="min-h-20" />
                                     </div>
-                                    <div class="grid gap-2">
+                                    <div class="grid gap-2 sm:col-span-2">
                                         <Label for="cs-country">Country</Label>
                                         <Select :model-value="toSelectValue(createForm.countryCode)" @update:model-value="createForm.countryCode = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
                                             <SelectTrigger class="w-full" :disabled="createLoading">
@@ -815,7 +820,7 @@ onMounted(() => {
                                         <Label for="es-address">Address</Label>
                                         <Textarea id="es-address" v-model="editForm.addressLine" :disabled="editLoading" class="min-h-20" />
                                     </div>
-                                    <div class="grid gap-2">
+                                    <div class="grid gap-2 sm:col-span-2">
                                         <Label for="es-country">Country</Label>
                                         <Select :model-value="toSelectValue(editForm.countryCode)" @update:model-value="editForm.countryCode = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
                                             <SelectTrigger class="w-full" :disabled="editLoading">
