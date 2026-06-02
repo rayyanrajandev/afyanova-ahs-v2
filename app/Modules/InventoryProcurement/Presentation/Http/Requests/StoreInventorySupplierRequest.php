@@ -20,6 +20,8 @@ class StoreInventorySupplierRequest extends FormRequest
             'supplierCode' => ['required', 'string', 'max:40'],
             'supplierName' => ['required', 'string', 'max:180'],
             'tinNumber' => ['nullable', 'string', 'max:30'],
+            'bankAccountNumber' => ['nullable', 'string', 'max:80'],
+            'lipaNumber' => ['nullable', 'string', 'max:80'],
             'contactPerson' => ['nullable', 'string', 'max:160'],
             'phone' => ['nullable', 'string', 'max:40'],
             'email' => ['nullable', 'email', 'max:255'],
@@ -29,4 +31,3 @@ class StoreInventorySupplierRequest extends FormRequest
         ];
     }
 }
-

@@ -3,6 +3,7 @@
 namespace App\Modules\Billing\Presentation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Billing\Application\UseCases\BulkUpdateBillingServiceCatalogItemStatusUseCase;
 use App\Modules\Billing\Application\Exceptions\DuplicateBillingServiceCatalogCodeException;
 use App\Modules\Billing\Application\Exceptions\InvalidBillingServiceCatalogClinicalLinkException;
 use App\Modules\Billing\Application\UseCases\CreateBillingServiceCatalogItemRevisionUseCase;
@@ -17,6 +18,7 @@ use App\Modules\Billing\Application\UseCases\UpdateBillingServiceCatalogItemStat
 use App\Modules\Billing\Application\UseCases\UpdateBillingServiceCatalogItemUseCase;
 use App\Modules\Billing\Presentation\Http\Requests\StoreBillingServiceCatalogItemRequest;
 use App\Modules\Billing\Presentation\Http\Requests\StoreBillingServiceCatalogItemRevisionRequest;
+use App\Modules\Billing\Presentation\Http\Requests\BulkUpdateBillingServiceCatalogItemStatusRequest;
 use App\Modules\Billing\Presentation\Http\Requests\UpdateBillingServiceCatalogItemRequest;
 use App\Modules\Billing\Presentation\Http\Requests\UpdateBillingServiceCatalogItemStatusRequest;
 use App\Modules\Billing\Presentation\Http\Transformers\BillingServiceCatalogItemAuditLogResponseTransformer;
@@ -31,6 +33,28 @@ class BillingServiceCatalogController extends Controller
     private const AUDIT_CSV_SCHEMA_VERSION = 'audit-log-csv.v1';
 
     private const AUDIT_CSV_COLUMNS = ['createdAt', 'action', 'actorType', 'actorId', 'changes', 'metadata'];
+
+    private const ITEMS_CSV_SCHEMA_VERSION = 'billing-service-catalog-items-csv.v1';
+
+    private const ITEMS_CSV_COLUMNS = [
+        'serviceCode',
+        'serviceName',
+        'serviceType',
+        'department',
+        'unit',
+        'basePrice',
+        'currencyCode',
+        'taxRatePercent',
+        'isTaxable',
+        'effectiveFrom',
+        'effectiveTo',
+        'status',
+        'versionNumber',
+        'clinicalCatalogType',
+        'clinicalCatalogCode',
+        'clinicalCatalogName',
+        'updatedAt',
+    ];
 
     public function index(Request $request, ListBillingServiceCatalogItemsUseCase $useCase): JsonResponse
     {
@@ -51,6 +75,42 @@ class BillingServiceCatalogController extends Controller
         return response()->json([
             'data' => $counts,
         ]);
+    }
+
+    public function exportItemsCsv(Request $request, ListBillingServiceCatalogItemsUseCase $useCase): StreamedResponse
+    {
+        $filters = $request->all();
+        $filters['perPage'] = 100;
+        $filters['page'] = max((int) ($filters['page'] ?? 1), 1);
+
+        $firstPage = $useCase->execute($filters);
+
+        return $this->streamCsvExport(
+            baseName: sprintf('billing_service_catalog_items_%s', now()->format('Ymd_His')),
+            columns: self::ITEMS_CSV_COLUMNS,
+            writeRows: function ($output) use ($firstPage, $filters, $useCase): void {
+                $page = (int) ($firstPage['meta']['currentPage'] ?? 1);
+                $lastPage = (int) ($firstPage['meta']['lastPage'] ?? 1);
+                $currentPage = $firstPage;
+
+                while ($page <= $lastPage) {
+                    foreach ($currentPage['data'] ?? [] as $item) {
+                        $row = $this->billingServiceCatalogExportRow($item);
+                        fputcsv($output, array_map(
+                            static fn (string $column): mixed => $row[$column] ?? '',
+                            self::ITEMS_CSV_COLUMNS,
+                        ));
+                    }
+
+                    $page += 1;
+                    if ($page <= $lastPage) {
+                        $currentPage = $useCase->execute(array_merge($filters, ['page' => $page]));
+                    }
+                }
+            },
+            schemaHeaderName: 'X-Billing-Service-Catalog-Csv-Schema',
+            schemaVersion: self::ITEMS_CSV_SCHEMA_VERSION,
+        );
     }
 
     public function store(
@@ -162,6 +222,35 @@ class BillingServiceCatalogController extends Controller
         ]);
     }
 
+    public function bulkUpdateStatus(
+        BulkUpdateBillingServiceCatalogItemStatusRequest $request,
+        BulkUpdateBillingServiceCatalogItemStatusUseCase $useCase
+    ): JsonResponse {
+        $validated = $request->validated();
+
+        try {
+            $result = $useCase->execute(
+                itemIds: $validated['itemIds'],
+                status: $validated['status'],
+                reason: $validated['reason'] ?? null,
+                actorId: $request->user()?->id,
+            );
+        } catch (TenantScopeRequiredForIsolationException $exception) {
+            return $this->tenantScopeRequiredError($exception->getMessage());
+        }
+
+        return response()->json([
+            'data' => array_map(
+                [BillingServiceCatalogItemResponseTransformer::class, 'transform'],
+                $result['updated'],
+            ),
+            'meta' => [
+                'updated' => count($result['updated']),
+                'notFound' => $result['notFound'],
+            ],
+        ]);
+    }
+
     public function auditLogs(
         string $id,
         Request $request,
@@ -249,6 +338,33 @@ class BillingServiceCatalogController extends Controller
             'code' => 'TENANT_SCOPE_REQUIRED',
             'message' => $message,
         ], 403);
+    }
+
+    private function billingServiceCatalogExportRow(array $item): array
+    {
+        $clinicalCatalogItem = is_array($item['clinical_catalog_item'] ?? null)
+            ? $item['clinical_catalog_item']
+            : null;
+
+        return [
+            'serviceCode' => $item['service_code'] ?? '',
+            'serviceName' => $item['service_name'] ?? '',
+            'serviceType' => $item['service_type'] ?? '',
+            'department' => $item['department'] ?? '',
+            'unit' => $item['unit'] ?? '',
+            'basePrice' => $item['base_price'] ?? '',
+            'currencyCode' => $item['currency_code'] ?? '',
+            'taxRatePercent' => $item['tax_rate_percent'] ?? '',
+            'isTaxable' => $item['is_taxable'] ?? '',
+            'effectiveFrom' => $item['effective_from'] ?? '',
+            'effectiveTo' => $item['effective_to'] ?? '',
+            'status' => $item['status'] ?? '',
+            'versionNumber' => $item['version_number'] ?? '',
+            'clinicalCatalogType' => $clinicalCatalogItem['catalog_type'] ?? '',
+            'clinicalCatalogCode' => $clinicalCatalogItem['code'] ?? '',
+            'clinicalCatalogName' => $clinicalCatalogItem['name'] ?? '',
+            'updatedAt' => $item['updated_at'] ?? '',
+        ];
     }
 
     private function toPersistencePayload(array $validated): array

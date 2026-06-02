@@ -11,6 +11,8 @@ class InventorySupplierResponseTransformer
             'supplierCode' => $supplier['supplier_code'] ?? null,
             'supplierName' => $supplier['supplier_name'] ?? null,
             'tinNumber' => $supplier['tin_number'] ?? null,
+            'bankAccountNumber' => $supplier['bank_account_number'] ?? null,
+            'lipaNumber' => $supplier['lipa_number'] ?? null,
             'contactPerson' => $supplier['contact_person'] ?? null,
             'phone' => $supplier['phone'] ?? null,
             'email' => $supplier['email'] ?? null,
@@ -24,4 +26,3 @@ class InventorySupplierResponseTransformer
         ];
     }
 }
-

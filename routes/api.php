@@ -1026,10 +1026,15 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('billing-service-catalog/items/status-counts', [BillingServiceCatalogController::class, 'statusCounts'])
         ->middleware('can:billing.service-catalog.read')
         ->name('billing-service-catalog.items.status-counts');
+    Route::get('billing-service-catalog/items/export', [BillingServiceCatalogController::class, 'exportItemsCsv'])
+        ->middleware('can:billing.service-catalog.read')
+        ->name('billing-service-catalog.items.export');
     Route::post('billing-service-catalog/items', [BillingServiceCatalogController::class, 'store'])
         ->name('billing-service-catalog.items.store');
     Route::post('billing-service-catalog/items/{id}/revisions', [BillingServiceCatalogController::class, 'storeRevision'])
         ->name('billing-service-catalog.items.store-revision');
+    Route::patch('billing-service-catalog/items/bulk-status', [BillingServiceCatalogController::class, 'bulkUpdateStatus'])
+        ->name('billing-service-catalog.items.bulk-status');
     Route::get('billing-service-catalog/items/{id}', [BillingServiceCatalogController::class, 'show'])
         ->middleware('can:billing.service-catalog.read')
         ->name('billing-service-catalog.items.show');

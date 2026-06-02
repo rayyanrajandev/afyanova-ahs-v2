@@ -100,6 +100,8 @@ class EloquentInventorySupplierRepository implements InventorySupplierRepository
                     $nestedQuery
                         ->where('supplier_code', 'like', $like)
                         ->orWhere('supplier_name', 'like', $like)
+                        ->orWhere('bank_account_number', 'like', $like)
+                        ->orWhere('lipa_number', 'like', $like)
                         ->orWhere('contact_person', 'like', $like)
                         ->orWhere('phone', 'like', $like)
                         ->orWhere('email', 'like', $like);
@@ -131,6 +133,8 @@ class EloquentInventorySupplierRepository implements InventorySupplierRepository
                     $nestedQuery
                         ->where('supplier_code', 'like', $like)
                         ->orWhere('supplier_name', 'like', $like)
+                        ->orWhere('bank_account_number', 'like', $like)
+                        ->orWhere('lipa_number', 'like', $like)
                         ->orWhere('contact_person', 'like', $like)
                         ->orWhere('phone', 'like', $like)
                         ->orWhere('email', 'like', $like);
@@ -197,4 +201,3 @@ class EloquentInventorySupplierRepository implements InventorySupplierRepository
         ];
     }
 }
-

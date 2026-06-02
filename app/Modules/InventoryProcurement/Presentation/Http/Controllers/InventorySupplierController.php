@@ -192,6 +192,8 @@ class InventorySupplierController extends Controller
             'supplierCode' => 'supplier_code',
             'supplierName' => 'supplier_name',
             'tinNumber' => 'tin_number',
+            'bankAccountNumber' => 'bank_account_number',
+            'lipaNumber' => 'lipa_number',
             'contactPerson' => 'contact_person',
             'phone' => 'phone',
             'email' => 'email',

@@ -23,6 +23,9 @@ class InventorySupplierModel extends Model
         'facility_id',
         'supplier_code',
         'supplier_name',
+        'tin_number',
+        'bank_account_number',
+        'lipa_number',
         'contact_person',
         'phone',
         'email',
@@ -44,4 +47,3 @@ class InventorySupplierModel extends Model
         ];
     }
 }
-

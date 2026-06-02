@@ -32,6 +32,8 @@ type Supplier = {
     supplierCode: string | null;
     supplierName: string | null;
     tinNumber: string | null;
+    bankAccountNumber: string | null;
+    lipaNumber: string | null;
     contactPerson: string | null;
     phone: string | null;
     email: string | null;
@@ -92,6 +94,8 @@ const createForm = reactive({
     supplierCode: '',
     supplierName: '',
     tinNumber: '',
+    bankAccountNumber: '',
+    lipaNumber: '',
     contactPerson: '',
     phone: '',
     email: '',
@@ -108,6 +112,8 @@ const editForm = reactive({
     supplierCode: '',
     supplierName: '',
     tinNumber: '',
+    bankAccountNumber: '',
+    lipaNumber: '',
     contactPerson: '',
     phone: '',
     email: '',
@@ -252,6 +258,8 @@ async function createItem() {
                 supplierCode: createForm.supplierCode.trim(),
                 supplierName: createForm.supplierName.trim(),
                 tinNumber: createForm.tinNumber.trim() || null,
+                bankAccountNumber: createForm.bankAccountNumber.trim() || null,
+                lipaNumber: createForm.lipaNumber.trim() || null,
                 contactPerson: createForm.contactPerson.trim() || null,
                 phone: createForm.phone.trim() || null,
                 email: createForm.email.trim() || null,
@@ -261,7 +269,7 @@ async function createItem() {
             },
         });
         notifySuccess(`Created ${labelOf(response.data)}.`);
-        Object.assign(createForm, { supplierCode: '', supplierName: '', tinNumber: '', contactPerson: '', phone: '', email: '', addressLine: '', countryCode: '', notes: '' });
+        Object.assign(createForm, { supplierCode: '', supplierName: '', tinNumber: '', bankAccountNumber: '', lipaNumber: '', contactPerson: '', phone: '', email: '', addressLine: '', countryCode: '', notes: '' });
         createOpen.value = false;
         filters.page = 1;
         await refreshPage();
@@ -276,6 +284,8 @@ function openEdit(item: Supplier) {
         supplierCode: item.supplierCode || '',
         supplierName: item.supplierName || '',
         tinNumber: item.tinNumber || '',
+        bankAccountNumber: item.bankAccountNumber || '',
+        lipaNumber: item.lipaNumber || '',
         contactPerson: item.contactPerson || '',
         phone: item.phone || '',
         email: item.email || '',
@@ -296,6 +306,8 @@ async function saveEdit() {
                 supplierCode: editForm.supplierCode.trim(),
                 supplierName: editForm.supplierName.trim(),
                 tinNumber: editForm.tinNumber.trim() || null,
+                bankAccountNumber: editForm.bankAccountNumber.trim() || null,
+                lipaNumber: editForm.lipaNumber.trim() || null,
                 contactPerson: editForm.contactPerson.trim() || null,
                 phone: editForm.phone.trim() || null,
                 email: editForm.email.trim() || null,
@@ -422,7 +434,7 @@ onMounted(() => {
                                 <!-- Inline search bar -->
                                 <SearchInput
                                     v-model="filters.q"
-                                    placeholder="Code, name, contact"
+                                    placeholder="Code, name, contact, payment number"
                                     class="min-w-0 flex-1"
                                     @keyup.enter="search"
                                 />
@@ -526,6 +538,11 @@ onMounted(() => {
                                                     Contact: {{ item.contactPerson || 'N/A' }} · Phone: {{ item.phone || 'N/A' }} · Country: {{ countryDisplayLabel(item.countryCode) }}
                                                 </p>
                                                 <p class="text-xs text-muted-foreground">{{ item.email || 'No email' }}{{ item.tinNumber ? ` · TIN: ${item.tinNumber}` : '' }}</p>
+                                                <p v-if="item.bankAccountNumber || item.lipaNumber" class="text-xs text-muted-foreground">
+                                                    <span v-if="item.bankAccountNumber">Bank: {{ item.bankAccountNumber }}</span>
+                                                    <span v-if="item.bankAccountNumber && item.lipaNumber"> · </span>
+                                                    <span v-if="item.lipaNumber">Lipa: {{ item.lipaNumber }}</span>
+                                                </p>
                                             </div>
                                             <div class="flex flex-wrap items-center gap-2">
                                                 <Badge :variant="statusVariant(item.status)">{{ item.status || 'unknown' }}</Badge>
@@ -673,6 +690,14 @@ onMounted(() => {
                                         <Input id="cs-tin" v-model="createForm.tinNumber" :disabled="createLoading" placeholder="e.g. 100123456" />
                                         <p class="text-xs text-muted-foreground">Tax Identification Number. Required for VAT-registered suppliers.</p>
                                     </div>
+                                    <div class="grid gap-2">
+                                        <Label for="cs-bank-account">Bank Account Number</Label>
+                                        <Input id="cs-bank-account" v-model="createForm.bankAccountNumber" :disabled="createLoading" placeholder="Supplier bank account" />
+                                    </div>
+                                    <div class="grid gap-2">
+                                        <Label for="cs-lipa-number">Lipa Number</Label>
+                                        <Input id="cs-lipa-number" v-model="createForm.lipaNumber" :disabled="createLoading" placeholder="Till, paybill, or merchant number" />
+                                    </div>
                                 </fieldset>
 
                                 <fieldset class="grid gap-3 sm:grid-cols-2 rounded-lg border p-3">
@@ -761,6 +786,14 @@ onMounted(() => {
                                         <Label for="es-tin">TIN Number</Label>
                                         <Input id="es-tin" v-model="editForm.tinNumber" :disabled="editLoading" placeholder="e.g. 100123456" />
                                         <p class="text-xs text-muted-foreground">Tax Identification Number. Required for VAT-registered suppliers.</p>
+                                    </div>
+                                    <div class="grid gap-2">
+                                        <Label for="es-bank-account">Bank Account Number</Label>
+                                        <Input id="es-bank-account" v-model="editForm.bankAccountNumber" :disabled="editLoading" placeholder="Supplier bank account" />
+                                    </div>
+                                    <div class="grid gap-2">
+                                        <Label for="es-lipa-number">Lipa Number</Label>
+                                        <Input id="es-lipa-number" v-model="editForm.lipaNumber" :disabled="editLoading" placeholder="Till, paybill, or merchant number" />
                                     </div>
                                 </fieldset>
 

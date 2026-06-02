@@ -11,6 +11,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
@@ -33,6 +35,7 @@ import type { SearchableSelectOption } from '@/lib/patientLocations';
 import { type BreadcrumbItem } from '@/types';
 
 type CatalogStatus = 'active' | 'inactive' | 'retired';
+type CheckboxCheckedState = boolean | 'indeterminate';
 type StandardsCodes = Partial<Record<'LOCAL' | 'LOINC' | 'SNOMED_CT' | 'NHIF' | 'MSD' | 'CPT' | 'ICD', string>>;
 type ClinicalCatalogLink = {
     id: string | null;
@@ -220,6 +223,14 @@ const listError = ref<string | null>(null);
 const items = ref<CatalogItem[]>([]);
 const pagination = ref<Pagination | null>(null);
 const statusCounts = ref<CatalogStatusCounts>({ active: 0, inactive: 0, retired: 0, other: 0, total: 0 });
+const catalogExporting = ref(false);
+const catalogPrinting = ref(false);
+const bulkStatusDialogOpen = ref(false);
+const bulkStatusTarget = ref<CatalogStatus | null>(null);
+const bulkStatusReason = ref('');
+const bulkStatusBusy = ref(false);
+const bulkStatusError = ref<string | null>(null);
+const selectedItemIds = ref<string[]>([]);
 
 const filters = reactive({
     q: '',
@@ -357,6 +368,19 @@ const canPrevPage = computed(() => (pagination.value?.currentPage ?? 1) > 1);
 const canNextPage = computed(() => {
     if (!pagination.value) return false;
     return pagination.value.currentPage < pagination.value.lastPage;
+});
+const pageItemIds = computed(() =>
+    items.value.map((item) => String(item.id ?? '').trim()).filter((id) => id.length > 0),
+);
+const selectedCount = computed(() => selectedItemIds.value.length);
+const allVisibleSelected = computed(
+    () => pageItemIds.value.length > 0 && pageItemIds.value.every((id) => selectedItemIds.value.includes(id)),
+);
+const canUseBulkSelection = computed(() => canRead.value && canManagePricing.value);
+const bulkStatusDialogTitle = computed(() => {
+    if (bulkStatusTarget.value === 'retired') return 'Retire selected billable services';
+    if (bulkStatusTarget.value === 'inactive') return 'Deactivate selected billable services';
+    return 'Activate selected billable services';
 });
 
 const paginationPageNumbers = computed((): (number | '...')[] => {
@@ -2030,6 +2054,227 @@ function updateCatalogPerPageFilter(value: string): void {
     void loadItems();
 }
 
+function catalogExportQuery(): Record<string, string | number | null> {
+    return {
+        q: filters.q.trim() || null,
+        serviceType: filters.serviceType.trim() || null,
+        status: filters.status || null,
+        departmentId: filters.departmentId.trim() || null,
+        currencyCode: filters.currencyCode.trim().toUpperCase() || null,
+        lifecycle: filters.lifecycle || null,
+        sortBy: filters.sortBy,
+        sortDir: filters.sortDir,
+    };
+}
+
+function triggerBlobDownload(blob: Blob, filename: string): void {
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
+}
+
+async function exportCatalogItemsCsv(): Promise<void> {
+    if (catalogExporting.value) return;
+
+    catalogExporting.value = true;
+    try {
+        const { blob, filename } = await apiGetBlob('/billing-service-catalog/items/export', {
+            query: catalogExportQuery(),
+            entitlementContext: 'Billing service catalog export',
+        });
+        triggerBlobDownload(blob, filename ?? 'billing-service-catalog.csv');
+        notifySuccess('Billable services exported.');
+    } catch (error) {
+        notifyError(messageFromUnknown(error, 'Unable to export billable services.'));
+    } finally {
+        catalogExporting.value = false;
+    }
+}
+
+async function loadFilteredCatalogItemsForPrint(): Promise<{ data: CatalogItem[]; total: number }> {
+    const results: CatalogItem[] = [];
+    let page = 1;
+    let lastPage = 1;
+    let total = 0;
+
+    do {
+        const response = await apiRequest<CatalogListResponse>('GET', '/billing-service-catalog/items', {
+            query: {
+                ...catalogExportQuery(),
+                perPage: 100,
+                page,
+            },
+        });
+
+        results.push(...(response.data ?? []));
+        total = response.meta?.total ?? results.length;
+        lastPage = Math.max(response.meta?.lastPage ?? 1, 1);
+        page += 1;
+    } while (page <= lastPage);
+
+    return { data: results, total };
+}
+
+function escapePrintHtml(value: string | number | null | undefined): string {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+async function printCatalogItems(): Promise<void> {
+    if (catalogPrinting.value) return;
+
+    const title = 'Billable services';
+    const printWindow = window.open('', '_blank', 'width=1100,height=800');
+    if (!printWindow) {
+        notifyError('Unable to open print preview.');
+        return;
+    }
+
+    catalogPrinting.value = true;
+    try {
+        const printable = await loadFilteredCatalogItemsForPrint();
+        const rows = printable.data.map((item) => `
+            <tr>
+                <td>${escapePrintHtml(item.serviceCode)}</td>
+                <td>${escapePrintHtml(item.serviceName)}</td>
+                <td>${escapePrintHtml(item.serviceType ? formatEnumLabel(item.serviceType) : '')}</td>
+                <td>${escapePrintHtml(item.department)}</td>
+                <td>${escapePrintHtml(formatMoney(item.basePrice, item.currencyCode))}</td>
+                <td>${escapePrintHtml(formatEnumLabel(item.status))}</td>
+                <td>${escapePrintHtml(tariffLifecycleLabel(item.effectiveFrom, item.effectiveTo))}</td>
+            </tr>
+        `).join('');
+
+        printWindow.document.write(`
+            <!doctype html>
+            <html>
+                <head>
+                    <title>${escapePrintHtml(title)}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
+                        h1 { font-size: 20px; margin: 0 0 4px; }
+                        p { margin: 0 0 16px; color: #4b5563; font-size: 12px; }
+                        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                        th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; vertical-align: top; }
+                        th { background: #f3f4f6; font-weight: 700; }
+                        @media print { body { margin: 12mm; } }
+                    </style>
+                </head>
+                <body>
+                    <h1>${escapePrintHtml(title)}</h1>
+                    <p>Filtered records: ${escapePrintHtml(printable.total)}. Printed ${escapePrintHtml(new Date().toLocaleString())}.</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Service code</th>
+                                <th>Service name</th>
+                                <th>Type</th>
+                                <th>Department</th>
+                                <th>Price</th>
+                                <th>Status</th>
+                                <th>Window</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows || '<tr><td colspan="7">No records match the current filters.</td></tr>'}</tbody>
+                    </table>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+    } catch (error) {
+        printWindow.close();
+        notifyError(messageFromUnknown(error, 'Unable to print filtered billable services.'));
+    } finally {
+        catalogPrinting.value = false;
+    }
+}
+
+function clearSelectedItems(): void {
+    selectedItemIds.value = [];
+}
+
+function toggleItemSelection(itemId: string, checked: CheckboxCheckedState): void {
+    const normalizedId = itemId.trim();
+    if (!normalizedId) {
+        return;
+    }
+
+    if (checked === true) {
+        if (!selectedItemIds.value.includes(normalizedId)) {
+            selectedItemIds.value = [...selectedItemIds.value, normalizedId];
+        }
+        return;
+    }
+
+    selectedItemIds.value = selectedItemIds.value.filter((id) => id !== normalizedId);
+}
+
+function toggleSelectAllVisible(checked: CheckboxCheckedState): void {
+    const visible = new Set(pageItemIds.value);
+    if (checked !== true) {
+        selectedItemIds.value = selectedItemIds.value.filter((id) => !visible.has(id));
+        return;
+    }
+
+    selectedItemIds.value = Array.from(new Set([...selectedItemIds.value, ...pageItemIds.value]));
+}
+
+function openBulkStatusDialog(status: CatalogStatus): void {
+    if (!canUseBulkSelection.value || selectedCount.value === 0) {
+        return;
+    }
+
+    bulkStatusTarget.value = status;
+    bulkStatusReason.value = '';
+    bulkStatusError.value = null;
+    bulkStatusDialogOpen.value = true;
+}
+
+async function submitBulkStatusDialog(): Promise<void> {
+    if (!canUseBulkSelection.value || !bulkStatusTarget.value || selectedCount.value === 0 || bulkStatusBusy.value) {
+        return;
+    }
+
+    bulkStatusBusy.value = true;
+    bulkStatusError.value = null;
+    try {
+        const response = await apiRequest<{ data: CatalogItem[]; meta: { updated: number; notFound: string[] } }>(
+            'PATCH',
+            '/billing-service-catalog/items/bulk-status',
+            {
+                body: {
+                    itemIds: selectedItemIds.value,
+                    status: bulkStatusTarget.value,
+                    reason: bulkStatusReason.value.trim() || null,
+                },
+                entitlementContext: 'Billing service catalog bulk status',
+            },
+        );
+
+        notifySuccess(`Updated ${response.meta.updated} billable service${response.meta.updated === 1 ? '' : 's'}.`);
+        selectedItemIds.value = [];
+        bulkStatusDialogOpen.value = false;
+        await Promise.all([loadItems(), loadStatusCounts()]);
+    } catch (error) {
+        bulkStatusError.value = messageFromUnknown(error, 'Unable to apply bulk status change.');
+        notifyError(bulkStatusError.value);
+    } finally {
+        bulkStatusBusy.value = false;
+    }
+}
+
 function resetFilters(): void {
     filters.q = '';
     filters.serviceType = '';
@@ -3209,6 +3454,26 @@ watch(
                                     variant="outline"
                                     size="sm"
                                     class="h-8 gap-1.5 rounded-lg text-xs"
+                                    :disabled="catalogExporting"
+                                    @click="exportCatalogItemsCsv"
+                                >
+                                    <AppIcon :name="catalogExporting ? 'loader-circle' : 'download'" class="size-3.5" :class="{ 'animate-spin': catalogExporting }" />
+                                    Export
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    class="h-8 gap-1.5 rounded-lg text-xs"
+                                    :disabled="catalogPrinting || catalogShowInitialSkeleton || listLoading"
+                                    @click="printCatalogItems"
+                                >
+                                    <AppIcon :name="catalogPrinting ? 'loader-circle' : 'printer'" class="size-3.5" :class="{ 'animate-spin': catalogPrinting }" />
+                                    Print
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    class="h-8 gap-1.5 rounded-lg text-xs"
                                     @click="filtersSheetOpen = true"
                                 >
                                     <AppIcon name="sliders-horizontal" class="size-3.5" />
@@ -3216,6 +3481,59 @@ watch(
                                     <Badge v-if="catalogActiveFilterCount > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">
                                         {{ catalogActiveFilterCount }}
                                     </Badge>
+                                </Button>
+                            </div>
+                        </div>
+                        <div
+                            v-if="canUseBulkSelection"
+                            class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed bg-muted/20 px-3 py-2"
+                        >
+                            <label class="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Checkbox
+                                    id="billing-service-catalog-select-page"
+                                    :model-value="allVisibleSelected"
+                                    :disabled="pageItemIds.length === 0 || bulkStatusBusy"
+                                    @update:model-value="toggleSelectAllVisible"
+                                />
+                                Select page
+                            </label>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="text-xs text-muted-foreground">{{ selectedCount }} selected</span>
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    class="h-8"
+                                    :disabled="selectedCount === 0 || bulkStatusBusy"
+                                    @click="openBulkStatusDialog('active')"
+                                >
+                                    Activate
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    class="h-8"
+                                    :disabled="selectedCount === 0 || bulkStatusBusy"
+                                    @click="openBulkStatusDialog('inactive')"
+                                >
+                                    Deactivate
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    class="h-8"
+                                    :disabled="selectedCount === 0 || bulkStatusBusy"
+                                    @click="openBulkStatusDialog('retired')"
+                                >
+                                    Retire
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    class="h-8"
+                                    :disabled="selectedCount === 0 || bulkStatusBusy"
+                                    @click="clearSelectedItems"
+                                >
+                                    Clear
                                 </Button>
                             </div>
                         </div>
@@ -3354,6 +3672,14 @@ watch(
                                     :key="String(item.id)"
                                     class="flex items-center gap-3 py-3 transition-colors hover:bg-muted/30"
                                 >
+                                    <Checkbox
+                                        v-if="canUseBulkSelection"
+                                        class="shrink-0"
+                                        :model-value="selectedItemIds.includes(String(item.id ?? ''))"
+                                        :disabled="!item.id || bulkStatusBusy"
+                                        @update:model-value="(checked) => toggleItemSelection(String(item.id ?? ''), checked)"
+                                        @click.stop
+                                    />
                                     <span
                                         class="size-2 shrink-0 rounded-full"
                                         :class="catalogStatusDotClass(item)"
@@ -4312,6 +4638,36 @@ watch(
                 @update:open="createDiscardConfirmOpen = false"
                 @confirm="confirmCreateCatalogDiscard"
             />
+
+            <Dialog v-model:open="bulkStatusDialogOpen">
+                <DialogContent class="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>{{ bulkStatusDialogTitle }}</DialogTitle>
+                        <DialogDescription>
+                            Applies to {{ selectedCount }} selected billable service{{ selectedCount === 1 ? '' : 's' }}. Add a short reason for audit traceability.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div class="grid gap-2">
+                        <Label for="billing-bulk-status-reason">Reason</Label>
+                        <Textarea
+                            id="billing-bulk-status-reason"
+                            v-model="bulkStatusReason"
+                            class="min-h-20"
+                            :placeholder="bulkStatusTarget === 'active' ? 'Optional activation note' : 'Required reason for deactivation or retirement'"
+                        />
+                    </div>
+                    <Alert v-if="bulkStatusError" variant="destructive">
+                        <AlertTitle>Bulk status issue</AlertTitle>
+                        <AlertDescription>{{ bulkStatusError }}</AlertDescription>
+                    </Alert>
+                    <DialogFooter class="gap-2 sm:justify-end">
+                        <Button variant="outline" :disabled="bulkStatusBusy" @click="bulkStatusDialogOpen = false">Cancel</Button>
+                        <Button :disabled="bulkStatusBusy" @click="submitBulkStatusDialog">
+                            {{ bulkStatusBusy ? 'Applying...' : 'Apply status' }}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <LeaveWorkflowDialog
                 :open="detailsDiscardConfirmOpen"

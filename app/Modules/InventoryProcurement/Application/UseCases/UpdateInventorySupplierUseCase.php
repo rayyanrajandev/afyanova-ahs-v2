@@ -49,6 +49,14 @@ class UpdateInventorySupplierUseCase
             $updatePayload['tin_number'] = $this->nullableTrimmedValue($payload['tin_number']);
         }
 
+        if (array_key_exists('bank_account_number', $payload)) {
+            $updatePayload['bank_account_number'] = $this->nullableTrimmedValue($payload['bank_account_number']);
+        }
+
+        if (array_key_exists('lipa_number', $payload)) {
+            $updatePayload['lipa_number'] = $this->nullableTrimmedValue($payload['lipa_number']);
+        }
+
         if (array_key_exists('contact_person', $payload)) {
             $updatePayload['contact_person'] = $this->nullableTrimmedValue($payload['contact_person']);
         }
@@ -122,6 +130,9 @@ class UpdateInventorySupplierUseCase
         $trackedFields = [
             'supplier_code',
             'supplier_name',
+            'tin_number',
+            'bank_account_number',
+            'lipa_number',
             'contact_person',
             'phone',
             'email',
@@ -149,4 +160,3 @@ class UpdateInventorySupplierUseCase
         return $changes;
     }
 }
-

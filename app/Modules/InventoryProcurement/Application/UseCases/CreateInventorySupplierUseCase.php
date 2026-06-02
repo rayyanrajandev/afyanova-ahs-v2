@@ -36,6 +36,8 @@ class CreateInventorySupplierUseCase
             'supplier_code' => $supplierCode,
             'supplier_name' => trim((string) $payload['supplier_name']),
             'tin_number' => $this->nullableTrimmedValue($payload['tin_number'] ?? null),
+            'bank_account_number' => $this->nullableTrimmedValue($payload['bank_account_number'] ?? null),
+            'lipa_number' => $this->nullableTrimmedValue($payload['lipa_number'] ?? null),
             'contact_person' => $this->nullableTrimmedValue($payload['contact_person'] ?? null),
             'phone' => $this->nullableTrimmedValue($payload['phone'] ?? null),
             'email' => $this->nullableTrimmedValue($payload['email'] ?? null),
@@ -91,6 +93,9 @@ class CreateInventorySupplierUseCase
             'facility_id',
             'supplier_code',
             'supplier_name',
+            'tin_number',
+            'bank_account_number',
+            'lipa_number',
             'contact_person',
             'phone',
             'email',
@@ -109,4 +114,3 @@ class CreateInventorySupplierUseCase
         return $result;
     }
 }
-

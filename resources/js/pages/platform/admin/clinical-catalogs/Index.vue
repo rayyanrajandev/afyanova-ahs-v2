@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { apiGetBlob } from '@/lib/apiClient';
 import { CLINICAL_CATALOG_BULK_MAX_STATUS_IDS } from '@/lib/clinicalCatalogBulk';
 import { formatEnumLabel } from '@/lib/labels';
 import { inventoryWorkspaceHref } from '@/lib/inventoryProcurement';
@@ -238,6 +239,8 @@ const base = computed(() => `/platform/admin/clinical-catalogs/${catalogKey.valu
 const loading = ref(true);
 const listLoading = ref(false);
 const listError = ref<string | null>(null);
+const catalogExporting = ref(false);
+const catalogPrinting = ref(false);
 const items = ref<Item[]>([]);
 const pager = ref<Pager | null>(null);
 const counts = ref<Counts>({ active: 0, inactive: 0, retired: 0, other: 0, total: 0 });
@@ -323,7 +326,7 @@ const consumptionStageOptions = [
     { value: 'procedure_completion', label: 'When procedure is completed' },
     { value: 'manual', label: 'Manual stock issue only' },
 ] as const;
-const filters = reactive({ q: '', status: '', category: '', perPage: 15, page: 1 });
+const filters = reactive({ q: '', status: '', category: '', perPage: 10, page: 1 });
 const filtersSheetOpen = ref(false);
 const createSheetOpen = ref(false);
 
@@ -543,6 +546,156 @@ function billingLinkDetail(item: Item | null): string {
     }
 
     return 'No hospital price is linked yet. Add one in Tariffs & services by selecting this clinical item when you create a service price.';
+}
+
+function clinicalCatalogExportQuery(): Record<string, string | null> {
+    return {
+        q: filters.q.trim() || null,
+        status: filters.status || null,
+        category: filters.category.trim() || null,
+    };
+}
+
+function triggerBlobDownload(blob: Blob, filename: string): void {
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
+}
+
+async function exportClinicalCatalogCsv(): Promise<void> {
+    if (catalogExporting.value) return;
+
+    catalogExporting.value = true;
+    try {
+        const { blob, filename } = await apiGetBlob(`${base.value}/export`, {
+            query: clinicalCatalogExportQuery(),
+            entitlementContext: `${catalog.value.label} catalog export`,
+        });
+        triggerBlobDownload(blob, filename ?? `clinical-catalog-${catalogKey.value}.csv`);
+        notifySuccess(`${catalog.value.label} exported.`);
+    } catch (error) {
+        notifyError(messageFromUnknown(error, 'Unable to export catalog records.'));
+    } finally {
+        catalogExporting.value = false;
+    }
+}
+
+async function loadFilteredClinicalCatalogItemsForPrint(): Promise<{ data: Item[]; total: number }> {
+    const results: Item[] = [];
+    let page = 1;
+    let lastPage = 1;
+    let total = 0;
+
+    do {
+        const response = await apiRequest<{ data: Item[]; meta: Pager }>('GET', base.value, {
+            query: {
+                ...clinicalCatalogExportQuery(),
+                perPage: 100,
+                page,
+            },
+        });
+
+        results.push(...(response.data ?? []));
+        total = response.meta?.total ?? results.length;
+        lastPage = Math.max(response.meta?.lastPage ?? 1, 1);
+        page += 1;
+    } while (page <= lastPage);
+
+    return { data: results, total };
+}
+
+function escapePrintHtml(value: string | number | null | undefined): string {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+async function printClinicalCatalogItems(): Promise<void> {
+    if (catalogPrinting.value) return;
+
+    const title = `${catalog.value.label} clinical catalog`;
+    const categoryLabel = catalog.value.categoryLabel;
+    const unitLabel = catalog.value.unitLabel;
+    const printWindow = window.open('', '_blank', 'width=1100,height=800');
+    if (!printWindow) {
+        notifyError('Unable to open print preview.');
+        return;
+    }
+
+    catalogPrinting.value = true;
+    try {
+        const printable = await loadFilteredClinicalCatalogItemsForPrint();
+        const rows = printable.data.map((item) => {
+            const billingCode = item.billingLink?.serviceCode || item.billingServiceCode || '';
+
+            return `
+                <tr>
+                    <td>${escapePrintHtml(item.code)}</td>
+                    <td>${escapePrintHtml(item.name)}</td>
+                    <td>${escapePrintHtml(item.category)}</td>
+                    <td>${escapePrintHtml(item.unit)}</td>
+                    <td>${escapePrintHtml(billingCode)}</td>
+                    <td>${escapePrintHtml(billingLinkLabel(item.billingLinkStatus))}</td>
+                    <td>${escapePrintHtml(item.status ? formatEnumLabel(item.status) : '')}</td>
+                    <td>${escapePrintHtml(fmtDate(item.updatedAt))}</td>
+                </tr>
+            `;
+        }).join('');
+
+        printWindow.document.write(`
+            <!doctype html>
+            <html>
+                <head>
+                    <title>${escapePrintHtml(title)}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
+                        h1 { font-size: 20px; margin: 0 0 4px; }
+                        p { margin: 0 0 16px; color: #4b5563; font-size: 12px; }
+                        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                        th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; vertical-align: top; }
+                        th { background: #f3f4f6; font-weight: 700; }
+                        @media print { body { margin: 12mm; } }
+                    </style>
+                </head>
+                <body>
+                    <h1>${escapePrintHtml(title)}</h1>
+                    <p>Filtered records: ${escapePrintHtml(printable.total)}. Printed ${escapePrintHtml(new Date().toLocaleString())}.</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Code</th>
+                                <th>Name</th>
+                                <th>${escapePrintHtml(categoryLabel)}</th>
+                                <th>${escapePrintHtml(unitLabel)}</th>
+                                <th>Billing code</th>
+                                <th>Billing link</th>
+                                <th>Status</th>
+                                <th>Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows || '<tr><td colspan="8">No records match the current filters.</td></tr>'}</tbody>
+                    </table>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+    } catch (error) {
+        printWindow.close();
+        notifyError(messageFromUnknown(error, 'Unable to print filtered catalog records.'));
+    } finally {
+        catalogPrinting.value = false;
+    }
 }
 
 function createClinicalDefinitionForm() {
@@ -852,7 +1005,7 @@ const filterCount = computed(() => {
     if (filters.q.trim()) count += 1;
     if (filters.status) count += 1;
     if (filters.category.trim()) count += 1;
-    if (filters.perPage !== 15) count += 1;
+    if (filters.perPage !== 10) count += 1;
     return count;
 });
 const filterChips = computed(() => {
@@ -891,12 +1044,12 @@ const filterChips = computed(() => {
             },
         });
     }
-    if (filters.perPage !== 15) {
+    if (filters.perPage !== 10) {
         chips.push({
             key: 'perPage',
             label: `${filters.perPage} per page`,
             clear: () => {
-                filters.perPage = 15;
+                filters.perPage = 10;
                 filters.page = 1;
                 void loadItems();
             },
@@ -1304,7 +1457,7 @@ function resetFilters(): void {
     filters.q = '';
     filters.status = '';
     filters.category = '';
-    filters.perPage = 15;
+    filters.perPage = 10;
     filters.page = 1;
     void loadItems();
 }
@@ -1877,6 +2030,26 @@ onMounted(() => {
                                 class="min-w-0 flex-1 text-xs [&_input]:h-8"
                                 @keyup.enter="search"
                             />
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                class="h-8 gap-1.5 rounded-lg text-xs"
+                                :disabled="catalogExporting"
+                                @click="exportClinicalCatalogCsv"
+                            >
+                                <AppIcon :name="catalogExporting ? 'loader-circle' : 'download'" class="size-3.5" :class="{ 'animate-spin': catalogExporting }" />
+                                Export
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                class="h-8 gap-1.5 rounded-lg text-xs"
+                                :disabled="catalogPrinting || loading || listLoading"
+                                @click="printClinicalCatalogItems"
+                            >
+                                <AppIcon :name="catalogPrinting ? 'loader-circle' : 'printer'" class="size-3.5" :class="{ 'animate-spin': catalogPrinting }" />
+                                Print
+                            </Button>
                             <Button variant="outline" size="sm" class="h-8 gap-1.5 rounded-lg text-xs" @click="filtersSheetOpen = true">
                                 <AppIcon name="sliders-horizontal" class="size-3.5" />
                                 Filters
@@ -2195,7 +2368,9 @@ onMounted(() => {
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
+                                            <SelectItem value="10">10</SelectItem>
                                             <SelectItem value="15">15</SelectItem>
+                                            <SelectItem value="20">20</SelectItem>
                                             <SelectItem value="25">25</SelectItem>
                                             <SelectItem value="50">50</SelectItem>
                                         </SelectContent>
