@@ -10,6 +10,7 @@ import {
     Calendar01Icon,
     CancelCircleIcon,
     CheckListIcon,
+    Download01Icon,
     CheckmarkCircle01Icon,
     EyeIcon,
     File02Icon,
@@ -17,6 +18,7 @@ import {
     Invoice01Icon,
     LayoutGridIcon,
     ListViewIcon,
+    Loading03Icon,
     Login01Icon,
     Mail01Icon,
     MapPinIcon,
@@ -24,6 +26,7 @@ import {
     PackageIcon,
     Pen01Icon,
     PillIcon,
+    PrinterIcon,
     ScissorIcon,
     SecurityCheckIcon,
     SlidersHorizontalIcon,
@@ -62,13 +65,16 @@ import {
     Folder,
     HeartPulse,
     LayoutGrid,
+    Download,
     LayoutList,
+    Loader2,
     LogIn,
     Mail,
     MapPin,
     Package,
     PanelRightOpen,
     Phone,
+    Printer,
     Pill,
     Plus,
     Receipt,
@@ -109,6 +115,7 @@ export type AppIconName =
     | 'circle-check-big'
     | 'circle-x'
     | 'clipboard-list'
+    | 'download'
     | 'ellipsis-vertical'
     | 'eye'
     | 'eye-off'
@@ -119,6 +126,7 @@ export type AppIconName =
     | 'layout-grid'
     | 'layout-list'
     | 'list-restart'
+    | 'loader-circle'
     | 'log-in'
     | 'mail'
     | 'map-pin'
@@ -128,6 +136,7 @@ export type AppIconName =
     | 'phone'
     | 'pill'
     | 'plus'
+    | 'printer'
     | 'receipt'
     | 'refresh-cw'
     | 'rotate-ccw'
@@ -162,6 +171,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     'circle-check-big': CircleCheck,
     'circle-x': CircleX,
     'clipboard-list': ClipboardList,
+    download: Download,
     'ellipsis-vertical': EllipsisVertical,
     eye: Eye,
     'eye-off': EyeOff,
@@ -172,6 +182,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     'layout-grid': LayoutGrid,
     'layout-list': LayoutList,
     'list-restart': ClipboardList,
+    'loader-circle': Loader2,
     'log-in': LogIn,
     mail: Mail,
     'map-pin': MapPin,
@@ -181,6 +192,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     phone: Phone,
     pill: Pill,
     plus: Plus,
+    printer: Printer,
     receipt: Receipt,
     'refresh-cw': RefreshCw,
     'rotate-ccw': RotateCcw,
@@ -216,6 +228,7 @@ const HUGE_ICON_MAP = {
     'circle-check-big': CheckmarkCircle01Icon,
     'circle-x': CancelCircleIcon,
     'clipboard-list': CheckListIcon,
+    download: Download01Icon,
     'ellipsis-vertical': MoreVerticalIcon,
     eye: EyeIcon,
     'eye-off': ViewOffIcon,
@@ -226,6 +239,7 @@ const HUGE_ICON_MAP = {
     'layout-grid': LayoutGridIcon,
     'layout-list': ListViewIcon,
     'list-restart': CheckListIcon,
+    'loader-circle': Loading03Icon,
     'log-in': Login01Icon,
     mail: Mail01Icon,
     'map-pin': MapPinIcon,
@@ -235,6 +249,7 @@ const HUGE_ICON_MAP = {
     phone: UserIcon,
     pill: PillIcon,
     plus: Add01Icon,
+    printer: PrinterIcon,
     receipt: Invoice01Icon,
     'refresh-cw': ActivityIcon,
     'rotate-ccw': ArrowLeft01Icon,

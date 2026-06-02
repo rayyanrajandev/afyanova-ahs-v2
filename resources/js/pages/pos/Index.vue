@@ -2147,8 +2147,18 @@ onMounted(refreshPage);
                                     <div v-if="labQuickSuccess" class="rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-100">
                                         <p>{{ labQuickSuccess }}</p>
                                         <div v-if="labQuickLatestSaleId" class="mt-2 flex flex-wrap gap-2">
-                                            <Button as-child size="sm" variant="outline"><Link :href="saleReceiptHref(labQuickLatestSaleId)">View receipt</Link></Button>
-                                            <Button as-child size="sm" variant="outline"><a :href="saleReceiptPdfHref(labQuickLatestSaleId)">Print PDF</a></Button>
+                                            <Button as-child size="sm" variant="outline">
+                                                <Link :href="saleReceiptHref(labQuickLatestSaleId)" class="inline-flex items-center gap-1.5">
+                                                    <AppIcon name="receipt" class="size-3.5" />
+                                                    View receipt
+                                                </Link>
+                                            </Button>
+                                            <Button as-child size="sm" variant="outline">
+                                                <a :href="saleReceiptPdfHref(labQuickLatestSaleId)" class="inline-flex items-center gap-1.5">
+                                                    <AppIcon name="printer" class="size-3.5" />
+                                                    Print PDF
+                                                </a>
+                                            </Button>
                                         </div>
                                     </div>
                                     <div class="flex flex-wrap gap-2">
@@ -2351,8 +2361,18 @@ onMounted(refreshPage);
                                     <div v-if="otcSuccess" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
                                         <p>{{ otcSuccess }}</p>
                                         <div v-if="otcLatestSaleId" class="mt-2 flex flex-wrap gap-2">
-                                            <Button as-child size="sm" variant="outline"><Link :href="saleReceiptHref(otcLatestSaleId)">Receipt</Link></Button>
-                                            <Button as-child size="sm" variant="outline"><a :href="saleReceiptPdfHref(otcLatestSaleId)">PDF</a></Button>
+                                            <Button as-child size="sm" variant="outline">
+                                                <Link :href="saleReceiptHref(otcLatestSaleId)" class="inline-flex items-center gap-1.5">
+                                                    <AppIcon name="receipt" class="size-3.5" />
+                                                    Receipt
+                                                </Link>
+                                            </Button>
+                                            <Button as-child size="sm" variant="outline">
+                                                <a :href="saleReceiptPdfHref(otcLatestSaleId)" class="inline-flex items-center gap-1.5">
+                                                    <AppIcon name="printer" class="size-3.5" />
+                                                    PDF
+                                                </a>
+                                            </Button>
                                         </div>
                                     </div>
                                     <div class="flex flex-wrap gap-2">
@@ -2514,8 +2534,18 @@ onMounted(refreshPage);
                                     <div v-if="retailSuccess" class="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200">
                                         <p>{{ retailSuccess }}</p>
                                         <div v-if="retailLatestSaleId" class="mt-2 flex gap-2">
-                                            <Button as-child size="sm" variant="outline"><Link :href="saleReceiptHref(retailLatestSaleId)">Receipt</Link></Button>
-                                            <Button as-child size="sm" variant="outline"><a :href="saleReceiptPdfHref(retailLatestSaleId)">PDF</a></Button>
+                                            <Button as-child size="sm" variant="outline">
+                                                <Link :href="saleReceiptHref(retailLatestSaleId)" class="inline-flex items-center gap-1.5">
+                                                    <AppIcon name="receipt" class="size-3.5" />
+                                                    Receipt
+                                                </Link>
+                                            </Button>
+                                            <Button as-child size="sm" variant="outline">
+                                                <a :href="saleReceiptPdfHref(retailLatestSaleId)" class="inline-flex items-center gap-1.5">
+                                                    <AppIcon name="printer" class="size-3.5" />
+                                                    PDF
+                                                </a>
+                                            </Button>
                                         </div>
                                     </div>
                                     <div class="flex flex-wrap gap-2">
@@ -3185,8 +3215,18 @@ onMounted(refreshPage);
                                     <div class="flex flex-col gap-2 md:items-end">
                                         <Badge>{{ sale.register?.registerCode || 'POS' }}</Badge>
                                         <div class="flex flex-wrap gap-2 md:justify-end">
-                                            <Button as-child size="sm" variant="outline"><Link :href="saleReceiptHref(sale.id)">Receipt</Link></Button>
-                                            <Button as-child size="sm" variant="outline"><a :href="saleReceiptPdfHref(sale.id)">PDF</a></Button>
+                                            <Button as-child size="sm" variant="outline">
+                                                <Link :href="saleReceiptHref(sale.id)" class="inline-flex items-center gap-1.5">
+                                                    <AppIcon name="receipt" class="size-3.5" />
+                                                    Receipt
+                                                </Link>
+                                            </Button>
+                                            <Button as-child size="sm" variant="outline">
+                                                <a :href="saleReceiptPdfHref(sale.id)" class="inline-flex items-center gap-1.5">
+                                                    <AppIcon name="printer" class="size-3.5" />
+                                                    PDF
+                                                </a>
+                                            </Button>
                                         </div>
                                         <div v-if="canControlSale(sale)" class="flex flex-wrap gap-2 md:justify-end">
                                             <Button v-if="canVoidSales" size="sm" variant="outline" @click="openSaleAction(sale, 'void')">{{ selectedSaleActionId === sale.id && saleActionMode === 'void' ? 'Voiding' : 'Void Sale' }}</Button>

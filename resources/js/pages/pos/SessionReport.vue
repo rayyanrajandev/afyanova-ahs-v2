@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import AppIcon from '@/components/AppIcon.vue';
 import DocumentShell from '@/components/documents/DocumentShell.vue';
 import { Button } from '@/components/ui/button';
 import { formatEnumLabel } from '@/lib/labels';
@@ -208,9 +209,15 @@ function printDocument(): void {
         @print="printDocument"
     >
         <template #actions>
-            <Button variant="outline" class="gap-2 print:hidden" @click="printDocument">Print</Button>
+            <Button variant="outline" class="gap-2 print:hidden" @click="printDocument">
+                <AppIcon name="printer" class="size-3.5" />
+                Print
+            </Button>
             <Button as-child variant="outline" class="print:hidden">
-                <a :href="`/pos/sessions/${session.id}/report.pdf`">Download PDF</a>
+                <a :href="`/pos/sessions/${session.id}/report.pdf`" class="inline-flex items-center gap-2">
+                    <AppIcon name="download" class="size-3.5" />
+                    Download PDF
+                </a>
             </Button>
             <Button as-child variant="outline" class="print:hidden">
                 <Link href="/pos">Back to POS</Link>

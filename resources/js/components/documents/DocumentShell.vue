@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppBrandMark from '@/components/AppBrandMark.vue';
+import AppIcon from '@/components/AppIcon.vue';
 import { Button } from '@/components/ui/button';
 import type { SharedDocumentBranding } from '@/types';
 
@@ -42,6 +43,7 @@ const emit = defineEmits<{
                 <div class="flex items-center gap-2">
                     <slot name="actions">
                         <Button type="button" variant="outline" class="gap-2" @click="emit('print')">
+                            <AppIcon name="printer" class="size-3.5" />
                             Print
                         </Button>
                     </slot>

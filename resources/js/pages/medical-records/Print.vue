@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import AppIcon from '@/components/AppIcon.vue';
 import DocumentShell from '@/components/documents/DocumentShell.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -662,10 +663,14 @@ function printDocument() {
     >
         <template #actions>
             <Button variant="outline" class="gap-2 print:hidden" @click="printDocument">
+                <AppIcon name="printer" class="size-3.5" />
                 Print
             </Button>
             <Button as-child variant="outline" class="print:hidden">
-                <a :href="`/medical-records/${record.id}/pdf`">Download PDF</a>
+                <a :href="`/medical-records/${record.id}/pdf`" class="inline-flex items-center gap-2">
+                    <AppIcon name="download" class="size-3.5" />
+                    Download PDF
+                </a>
             </Button>
             <Button as-child variant="outline" class="print:hidden">
                 <Link href="/medical-records">Back to Records</Link>

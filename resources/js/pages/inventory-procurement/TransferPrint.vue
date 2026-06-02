@@ -176,7 +176,11 @@ function printDocument(): void {
                 Print
             </Button>
             <Button as-child variant="outline" class="print:hidden">
-                <a :href="isPickSlip ? `/inventory-procurement/warehouse-transfers/${transfer.id}/pick-slip.pdf` : `/inventory-procurement/warehouse-transfers/${transfer.id}/dispatch-note.pdf`">
+                <a
+                    :href="isPickSlip ? `/inventory-procurement/warehouse-transfers/${transfer.id}/pick-slip.pdf` : `/inventory-procurement/warehouse-transfers/${transfer.id}/dispatch-note.pdf`"
+                    class="inline-flex items-center gap-2"
+                >
+                    <AppIcon name="download" class="size-3.5" />
                     Download PDF
                 </a>
             </Button>

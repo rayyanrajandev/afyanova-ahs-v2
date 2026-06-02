@@ -182,7 +182,10 @@ function printDocument(): void {
                 Print
             </Button>
             <Button as-child variant="outline" class="print:hidden">
-                <a :href="procurementGrnPdfHref(request.id)">Download PDF</a>
+                <a :href="procurementGrnPdfHref(request.id)" class="inline-flex items-center gap-2">
+                    <AppIcon name="download" class="size-3.5" />
+                    Download PDF
+                </a>
             </Button>
             <Button as-child variant="outline" class="print:hidden">
                 <Link :href="INVENTORY_PROCUREMENT_HOME_PATH">Supply chain home</Link>

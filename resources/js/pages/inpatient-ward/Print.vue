@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import AppIcon from '@/components/AppIcon.vue';
 import DocumentShell from '@/components/documents/DocumentShell.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -52,8 +53,16 @@ function printDocument(): void { window.print(); }
     <Head :title="pageTitle" />
     <DocumentShell :document-branding="documentBranding" eyebrow="Clinical Discharge" title="Discharge Summary" :subtitle="subtitle" :document-number="admission?.admissionNumber || checklist.id" :status-label="formatEnumLabel(checklist.status || 'draft')" :generated-at-label="generatedAt ? formatDateTime(generatedAt) : null" @print="printDocument">
         <template #actions>
-            <Button variant="outline" class="gap-2 print:hidden" @click="printDocument">Print</Button>
-            <Button as-child variant="outline" class="print:hidden"><a :href="`/inpatient-ward/discharge-checklists/${checklist.id}/pdf`">Download PDF</a></Button>
+            <Button variant="outline" class="gap-2 print:hidden" @click="printDocument">
+                <AppIcon name="printer" class="size-3.5" />
+                Print
+            </Button>
+            <Button as-child variant="outline" class="print:hidden">
+                <a :href="`/inpatient-ward/discharge-checklists/${checklist.id}/pdf`" class="inline-flex items-center gap-2">
+                    <AppIcon name="download" class="size-3.5" />
+                    Download PDF
+                </a>
+            </Button>
             <Button as-child variant="outline" class="print:hidden"><Link href="/inpatient-ward">Back to Inpatient Ward</Link></Button>
         </template>
 
