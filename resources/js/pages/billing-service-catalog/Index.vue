@@ -2644,8 +2644,6 @@ watch(
                                     <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
                                     <span class="font-medium text-foreground">{{ platformScope?.facility?.name || 'No facility' }}</span>
                                 </span>
-                                <span class="select-none text-border" aria-hidden="true">·</span>
-                                <span>{{ platformScope?.tenant?.name || 'No tenant' }}</span>
                             </div>
                         </div>
                     </div>
@@ -2712,7 +2710,7 @@ watch(
                 <SheetContent
                     side="right"
                     variant="workspace"
-                    size="6xl"
+                    size="4xl"
                     class="flex h-full min-h-0 flex-col"
                 >
                     <SheetHeader class="shrink-0 border-b px-4 py-3 pr-12 text-left sm:px-5">
