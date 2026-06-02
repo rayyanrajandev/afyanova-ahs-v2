@@ -3,7 +3,6 @@ import { Link } from '@inertiajs/vue3';
 import AppIcon from '@/components/AppIcon.vue';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { usePlatformAccess } from '@/composables/usePlatformAccess';
 
 const props = withDefaults(
     defineProps<{
@@ -31,7 +30,6 @@ defineSlots<{
     actions?: () => unknown;
 }>();
 
-const { scope } = usePlatformAccess();
 </script>
 
 <template>
@@ -55,26 +53,17 @@ const { scope } = usePlatformAccess();
                         {{ props.description }}
                     </p>
                     <div
-                        v-if="props.showScope"
+                        v-if="props.showScope && (props.departmentLoading || props.departmentName)"
                         class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground"
                     >
-                        <span class="inline-flex items-center gap-1">
-                            <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
-                            <span class="font-medium text-foreground">
-                                {{ scope?.facility?.name || 'No facility' }}
-                            </span>
+                        <span v-if="props.departmentLoading" class="inline-flex items-center gap-1">
+                            <AppIcon name="users" class="size-3 opacity-75" aria-hidden="true" />
+                            <Skeleton class="h-3 w-24" />
                         </span>
-                        <template v-if="props.departmentLoading || props.departmentName">
-                            <span class="select-none text-border" aria-hidden="true">·</span>
-                            <span v-if="props.departmentLoading" class="inline-flex items-center gap-1">
-                                <AppIcon name="users" class="size-3 opacity-75" aria-hidden="true" />
-                                <Skeleton class="h-3 w-24" />
-                            </span>
-                            <span v-else class="inline-flex items-center gap-1">
-                                <AppIcon name="users" class="size-3 opacity-75" aria-hidden="true" />
-                                <span class="font-medium text-foreground">{{ props.departmentName }}</span>
-                            </span>
-                        </template>
+                        <span v-else class="inline-flex items-center gap-1">
+                            <AppIcon name="users" class="size-3 opacity-75" aria-hidden="true" />
+                            <span class="font-medium text-foreground">{{ props.departmentName }}</span>
+                        </span>
                     </div>
                 </div>
             </div>

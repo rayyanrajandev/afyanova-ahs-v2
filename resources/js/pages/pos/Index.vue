@@ -1819,7 +1819,6 @@ onMounted(refreshPage);
                 icon="scan-line"
                 :intro="posWorkspaceIntro"
                 :list-loading="loading"
-                :show-tenant-in-scope="false"
                 @refresh="refreshPage"
             >
                 <template #actions>

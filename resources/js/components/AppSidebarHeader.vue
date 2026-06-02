@@ -144,8 +144,8 @@ const scopeMode = computed(() => {
 });
 
 const facilityTriggerLabel = computed(() => {
-    const facility = scope.value?.facility;
-    if (facility?.name && facility?.code) return `${facility.name} (${facility.code})`;
+    const facilityCode = String(scope.value?.facility?.code ?? '').trim().toUpperCase();
+    if (facilityCode) return facilityCode;
     if (hasUniversalAdminAccess.value && isPlatformAdminPage.value) return 'Global admin mode';
     if (hasUniversalAdminAccess.value) return 'All facilities';
 

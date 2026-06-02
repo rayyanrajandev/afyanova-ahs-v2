@@ -47,6 +47,37 @@ const singleModule = runtime.singleDirectServiceModule;
                 ];
             }
 
+            if (singleModule.key === 'pharmacy') {
+                const pharmacyCounts = counts.pharmacy;
+
+                return [
+                    helpers.metric(
+                        'Pending pharmacy orders',
+                        singleModule.subtitle,
+                        singleModule.icon,
+                        singleModule.active,
+                    ),
+                    helpers.metric(
+                        'Dispensed orders',
+                        'Pharmacy work already dispensed in the current queue scope.',
+                        'pill',
+                        singleModule.completed,
+                    ),
+                    helpers.metric(
+                        'Partially dispensed',
+                        'Medication orders with some quantity released but remaining dispense follow-up still open.',
+                        'activity',
+                        helpers.numberValue(pharmacyCounts, 'partially_dispensed'),
+                    ),
+                    helpers.metric(
+                        'Reconciliation pending',
+                        'Dispensed medication orders still waiting for medication reconciliation follow-up.',
+                        'clipboard-list',
+                        helpers.numberValue(pharmacyCounts, 'reconciliation_pending'),
+                    ),
+                ];
+            }
+
             return [
                 helpers.metric(
                     `Pending ${singleModule.label.toLowerCase()} orders`,
