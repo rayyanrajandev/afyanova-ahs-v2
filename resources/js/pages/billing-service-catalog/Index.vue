@@ -103,7 +103,7 @@ type Department = {
     serviceType: string | null;
 };
 type DepartmentListResponse = { data: Department[]; meta: Pagination };
-type ClinicalCatalogType = 'lab-tests' | 'radiology-procedures' | 'theatre-procedures' | 'formulary-items';
+type ClinicalCatalogType = 'lab_test' | 'radiology_procedure' | 'theatre_procedure' | 'formulary_item';
 type CreateIdentitySource = 'clinical' | 'standalone';
 type ClinicalCatalogLookupBillingItem = {
     id: string | null;
@@ -179,10 +179,10 @@ const facilityTierOptions = [
     { value: 'zonal_referral', label: 'Zonal referral' },
 ] as const;
 const clinicalCatalogSources = [
-    { type: 'lab-tests', path: '/platform/admin/clinical-catalogs/lab-tests', label: 'Lab Tests', defaultServiceType: 'laboratory' },
-    { type: 'radiology-procedures', path: '/platform/admin/clinical-catalogs/radiology-procedures', label: 'Radiology', defaultServiceType: 'radiology' },
-    { type: 'theatre-procedures', path: '/platform/admin/clinical-catalogs/theatre-procedures', label: 'Theatre Procedures', defaultServiceType: 'theatre' },
-    { type: 'formulary-items', path: '/platform/admin/clinical-catalogs/formulary-items', label: 'Formulary', defaultServiceType: 'pharmacy' },
+    { type: 'lab_test', path: '/platform/admin/clinical-catalogs/lab-tests', label: 'Lab Tests', defaultServiceType: 'laboratory' },
+    { type: 'radiology_procedure', path: '/platform/admin/clinical-catalogs/radiology-procedures', label: 'Radiology', defaultServiceType: 'radiology' },
+    { type: 'theatre_procedure', path: '/platform/admin/clinical-catalogs/theatre-procedures', label: 'Theatre Procedures', defaultServiceType: 'theatre' },
+    { type: 'formulary_item', path: '/platform/admin/clinical-catalogs/formulary-items', label: 'Formulary', defaultServiceType: 'pharmacy' },
 ] as const satisfies ReadonlyArray<{ type: ClinicalCatalogType; path: string; label: string; defaultServiceType: string }>;
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -1863,13 +1863,13 @@ async function apiRequest<T>(
     });
 }
 
-async function loadClinicalCatalogLookupSource(path: string): Promise<ClinicalCatalogLookupItem[]> {
+async function loadClinicalCatalogLookupSource(source: (typeof clinicalCatalogSources)[number]): Promise<ClinicalCatalogLookupItem[]> {
     const results: ClinicalCatalogLookupItem[] = [];
     let page = 1;
     let lastPage = 1;
 
     do {
-        const response = await apiRequest<ClinicalCatalogLookupListResponse>('GET', path, {
+        const response = await apiRequest<ClinicalCatalogLookupListResponse>('GET', source.path, {
             query: {
                 status: 'active',
                 page,
@@ -1877,7 +1877,10 @@ async function loadClinicalCatalogLookupSource(path: string): Promise<ClinicalCa
             },
         });
 
-        results.push(...(response.data ?? []));
+        results.push(...(response.data ?? []).map((item) => ({
+            ...item,
+            catalogType: item.catalogType ?? source.type,
+        })));
         lastPage = Math.max(response.meta?.lastPage ?? 1, 1);
         page += 1;
     } while (page <= lastPage);
@@ -1893,7 +1896,7 @@ async function loadClinicalCatalogLookupItems(): Promise<void> {
 
     try {
         const responses = await Promise.all(
-            clinicalCatalogSources.map((source) => loadClinicalCatalogLookupSource(source.path)),
+            clinicalCatalogSources.map((source) => loadClinicalCatalogLookupSource(source)),
         );
 
         clinicalCatalogLookupItems.value = responses.flat();
