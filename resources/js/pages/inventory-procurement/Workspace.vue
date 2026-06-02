@@ -221,7 +221,7 @@ const inventoryWorkspaceAreas: Array<{
     {
         id: 'requests-fulfilment',
         label: 'Requests & Fulfilment',
-        description: 'Requests, shortages and transfers',
+        description: 'Priorities, requests and shortages',
         icon: 'activity',
         activeClass: 'border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100',
         tabs: ['overview', 'requisitions', 'shortage-queue', 'transfers'],
@@ -6071,8 +6071,8 @@ onMounted(async () => {
                         Lead Times
                     </TabsTrigger>
                     <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('overview')" value="overview" class="gap-1.5">
-                        <AppIcon name="layout-grid" class="size-3.5" />
-                        Overview
+                        <AppIcon name="alert-triangle" class="size-3.5" />
+                        Priorities
                     </TabsTrigger>
                     <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('requisitions')" value="requisitions" class="gap-1.5">
                         <AppIcon name="clipboard-list" class="size-3.5" />
