@@ -34,6 +34,9 @@ type BillingLinkStatus = 'linked' | 'pending_price' | 'review_required' | 'not_l
 type ApiError = Error & { status?: number; payload?: { message?: string; errors?: Record<string, string[]> } };
 type StandardsCodes = Partial<Record<'LOCAL' | 'LOINC' | 'SNOMED_CT' | 'NHIF' | 'MSD' | 'CPT' | 'ICD', string>>;
 
+const props = defineProps<{ catalog?: string | null }>();
+const catalogKeys = ['lab-tests', 'radiology-procedures', 'theatre-procedures', 'formulary-items'] as const;
+
 type BillingLinkItem = {
     id: string | null;
     clinicalCatalogItemId: string | null;
@@ -193,7 +196,32 @@ const canRead = computed(() => permissionState('platform.clinical-catalog.read')
 const canAudit = computed(() => permissionState('platform.clinical-catalog.view-audit-logs') === 'allowed');
 const scopeUnresolved = computed(() => multiTenantIsolationEnabled.value && (scope.value?.resolvedFrom ?? 'none') === 'none');
 
-const catalogKey = ref<CatalogKey>('lab-tests');
+function normalizeCatalogKey(value: string | null | undefined): CatalogKey {
+    return catalogKeys.includes(value as CatalogKey) ? (value as CatalogKey) : 'lab-tests';
+}
+
+function catalogKeyFromPath(): CatalogKey | null {
+    if (typeof window === 'undefined') return null;
+
+    const segment = window.location.pathname.split('/').filter(Boolean).at(-1);
+
+    return catalogKeys.includes(segment as CatalogKey) ? (segment as CatalogKey) : null;
+}
+
+function clinicalCatalogHref(key: CatalogKey): string {
+    return `/platform/admin/clinical-catalogs/${key}`;
+}
+
+function syncCatalogUrl(key: CatalogKey): void {
+    if (typeof window === 'undefined') return;
+
+    const nextUrl = clinicalCatalogHref(key);
+    if (window.location.pathname !== nextUrl) {
+        window.history.replaceState(window.history.state, '', nextUrl);
+    }
+}
+
+const catalogKey = ref<CatalogKey>(normalizeCatalogKey(props.catalog ?? catalogKeyFromPath()));
 const catalog = computed(() => domains[catalogKey.value]);
 const canManage = computed(() => permissionState(catalog.value.manage) === 'allowed');
 const clinicalCatalogReadOnly = computed(() => canRead.value && !canManage.value);
@@ -224,6 +252,66 @@ const facilityTierOptions = [
     { value: 'regional_hospital', label: 'Regional hospital' },
     { value: 'zonal_referral', label: 'Zonal referral' },
 ] as const;
+const labDisciplineOptions: SearchableSelectOption[] = [
+    { value: 'hematology', label: 'Hematology', description: 'CBC, ESR, blood film, coagulation screening' },
+    { value: 'clinical_chemistry', label: 'Clinical chemistry', description: 'Glucose, renal, liver, electrolytes, lipids' },
+    { value: 'microbiology', label: 'Microbiology', description: 'Culture, sensitivity, Gram stain, AFB workflow' },
+    { value: 'serology_immunology', label: 'Serology / immunology', description: 'HIV, hepatitis, pregnancy, rapid immunoassays' },
+    { value: 'parasitology', label: 'Parasitology', description: 'Malaria, stool ova and parasites, blood parasites' },
+    { value: 'urinalysis', label: 'Urinalysis', description: 'Dipstick, microscopy, urine pregnancy testing' },
+    { value: 'blood_bank_transfusion', label: 'Blood bank / transfusion', description: 'Grouping, crossmatch, compatibility tests' },
+    { value: 'molecular_diagnostics', label: 'Molecular diagnostics', description: 'PCR and GeneXpert style testing' },
+    { value: 'histopathology_cytology', label: 'Histopathology / cytology', description: 'Biopsy, FNAC, Pap smear specimens' },
+];
+const labReportingUnitOptions: SearchableSelectOption[] = [
+    { value: 'test', label: 'Test', description: 'Single reported laboratory test' },
+    { value: 'panel', label: 'Panel', description: 'Grouped results reported together' },
+    { value: 'profile', label: 'Profile', description: 'Clinical chemistry or wellness profile' },
+    { value: 'slide', label: 'Slide', description: 'Microscopy slide review' },
+    { value: 'sample', label: 'Sample', description: 'One specimen-based result' },
+    { value: 'culture', label: 'Culture', description: 'Culture and sensitivity workflow' },
+    { value: 'report', label: 'Report', description: 'Narrative or specialist report' },
+];
+const labSampleTypeOptions: SearchableSelectOption[] = [
+    { value: 'whole blood', label: 'Whole blood', group: 'Blood' },
+    { value: 'serum', label: 'Serum', group: 'Blood' },
+    { value: 'plasma', label: 'Plasma', group: 'Blood' },
+    { value: 'capillary blood', label: 'Capillary blood', group: 'Blood' },
+    { value: 'urine', label: 'Urine', group: 'Body fluids' },
+    { value: 'stool', label: 'Stool', group: 'Body fluids' },
+    { value: 'sputum', label: 'Sputum', group: 'Respiratory' },
+    { value: 'swab', label: 'Swab', group: 'Microbiology' },
+    { value: 'CSF', label: 'CSF', description: 'Cerebrospinal fluid', group: 'Body fluids' },
+    { value: 'tissue', label: 'Tissue / biopsy', group: 'Pathology' },
+    { value: 'semen', label: 'Semen', group: 'Body fluids' },
+];
+const labSpecimenContainerOptions: SearchableSelectOption[] = [
+    { value: 'EDTA tube', label: 'EDTA tube', description: 'Purple top; hematology and HbA1c' },
+    { value: 'plain tube', label: 'Plain tube', description: 'Red top; serum chemistry and serology' },
+    { value: 'SST tube', label: 'SST tube', description: 'Gel separator tube for serum tests' },
+    { value: 'fluoride oxalate tube', label: 'Fluoride oxalate tube', description: 'Grey top; glucose/lactate' },
+    { value: 'sodium citrate tube', label: 'Sodium citrate tube', description: 'Blue top; coagulation tests' },
+    { value: 'lithium heparin tube', label: 'Lithium heparin tube', description: 'Green top; plasma chemistry' },
+    { value: 'urine container', label: 'Urine container' },
+    { value: 'stool container', label: 'Stool container' },
+    { value: 'sputum cup', label: 'Sputum cup' },
+    { value: 'blood culture bottle', label: 'Blood culture bottle' },
+    { value: 'swab transport tube', label: 'Swab transport tube' },
+    { value: 'sterile container', label: 'Sterile container' },
+];
+const labTurnaroundHourOptions: SearchableSelectOption[] = [
+    { value: '1', label: '1 hour', group: 'Same day' },
+    { value: '2', label: '2 hours', group: 'Same day' },
+    { value: '4', label: '4 hours', group: 'Same day' },
+    { value: '6', label: '6 hours', group: 'Same day' },
+    { value: '8', label: '8 hours', group: 'Same day' },
+    { value: '12', label: '12 hours', group: 'Same day' },
+    { value: '24', label: '24 hours', group: 'Routine' },
+    { value: '48', label: '48 hours', group: 'Routine' },
+    { value: '72', label: '72 hours', group: 'Culture / referral' },
+    { value: '120', label: '5 days', group: 'Culture / referral' },
+    { value: '168', label: '7 days', group: 'Culture / referral' },
+];
 
 const inventoryStoreItemsHref = inventoryWorkspaceHref({ section: 'inventory' });
 
@@ -927,6 +1015,13 @@ function resetFiltersFromSheet(): void {
     resetFilters();
 }
 
+function setCatalogTab(value: string | number): void {
+    const next = normalizeCatalogKey(String(value));
+    if (next === catalogKey.value) return;
+
+    catalogKey.value = next;
+}
+
 function goToPage(page: number): void {
     filters.page = page;
     void loadItems();
@@ -1622,7 +1717,8 @@ async function submitBulkStatusDialog(): Promise<void> {
     }
 }
 
-watch(catalogKey, () => {
+watch(catalogKey, (next) => {
+    syncCatalogUrl(next);
     loading.value = true;
     clearSelectedItems();
     closeDetails();
@@ -1686,7 +1782,6 @@ onMounted(() => {
                                     </span>
                                 </span>
                                 <span class="select-none text-border" aria-hidden="true">·</span>
-                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
                             </div>
                         </div>
                     </div>
@@ -1728,33 +1823,26 @@ onMounted(() => {
                     <p id="clinical-catalog-domain-label" class="mb-2.5 text-xs font-semibold text-foreground">
                         Catalog domain
                     </p>
-                    <div
-                        class="grid grid-cols-2 gap-2 sm:grid-cols-4"
-                        role="tablist"
-                        aria-labelledby="clinical-catalog-domain-label"
+                    <Tabs
+                        :model-value="catalogKey"
+                        class="w-full"
+                        @update:model-value="setCatalogTab"
                     >
-                        <button
-                            v-for="tab in clinicalCatalogTabs"
-                            :key="tab.key"
-                            type="button"
-                            role="tab"
-                            :aria-selected="catalogKey === tab.key"
-                            class="flex min-h-11 items-center justify-center gap-2 rounded-lg border-2 px-3 py-2.5 text-sm font-semibold shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            :class="
-                                catalogKey === tab.key
-                                    ? 'border-primary bg-primary text-primary-foreground shadow-md'
-                                    : 'border-border bg-background text-foreground hover:border-primary/40 hover:bg-accent'
-                            "
-                            @click="catalogKey = tab.key"
+                        <TabsList
+                            class="grid h-auto w-full grid-cols-2 gap-1 bg-muted/40 p-1 sm:grid-cols-4"
+                            aria-labelledby="clinical-catalog-domain-label"
                         >
-                            <AppIcon
-                                :name="tab.icon"
-                                class="size-4 shrink-0"
-                                :class="catalogKey === tab.key ? 'text-primary-foreground' : 'text-muted-foreground'"
-                            />
-                            <span>{{ tab.label }}</span>
-                        </button>
-                    </div>
+                            <TabsTrigger
+                                v-for="tab in clinicalCatalogTabs"
+                                :key="tab.key"
+                                :value="tab.key"
+                                class="h-8 min-w-0 gap-1.5 rounded-md px-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                            >
+                                <AppIcon :name="tab.icon" class="size-3.5 shrink-0 text-muted-foreground" />
+                                <span class="truncate text-xs font-medium">{{ tab.label }}</span>
+                            </TabsTrigger>
+                        </TabsList>
+                    </Tabs>
                 </div>
             </section>
 
@@ -2165,12 +2253,38 @@ onMounted(() => {
                                     :reserve-message-space="false"
                                 />
                                 <div class="grid gap-1.5">
-                                    <Label>{{ catalog.categoryLabel }}</Label>
-                                    <Input v-model="createForm.category" :placeholder="catalog.categoryPlaceholder" />
+                                    <ComboboxField
+                                        v-if="catalogKey === 'lab-tests'"
+                                        input-id="create-clinical-definition-discipline"
+                                        :label="catalog.categoryLabel"
+                                        v-model="createForm.category"
+                                        :options="labDisciplineOptions"
+                                        placeholder="Select discipline"
+                                        search-placeholder="Search lab discipline"
+                                        empty-text="No matching discipline found."
+                                        :reserve-message-space="false"
+                                    />
+                                    <template v-else>
+                                        <Label>{{ catalog.categoryLabel }}</Label>
+                                        <Input v-model="createForm.category" :placeholder="catalog.categoryPlaceholder" />
+                                    </template>
                                 </div>
                                 <div class="grid gap-1.5">
-                                    <Label>{{ catalog.unitLabel }}</Label>
-                                    <Input v-model="createForm.unit" :placeholder="catalog.unitPlaceholder" />
+                                    <ComboboxField
+                                        v-if="catalogKey === 'lab-tests'"
+                                        input-id="create-clinical-definition-reporting-unit"
+                                        :label="catalog.unitLabel"
+                                        v-model="createForm.unit"
+                                        :options="labReportingUnitOptions"
+                                        placeholder="Select reporting unit"
+                                        search-placeholder="Search reporting unit"
+                                        empty-text="No matching reporting unit found."
+                                        :reserve-message-space="false"
+                                    />
+                                    <template v-else>
+                                        <Label>{{ catalog.unitLabel }}</Label>
+                                        <Input v-model="createForm.unit" :placeholder="catalog.unitPlaceholder" />
+                                    </template>
                                 </div>
                                 <div class="grid gap-1.5 md:col-span-3">
                                     <Label>Description</Label>
@@ -2182,9 +2296,37 @@ onMounted(() => {
                                 <legend class="px-2 text-sm font-medium text-muted-foreground">{{ catalog.domainSectionTitle }}</legend>
                                 <p class="text-xs text-muted-foreground">{{ catalog.domainSectionDescription }}</p>
                                 <div v-if="catalogKey === 'lab-tests'" class="grid gap-3 md:grid-cols-2">
-                                    <div class="grid gap-1.5"><Label>Sample type</Label><Input v-model="createForm.sampleType" placeholder="blood" /></div>
-                                    <div class="grid gap-1.5"><Label>Specimen container</Label><Input v-model="createForm.specimenContainer" placeholder="EDTA tube" /></div>
-                                    <div class="grid gap-1.5"><Label>Turnaround hours</Label><Input v-model="createForm.turnaroundHours" inputmode="numeric" placeholder="4" /><p v-if="firstError(createErrors, 'turnaroundHours')" class="text-xs text-destructive">{{ firstError(createErrors, 'turnaroundHours') }}</p></div>
+                                    <ComboboxField
+                                        input-id="create-clinical-definition-sample-type"
+                                        label="Sample type"
+                                        v-model="createForm.sampleType"
+                                        :options="labSampleTypeOptions"
+                                        placeholder="Select sample type"
+                                        search-placeholder="Search sample type"
+                                        empty-text="No matching sample type found."
+                                        :reserve-message-space="false"
+                                    />
+                                    <ComboboxField
+                                        input-id="create-clinical-definition-specimen-container"
+                                        label="Specimen container"
+                                        v-model="createForm.specimenContainer"
+                                        :options="labSpecimenContainerOptions"
+                                        placeholder="Select specimen container"
+                                        search-placeholder="Search specimen container"
+                                        empty-text="No matching container found."
+                                        :reserve-message-space="false"
+                                    />
+                                    <ComboboxField
+                                        input-id="create-clinical-definition-turnaround-hours"
+                                        label="Turnaround hours"
+                                        v-model="createForm.turnaroundHours"
+                                        :options="labTurnaroundHourOptions"
+                                        placeholder="Select turnaround time"
+                                        search-placeholder="Search turnaround time"
+                                        :error-message="firstError(createErrors, 'turnaroundHours')"
+                                        empty-text="No matching turnaround time found."
+                                        :reserve-message-space="false"
+                                    />
                                     <div class="grid gap-1.5"><Label>Fasting required</Label><Select v-model="createForm.fastingRequired"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">Required</SelectItem><SelectItem value="no">Not required</SelectItem></SelectContent></Select></div>
                                 </div>
                                 <div v-else-if="catalogKey === 'radiology-procedures'" class="grid gap-3 md:grid-cols-2">

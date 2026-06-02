@@ -246,9 +246,13 @@ Route::get('platform/admin/branding', function (SystemBrandingManager $brandingM
     ]);
 })->middleware(['auth', 'verified', 'can:platform.settings.manage-branding'])->name('platform-admin-branding.page');
 
-Route::get('platform/admin/clinical-catalogs', function () {
-    return Inertia::render('platform/admin/clinical-catalogs/Index');
-})->middleware(['auth', 'verified', 'can:platform.clinical-catalog.read'])->name('platform-admin-clinical-catalogs.page');
+Route::get('platform/admin/clinical-catalogs/{catalog?}', function (?string $catalog = null) {
+    return Inertia::render('platform/admin/clinical-catalogs/Index', [
+        'catalog' => $catalog,
+    ]);
+})->where('catalog', 'lab-tests|radiology-procedures|theatre-procedures|formulary-items')
+    ->middleware(['auth', 'verified', 'can:platform.clinical-catalog.read'])
+    ->name('platform-admin-clinical-catalogs.page');
 
 Route::get('radiology-orders', function () {
     return Inertia::render('radiology-orders/Index');
