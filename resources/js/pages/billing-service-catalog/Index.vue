@@ -248,6 +248,7 @@ const clinicalCatalogLookupLoading = ref(false);
 const clinicalCatalogLookupLoaded = ref(false);
 const clinicalCatalogLookupError = ref<string | null>(null);
 const clinicalCatalogLookupItems = ref<ClinicalCatalogLookupItem[]>([]);
+const createClinicalCatalogTypeFilter = ref<ClinicalCatalogType | 'all'>('all');
 const departmentsLoading = ref(false);
 const departments = ref<Department[]>([]);
 const createForm = reactive({
@@ -482,8 +483,15 @@ const createIdentitySourceTabsValue = computed({
     },
 });
 const createSelectedClinicalCatalogItem = computed(() => findClinicalCatalogLookupItem(createForm.clinicalCatalogItemId));
+const createFilteredClinicalCatalogItems = computed(() => {
+    if (createClinicalCatalogTypeFilter.value === 'all') {
+        return clinicalCatalogLookupItems.value;
+    }
+
+    return clinicalCatalogLookupItems.value.filter((item) => item.catalogType === createClinicalCatalogTypeFilter.value);
+});
 const createClinicalCatalogItemOptions = computed<SearchableSelectOption[]>(() =>
-    [...clinicalCatalogLookupItems.value]
+    [...createFilteredClinicalCatalogItems.value]
         .sort((left, right) => {
             const leftGroup = clinicalCatalogGroupLabel(left.catalogType);
             const rightGroup = clinicalCatalogGroupLabel(right.catalogType);
@@ -529,11 +537,13 @@ const createClinicalCatalogHelperText = computed(() => {
     if (clinicalCatalogLookupLoading.value) return 'Loading active clinical definitions across lab, radiology, theatre, and formulary catalogs...';
     if (clinicalCatalogLookupError.value) return 'Clinical catalog lookup is unavailable right now. Use standalone mode only for true billing-only services.';
     if (!clinicalCatalogLookupItems.value.length) return 'No active clinical definitions are available yet. Add them in Clinical Care Catalogs first.';
+    if (!createFilteredClinicalCatalogItems.value.length) return `No active ${clinicalCatalogGroupLabel(createClinicalCatalogTypeFilter.value).toLowerCase()} definitions are available yet.`;
     return 'Select the existing clinical definition first. Service code and service name will be filled automatically from that record.';
 });
 const createClinicalCatalogEmptyText = computed(() => {
     if (clinicalCatalogLookupLoading.value) return 'Loading clinical definitions...';
     if (!clinicalCatalogLookupItems.value.length) return 'No active clinical definitions are available.';
+    if (!createFilteredClinicalCatalogItems.value.length) return `No active ${clinicalCatalogGroupLabel(createClinicalCatalogTypeFilter.value).toLowerCase()} definitions are available.`;
     return 'No clinical definition matched this search.';
 });
 const createLinkedClinicalModeLocked = computed(() => (
@@ -1235,6 +1245,7 @@ function formatCoverageRange(min: number | null, max: number | null): string {
 function resetCreateCatalogForm(): void {
     createForm.identitySource = 'clinical';
     createForm.clinicalCatalogItemId = '';
+    createClinicalCatalogTypeFilter.value = 'all';
     createForm.serviceCode = '';
     createForm.serviceName = '';
     createForm.serviceType = '';
@@ -2586,6 +2597,16 @@ watch(
 );
 
 watch(
+    createClinicalCatalogTypeFilter,
+    (catalogType) => {
+        const selectedItem = createSelectedClinicalCatalogItem.value;
+        if (!selectedItem || catalogType === 'all' || selectedItem.catalogType === catalogType) return;
+
+        clearCreateClinicalCatalogSelection();
+    },
+);
+
+watch(
     () => [createSheetOpen.value, createForm.identitySource] as const,
     ([sheetOpen, identitySource]) => {
         if (
@@ -2767,6 +2788,24 @@ watch(
                                     </TabsList>
 
                                     <TabsContent value="clinical" class="mt-0 space-y-3">
+                                        <div class="grid gap-1.5">
+                                            <Label for="create-price-clinical-catalog-type">Catalog type</Label>
+                                            <Select v-model="createClinicalCatalogTypeFilter">
+                                                <SelectTrigger id="create-price-clinical-catalog-type" class="w-full">
+                                                    <SelectValue placeholder="All catalogs" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all">All catalogs</SelectItem>
+                                                    <SelectItem
+                                                        v-for="source in clinicalCatalogSources"
+                                                        :key="source.type"
+                                                        :value="source.type"
+                                                    >
+                                                        {{ source.label }}
+                                                    </SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
                                         <ComboboxField
                                             input-id="create-price-clinical-catalog-item"
                                             label="Clinical definition"
