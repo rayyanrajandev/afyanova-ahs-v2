@@ -192,6 +192,49 @@ const stockLedgerSourceOptions = [
 
 const inventoryWorkspaceTabs = ['overview', 'requisitions', 'shortage-queue', 'transfers', 'inventory', 'ledger', 'department-stock', 'procurement', 'msd-orders', 'lead-times', 'claims', 'analytics'] as const;
 type InventoryWorkspaceTab = (typeof inventoryWorkspaceTabs)[number];
+type InventoryWorkspaceArea = 'stock-control' | 'procurement' | 'requests-fulfilment' | 'review';
+
+const inventoryWorkspaceAreas: Array<{
+    id: InventoryWorkspaceArea;
+    label: string;
+    description: string;
+    icon: string;
+    activeClass: string;
+    tabs: InventoryWorkspaceTab[];
+}> = [
+    {
+        id: 'stock-control',
+        label: 'Stock Control',
+        description: 'Items, ledger and department stock',
+        icon: 'package',
+        activeClass: 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100',
+        tabs: ['inventory', 'ledger', 'department-stock'],
+    },
+    {
+        id: 'procurement',
+        label: 'Procurement',
+        description: 'Purchase requests, MSD and lead times',
+        icon: 'clipboard-list',
+        activeClass: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100',
+        tabs: ['procurement', 'msd-orders', 'lead-times'],
+    },
+    {
+        id: 'requests-fulfilment',
+        label: 'Requests & Fulfilment',
+        description: 'Requests, shortages and transfers',
+        icon: 'activity',
+        activeClass: 'border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100',
+        tabs: ['overview', 'requisitions', 'shortage-queue', 'transfers'],
+    },
+    {
+        id: 'review',
+        label: 'Review',
+        description: 'Claims and analytics',
+        icon: 'shield-check',
+        activeClass: 'border-violet-300 bg-violet-50 text-violet-900 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-100',
+        tabs: ['claims', 'analytics'],
+    },
+];
 
 function normalizeInventoryWorkspaceTab(value: string): InventoryWorkspaceTab {
     return normalizeInventoryWorkspaceSection(value) as InventoryWorkspaceTab;
@@ -232,6 +275,34 @@ function workspaceTabVisible(tab: InventoryWorkspaceTab): boolean {
         inventoryAccess.value,
         normalizeInventoryWorkspaceSection(tab),
     );
+}
+
+function workspaceAreaVisible(area: (typeof inventoryWorkspaceAreas)[number]): boolean {
+    return area.tabs.some((tab) => workspaceTabVisible(tab));
+}
+
+function firstVisibleWorkspaceAreaTab(area: (typeof inventoryWorkspaceAreas)[number]): InventoryWorkspaceTab | null {
+    return area.tabs.find((tab) => workspaceTabVisible(tab)) ?? null;
+}
+
+const visibleWorkspaceAreas = computed(() => inventoryWorkspaceAreas.filter((area) => workspaceAreaVisible(area)));
+
+const activeWorkspaceArea = computed(() => {
+    return visibleWorkspaceAreas.value.find((area) => area.tabs.includes(activeTab.value))
+        ?? visibleWorkspaceAreas.value[0]
+        ?? inventoryWorkspaceAreas[0];
+});
+
+const activeWorkspaceAreaTabs = computed(() => activeWorkspaceArea.value.tabs.filter((tab) => workspaceTabVisible(tab)));
+
+function switchWorkspaceArea(areaId: InventoryWorkspaceArea): void {
+    const area = inventoryWorkspaceAreas.find((candidate) => candidate.id === areaId);
+    if (!area) return;
+
+    const nextTab = firstVisibleWorkspaceAreaTab(area);
+    if (nextTab) {
+        onTabChange(nextTab);
+    }
 }
 
 function syncActiveTabWithAccess(): void {
@@ -5951,58 +6022,63 @@ onMounted(async () => {
 
             <!-- Tab layout -->
             <Tabs :model-value="activeTab" class="flex min-h-0 flex-1 flex-col gap-4" @update:model-value="onTabChange">
-                <TabsList class="flex h-auto w-full flex-wrap justify-start gap-2 rounded-lg bg-muted/30 p-1">
-                    <template v-if="workspaceTabVisible('inventory') || workspaceTabVisible('ledger') || workspaceTabVisible('department-stock')">
-                        <span class="pointer-events-none inline-flex h-8 select-none items-center gap-1.5 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300" aria-hidden="true">
-                            <span class="h-3 w-px bg-emerald-300 dark:bg-emerald-700"></span>
-                            Stock Control
+                <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <button
+                        v-for="area in visibleWorkspaceAreas"
+                        :key="area.id"
+                        type="button"
+                        :class="[
+                            'flex min-h-12 items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition',
+                            area.id === activeWorkspaceArea.id
+                                ? area.activeClass
+                                : 'border-transparent bg-muted/30 text-muted-foreground hover:border-border hover:bg-background hover:text-foreground'
+                        ]"
+                        @click="switchWorkspaceArea(area.id)"
+                    >
+                        <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-background/70">
+                            <AppIcon :name="area.icon" class="size-4" />
                         </span>
-                    </template>
-                    <TabsTrigger v-if="workspaceTabVisible('inventory')" value="inventory" class="gap-1.5">
+                        <span class="min-w-0">
+                            <span class="block truncate font-medium leading-tight">{{ area.label }}</span>
+                            <span class="hidden truncate text-xs opacity-75 lg:block">{{ area.description }}</span>
+                        </span>
+                    </button>
+                </div>
+
+                <TabsList class="flex h-auto w-full flex-wrap justify-start gap-2 rounded-lg bg-muted/30 p-1">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('inventory')" value="inventory" class="gap-1.5">
                         <AppIcon name="package" class="size-3.5" />
                         Items
                     </TabsTrigger>
-                    <TabsTrigger v-if="workspaceTabVisible('ledger')" value="ledger" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('ledger')" value="ledger" class="gap-1.5">
                         <AppIcon name="activity" class="size-3.5" />
                         Ledger
                     </TabsTrigger>
-                    <TabsTrigger v-if="workspaceTabVisible('department-stock')" value="department-stock" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('department-stock')" value="department-stock" class="gap-1.5">
                         <AppIcon name="building-2" class="size-3.5" />
                         Department Stock
                     </TabsTrigger>
-                    <template v-if="workspaceTabVisible('procurement') || workspaceTabVisible('msd-orders') || workspaceTabVisible('lead-times')">
-                        <span class="pointer-events-none inline-flex h-8 select-none items-center gap-1.5 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300" aria-hidden="true">
-                            <span class="h-3 w-px bg-amber-300 dark:bg-amber-700"></span>
-                            Procurement
-                        </span>
-                    </template>
-                    <TabsTrigger v-if="workspaceTabVisible('procurement')" value="procurement" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('procurement')" value="procurement" class="gap-1.5">
                         <AppIcon name="clipboard-list" class="size-3.5" />
                         Purchase Requests
                     </TabsTrigger>
-                    <TabsTrigger v-if="workspaceTabVisible('msd-orders')" value="msd-orders" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('msd-orders')" value="msd-orders" class="gap-1.5">
                         <AppIcon name="package" class="size-3.5" />
                         MSD Orders
                     </TabsTrigger>
-                    <TabsTrigger v-if="workspaceTabVisible('lead-times')" value="lead-times" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('lead-times')" value="lead-times" class="gap-1.5">
                         <AppIcon name="activity" class="size-3.5" />
                         Lead Times
                     </TabsTrigger>
-                    <template v-if="workspaceTabVisible('overview') || workspaceTabVisible('requisitions') || workspaceTabVisible('shortage-queue') || workspaceTabVisible('transfers')">
-                        <span class="pointer-events-none inline-flex h-8 select-none items-center gap-1.5 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300" aria-hidden="true">
-                            <span class="h-3 w-px bg-sky-300 dark:bg-sky-700"></span>
-                            Requests &amp; Fulfilment
-                        </span>
-                    </template>
-                    <TabsTrigger v-if="workspaceTabVisible('overview')" value="overview" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('overview')" value="overview" class="gap-1.5">
                         <AppIcon name="layout-grid" class="size-3.5" />
                         Overview
                     </TabsTrigger>
-                    <TabsTrigger v-if="workspaceTabVisible('requisitions')" value="requisitions" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('requisitions')" value="requisitions" class="gap-1.5">
                         <AppIcon name="clipboard-list" class="size-3.5" />
                         Department Requests
                     </TabsTrigger>
-                    <TabsTrigger v-if="workspaceTabVisible('shortage-queue')" value="shortage-queue" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('shortage-queue')" value="shortage-queue" class="gap-1.5">
                         <AppIcon name="alert-triangle" class="size-3.5" />
                         Shortages
                         <Badge
@@ -6013,21 +6089,15 @@ onMounted(async () => {
                             {{ shortageQueueMeta!.readyLineCount }}
                         </Badge>
                     </TabsTrigger>
-                    <TabsTrigger v-if="workspaceTabVisible('transfers')" value="transfers" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('transfers')" value="transfers" class="gap-1.5">
                         <AppIcon name="activity" class="size-3.5" />
                         Transfers
                     </TabsTrigger>
-                    <template v-if="workspaceTabVisible('claims') || workspaceTabVisible('analytics')">
-                        <span class="pointer-events-none inline-flex h-8 select-none items-center gap-1.5 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-300" aria-hidden="true">
-                            <span class="h-3 w-px bg-violet-300 dark:bg-violet-700"></span>
-                            Review
-                        </span>
-                    </template>
-                    <TabsTrigger v-if="workspaceTabVisible('claims')" value="claims" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('claims')" value="claims" class="gap-1.5">
                         <AppIcon name="shield-check" class="size-3.5" />
                         Claims
                     </TabsTrigger>
-                    <TabsTrigger v-if="workspaceTabVisible('analytics')" value="analytics" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('analytics')" value="analytics" class="gap-1.5">
                         <AppIcon name="activity" class="size-3.5" />
                         Analytics
                     </TabsTrigger>
