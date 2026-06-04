@@ -4911,7 +4911,7 @@ async function loadActiveWorkspaceTab(tab: InventoryWorkspaceTab = activeTab.val
             await Promise.all([loadItems(), loadProcurementRequests(), loadDeptRequisitions(), loadShortageQueue(), loadRequestPipelineCounts()]);
             break;
         case 'inventory':
-            await loadItems();
+            await Promise.all([loadItems(), loadSuppliersAndWarehouses()]);
             break;
         case 'procurement':
             await Promise.all([loadProcurementRequests(), loadSuppliersAndWarehouses()]);
