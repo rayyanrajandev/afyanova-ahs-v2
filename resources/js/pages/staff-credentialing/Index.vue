@@ -2,6 +2,8 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import RegistryListRow from '@/components/list/RegistryListRow.vue';
+import RegistryPickerSkeleton from '@/components/list/RegistryPickerSkeleton.vue';
 import StaffGovernanceSetupChecklist from '@/components/staff/StaffGovernanceSetupChecklist.vue';
 import StaffProfileEditDialog from '@/components/staff/StaffProfileEditDialog.vue';
 import StaffProfileStatusDialog from '@/components/staff/StaffProfileStatusDialog.vue';
@@ -1561,7 +1563,6 @@ onBeforeUnmount(() => {
                                     </span>
                                 </span>
                                 <span class="select-none text-border" aria-hidden="true">·</span>
-                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
                                     <span class="select-none text-border" aria-hidden="true">·</span>
                             </div>
                         </div>
@@ -1767,21 +1768,7 @@ onBeforeUnmount(() => {
                     </CardHeader>
 
                     <CardContent class="flex flex-1 flex-col px-3 pb-0 pt-3">
-                        <div v-if="showCredentialingWorkspaceLoading" class="space-y-2 pb-3">
-                            <div
-                                v-for="index in 6"
-                                :key="`credentialing-staff-skeleton-${index}`"
-                                class="flex w-full items-center gap-3 rounded-lg border border-border/70 bg-background px-3"
-                                :class="compactQueueRows ? 'py-2' : 'py-2.5'"
-                            >
-                                <Skeleton class="size-2 shrink-0 rounded-full" />
-                                <div class="min-w-0 flex-1 space-y-1.5">
-                                    <Skeleton class="h-3.5 w-44 max-w-[90%]" />
-                                    <Skeleton class="h-3 w-full max-w-[22rem]" />
-                                </div>
-                                <Skeleton class="size-4 shrink-0 rounded-sm" />
-                            </div>
-                        </div>
+                        <RegistryPickerSkeleton v-if="showCredentialingWorkspaceLoading" :compact="compactQueueRows" />
 
                         <div
                             v-else-if="staffQueueReady && visibleStaffRows.length === 0"
@@ -1801,20 +1788,16 @@ onBeforeUnmount(() => {
                         </div>
 
                         <div v-else class="space-y-2 pb-3">
-                            <button
+                            <RegistryListRow
                                 v-for="row in visibleStaffRows"
                                 :key="`credentialing-row-${row.id}`"
-                                type="button"
-                                class="group flex w-full items-center gap-3 rounded-lg border border-border/70 bg-background px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-muted/30"
-                                :class="selectedStaff?.id === row.id ? 'border-primary/50 bg-primary/5 shadow-sm' : ''"
-                                @click="selectStaff(row)"
+                                variant="picker"
+                                :selected="selectedStaff?.id === row.id"
+                                :status-dot-class="staffStatusDotClass(row.status)"
+                                :status-title="formatLabel(row.status)"
+                                @select="selectStaff(row)"
                             >
-                                <span
-                                    class="size-2 shrink-0 rounded-full"
-                                    :class="staffStatusDotClass(row.status)"
-                                    :title="formatLabel(row.status)"
-                                />
-                                <div class="min-w-0 flex-1 space-y-0.5">
+                                <template #title>
                                     <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                                         <span class="truncate text-sm font-medium transition-colors group-hover:text-primary">
                                             {{ staffDisplayName(row) }}
@@ -1830,17 +1813,21 @@ onBeforeUnmount(() => {
                                             {{ alertCountForStaff(row.id) }} alert{{ alertCountForStaff(row.id) === 1 ? '' : 's' }}
                                         </Badge>
                                     </div>
+                                </template>
+                                <template #meta>
                                     <p class="truncate text-xs text-muted-foreground">
                                         {{ row.jobTitle || 'No title' }}
                                         <span class="text-border"> · </span>
                                         {{ row.department || 'No department' }}
                                     </p>
-                                </div>
-                                <AppIcon
-                                    name="chevron-right"
-                                    class="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
-                                />
-                            </button>
+                                </template>
+                                <template #actions>
+                                    <AppIcon
+                                        name="chevron-right"
+                                        class="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
+                                    />
+                                </template>
+                            </RegistryListRow>
                         </div>
 
                         <footer v-if="staffMeta && !showCredentialingWorkspaceLoading" class="flex shrink-0 flex-col gap-2 border-t bg-muted/20 px-3 py-3">
@@ -2815,4 +2802,5 @@ onBeforeUnmount(() => {
         </Dialog>
     </AppLayout>
 </template>
+
 

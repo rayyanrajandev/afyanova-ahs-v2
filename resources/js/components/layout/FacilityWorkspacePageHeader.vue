@@ -27,6 +27,7 @@ const props = withDefaults(
 
 defineSlots<{
     badges?: () => unknown;
+    metrics?: () => unknown;
     actions?: () => unknown;
 }>();
 
@@ -68,22 +69,30 @@ defineSlots<{
                 </div>
             </div>
             <div
-                v-if="$slots.actions || props.backHref"
-                class="flex w-full shrink-0 flex-wrap items-center justify-end gap-2 md:w-auto"
+                v-if="$slots.metrics || $slots.actions || props.backHref"
+                class="flex w-full shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end md:w-auto"
             >
-                <slot name="actions" />
-                <Button
-                    v-if="props.backHref"
-                    variant="outline"
-                    size="sm"
-                    class="h-8 gap-1.5"
-                    as-child
+                <div v-if="$slots.metrics" class="min-w-0 sm:max-w-full">
+                    <slot name="metrics" />
+                </div>
+                <div
+                    v-if="$slots.actions || props.backHref"
+                    class="flex flex-wrap items-center justify-end gap-2"
                 >
-                    <Link :href="props.backHref">
-                        {{ props.backLabel }}
-                        <AppIcon name="chevron-right" class="size-3.5" />
-                    </Link>
-                </Button>
+                    <slot name="actions" />
+                    <Button
+                        v-if="props.backHref"
+                        variant="outline"
+                        size="sm"
+                        class="h-8 gap-1.5"
+                        as-child
+                    >
+                        <Link :href="props.backHref">
+                            {{ props.backLabel }}
+                            <AppIcon name="chevron-right" class="size-3.5" />
+                        </Link>
+                    </Button>
+                </div>
             </div>
         </div>
     </section>

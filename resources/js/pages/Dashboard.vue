@@ -3,6 +3,7 @@ import { Head, Link, usePage } from '@inertiajs/vue3';
 import { watchDebounced } from '@vueuse/core';
 import { computed, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import RegistryListRow from '@/components/list/RegistryListRow.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -1052,14 +1053,6 @@ const currentFacilityLabel = computed(() => {
     return 'No facility selected';
 });
 
-const currentTenantLabel = computed(() => {
-    const tenant = platformScope.value?.tenant;
-    if (tenant?.name && tenant?.code) return `${tenant.name} - ${tenant.code}`;
-    if (tenant?.name) return tenant.name;
-    if (tenant?.code) return tenant.code;
-    return 'Platform scope';
-});
-
 const kpiPaddingClass = computed(() => (density.value === 'compact' ? 'p-2.5' : 'p-3.5'));
 const kpiValueClass = computed(() => (density.value === 'compact' ? 'text-lg' : 'text-2xl'));
 const gridGapClass = computed(() => (density.value === 'compact' ? 'gap-2' : 'gap-3'));
@@ -1882,8 +1875,6 @@ function switchPreset(key: DashboardPresetKey): void {
                                     <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
                                     <span class="font-medium text-foreground">{{ currentFacilityLabel }}</span>
                                 </span>
-                                <span class="select-none text-border" aria-hidden="true">·</span>
-                                <span>{{ currentTenantLabel }}</span>
                             </div>
                         </div>
                     </div>
@@ -2410,26 +2401,24 @@ function switchPreset(key: DashboardPresetKey): void {
                                             {{ queueGroupCounts.get(row.group) ?? 0 }}
                                         </span>
                                     </div>
-                                    <div
-                                        class="flex items-start gap-3 border-b px-4 py-3 last:border-b-0"
-                                        :class="[dashboardRowBorderClass(row), dashboardRowBgClass(row)]"
+                                    <RegistryListRow
+                                        :status-dot-class="
+                                            row.isOverdue
+                                                ? 'bg-rose-500'
+                                                : statusVariant(row.status) === 'destructive'
+                                                  ? 'bg-rose-500/80'
+                                                  : statusVariant(row.status) === 'default'
+                                                    ? 'bg-sky-500'
+                                                    : statusVariant(row.status) === 'secondary'
+                                                      ? 'bg-emerald-500'
+                                                      : 'bg-muted-foreground/40'
+                                        "
+                                        :surface-class="['border-b px-4 py-3 last:border-b-0', dashboardRowBorderClass(row), dashboardRowBgClass(row)]"
+                                        align="start"
+                                        status-dot-offset
+                                        :selectable="false"
                                     >
-                                        <span
-                                            class="mt-1.5 size-2 shrink-0 rounded-full"
-                                            :class="
-                                                row.isOverdue
-                                                    ? 'bg-rose-500'
-                                                    : statusVariant(row.status) === 'destructive'
-                                                      ? 'bg-rose-500/80'
-                                                      : statusVariant(row.status) === 'default'
-                                                        ? 'bg-sky-500'
-                                                        : statusVariant(row.status) === 'secondary'
-                                                          ? 'bg-emerald-500'
-                                                          : 'bg-muted-foreground/40'
-                                            "
-                                            aria-hidden="true"
-                                        />
-                                        <div class="min-w-0 flex-1">
+                                        <template #title>
                                             <div class="flex items-start justify-between gap-2">
                                                 <p class="truncate text-sm font-medium leading-snug">{{ row.title }}</p>
                                                 <div class="flex shrink-0 items-center gap-1">
@@ -2450,18 +2439,22 @@ function switchPreset(key: DashboardPresetKey): void {
                                                     </Badge>
                                                 </div>
                                             </div>
-                                            <p class="mt-0.5 truncate text-xs text-muted-foreground">{{ row.subtitle }}</p>
+                                        </template>
+                                        <template #meta>
+                                            <p class="truncate text-xs text-muted-foreground">{{ row.subtitle }}</p>
                                             <p class="mt-1 text-[11px] text-muted-foreground">{{ row.meta }}</p>
-                                        </div>
-                                        <Button
-                                            as-child
-                                            size="sm"
-                                            :variant="queueRowActionVariant(row)"
-                                            class="mt-0.5 h-7 shrink-0 rounded-lg text-xs"
-                                        >
-                                            <Link :href="row.href">{{ row.actionLabel }}</Link>
-                                        </Button>
-                                    </div>
+                                        </template>
+                                        <template #actions>
+                                            <Button
+                                                as-child
+                                                size="sm"
+                                                :variant="queueRowActionVariant(row)"
+                                                class="mt-0.5 h-7 shrink-0 rounded-lg text-xs"
+                                            >
+                                                <Link :href="row.href">{{ row.actionLabel }}</Link>
+                                            </Button>
+                                        </template>
+                                    </RegistryListRow>
                                 </template>
                             </div>
                         </CardContent>

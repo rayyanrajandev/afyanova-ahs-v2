@@ -2,6 +2,8 @@
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import RegistryListRow from '@/components/list/RegistryListRow.vue';
+import RegistryListSkeleton from '@/components/list/RegistryListSkeleton.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import StaffProfileEditDialog from '@/components/staff/StaffProfileEditDialog.vue';
 import StaffProfileStatusDialog from '@/components/staff/StaffProfileStatusDialog.vue';
@@ -2397,7 +2399,6 @@ onMounted(refreshPage);
                                     </span>
                                 </span>
                                 <span class="select-none text-border" aria-hidden="true">·</span>
-                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
                                 <template v-if="scope?.userAccess?.accessibleFacilityCount">
                                     <span class="select-none text-border" aria-hidden="true">·</span>
                                     <span>{{ scope.userAccess.accessibleFacilityCount }} accessible facilities</span>
@@ -2669,23 +2670,7 @@ onMounted(refreshPage);
                     <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
                         <ScrollArea class="min-h-0 flex-1">
                             <div class="min-h-[12rem]">
-                                <div v-if="loading || listLoading" class="divide-y px-4">
-                                    <div
-                                        v-for="index in 6"
-                                        :key="`staff-modern-skeleton-${index}`"
-                                        class="flex items-center gap-3 py-3"
-                                    >
-                                        <Skeleton class="size-2 shrink-0 rounded-full" />
-                                        <div class="min-w-0 flex-1 space-y-2">
-                                            <Skeleton class="h-4 w-40" />
-                                            <Skeleton class="h-3.5 w-56 max-w-full" />
-                                        </div>
-                                        <Skeleton class="hidden h-5 w-14 shrink-0 rounded-full sm:block" />
-                                        <Skeleton class="hidden h-5 w-16 shrink-0 rounded-full sm:block" />
-                                        <Skeleton class="h-8 w-16 shrink-0 rounded-md" />
-                                        <Skeleton class="hidden h-8 w-8 shrink-0 rounded-md sm:block" />
-                                    </div>
-                                </div>
+                                <RegistryListSkeleton v-if="loading || listLoading" :count="6" />
 
                                 <div
                                     v-else-if="staffProfiles.length === 0"
@@ -2712,21 +2697,14 @@ onMounted(refreshPage);
                                 </div>
 
                                 <div v-else class="divide-y px-4">
-                                    <div
+                                    <RegistryListRow
                                         v-for="profile in staffProfiles"
                                         :key="`staff-modern-row-${profile.id}`"
-                                        class="flex items-center gap-3 py-3 transition-colors hover:bg-muted/30"
+                                        :status-dot-class="staffStatusDotClass(profile.status)"
+                                        :status-title="(profile.status ?? 'unknown').toString()"
+                                        @select="openStaffDetailsSheet(profile)"
                                     >
-                                        <span
-                                            class="size-2 shrink-0 rounded-full"
-                                            :class="staffStatusDotClass(profile.status)"
-                                            :title="(profile.status ?? 'unknown').toString()"
-                                        />
-                                        <button
-                                            type="button"
-                                            class="min-w-0 flex-1 space-y-0.5 text-left"
-                                            @click="openStaffDetailsSheet(profile)"
-                                        >
+                                        <template #title>
                                             <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                                                 <span class="truncate text-sm font-medium transition-colors hover:text-primary">
                                                     {{ staffDisplayName(profile) }}
@@ -2735,13 +2713,15 @@ onMounted(refreshPage);
                                                     {{ profile.employeeNumber || 'No employee number' }}
                                                 </span>
                                             </div>
+                                        </template>
+                                        <template #meta>
                                             <p class="truncate text-xs text-muted-foreground">
                                                 {{ profile.jobTitle || 'No title' }}
                                                 <span class="text-border"> · </span>
                                                 {{ profile.department || 'No department' }}
                                             </p>
-                                        </button>
-                                        <div class="hidden shrink-0 flex-wrap items-center gap-1.5 sm:flex">
+                                        </template>
+                                        <template #badges>
                                             <Badge :variant="statusVariant(profile.status)" class="capitalize">
                                                 {{ profile.status || 'unknown' }}
                                             </Badge>
@@ -2751,8 +2731,8 @@ onMounted(refreshPage);
                                             >
                                                 {{ credentialingStateLabel(staffCredentialingSummary(profile.id)?.credentialingState ?? null) }}
                                             </Badge>
-                                        </div>
-                                        <div class="flex shrink-0 items-center gap-1.5">
+                                        </template>
+                                        <template #actions>
                                             <Button
                                                 size="sm"
                                                 variant="outline"
@@ -2787,8 +2767,8 @@ onMounted(refreshPage);
                                                     </DropdownMenuItem>
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
-                                        </div>
-                                    </div>
+                                        </template>
+                                    </RegistryListRow>
                                 </div>
                             </div>
                         </ScrollArea>
@@ -4341,6 +4321,7 @@ onMounted(refreshPage);
         </div>
     </AppLayout>
 </template>
+
 
 
 

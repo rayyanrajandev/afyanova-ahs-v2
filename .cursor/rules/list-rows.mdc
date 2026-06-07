@@ -1,0 +1,65 @@
+---
+description: Shared list row patterns for registries and workflow queues
+globs: resources/js/**/*.{vue,ts}
+alwaysApply: false
+---
+
+# List row patterns
+
+Use shared components — do not hand-roll status dots or 3px stripes.
+
+## Registry (master data)
+
+`RegistryListRow` + `RegistryListSkeleton` for catalogs, staff, departments, items.
+
+```vue
+<RegistryListRow
+  :status-dot-class="activeInactiveStatusDotClass(item.status)"
+  :primary-label="item.name"
+  :secondary-label="item.code"
+  :meta="summaryLine"
+  @select="openDetails(item)"
+>
+  <template #badges>...</template>
+  <template #actions><Button>View details</Button></template>
+</RegistryListRow>
+```
+
+- Status dots → `lib/listRows.ts` (`activeInactiveStatusDotClass`, `catalogTriStateStatusDotClass`, etc.)
+- Bulk checkbox → `#leading` slot
+- Complex title/meta → `#title` / `#meta` slots with `@select`
+
+## Picker (master-detail sidebar)
+
+`RegistryListRow variant="picker"` + `RegistryPickerSkeleton`.
+
+```vue
+<RegistryListRow
+  variant="picker"
+  :selected="selectedId === row.id"
+  @select="selectRow(row)"
+>
+  <template #actions><AppIcon name="chevron-right" /></template>
+</RegistryListRow>
+```
+
+## Workflow queue (operational)
+
+`WorkflowQueueRow` + `WorkflowQueueSkeleton` for requisitions, transfers, procurement, walk-in requests.
+
+```vue
+<WorkflowQueueRow
+  :stripe-class="procurementRequestStripeClass(request.status)"
+  interactive
+  @activate="openDetails(request)"
+>
+  <template #actions>...</template>
+</WorkflowQueueRow>
+```
+
+- Card-style queues → `variant="card"` (walk-in requests)
+- Stripe helpers → `lib/listRows.ts`
+
+## Do not migrate
+
+Grid/table layouts (patients, users, roles) — different pattern. Analytics tables stay as HTML tables.

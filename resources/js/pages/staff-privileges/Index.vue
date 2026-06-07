@@ -2,6 +2,7 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import RegistryListRow from '@/components/list/RegistryListRow.vue';
 import StaffGovernanceSetupChecklist from '@/components/staff/StaffGovernanceSetupChecklist.vue';
 import StaffProfileEditDialog from '@/components/staff/StaffProfileEditDialog.vue';
 import StaffProfileStatusDialog from '@/components/staff/StaffProfileStatusDialog.vue';
@@ -2010,7 +2011,6 @@ onBeforeUnmount(() => {
                                     </span>
                                 </span>
                                 <span class="select-none text-border" aria-hidden="true">·</span>
-                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
                                 <template v-if="selectedStaff">
                                     <span class="select-none text-border" aria-hidden="true">·</span>
                                     <span>Viewing {{ staffDisplayName(selectedStaff) }}</span>
@@ -2260,21 +2260,17 @@ onBeforeUnmount(() => {
                                     Try adjusting your search or queue options to find a staff profile for privileging review.
                                 </p>
                             </div>
-                            <div v-else class="divide-y divide-border/50 pb-3">
-                                <button
+                            <div v-else class="space-y-2 pb-3">
+                                <RegistryListRow
                                     v-for="row in staffRows"
                                     :key="row.id"
-                                    type="button"
-                                    class="group flex w-full items-center gap-3 px-1 py-2.5 text-left transition-colors hover:bg-muted/30"
-                                    :class="selectedStaff?.id === row.id ? 'bg-primary/5' : ''"
-                                    @click="selectStaff(row)"
+                                    variant="picker"
+                                    :selected="selectedStaff?.id === row.id"
+                                    :status-dot-class="staffStatusDotClass(row.status)"
+                                    :status-title="formatStatusLabel(row.status)"
+                                    @select="selectStaff(row)"
                                 >
-                                    <span
-                                        class="size-2 shrink-0 rounded-full"
-                                        :class="staffStatusDotClass(row.status)"
-                                        :title="formatStatusLabel(row.status)"
-                                    />
-                                    <div class="min-w-0 flex-1 space-y-0.5">
+                                    <template #title>
                                         <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                                             <span class="truncate text-sm font-medium transition-colors group-hover:text-primary">
                                                 {{ staffDisplayName(row) }}
@@ -2283,17 +2279,21 @@ onBeforeUnmount(() => {
                                                 {{ row.employeeNumber || 'No employee #' }}
                                             </span>
                                         </div>
+                                    </template>
+                                    <template #meta>
                                         <p class="truncate text-xs text-muted-foreground">
                                             {{ row.jobTitle || 'No title' }}
                                             <span class="text-border"> · </span>
                                             {{ row.department || 'No department' }}
                                         </p>
-                                    </div>
-                                    <AppIcon
-                                        name="chevron-right"
-                                        class="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
-                                    />
-                                </button>
+                                    </template>
+                                    <template #actions>
+                                        <AppIcon
+                                            name="chevron-right"
+                                            class="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
+                                        />
+                                    </template>
+                                </RegistryListRow>
                             </div>
                         </template>
 
@@ -3163,6 +3163,7 @@ onBeforeUnmount(() => {
         </div>
     </AppLayout>
 </template>
+
 
 
 

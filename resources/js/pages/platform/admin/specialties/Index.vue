@@ -3,6 +3,9 @@ import { Head } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import RegistryListRow from '@/components/list/RegistryListRow.vue';
+import RegistryPickerSkeleton from '@/components/list/RegistryPickerSkeleton.vue';
+import { activeInactiveStatusDotClass } from '@/lib/listRows';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -941,7 +944,6 @@ onMounted(refreshPage);
                                     </span>
                                 </span>
                                 <span class="select-none text-border" aria-hidden="true">·</span>
-                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
                                 <template v-if="selectedSpecialty">
                                     <span class="select-none text-border" aria-hidden="true">·</span>
                                     <span>Viewing {{ specialtyLabel(selectedSpecialty) }}</span>
@@ -1110,20 +1112,7 @@ onMounted(refreshPage);
                             </CardHeader>
 
                             <CardContent class="flex flex-1 flex-col px-3 pb-0 pt-3">
-                                <div v-if="showRegistryWorkspaceLoading" class="space-y-2 pb-3">
-                                    <div
-                                        v-for="index in 6"
-                                        :key="`specialty-queue-skeleton-${index}`"
-                                        class="flex w-full items-center gap-3 rounded-lg border border-border/70 bg-background px-3 py-2.5"
-                                    >
-                                        <Skeleton class="size-2 shrink-0 rounded-full" />
-                                        <div class="min-w-0 flex-1 space-y-1.5">
-                                            <Skeleton class="h-3.5 w-44 max-w-[90%]" />
-                                            <Skeleton class="h-3 w-full max-w-[22rem]" />
-                                        </div>
-                                        <Skeleton class="size-4 shrink-0 rounded-sm" />
-                                    </div>
-                                </div>
+                                <RegistryPickerSkeleton v-if="showRegistryWorkspaceLoading" />
 
                                 <div
                                     v-else-if="queueReady && specialties.length === 0"
@@ -1139,20 +1128,16 @@ onMounted(refreshPage);
                                 </div>
 
                                 <div v-else class="space-y-2 pb-3">
-                                    <button
+                                    <RegistryListRow
                                         v-for="specialty in specialties"
                                         :key="specialtyKey(specialty)"
-                                        type="button"
-                                        class="group flex w-full items-center gap-3 rounded-lg border border-border/70 bg-background px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-muted/30"
-                                        :class="specialtyKey(selectedSpecialty) === specialtyKey(specialty) ? 'border-primary/50 bg-primary/5 shadow-sm' : ''"
-                                        @click="selectSpecialty(specialty)"
+                                        variant="picker"
+                                        :selected="specialtyKey(selectedSpecialty) === specialtyKey(specialty)"
+                                        :status-dot-class="specialtyStatusDotClass(specialty.status)"
+                                        :status-title="specialty.status || 'unknown'"
+                                        @select="selectSpecialty(specialty)"
                                     >
-                                        <span
-                                            class="size-2 shrink-0 rounded-full"
-                                            :class="specialtyStatusDotClass(specialty.status)"
-                                            :title="specialty.status || 'unknown'"
-                                        />
-                                        <div class="min-w-0 flex-1 space-y-0.5">
+                                        <template #title>
                                             <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                                                 <span class="truncate text-sm font-medium transition-colors group-hover:text-primary">
                                                     {{ specialtyLabel(specialty) }}
@@ -1164,15 +1149,19 @@ onMounted(refreshPage);
                                                     {{ specialty.status || 'unknown' }}
                                                 </Badge>
                                             </div>
+                                        </template>
+                                        <template #meta>
                                             <p class="truncate text-xs text-muted-foreground">
                                                 {{ specialty.description || 'No description recorded' }}
                                             </p>
-                                        </div>
-                                        <AppIcon
-                                            name="chevron-right"
-                                            class="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
-                                        />
-                                    </button>
+                                        </template>
+                                        <template #actions>
+                                            <AppIcon
+                                                name="chevron-right"
+                                                class="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
+                                            />
+                                        </template>
+                                    </RegistryListRow>
                                 </div>
 
                                 <footer v-if="pagination && !showRegistryWorkspaceLoading" class="flex shrink-0 flex-col gap-2 border-t bg-muted/20 px-3 py-3">
@@ -1656,30 +1645,24 @@ onMounted(refreshPage);
                                         </p>
                                     </div>
                                     <div v-else class="divide-y rounded-lg border">
-                                        <button
+                                        <RegistryListRow
                                             v-for="profile in assignmentStaffResults"
                                             :key="profile.id"
-                                            type="button"
-                                            class="flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/30"
-                                            :class="
-                                                assignmentSelectedStaff?.id === profile.id ? 'bg-primary/5' : ''
-                                            "
-                                            @click="selectAssignmentStaff(profile)"
+                                            variant="picker"
+                                            :selected="assignmentSelectedStaff?.id === profile.id"
+                                            :status-dot-class="activeInactiveStatusDotClass(profile.status)"
+                                            :status-title="(profile.status ?? 'unknown').toString()"
+                                            surface-class="rounded-none border-0 px-3 py-3 shadow-none hover:border-transparent"
+                                            @select="selectAssignmentStaff(profile)"
                                         >
-                                            <span
-                                                class="size-2 shrink-0 rounded-full"
-                                                :class="
-                                                    (profile.status ?? '').toLowerCase() === 'active'
-                                                        ? 'bg-emerald-500'
-                                                        : 'bg-rose-500'
-                                                "
-                                            />
-                                            <div
-                                                class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary"
-                                            >
-                                                {{ staffProfileInitials(profile) }}
-                                            </div>
-                                            <div class="min-w-0 flex-1">
+                                            <template #leading>
+                                                <div
+                                                    class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary"
+                                                >
+                                                    {{ staffProfileInitials(profile) }}
+                                                </div>
+                                            </template>
+                                            <template #title>
                                                 <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                                                     <span class="truncate text-sm font-medium">{{
                                                         staffProfileLabel(profile)
@@ -1688,12 +1671,16 @@ onMounted(refreshPage);
                                                         profile.employeeNumber || 'No employee #'
                                                     }}</span>
                                                 </div>
+                                            </template>
+                                            <template #meta>
                                                 <p class="truncate text-xs text-muted-foreground">
                                                     {{ staffProfileMeta(profile) }}
                                                 </p>
-                                            </div>
-                                            <AppIcon name="chevron-right" class="size-4 shrink-0 text-muted-foreground" />
-                                        </button>
+                                            </template>
+                                            <template #actions>
+                                                <AppIcon name="chevron-right" class="size-4 shrink-0 text-muted-foreground" />
+                                            </template>
+                                        </RegistryListRow>
                                     </div>
                                 </TabsContent>
 
@@ -1994,6 +1981,7 @@ onMounted(refreshPage);
         </div>
     </AppLayout>
 </template>
+
 
 
 

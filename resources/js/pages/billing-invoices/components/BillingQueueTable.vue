@@ -2,6 +2,8 @@
 import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import RegistryListRow from '@/components/list/RegistryListRow.vue';
+import RegistryListSkeleton from '@/components/list/RegistryListSkeleton.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CardContent } from '@/components/ui/card';
@@ -12,8 +14,8 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Skeleton } from '@/components/ui/skeleton';
 import { formatEnumLabel } from '@/lib/labels';
+import { invoiceStatusDotClass } from '@/lib/listRows';
 import {
     amountToNumber,
     billingInvoiceClaimPostureLabel,
@@ -155,32 +157,17 @@ function consultationReviewDiscountLabel(invoice: BillingInvoice): string | null
 function requestStatusAction(invoice: BillingInvoice, action: BillingInvoiceStatusAction): void {
     emit('status-action', { invoice, action });
 }
-
-function invoiceStatusDotClass(status: string | null): string {
-    const normalized = (status ?? '').toLowerCase();
-    if (normalized === 'draft') return 'bg-slate-500';
-    if (normalized === 'issued') return 'bg-sky-500';
-    if (normalized === 'partially_paid') return 'bg-amber-500';
-    if (normalized === 'paid') return 'bg-emerald-500';
-    if (normalized === 'cancelled' || normalized === 'voided') return 'bg-rose-500';
-    return 'bg-muted-foreground';
-}
 </script>
 
 <template>
     <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
         <ScrollArea class="max-h-[min(70vh,42rem)] min-h-0 flex-1">
             <div class="min-h-[12rem]" :class="compactQueueRows ? '' : 'space-y-3 p-4'">
-                <div v-if="pageLoading || listLoading" class="divide-y px-4">
-                    <div v-for="index in 6" :key="`invoice-skeleton-${index}`" class="flex items-center gap-3 py-3">
-                        <Skeleton class="size-2 shrink-0 rounded-full" />
-                        <div class="min-w-0 flex-1 space-y-2">
-                            <Skeleton class="h-4 w-48" />
-                            <Skeleton class="h-3.5 w-72 max-w-full" />
-                        </div>
-                        <Skeleton class="h-8 w-20 shrink-0 rounded-md" />
-                    </div>
-                </div>
+                <RegistryListSkeleton
+                    v-if="pageLoading || listLoading"
+                    :count="6"
+                    :show-badge="false"
+                />
                 <div
                     v-else-if="visibleInvoices.length === 0"
                     class="flex flex-col items-center gap-3 px-4 py-10 text-center"
@@ -194,23 +181,16 @@ function invoiceStatusDotClass(status: string | null): string {
                     </div>
                 </div>
                 <div v-else-if="compactQueueRows" class="divide-y px-4">
-                    <div
+                    <RegistryListRow
                         v-for="invoice in visibleInvoices"
                         :key="invoice.id"
-                        class="flex items-center gap-3 py-3 transition-colors hover:bg-muted/30"
+                        :status-dot-class="invoiceStatusDotClass(invoice.status)"
+                        :status-title="formatEnumLabel(invoice.status)"
+                        @select="emit('open-details', invoice)"
                     >
-                        <span
-                            class="size-2 shrink-0 rounded-full"
-                            :class="invoiceStatusDotClass(invoice.status)"
-                            :title="formatEnumLabel(invoice.status)"
-                        />
-                        <button
-                            type="button"
-                            class="min-w-0 flex-1 space-y-0.5 text-left"
-                            @click="emit('open-details', invoice)"
-                        >
+                        <template #title>
                             <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                                <span class="truncate text-sm font-medium">
+                                <span class="truncate text-sm font-medium transition-colors hover:text-primary">
                                     {{ invoice.invoiceNumber || 'Draft invoice' }}
                                 </span>
                                 <span class="shrink-0 text-xs text-muted-foreground">
@@ -220,6 +200,8 @@ function invoiceStatusDotClass(status: string | null): string {
                                     {{ formatMoney(invoice.totalAmount, invoice.currencyCode) }}
                                 </span>
                             </div>
+                        </template>
+                        <template #meta>
                             <p class="truncate text-xs text-muted-foreground">
                                 <span>{{ formatEnumLabel(invoice.status) }}</span>
                                 <span class="text-border"> · </span>
@@ -233,11 +215,13 @@ function invoiceStatusDotClass(status: string | null): string {
                                     {{ billingInvoiceQueueNextStep(invoice)?.title }}
                                 </span>
                             </p>
-                        </button>
-                        <Badge :variant="statusVariant(invoice.status)" class="hidden shrink-0 capitalize sm:inline-flex">
-                            {{ formatEnumLabel(invoice.status) }}
-                        </Badge>
-                        <div class="flex shrink-0 items-center gap-1">
+                        </template>
+                        <template #badges>
+                            <Badge :variant="statusVariant(invoice.status)" class="capitalize">
+                                {{ formatEnumLabel(invoice.status) }}
+                            </Badge>
+                        </template>
+                        <template #actions>
                             <Button
                                 v-if="canIssueBillingInvoices && invoice.status === 'draft'"
                                 size="sm"
@@ -283,8 +267,8 @@ function invoiceStatusDotClass(status: string | null): string {
                             >
                                 Details
                             </Button>
-                        </div>
-                    </div>
+                        </template>
+                    </RegistryListRow>
                 </div>
                 <div v-else class="space-y-3 p-4">
                     <div

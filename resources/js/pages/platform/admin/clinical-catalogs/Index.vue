@@ -4,6 +4,8 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
 import ClinicalCatalogBulkSheet from '@/components/platform/clinical-catalogs/ClinicalCatalogBulkSheet.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import RegistryListRow from '@/components/list/RegistryListRow.vue';
+import RegistryListSkeleton from '@/components/list/RegistryListSkeleton.vue';
 import ComboboxField from '@/components/forms/ComboboxField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +26,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { apiGetBlob } from '@/lib/apiClient';
 import { CLINICAL_CATALOG_BULK_MAX_STATUS_IDS } from '@/lib/clinicalCatalogBulk';
 import { formatEnumLabel } from '@/lib/labels';
+import { catalogTriStateStatusDotClass } from '@/lib/listRows';
 import { inventoryWorkspaceHref } from '@/lib/inventoryProcurement';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
@@ -2178,17 +2181,7 @@ onMounted(() => {
                                 <AlertTitle>List load issue</AlertTitle>
                                 <AlertDescription>{{ listError }}</AlertDescription>
                             </Alert>
-                            <div v-else-if="loading || listLoading" class="divide-y px-4">
-                                <div v-for="index in 6" :key="`clinical-skeleton-${index}`" class="flex items-center gap-3 py-3">
-                                    <Skeleton class="size-2 shrink-0 rounded-full" />
-                                    <div class="min-w-0 flex-1 space-y-2">
-                                        <Skeleton class="h-4 w-48" />
-                                        <Skeleton class="h-3.5 w-64 max-w-full" />
-                                    </div>
-                                    <Skeleton class="hidden h-5 w-20 shrink-0 rounded-full sm:block" />
-                                    <Skeleton class="h-8 w-16 shrink-0 rounded-md" />
-                                </div>
-                            </div>
+                            <RegistryListSkeleton v-else-if="loading || listLoading" :count="6" />
                             <div v-else-if="items.length === 0" class="flex flex-col items-center gap-3 px-4 py-10 text-center">
                                 <div class="flex size-10 items-center justify-center rounded-lg bg-muted">
                                     <AppIcon :name="activeCatalogTab.icon" class="size-4 text-muted-foreground" />
@@ -2215,31 +2208,23 @@ onMounted(() => {
                                 </div>
                             </div>
                             <div v-else class="divide-y px-4">
-                                <div
+                                <RegistryListRow
                                     v-for="item in items"
                                     :key="String(item.id)"
-                                    class="flex items-center gap-3 py-3 transition-colors hover:bg-muted/30"
+                                    :status-dot-class="catalogTriStateStatusDotClass(item.status)"
+                                    :status-title="(item.status ?? 'unknown').toString()"
+                                    @select="openDetails(item)"
                                 >
-                                    <Checkbox
-                                        v-if="canUseBulkSelection"
-                                        class="shrink-0"
-                                        :model-value="selectedItemIds.includes(String(item.id ?? ''))"
-                                        :disabled="!item.id || bulkStatusBusy"
-                                        @update:model-value="(checked) => toggleItemSelection(String(item.id ?? ''), checked)"
-                                        @click.stop
-                                    />
-                                    <span
-                                        class="size-2 shrink-0 rounded-full"
-                                        :class="
-                                            (item.status ?? '').toLowerCase() === 'active'
-                                                ? 'bg-emerald-500'
-                                                : (item.status ?? '').toLowerCase() === 'retired'
-                                                  ? 'bg-rose-500'
-                                                  : 'bg-amber-500'
-                                        "
-                                        :title="(item.status ?? 'unknown').toString()"
-                                    />
-                                    <div class="min-w-0 flex-1">
+                                    <template v-if="canUseBulkSelection" #leading>
+                                        <Checkbox
+                                            class="shrink-0"
+                                            :model-value="selectedItemIds.includes(String(item.id ?? ''))"
+                                            :disabled="!item.id || bulkStatusBusy"
+                                            @update:model-value="(checked) => toggleItemSelection(String(item.id ?? ''), checked)"
+                                            @click.stop
+                                        />
+                                    </template>
+                                    <template #title>
                                         <div class="flex flex-wrap items-center gap-2">
                                             <p class="truncate text-sm font-medium">{{ item.name || 'Unnamed item' }}</p>
                                             <Badge variant="outline" class="h-5 px-1.5 text-[10px]">{{ item.code || 'NO-CODE' }}</Badge>
@@ -2250,22 +2235,25 @@ onMounted(() => {
                                                 {{ billingLinkLabel(item.billingLinkStatus) }}
                                             </Badge>
                                         </div>
-                                        <p class="mt-0.5 truncate text-xs text-muted-foreground">
+                                    </template>
+                                    <template #meta>
+                                        <p class="truncate text-xs text-muted-foreground">
                                             {{ item.category || 'Category not set' }}
                                             · {{ item.unit || 'Unit not set' }}
                                             · {{ domainMetadataSummary(item) }}
                                         </p>
-                                    </div>
-                                    <Badge
-                                        :variant="statusVariant(item.status)"
-                                        class="hidden h-5 shrink-0 px-1.5 text-[10px] sm:inline-flex"
-                                    >
-                                        {{ formatEnumLabel(item.status) }}
-                                    </Badge>
-                                    <Button size="sm" variant="outline" class="h-8 shrink-0 rounded-lg text-xs" @click="openDetails(item)">
-                                        View details
-                                    </Button>
-                                </div>
+                                    </template>
+                                    <template #badges>
+                                        <Badge :variant="statusVariant(item.status)" class="h-5 px-1.5 text-[10px]">
+                                            {{ formatEnumLabel(item.status) }}
+                                        </Badge>
+                                    </template>
+                                    <template #actions>
+                                        <Button size="sm" variant="outline" class="h-8 rounded-lg text-xs" @click="openDetails(item)">
+                                            View details
+                                        </Button>
+                                    </template>
+                                </RegistryListRow>
                             </div>
                         </div>
                     </ScrollArea>

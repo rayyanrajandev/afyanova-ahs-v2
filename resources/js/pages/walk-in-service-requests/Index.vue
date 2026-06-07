@@ -3,6 +3,8 @@ import { Head } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import WorkflowQueueRow from '@/components/list/WorkflowQueueRow.vue';
+import WorkflowQueueSkeleton from '@/components/list/WorkflowQueueSkeleton.vue';
 import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
@@ -46,6 +48,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { apiGet, apiGetBlob, apiPatch, apiPost, isApiClientError } from '@/lib/apiClient';
 import type { AuditActorSummary } from '@/lib/audit';
 import type { AppIconName } from '@/lib/icons';
+import { walkInServiceRequestStripeClass } from '@/lib/listRows';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { patientChartHref } from '@/lib/patientChart';
@@ -984,16 +987,6 @@ function statusDisplayLabel(status: string | null | undefined): string {
     }
 }
 
-function statusBarClass(status: string | null): string {
-    switch (status) {
-        case 'pending': return 'bg-amber-400';
-        case 'in_progress': return 'bg-blue-500';
-        case 'completed': return 'bg-emerald-500';
-        case 'cancelled': return 'bg-red-400';
-        default: return 'bg-muted-foreground/30';
-    }
-}
-
 // ─── Load list ─────────────────────────────────────────────────────────────────
 
 async function loadList(): Promise<void> {
@@ -1181,10 +1174,6 @@ onMounted(() => {
                                     <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
                                     <span class="font-medium text-foreground">{{ scope?.facility?.name || 'No facility' }}</span>
                                 </span>
-                                <span class="select-none text-border" aria-hidden="true">·</span>
-                                <span>
-                                    {{ scope?.tenant?.name || 'No tenant' }}
-                                </span>
                             </div>
                         </div>
                     </div>
@@ -1333,9 +1322,7 @@ onMounted(() => {
                             <div class="min-h-[12rem] p-4" :class="compactRows ? 'space-y-2' : 'space-y-3'">
                                 <!-- Loading skeleton -->
                                 <div v-if="loading" class="space-y-2">
-                                    <div class="h-20 w-full animate-pulse rounded-lg bg-muted" />
-                                    <div class="h-20 w-full animate-pulse rounded-lg bg-muted" />
-                                    <div class="h-20 w-full animate-pulse rounded-lg bg-muted" />
+                                    <WorkflowQueueSkeleton :count="3" :show-trailing="false" />
                                 </div>
 
                                 <!-- Empty state -->
@@ -1351,21 +1338,17 @@ onMounted(() => {
 
                                 <!-- Request rows -->
                                 <div v-else :class="compactRows ? 'space-y-2' : 'space-y-3'">
-                                    <div
+                                    <WorkflowQueueRow
                                         v-for="row in rows"
                                         :key="row.id"
-                                        class="relative cursor-pointer rounded-lg border outline-none transition-colors hover:bg-muted/30"
-                                        :class="compactRows ? 'p-2.5' : 'p-3'"
-                                        @click="openDetails(row)"
+                                        variant="card"
+                                        :compact="compactRows"
+                                        interactive
+                                        :stripe-class="walkInServiceRequestStripeClass(row.status)"
+                                        @activate="openDetails(row)"
                                     >
-                                        <!-- Status left accent bar -->
-                                        <div
-                                            class="absolute inset-y-0 left-0 w-[3px] rounded-l-lg"
-                                            :class="statusBarClass(row.status)"
-                                        />
-
                                         <!-- Header: ticket # + desk + timestamps + badges -->
-                                        <div class="flex flex-wrap items-start justify-between gap-2 pl-2">
+                                        <div class="flex flex-wrap items-start justify-between gap-2">
                                             <div class="min-w-0">
                                                 <p class="text-sm font-semibold">{{ row.requestNumber ?? row.id }}</p>
                                                 <p class="text-xs text-muted-foreground">
@@ -1392,7 +1375,7 @@ onMounted(() => {
                                         </div>
 
                                         <!-- Patient row -->
-                                        <div class="mt-1.5 pl-2 text-xs text-muted-foreground">
+                                        <div class="mt-1.5 text-xs text-muted-foreground">
                                             <template v-if="row.patientId">
                                                 Patient:
                                                 <span
@@ -1412,15 +1395,14 @@ onMounted(() => {
                                             <span v-else>No patient linked</span>
                                         </div>
 
-                                        <div class="mt-1 pl-2 text-xs text-muted-foreground">
+                                        <div class="mt-1 text-xs text-muted-foreground">
                                             Department:
                                             <span class="font-medium text-foreground">
                                                 {{ departmentDisplay(row) }}
                                             </span>
                                         </div>
 
-                                        <!-- Action buttons -->
-                                        <div class="mt-2.5 flex flex-wrap gap-2 pl-2" @click.stop>
+                                        <template #actions>
                                             <Button
                                                 v-if="canUpdateStatus() && row.status === 'pending'"
                                                 size="sm"
@@ -1452,8 +1434,8 @@ onMounted(() => {
                                                 <AppIcon name="layout-grid" class="size-3.5" />
                                                 Review
                                             </Button>
-                                        </div>
-                                    </div>
+                                        </template>
+                                    </WorkflowQueueRow>
                                 </div>
                             </div>
                         </ScrollArea>
@@ -1927,7 +1909,7 @@ onMounted(() => {
                         :patient-name="createPatientContextLabel"
                         :patient-meta="createPatientContextMeta"
                         :facility-name="scope?.facility?.name || 'No facility selected'"
-                        :tenant-name="scope?.tenant?.name || 'No tenant'"
+                        :tenant-name="null"
                         :context-label="createRequestWorkflowContextLabel"
                         :context-meta="createRequestWorkflowContextMeta"
                         :status-label="createRequestContextStatusLabel"
@@ -2140,3 +2122,4 @@ onMounted(() => {
         </Sheet>
     </AppLayout>
 </template>
+

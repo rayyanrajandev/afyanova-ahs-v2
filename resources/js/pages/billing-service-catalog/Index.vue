@@ -3,6 +3,8 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import RegistryListRow from '@/components/list/RegistryListRow.vue';
+import RegistryListSkeleton from '@/components/list/RegistryListSkeleton.vue';
 import ComboboxField from '@/components/forms/ComboboxField.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vue';
@@ -3608,17 +3610,7 @@ watch(
 
                     <ScrollArea v-else class="max-h-[min(70vh,42rem)]">
                         <div>
-                            <div v-if="catalogShowInitialSkeleton" class="divide-y px-4">
-                                <div v-for="index in 6" :key="`catalog-skeleton-${index}`" class="flex items-center gap-3 py-3">
-                                    <Skeleton class="size-2 shrink-0 rounded-full" />
-                                    <div class="min-w-0 flex-1 space-y-2">
-                                        <Skeleton class="h-4 w-48" />
-                                        <Skeleton class="h-3.5 w-72 max-w-full" />
-                                    </div>
-                                    <Skeleton class="hidden h-5 w-16 shrink-0 rounded-full sm:block" />
-                                    <Skeleton class="h-8 w-16 shrink-0 rounded-md" />
-                                </div>
-                            </div>
+                            <RegistryListSkeleton v-if="catalogShowInitialSkeleton" :count="6" />
 
                             <div
                                 v-else-if="items.length === 0"
@@ -3667,29 +3659,23 @@ watch(
                                 class="divide-y px-4"
                                 :class="catalogListRefreshing ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'"
                             >
-                                <div
+                                <RegistryListRow
                                     v-for="item in items"
                                     :key="String(item.id)"
-                                    class="flex items-center gap-3 py-3 transition-colors hover:bg-muted/30"
+                                    :status-dot-class="catalogStatusDotClass(item)"
+                                    :status-title="`${formatEnumLabel(item.status)} · ${tariffLifecycleLabel(item.effectiveFrom, item.effectiveTo)}`"
+                                    @select="openDetails(item)"
                                 >
-                                    <Checkbox
-                                        v-if="canUseBulkSelection"
-                                        class="shrink-0"
-                                        :model-value="selectedItemIds.includes(String(item.id ?? ''))"
-                                        :disabled="!item.id || bulkStatusBusy"
-                                        @update:model-value="(checked) => toggleItemSelection(String(item.id ?? ''), checked)"
-                                        @click.stop
-                                    />
-                                    <span
-                                        class="size-2 shrink-0 rounded-full"
-                                        :class="catalogStatusDotClass(item)"
-                                        :title="`${formatEnumLabel(item.status)} · ${tariffLifecycleLabel(item.effectiveFrom, item.effectiveTo)}`"
-                                    />
-                                    <button
-                                        type="button"
-                                        class="min-w-0 flex-1 space-y-0.5 text-left"
-                                        @click="openDetails(item)"
-                                    >
+                                    <template v-if="canUseBulkSelection" #leading>
+                                        <Checkbox
+                                            class="shrink-0"
+                                            :model-value="selectedItemIds.includes(String(item.id ?? ''))"
+                                            :disabled="!item.id || bulkStatusBusy"
+                                            @update:model-value="(checked) => toggleItemSelection(String(item.id ?? ''), checked)"
+                                            @click.stop
+                                        />
+                                    </template>
+                                    <template #title>
                                         <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                                             <span class="truncate text-sm font-medium transition-colors hover:text-primary">
                                                 {{ item.serviceName || 'Unnamed service' }}
@@ -3699,6 +3685,8 @@ watch(
                                                 {{ formatMoney(item.basePrice, item.currencyCode) }}
                                             </span>
                                         </div>
+                                    </template>
+                                    <template #meta>
                                         <p class="truncate text-xs text-muted-foreground">
                                             {{ item.serviceType ? formatEnumLabel(item.serviceType) : 'Type not set' }}
                                             <span class="text-border"> · </span>
@@ -3710,11 +3698,13 @@ watch(
                                             <span class="text-border"> · </span>
                                             {{ clinicalCatalogLinkLabel(item) }}
                                         </p>
-                                    </button>
-                                    <Badge :variant="statusVariant(item.status)" class="hidden shrink-0 capitalize sm:inline-flex">
-                                        {{ formatEnumLabel(item.status) }}
-                                    </Badge>
-                                    <div class="flex shrink-0 items-center gap-1.5">
+                                    </template>
+                                    <template #badges>
+                                        <Badge :variant="statusVariant(item.status)" class="capitalize">
+                                            {{ formatEnumLabel(item.status) }}
+                                        </Badge>
+                                    </template>
+                                    <template #actions>
                                         <Button
                                             size="sm"
                                             variant="outline"
@@ -3723,8 +3713,8 @@ watch(
                                         >
                                             Details
                                         </Button>
-                                    </div>
-                                </div>
+                                    </template>
+                                </RegistryListRow>
                             </div>
                         </div>
                     </ScrollArea>

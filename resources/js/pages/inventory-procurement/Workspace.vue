@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type Ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import BillingInvoiceLookupField from '@/components/billing/BillingInvoiceLookupField.vue';
 import ClaimsInsuranceCaseLookupField from '@/components/claims/ClaimsInsuranceCaseLookupField.vue';
@@ -12,6 +12,10 @@ import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vu
 import InventoryEmptyState from '@/components/inventory/InventoryEmptyState.vue';
 import InventoryItemLookupField from '@/components/inventory/InventoryItemLookupField.vue';
 import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePageHeader.vue';
+import RegistryListRow from '@/components/list/RegistryListRow.vue';
+import RegistryListSkeleton from '@/components/list/RegistryListSkeleton.vue';
+import WorkflowQueueRow from '@/components/list/WorkflowQueueRow.vue';
+import WorkflowQueueSkeleton from '@/components/list/WorkflowQueueSkeleton.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -28,6 +32,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import LeaveWorkflowDialog from '@/components/workflow/LeaveWorkflowDialog.vue';
@@ -50,6 +55,15 @@ import {
     inventoryWorkspaceHref,
     normalizeInventoryWorkspaceSection,
 } from '@/lib/inventoryProcurement';
+import WorkspaceOverviewTab from '@/pages/inventory-procurement/workspace/WorkspaceOverviewTab.vue';
+import { type RequestPipelineStage, type WorkspaceNextAction } from '@/pages/inventory-procurement/workspace/workspaceOverview';
+import { useRequestPipelineCounts } from '@/pages/inventory-procurement/workspace/useRequestPipelineCounts';
+import {
+    departmentRequisitionStripeClass,
+    procurementRequestStripeClass,
+    shortageReadinessStripeClass,
+    stockMovementStripeClass,
+} from '@/lib/listRows';
 import {
     canAccessInventoryWorkspaceSection,
     defaultInventoryWorkspaceSection,
@@ -133,7 +147,37 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Workspace', href: inventoryWorkspaceHref() },
 ];
 
-const POLLING_INTERVAL_MS = 30_000;
+type InventoryAutoRefreshKey = 'off' | '30s' | '1m' | '5m';
+
+const INVENTORY_AUTO_REFRESH_INTERVAL_MS: Record<InventoryAutoRefreshKey, number> = {
+    off: 0,
+    '30s': 30_000,
+    '1m': 60_000,
+    '5m': 300_000,
+};
+
+const INVENTORY_AUTO_REFRESH_LABEL: Record<InventoryAutoRefreshKey, string> = {
+    off: 'Auto: Off',
+    '30s': 'Auto: 30s',
+    '1m': 'Auto: 1m',
+    '5m': 'Auto: 5m',
+};
+
+function useLocalStorageString<T extends string>(key: string, defaultValue: T, valid: readonly T[]): Ref<T> {
+    const state = ref(defaultValue) as Ref<T>;
+    onMounted(() => {
+        if (typeof window === 'undefined') return;
+        const raw = window.localStorage.getItem(key);
+        if (raw && (valid as readonly string[]).includes(raw)) {
+            state.value = raw as T;
+        }
+    });
+    watch(state, (value) => {
+        if (typeof window === 'undefined') return;
+        window.localStorage.setItem(key, value);
+    });
+    return state;
+}
 
 const EMPTY_SELECT_VALUE = '__inventory_procurement_empty_select__';
 const INVENTORY_ITEM_CREATE_DRAFT_STORAGE_KEY = 'ahs.inventory-procurement.create-item-draft.v1';
@@ -385,8 +429,12 @@ const departmentStockFilters = reactive({
     perPage: 20,
 });
 
-const compactItemRows = useLocalStorageBoolean('inventory.procurement.items.compact', false);
 const compactProcurementRows = useLocalStorageBoolean('inventory.procurement.procurement.compact', false);
+const inventoryAutoRefreshInterval = useLocalStorageString<InventoryAutoRefreshKey>(
+    'inventory.procurement.items.auto-refresh',
+    'off',
+    ['off', '30s', '1m', '5m'],
+);
 const inventoryItemSetupBlockedReason = computed(() => {
     if (!warehouseReady.value && !supplierReady.value) {
         return 'Create at least one warehouse and one supplier first so inventory items can attach to a real stock structure.';
@@ -2376,6 +2424,8 @@ function nullableNumericFormValue(value: unknown): number | null {
 async function apiRequest<T>(method: 'GET' | 'POST' | 'PATCH', path: string, opts?: { query?: Record<string, string | number | null>; body?: Record<string, unknown> }): Promise<T> {
     return apiRequestJson<T>(method, path, opts);
 }
+
+const { requestPipelineCounts, loadRequestPipelineCounts } = useRequestPipelineCounts(apiRequest);
 
 async function loadPermissions() {
     const applyResolvedPermissions = (names: Iterable<string>, hasSuperAdminAccess: boolean): void => {
@@ -4526,27 +4576,7 @@ const requisitionsReadyCount = computed(() => shortageQueueMeta.value?.readyLine
 const requisitionsWaitingCount = computed(() => shortageQueueMeta.value?.waitingLineCount ?? 0);
 const stockAlertCount = computed(() => Number(itemCounts.value.outOfStock ?? 0) + Number(itemCounts.value.lowStock ?? 0));
 const msdDraftSignalCount = computed(() => shortageMsdDraftLines.value.length + lowStockMsdDraftLines.value.length);
-const requestPipelineCounts = ref({
-    submitted: 0,
-    approved: 0,
-    partiallyIssued: 0,
-    shortageWaiting: 0,
-    procurementPending: 0,
-    procurementApproved: 0,
-    procurementOrdered: 0,
-    procurementReceived: 0,
-    issued: 0,
-});
-
-type WorkspaceNextAction = {
-    key: string;
-    label: string;
-    value: string | number;
-    helper: string;
-    icon: string;
-    tone: 'danger' | 'warning' | 'success' | 'neutral';
-    target: InventoryWorkspaceTab;
-};
+const departmentRequisitionTotal = computed(() => deptReqPagination.value?.total ?? deptRequisitions.value.length);
 
 const workspaceNextActions = computed<WorkspaceNextAction[]>(() => {
     const actions: WorkspaceNextAction[] = [
@@ -4590,26 +4620,6 @@ const workspaceNextActions = computed<WorkspaceNextAction[]>(() => {
 
     return actions.filter((action) => workspaceTabVisible(action.target));
 });
-
-function nextActionClass(tone: WorkspaceNextAction['tone']): string {
-    if (tone === 'danger') return 'border-destructive/30 bg-destructive/5 text-destructive';
-    if (tone === 'warning') return 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100';
-    if (tone === 'success') return 'border-green-200 bg-green-50 text-green-900 dark:border-green-900 dark:bg-green-950/30 dark:text-green-100';
-
-    return 'border-sidebar-border/70 bg-card text-foreground';
-}
-
-type RequestPipelineStage = {
-    key: string;
-    label: string;
-    value: number;
-    helper: string;
-    icon: string;
-    target: InventoryWorkspaceTab;
-    status?: string;
-    readiness?: 'all' | 'ready' | 'waiting';
-    kind: 'requisition' | 'shortage' | 'procurement';
-};
 
 const requestPipelineStages = computed<RequestPipelineStage[]>(() => [
     {
@@ -4683,60 +4693,6 @@ const requestPipelineStages = computed<RequestPipelineStage[]>(() => [
         kind: 'requisition',
     },
 ]);
-
-function metaTotal(response: { meta?: { total?: number } } | null | undefined): number {
-    return Number(response?.meta?.total ?? 0);
-}
-
-async function loadRequestPipelineCounts(): Promise<void> {
-    try {
-        const [
-            submitted,
-            approved,
-            partiallyIssued,
-            issued,
-            shortageWaiting,
-            procurementPending,
-            procurementApproved,
-            procurementOrdered,
-            procurementReceived,
-        ] = await Promise.all([
-            apiRequest<{ meta?: { total?: number } }>('GET', '/inventory-procurement/department-requisitions', { query: { status: 'submitted', page: 1, perPage: 1 } }),
-            apiRequest<{ meta?: { total?: number } }>('GET', '/inventory-procurement/department-requisitions', { query: { status: 'approved', page: 1, perPage: 1 } }),
-            apiRequest<{ meta?: { total?: number } }>('GET', '/inventory-procurement/department-requisitions', { query: { status: 'partially_issued', page: 1, perPage: 1 } }),
-            apiRequest<{ meta?: { total?: number } }>('GET', '/inventory-procurement/department-requisitions', { query: { status: 'issued', page: 1, perPage: 1 } }),
-            apiRequest<{ meta?: { waitingLineCount?: number } }>('GET', '/inventory-procurement/shortage-queue', { query: { readiness: 'waiting', page: 1, perPage: 1 } }),
-            apiRequest<{ meta?: { total?: number } }>('GET', '/inventory-procurement/procurement-requests', { query: { status: 'pending_approval', page: 1, perPage: 1 } }),
-            apiRequest<{ meta?: { total?: number } }>('GET', '/inventory-procurement/procurement-requests', { query: { status: 'approved', page: 1, perPage: 1 } }),
-            apiRequest<{ meta?: { total?: number } }>('GET', '/inventory-procurement/procurement-requests', { query: { status: 'ordered', page: 1, perPage: 1 } }),
-            apiRequest<{ meta?: { total?: number } }>('GET', '/inventory-procurement/procurement-requests', { query: { status: 'received', page: 1, perPage: 1 } }),
-        ]);
-
-        requestPipelineCounts.value = {
-            submitted: metaTotal(submitted),
-            approved: metaTotal(approved),
-            partiallyIssued: metaTotal(partiallyIssued),
-            shortageWaiting: Number(shortageWaiting.meta?.waitingLineCount ?? 0),
-            procurementPending: metaTotal(procurementPending),
-            procurementApproved: metaTotal(procurementApproved),
-            procurementOrdered: metaTotal(procurementOrdered),
-            procurementReceived: metaTotal(procurementReceived),
-            issued: metaTotal(issued),
-        };
-    } catch {
-        requestPipelineCounts.value = {
-            submitted: 0,
-            approved: 0,
-            partiallyIssued: 0,
-            shortageWaiting: 0,
-            procurementPending: 0,
-            procurementApproved: 0,
-            procurementOrdered: 0,
-            procurementReceived: 0,
-            issued: 0,
-        };
-    }
-}
 
 function openRequestPipelineStage(stage: RequestPipelineStage): void {
     if (stage.kind === 'requisition') {
@@ -4962,6 +4918,20 @@ async function reloadAll() {
     }
 }
 
+async function refreshInventoryItems(): Promise<void> {
+    if (!canRead.value || loading.value) return;
+    loading.value = true;
+    queueError.value = null;
+    try {
+        await loadReferenceData();
+        await loadActiveWorkspaceTab('inventory', { force: true });
+    } catch (error) {
+        queueError.value = messageFromUnknown(error, 'Unable to load inventory items.');
+    } finally {
+        loading.value = false;
+    }
+}
+
 async function submitCreateItem() {
     if (itemCreateSubmitting.value) return;
     if (!canManageItems.value) {
@@ -5138,9 +5108,9 @@ async function loadItemAuditLogs() {
     }
 }
 
-async function openItemDetails(item: any) {
+async function openItemDetails(item: any, tab: string = 'overview') {
     itemDetailsOpen.value = true;
-    itemDetailsTab.value = 'overview';
+    itemDetailsTab.value = tab;
     itemDetails.value = null;
     itemDetailsError.value = null;
     itemDetailsDiscardConfirmOpen.value = false;
@@ -5697,6 +5667,14 @@ function stockAlertBadgeClass(state: string): string {
     return '';
 }
 
+function stockStateDotClass(state: string | null | undefined): string {
+    if (state === 'out_of_stock') return 'bg-rose-500';
+    if (state === 'low_stock') return 'bg-amber-500';
+    if (state === 'healthy') return 'bg-emerald-500';
+
+    return 'bg-muted-foreground/40';
+}
+
 function stockStateLabel(state: string | null | undefined): string {
     if (state === 'out_of_stock') return 'Store out';
     if (state === 'low_stock') return 'Store low';
@@ -5874,17 +5852,24 @@ function resetLedgerFiltersFromMobileDrawer() {
     resetStockLedgerFilters();
 }
 
-// --- Polling ---
-function startPolling() {
+// --- Inventory auto-refresh ---
+function applyInventoryAutoRefresh() {
     stopPolling();
-    pollingTimer = setInterval(() => {
-        if (document.hidden || loading.value || !canRead.value) return;
-        void reloadAll();
-    }, POLLING_INTERVAL_MS);
+    const ms = INVENTORY_AUTO_REFRESH_INTERVAL_MS[inventoryAutoRefreshInterval.value] ?? 0;
+    if (ms > 0) {
+        pollingTimer = setInterval(() => {
+            if (document.hidden || loading.value || !canRead.value || activeTab.value !== 'inventory') return;
+            void refreshInventoryItems();
+        }, ms);
+    }
 }
 function stopPolling() {
     if (pollingTimer) { clearInterval(pollingTimer); pollingTimer = null; }
 }
+
+watch(inventoryAutoRefreshInterval, () => {
+    applyInventoryAutoRefresh();
+});
 
 // --- Keyboard shortcuts ---
 function handleKeyboardShortcut(e: KeyboardEvent) {
@@ -5953,7 +5938,7 @@ onMounted(async () => {
     }
 
     await reloadAll();
-    startPolling();
+    applyInventoryAutoRefresh();
 });
 </script>
 
@@ -6105,113 +6090,16 @@ onMounted(async () => {
 
             <div class="flex min-w-0 flex-col gap-4">
                 <TabsContent value="overview" class="mt-0 flex flex-col gap-4">
-                    <div class="grid gap-3 lg:grid-cols-4">
-                        <button
-                            v-for="action in workspaceNextActions"
-                            :key="action.key"
-                            type="button"
-                            :class="[
-                                'rounded-lg border px-4 py-3 text-left shadow-sm transition hover:border-primary/40',
-                                nextActionClass(action.tone),
-                            ]"
-                            @click="onTabChange(action.target)"
-                        >
-                            <div class="flex items-start justify-between gap-3">
-                                <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background/70">
-                                    <AppIcon :name="action.icon" class="size-4" />
-                                </span>
-                                <span class="text-2xl font-bold leading-none tabular-nums">{{ action.value }}</span>
-                            </div>
-                            <p class="mt-3 text-sm font-semibold">{{ action.label }}</p>
-                            <p class="mt-1 text-xs leading-relaxed opacity-80">{{ action.helper }}</p>
-                        </button>
-                    </div>
-
-                    <Card class="rounded-lg border-sidebar-border/70 shadow-sm">
-                        <CardHeader class="pb-3">
-                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                <div>
-                                    <CardTitle class="text-base">Request Pipeline</CardTitle>
-                                    <CardDescription>Follow department demand from request, to issue, to procurement, to final receipt.</CardDescription>
-                                </div>
-                                <Button size="sm" variant="outline" class="h-8 gap-1.5 text-xs" @click="loadRequestPipelineCounts">
-                                    <AppIcon name="refresh-cw" class="size-3.5" />
-                                    Refresh pipeline
-                                </Button>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-7">
-                                <button
-                                    v-for="stage in requestPipelineStages"
-                                    :key="stage.key"
-                                    type="button"
-                                    class="group relative rounded-lg border bg-card p-3 text-left transition hover:border-primary/40 hover:bg-muted/20"
-                                    @click="openRequestPipelineStage(stage)"
-                                >
-                                    <div class="flex items-start justify-between gap-2">
-                                        <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground group-hover:text-foreground">
-                                            <AppIcon :name="stage.icon" class="size-4" />
-                                        </span>
-                                        <span class="text-xl font-bold leading-none tabular-nums">{{ stage.value }}</span>
-                                    </div>
-                                    <p class="mt-3 text-sm font-semibold leading-tight">{{ stage.label }}</p>
-                                    <p class="mt-1 min-h-8 text-xs leading-relaxed text-muted-foreground">{{ stage.helper }}</p>
-                                </button>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <div class="grid gap-4 xl:grid-cols-3">
-                        <Card class="rounded-lg border-sidebar-border/70 shadow-sm xl:col-span-2">
-                            <CardHeader class="pb-2">
-                                <CardTitle class="text-base">Operations Queue</CardTitle>
-                                <CardDescription>Start with work that changes patient-facing stock availability.</CardDescription>
-                            </CardHeader>
-                            <CardContent class="grid gap-3 sm:grid-cols-3">
-                                <button type="button" class="rounded-lg border bg-muted/10 p-3 text-left transition hover:border-primary/40" @click="onTabChange('shortage-queue')">
-                                    <AppIcon name="alert-triangle" class="mb-2 size-4 text-muted-foreground" />
-                                    <p class="text-sm font-medium">Shortage queue</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">{{ requisitionsReadyCount }} ready, {{ requisitionsWaitingCount }} waiting.</p>
-                                </button>
-                                <button type="button" class="rounded-lg border bg-muted/10 p-3 text-left transition hover:border-primary/40" @click="onTabChange('requisitions')">
-                                    <AppIcon name="clipboard-list" class="mb-2 size-4 text-muted-foreground" />
-                                    <p class="text-sm font-medium">Department requisitions</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">{{ deptReqPagination?.total ?? deptRequisitions.length }} request{{ (deptReqPagination?.total ?? deptRequisitions.length) === 1 ? '' : 's' }} in view.</p>
-                                </button>
-                                <button type="button" class="rounded-lg border bg-muted/10 p-3 text-left transition hover:border-primary/40" @click="onTabChange('transfers')">
-                                    <AppIcon name="activity" class="mb-2 size-4 text-muted-foreground" />
-                                    <p class="text-sm font-medium">Transfers</p>
-                                    <p class="mt-1 text-xs text-muted-foreground">Pack, dispatch, receive, and review variance.</p>
-                                </button>
-                            </CardContent>
-                        </Card>
-
-                        <Card class="rounded-lg border-sidebar-border/70 shadow-sm">
-                            <CardHeader class="pb-2">
-                                <CardTitle class="text-base">Supervisor Tools</CardTitle>
-                                <CardDescription>Use these after the immediate queues are under control.</CardDescription>
-                            </CardHeader>
-                            <CardContent class="grid gap-2">
-                                <Button variant="outline" class="justify-start gap-2" @click="onTabChange('inventory')">
-                                    <AppIcon name="package" class="size-4" />
-                                    Item master and stock alerts
-                                </Button>
-                                <Button variant="outline" class="justify-start gap-2" @click="onTabChange('procurement')">
-                                    <AppIcon name="clipboard-list" class="size-4" />
-                                    Procurement requests
-                                </Button>
-                                <Button variant="outline" class="justify-start gap-2" @click="onTabChange('msd-orders')">
-                                    <AppIcon name="package" class="size-4" />
-                                    MSD order drafts
-                                </Button>
-                                <Button variant="outline" class="justify-start gap-2" @click="onTabChange('analytics')">
-                                    <AppIcon name="activity" class="size-4" />
-                                    Analytics
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    </div>
+                    <WorkspaceOverviewTab
+                        :workspace-next-actions="workspaceNextActions"
+                        :request-pipeline-stages="requestPipelineStages"
+                        :requisitions-ready-count="requisitionsReadyCount"
+                        :requisitions-waiting-count="requisitionsWaitingCount"
+                        :department-requisition-total="departmentRequisitionTotal"
+                        @change-tab="onTabChange"
+                        @refresh-pipeline="loadRequestPipelineCounts"
+                        @open-pipeline-stage="openRequestPipelineStage"
+                    />
                 </TabsContent>
 
                 <!-- Department Requisitions tab -->
@@ -6285,27 +6173,7 @@ onMounted(async () => {
 
                     <CardContent class="flex-1 overflow-auto p-0">
 
-                        <!-- Skeleton loading -->
-                        <div v-if="deptReqLoading" class="divide-y">
-                            <div v-for="n in 5" :key="n" class="flex items-center gap-4 px-4 py-4">
-                                <div class="h-full w-[3px] shrink-0 self-stretch rounded-full bg-muted/50"></div>
-                                <div class="flex-1 space-y-2">
-                                    <div class="flex items-center gap-2">
-                                        <div class="h-3.5 w-24 animate-pulse rounded-md bg-muted/70"></div>
-                                        <div class="h-4 w-14 animate-pulse rounded-full bg-muted/50"></div>
-                                        <div class="h-4 w-16 animate-pulse rounded-full bg-muted/50"></div>
-                                    </div>
-                                    <div class="flex gap-3">
-                                        <div class="h-3 w-28 animate-pulse rounded-md bg-muted/50"></div>
-                                        <div class="h-3 w-20 animate-pulse rounded-md bg-muted/40"></div>
-                                        <div class="h-3 w-20 animate-pulse rounded-md bg-muted/40"></div>
-                                    </div>
-                                </div>
-                                <div class="flex gap-1.5">
-                                    <div class="h-7 w-16 animate-pulse rounded-lg bg-muted/60"></div>
-                                </div>
-                            </div>
-                        </div>
+                        <WorkflowQueueSkeleton v-if="deptReqLoading" :count="5" />
 
                         <!-- Empty state -->
                         <div v-else-if="deptRequisitions.length === 0" class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center">
@@ -6332,84 +6200,67 @@ onMounted(async () => {
 
                         <!-- Requisition rows -->
                         <div v-else class="divide-y">
-                            <div
+                            <WorkflowQueueRow
                                 v-for="req in deptRequisitions"
                                 :key="req.id"
-                                class="group relative flex cursor-pointer items-start transition-colors hover:bg-muted/20"
-                                @click="openRequisitionDetails(req)"
+                                :stripe-class="departmentRequisitionStripeClass(req.status)"
+                                stripe-edge="rounded-r-full"
+                                inner-class="pl-2"
+                                interactive
+                                hover-class="hover:bg-muted/20"
+                                @activate="openRequisitionDetails(req)"
                             >
-                                <!-- Status accent stripe -->
-                                <div
-                                    class="absolute inset-y-0 left-0 w-[3px] rounded-r-full"
-                                    :class="{
-                                        'bg-muted-foreground/30':  req.status === 'draft' || req.status === 'cancelled',
-                                        'bg-blue-500':             req.status === 'submitted',
-                                        'bg-green-500':            req.status === 'approved',
-                                        'bg-amber-400':            req.status === 'partially_issued',
-                                        'bg-emerald-600':          req.status === 'issued',
-                                        'bg-destructive':          req.status === 'rejected',
-                                    }"
-                                ></div>
-
-                                <div class="flex w-full items-start gap-4 px-4 py-3.5 pl-6">
-                                    <!-- Left: main content -->
-                                    <div class="min-w-0 flex-1 space-y-1.5">
-                                        <!-- Row 1: Req # + priority + status + dept -->
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <span class="font-mono text-xs font-bold tracking-tight">{{ req.requisitionNumber }}</span>
-                                            <Badge
-                                                v-if="req.priority === 'urgent'"
-                                                variant="destructive"
-                                                class="h-4 px-1.5 text-[10px] uppercase tracking-wide"
-                                            >Urgent</Badge>
-                                            <Badge
-                                                v-else-if="req.priority === 'high'"
-                                                class="h-4 bg-orange-100 px-1.5 text-[10px] uppercase tracking-wide text-orange-800 dark:bg-orange-900/40 dark:text-orange-200"
-                                            >High</Badge>
-                                            <span
-                                                class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold"
-                                                :class="reqStatusBadgeClass(req.status)"
-                                            >{{ formatEnumLabel(req.status) }}</span>
-                                            <span class="text-xs text-muted-foreground">{{ req.requestingDepartment }}</span>
-                                        </div>
-
-                                        <!-- Row 2: meta details -->
-                                        <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-                                            <span class="flex items-center gap-1">
-                                                <AppIcon name="warehouse" class="size-3 opacity-60" />
-                                                {{ warehouseLabel(req.issuingWarehouseId) ?? req.issuingStore ?? '—' }}
-                                            </span>
-                                            <span class="flex items-center gap-1">
-                                                <AppIcon name="layers" class="size-3 opacity-60" />
-                                                {{ req.lines?.length ?? 0 }} line{{ (req.lines?.length ?? 0) === 1 ? '' : 's' }}
-                                            </span>
-                                            <span v-if="req.neededBy" class="flex items-center gap-1" :class="new Date(req.neededBy) < new Date() && !['issued','cancelled','rejected'].includes(req.status) ? 'font-medium text-red-600 dark:text-red-400' : ''">
-                                                <AppIcon name="calendar" class="size-3 opacity-60" />
-                                                Needed {{ formatDateOnly(req.neededBy) }}
-                                                <span v-if="new Date(req.neededBy) < new Date() && !['issued','cancelled','rejected'].includes(req.status)" class="font-semibold">· Overdue</span>
-                                            </span>
-                                            <span class="flex items-center gap-1 opacity-70">
-                                                <AppIcon name="clock" class="size-3 opacity-60" />
-                                                {{ formatDateTime(req.createdAt) }}
-                                            </span>
-                                        </div>
+                                <div class="space-y-1.5">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="font-mono text-xs font-bold tracking-tight">{{ req.requisitionNumber }}</span>
+                                        <Badge
+                                            v-if="req.priority === 'urgent'"
+                                            variant="destructive"
+                                            class="h-4 px-1.5 text-[10px] uppercase tracking-wide"
+                                        >Urgent</Badge>
+                                        <Badge
+                                            v-else-if="req.priority === 'high'"
+                                            class="h-4 bg-orange-100 px-1.5 text-[10px] uppercase tracking-wide text-orange-800 dark:bg-orange-900/40 dark:text-orange-200"
+                                        >High</Badge>
+                                        <span
+                                            class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold"
+                                            :class="reqStatusBadgeClass(req.status)"
+                                        >{{ formatEnumLabel(req.status) }}</span>
+                                        <span class="text-xs text-muted-foreground">{{ req.requestingDepartment }}</span>
                                     </div>
-
-                                    <!-- Right: action buttons -->
-                                    <div class="flex shrink-0 items-center gap-1.5" @click.stop>
-                                        <Button size="sm" variant="ghost" class="h-7 px-2.5 text-xs" @click="openRequisitionDetails(req)">
-                                            {{ requisitionPrimaryActionLabel(req) }}
-                                        </Button>
-                                        <Button v-if="req.status === 'draft'" size="sm" variant="outline" class="h-7 text-xs" @click="updateRequisitionStatus(req.id, 'submitted')">Submit</Button>
-                                        <Button v-if="req.status === 'submitted' && canManageItems" size="sm" variant="outline" class="h-7 text-xs" @click="updateRequisitionStatus(req.id, 'approved')">Approve</Button>
-                                        <Button v-if="req.status === 'submitted' && canManageItems" size="sm" variant="destructive" class="h-7 text-xs" @click="updateRequisitionStatus(req.id, 'rejected', { rejectionReason: 'Rejected by store manager' })">Reject</Button>
-                                        <Button v-if="req.status === 'approved' && canManageItems" size="sm" variant="outline" class="h-7 gap-1.5 text-xs" @click="updateRequisitionStatus(req.id, 'issued')">
-                                            <AppIcon name="check" class="size-3" />
-                                            Issue
-                                        </Button>
+                                    <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                                        <span class="flex items-center gap-1">
+                                            <AppIcon name="warehouse" class="size-3 opacity-60" />
+                                            {{ warehouseLabel(req.issuingWarehouseId) ?? req.issuingStore ?? '—' }}
+                                        </span>
+                                        <span class="flex items-center gap-1">
+                                            <AppIcon name="layers" class="size-3 opacity-60" />
+                                            {{ req.lines?.length ?? 0 }} line{{ (req.lines?.length ?? 0) === 1 ? '' : 's' }}
+                                        </span>
+                                        <span v-if="req.neededBy" class="flex items-center gap-1" :class="new Date(req.neededBy) < new Date() && !['issued','cancelled','rejected'].includes(req.status) ? 'font-medium text-red-600 dark:text-red-400' : ''">
+                                            <AppIcon name="calendar" class="size-3 opacity-60" />
+                                            Needed {{ formatDateOnly(req.neededBy) }}
+                                            <span v-if="new Date(req.neededBy) < new Date() && !['issued','cancelled','rejected'].includes(req.status)" class="font-semibold">· Overdue</span>
+                                        </span>
+                                        <span class="flex items-center gap-1 opacity-70">
+                                            <AppIcon name="clock" class="size-3 opacity-60" />
+                                            {{ formatDateTime(req.createdAt) }}
+                                        </span>
                                     </div>
                                 </div>
-                            </div>
+                                <template #actions>
+                                    <Button size="sm" variant="ghost" class="h-7 px-2.5 text-xs" @click="openRequisitionDetails(req)">
+                                        {{ requisitionPrimaryActionLabel(req) }}
+                                    </Button>
+                                    <Button v-if="req.status === 'draft'" size="sm" variant="outline" class="h-7 text-xs" @click="updateRequisitionStatus(req.id, 'submitted')">Submit</Button>
+                                    <Button v-if="req.status === 'submitted' && canManageItems" size="sm" variant="outline" class="h-7 text-xs" @click="updateRequisitionStatus(req.id, 'approved')">Approve</Button>
+                                    <Button v-if="req.status === 'submitted' && canManageItems" size="sm" variant="destructive" class="h-7 text-xs" @click="updateRequisitionStatus(req.id, 'rejected', { rejectionReason: 'Rejected by store manager' })">Reject</Button>
+                                    <Button v-if="req.status === 'approved' && canManageItems" size="sm" variant="outline" class="h-7 gap-1.5 text-xs" @click="updateRequisitionStatus(req.id, 'issued')">
+                                        <AppIcon name="check" class="size-3" />
+                                        Issue
+                                    </Button>
+                                </template>
+                            </WorkflowQueueRow>
                         </div>
 
                         <!-- Pagination -->
@@ -6602,25 +6453,7 @@ onMounted(async () => {
 
                     <CardContent class="flex-1 overflow-auto p-0">
 
-                        <!-- Skeleton loading -->
-                        <div v-if="shortageQueueLoading" class="divide-y">
-                            <div v-for="n in 4" :key="n" class="flex items-start gap-4 px-4 py-4">
-                                <div class="mt-0.5 h-full w-1 shrink-0 rounded-full bg-muted/50"></div>
-                                <div class="flex-1 space-y-2">
-                                    <div class="flex items-center gap-2">
-                                        <div class="h-3.5 w-20 animate-pulse rounded-md bg-muted/70"></div>
-                                        <div class="h-4 w-12 animate-pulse rounded-full bg-muted/50"></div>
-                                    </div>
-                                    <div class="h-3 w-32 animate-pulse rounded-md bg-muted/50"></div>
-                                    <div class="flex gap-2">
-                                        <div class="h-5 w-24 animate-pulse rounded-md bg-muted/40"></div>
-                                        <div class="h-5 w-24 animate-pulse rounded-md bg-muted/40"></div>
-                                    </div>
-                                </div>
-                                <div class="mt-1 h-3 w-16 animate-pulse rounded-md bg-muted/50"></div>
-                                <div class="h-7 w-20 animate-pulse rounded-lg bg-muted/60"></div>
-                            </div>
-                        </div>
+                        <WorkflowQueueSkeleton v-if="shortageQueueLoading" :count="4" />
 
                         <!-- Error state -->
                         <div v-else-if="shortageQueueError" class="px-6 py-8">
@@ -6674,24 +6507,17 @@ onMounted(async () => {
 
                         <!-- Requisition cards -->
                         <div v-else class="divide-y">
-                            <div
+                            <WorkflowQueueRow
                                 v-for="req in shortageQueueItems"
                                 :key="req.id"
-                                class="group relative flex items-start gap-0 transition-colors hover:bg-muted/20"
+                                :stripe-class="shortageReadinessStripeClass(req.readyLineCount ?? 0, req.waitingLineCount ?? 0)"
+                                stripe-edge="rounded-r-full"
+                                inner-class="pl-2"
+                                interactive
+                                hover-class="hover:bg-muted/20"
+                                @activate="openRequisitionDetails(req)"
                             >
-                                <!-- Readiness accent stripe -->
-                                <div
-                                    class="absolute inset-y-0 left-0 w-[3px] rounded-r-full transition-colors"
-                                    :class="req.readyLineCount > 0 && req.waitingLineCount === 0
-                                        ? 'bg-green-500'
-                                        : req.readyLineCount > 0
-                                            ? 'bg-amber-400'
-                                            : 'bg-border'"
-                                ></div>
-
-                                <div class="flex w-full cursor-pointer items-start gap-4 px-4 py-4 pl-6" @click="openRequisitionDetails(req)">
-                                    <!-- Left: meta -->
-                                    <div class="min-w-0 flex-1 space-y-2">
+                                <div class="space-y-2">
                                         <!-- Row 1: number + priority + department -->
                                         <div class="flex flex-wrap items-center gap-2">
                                             <span class="font-mono text-xs font-bold tracking-tight">{{ req.requisitionNumber ?? '—' }}</span>
@@ -6779,10 +6605,9 @@ onMounted(async () => {
                                                 {{ req.readyLineCount ?? 0 }} of {{ (req.readyLineCount ?? 0) + (req.waitingLineCount ?? 0) }} lines ready
                                             </span>
                                         </div>
-                                    </div>
-
-                                    <!-- Right: readiness badge + CTA -->
-                                    <div class="flex shrink-0 flex-col items-end gap-2 pt-0.5">
+                                </div>
+                                <template #trailing>
+                                    <div class="flex flex-col items-end gap-2 pt-0.5">
                                         <div
                                             class="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
                                             :class="req.readyLineCount > 0 && req.waitingLineCount === 0
@@ -6807,14 +6632,14 @@ onMounted(async () => {
                                             size="sm"
                                             :variant="req.readyLineCount > 0 ? 'default' : 'outline'"
                                             class="h-7 gap-1.5 text-xs"
-                                            @click.stop="openRequisitionDetails(req)"
+                                            @click="openRequisitionDetails(req)"
                                         >
                                             <AppIcon v-if="req.readyLineCount > 0" name="arrow-right" class="size-3" />
                                             {{ req.readyLineCount > 0 ? 'Issue now' : 'View' }}
                                         </Button>
                                     </div>
-                                </div>
-                            </div>
+                                </template>
+                            </WorkflowQueueRow>
                         </div>
 
                         <!-- Pagination -->
@@ -6927,22 +6752,7 @@ onMounted(async () => {
                             </Button>
                         </div>
 
-                        <!-- Skeleton -->
-                        <div v-if="transferLoading" class="divide-y">
-                            <div v-for="n in 4" :key="`sk-tr-${n}`" class="flex items-start gap-3 px-4 py-4">
-                                <div class="min-w-0 flex-1 space-y-2">
-                                    <div class="h-3.5 w-1/4 animate-pulse rounded bg-muted" />
-                                    <div class="h-3 w-1/2 animate-pulse rounded bg-muted" />
-                                    <div class="flex gap-1.5">
-                                        <div class="h-5 w-16 animate-pulse rounded-full bg-muted" />
-                                        <div class="h-5 w-20 animate-pulse rounded-full bg-muted" />
-                                    </div>
-                                </div>
-                                <div class="flex gap-1.5">
-                                    <div class="h-7 w-20 animate-pulse rounded bg-muted" />
-                                </div>
-                            </div>
-                        </div>
+                        <WorkflowQueueSkeleton v-if="transferLoading" :count="4" />
 
                         <!-- Empty -->
                         <div
@@ -6964,21 +6774,16 @@ onMounted(async () => {
 
                         <!-- Transfer rows -->
                         <div v-else class="divide-y">
-                            <div
+                            <WorkflowQueueRow
                                 v-for="t in transfers"
                                 :key="t.id"
-                                class="relative flex items-start gap-3 px-4 py-4 transition-colors hover:bg-muted/30"
+                                :stripe-class="transferStatusBadgeClass(t.status).includes('green') ? 'bg-green-500'
+                                    : transferStatusBadgeClass(t.status).includes('amber') ? 'bg-amber-500'
+                                    : transferStatusBadgeClass(t.status).includes('blue') ? 'bg-blue-500'
+                                    : transferStatusBadgeClass(t.status).includes('red') ? 'bg-red-500'
+                                    : 'bg-muted-foreground/30'"
                             >
-                                <!-- Status accent stripe -->
-                                <div
-                                    class="absolute inset-y-0 left-0 w-[3px] rounded-l"
-                                    :class="transferStatusBadgeClass(t.status).includes('green') ? 'bg-green-500'
-                                          : transferStatusBadgeClass(t.status).includes('amber') ? 'bg-amber-500'
-                                          : transferStatusBadgeClass(t.status).includes('blue') ? 'bg-blue-500'
-                                          : transferStatusBadgeClass(t.status).includes('red') ? 'bg-red-500'
-                                          : 'bg-muted-foreground/30'"
-                                />
-                                <div class="min-w-0 flex-1">
+                                <div class="min-w-0 space-y-1">
                                     <!-- Row 1: number + priority + status badges -->
                                     <div class="flex flex-wrap items-center gap-2">
                                         <span class="font-mono text-sm font-semibold">{{ t.transfer_number }}</span>
@@ -7018,8 +6823,7 @@ onMounted(async () => {
                                         >{{ signal.label }}</span>
                                     </div>
                                 </div>
-                                <!-- Action buttons -->
-                                <div class="flex shrink-0 flex-wrap items-start gap-1.5">
+                                <template #actions>
                                     <Button
                                         v-for="ns in (TRANSFER_ACTION_TRANSITIONS[t.status] ?? [])"
                                         :key="ns"
@@ -7052,8 +6856,8 @@ onMounted(async () => {
                                             </DropdownMenuItem>
                                         </DropdownMenuContent>
                                     </DropdownMenu>
-                                </div>
-                            </div>
+                                </template>
+                            </WorkflowQueueRow>
                         </div>
 
                         <!-- Footer pagination -->
@@ -7125,15 +6929,32 @@ onMounted(async () => {
                             </h3>
                             <p class="mt-1 text-xs text-muted-foreground">Physical stock master with category, reorder policy, opening stock, and warehouse operations.</p>
                         </div>
-                        <div class="flex shrink-0 items-center gap-2">
+                        <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                            <Select v-model="inventoryAutoRefreshInterval">
+                                <SelectTrigger
+                                    class="h-9 w-[8rem] rounded-lg text-xs data-[size=default]:h-9"
+                                    :title="inventoryAutoRefreshInterval !== 'off' ? `Auto-refresh every ${inventoryAutoRefreshInterval}` : 'Auto-refresh off'"
+                                >
+                                    <SelectValue placeholder="Auto" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem
+                                        v-for="key in (['off', '30s', '1m', '5m'] as const)"
+                                        :key="key"
+                                        :value="key"
+                                    >
+                                        {{ INVENTORY_AUTO_REFRESH_LABEL[key] }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
                             <Button
                                 variant="outline"
                                 size="sm"
                                 class="h-9 gap-1.5 rounded-lg text-xs"
                                 :disabled="loading"
-                                @click="loadActiveWorkspaceTab('inventory', { force: true })"
+                                @click="refreshInventoryItems"
                             >
-                                <AppIcon name="refresh-cw" class="size-3.5" />
+                                <AppIcon name="refresh-cw" class="size-3.5" :class="{ 'animate-spin': loading }" />
                                 Refresh
                             </Button>
                             <Button
@@ -7164,25 +6985,12 @@ onMounted(async () => {
                                 {{ itemFilterChips.length }}
                             </Badge>
                         </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            class="hidden h-9 rounded-lg text-xs sm:inline-flex"
-                            @click="compactItemRows = !compactItemRows"
-                        >
-                            {{ compactItemRows ? 'Comfortable Rows' : 'Compact Rows' }}
-                        </Button>
                     </div>
                     <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
                         <ScrollArea class="min-h-0 flex-1">
-                            <div class="min-h-[12rem] p-4" :class="compactItemRows ? 'space-y-2' : 'space-y-3'">
-                                <div v-if="loading" class="space-y-2">
-                                    <div class="h-20 w-full animate-pulse rounded-lg bg-muted" />
-                                    <div class="h-20 w-full animate-pulse rounded-lg bg-muted" />
-                                    <div class="h-20 w-full animate-pulse rounded-lg bg-muted" />
-                                </div>
+                            <RegistryListSkeleton v-if="loading" />
+                            <div v-else-if="items.length === 0" class="p-4">
                                 <InventoryEmptyState
-                                    v-else-if="items.length === 0"
                                     icon="package"
                                     title="No inventory items found"
                                     :description="!hasAnyItemFilters ? (inventoryItemSetupBlockedReason || 'Register the first physical stock item here after warehouses and suppliers are ready. Medicines should already exist in Clinical Care Catalog before you link them to inventory.') : 'No inventory items match the current filters.'"
@@ -7199,58 +7007,79 @@ onMounted(async () => {
                                         </Button>
                                     </template>
                                 </InventoryEmptyState>
-                                <div v-else :class="compactItemRows ? 'space-y-2' : 'space-y-3'">
-                                    <div
-                                        v-for="item in items"
-                                        :key="item.id"
-                                        class="relative rounded-lg border transition-colors outline-none hover:bg-muted/30"
-                                        :class="[
-                                            compactItemRows ? 'p-2.5' : 'p-3',
-                                            flashedItemId === item.id ? 'animate-inv-row-flash' : '',
-                                        ]"
-                                    >
-                                        <div
-                                            class="absolute inset-y-0 left-0 w-[3px] rounded-l-lg"
-                                            :class="item.stockState === 'out_of_stock' ? 'bg-destructive' : item.stockState === 'low_stock' ? 'bg-amber-500' : 'bg-green-500'"
-                                        />
-                                        <div class="flex flex-wrap items-center justify-between gap-2 pl-2">
-                                            <div>
-                                                <p class="text-sm font-semibold">{{ item.itemName }}</p>
-                                                <p class="text-xs text-muted-foreground">{{ item.itemCode }} | {{ item.category || 'Uncategorized' }} | {{ item.unit }}</p>
-                                            </div>
-                                            <div class="flex flex-wrap items-center gap-1.5">
-                                                <Badge v-if="inventoryItemNeedsOpeningStock(item)" variant="outline">Opening stock pending</Badge>
-                                                <Badge :class="stockAlertBadgeClass(item.stockState)">{{ stockStateLabel(item.stockState) }}</Badge>
-                                            </div>
-                                        </div>
-                                        <div class="mt-2 grid gap-1 pl-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
-                                            <p>Store Stock: {{ item.currentStock }}</p>
-                                            <p>Reorder Level: {{ item.reorderLevel }}</p>
-                                            <p>Status: {{ formatEnumLabel(item.status || 'n/a') }}</p>
-                                            <p>Code: {{ item.itemCode || 'N/A' }}</p>
-                                        </div>
-                                        <div class="mt-3 flex flex-wrap gap-2 pl-2">
-                                            <Button v-if="canCreateMovement" size="sm" variant="outline" class="h-8 w-full gap-1.5 rounded-lg text-xs sm:w-auto" :disabled="!canLaunchStockMovement" @click="openStockMovementDialog(item)">
-                                                <AppIcon name="arrow-up-down" class="size-3.5" />
-                                                {{ inventoryItemStockActionLabel(item) }}
-                                            </Button>
-                                            <Button size="sm" variant="outline" class="h-8 w-full rounded-lg text-xs sm:w-auto" @click="openItemDetails(item)">Details</Button>
-                                            <Button size="sm" variant="outline" class="h-8 w-full gap-1.5 rounded-lg text-xs sm:w-auto" @click="openDepartmentStockForItem(item)">
-                                                <AppIcon name="building-2" class="size-3.5" />
-                                                Where issued
-                                            </Button>
-                                            <Button
-                                                v-if="canManageItems"
-                                                size="sm"
-                                                variant="secondary"
-                                                class="h-8 w-full rounded-lg text-xs sm:w-auto"
-                                                @click="openItemDetails(item)"
-                                            >
-                                                Edit / Status
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
+                            </div>
+                            <div v-else class="divide-y px-4">
+                                <RegistryListRow
+                                    v-for="item in items"
+                                    :key="item.id"
+                                    :status-dot-class="stockStateDotClass(item.stockState)"
+                                    :status-title="stockStateLabel(item.stockState)"
+                                    :primary-label="item.itemName"
+                                    :secondary-label="item.itemCode || 'No code'"
+                                    :meta="`${item.category || 'Uncategorized'} · ${item.unit || 'No unit'} · Store ${item.currentStock ?? '—'} · Reorder ${item.reorderLevel ?? '—'}`"
+                                    :flash="flashedItemId === item.id"
+                                    @select="openItemDetails(item)"
+                                >
+                                    <template #badges>
+                                        <Badge v-if="inventoryItemNeedsOpeningStock(item)" variant="outline" class="h-5 px-1.5 text-[10px]">
+                                            Opening stock
+                                        </Badge>
+                                        <Badge :class="stockAlertBadgeClass(item.stockState)" class="h-5 px-1.5 text-[10px]">
+                                            {{ stockStateLabel(item.stockState) }}
+                                        </Badge>
+                                    </template>
+                                    <template #actions>
+                                        <Button
+                                            v-if="canCreateMovement"
+                                            size="sm"
+                                            variant="outline"
+                                            class="hidden h-8 gap-1.5 rounded-lg text-xs lg:inline-flex"
+                                            :disabled="!canLaunchStockMovement"
+                                            @click="openStockMovementDialog(item)"
+                                        >
+                                            <AppIcon name="activity" class="size-3.5" />
+                                            {{ inventoryItemStockActionLabel(item) }}
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            class="h-8 rounded-lg text-xs"
+                                            @click="openItemDetails(item)"
+                                        >
+                                            View details
+                                        </Button>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger as-child>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    class="h-8 w-8 rounded-lg p-0"
+                                                    aria-label="More item actions"
+                                                >
+                                                    <AppIcon name="ellipsis-vertical" class="size-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" class="w-44">
+                                                <DropdownMenuItem v-if="canCreateMovement" class="lg:hidden" @click="openStockMovementDialog(item)">
+                                                    <AppIcon name="activity" class="mr-2 size-3.5" />
+                                                    {{ inventoryItemStockActionLabel(item) }}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem @click="openDepartmentStockForItem(item)">
+                                                    <AppIcon name="building-2" class="mr-2 size-3.5" />
+                                                    Where issued
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem v-if="canManageItems" @click="openItemDetails(item, 'maintenance')">
+                                                    <AppIcon name="pencil" class="mr-2 size-3.5" />
+                                                    Edit
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem v-if="canManageItems" @click="openItemDetails(item, 'status')">
+                                                    <AppIcon name="shield-check" class="mr-2 size-3.5" />
+                                                    Status
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </template>
+                                </RegistryListRow>
                             </div>
                         </ScrollArea>
                         <footer class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-4 py-2">
@@ -7488,16 +7317,7 @@ onMounted(async () => {
                         </div>
 
                         <!-- Skeleton loader -->
-                        <div v-if="stockLedgerLoading" class="divide-y">
-                            <div v-for="n in 5" :key="`sk-sl-${n}`" class="flex items-start gap-3 px-4 py-4">
-                                <div class="size-9 shrink-0 animate-pulse rounded-lg bg-muted" />
-                                <div class="min-w-0 flex-1 space-y-2">
-                                    <div class="h-3.5 w-1/3 animate-pulse rounded bg-muted" />
-                                    <div class="h-3 w-2/3 animate-pulse rounded bg-muted" />
-                                </div>
-                                <div class="h-8 w-14 animate-pulse rounded-lg bg-muted" />
-                            </div>
-                        </div>
+                        <WorkflowQueueSkeleton v-if="stockLedgerLoading" :count="5" />
 
                         <!-- Empty state -->
                         <div
@@ -7516,29 +7336,24 @@ onMounted(async () => {
 
                         <!-- Movement rows -->
                         <div v-else class="divide-y">
-                            <div
+                            <WorkflowQueueRow
                                 v-for="movement in stockMovements"
                                 :key="movement.id"
-                                class="relative flex items-start gap-3 px-4 py-4 transition-colors hover:bg-muted/30"
+                                :stripe-class="stockMovementStripeClass(movement.movementType)"
                             >
-                                <!-- Type accent stripe -->
-                                <div
-                                    class="absolute inset-y-0 left-0 w-[3px] rounded-l"
-                                    :class="movement.movementType === 'receive' ? 'bg-green-500' : movement.movementType === 'issue' ? 'bg-amber-500' : movement.movementType === 'adjust' ? 'bg-blue-500' : movement.movementType === 'transfer' ? 'bg-sky-500' : 'bg-muted-foreground/30'"
-                                />
-                                <!-- Type icon avatar -->
-                                <span
-                                    class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg"
-                                    :class="movement.movementType === 'receive' ? 'bg-green-100 dark:bg-green-900/40' : movement.movementType === 'issue' ? 'bg-amber-100 dark:bg-amber-900/40' : movement.movementType === 'adjust' ? 'bg-blue-100 dark:bg-blue-900/40' : movement.movementType === 'transfer' ? 'bg-sky-100 dark:bg-sky-900/40' : 'bg-muted/60'"
-                                >
-                                    <AppIcon
-                                        :name="movement.movementType === 'receive' ? 'arrow-right' : movement.movementType === 'issue' ? 'package' : movement.movementType === 'adjust' ? 'sliders-horizontal' : movement.movementType === 'transfer' ? 'arrow-right' : 'activity'"
-                                        class="size-4"
-                                        :class="movement.movementType === 'receive' ? 'text-green-600 dark:text-green-400' : movement.movementType === 'issue' ? 'text-amber-600 dark:text-amber-400' : movement.movementType === 'adjust' ? 'text-blue-600 dark:text-blue-400' : movement.movementType === 'transfer' ? 'text-sky-600 dark:text-sky-400' : 'text-muted-foreground'"
-                                    />
-                                </span>
-                                <!-- Main content -->
-                                <div class="min-w-0 flex-1">
+                                <template #leading>
+                                    <span
+                                        class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg"
+                                        :class="movement.movementType === 'receive' ? 'bg-green-100 dark:bg-green-900/40' : movement.movementType === 'issue' ? 'bg-amber-100 dark:bg-amber-900/40' : movement.movementType === 'adjust' ? 'bg-blue-100 dark:bg-blue-900/40' : movement.movementType === 'transfer' ? 'bg-sky-100 dark:bg-sky-900/40' : 'bg-muted/60'"
+                                    >
+                                        <AppIcon
+                                            :name="movement.movementType === 'receive' ? 'arrow-right' : movement.movementType === 'issue' ? 'package' : movement.movementType === 'adjust' ? 'sliders-horizontal' : movement.movementType === 'transfer' ? 'arrow-right' : 'activity'"
+                                            class="size-4"
+                                            :class="movement.movementType === 'receive' ? 'text-green-600 dark:text-green-400' : movement.movementType === 'issue' ? 'text-amber-600 dark:text-amber-400' : movement.movementType === 'adjust' ? 'text-blue-600 dark:text-blue-400' : movement.movementType === 'transfer' ? 'text-sky-600 dark:text-sky-400' : 'text-muted-foreground'"
+                                        />
+                                    </span>
+                                </template>
+                                <div class="min-w-0 space-y-1">
                                     <div class="flex flex-wrap items-start justify-between gap-2">
                                         <p class="text-sm font-medium leading-tight">{{ movement.item?.itemName || movement.itemId }}</p>
                                         <div class="flex shrink-0 flex-wrap items-center gap-1.5">
@@ -7574,14 +7389,15 @@ onMounted(async () => {
                                     </div>
                                     <p v-if="movement.notes" class="mt-1 text-xs italic text-muted-foreground/70">{{ movement.notes }}</p>
                                 </div>
-                                <!-- Delta pill -->
-                                <span
-                                    class="mt-0.5 shrink-0 rounded-lg px-2.5 py-1 text-sm font-bold tabular-nums"
-                                    :class="(movement.quantityDelta ?? 0) > 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : (movement.quantityDelta ?? 0) < 0 ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' : 'bg-muted text-muted-foreground'"
-                                >
-                                    {{ (movement.quantityDelta ?? 0) > 0 ? '+' : '' }}{{ movement.quantityDelta ?? 0 }}
-                                </span>
-                            </div>
+                                <template #trailing>
+                                    <span
+                                        class="mt-0.5 shrink-0 rounded-lg px-2.5 py-1 text-sm font-bold tabular-nums"
+                                        :class="(movement.quantityDelta ?? 0) > 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : (movement.quantityDelta ?? 0) < 0 ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' : 'bg-muted text-muted-foreground'"
+                                    >
+                                        {{ (movement.quantityDelta ?? 0) > 0 ? '+' : '' }}{{ movement.quantityDelta ?? 0 }}
+                                    </span>
+                                </template>
+                            </WorkflowQueueRow>
                         </div>
 
                         <!-- Footer pagination -->
@@ -7757,23 +7573,7 @@ onMounted(async () => {
                     <CardContent class="flex-1 overflow-auto p-0">
 
                         <!-- Skeleton -->
-                        <div v-if="departmentStockLoading" class="divide-y">
-                            <div v-for="n in 5" :key="n" class="flex items-start gap-4 px-4 py-4">
-                                <div class="flex-1 space-y-2">
-                                    <div class="flex items-center gap-2">
-                                        <div class="h-3.5 w-36 animate-pulse rounded-md bg-muted/70"></div>
-                                        <div class="h-4 w-16 animate-pulse rounded-full bg-muted/50"></div>
-                                        <div class="h-4 w-12 animate-pulse rounded-full bg-muted/50"></div>
-                                    </div>
-                                    <div class="flex gap-3">
-                                        <div class="h-3 w-24 animate-pulse rounded-md bg-muted/50"></div>
-                                        <div class="h-3 w-28 animate-pulse rounded-md bg-muted/40"></div>
-                                        <div class="h-3 w-20 animate-pulse rounded-md bg-muted/40"></div>
-                                    </div>
-                                </div>
-                                <div class="h-7 w-20 animate-pulse rounded-lg bg-muted/60"></div>
-                            </div>
-                        </div>
+                        <RegistryListSkeleton v-if="departmentStockLoading" :count="5" />
 
                         <!-- Empty -->
                         <div v-else-if="departmentStock.length === 0" class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center">
@@ -7787,45 +7587,34 @@ onMounted(async () => {
                         </div>
 
                         <!-- Stock rows -->
-                        <div v-else class="divide-y">
-                            <div
+                        <div v-else class="divide-y px-4">
+                            <RegistryListRow
                                 v-for="row in departmentStock"
                                 :key="row.id"
-                                class="flex items-start gap-4 px-4 py-3.5 transition-colors hover:bg-muted/20"
+                                status-dot-class="bg-sky-500"
+                                status-title="Department stock"
+                                :primary-label="row.itemName || row.itemId"
+                                :secondary-label="row.itemCode || row.itemId"
+                                :meta="`${row.departmentName || 'Department'} · ${formatAmount(row.issuedQuantity)} ${row.unit || ''} on hand · ${row.sourceWarehouseName || row.sourceWarehouseCode || 'Store not recorded'} · ${row.movementCount} movement${row.movementCount === 1 ? '' : 's'} · Last issued ${formatDateTime(row.lastIssuedAt)}`"
+                                :selectable="false"
                             >
-                                <!-- Main content -->
-                                <div class="min-w-0 flex-1 space-y-1.5">
-                                    <!-- Row 1: name + dept badge + qty badge -->
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <span class="truncate text-sm font-semibold">{{ row.itemName || row.itemId }}</span>
-                                        <Badge variant="secondary" class="shrink-0 text-[11px]">{{ row.departmentName }}</Badge>
-                                        <Badge variant="outline" class="shrink-0 font-mono text-[11px]">
-                                            {{ formatAmount(row.issuedQuantity) }} {{ row.unit || '' }}
-                                        </Badge>
-                                    </div>
-                                    <!-- Row 2: meta details -->
-                                    <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-                                        <span class="flex items-center gap-1">
-                                            <AppIcon name="tag" class="size-3 opacity-60" />
-                                            {{ row.itemCode || row.itemId }}
-                                            <template v-if="row.category"> · {{ formatEnumLabel(row.category) }}</template>
-                                            <template v-if="row.subcategory"> / {{ formatEnumLabel(row.subcategory) }}</template>
-                                        </span>
-                                        <span class="flex items-center gap-1">
-                                            <AppIcon name="warehouse" class="size-3 opacity-60" />
-                                            {{ row.sourceWarehouseName || row.sourceWarehouseCode || 'Store not recorded' }}
-                                        </span>
-                                        <span class="flex items-center gap-1">
-                                            <AppIcon name="refresh-cw" class="size-3 opacity-60" />
-                                            {{ row.movementCount }} movement{{ row.movementCount === 1 ? '' : 's' }}
-                                        </span>
-                                        <span class="flex items-center gap-1">
-                                            <AppIcon name="clock" class="size-3 opacity-60" />
-                                            Last issued {{ formatDateTime(row.lastIssuedAt) }}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
+                                <template #badges>
+                                    <Badge variant="secondary" class="h-5 px-1.5 text-[10px]">
+                                        {{ row.departmentName }}
+                                    </Badge>
+                                </template>
+                                <template #actions>
+                                    <Button
+                                        v-if="row.itemId"
+                                        size="sm"
+                                        variant="outline"
+                                        class="h-8 rounded-lg text-xs"
+                                        @click="openItemDetails({ id: row.itemId, itemName: row.itemName, itemCode: row.itemCode })"
+                                    >
+                                        View item
+                                    </Button>
+                                </template>
+                            </RegistryListRow>
                         </div>
                     </CardContent>
 
@@ -7986,21 +7775,7 @@ onMounted(async () => {
                             <button class="ml-1 text-[11px] text-muted-foreground underline-offset-2 hover:underline" @click="resetProcurementFilters()">Clear all</button>
                         </div>
 
-                        <!-- Skeleton loader -->
-                        <div v-if="loading" class="divide-y">
-                            <div v-for="n in 4" :key="`sk-pr-${n}`" class="flex items-start gap-3 px-4 py-4">
-                                <div class="mt-0.5 size-1 w-[3px] self-stretch animate-pulse rounded bg-muted" />
-                                <div class="min-w-0 flex-1 space-y-2">
-                                    <div class="flex items-center gap-2">
-                                        <div class="h-3.5 w-28 animate-pulse rounded bg-muted" />
-                                        <div class="h-5 w-16 animate-pulse rounded-full bg-muted" />
-                                    </div>
-                                    <div class="h-3 w-3/4 animate-pulse rounded bg-muted" />
-                                    <div class="h-3 w-1/2 animate-pulse rounded bg-muted" />
-                                </div>
-                                <div class="h-8 w-20 animate-pulse rounded-lg bg-muted" />
-                            </div>
-                        </div>
+                        <WorkflowQueueSkeleton v-if="loading" :count="4" />
 
                         <!-- Empty state -->
                         <div
@@ -8031,20 +7806,13 @@ onMounted(async () => {
 
                         <!-- Request rows -->
                         <div v-else class="divide-y">
-                            <div
+                            <WorkflowQueueRow
                                 v-for="request in procurementRequests"
                                 :key="request.id"
-                                class="relative flex items-start gap-3 px-4 py-4 transition-colors hover:bg-muted/30"
-                                :class="flashedRequestId === request.id ? 'animate-inv-row-flash' : ''"
+                                :stripe-class="procurementRequestStripeClass(request.status)"
+                                :flash="flashedRequestId === request.id"
                             >
-                                <!-- Status accent stripe -->
-                                <div
-                                    class="absolute inset-y-0 left-0 w-[3px] rounded-l"
-                                    :class="request.status === 'draft' ? 'bg-muted-foreground/30' : request.status === 'pending_approval' ? 'bg-blue-400' : request.status === 'approved' ? 'bg-green-500' : request.status === 'ordered' ? 'bg-amber-500' : request.status === 'received' ? 'bg-emerald-500' : request.status === 'rejected' ? 'bg-red-500' : request.status === 'cancelled' ? 'bg-muted-foreground/20' : 'bg-muted-foreground/30'"
-                                />
-                                <!-- Content -->
-                                <div class="min-w-0 flex-1">
-                                    <!-- Row 1: number + badges -->
+                                <div class="min-w-0 space-y-1">
                                     <div class="flex flex-wrap items-center gap-2">
                                         <p class="text-sm font-semibold">{{ request.requestNumber }}</p>
                                         <span
@@ -8057,64 +7825,60 @@ onMounted(async () => {
                                             Dept shortage
                                         </span>
                                     </div>
-                                    <!-- Row 2: item · qty · supplier · needed-by -->
                                     <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                                         <span>{{ request.itemName || request.itemId }}</span>
                                         <span>&middot;</span>
                                         <span>Qty: <strong class="text-foreground">{{ request.requestedQuantity }}</strong></span>
                                         <span v-if="request.supplierName || supplierLabel(request.supplierId)">&middot; {{ request.supplierName || supplierLabel(request.supplierId) }}</span>
                                         <span v-if="request.neededBy">&middot; Needed {{ request.neededBy }}</span>
-                                    </div>
-                                    <!-- Row 3: cost + source -->
-                                    <div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                                        <span v-if="request.unitCostEstimate">Unit: {{ formatAmount(request.unitCostEstimate) }}</span>
-                                        <span v-if="request.totalCostEstimate">&middot; Total est: {{ formatAmount(request.totalCostEstimate) }}</span>
+                                        <span v-if="request.unitCostEstimate">&middot; Unit {{ formatAmount(request.unitCostEstimate) }}</span>
+                                        <span v-if="request.totalCostEstimate">&middot; Total est {{ formatAmount(request.totalCostEstimate) }}</span>
                                         <span v-if="request.sourceDepartmentRequisitionId" class="text-muted-foreground/70">&middot; {{ procurementSourceLabel(request) }}</span>
                                     </div>
-                                    <!-- CTAs -->
-                                    <div class="mt-2.5 flex flex-wrap items-center gap-2">
-                                        <Button size="sm" variant="outline" class="h-7 rounded-lg px-2.5 text-xs" @click="openDetails(request)">
-                                            Details
-                                        </Button>
+                                </div>
+                                <template #actions>
+                                    <Button size="sm" variant="outline" class="h-7 rounded-lg px-2.5 text-xs" @click="openDetails(request)">
+                                        Details
+                                    </Button>
+                                    <Button
+                                        v-if="request.sourceDepartmentRequisitionId && request.status !== 'received'"
+                                        size="sm"
+                                        variant="outline"
+                                        class="h-7 rounded-lg px-2.5 text-xs"
+                                        :disabled="sourceRequisitionOpeningId === String(request.id)"
+                                        @click="openSourceRequisitionFromProcurement(request)"
+                                    >
+                                        {{ sourceRequisitionOpeningId === String(request.id) ? 'Opening...' : 'Source Req.' }}
+                                    </Button>
+                                    <template v-if="canUpdateRequestStatus">
                                         <Button
-                                            v-if="request.sourceDepartmentRequisitionId && request.status !== 'received'"
-                                            size="sm" variant="outline"
+                                            v-if="procurementPrimaryAction(request)"
+                                            size="sm"
                                             class="h-7 rounded-lg px-2.5 text-xs"
                                             :disabled="sourceRequisitionOpeningId === String(request.id)"
-                                            @click="openSourceRequisitionFromProcurement(request)"
+                                            @click="procurementPrimaryAction(request)!.handler()"
                                         >
-                                            {{ sourceRequisitionOpeningId === String(request.id) ? 'Opening...' : 'Source Req.' }}
+                                            {{ procurementPrimaryAction(request)!.label }}
                                         </Button>
-                                        <template v-if="canUpdateRequestStatus">
-                                            <Button
-                                                v-if="procurementPrimaryAction(request)"
-                                                size="sm"
-                                                class="h-7 rounded-lg px-2.5 text-xs"
-                                                :disabled="sourceRequisitionOpeningId === String(request.id)"
-                                                @click="procurementPrimaryAction(request)!.handler()"
-                                            >
-                                                {{ procurementPrimaryAction(request)!.label }}
-                                            </Button>
-                                            <DropdownMenu v-if="procurementOverflowActions(request).length">
-                                                <DropdownMenuTrigger as-child>
-                                                    <Button size="sm" variant="outline" class="h-7 rounded-lg px-2 text-xs">
-                                                        <AppIcon name="ellipsis-vertical" class="size-3.5" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem
-                                                        v-for="act in procurementOverflowActions(request)"
-                                                        :key="act.label"
-                                                        @click="act.handler()"
-                                                    >
-                                                        {{ act.label }}
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </template>
-                                    </div>
-                                </div>
-                            </div>
+                                        <DropdownMenu v-if="procurementOverflowActions(request).length">
+                                            <DropdownMenuTrigger as-child>
+                                                <Button size="sm" variant="outline" class="h-7 rounded-lg px-2 text-xs">
+                                                    <AppIcon name="ellipsis-vertical" class="size-3.5" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem
+                                                    v-for="act in procurementOverflowActions(request)"
+                                                    :key="act.label"
+                                                    @click="act.handler()"
+                                                >
+                                                    {{ act.label }}
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </template>
+                                </template>
+                            </WorkflowQueueRow>
                         </div>
 
                         <!-- Footer pagination -->
@@ -8258,20 +8022,7 @@ onMounted(async () => {
                     </div>
 
                     <CardContent class="flex min-h-0 flex-1 flex-col p-0">
-                        <div v-if="msdOrderLoading" class="divide-y">
-                            <div v-for="n in 4" :key="`msd-skeleton-${n}`" class="flex items-start gap-3 px-4 py-4">
-                                <div class="mt-0.5 size-1 w-[3px] self-stretch animate-pulse rounded bg-muted" />
-                                <div class="min-w-0 flex-1 space-y-2">
-                                    <div class="flex items-center gap-2">
-                                        <div class="h-3.5 w-32 animate-pulse rounded bg-muted" />
-                                        <div class="h-5 w-16 animate-pulse rounded-full bg-muted" />
-                                    </div>
-                                    <div class="h-3 w-3/4 animate-pulse rounded bg-muted" />
-                                    <div class="h-3 w-1/2 animate-pulse rounded bg-muted" />
-                                </div>
-                                <div class="h-8 w-20 animate-pulse rounded-lg bg-muted" />
-                            </div>
-                        </div>
+                        <WorkflowQueueSkeleton v-if="msdOrderLoading" :count="4" />
                         <div
                             v-else-if="msdOrders.length === 0"
                             class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center"
@@ -8289,62 +8040,41 @@ onMounted(async () => {
                             </Button>
                         </div>
                         <div v-else-if="msdOrders.length > 0" class="divide-y">
-                            <div v-for="order in msdOrders" :key="order.id" class="relative flex flex-col gap-3 px-4 py-4 transition-colors hover:bg-muted/30 md:flex-row md:items-start md:justify-between">
-                                <div class="absolute inset-y-0 left-0 w-[3px]" :class="msdStatusBadgeClass(order.status).includes('red') ? 'bg-destructive' : msdStatusBadgeClass(order.status).includes('green') ? 'bg-green-500' : msdStatusBadgeClass(order.status).includes('amber') ? 'bg-amber-500' : msdStatusBadgeClass(order.status).includes('blue') ? 'bg-blue-500' : 'bg-muted-foreground/30'" />
-                                <div class="min-w-0 flex-1">
+                            <WorkflowQueueRow
+                                v-for="order in msdOrders"
+                                :key="order.id"
+                                :stripe-class="msdStatusBadgeClass(order.status).includes('red') ? 'bg-destructive' : msdStatusBadgeClass(order.status).includes('green') ? 'bg-green-500' : msdStatusBadgeClass(order.status).includes('amber') ? 'bg-amber-500' : msdStatusBadgeClass(order.status).includes('blue') ? 'bg-blue-500' : 'bg-muted-foreground/30'"
+                            >
+                                <div class="min-w-0 space-y-1">
                                     <div class="flex flex-wrap items-center gap-2">
                                         <p class="font-mono text-sm font-semibold">{{ order.msd_order_number }}</p>
                                         <Badge :class="msdStatusBadgeClass(order.status)">{{ formatEnumLabel(order.status) }}</Badge>
                                     </div>
-                                    <p class="mt-1 text-xs text-muted-foreground">
-                                        Facility {{ order.facility_msd_code || 'not set' }} &middot; {{ Array.isArray(order.order_lines) ? order.order_lines.length : 0 }} line{{ Array.isArray(order.order_lines) && order.order_lines.length === 1 ? '' : 's' }}
+                                    <p class="text-xs text-muted-foreground">
+                                        Facility {{ order.facility_msd_code || 'not set' }}
+                                        <span>&middot;</span>
+                                        {{ Array.isArray(order.order_lines) ? order.order_lines.length : 0 }} line{{ Array.isArray(order.order_lines) && order.order_lines.length === 1 ? '' : 's' }}
+                                        <span>&middot;</span>
+                                        Order {{ order.order_date || 'N/A' }}
+                                        <span>&middot;</span>
+                                        TZS {{ order.total_amount != null ? Number(order.total_amount).toLocaleString() : 'N/A' }}
+                                        <span>&middot;</span>
+                                        {{ order.submission_reference || 'Not submitted' }}
                                     </p>
-                                    <div class="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-3">
-                                        <p>Order date <span class="text-foreground">{{ order.order_date || 'N/A' }}</span></p>
-                                        <p>Total <span class="font-medium text-foreground">TZS {{ order.total_amount != null ? Number(order.total_amount).toLocaleString() : 'N/A' }}</span></p>
-                                        <p>Reference <span class="font-mono text-foreground">{{ order.submission_reference || 'Not submitted' }}</span></p>
-                                    </div>
                                 </div>
-                                <div class="flex shrink-0 items-center gap-1.5">
-                                    <Button v-if="order.submission_reference" variant="outline" size="sm" class="h-8 gap-1.5 rounded-lg text-xs" @click="syncMsdOrderStatus(order.id)">
+                                <template #actions>
+                                    <Button
+                                        v-if="order.submission_reference"
+                                        variant="outline"
+                                        size="sm"
+                                        class="h-7 gap-1.5 rounded-lg px-2.5 text-xs"
+                                        @click="syncMsdOrderStatus(order.id)"
+                                    >
                                         <AppIcon name="refresh-cw" class="size-3.5" />
                                         Sync
                                     </Button>
-                                </div>
-                            </div>
-                        </div>
-                        <div v-if="false" class="overflow-auto">
-                            <table class="w-full text-sm">
-                                <thead>
-                                    <tr class="border-b text-left text-xs text-muted-foreground">
-                                        <th class="pb-2 pr-4 font-medium">Order #</th>
-                                        <th class="pb-2 pr-4 font-medium">Facility Code</th>
-                                        <th class="pb-2 pr-4 font-medium">Order Date</th>
-                                        <th class="pb-2 pr-4 font-medium">Lines</th>
-                                        <th class="pb-2 pr-4 font-medium">Total (TZS)</th>
-                                        <th class="pb-2 pr-4 font-medium">Status</th>
-                                        <th class="pb-2 pr-4 font-medium">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="order in msdOrders" :key="order.id" class="border-b last:border-0">
-                                        <td class="py-2 pr-4 font-medium">{{ order.msd_order_number }}</td>
-                                        <td class="py-2 pr-4 text-xs">{{ order.facility_msd_code || '—' }}</td>
-                                        <td class="py-2 pr-4 text-xs">{{ order.order_date }}</td>
-                                        <td class="py-2 pr-4 text-xs">{{ Array.isArray(order.order_lines) ? order.order_lines.length : 0 }}</td>
-                                        <td class="py-2 pr-4 text-xs">{{ order.total_amount != null ? Number(order.total_amount).toLocaleString() : '—' }}</td>
-                                        <td class="py-2 pr-4">
-                                            <Badge :class="msdStatusBadgeClass(order.status)">{{ formatEnumLabel(order.status) }}</Badge>
-                                        </td>
-                                        <td class="py-2 pr-4">
-                                            <Button v-if="order.submission_reference" variant="outline" size="sm" class="h-7 text-xs" @click="syncMsdOrderStatus(order.id)">
-                                                <AppIcon name="refresh-cw" class="mr-1 size-3" />
-                                                Sync
-                                            </Button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                                </template>
+                            </WorkflowQueueRow>
                         </div>
                         <footer v-if="msdOrderPagination && msdOrderPagination.lastPage > 1" class="flex shrink-0 items-center justify-between border-t bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground">
                             <span>Page {{ msdOrderPagination.currentPage }} of {{ msdOrderPagination.lastPage }}{{ msdOrderPagination.total != null ? ` (${msdOrderPagination.total} total)` : '' }}</span>
@@ -8420,16 +8150,7 @@ onMounted(async () => {
                             </div>
                         </div>
 
-                        <!-- Skeleton -->
-                        <div v-if="leadTimeLoading" class="divide-y">
-                            <div v-for="n in 4" :key="`sk-lt-${n}`" class="flex items-start gap-3 px-4 py-4">
-                                <div class="min-w-0 flex-1 space-y-2">
-                                    <div class="h-3.5 w-1/3 animate-pulse rounded bg-muted" />
-                                    <div class="h-3 w-2/3 animate-pulse rounded bg-muted" />
-                                </div>
-                                <div class="h-6 w-16 animate-pulse rounded-full bg-muted" />
-                            </div>
-                        </div>
+                        <WorkflowQueueSkeleton v-if="leadTimeLoading" :count="4" />
 
                         <!-- No supplier selected -->
                         <div
@@ -8459,14 +8180,12 @@ onMounted(async () => {
 
                         <!-- Lead time rows -->
                         <div v-else class="divide-y">
-                            <div v-for="lt in leadTimes" :key="lt.id" class="relative flex items-start gap-3 px-4 py-4 transition-colors hover:bg-muted/30">
-                                <!-- Delivery status stripe -->
-                                <div
-                                    class="absolute inset-y-0 left-0 w-[3px] rounded-l"
-                                    :class="lt.delivery_status === 'on_time' ? 'bg-green-500' : lt.delivery_status === 'late' ? 'bg-red-500' : lt.delivery_status === 'early' ? 'bg-sky-500' : 'bg-muted-foreground/30'"
-                                />
-                                <div class="min-w-0 flex-1">
-                                    <!-- Row 1: dates + status badge -->
+                            <WorkflowQueueRow
+                                v-for="lt in leadTimes"
+                                :key="lt.id"
+                                :stripe-class="lt.delivery_status === 'on_time' ? 'bg-green-500' : lt.delivery_status === 'late' ? 'bg-red-500' : lt.delivery_status === 'early' ? 'bg-sky-500' : 'bg-muted-foreground/30'"
+                            >
+                                <div class="min-w-0 space-y-1">
                                     <div class="flex flex-wrap items-center gap-2">
                                         <span class="text-sm font-medium">{{ lt.order_date ? new Date(lt.order_date).toLocaleDateString() : '—' }}</span>
                                         <span class="text-xs text-muted-foreground">→</span>
@@ -8478,23 +8197,25 @@ onMounted(async () => {
                                             {{ (lt.delivery_status ?? 'pending').replace(/_/g, ' ') }}
                                         </span>
                                     </div>
-                                    <!-- Row 2: lead days · qty · fulfillment -->
-                                    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                                    <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                                         <span>Lead: <strong class="text-foreground">{{ lt.actual_lead_time_days ?? lt.expected_lead_time_days ?? '—' }}d</strong></span>
                                         <span v-if="lt.quantity_ordered != null">&middot; Ordered: <strong class="text-foreground">{{ lt.quantity_ordered }}</strong></span>
                                         <span v-if="lt.quantity_received != null">&middot; Received: <strong class="text-foreground">{{ lt.quantity_received }}</strong></span>
                                         <span v-if="lt.fulfillment_rate != null">&middot; Fulfillment: <strong class="text-foreground">{{ lt.fulfillment_rate }}%</strong></span>
                                     </div>
                                 </div>
-                                <Button
-                                    v-if="lt.delivery_status === 'pending'"
-                                    size="sm" variant="outline"
-                                    class="h-7 shrink-0 rounded-lg px-2.5 text-xs"
-                                    @click="openRecordDelivery(lt)"
-                                >
-                                    Record delivery
-                                </Button>
-                            </div>
+                                <template #actions>
+                                    <Button
+                                        v-if="lt.delivery_status === 'pending'"
+                                        size="sm"
+                                        variant="outline"
+                                        class="h-7 rounded-lg px-2.5 text-xs"
+                                        @click="openRecordDelivery(lt)"
+                                    >
+                                        Record delivery
+                                    </Button>
+                                </template>
+                            </WorkflowQueueRow>
                         </div>
 
                         <!-- Footer pagination -->
@@ -8592,20 +8313,7 @@ onMounted(async () => {
                     </div>
 
                     <CardContent class="flex min-h-0 flex-1 flex-col p-0">
-                        <div v-if="claimLinkLoading" class="divide-y">
-                            <div v-for="n in 4" :key="`claim-skeleton-${n}`" class="flex items-start gap-3 px-4 py-4">
-                                <div class="mt-0.5 size-1 w-[3px] self-stretch animate-pulse rounded bg-muted" />
-                                <div class="min-w-0 flex-1 space-y-2">
-                                    <div class="flex items-center gap-2">
-                                        <div class="h-3.5 w-28 animate-pulse rounded bg-muted" />
-                                        <div class="h-5 w-16 animate-pulse rounded-full bg-muted" />
-                                    </div>
-                                    <div class="h-3 w-3/4 animate-pulse rounded bg-muted" />
-                                    <div class="h-3 w-1/2 animate-pulse rounded bg-muted" />
-                                </div>
-                                <div class="h-8 w-20 animate-pulse rounded-lg bg-muted" />
-                            </div>
-                        </div>
+                        <WorkflowQueueSkeleton v-if="claimLinkLoading" :count="4" />
                         <div
                             v-else-if="claimLinks.length === 0"
                             class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center"
@@ -8623,54 +8331,43 @@ onMounted(async () => {
                             </Button>
                         </div>
                         <div v-else-if="claimLinks.length > 0" class="divide-y">
-                            <div v-for="link in claimLinks" :key="link.id" class="relative flex flex-col gap-3 px-4 py-4 transition-colors hover:bg-muted/30 md:flex-row md:items-start md:justify-between">
-                                <div class="absolute inset-y-0 left-0 w-[3px]" :class="claimStatusBadgeClass(link.claim_status).includes('red') ? 'bg-destructive' : claimStatusBadgeClass(link.claim_status).includes('green') ? 'bg-green-500' : claimStatusBadgeClass(link.claim_status).includes('blue') ? 'bg-blue-500' : 'bg-muted-foreground/30'" />
-                                <div class="min-w-0 flex-1">
+                            <WorkflowQueueRow
+                                v-for="link in claimLinks"
+                                :key="link.id"
+                                :stripe-class="claimStatusBadgeClass(link.claim_status).includes('red') ? 'bg-destructive' : claimStatusBadgeClass(link.claim_status).includes('green') ? 'bg-green-500' : claimStatusBadgeClass(link.claim_status).includes('blue') ? 'bg-blue-500' : 'bg-muted-foreground/30'"
+                            >
+                                <div class="min-w-0 space-y-1">
                                     <div class="flex flex-wrap items-center gap-2">
                                         <p class="font-mono text-sm font-semibold">{{ link.nhif_code || link.id }}</p>
                                         <Badge :class="claimStatusBadgeClass(link.claim_status)">{{ formatEnumLabel(link.claim_status) }}</Badge>
                                     </div>
-                                    <p class="mt-1 text-xs text-muted-foreground">
-                                        {{ link.payer_name || link.payer_type || 'No payer recorded' }} &middot; Qty {{ formatAmount(link.quantity_dispensed) }} {{ link.unit || '' }}
+                                    <p class="text-xs text-muted-foreground">
+                                        {{ link.payer_name || link.payer_type || 'No payer recorded' }}
+                                        <span>&middot;</span>
+                                        Qty {{ formatAmount(link.quantity_dispensed) }} {{ link.unit || '' }}
+                                        <span>&middot;</span>
+                                        Item {{ link.item_id?.substring(0, 8) || 'N/A' }}
+                                        <span>&middot;</span>
+                                        Patient {{ link.patient_id?.substring(0, 8) || 'N/A' }}
+                                        <span>&middot;</span>
+                                        {{ link.created_at?.substring(0, 10) || 'N/A' }}
                                     </p>
-                                    <div class="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-3">
-                                        <p>Item <span class="font-mono text-foreground">{{ link.item_id?.substring(0, 8) || 'N/A' }}</span></p>
-                                        <p>Patient <span class="font-mono text-foreground">{{ link.patient_id?.substring(0, 8) || 'N/A' }}</span></p>
-                                        <p>Created <span class="text-foreground">{{ link.created_at?.substring(0, 10) || 'N/A' }}</span></p>
-                                    </div>
                                 </div>
-                                <div class="flex shrink-0 items-center gap-1.5">
-                                    <Badge variant="outline" class="rounded-lg">{{ link.payer_type || 'payer' }}</Badge>
-                                </div>
-                            </div>
-                        </div>
-                        <div v-if="false" class="overflow-auto">
-                            <table class="w-full text-sm">
-                                <thead>
-                                    <tr class="border-b text-left text-xs text-muted-foreground">
-                                        <th class="pb-2 pr-4 font-medium">Item ID</th>
-                                        <th class="pb-2 pr-4 font-medium">Patient ID</th>
-                                        <th class="pb-2 pr-4 font-medium">NHIF Code</th>
-                                        <th class="pb-2 pr-4 font-medium">Qty</th>
-                                        <th class="pb-2 pr-4 font-medium">Payer</th>
-                                        <th class="pb-2 pr-4 font-medium">Status</th>
-                                        <th class="pb-2 pr-4 font-medium">Created</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="link in claimLinks" :key="link.id" class="border-b last:border-0">
-                                        <td class="py-2 pr-4 font-mono text-xs">{{ link.item_id?.substring(0, 8) }}...</td>
-                                        <td class="py-2 pr-4 font-mono text-xs">{{ link.patient_id?.substring(0, 8) }}...</td>
-                                        <td class="py-2 pr-4">{{ link.nhif_code || '—' }}</td>
-                                        <td class="py-2 pr-4">{{ link.quantity_dispensed }} {{ link.unit || '' }}</td>
-                                        <td class="py-2 pr-4">{{ link.payer_name || link.payer_type || '—' }}</td>
-                                        <td class="py-2 pr-4">
-                                            <Badge :class="claimStatusBadgeClass(link.claim_status)">{{ formatEnumLabel(link.claim_status) }}</Badge>
-                                        </td>
-                                        <td class="py-2 pr-4 text-xs text-muted-foreground">{{ link.created_at?.substring(0, 10) }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                                <template #actions>
+                                    <Badge variant="outline" class="h-7 rounded-lg px-2 text-[11px]">
+                                        {{ link.payer_type || 'payer' }}
+                                    </Badge>
+                                    <Button
+                                        v-if="link.item_id"
+                                        size="sm"
+                                        variant="outline"
+                                        class="h-7 rounded-lg px-2.5 text-xs"
+                                        @click="openItemDetails({ id: link.item_id })"
+                                    >
+                                        View item
+                                    </Button>
+                                </template>
+                            </WorkflowQueueRow>
                         </div>
                         <footer v-if="claimLinkPagination && claimLinkPagination.lastPage > 1" class="flex shrink-0 items-center justify-between border-t bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground">
                             <span>Page {{ claimLinkPagination.currentPage }} of {{ claimLinkPagination.lastPage }}{{ claimLinkPagination.total != null ? ` (${claimLinkPagination.total} total)` : '' }}</span>
@@ -10698,8 +10395,54 @@ onMounted(async () => {
                 </div>
             </SheetHeader>
             <div class="min-h-0 flex-1 overflow-hidden">
-                <div v-if="itemDetailsLoading" class="space-y-2 p-4">
-                    <p class="text-sm text-muted-foreground">Loading item details...</p>
+                <div v-if="itemDetailsLoading" class="h-full overflow-y-auto p-4">
+                    <div class="space-y-4">
+                        <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                            <div
+                                v-for="label in ['Stock state', 'On hand', 'Default route']"
+                                :key="label"
+                                class="min-w-0 rounded-lg border bg-background/70 px-3 py-2"
+                            >
+                                <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{{ label }}</p>
+                                <Skeleton class="mt-2 h-4 w-28" />
+                                <Skeleton class="mt-1.5 h-3 w-40" />
+                            </div>
+                        </div>
+
+                        <Card class="min-w-0">
+                            <CardHeader class="pb-3">
+                                <CardTitle class="text-base">Master Record</CardTitle>
+                                <CardDescription>Core item identity and how this stock definition is classified in the system.</CardDescription>
+                            </CardHeader>
+                            <CardContent class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                <div
+                                    v-for="label in ['Item code', 'Item name', 'Category', 'Subcategory', 'Stock unit', 'Clinical link']"
+                                    :key="label"
+                                    class="space-y-1"
+                                >
+                                    <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{{ label }}</p>
+                                    <Skeleton class="h-4 w-32 max-w-full" />
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card class="min-w-0">
+                            <CardHeader class="pb-3">
+                                <CardTitle class="text-base">Handling &amp; Routing</CardTitle>
+                                <CardDescription>Storage, manufacturer, and operational routing details used by stores workflows.</CardDescription>
+                            </CardHeader>
+                            <CardContent class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                <div
+                                    v-for="label in ['Manufacturer', 'Bin location', 'Storage conditions', 'Cold chain', 'Controlled substance', 'Dispensing unit']"
+                                    :key="label"
+                                    class="space-y-1"
+                                >
+                                    <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{{ label }}</p>
+                                    <Skeleton class="h-4 w-28 max-w-full" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
                 </div>
                 <Alert v-else-if="itemDetailsError" variant="destructive" class="m-4">
                     <AlertTitle>Item load failed</AlertTitle>
@@ -11274,11 +11017,11 @@ onMounted(async () => {
                                         <div v-else-if="itemBatches.length === 0" class="rounded-lg border border-dashed bg-muted/10 p-4 text-sm text-muted-foreground">
                                             No batches have been recorded for this item yet.
                                         </div>
-                                        <div v-else class="space-y-2">
+                                        <div v-else class="overflow-hidden rounded-lg border">
                                             <div
                                                 v-for="batch in itemBatches"
                                                 :key="batch.id"
-                                                class="rounded-lg border bg-background/70 p-3"
+                                                class="border-b bg-background/70 p-3 transition-colors last:border-b-0 hover:bg-muted/30"
                                             >
                                                 <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                                                     <div class="min-w-0 space-y-1">
@@ -11397,8 +11140,8 @@ onMounted(async () => {
                                         <div v-else-if="itemAuditLogs.length === 0" class="rounded-lg border border-dashed bg-muted/10 p-4 text-sm text-muted-foreground">
                                             No audit logs found for the current filters.
                                         </div>
-                                        <div v-else class="space-y-2">
-                                            <div v-for="log in itemAuditLogs" :key="log.id" class="rounded border p-2 text-xs">
+                                        <div v-else class="overflow-hidden rounded-lg border">
+                                            <div v-for="log in itemAuditLogs" :key="log.id" class="border-b p-2 text-xs transition-colors last:border-b-0 hover:bg-muted/30">
                                                 <p class="font-medium">{{ log.action }}</p>
                                                 <p class="text-muted-foreground">{{ formatDateTime(log.createdAt) }} | {{ auditActorLabel(log) }}</p>
                                             </div>
@@ -11862,8 +11605,8 @@ onMounted(async () => {
                         <p v-if="detailsAuditLoading" class="text-muted-foreground">Loading audit logs...</p>
                         <p v-else-if="detailsAuditError" class="text-red-600">{{ detailsAuditError }}</p>
                         <p v-else-if="detailsAuditLogs.length === 0" class="text-muted-foreground">No audit logs found for current filters.</p>
-                        <div v-else class="space-y-2">
-                            <div v-for="log in detailsAuditLogs" :key="log.id" class="rounded border p-2 text-xs">
+                        <div v-else class="overflow-hidden rounded-lg border">
+                            <div v-for="log in detailsAuditLogs" :key="log.id" class="border-b p-2 text-xs transition-colors last:border-b-0 hover:bg-muted/30">
                                 <p class="font-medium">{{ log.action }}</p>
                                 <p class="text-muted-foreground">{{ formatDateTime(log.createdAt) }} | {{ auditActorLabel(log) }}</p>
                             </div>

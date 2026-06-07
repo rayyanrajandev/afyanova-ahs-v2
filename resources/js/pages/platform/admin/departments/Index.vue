@@ -3,6 +3,8 @@ import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref } from 'vue';
 import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import RegistryListRow from '@/components/list/RegistryListRow.vue';
+import RegistryListSkeleton from '@/components/list/RegistryListSkeleton.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +25,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { activeInactiveStatusDotClass } from '@/lib/listRows';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
 import { type BreadcrumbItem } from '@/types';
@@ -941,7 +944,6 @@ onMounted(() => {
                                     </span>
                                 </span>
                                 <span class="select-none text-border" aria-hidden="true">·</span>
-                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
                             </div>
                         </div>
                     </div>
@@ -1071,22 +1073,7 @@ onMounted(() => {
                     <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
                         <ScrollArea class="min-h-0 flex-1">
                             <div class="min-h-[12rem]">
-                                <div v-if="loading || listLoading" class="divide-y px-4">
-                                    <div
-                                        v-for="index in 6"
-                                        :key="`department-skeleton-${index}`"
-                                        class="flex items-center gap-3 py-3"
-                                    >
-                                        <Skeleton class="size-2 shrink-0 rounded-full" />
-                                        <div class="min-w-0 flex-1 space-y-2">
-                                            <Skeleton class="h-4 w-48" />
-                                            <Skeleton class="h-3.5 w-64 max-w-full" />
-                                        </div>
-                                        <Skeleton class="hidden h-5 w-14 shrink-0 rounded-full sm:block" />
-                                        <Skeleton class="h-8 w-16 shrink-0 rounded-md" />
-                                        <Skeleton class="hidden h-8 w-12 shrink-0 rounded-md sm:block" />
-                                    </div>
-                                </div>
+                                <RegistryListSkeleton v-if="loading || listLoading" :count="6" />
                                 <div v-else-if="items.length === 0" class="flex flex-col items-center gap-3 px-4 py-10 text-center">
                                     <div class="flex size-10 items-center justify-center rounded-lg bg-muted">
                                         <AppIcon name="building-2" class="size-4 text-muted-foreground" />
@@ -1109,21 +1096,14 @@ onMounted(() => {
                                     </div>
                                 </div>
                                 <div v-else class="divide-y px-4">
-                                    <div
+                                    <RegistryListRow
                                         v-for="item in items"
                                         :key="item.id || item.code || item.name"
-                                        class="flex items-center gap-3 py-3 transition-colors hover:bg-muted/30"
+                                        :status-dot-class="activeInactiveStatusDotClass(item.status)"
+                                        :status-title="item.status"
+                                        @select="openDepartmentDetails(item)"
                                     >
-                                        <span
-                                            class="size-2 shrink-0 rounded-full"
-                                            :class="(item.status ?? '').toLowerCase() === 'active' ? 'bg-emerald-500' : 'bg-rose-500'"
-                                            :title="(item.status ?? 'unknown').toString()"
-                                        />
-                                        <button
-                                            type="button"
-                                            class="min-w-0 flex-1 space-y-0.5 text-left"
-                                            @click="openDepartmentDetails(item)"
-                                        >
+                                        <template #title>
                                             <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                                                 <span class="truncate text-sm font-medium transition-colors hover:text-primary">
                                                     {{ item.name || labelOf(item) }}
@@ -1132,6 +1112,8 @@ onMounted(() => {
                                                     {{ item.code || 'No code' }}
                                                 </span>
                                             </div>
+                                        </template>
+                                        <template #meta>
                                             <p class="truncate text-xs text-muted-foreground">
                                                 {{ item.serviceType || 'Uncategorized' }}
                                                 <span class="text-border"> · </span>
@@ -1157,8 +1139,8 @@ onMounted(() => {
                                                     </Tooltip>
                                                 </TooltipProvider>
                                             </p>
-                                        </button>
-                                        <div class="hidden shrink-0 flex-wrap items-center gap-1.5 sm:flex">
+                                        </template>
+                                        <template #badges>
                                             <Badge :variant="statusVariant(item.status)">
                                                 {{ item.status || 'unknown' }}
                                             </Badge>
@@ -1168,8 +1150,8 @@ onMounted(() => {
                                             <Badge v-if="item.isAppointmentable" variant="outline">
                                                 Appointmentable
                                             </Badge>
-                                        </div>
-                                        <div class="flex shrink-0 items-center gap-1.5">
+                                        </template>
+                                        <template #actions>
                                             <Button
                                                 size="sm"
                                                 variant="outline"
@@ -1187,8 +1169,8 @@ onMounted(() => {
                                             >
                                                 Edit
                                             </Button>
-                                        </div>
-                                    </div>
+                                        </template>
+                                    </RegistryListRow>
                                 </div>
                             </div>
                         </ScrollArea>
@@ -2012,6 +1994,7 @@ onMounted(() => {
         </div>
     </AppLayout>
 </template>
+
 
 
 
