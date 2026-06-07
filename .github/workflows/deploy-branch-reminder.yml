@@ -1,0 +1,47 @@
+name: Deploy branch reminder
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+    branches: [main]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  remind:
+    if: github.event.pull_request.head.ref != 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment deploy source-of-truth
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const marker = '<!-- deploy-branch-reminder -->';
+            const body = `${marker}
+            ### Cloud deploy note
+
+            This PR is from \`${pr.head.ref}\`. **Cloud/production UI is built from \`main\` only** (see \`Dockerfile\`: \`npm run build\` on merged code).
+
+            Localhost on a feature branch will look different from cloud until this PR is **merged to \`main\`** and production **redeploys**.
+
+            **After merge:** confirm the host pulled the merge commit and rebuilt frontend assets.`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+            });
+
+            if (comments.some((c) => c.body?.includes(marker))) {
+              core.info('Deploy reminder already posted.');
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body,
+            });

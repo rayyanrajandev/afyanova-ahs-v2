@@ -1,0 +1,32 @@
+---
+description: Cloud deploys from main only — feature branches are local/staging until merged
+alwaysApply: true
+---
+
+# Deployment branches
+
+## Source of truth for cloud
+
+- **Production / cloud UI** is built from **`main`** (Docker image runs `npm run build` on whatever is merged there).
+- **Feature branches** (`feat/*`, `fix/*`, etc.) are for local dev and PR review only until merged into `main`.
+- Pushing to a feature branch does **not** update cloud. Merge to `main`, then redeploy.
+
+## Before telling the user "cloud should match localhost"
+
+1. Confirm localhost is on the same branch as cloud (`main`), or explain the branch gap explicitly.
+2. If work is on a feature branch, say: **merge PR → `main` → redeploy** — not "push again."
+
+## When finishing UI work that should reach cloud
+
+1. Open PR: `feat/...` → `main`
+2. Pass CI (lint + tests)
+3. Merge to `main`
+4. Trigger production redeploy (host pulls `main` and rebuilds assets)
+
+## Quick check commands
+
+```bash
+git branch --show-current
+git log --oneline origin/main..HEAD    # commits not yet on cloud
+git log --oneline HEAD..origin/main    # cloud ahead of you (rare)
+```
