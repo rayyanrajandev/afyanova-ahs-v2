@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type Ref } from 'vue';
+import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue } from '@/pages/inventory-procurement/workspace/constants';
+import { clearInventoryWorkspace } from '@/pages/inventory-procurement/workspace/inventoryWorkspaceApi';
+import { bindInventoryWorkspace } from '@/pages/inventory-procurement/workspace/registerInventoryWorkspaceApi';
+import {
+    WorkspaceClaimsTab,
+    WorkspaceLeadTimesTab,
+    WorkspaceMsdOrdersTab,
+    WorkspaceOverviewTab,
+    WorkspaceRequisitionsTab,
+} from '@/pages/inventory-procurement/workspace/workspaceTabComponents';
 import AppIcon from '@/components/AppIcon.vue';
 import BillingInvoiceLookupField from '@/components/billing/BillingInvoiceLookupField.vue';
 import ClaimsInsuranceCaseLookupField from '@/components/claims/ClaimsInsuranceCaseLookupField.vue';
@@ -55,7 +65,6 @@ import {
     inventoryWorkspaceHref,
     normalizeInventoryWorkspaceSection,
 } from '@/lib/inventoryProcurement';
-import WorkspaceOverviewTab from '@/pages/inventory-procurement/workspace/WorkspaceOverviewTab.vue';
 import { type RequestPipelineStage, type WorkspaceNextAction } from '@/pages/inventory-procurement/workspace/workspaceOverview';
 import { useRequestPipelineCounts } from '@/pages/inventory-procurement/workspace/useRequestPipelineCounts';
 import {
@@ -179,16 +188,7 @@ function useLocalStorageString<T extends string>(key: string, defaultValue: T, v
     return state;
 }
 
-const EMPTY_SELECT_VALUE = '__inventory_procurement_empty_select__';
 const INVENTORY_ITEM_CREATE_DRAFT_STORAGE_KEY = 'ahs.inventory-procurement.create-item-draft.v1';
-
-function toSelectValue(value: string | null | undefined): string {
-    return value == null || value === '' ? EMPTY_SELECT_VALUE : value;
-}
-
-function fromSelectValue(value: string): string {
-    return value === EMPTY_SELECT_VALUE ? '' : value;
-}
 
 const stockStateOptions = ['out_of_stock', 'low_stock', 'healthy'] as const;
 const procurementStatusOptions = ['draft', 'pending_approval', 'approved', 'rejected', 'ordered', 'received', 'cancelled'] as const;
@@ -5916,11 +5916,75 @@ function handleKeyboardShortcut(e: KeyboardEvent) {
     }
 }
 
+bindInventoryWorkspace({
+    canRead,
+    canCreateRequest,
+    canManageItems,
+    deptReqSearch,
+    deptReqLoading,
+    deptRequisitions,
+    deptReqPagination,
+    deptReqFilterChips,
+    hasAnyDeptReqFilters,
+    REQUISITION_STATUSES,
+    EMPTY_SELECT_VALUE,
+    requisitionDepartmentOptions,
+    canSelectAnyRequisitionDepartment,
+    loadDeptRequisitions,
+    resetDeptReqFilters,
+    openCreateRequisitionDialog,
+    openRequisitionDetails,
+    updateRequisitionStatus,
+    requisitionPrimaryActionLabel,
+    reqStatusBadgeClass,
+    warehouseLabel,
+    formatDateOnly,
+    formatDateTime,
+    formatEnumLabel,
+    toSelectValue,
+    fromSelectValue,
+    lookupOptionText,
+    claimLinks,
+    claimLinkPagination,
+    claimLinkLoading,
+    claimLinkSearch,
+    CLAIM_STATUSES,
+    createClaimLinkDialogOpen,
+    loadClaimLinks,
+    claimStatusBadgeClass,
+    formatAmount,
+    openItemDetails,
+    msdOrders,
+    msdOrderPagination,
+    msdOrderLoading,
+    msdOrderSearch,
+    MSD_ORDER_STATUSES,
+    shortageMsdDraftLines,
+    lowStockMsdDraftLines,
+    openMsdOrderFromDraft,
+    openBlankMsdOrder,
+    loadMsdOrders,
+    msdStatusBadgeClass,
+    syncMsdOrderStatus,
+    leadTimeSearch,
+    leadTimeLoading,
+    leadTimes,
+    leadTimePagination,
+    suppliers,
+    supplierPerformance,
+    supplierLabel,
+    createLeadTimeDialogOpen,
+    loadLeadTimes,
+    deliveryStatusBadge,
+    openRecordDelivery,
+});
+
 onBeforeUnmount(() => {
     stopPolling();
     if (flashedItemTimer) clearTimeout(flashedItemTimer);
     if (flashedRequestTimer) clearTimeout(flashedRequestTimer);
     document.removeEventListener('keydown', handleKeyboardShortcut);
+    clearInventoryWorkspace();
 });
 
 onMounted(async () => {
@@ -6090,7 +6154,7 @@ onMounted(async () => {
 
             <div class="flex min-w-0 flex-col gap-4">
                 <TabsContent value="overview" class="mt-0 flex flex-col gap-4">
-                    <WorkspaceOverviewTab
+                    <WorkspaceOverviewTab v-if="activeTab === 'overview'"
                         :workspace-next-actions="workspaceNextActions"
                         :request-pipeline-stages="requestPipelineStages"
                         :requisitions-ready-count="requisitionsReadyCount"
@@ -6104,183 +6168,7 @@ onMounted(async () => {
 
                 <!-- Department Requisitions tab -->
                 <TabsContent value="requisitions" class="mt-0 flex flex-col gap-4">
-                <Card v-if="canRead" class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col shadow-sm">
-
-                    <!-- Header -->
-                    <div class="flex items-center justify-between gap-4 border-b px-4 py-3.5">
-                        <div class="min-w-0">
-                            <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
-                                <AppIcon name="clipboard-list" class="size-4 text-muted-foreground" />
-                                Department Requisitions
-                            </h3>
-                            <p class="mt-1 text-xs text-muted-foreground">Internal requests from hospital departments for inventory items.</p>
-                        </div>
-                        <Button v-if="canCreateRequest" size="sm" class="h-9 shrink-0 gap-1.5" @click="openCreateRequisitionDialog">
-                            <AppIcon name="plus" class="size-3.5" />
-                            New Requisition
-                        </Button>
-                    </div>
-
-                    <!-- Toolbar -->
-                    <div class="flex items-center gap-2 border-b px-4 py-3">
-                        <SearchInput
-                            id="req-search-q"
-                            v-model="deptReqSearch.q"
-                            placeholder="Req # or department…"
-                            class="min-w-0 flex-1"
-                            @keyup.enter="deptReqSearch.page = 1; loadDeptRequisitions()"
-                        />
-                        <Select :model-value="toSelectValue(deptReqSearch.status)" @update:model-value="deptReqSearch.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
-                            <SelectTrigger class="h-9 w-36 text-xs">
-                                <SelectValue placeholder="All statuses" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
-                                <SelectItem v-for="s in REQUISITION_STATUSES" :key="s" :value="s">{{ formatEnumLabel(s) }}</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Select
-                            v-if="canSelectAnyRequisitionDepartment"
-                            :model-value="toSelectValue(deptReqSearch.departmentId)"
-                            @update:model-value="deptReqSearch.departmentId = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))"
-                        >
-                            <SelectTrigger class="h-9 w-44 text-xs" :disabled="!canSelectAnyRequisitionDepartment">
-                                <SelectValue placeholder="All departments" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem v-if="canSelectAnyRequisitionDepartment" :value="EMPTY_SELECT_VALUE">All departments</SelectItem>
-                                <SelectItem v-for="department in requisitionDepartmentOptions" :key="department.id" :value="department.id" :text-value="lookupOptionText(department)">
-                                    {{ lookupOptionText(department) }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Button size="sm" variant="outline" class="h-9 gap-1.5 text-xs" @click="deptReqSearch.page = 1; loadDeptRequisitions()">
-                            <AppIcon name="search" class="size-3.5" />
-                            Search
-                        </Button>
-                        <Button v-if="hasAnyDeptReqFilters" size="sm" variant="ghost" class="h-9 gap-1.5 text-xs text-muted-foreground" @click="resetDeptReqFilters">
-                            <AppIcon name="x" class="size-3.5" />
-                            Reset
-                        </Button>
-                    </div>
-
-                    <!-- Active filter chips -->
-                    <div v-if="deptReqFilterChips.length" class="flex flex-wrap gap-1.5 border-b px-4 py-2">
-                        <Badge v-for="chip in deptReqFilterChips" :key="chip" variant="secondary" class="rounded-md text-xs">
-                            {{ chip }}
-                        </Badge>
-                    </div>
-
-                    <CardContent class="flex-1 overflow-auto p-0">
-
-                        <WorkflowQueueSkeleton v-if="deptReqLoading" :count="5" />
-
-                        <!-- Empty state -->
-                        <div v-else-if="deptRequisitions.length === 0" class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center">
-                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                <AppIcon name="clipboard-list" class="size-5 text-muted-foreground/40" />
-                            </div>
-                            <div class="space-y-1">
-                                <p class="text-sm font-semibold">No department requisitions found</p>
-                                <p class="max-w-xs text-xs text-muted-foreground">
-                                    {{ hasAnyDeptReqFilters ? 'No requisitions match the current filters.' : 'Department requisitions start the live demand workflow before store issue or procurement.' }}
-                                </p>
-                            </div>
-                            <div class="flex gap-2">
-                                <Button v-if="hasAnyDeptReqFilters" variant="outline" size="sm" class="gap-1.5" @click="resetDeptReqFilters">
-                                    <AppIcon name="x" class="size-3.5" />
-                                    Clear filters
-                                </Button>
-                                <Button v-if="canCreateRequest" size="sm" class="gap-1.5" @click="openCreateRequisitionDialog">
-                                    <AppIcon name="plus" class="size-3.5" />
-                                    New requisition
-                                </Button>
-                            </div>
-                        </div>
-
-                        <!-- Requisition rows -->
-                        <div v-else class="divide-y">
-                            <WorkflowQueueRow
-                                v-for="req in deptRequisitions"
-                                :key="req.id"
-                                :stripe-class="departmentRequisitionStripeClass(req.status)"
-                                stripe-edge="rounded-r-full"
-                                inner-class="pl-2"
-                                interactive
-                                hover-class="hover:bg-muted/20"
-                                @activate="openRequisitionDetails(req)"
-                            >
-                                <div class="space-y-1.5">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <span class="font-mono text-xs font-bold tracking-tight">{{ req.requisitionNumber }}</span>
-                                        <Badge
-                                            v-if="req.priority === 'urgent'"
-                                            variant="destructive"
-                                            class="h-4 px-1.5 text-[10px] uppercase tracking-wide"
-                                        >Urgent</Badge>
-                                        <Badge
-                                            v-else-if="req.priority === 'high'"
-                                            class="h-4 bg-orange-100 px-1.5 text-[10px] uppercase tracking-wide text-orange-800 dark:bg-orange-900/40 dark:text-orange-200"
-                                        >High</Badge>
-                                        <span
-                                            class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold"
-                                            :class="reqStatusBadgeClass(req.status)"
-                                        >{{ formatEnumLabel(req.status) }}</span>
-                                        <span class="text-xs text-muted-foreground">{{ req.requestingDepartment }}</span>
-                                    </div>
-                                    <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-                                        <span class="flex items-center gap-1">
-                                            <AppIcon name="warehouse" class="size-3 opacity-60" />
-                                            {{ warehouseLabel(req.issuingWarehouseId) ?? req.issuingStore ?? '—' }}
-                                        </span>
-                                        <span class="flex items-center gap-1">
-                                            <AppIcon name="layers" class="size-3 opacity-60" />
-                                            {{ req.lines?.length ?? 0 }} line{{ (req.lines?.length ?? 0) === 1 ? '' : 's' }}
-                                        </span>
-                                        <span v-if="req.neededBy" class="flex items-center gap-1" :class="new Date(req.neededBy) < new Date() && !['issued','cancelled','rejected'].includes(req.status) ? 'font-medium text-red-600 dark:text-red-400' : ''">
-                                            <AppIcon name="calendar" class="size-3 opacity-60" />
-                                            Needed {{ formatDateOnly(req.neededBy) }}
-                                            <span v-if="new Date(req.neededBy) < new Date() && !['issued','cancelled','rejected'].includes(req.status)" class="font-semibold">· Overdue</span>
-                                        </span>
-                                        <span class="flex items-center gap-1 opacity-70">
-                                            <AppIcon name="clock" class="size-3 opacity-60" />
-                                            {{ formatDateTime(req.createdAt) }}
-                                        </span>
-                                    </div>
-                                </div>
-                                <template #actions>
-                                    <Button size="sm" variant="ghost" class="h-7 px-2.5 text-xs" @click="openRequisitionDetails(req)">
-                                        {{ requisitionPrimaryActionLabel(req) }}
-                                    </Button>
-                                    <Button v-if="req.status === 'draft'" size="sm" variant="outline" class="h-7 text-xs" @click="updateRequisitionStatus(req.id, 'submitted')">Submit</Button>
-                                    <Button v-if="req.status === 'submitted' && canManageItems" size="sm" variant="outline" class="h-7 text-xs" @click="updateRequisitionStatus(req.id, 'approved')">Approve</Button>
-                                    <Button v-if="req.status === 'submitted' && canManageItems" size="sm" variant="destructive" class="h-7 text-xs" @click="updateRequisitionStatus(req.id, 'rejected', { rejectionReason: 'Rejected by store manager' })">Reject</Button>
-                                    <Button v-if="req.status === 'approved' && canManageItems" size="sm" variant="outline" class="h-7 gap-1.5 text-xs" @click="updateRequisitionStatus(req.id, 'issued')">
-                                        <AppIcon name="check" class="size-3" />
-                                        Issue
-                                    </Button>
-                                </template>
-                            </WorkflowQueueRow>
-                        </div>
-
-                        <!-- Pagination -->
-                        <footer v-if="deptReqPagination && deptReqPagination.lastPage > 1" class="flex items-center justify-between border-t px-4 py-3">
-                            <p class="text-xs text-muted-foreground">
-                                Page {{ deptReqPagination.currentPage }} of {{ deptReqPagination.lastPage }}{{ deptReqPagination.total != null ? ` · ${deptReqPagination.total} total` : '' }}
-                            </p>
-                            <div class="flex items-center gap-1">
-                                <Button variant="outline" size="sm" class="h-8 gap-1.5 text-xs" :disabled="deptReqPagination.currentPage <= 1" @click="deptReqSearch.page = deptReqPagination!.currentPage - 1; loadDeptRequisitions()">
-                                    <AppIcon name="chevron-left" class="size-3.5" />
-                                    Previous
-                                </Button>
-                                <Button variant="outline" size="sm" class="h-8 gap-1.5 text-xs" :disabled="deptReqPagination.currentPage >= deptReqPagination.lastPage" @click="deptReqSearch.page = deptReqPagination!.currentPage + 1; loadDeptRequisitions()">
-                                    Next
-                                    <AppIcon name="chevron-right" class="size-3.5" />
-                                </Button>
-                            </div>
-                        </footer>
-                    </CardContent>
-                </Card>
+                    <WorkspaceRequisitionsTab v-if="activeTab === 'requisitions'" />
                 </TabsContent>
                 <!-- ─── Shortage Queue Tab ─── -->
                 <TabsContent value="shortage-queue" class="mt-0 flex flex-col gap-4">
@@ -7923,461 +7811,14 @@ onMounted(async () => {
 
                 <!-- MSD Orders Tab (Feature 6) -->
                 <TabsContent value="msd-orders" class="mt-0 flex flex-col gap-4">
-                    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                        <div class="flex items-center gap-3 rounded-lg border border-sidebar-border/70 bg-card px-4 py-3 shadow-sm">
-                            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted/60">
-                                <AppIcon name="package" class="size-4 text-muted-foreground" />
-                            </span>
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">MSD Orders</p>
-                                <p class="text-xl font-bold leading-tight tabular-nums">{{ msdOrderPagination?.total ?? msdOrders.length }}</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-3 rounded-lg border border-blue-200/70 bg-blue-50/50 px-4 py-3 shadow-sm dark:border-blue-900/40 dark:bg-blue-950/20">
-                            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/50">
-                                <AppIcon name="activity" class="size-4 text-blue-600 dark:text-blue-400" />
-                            </span>
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-medium uppercase tracking-wider text-blue-700/70 dark:text-blue-400/70">Submitted</p>
-                                <p class="text-xl font-bold leading-tight tabular-nums text-blue-700 dark:text-blue-300">{{ msdOrders.filter((order) => ['submitted', 'acknowledged'].includes(order.status)).length }}</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-3 rounded-lg border border-amber-200/70 bg-amber-50/50 px-4 py-3 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/20">
-                            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/50">
-                                <AppIcon name="clock" class="size-4 text-amber-600 dark:text-amber-400" />
-                            </span>
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-medium uppercase tracking-wider text-amber-700/70 dark:text-amber-400/70">Pending</p>
-                                <p class="text-xl font-bold leading-tight tabular-nums text-amber-700 dark:text-amber-300">{{ msdOrders.filter((order) => ['draft', 'pending', 'pending_submission'].includes(order.status)).length }}</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-3 rounded-lg border border-green-200/70 bg-green-50/50 px-4 py-3 shadow-sm dark:border-green-900/40 dark:bg-green-950/20">
-                            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/50">
-                                <AppIcon name="check-circle" class="size-4 text-green-600 dark:text-green-400" />
-                            </span>
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-medium uppercase tracking-wider text-green-700/70 dark:text-green-400/70">Fulfilled</p>
-                                <p class="text-xl font-bold leading-tight tabular-nums text-green-700 dark:text-green-300">{{ msdOrders.filter((order) => ['fulfilled', 'received', 'closed'].includes(order.status)).length }}</p>
-                            </div>
-                        </div>
-                    </div>
-
-                <Card class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col shadow-sm">
-                    <div class="flex items-center justify-between gap-4 border-b px-4 py-3.5">
-                        <div class="min-w-0">
-                            <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
-                                <AppIcon name="package" class="size-4 text-muted-foreground" />
-                                MSD Electronic Orders
-                            </h3>
-                            <p class="mt-1 text-xs text-muted-foreground">Create, submit, synchronize, and monitor Medical Stores Department supply orders.</p>
-                        </div>
-                        <div class="flex shrink-0 flex-wrap items-center gap-2">
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                class="h-9 gap-1.5 rounded-lg text-xs"
-                                :disabled="shortageMsdDraftLines.length === 0"
-                                @click="openMsdOrderFromDraft(shortageMsdDraftLines, 'shortage queue')"
-                            >
-                                <AppIcon name="alert-triangle" class="size-3.5" />
-                                Draft shortages
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                class="h-9 gap-1.5 rounded-lg text-xs"
-                                :disabled="lowStockMsdDraftLines.length === 0"
-                                @click="openMsdOrderFromDraft(lowStockMsdDraftLines, 'low-stock reorder policy')"
-                            >
-                                <AppIcon name="package" class="size-3.5" />
-                                Draft low stock
-                            </Button>
-                            <Button size="sm" class="h-9 gap-1.5 rounded-lg text-xs" @click="openBlankMsdOrder">
-                                <AppIcon name="plus" class="size-3.5" />
-                                Blank order
-                            </Button>
-                        </div>
-                    </div>
-
-                    <div class="flex items-center gap-2 border-b px-4 py-3">
-                        <SearchInput
-                            v-model="msdOrderSearch.q"
-                            placeholder="Search order number, reference..."
-                            class="min-w-0 flex-1 text-xs"
-                            @keyup.enter="msdOrderSearch.page = 1; loadMsdOrders()"
-                        />
-                        <Select :model-value="toSelectValue(msdOrderSearch.status)" @update:model-value="val => { msdOrderSearch.status = fromSelectValue(String(val ?? EMPTY_SELECT_VALUE)); msdOrderSearch.page = 1; loadMsdOrders() }">
-                            <SelectTrigger class="h-9 w-44 rounded-lg text-xs">
-                                <SelectValue placeholder="All statuses" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
-                                <SelectItem v-for="s in MSD_ORDER_STATUSES" :key="s.value" :value="s.value">{{ s.label }}</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Button variant="ghost" size="sm" class="h-9 gap-1.5 rounded-lg text-xs text-muted-foreground" @click="msdOrderSearch.page = 1; loadMsdOrders()">
-                            <AppIcon name="refresh-cw" class="size-3.5" />
-                            Refresh
-                        </Button>
-                    </div>
-
-                    <CardContent class="flex min-h-0 flex-1 flex-col p-0">
-                        <WorkflowQueueSkeleton v-if="msdOrderLoading" :count="4" />
-                        <div
-                            v-else-if="msdOrders.length === 0"
-                            class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center"
-                        >
-                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                <AppIcon name="package" class="size-5 text-muted-foreground/40" />
-                            </div>
-                            <div class="space-y-1">
-                                <p class="text-sm font-semibold">No MSD orders found</p>
-                                <p class="max-w-xs text-xs text-muted-foreground">MSD orders appear after public-sector procurement orders are created, submitted, or synchronized.</p>
-                            </div>
-                            <Button size="sm" class="mt-1 h-8 gap-1.5 rounded-lg text-xs" @click="openBlankMsdOrder">
-                                <AppIcon name="plus" class="size-3.5" />
-                                Blank MSD order
-                            </Button>
-                        </div>
-                        <div v-else-if="msdOrders.length > 0" class="divide-y">
-                            <WorkflowQueueRow
-                                v-for="order in msdOrders"
-                                :key="order.id"
-                                :stripe-class="msdStatusBadgeClass(order.status).includes('red') ? 'bg-destructive' : msdStatusBadgeClass(order.status).includes('green') ? 'bg-green-500' : msdStatusBadgeClass(order.status).includes('amber') ? 'bg-amber-500' : msdStatusBadgeClass(order.status).includes('blue') ? 'bg-blue-500' : 'bg-muted-foreground/30'"
-                            >
-                                <div class="min-w-0 space-y-1">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <p class="font-mono text-sm font-semibold">{{ order.msd_order_number }}</p>
-                                        <Badge :class="msdStatusBadgeClass(order.status)">{{ formatEnumLabel(order.status) }}</Badge>
-                                    </div>
-                                    <p class="text-xs text-muted-foreground">
-                                        Facility {{ order.facility_msd_code || 'not set' }}
-                                        <span>&middot;</span>
-                                        {{ Array.isArray(order.order_lines) ? order.order_lines.length : 0 }} line{{ Array.isArray(order.order_lines) && order.order_lines.length === 1 ? '' : 's' }}
-                                        <span>&middot;</span>
-                                        Order {{ order.order_date || 'N/A' }}
-                                        <span>&middot;</span>
-                                        TZS {{ order.total_amount != null ? Number(order.total_amount).toLocaleString() : 'N/A' }}
-                                        <span>&middot;</span>
-                                        {{ order.submission_reference || 'Not submitted' }}
-                                    </p>
-                                </div>
-                                <template #actions>
-                                    <Button
-                                        v-if="order.submission_reference"
-                                        variant="outline"
-                                        size="sm"
-                                        class="h-7 gap-1.5 rounded-lg px-2.5 text-xs"
-                                        @click="syncMsdOrderStatus(order.id)"
-                                    >
-                                        <AppIcon name="refresh-cw" class="size-3.5" />
-                                        Sync
-                                    </Button>
-                                </template>
-                            </WorkflowQueueRow>
-                        </div>
-                        <footer v-if="msdOrderPagination && msdOrderPagination.lastPage > 1" class="flex shrink-0 items-center justify-between border-t bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground">
-                            <span>Page {{ msdOrderPagination.currentPage }} of {{ msdOrderPagination.lastPage }}{{ msdOrderPagination.total != null ? ` (${msdOrderPagination.total} total)` : '' }}</span>
-                            <div class="flex gap-1">
-                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="msdOrderPagination.currentPage <= 1" @click="msdOrderSearch.page = msdOrderPagination!.currentPage - 1; loadMsdOrders()">Prev</Button>
-                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="msdOrderPagination.currentPage >= msdOrderPagination.lastPage" @click="msdOrderSearch.page = msdOrderPagination!.currentPage + 1; loadMsdOrders()">Next</Button>
-                            </div>
-                        </footer>
-                    </CardContent>
-                </Card>
+                    <WorkspaceMsdOrdersTab v-if="activeTab === 'msd-orders'" />
                 </TabsContent>
                 <!-- Supplier Lead Times Tab -->
                 <TabsContent value="lead-times" class="mt-0 flex flex-col gap-4">
-
-                    <Card v-if="canRead" class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col shadow-sm">
-
-                        <!-- Header -->
-                        <div class="flex items-center justify-between gap-4 border-b px-4 py-3.5">
-                            <div class="min-w-0">
-                                <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
-                                    <AppIcon name="calendar-clock" class="size-4 text-muted-foreground" />
-                                    Supplier Lead Times
-                                </h3>
-                                <p class="mt-1 text-xs text-muted-foreground">Track delivery performance and lead times per supplier.</p>
-                            </div>
-                            <Button size="sm" class="h-9 gap-1.5 rounded-lg text-xs" @click="createLeadTimeDialogOpen = true">
-                                <AppIcon name="plus" class="size-3.5" />
-                                Record Order
-                            </Button>
-                        </div>
-
-                        <!-- Toolbar -->
-                        <div class="flex items-center gap-2 border-b px-4 py-3">
-                            <Select
-                                :model-value="toSelectValue(leadTimeSearch.supplierId)"
-                                @update:model-value="leadTimeSearch.supplierId = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))"
-                            >
-                                <SelectTrigger class="h-9 min-w-0 flex-1 rounded-lg text-xs">
-                                    <SelectValue placeholder="Select supplier…">
-                                        {{ supplierLabel(leadTimeSearch.supplierId) || 'Select supplier…' }}
-                                    </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem :value="EMPTY_SELECT_VALUE">All suppliers</SelectItem>
-                                    <SelectItem v-for="s in (suppliers ?? [])" :key="s.id" :value="s.id" :text-value="lookupOptionText(s)">{{ s.name }}</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <Button variant="ghost" size="sm" class="h-9 gap-1.5 rounded-lg text-xs text-muted-foreground" :disabled="leadTimeLoading" @click="leadTimeSearch.page = 1; loadLeadTimes()">
-                                <AppIcon name="refresh-cw" class="size-3.5" />
-                                Refresh
-                            </Button>
-                        </div>
-
-                        <!-- Supplier performance KPI strip -->
-                        <div v-if="supplierPerformance" class="grid grid-cols-2 gap-3 border-b px-4 py-3 sm:grid-cols-4">
-                            <div class="flex items-center gap-3 rounded-lg border border-sidebar-border/70 bg-card px-3 py-2.5 shadow-sm">
-                                <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/60">
-                                    <AppIcon name="calendar-clock" class="size-3.5 text-muted-foreground" />
-                                </span>
-                                <div>
-                                    <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Avg Lead</p>
-                                    <p class="text-base font-bold tabular-nums">{{ supplierPerformance.avgLeadTimeDays ?? '—' }}<span class="ml-0.5 text-xs font-normal text-muted-foreground">d</span></p>
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-3 rounded-lg border border-sidebar-border/70 bg-card px-3 py-2.5 shadow-sm">
-                                <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/60">
-                                    <AppIcon name="check-circle" class="size-3.5 text-muted-foreground" />
-                                </span>
-                                <div>
-                                    <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Fulfillment</p>
-                                    <p class="text-base font-bold tabular-nums">{{ supplierPerformance.avgFulfillmentRate != null ? supplierPerformance.avgFulfillmentRate + '%' : '—' }}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <WorkflowQueueSkeleton v-if="leadTimeLoading" :count="4" />
-
-                        <!-- No supplier selected -->
-                        <div
-                            v-else-if="!leadTimeSearch.supplierId"
-                            class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center"
-                        >
-                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                <AppIcon name="calendar-clock" class="size-5 text-muted-foreground/40" />
-                            </div>
-                            <div>
-                                <p class="text-sm font-medium text-muted-foreground">Select a supplier</p>
-                                <p class="mt-0.5 text-xs text-muted-foreground/70">Choose a supplier to review lead-time performance, fulfillment variance, and receiving reliability.</p>
-                            </div>
-                        </div>
-
-                        <!-- Empty -->
-                        <div
-                            v-else-if="leadTimes.length === 0"
-                            class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center"
-                        >
-                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                <AppIcon name="calendar-clock" class="size-5 text-muted-foreground/40" />
-                            </div>
-                            <p class="text-sm font-medium text-muted-foreground">No lead time records found</p>
-                            <p class="text-xs text-muted-foreground/70">Records appear after supplier orders are received and actual delivery dates are captured.</p>
-                        </div>
-
-                        <!-- Lead time rows -->
-                        <div v-else class="divide-y">
-                            <WorkflowQueueRow
-                                v-for="lt in leadTimes"
-                                :key="lt.id"
-                                :stripe-class="lt.delivery_status === 'on_time' ? 'bg-green-500' : lt.delivery_status === 'late' ? 'bg-red-500' : lt.delivery_status === 'early' ? 'bg-sky-500' : 'bg-muted-foreground/30'"
-                            >
-                                <div class="min-w-0 space-y-1">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <span class="text-sm font-medium">{{ lt.order_date ? new Date(lt.order_date).toLocaleDateString() : '—' }}</span>
-                                        <span class="text-xs text-muted-foreground">→</span>
-                                        <span class="text-sm">{{ lt.actual_delivery_date ? new Date(lt.actual_delivery_date).toLocaleDateString() : lt.expected_delivery_date ? new Date(lt.expected_delivery_date).toLocaleDateString() : '—' }}</span>
-                                        <span
-                                            class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
-                                            :class="deliveryStatusBadge(lt.delivery_status)"
-                                        >
-                                            {{ (lt.delivery_status ?? 'pending').replace(/_/g, ' ') }}
-                                        </span>
-                                    </div>
-                                    <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                                        <span>Lead: <strong class="text-foreground">{{ lt.actual_lead_time_days ?? lt.expected_lead_time_days ?? '—' }}d</strong></span>
-                                        <span v-if="lt.quantity_ordered != null">&middot; Ordered: <strong class="text-foreground">{{ lt.quantity_ordered }}</strong></span>
-                                        <span v-if="lt.quantity_received != null">&middot; Received: <strong class="text-foreground">{{ lt.quantity_received }}</strong></span>
-                                        <span v-if="lt.fulfillment_rate != null">&middot; Fulfillment: <strong class="text-foreground">{{ lt.fulfillment_rate }}%</strong></span>
-                                    </div>
-                                </div>
-                                <template #actions>
-                                    <Button
-                                        v-if="lt.delivery_status === 'pending'"
-                                        size="sm"
-                                        variant="outline"
-                                        class="h-7 rounded-lg px-2.5 text-xs"
-                                        @click="openRecordDelivery(lt)"
-                                    >
-                                        Record delivery
-                                    </Button>
-                                </template>
-                            </WorkflowQueueRow>
-                        </div>
-
-                        <!-- Footer pagination -->
-                        <footer v-if="leadTimePagination && leadTimePagination.lastPage > 1" class="flex shrink-0 items-center justify-between border-t bg-muted/20 px-4 py-2.5">
-                            <p class="text-xs text-muted-foreground">Page {{ leadTimePagination.currentPage }}/{{ leadTimePagination.lastPage }}{{ leadTimePagination.total != null ? ` · ${leadTimePagination.total} total` : '' }}</p>
-                            <div class="flex gap-1">
-                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="leadTimePagination.currentPage <= 1" @click="leadTimeSearch.page = leadTimePagination!.currentPage - 1; loadLeadTimes()">
-                                    <AppIcon name="chevron-left" class="size-3.5" />
-                                    Prev
-                                </Button>
-                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="leadTimePagination.currentPage >= leadTimePagination.lastPage" @click="leadTimeSearch.page = leadTimePagination!.currentPage + 1; loadLeadTimes()">
-                                    Next
-                                    <AppIcon name="chevron-right" class="size-3.5" />
-                                </Button>
-                            </div>
-                        </footer>
-                    </Card>
-
+                    <WorkspaceLeadTimesTab v-if="activeTab === 'lead-times'" />
                 </TabsContent>
                 <TabsContent value="claims" class="mt-0 flex flex-col gap-4">
-                    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                        <div class="flex items-center gap-3 rounded-lg border border-sidebar-border/70 bg-card px-4 py-3 shadow-sm">
-                            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted/60">
-                                <AppIcon name="receipt" class="size-4 text-muted-foreground" />
-                            </span>
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Claim Links</p>
-                                <p class="text-xl font-bold leading-tight tabular-nums">{{ claimLinkPagination?.total ?? claimLinks.length }}</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-3 rounded-lg border border-blue-200/70 bg-blue-50/50 px-4 py-3 shadow-sm dark:border-blue-900/40 dark:bg-blue-950/20">
-                            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/50">
-                                <AppIcon name="activity" class="size-4 text-blue-600 dark:text-blue-400" />
-                            </span>
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-medium uppercase tracking-wider text-blue-700/70 dark:text-blue-400/70">Submitted</p>
-                                <p class="text-xl font-bold leading-tight tabular-nums text-blue-700 dark:text-blue-300">{{ claimLinks.filter((link) => link.claim_status === 'submitted').length }}</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-3 rounded-lg border border-green-200/70 bg-green-50/50 px-4 py-3 shadow-sm dark:border-green-900/40 dark:bg-green-950/20">
-                            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/50">
-                                <AppIcon name="check-circle" class="size-4 text-green-600 dark:text-green-400" />
-                            </span>
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-medium uppercase tracking-wider text-green-700/70 dark:text-green-400/70">Accepted</p>
-                                <p class="text-xl font-bold leading-tight tabular-nums text-green-700 dark:text-green-300">{{ claimLinks.filter((link) => ['accepted', 'approved', 'paid'].includes(link.claim_status)).length }}</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 shadow-sm">
-                            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
-                                <AppIcon name="alert-triangle" class="size-4 text-destructive" />
-                            </span>
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-medium uppercase tracking-wider text-destructive/80">Rejected</p>
-                                <p class="text-xl font-bold leading-tight tabular-nums text-destructive">{{ claimLinks.filter((link) => ['rejected', 'failed'].includes(link.claim_status)).length }}</p>
-                            </div>
-                        </div>
-                    </div>
-                <!-- Claims Tab (Feature 5) -->
-                <Card class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col shadow-sm">
-                    <div class="flex items-center justify-between gap-4 border-b px-4 py-3.5">
-                        <div class="min-w-0">
-                            <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
-                                <AppIcon name="receipt" class="size-4 text-muted-foreground" />
-                                Dispensing Claim Links
-                            </h3>
-                            <p class="mt-1 text-xs text-muted-foreground">Connect dispensed stock to payer claims, NHIF references, invoice traceability, and reimbursement follow-up.</p>
-                        </div>
-                        <Button size="sm" class="h-9 shrink-0 gap-1.5 rounded-lg text-xs" @click="createClaimLinkDialogOpen = true">
-                            <AppIcon name="plus" class="size-3.5" />
-                            Link Dispensing
-                        </Button>
-                    </div>
-
-                    <div class="flex items-center gap-2 border-b px-4 py-3">
-                        <SearchInput
-                            v-model="claimLinkSearch.q"
-                            placeholder="Search NHIF code, payer..."
-                            class="min-w-0 flex-1 text-xs"
-                            @keyup.enter="claimLinkSearch.page = 1; loadClaimLinks()"
-                        />
-                        <Select :model-value="toSelectValue(claimLinkSearch.claimStatus)" @update:model-value="val => { claimLinkSearch.claimStatus = fromSelectValue(String(val ?? EMPTY_SELECT_VALUE)); claimLinkSearch.page = 1; loadClaimLinks() }">
-                            <SelectTrigger class="h-9 w-44 rounded-lg text-xs">
-                                <SelectValue placeholder="All statuses" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
-                                <SelectItem v-for="s in CLAIM_STATUSES" :key="s.value" :value="s.value">{{ s.label }}</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Button variant="ghost" size="sm" class="h-9 gap-1.5 rounded-lg text-xs text-muted-foreground" @click="claimLinkSearch.page = 1; loadClaimLinks()">
-                            <AppIcon name="refresh-cw" class="size-3.5" />
-                            Refresh
-                        </Button>
-                    </div>
-
-                    <CardContent class="flex min-h-0 flex-1 flex-col p-0">
-                        <WorkflowQueueSkeleton v-if="claimLinkLoading" :count="4" />
-                        <div
-                            v-else-if="claimLinks.length === 0"
-                            class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center"
-                        >
-                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                <AppIcon name="receipt" class="size-5 text-muted-foreground/40" />
-                            </div>
-                            <div class="space-y-1">
-                                <p class="text-sm font-semibold">No dispensing claim links found</p>
-                                <p class="max-w-xs text-xs text-muted-foreground">Claim links appear when dispensed stock is connected to payer, invoice, NHIF, or reimbursement workflows.</p>
-                            </div>
-                            <Button size="sm" class="mt-1 h-8 gap-1.5 rounded-lg text-xs" @click="createClaimLinkDialogOpen = true">
-                                <AppIcon name="plus" class="size-3.5" />
-                                Link Dispensing
-                            </Button>
-                        </div>
-                        <div v-else-if="claimLinks.length > 0" class="divide-y">
-                            <WorkflowQueueRow
-                                v-for="link in claimLinks"
-                                :key="link.id"
-                                :stripe-class="claimStatusBadgeClass(link.claim_status).includes('red') ? 'bg-destructive' : claimStatusBadgeClass(link.claim_status).includes('green') ? 'bg-green-500' : claimStatusBadgeClass(link.claim_status).includes('blue') ? 'bg-blue-500' : 'bg-muted-foreground/30'"
-                            >
-                                <div class="min-w-0 space-y-1">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <p class="font-mono text-sm font-semibold">{{ link.nhif_code || link.id }}</p>
-                                        <Badge :class="claimStatusBadgeClass(link.claim_status)">{{ formatEnumLabel(link.claim_status) }}</Badge>
-                                    </div>
-                                    <p class="text-xs text-muted-foreground">
-                                        {{ link.payer_name || link.payer_type || 'No payer recorded' }}
-                                        <span>&middot;</span>
-                                        Qty {{ formatAmount(link.quantity_dispensed) }} {{ link.unit || '' }}
-                                        <span>&middot;</span>
-                                        Item {{ link.item_id?.substring(0, 8) || 'N/A' }}
-                                        <span>&middot;</span>
-                                        Patient {{ link.patient_id?.substring(0, 8) || 'N/A' }}
-                                        <span>&middot;</span>
-                                        {{ link.created_at?.substring(0, 10) || 'N/A' }}
-                                    </p>
-                                </div>
-                                <template #actions>
-                                    <Badge variant="outline" class="h-7 rounded-lg px-2 text-[11px]">
-                                        {{ link.payer_type || 'payer' }}
-                                    </Badge>
-                                    <Button
-                                        v-if="link.item_id"
-                                        size="sm"
-                                        variant="outline"
-                                        class="h-7 rounded-lg px-2.5 text-xs"
-                                        @click="openItemDetails({ id: link.item_id })"
-                                    >
-                                        View item
-                                    </Button>
-                                </template>
-                            </WorkflowQueueRow>
-                        </div>
-                        <footer v-if="claimLinkPagination && claimLinkPagination.lastPage > 1" class="flex shrink-0 items-center justify-between border-t bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground">
-                            <span>Page {{ claimLinkPagination.currentPage }} of {{ claimLinkPagination.lastPage }}{{ claimLinkPagination.total != null ? ` (${claimLinkPagination.total} total)` : '' }}</span>
-                            <div class="flex gap-1">
-                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="claimLinkPagination.currentPage <= 1" @click="claimLinkSearch.page = claimLinkPagination!.currentPage - 1; loadClaimLinks()">Prev</Button>
-                                <Button variant="outline" size="sm" class="h-8 rounded-lg text-xs" :disabled="claimLinkPagination.currentPage >= claimLinkPagination.lastPage" @click="claimLinkSearch.page = claimLinkPagination!.currentPage + 1; loadClaimLinks()">Next</Button>
-                            </div>
-                        </footer>
-                    </CardContent>
-                </Card>
+                    <WorkspaceClaimsTab v-if="activeTab === 'claims'" />
                 </TabsContent>
                 <!-- Analytics Tab (Feature 8) -->
                 <TabsContent value="analytics" class="mt-0 flex flex-col gap-4">

@@ -1,0 +1,29 @@
+---
+description: Supply chain Workspace.vue decomposition pattern
+globs: resources/js/pages/inventory-procurement/**
+alwaysApply: false
+---
+
+# Supply chain workspace split
+
+`Workspace.vue` is being split incrementally under `resources/js/pages/inventory-procurement/workspace/`.
+
+## Pattern
+
+1. **Tab UI** → `Workspace{Tab}Tab.vue` (lazy via `workspaceTabComponents.ts`)
+2. **Shared state** → register on `bindInventoryWorkspace()` in parent; tabs read via `useInventoryWorkspace()`
+3. **Tab-only helpers** → `workspaceOverview.ts`, `useRequestPipelineCounts.ts`, etc.
+4. **Select helpers** → `workspace/constants.ts` (`EMPTY_SELECT_VALUE`, `toSelectValue`, `fromSelectValue`)
+
+## Adding a new tab extract
+
+- Copy tab markup from `Workspace.vue` into `Workspace{Name}Tab.vue`
+- Prefix bindings with `ws.` from `useInventoryWorkspace()`
+- Add required keys to `bindInventoryWorkspace({ ... })` in `Workspace.vue`
+- Register async component in `workspaceTabComponents.ts`
+- Replace inline `TabsContent` with `<Workspace{Name}Tab v-if="activeTab === '{tab}'" />`
+
+## Do not
+
+- Move dialogs/sheets out until tab lists are stable
+- Duplicate `apiRequest` — keep network logic in parent until a composable extract is planned
