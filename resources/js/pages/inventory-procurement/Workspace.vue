@@ -302,8 +302,9 @@ function normalizeInventoryWorkspaceTab(value: string): InventoryWorkspaceTab {
 }
 
 const activeTab = ref<InventoryWorkspaceTab>('inventory');
-const loading = ref(false);
+const loading = ref(true);
 const queueError = ref<string | null>(null);
+const referenceStructureLoaded = ref(false);
 
 const canRead = ref(false);
 const canManageItems = ref(false);
@@ -453,6 +454,10 @@ const inventoryAutoRefreshInterval = useLocalStorageString<InventoryAutoRefreshK
     ['off', '30s', '1m', '5m'],
 );
 const inventoryItemSetupBlockedReason = computed(() => {
+    if (!referenceStructureLoaded.value) {
+        return null;
+    }
+
     if (!warehouseReady.value && !supplierReady.value) {
         return 'Create at least one warehouse and one supplier first so inventory items can attach to a real stock structure.';
     }
@@ -4260,6 +4265,8 @@ async function loadSuppliersAndWarehouses() {
         warehouses.value = [];
         departments.value = [];
         requisitionContext.value = null;
+    } finally {
+        referenceStructureLoaded.value = true;
     }
 }
 
@@ -4897,10 +4904,49 @@ async function loadAllAnalytics() {
 
 const loadedWorkspaceTabs = new Set<InventoryWorkspaceTab>();
 
+function setWorkspaceTabLoading(tab: InventoryWorkspaceTab, isLoading: boolean): void {
+    switch (tab) {
+        case 'inventory':
+        case 'procurement':
+        case 'overview':
+            loading.value = isLoading;
+            break;
+        case 'ledger':
+            stockLedgerLoading.value = isLoading;
+            break;
+        case 'department-stock':
+            departmentStockLoading.value = isLoading;
+            break;
+        case 'requisitions':
+            deptReqLoading.value = isLoading;
+            break;
+        case 'shortage-queue':
+            shortageQueueLoading.value = isLoading;
+            break;
+        case 'lead-times':
+            leadTimeLoading.value = isLoading;
+            break;
+        case 'transfers':
+            transferLoading.value = isLoading;
+            break;
+        case 'claims':
+            claimLinkLoading.value = isLoading;
+            break;
+        case 'msd-orders':
+            msdOrderLoading.value = isLoading;
+            break;
+        case 'analytics':
+            analyticsLoading.value = isLoading;
+            break;
+    }
+}
+
 async function loadActiveWorkspaceTab(tab: InventoryWorkspaceTab = activeTab.value, options: { force?: boolean } = {}): Promise<void> {
     if (!canRead.value) return;
     if (!options.force && loadedWorkspaceTabs.has(tab)) return;
 
+    setWorkspaceTabLoading(tab, true);
+    try {
     switch (tab) {
         case 'overview':
             await Promise.all([loadItems(), loadProcurementRequests(), loadDeptRequisitions(), loadShortageQueue(), loadRequestPipelineCounts()]);
@@ -4941,10 +4987,16 @@ async function loadActiveWorkspaceTab(tab: InventoryWorkspaceTab = activeTab.val
     }
 
     loadedWorkspaceTabs.add(tab);
+    } finally {
+        setWorkspaceTabLoading(tab, false);
+    }
 }
 
 async function reloadAll() {
-    if (!canRead.value) return;
+    if (!canRead.value) {
+        loading.value = false;
+        return;
+    }
     loading.value = true;
     queueError.value = null;
     try {
