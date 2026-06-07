@@ -828,7 +828,7 @@ onMounted(() => {
                         :patient-name="createPlanPatientName"
                         :patient-meta="createPlanPatientMeta"
                         :facility-name="scope?.facility?.name || null"
-                        :tenant-name="scope?.tenant?.name || null"
+                        :tenant-name="null"
                         :context-label="createPlanWorkflowContextLabel"
                         :context-meta="createPlanWorkflowContextMeta"
                         :status-label="createPlanContextStatusLabel"
@@ -983,7 +983,7 @@ onMounted(() => {
                         :patient-name="selectedPlanPatientName"
                         :patient-meta="selectedPlanPatientMeta"
                         :facility-name="scope?.facility?.name || null"
-                        :tenant-name="scope?.tenant?.name || null"
+                        :tenant-name="null"
                         :context-label="paymentWorkflowContextLabel"
                         :context-meta="paymentWorkflowContextMeta"
                         :status-label="paymentContextStatusLabel"
@@ -1057,3 +1057,4 @@ onMounted(() => {
         />
     </AppLayout>
 </template>
+

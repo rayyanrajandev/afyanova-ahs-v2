@@ -3984,7 +3984,6 @@ onMounted(() => {
                                     <span class="font-medium text-foreground">{{ scope?.facility?.name || 'No facility' }}</span>
                                 </span>
                                 <span class="select-none text-border" aria-hidden="true">|</span>
-                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
                                 <template v-if="recordToolbarStateLabel">
                                     <span class="select-none text-border" aria-hidden="true">|</span>
                                     <span>{{ recordToolbarStateLabel }}</span>
@@ -6124,3 +6123,4 @@ onMounted(() => {
         </div>
     </AppLayout>
 </template>
+

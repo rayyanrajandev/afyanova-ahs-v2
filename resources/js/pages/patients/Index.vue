@@ -5814,9 +5814,6 @@ onMounted(() => {
                                     aria-hidden="true"
                                     >·</span
                                 >
-                                <span>{{
-                                    scope?.tenant?.name || 'No tenant'
-                                }}</span>
                             </div>
                         </div>
                     </div>
@@ -12086,3 +12083,4 @@ onMounted(() => {
         </Sheet>
     </AppLayout>
 </template>
+

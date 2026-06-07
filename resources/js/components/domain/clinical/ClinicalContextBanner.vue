@@ -42,7 +42,7 @@ const props = withDefaults(
 );
 
 const hasPatientContext = computed(() => Boolean(props.patientName || props.patientMeta || props.patientNumber));
-const hasFacilityContext = computed(() => Boolean(props.facilityName || props.tenantName));
+const hasFacilityContext = computed(() => Boolean(props.facilityName));
 const hasWorkflowContext = computed(() => Boolean(props.contextLabel || props.contextMeta));
 const hasAnyContext = computed(() => hasPatientContext.value || hasFacilityContext.value || hasWorkflowContext.value);
 
@@ -113,7 +113,6 @@ const toneClasses = computed(() => {
                         Facility
                     </div>
                     <p class="mt-1 truncate font-medium text-foreground">{{ facilityName || 'No facility selected' }}</p>
-                    <p v-if="tenantName" class="mt-0.5 truncate text-xs text-muted-foreground">{{ tenantName }}</p>
                 </div>
 
                 <div v-if="hasWorkflowContext" class="min-w-0 rounded-md border bg-background/70 px-3 py-2">

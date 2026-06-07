@@ -2280,12 +2280,6 @@ async function refreshWardPage(): Promise<void> {
                             </Button>
                         </PopoverTrigger>
                         <PopoverContent align='end' class='w-72 space-y-1 text-xs'>
-                            <p v-if='scope?.tenant'>
-                                Tenant: {{ scope.tenant.name || 'Tenant' }} ({{ scope.tenant.code || effectiveTenantCode || 'n/a' }})
-                            </p>
-                            <p v-else-if='effectiveTenantCode'>
-                                Tenant code: {{ effectiveTenantCode }}
-                            </p>
                             <p v-if='scope?.facility'>
                                 Facility: {{ scope.facility.name || 'Facility' }} ({{ scope.facility.code || effectiveFacilityCode || 'n/a' }})
                             </p>
@@ -2905,7 +2899,7 @@ async function refreshWardPage(): Promise<void> {
                                         :patient-meta='selectedAdmissionPatientMeta'
                                         :patient-number='selectedAdmission.patientNumber || null'
                                         :facility-name='scope?.facility?.name || "No facility selected"'
-                                        :tenant-name='scope?.tenant?.name || "No tenant"'
+                                        :tenant-name='null'
                                         :context-label='selectedAdmissionContextLabel'
                                         :context-meta='selectedAdmissionContextMeta'
                                         :status-label='selectedAdmissionStatusLabel'

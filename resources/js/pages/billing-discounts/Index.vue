@@ -859,7 +859,7 @@ onMounted(async () => {
                         title="Discount policy context"
                         description="Confirm the governance mode, threshold, and facility before saving a new concession rule."
                         :facility-name="scope?.facility?.name || null"
-                        :tenant-name="scope?.tenant?.name || null"
+                        :tenant-name="null"
                         :context-label="createPolicyWorkflowContextLabel"
                         :context-meta="createPolicyWorkflowContextMeta"
                         :status-label="createPolicyContextStatusLabel"
@@ -963,7 +963,7 @@ onMounted(async () => {
                         title="Invoice discount context"
                         description="Confirm the selected policy, concession value, and billing facility before applying the discount to an invoice."
                         :facility-name="scope?.facility?.name || null"
-                        :tenant-name="scope?.tenant?.name || null"
+                        :tenant-name="null"
                         :context-label="selectedPolicyContextLabel"
                         :context-meta="selectedPolicyContextMeta"
                         :status-label="applyPolicyContextStatusLabel"
@@ -1026,3 +1026,4 @@ onMounted(async () => {
         />
     </AppLayout>
 </template>
+

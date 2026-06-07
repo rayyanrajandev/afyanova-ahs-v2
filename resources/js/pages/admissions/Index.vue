@@ -5200,9 +5200,6 @@ onMounted(initialPageLoad);
                             </Button>
                         </PopoverTrigger>
                         <PopoverContent align="end" class="w-72 space-y-1 text-xs">
-                            <p v-if="scope?.tenant">
-                                Tenant: {{ scope.tenant.name }} ({{ scope.tenant.code }})
-                            </p>
                             <p v-if="scope?.facility">
                                 Facility: {{ scope.facility.name }} ({{ scope.facility.code }})
                             </p>
@@ -5868,7 +5865,7 @@ onMounted(initialPageLoad);
                             :patient-meta="createForm.patientId.trim() ? createPatientContextMeta : null"
                             :patient-number="createPatientSummary?.patientNumber || null"
                             :facility-name="scope?.facility?.name || 'No facility selected'"
-                            :tenant-name="scope?.tenant?.name || 'No tenant'"
+                            :tenant-name="null"
                             :context-label="createAdmissionWorkflowContextLabel"
                             :context-meta="createAdmissionWorkflowContextMeta"
                             :status-label="createAdmissionContextStatusLabel"
@@ -8050,6 +8047,7 @@ onMounted(initialPageLoad);
         </div>
     </AppLayout>
 </template>
+
 
 
 

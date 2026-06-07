@@ -5234,7 +5234,7 @@ onMounted(async () => {
                             :patient-meta="createForm.patientId.trim() ? createPatientContextMeta : null"
                             :patient-number="createPatientSummary?.patientNumber || null"
                             :facility-name="scope?.facility?.name || 'No facility selected'"
-                            :tenant-name="scope?.tenant?.name || 'No tenant'"
+                            :tenant-name="null"
                             :context-label="createRadiologyWorkflowContextLabel"
                             :context-meta="createRadiologyWorkflowContextMeta"
                             :status-label="createRadiologyContextStatusLabel"
@@ -7334,6 +7334,7 @@ onMounted(async () => {
             />
     </AppLayout>
 </template>
+
 
 
 

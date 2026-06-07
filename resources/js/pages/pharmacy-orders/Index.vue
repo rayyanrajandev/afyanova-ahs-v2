@@ -11068,7 +11068,7 @@ onMounted(async () => {
                         :patient-meta="createForm.patientId.trim() ? createPatientContextMeta : null"
                         :patient-number="createPatientSummary?.patientNumber || null"
                         :facility-name="scope?.facility?.name || 'No facility selected'"
-                        :tenant-name="scope?.tenant?.name || 'No tenant'"
+                        :tenant-name="null"
                         :context-label="createPharmacyWorkflowContextLabel"
                         :context-meta="createPharmacyWorkflowContextMeta"
                         :status-label="createPharmacyContextStatusLabel"
@@ -16703,3 +16703,4 @@ onMounted(async () => {
     animation: pharmacy-row-flash 1.5s ease-out;
 }
 </style>
+

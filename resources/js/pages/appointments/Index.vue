@@ -5220,7 +5220,6 @@ watchDebounced(
                                     <span class="font-medium text-foreground">{{ scope?.facility?.name || 'No facility' }}</span>
                                 </span>
                                 <span class="select-none text-border" aria-hidden="true">·</span>
-                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
                             </div>
                         </div>
                     </div>
@@ -6030,7 +6029,7 @@ watchDebounced(
                                 :patient-name="patientDisplayName(createForm.patientId)"
                                 :patient-meta="patientMeta(createForm.patientId)"
                                 :facility-name="scope?.facility?.name || 'No facility selected'"
-                                :tenant-name="scope?.tenant?.name || 'No tenant'"
+                                :tenant-name="null"
                                 :context-label="createClinicalContextLabel"
                                 :context-meta="createClinicalContextMeta"
                                 status-label="Patient locked"
@@ -8585,3 +8584,4 @@ watchDebounced(
     border-radius: 0.5rem;
 }
 </style>
+

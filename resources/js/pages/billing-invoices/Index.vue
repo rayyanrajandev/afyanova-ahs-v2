@@ -14470,7 +14470,7 @@ onMounted(refreshPage);
                 :page-description="billingWorkspaceHeaderDescription"
                 :scope-status-label="billingWorkspaceHeaderScopeLabel"
                 :facility-name="scope?.facility?.name ?? ''"
-                :tenant-name="scope?.tenant?.name ?? ''"
+                :tenant-name="null"
                 :scope-unresolved="scope?.resolvedFrom === 'none'"
                 :billing-workspace-view="billingWorkspaceView"
                 :can-read-billing-financial-controls="canReadBillingFinancialControls"
@@ -14820,7 +14820,7 @@ onMounted(refreshPage);
                                 :create-patient-context-meta="createPatientContextMeta"
                                 :create-patient-context-label="createPatientContextLabel"
                                 :facility-name="scope?.facility?.name || 'No facility selected'"
-                                :tenant-name="scope?.tenant?.name || 'No tenant'"
+                                :tenant-name="null"
                                 :has-create-appointment-context="hasCreateAppointmentContext"
                                 :create-appointment-context-label="createAppointmentContextLabel"
                                 :create-appointment-context-meta="createAppointmentContextMeta"
@@ -15098,6 +15098,7 @@ onMounted(refreshPage);
             />
     </AppLayout>
 </template>
+
 
 
 

@@ -710,7 +710,7 @@ onMounted(async () => {
                                     :patient-meta="selectedAccountPatientMeta"
                                     :patient-number="selectedAccount.patient?.patient_number || null"
                                     :facility-name="scope?.facility?.name || 'No facility selected'"
-                                    :tenant-name="scope?.tenant?.name || 'No tenant'"
+                                    :tenant-name="null"
                                     :context-label="selectedAccountWorkflowContextLabel"
                                     :context-meta="selectedAccountWorkflowContextMeta"
                                     :status-label="formatStatusLabel(selectedAccount.status)"
@@ -892,7 +892,7 @@ onMounted(async () => {
                         :patient-meta="createPatientContextMeta"
                         :patient-number="createPatient?.patientNumber || null"
                         :facility-name="scope?.facility?.name || 'No facility selected'"
-                        :tenant-name="scope?.tenant?.name || 'No tenant'"
+                        :tenant-name="null"
                         context-label="Walk-in cash account"
                         :context-meta="createForm.currencyCode.trim() ? `Currency: ${createForm.currencyCode.trim().toUpperCase()}` : 'Select the account currency.'"
                         :status-label="createCashAccountStatusLabel"
@@ -1087,3 +1087,4 @@ onMounted(async () => {
         </Dialog>
     </AppLayout>
 </template>
+

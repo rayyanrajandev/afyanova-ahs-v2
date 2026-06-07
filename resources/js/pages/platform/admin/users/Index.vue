@@ -1961,7 +1961,6 @@ onMounted(async () => {
                                     <span class="font-medium text-foreground">{{ scope?.facility?.name || scopedFacilityLabel || 'No facility' }}</span>
                                 </span>
                                 <span class="text-border select-none" aria-hidden="true">·</span>
-                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
                             </div>
                         </div>
                     </div>
@@ -3596,6 +3595,7 @@ onMounted(async () => {
         </div>
     </AppLayout>
 </template>
+
 
 
 

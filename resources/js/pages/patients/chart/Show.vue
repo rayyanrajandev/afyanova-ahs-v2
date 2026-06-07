@@ -4062,7 +4062,7 @@ onMounted(() => {
                 :patient-meta="patientChartPatientMeta"
                 :patient-number="patient.patientNumber || null"
                 :facility-name="scope?.facility?.name || 'No facility selected'"
-                :tenant-name="scope?.tenant?.name || 'No tenant'"
+                :tenant-name="null"
                 :context-label="patientChartContextLabel"
                 :context-meta="patientChartContextMeta"
                 :status-label="patientChartStatusLabel"
@@ -6886,6 +6886,7 @@ onMounted(() => {
         </div>
     </AppLayout>
 </template>
+
 
 
 

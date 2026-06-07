@@ -166,13 +166,7 @@ const roleTierBadgeClass = computed(() => {
                             </h1>
                             <p class="mt-0.5 truncate text-xs text-muted-foreground">
                                 <span v-if="scope?.facility?.name">{{ scope.facility.name }}</span>
-                                <span
-                                    v-if="scope?.facility?.name && scope?.tenant?.name"
-                                    class="mx-1 opacity-40"
-                                    >·</span
-                                >
-                                <span v-if="scope?.tenant?.name">{{ scope.tenant.name }}</span>
-                                <span v-if="!scope?.facility?.name && !scope?.tenant?.name">
+                                <span v-if="!scope?.facility?.name">
                                     Keyboard shortcuts, workflow tips, and screen navigation
                                 </span>
                             </p>

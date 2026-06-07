@@ -135,7 +135,7 @@ function openContextDialog(): void {
         :patient-meta="createFormPatientId.trim() ? createPatientContextMeta : null"
         :patient-number="createPatientNumber"
         :facility-name="facilityName || 'No facility selected'"
-        :tenant-name="tenantName || 'No tenant'"
+        :tenant-name="null"
         :context-label="createBillingWorkflowContextLabel"
         :context-meta="createBillingWorkflowContextMeta"
         :status-label="createBillingContextStatusLabel"

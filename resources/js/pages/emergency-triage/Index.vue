@@ -3060,7 +3060,6 @@ onMounted(async () => {
                             </Button>
                         </PopoverTrigger>
                         <PopoverContent align="end" class="w-72 space-y-1 text-xs">
-                            <p v-if="scope?.tenant">Tenant: {{ scope.tenant.name }} ({{ scope.tenant.code }})</p>
                             <p v-if="scope?.facility">Facility: {{ scope.facility.name }} ({{ scope.facility.code }})</p>
                             <p>Accessible facilities: {{ scope?.userAccess?.accessibleFacilityCount ?? 'N/A' }}</p>
                             <p v-if="!scope" class="text-destructive">Scope could not be loaded.</p>
@@ -3458,7 +3457,7 @@ onMounted(async () => {
                             :patient-meta="createForm.patientId.trim() ? createPatientContextMeta : null"
                             :patient-number="createActivePatientSummary?.patientNumber || null"
                             :facility-name="scope?.facility?.name || 'No facility selected'"
-                            :tenant-name="scope?.tenant?.name || 'No tenant'"
+                            :tenant-name="null"
                             :context-label="createEmergencyWorkflowContextLabel"
                             :context-meta="createEmergencyWorkflowContextMeta"
                             :status-label="createEmergencyContextStatusLabel"
@@ -4707,6 +4706,7 @@ onMounted(async () => {
         </div>
     </AppLayout>
 </template>
+
 
 
 

@@ -1053,7 +1053,7 @@ onMounted(async () => {
                         title="Refund request context"
                         description="Confirm the source invoice, refund pathway, and payout route before opening the refund trail."
                         :facility-name="scope?.facility?.name || null"
-                        :tenant-name="scope?.tenant?.name || null"
+                        :tenant-name="null"
                         :context-label="createRefundWorkflowContextLabel"
                         :context-meta="createRefundWorkflowContextMeta"
                         :status-label="createRefundContextStatusLabel"
@@ -1201,7 +1201,7 @@ onMounted(async () => {
                         :patient-name="selectedRefundPatientName"
                         :patient-meta="selectedRefundPatientMeta"
                         :facility-name="scope?.facility?.name || null"
-                        :tenant-name="scope?.tenant?.name || null"
+                        :tenant-name="null"
                         :context-label="selectedRefundWorkflowContextLabel"
                         :context-meta="selectedRefundWorkflowContextMeta"
                         :status-label="selectedRefund ? formatStatusLabel(selectedRefund.refund_status) : null"
@@ -1255,7 +1255,7 @@ onMounted(async () => {
                         :patient-name="selectedRefundPatientName"
                         :patient-meta="selectedRefundPatientMeta"
                         :facility-name="scope?.facility?.name || null"
-                        :tenant-name="scope?.tenant?.name || null"
+                        :tenant-name="null"
                         :context-label="selectedRefundWorkflowContextLabel"
                         :context-meta="selectedRefundWorkflowContextMeta"
                         :status-label="selectedRefund ? formatStatusLabel(selectedRefund.refund_status) : null"
@@ -1349,3 +1349,4 @@ onMounted(async () => {
         />
     </AppLayout>
 </template>
+

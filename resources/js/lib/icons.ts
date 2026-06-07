@@ -41,15 +41,19 @@ import {
 import type { IconArray } from '@hugeicons/vue';
 import {
     Activity,
+    AlertCircle,
     Archive,
     AlertTriangle,
     ArrowRight,
+    ArrowUpDown,
     ArrowUpRight,
     BedDouble,
     Building2,
     BookOpen,
     Calendar,
     CalendarClock,
+    Check,
+    Clock,
     ChevronDown,
     ChevronLeft,
     ChevronRight,
@@ -67,8 +71,12 @@ import {
     HeartPulse,
     LayoutGrid,
     Download,
+    Info,
+    Layers,
     LayoutList,
+    List,
     Loader2,
+    Lock,
     LogIn,
     Mail,
     MapPin,
@@ -85,14 +93,17 @@ import {
     Scissors,
     Search,
     ShieldCheck,
+    ShoppingCart,
     SlidersHorizontal,
     SquarePen,
     Stethoscope,
     Truck,
+    Tag,
     Undo2,
     User,
     UserX,
     Users,
+    Warehouse,
     X,
 } from 'lucide-vue-next';
 import type { Component } from 'vue';
@@ -100,9 +111,11 @@ import type { IconPack } from '@/types';
 
 export type AppIconName =
     | 'activity'
+    | 'alert-circle'
     | 'archive'
     | 'alert-triangle'
     | 'arrow-right'
+    | 'arrow-up-down'
     | 'arrow-up-right'
     | 'bed-double'
     | 'book-open'
@@ -110,7 +123,9 @@ export type AppIconName =
     | 'calendar'
     | 'calendar-plus-2'
     | 'calendar-clock'
+    | 'check'
     | 'check-circle'
+    | 'clock'
     | 'chevron-down'
     | 'chevron-left'
     | 'chevron-right'
@@ -127,10 +142,14 @@ export type AppIconName =
     | 'flask-conical'
     | 'folder'
     | 'heart-pulse'
+    | 'info'
     | 'layout-grid'
     | 'layout-list'
+    | 'layers'
+    | 'list'
     | 'list-restart'
     | 'loader-circle'
+    | 'lock'
     | 'log-in'
     | 'mail'
     | 'map-pin'
@@ -148,10 +167,13 @@ export type AppIconName =
     | 'scissors'
     | 'search'
     | 'shield-check'
+    | 'shopping-cart'
     | 'sliders-horizontal'
     | 'stethoscope'
+    | 'tag'
     | 'truck'
     | 'undo-2'
+    | 'warehouse'
     | 'user'
     | 'user-x'
     | 'users'
@@ -159,9 +181,11 @@ export type AppIconName =
 
 const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     activity: Activity,
+    'alert-circle': AlertCircle,
     archive: Archive,
     'alert-triangle': AlertTriangle,
     'arrow-right': ArrowRight,
+    'arrow-up-down': ArrowUpDown,
     'arrow-up-right': ArrowUpRight,
     'bed-double': BedDouble,
     'book-open': BookOpen,
@@ -169,7 +193,9 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     calendar: Calendar,
     'calendar-plus-2': Calendar,
     'calendar-clock': CalendarClock,
+    check: Check,
     'check-circle': CircleCheck,
+    clock: Clock,
     'chevron-down': ChevronDown,
     'chevron-left': ChevronLeft,
     'chevron-right': ChevronRight,
@@ -186,10 +212,14 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     'flask-conical': FlaskConical,
     folder: Folder,
     'heart-pulse': HeartPulse,
+    info: Info,
     'layout-grid': LayoutGrid,
     'layout-list': LayoutList,
+    layers: Layers,
+    list: List,
     'list-restart': ClipboardList,
     'loader-circle': Loader2,
+    lock: Lock,
     'log-in': LogIn,
     mail: Mail,
     'map-pin': MapPin,
@@ -207,10 +237,13 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     scissors: Scissors,
     search: Search,
     'shield-check': ShieldCheck,
+    'shopping-cart': ShoppingCart,
     'sliders-horizontal': SlidersHorizontal,
     stethoscope: Stethoscope,
+    tag: Tag,
     truck: Truck,
     'undo-2': Undo2,
+    warehouse: Warehouse,
     user: User,
     'user-x': UserX,
     users: Users,
@@ -219,9 +252,11 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
 
 const HUGE_ICON_MAP = {
     activity: ActivityIcon,
+    'alert-circle': Alert01Icon,
     archive: Folder01Icon,
     'alert-triangle': Alert01Icon,
     'arrow-right': ArrowRight01Icon,
+    'arrow-up-down': SlidersHorizontalIcon,
     'arrow-up-right': ArrowRight01Icon,
     'bed-double': BedDoubleIcon,
     'book-open': BookOpen01Icon,
@@ -229,7 +264,9 @@ const HUGE_ICON_MAP = {
     calendar: Calendar01Icon,
     'calendar-plus-2': Calendar01Icon,
     'calendar-clock': TimeScheduleIcon,
+    check: CheckmarkCircle01Icon,
     'check-circle': CheckmarkCircle01Icon,
+    clock: TimeScheduleIcon,
     'chevron-down': ArrowRight01Icon,
     'chevron-left': ArrowLeft01Icon,
     'chevron-right': ArrowRight01Icon,
@@ -246,10 +283,14 @@ const HUGE_ICON_MAP = {
     'flask-conical': TestTube01Icon,
     folder: Folder01Icon,
     'heart-pulse': ActivityIcon,
+    info: Alert01Icon,
     'layout-grid': LayoutGridIcon,
     'layout-list': ListViewIcon,
+    layers: LayoutGridIcon,
+    list: ListViewIcon,
     'list-restart': CheckListIcon,
     'loader-circle': Loading03Icon,
+    lock: SecurityCheckIcon,
     'log-in': Login01Icon,
     mail: Mail01Icon,
     'map-pin': MapPinIcon,
@@ -267,10 +308,13 @@ const HUGE_ICON_MAP = {
     scissors: ScissorIcon,
     search: ListViewIcon,
     'shield-check': SecurityCheckIcon,
+    'shopping-cart': Invoice01Icon,
     'sliders-horizontal': SlidersHorizontalIcon,
     stethoscope: StethoscopeIcon,
+    tag: Invoice01Icon,
     truck: PackageIcon,
     'undo-2': ArrowLeft01Icon,
+    warehouse: Building01Icon,
     user: UserIcon,
     'user-x': UserRemove01Icon,
     users: UserGroupIcon,

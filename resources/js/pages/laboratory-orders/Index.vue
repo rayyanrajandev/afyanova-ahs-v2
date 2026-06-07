@@ -6840,7 +6840,6 @@ onMounted(async () => {
                                     }}</span>
                                 </span>
                                 <span class="select-none text-border" aria-hidden="true">·</span>
-                                <span>{{ scope?.tenant?.name || 'No tenant' }}</span>
                             </div>
                         </div>
                     </div>
@@ -8299,7 +8298,7 @@ onMounted(async () => {
                             :patient-meta="createForm.patientId.trim() ? createPatientContextMeta : null"
                             :patient-number="createPatientSummary?.patientNumber || null"
                             :facility-name="scope?.facility?.name || 'No facility selected'"
-                            :tenant-name="scope?.tenant?.name || 'No tenant'"
+                            :tenant-name="null"
                             :context-label="createLaboratoryWorkflowContextLabel"
                             :context-meta="createLaboratoryWorkflowContextMeta"
                             :status-label="createLaboratoryContextStatusLabel"
@@ -10099,3 +10098,4 @@ onMounted(async () => {
   border-color: color-mix(in srgb, var(--color-info) 24%, transparent);
 }
 </style>
+

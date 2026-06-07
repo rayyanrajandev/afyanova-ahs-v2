@@ -59,21 +59,13 @@ defineEmits<{
                         {{ props.pageDescription }}
                     </p>
                     <div
-                        v-if="props.facilityName || props.tenantName"
+                        v-if="props.facilityName"
                         class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground"
                     >
                         <span v-if="props.facilityName" class="inline-flex items-center gap-1">
                             <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
                             <span class="font-medium text-foreground">{{ props.facilityName }}</span>
                         </span>
-                        <span
-                            v-if="props.facilityName && props.tenantName"
-                            class="select-none text-border"
-                            aria-hidden="true"
-                        >
-                            ·
-                        </span>
-                        <span v-if="props.tenantName">{{ props.tenantName }}</span>
                     </div>
                 </div>
             </div>
