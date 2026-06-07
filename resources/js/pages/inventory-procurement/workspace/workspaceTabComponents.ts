@@ -19,3 +19,31 @@ export const WorkspaceMsdOrdersTab = defineAsyncComponent(
 export const WorkspaceLeadTimesTab = defineAsyncComponent(
     () => import('@/pages/inventory-procurement/workspace/WorkspaceLeadTimesTab.vue'),
 );
+
+export const WorkspaceShortageQueueTab = defineAsyncComponent(
+    () => import('@/pages/inventory-procurement/workspace/WorkspaceShortageQueueTab.vue'),
+);
+
+export const WorkspaceTransfersTab = defineAsyncComponent(
+    () => import('@/pages/inventory-procurement/workspace/WorkspaceTransfersTab.vue'),
+);
+
+export const WorkspaceInventoryTab = defineAsyncComponent(
+    () => import('@/pages/inventory-procurement/workspace/WorkspaceInventoryTab.vue'),
+);
+
+export const WorkspaceDepartmentStockTab = defineAsyncComponent(
+    () => import('@/pages/inventory-procurement/workspace/WorkspaceDepartmentStockTab.vue'),
+);
+
+export const WorkspaceProcurementTab = defineAsyncComponent(
+    () => import('@/pages/inventory-procurement/workspace/WorkspaceProcurementTab.vue'),
+);
+
+export const WorkspaceLedgerTab = defineAsyncComponent(
+    () => import('@/pages/inventory-procurement/workspace/WorkspaceLedgerTab.vue'),
+);
+
+export const WorkspaceAnalyticsTab = defineAsyncComponent(
+    () => import('@/pages/inventory-procurement/workspace/WorkspaceAnalyticsTab.vue'),
+);

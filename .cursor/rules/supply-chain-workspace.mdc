@@ -23,6 +23,50 @@ alwaysApply: false
 - Register async component in `workspaceTabComponents.ts`
 - Replace inline `TabsContent` with `<Workspace{Name}Tab v-if="activeTab === '{tab}'" />`
 
+## Extracted tabs (lazy-loaded)
+
+All primary workspace tabs: `overview`, `requisitions`, `shortage-queue`, `transfers`, `inventory`, `ledger`, `department-stock`, `procurement`, `msd-orders`, `lead-times`, `claims`, `analytics`
+
+## Extracted overlays
+
+`WorkspaceFilterOverlays.vue` — inventory filters sheet, mobile procurement drawer, mobile ledger drawer
+
+## Extracted auxiliary sheets
+
+`WorkspaceAuxiliarySheets.vue` — create batch, record lead time, record delivery, barcode scanner
+
+## Extracted transfer sheets
+
+`WorkspaceTransferSheets.vue` — create transfer, update transfer status, variance review
+
+## Extracted request entry sheets
+
+`WorkspaceRequestEntrySheets.vue` — create department requisition, create procurement request
+
+## Extracted inventory ops sheets
+
+`WorkspaceInventoryOpsSheets.vue` — create inventory item, record stock movement, reconcile stock count
+
+## Extracted requisition details sheet
+
+`WorkspaceRequisitionDetailsSheet.vue` — department requisition review, approve/reject/issue workflow
+
+## Extracted procurement lifecycle sheets
+
+`WorkspaceProcurementLifecycleSheets.vue` — place order, receive goods, update status, request details (with audit log panel)
+
+## Extracted item details sheet
+
+`WorkspaceItemDetailsSheet.vue` — item overview, edit, status, batches, audit trail sub-tabs
+
+## Extracted claims and MSD sheets
+
+`WorkspaceClaimsAndMsdSheets.vue` — dispensing claim link, MSD electronic order
+
+## Still inline
+
+None — all workspace sheets/overlays extracted; parent holds network logic via `bindInventoryWorkspace()`
+
 ## Do not
 
 - Move dialogs/sheets out until tab lists are stable
