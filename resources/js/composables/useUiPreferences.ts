@@ -40,7 +40,7 @@ const themePreset = ref<UiThemePreset>('yaru');
 const themeBase = ref<UiThemeBase>('slate');
 const fontFamily = ref<UiFontFamily>('sans');
 const uiScale = ref<UiScalePreset>('compact');
-const borderRadius = ref<UiRadiusPreset>('0.5');
+const borderRadius = ref<UiRadiusPreset>('1');
 let initialized = false;
 
 const setCookie = (name: string, value: string, days = 365) => {
@@ -184,7 +184,7 @@ export function initializeUiPreferences(): void {
     borderRadius.value = readStoredPreference(
         BORDER_RADIUS_STORAGE_KEY,
         BORDER_RADIUS_VALUES,
-        '0.5',
+        '1',
     );
 
     applyIconPack(iconPack.value);
@@ -277,7 +277,7 @@ export function useUiPreferences(): UseUiPreferencesReturn {
         updateThemeBase('slate');
         updateFontFamily('sans');
         updateUiScale('compact');
-        updateBorderRadius('0.5');
+        updateBorderRadius('1');
 
         if (typeof window !== 'undefined') {
             window.localStorage.removeItem('ui.accent-color');
