@@ -6,7 +6,6 @@ import InventoryItemLookupField from '@/components/inventory/InventoryItemLookup
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -149,18 +148,18 @@ const ws = useInventoryWorkspace();
         </SheetContent>
     </Sheet>
 
-<Sheet :open="createProcurementDialogOpen" @update:open="createProcurementDialogOpen = $event">
-        <SheetContent side="right" variant="form" size="4xl">
+<Sheet :open="ws.createProcurementDialogOpen" @update:open="ws.createProcurementDialogOpen = $event">
+        <SheetContent side="right" variant="form" size="6xl">
             <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
                 <SheetTitle class="flex items-center gap-2">
-                    <AppIcon name="plus" class="size-5 text-muted-foreground" />
+                    <AppIcon name="clipboard-list" class="size-5 text-muted-foreground" />
                     Create Procurement Request
                 </SheetTitle>
-                <SheetDescription>Request procurement for an existing or new inventory item.</SheetDescription>
+                <SheetDescription>Request supplier procurement for an inventory item from master data.</SheetDescription>
             </SheetHeader>
             <ScrollArea class="min-h-0 flex-1">
-            <div class="px-6 py-4 grid gap-3 sm:grid-cols-2">
-                <Alert v-if="ws.procurementForm.sourceSummary" class="sm:col-span-2 border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+            <div class="px-6 py-4 grid gap-4">
+                <Alert v-if="ws.procurementForm.sourceSummary" class="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
                     <AppIcon name="activity" class="size-4" />
                     <AlertTitle>Raised from department shortage</AlertTitle>
                     <AlertDescription>
@@ -170,77 +169,162 @@ const ws = useInventoryWorkspace();
                         </span>
                     </AlertDescription>
                 </Alert>
-                <div class="grid gap-2 sm:col-span-2">
-                    <Label for="inv-proc-item-id">Existing Inventory Item</Label>
-                    <Input id="inv-proc-item-id" v-model="ws.procurementForm.itemId" :disabled="ws.procurementSubmitting || ws.procurementLockedToSource" placeholder="Use existing item UUID if known" />
-                    <p v-if="ws.procurementUsesExistingItem" class="text-xs text-muted-foreground">
-                        Linked request: item name, category, and unit come from the inventory master and should not be retyped.
-                    </p>
-                </div>
-                <div v-if="ws.procurementForm.itemId && ws.activeRequestsForItem" class="sm:col-span-2">
-                    <Alert v-if="ws.activeRequestsForItem.length > 0" class="border-blue-200 bg-blue-50 text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
-                        <AppIcon name="info" class="size-4" />
-                        <AlertTitle>Active Requests for This Item</AlertTitle>
-                        <AlertDescription>
-                            <div class="mt-2 space-y-1 text-xs">
-                                <div v-for="req in ws.activeRequestsForItem" :key="req.requestNumber" class="flex justify-between gap-2">
-                                    <span>{{ req.requestNumber }} - {{ req.quantity }} {{ req.unit }}</span>
-                                    <span class="text-blue-700 dark:text-blue-200">{{ req.status }}</span>
+
+                <fieldset class="rounded-lg border p-3">
+                    <legend class="px-2 text-sm font-medium text-muted-foreground">Inventory Item</legend>
+                    <div class="grid gap-3">
+                        <InventoryItemLookupField
+                            input-id="inv-proc-item-id"
+                            v-model="ws.procurementForm.itemId"
+                            label="Inventory item"
+                            placeholder="Search item name, code, barcode..."
+                            helper-text="Search inventory master data. Item details are loaded from the catalogue."
+                            browse-on-focus
+                            :disabled="ws.procurementSubmitting || ws.procurementLockedToSource"
+                            :error-message="ws.fieldError(ws.procurementErrors, 'itemId')"
+                            @selected="item => ws.handleProcurementItemSelected(item)"
+                        />
+
+                        <Alert v-if="ws.procurementForm.itemId && ws.activeRequestsForItem.length > 0" class="border-blue-200 bg-blue-50 text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
+                            <AppIcon name="info" class="size-4" />
+                            <AlertTitle>Active requests for this item</AlertTitle>
+                            <AlertDescription>
+                                <div class="mt-2 space-y-1 text-xs">
+                                    <div v-for="req in ws.activeRequestsForItem" :key="req.requestNumber" class="flex justify-between gap-2">
+                                        <span>{{ req.requestNumber }} · {{ req.quantity }} {{ req.unit }}</span>
+                                        <span class="text-blue-700 dark:text-blue-200">{{ req.status }}</span>
+                                    </div>
                                 </div>
-                            </div>
-                        </AlertDescription>
-                    </Alert>
-                </div>
-                <div class="grid gap-2">
-                    <Label for="inv-proc-item-name">Item Name</Label>
-                    <Input id="inv-proc-item-name" v-model="ws.procurementForm.itemName" :disabled="ws.procurementSubmitting || ws.procurementUsesExistingItem" />
-                    <p v-if="ws.fieldError(ws.procurementErrors, 'itemName')" class="text-xs text-destructive">{{ ws.fieldError(ws.procurementErrors, 'itemName') }}</p>
-                </div>
-                <div class="grid gap-2">
-                    <Label for="inv-proc-category">Category</Label>
-                    <Input id="inv-proc-category" v-model="ws.procurementForm.category" :disabled="ws.procurementSubmitting || ws.procurementUsesExistingItem" />
-                </div>
-                <div class="grid gap-2">
-                    <Label for="inv-proc-unit">Unit</Label>
-                    <Input id="inv-proc-unit" v-model="ws.procurementForm.unit" :disabled="ws.procurementSubmitting || ws.procurementUsesExistingItem" />
-                </div>
-                <div class="grid gap-2">
-                    <Label for="inv-proc-reorder-level">Reorder Level</Label>
-                    <Input id="inv-proc-reorder-level" v-model="ws.procurementForm.reorderLevel" :disabled="ws.procurementSubmitting || ws.procurementUsesExistingItem" type="number" min="0" step="0.001" />
-                </div>
-                <div class="grid gap-2">
-                    <Label for="inv-proc-req-qty">Requested Quantity</Label>
-                    <Input id="inv-proc-req-qty" v-model="ws.procurementForm.requestedQuantity" :disabled="ws.procurementSubmitting" type="number" min="0" step="0.001" />
-                    <p v-if="ws.fieldError(ws.procurementErrors, 'requestedQuantity')" class="text-xs text-destructive">{{ ws.fieldError(ws.procurementErrors, 'requestedQuantity') }}</p>
-                </div>
-                <div class="grid gap-2">
-                    <Label for="inv-proc-unit-cost">Unit Cost Estimate</Label>
-                    <Input id="inv-proc-unit-cost" v-model="ws.procurementForm.unitCostEstimate" :disabled="ws.procurementSubmitting" type="number" min="0" step="0.01" />
-                </div>
-                <SingleDatePopoverField input-id="inv-proc-needed-by" label="Needed By" v-model="ws.procurementForm.neededBy" :disabled="ws.procurementSubmitting" />
-                <div class="grid gap-2">
-                    <Label for="inv-proc-supplier">Preferred Supplier</Label>
-                    <Select :model-value="ws.toSelectValue(ws.procurementForm.supplierId)" @update:model-value="ws.procurementForm.supplierId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                        <SelectTrigger class="w-full" :disabled="ws.procurementSubmitting">
-                            <SelectValue placeholder="— Not specified —">
-                                {{ ws.supplierLabel(ws.procurementForm.supplierId) }}
-                            </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                        <SelectItem :value="ws.EMPTY_SELECT_VALUE">— Not specified —</SelectItem>
-                        <SelectItem v-for="s in ws.suppliers" :key="s.id" :value="s.id" :text-value="ws.lookupOptionText(s)">{{ s.name }}{{ s.code ? ` (${s.code})` : '' }}</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div class="grid gap-2 sm:col-span-2">
-                    <Label for="inv-proc-notes">Notes</Label>
-                    <Textarea id="inv-proc-notes" v-model="ws.procurementForm.notes" :disabled="ws.procurementSubmitting" rows="3" />
-                </div>
+                            </AlertDescription>
+                        </Alert>
+
+                        <div class="grid gap-3 sm:grid-cols-2">
+                            <FormFieldShell input-id="inv-proc-item-code" label="Item Code">
+                                <Input
+                                    id="inv-proc-item-code"
+                                    :model-value="ws.selectedProcurementItem?.itemCode ?? 'Not selected'"
+                                    disabled
+                                    class="bg-muted/40"
+                                />
+                            </FormFieldShell>
+                            <FormFieldShell input-id="inv-proc-item-category" label="Category">
+                                <Input
+                                    id="inv-proc-item-category"
+                                    :model-value="ws.selectedProcurementItem?.category ? ws.formatEnumLabel(ws.selectedProcurementItem.category) : 'Not selected'"
+                                    disabled
+                                    class="bg-muted/40"
+                                />
+                            </FormFieldShell>
+                            <FormFieldShell input-id="inv-proc-item-unit" label="Unit">
+                                <Input
+                                    id="inv-proc-item-unit"
+                                    :model-value="(ws.selectedProcurementItem?.unit ?? ws.procurementForm.unit) || 'Not selected'"
+                                    disabled
+                                    class="bg-muted/40"
+                                />
+                            </FormFieldShell>
+                            <FormFieldShell input-id="inv-proc-item-reorder" label="Reorder Level">
+                                <Input
+                                    id="inv-proc-item-reorder"
+                                    :model-value="(ws.selectedProcurementItem?.reorderLevel ?? ws.procurementForm.reorderLevel) || '—'"
+                                    disabled
+                                    class="bg-muted/40"
+                                />
+                            </FormFieldShell>
+                            <FormFieldShell input-id="inv-proc-item-stock" label="Current Stock" class="sm:col-span-2">
+                                <Input
+                                    id="inv-proc-item-stock"
+                                    :model-value="ws.selectedProcurementItem?.currentStock ?? '—'"
+                                    disabled
+                                    class="bg-muted/40"
+                                />
+                            </FormFieldShell>
+                        </div>
+                    </div>
+                </fieldset>
+
+                <fieldset class="grid gap-3 sm:grid-cols-2 rounded-lg border p-3">
+                    <legend class="px-2 text-sm font-medium text-muted-foreground">Request Details</legend>
+                    <FormFieldShell
+                        input-id="inv-proc-req-qty"
+                        label="Requested Quantity"
+                        helper-text="Quantity to procure from the supplier."
+                        :error-message="ws.fieldError(ws.procurementErrors, 'requestedQuantity')"
+                    >
+                        <Input
+                            id="inv-proc-req-qty"
+                            v-model="ws.procurementForm.requestedQuantity"
+                            :disabled="ws.procurementSubmitting"
+                            type="number"
+                            min="0"
+                            step="0.001"
+                        />
+                    </FormFieldShell>
+                    <FormFieldShell
+                        input-id="inv-proc-unit-cost"
+                        label="Unit Cost Estimate"
+                        helper-text="Optional estimate for budget and approval routing."
+                        :error-message="ws.fieldError(ws.procurementErrors, 'unitCostEstimate')"
+                    >
+                        <Input
+                            id="inv-proc-unit-cost"
+                            v-model="ws.procurementForm.unitCostEstimate"
+                            :disabled="ws.procurementSubmitting"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                        />
+                    </FormFieldShell>
+                    <SingleDatePopoverField
+                        input-id="inv-proc-needed-by"
+                        label="Needed By"
+                        v-model="ws.procurementForm.neededBy"
+                        :disabled="ws.procurementSubmitting"
+                        :error-message="ws.fieldError(ws.procurementErrors, 'neededBy')"
+                    />
+                    <FormFieldShell
+                        input-id="inv-proc-supplier"
+                        label="Preferred Supplier"
+                        helper-text="Optional supplier preference for this request."
+                        :error-message="ws.fieldError(ws.procurementErrors, 'supplierId')"
+                    >
+                        <Select
+                            :model-value="ws.toSelectValue(ws.procurementForm.supplierId)"
+                            @update:model-value="ws.procurementForm.supplierId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))"
+                        >
+                            <SelectTrigger id="inv-proc-supplier" class="w-full" :disabled="ws.procurementSubmitting">
+                                <SelectValue placeholder="Not specified">
+                                    {{ ws.supplierLabel(ws.procurementForm.supplierId) || 'Not specified' }}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem :value="ws.EMPTY_SELECT_VALUE">Not specified</SelectItem>
+                                <SelectItem
+                                    v-for="supplier in ws.suppliers"
+                                    :key="supplier.id"
+                                    :value="supplier.id"
+                                    :text-value="ws.lookupOptionText(supplier)"
+                                >
+                                    {{ ws.lookupOptionText(supplier) }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </FormFieldShell>
+                    <FormFieldShell input-id="inv-proc-notes" label="Notes" class="sm:col-span-2">
+                        <Textarea
+                            id="inv-proc-notes"
+                            v-model="ws.procurementForm.notes"
+                            :disabled="ws.procurementSubmitting"
+                            rows="3"
+                            placeholder="Additional context for approvers or suppliers"
+                        />
+                    </FormFieldShell>
+                </fieldset>
             </div>
             </ScrollArea>
             <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
-                <Button variant="outline" @click="createProcurementDialogOpen = false">Cancel</Button>
-                <Button :disabled="ws.procurementSubmitting" class="gap-1.5" @click="ws.submitProcurementRequest">
+                <Button variant="outline" @click="ws.createProcurementDialogOpen = false">Cancel</Button>
+                <Button :disabled="ws.procurementSubmitDisabled" class="gap-1.5" @click="ws.submitProcurementRequest">
                     <AppIcon name="plus" class="size-3.5" />
                     {{ ws.procurementSubmitting ? 'Creating...' : 'Create Request' }}
                 </Button>

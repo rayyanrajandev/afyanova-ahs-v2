@@ -17,11 +17,11 @@ class StoreInventoryProcurementRequestRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'itemId' => ['nullable', 'uuid'],
-            'itemName' => ['nullable', 'string', 'max:180', 'required_without:itemId'],
-            'category' => ['nullable', 'string', 'max:120'],
-            'unit' => ['nullable', 'string', 'max:40', 'required_without:itemId'],
-            'reorderLevel' => ['nullable', 'numeric', 'min:0'],
+            'itemId' => ['required', 'uuid'],
+            'itemName' => ['prohibited'],
+            'category' => ['prohibited'],
+            'unit' => ['prohibited'],
+            'reorderLevel' => ['prohibited'],
             'requestedQuantity' => ['required', 'numeric', 'gt:0'],
             'unitCostEstimate' => ['nullable', 'numeric', 'min:0'],
             'neededBy' => ['nullable', 'date'],

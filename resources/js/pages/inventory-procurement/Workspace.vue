@@ -485,6 +485,10 @@ const stockExecutionBlockedReason = computed(() => {
     return null;
 });
 const procurementSetupBlockedReason = computed(() => {
+    if (!referenceStructureLoaded.value || loading.value) {
+        return null;
+    }
+
     if (inventoryItemSetupBlockedReason.value) {
         return inventoryItemSetupBlockedReason.value;
     }
@@ -583,8 +587,15 @@ const procurementForm = reactive({
     sourceSummary: '',
     notes: '',
 });
+const selectedProcurementItem = ref<StockMovementLookupItem | null>(null);
 const procurementUsesExistingItem = computed(() => procurementForm.itemId.trim().length > 0);
 const procurementLockedToSource = computed(() => procurementForm.sourceDepartmentRequisitionLineId.trim().length > 0);
+const procurementSubmitDisabled = computed(() => (
+    procurementSubmitting.value
+    || !procurementForm.itemId.trim()
+    || procurementForm.requestedQuantity.trim() === ''
+    || Number(procurementForm.requestedQuantity) <= 0
+));
 const ACTIVE_SOURCE_PROCUREMENT_STATUSES = ['pending_approval', 'approved', 'ordered'];
 
 const activeRequests = ref<Record<string, any>[]>([]);
@@ -777,7 +788,33 @@ function openCreateProcurementDialog() {
     procurementRequestError.value = null;
     resetProcurementForm();
     rotateProcurementRequestKey();
+    void loadActiveProcurementRequests();
     createProcurementDialogOpen.value = true;
+}
+
+function handleProcurementItemSelected(item: StockMovementLookupItem | null): void {
+    selectedProcurementItem.value = item;
+
+    if (!item) {
+        procurementForm.itemName = '';
+        procurementForm.category = '';
+        procurementForm.unit = '';
+        procurementForm.reorderLevel = '';
+        if (!procurementLockedToSource.value) {
+            procurementForm.supplierId = '';
+        }
+        return;
+    }
+
+    procurementForm.itemName = String(item.itemName ?? '');
+    procurementForm.category = String(item.category ?? '');
+    procurementForm.unit = String(item.unit ?? '');
+    procurementForm.reorderLevel = item.reorderLevel != null ? String(item.reorderLevel) : '';
+
+    const masterItem = items.value.find((entry) => entry.id === item.id) ?? null;
+    if (masterItem?.defaultSupplierId) {
+        procurementForm.supplierId = masterItem.defaultSupplierId;
+    }
 }
 
 function closeCreateProcurementDialog(): void {
@@ -789,20 +826,21 @@ function closeCreateProcurementDialog(): void {
     rotateProcurementRequestKey();
 }
 
-function requestCreateProcurementOpenChange(open: boolean): void {
+function handleProcurementDialogOpenChange(open: boolean): void {
     if (open) {
         createProcurementDialogOpen.value = true;
         return;
     }
 
-    if (procurementSubmitting.value) return;
-
-    if (hasPendingProcurementWorkflow.value) {
-        procurementDiscardConfirmOpen.value = true;
+    if (procurementSubmitting.value) {
         return;
     }
 
     closeCreateProcurementDialog();
+}
+
+function requestCreateProcurementOpenChange(open: boolean): void {
+    handleProcurementDialogOpenChange(open);
 }
 
 function confirmProcurementDiscard(): void {
@@ -5456,6 +5494,7 @@ async function submitStockReconciliation() {
 }
 
 function resetProcurementForm() {
+    selectedProcurementItem.value = null;
     procurementForm.itemId = '';
     procurementForm.itemName = '';
     procurementForm.category = '';
@@ -5493,6 +5532,16 @@ function openProcurementFromShortage(req: any | null, line: any): void {
         `Shortage raised from ${req.requisitionNumber ?? 'department requisition'} for ${req.requestingDepartment ?? 'department'}.`,
         `Approved ${formatAmount(requisitionApprovedDecisionQuantity(line))} ${line?.unit ?? ''}; issued ${formatAmount(requisitionIssuedDecisionQuantity(line))} ${line?.unit ?? ''}; shortage ${formatAmount(shortageQuantity)} ${line?.unit ?? ''}.`,
     ].join('\n');
+    selectedProcurementItem.value = {
+        id: String(line.itemId ?? ''),
+        itemCode: item?.itemCode ?? line.itemCode ?? null,
+        itemName: String(line.itemName ?? item?.itemName ?? ''),
+        category: String(line.itemCategory ?? item?.category ?? ''),
+        unit: String(line.unit ?? item?.unit ?? ''),
+        reorderLevel: item?.reorderLevel ?? line.reorderLevel ?? null,
+        currentStock: item?.currentStock ?? null,
+    };
+    void loadActiveProcurementRequests();
     createProcurementDialogOpen.value = true;
 }
 
@@ -5505,17 +5554,20 @@ function openProcurementFromQueueShortage(req: any, line: any): void {
 }
 
 async function submitProcurementRequest() {
-    if (!canCreateRequest.value || procurementSubmitting.value) return;
+    if (!canCreateRequest.value || procurementSubmitDisabled.value) return;
+
+    if (!procurementForm.itemId.trim()) {
+        procurementErrors.value = { itemId: ['Select an inventory item from master data.'] };
+        notifyError('Select an inventory item before creating a procurement request.');
+        return;
+    }
+
     procurementSubmitting.value = true;
     procurementErrors.value = {};
     try {
         await apiRequest('POST', '/inventory-procurement/procurement-requests', {
             body: {
-                itemId: procurementForm.itemId.trim() || null,
-                itemName: procurementForm.itemName.trim() || null,
-                category: procurementForm.category.trim() || null,
-                unit: procurementForm.unit.trim() || null,
-                reorderLevel: procurementForm.reorderLevel.trim() === '' ? null : Number(procurementForm.reorderLevel),
+                itemId: procurementForm.itemId.trim(),
                 requestedQuantity: Number(procurementForm.requestedQuantity),
                 unitCostEstimate: procurementForm.unitCostEstimate.trim() === '' ? null : Number(procurementForm.unitCostEstimate),
                 neededBy: procurementForm.neededBy || null,
@@ -6311,6 +6363,11 @@ bindInventoryWorkspace({
     submitTransferVarianceReview,
     transferVarianceReviewLines,
     createRequisitionDialogOpen,
+    createProcurementDialogOpen,
+    procurementRequestKey,
+    closeCreateProcurementDialog,
+    handleProcurementDialogOpenChange,
+    requestCreateProcurementOpenChange,
     requisitionDepartmentHelperText,
     reqCreateErrors,
     reqCreateSubmitting,
@@ -6327,8 +6384,11 @@ bindInventoryWorkspace({
     procurementForm,
     procurementErrors,
     procurementSubmitting,
+    procurementSubmitDisabled,
     procurementUsesExistingItem,
     procurementLockedToSource,
+    selectedProcurementItem,
+    handleProcurementItemSelected,
     activeRequestsForItem,
     submitProcurementRequest,
     createItemDialogOpen,
