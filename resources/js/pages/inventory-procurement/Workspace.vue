@@ -315,7 +315,8 @@ const canUpdateRequestStatus = ref(false);
 const canViewAudit = ref(false);
 const canManageSuppliers = ref(false);
 const canManageWarehouses = ref(false);
-const { permissionNames: sharedPermissionNames, isFacilitySuperAdmin } = usePlatformAccess();
+const { permissionNames: sharedPermissionNames, isFacilitySuperAdmin, hasPermission } = usePlatformAccess();
+const canReadDepartments = computed(() => isFacilitySuperAdmin.value || hasPermission('departments.read'));
 
 const inventoryAccess = computed<InventoryProcurementAccess>(() => ({
     canRead: canRead.value,
@@ -4288,8 +4289,10 @@ async function loadSuppliersAndWarehouses() {
                 .catch(() => ({ data: [] })),
             apiRequest<{ data: any[] }>('GET', '/inventory-procurement/warehouses', { query: { perPage: 200 } })
                 .catch(() => ({ data: [] })),
-            apiRequest<{ data: any[] }>('GET', '/departments', { query: { perPage: 200, status: 'active' } })
-                .catch(() => ({ data: [] })),
+            canReadDepartments.value
+                ? apiRequest<{ data: any[] }>('GET', '/departments', { query: { perPage: 200, status: 'active' } })
+                    .catch(() => ({ data: [] }))
+                : Promise.resolve({ data: [] }),
             apiRequest<{ data: DepartmentRequisitionContext }>('GET', '/inventory-procurement/department-requisitions/context')
                 .catch(() => ({ data: { canSelectAnyDepartment: isFacilitySuperAdmin.value, lockedDepartment: null, staffDepartmentName: null } })),
         ]);

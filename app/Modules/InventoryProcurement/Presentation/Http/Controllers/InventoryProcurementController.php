@@ -44,6 +44,7 @@ use App\Modules\InventoryProcurement\Presentation\Http\Transformers\InventoryPro
 use App\Modules\InventoryProcurement\Presentation\Http\Transformers\InventoryStockMovementResponseTransformer;
 use App\Modules\InventoryProcurement\Presentation\Support\InventoryStockMovementSourcePresenter;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
+use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -51,6 +52,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class InventoryProcurementController extends Controller
 {
+    public function __construct(
+        private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
+    ) {}
+
     private const AUDIT_CSV_SCHEMA_VERSION = 'audit-log-csv.v1';
 
     private const AUDIT_CSV_COLUMNS = ['createdAt', 'action', 'actorType', 'actorId', 'changes', 'metadata'];
@@ -361,7 +366,8 @@ class InventoryProcurementController extends Controller
      */
     public function activeProcurementRequests(Request $request): JsonResponse
     {
-        $facility = $request->attributes->get('facility') ?? $request->user()?->facilityId();
+        $facilityId = $request->attributes->get('facility') ?? $this->platformScopeContext->facilityId();
+        $tenantId = $request->attributes->get('tenant') ?? $this->platformScopeContext->tenantId();
         
         $activeStatuses = ['pending_approval', 'approved', 'ordered'];
         
@@ -375,7 +381,8 @@ class InventoryProcurementController extends Controller
                 'created_at',
                 'requested_by_user_id'
             )
-            ->where('facility_id', $facility)
+            ->when($facilityId !== null, fn($query) => $query->where('facility_id', $facilityId))
+            ->when($tenantId !== null, fn($query) => $query->where('tenant_id', $tenantId))
             ->whereIn('status', $activeStatuses)
             ->orderByDesc('created_at')
             ->get()
