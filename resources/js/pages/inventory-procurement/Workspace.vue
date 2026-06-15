@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type Ref } from 'vue';
+import { computed, KeepAlive, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type Ref } from 'vue';
 import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue } from '@/pages/inventory-procurement/workspace/constants';
 import { clearInventoryWorkspace } from '@/pages/inventory-procurement/workspace/inventoryWorkspaceApi';
 import { bindInventoryWorkspace } from '@/pages/inventory-procurement/workspace/registerInventoryWorkspaceApi';
@@ -485,8 +485,12 @@ const stockExecutionBlockedReason = computed(() => {
     return null;
 });
 const procurementSetupBlockedReason = computed(() => {
-    if (!referenceStructureLoaded.value || loading.value) {
-        return null;
+    if (loading.value) {
+        return 'Loading inventory data...';
+    }
+
+    if (!referenceStructureLoaded.value) {
+        return 'Loading reference data...';
     }
 
     if (inventoryItemSetupBlockedReason.value) {
@@ -6751,62 +6755,86 @@ onMounted(async () => {
 
             <div class="flex min-w-0 flex-col gap-4">
                 <TabsContent value="overview" class="mt-0 flex flex-col gap-4">
-                    <WorkspaceOverviewTab v-if="activeTab === 'overview'"
-                        :workspace-next-actions="workspaceNextActions"
-                        :request-pipeline-stages="requestPipelineStages"
-                        :requisitions-ready-count="requisitionsReadyCount"
-                        :requisitions-waiting-count="requisitionsWaitingCount"
-                        :department-requisition-total="departmentRequisitionTotal"
-                        @change-tab="onTabChange"
-                        @refresh-pipeline="loadRequestPipelineCounts"
-                        @open-pipeline-stage="openRequestPipelineStage"
-                    />
+                    <KeepAlive>
+                        <WorkspaceOverviewTab v-if="activeTab === 'overview'"
+                            :workspace-next-actions="workspaceNextActions"
+                            :request-pipeline-stages="requestPipelineStages"
+                            :requisitions-ready-count="requisitionsReadyCount"
+                            :requisitions-waiting-count="requisitionsWaitingCount"
+                            :department-requisition-total="departmentRequisitionTotal"
+                            @change-tab="onTabChange"
+                            @refresh-pipeline="loadRequestPipelineCounts"
+                            @open-pipeline-stage="openRequestPipelineStage"
+                        />
+                    </KeepAlive>
                 </TabsContent>
 
                 <!-- Department Requisitions tab -->
                 <TabsContent value="requisitions" class="mt-0 flex flex-col gap-4">
-                    <WorkspaceRequisitionsTab v-if="activeTab === 'requisitions'" />
+                    <KeepAlive>
+                        <WorkspaceRequisitionsTab v-if="activeTab === 'requisitions'" />
+                    </KeepAlive>
                 </TabsContent>
                 <!-- ─── Shortage Queue Tab ─── -->
                 <TabsContent value="shortage-queue" class="mt-0 flex flex-col gap-4">
-                    <WorkspaceShortageQueueTab v-if="activeTab === 'shortage-queue'" />
+                    <KeepAlive>
+                        <WorkspaceShortageQueueTab v-if="activeTab === 'shortage-queue'" />
+                    </KeepAlive>
                 </TabsContent>
 
                 <!-- Warehouse Transfers Tab -->
                 <!-- ─── Warehouse Transfers Tab ─── -->
                 <TabsContent value="transfers" class="mt-0 flex flex-col gap-4">
-                    <WorkspaceTransfersTab v-if="activeTab === 'transfers'" />
+                    <KeepAlive>
+                        <WorkspaceTransfersTab v-if="activeTab === 'transfers'" />
+                    </KeepAlive>
                 </TabsContent>
                 <TabsContent value="inventory" class="mt-0 flex flex-col gap-4">
-                    <WorkspaceInventoryTab v-if="activeTab === 'inventory'" />
+                    <KeepAlive>
+                        <WorkspaceInventoryTab v-if="activeTab === 'inventory'" />
+                    </KeepAlive>
                 </TabsContent>
 
                 <TabsContent value="ledger" class="mt-0 flex flex-col gap-4">
-                    <WorkspaceLedgerTab v-if="activeTab === 'ledger'" />
+                    <KeepAlive>
+                        <WorkspaceLedgerTab v-if="activeTab === 'ledger'" />
+                    </KeepAlive>
                 </TabsContent>
 
                 <TabsContent value="department-stock" class="mt-0 flex flex-col gap-4">
-                    <WorkspaceDepartmentStockTab v-if="activeTab === 'department-stock'" />
+                    <KeepAlive>
+                        <WorkspaceDepartmentStockTab v-if="activeTab === 'department-stock'" />
+                    </KeepAlive>
                 </TabsContent>
 
                 <TabsContent value="procurement" class="mt-0 flex flex-col gap-4">
-                    <WorkspaceProcurementTab v-if="activeTab === 'procurement'" />
+                    <KeepAlive>
+                        <WorkspaceProcurementTab v-if="activeTab === 'procurement'" />
+                    </KeepAlive>
                 </TabsContent>
 
                 <!-- MSD Orders Tab (Feature 6) -->
                 <TabsContent value="msd-orders" class="mt-0 flex flex-col gap-4">
-                    <WorkspaceMsdOrdersTab v-if="activeTab === 'msd-orders'" />
+                    <KeepAlive>
+                        <WorkspaceMsdOrdersTab v-if="activeTab === 'msd-orders'" />
+                    </KeepAlive>
                 </TabsContent>
                 <!-- Supplier Lead Times Tab -->
                 <TabsContent value="lead-times" class="mt-0 flex flex-col gap-4">
-                    <WorkspaceLeadTimesTab v-if="activeTab === 'lead-times'" />
+                    <KeepAlive>
+                        <WorkspaceLeadTimesTab v-if="activeTab === 'lead-times'" />
+                    </KeepAlive>
                 </TabsContent>
                 <TabsContent value="claims" class="mt-0 flex flex-col gap-4">
-                    <WorkspaceClaimsTab v-if="activeTab === 'claims'" />
+                    <KeepAlive>
+                        <WorkspaceClaimsTab v-if="activeTab === 'claims'" />
+                    </KeepAlive>
                 </TabsContent>
                 <!-- Analytics Tab (Feature 8) -->
                 <TabsContent value="analytics" class="mt-0 flex flex-col gap-4">
-                    <WorkspaceAnalyticsTab v-if="activeTab === 'analytics'" />
+                    <KeepAlive>
+                        <WorkspaceAnalyticsTab v-if="activeTab === 'analytics'" />
+                    </KeepAlive>
                 </TabsContent>
 
             </div>
