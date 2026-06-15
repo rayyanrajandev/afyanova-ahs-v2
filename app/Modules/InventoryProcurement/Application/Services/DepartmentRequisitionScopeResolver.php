@@ -4,6 +4,7 @@ namespace App\Modules\InventoryProcurement\Application\Services;
 
 use App\Models\User;
 use App\Modules\Department\Infrastructure\Models\DepartmentModel;
+use App\Modules\InventoryProcurement\Application\Services\DepartmentItemCatalogService;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryItemCategory;
 use App\Modules\Staff\Infrastructure\Models\StaffProfileModel;
 
@@ -23,6 +24,7 @@ class DepartmentRequisitionScopeResolver
     public function __construct(
         private readonly PlatformScopeQueryApplier $platformScopeQueryApplier,
         private readonly FeatureFlagResolverInterface $featureFlagResolver,
+        private readonly DepartmentItemCatalogService $itemCatalogService,
     ) {}
 
     /**
@@ -40,11 +42,17 @@ class DepartmentRequisitionScopeResolver
             ? $this->departmentByIdOrName($staffDepartmentId, null)
             : $this->departmentByIdOrName(null, $staffDepartmentName);
 
+        $effectiveDepartmentId = $lockedDepartment['id'] ?? $staffDepartmentId;
+
         return [
             'canSelectAnyDepartment' => $this->canSelectAnyDepartment($user),
             'lockedDepartment' => $lockedDepartment,
             'staffDepartmentName' => $staffDepartmentName,
             'staffDepartmentId' => $staffDepartmentId,
+            'preferredWarehouseId' => $this->itemCatalogService->preferredWarehouseId($effectiveDepartmentId),
+            'hasExplicitItemCatalog' => $effectiveDepartmentId
+                ? $this->itemCatalogService->hasExplicitCatalog($effectiveDepartmentId)
+                : false,
         ];
     }
 
@@ -87,6 +95,20 @@ class DepartmentRequisitionScopeResolver
             return;
         }
 
+        // Check explicit catalog first — takes priority over category heuristic
+        $catalogIds = $this->itemCatalogService->catalogItemIdsForDepartment($departmentId);
+        if ($catalogIds !== null) {
+            $isAllowed = in_array($itemId, $catalogIds, true);
+            if (! $isAllowed) {
+                throw ValidationException::withMessages([
+                    'lines' => 'One or more requested items are not in the department item catalog.',
+                ]);
+            }
+
+            return;
+        }
+
+        // Fallback: category-based heuristic
         $allowedCategories = $this->allowedCategoriesForDepartmentId($departmentId);
         if ($allowedCategories === null) {
             return;
@@ -110,6 +132,15 @@ class DepartmentRequisitionScopeResolver
             return;
         }
 
+        // Check explicit catalog first — takes priority over category heuristic
+        $catalogIds = $this->itemCatalogService->catalogItemIdsForDepartment($departmentId);
+        if ($catalogIds !== null) {
+            $query->whereIn('inventory_items.id', $catalogIds);
+
+            return;
+        }
+
+        // Fallback: category-based heuristic
         $allowedCategories = $this->allowedCategoriesForDepartmentId($departmentId);
         if ($allowedCategories === null) {
             return;

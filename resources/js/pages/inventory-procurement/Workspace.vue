@@ -620,6 +620,8 @@ type DepartmentRequisitionContext = {
     canSelectAnyDepartment: boolean;
     lockedDepartment: LookupOption | null;
     staffDepartmentName: string | null;
+    preferredWarehouseId: string | null;
+    hasExplicitItemCatalog: boolean;
 };
 
 const suppliers = ref<LookupOption[]>([]);
@@ -3104,7 +3106,11 @@ function updateRequisitionDepartment(departmentId: string): void {
 function resetReqForm() {
     reqForm.requestingDepartment = '';
     reqForm.requestingDepartmentId = '';
-    reqForm.issuingWarehouseId = warehouses.value.length === 1 ? warehouses.value[0]?.id ?? '' : '';
+    // Auto-select the department's preferred warehouse, fallback to sole warehouse
+    const preferredWarehouse = requisitionContext.value?.preferredWarehouseId ?? null;
+    const warehouseOptions = warehouses.value;
+    reqForm.issuingWarehouseId = preferredWarehouse
+        || (warehouseOptions.length === 1 ? warehouseOptions[0]?.id ?? '' : '');
     reqForm.priority = 'normal';
     reqForm.neededBy = '';
     reqForm.notes = '';
@@ -4336,7 +4342,7 @@ async function loadSuppliersAndWarehouses() {
                     .catch(() => ({ data: [] }))
                 : Promise.resolve({ data: [] }),
             apiRequest<{ data: DepartmentRequisitionContext }>('GET', '/inventory-procurement/department-requisitions/context')
-                .catch(() => ({ data: { canSelectAnyDepartment: isFacilitySuperAdmin.value, lockedDepartment: null, staffDepartmentName: null } })),
+                .catch(() => ({ data: { canSelectAnyDepartment: isFacilitySuperAdmin.value, lockedDepartment: null, staffDepartmentName: null, preferredWarehouseId: null, hasExplicitItemCatalog: false } })),
         ]);
         suppliers.value = (suppliersRes.data ?? [])
             .map((supplier) => normalizeLookupOption(supplier, ['supplierName', 'name'], ['supplierCode', 'code']))

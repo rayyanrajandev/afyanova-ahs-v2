@@ -1539,6 +1539,24 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:inventory.procurement.read')
         ->name('inventory-procurement.barcode-lookup');
 
+    // ─── Department Item Catalog ───────────────────────────
+    Route::get('inventory-procurement/department-item-catalog/{departmentId}', [InventoryExtendedController::class, 'getDepartmentItemCatalog'])
+        ->middleware('can:inventory.procurement.manage-items')
+        ->name('inventory-procurement.department-item-catalog.show');
+    Route::put('inventory-procurement/department-item-catalog/{departmentId}', [InventoryExtendedController::class, 'updateDepartmentItemCatalog'])
+        ->middleware('can:inventory.procurement.manage-items')
+        ->name('inventory-procurement.department-item-catalog.update');
+    Route::post('inventory-procurement/department-item-catalog/{departmentId}', [InventoryExtendedController::class, 'syncDepartmentItemCatalog'])
+        ->middleware('can:inventory.procurement.manage-items')
+        ->name('inventory-procurement.department-item-catalog.sync');
+
+    // ─── Department Default Warehouses ────────────────────
+    Route::get('inventory-procurement/department-default-warehouses', [InventoryExtendedController::class, 'departmentDefaultWarehouses'])
+        ->middleware('can:inventory.procurement.manage-warehouses')
+        ->name('inventory-procurement.department-default-warehouses.index');
+    Route::patch('inventory-procurement/department-default-warehouses/{departmentId}', [InventoryExtendedController::class, 'updateDepartmentDefaultWarehouse'])
+        ->middleware('can:inventory.procurement.manage-warehouses')
+        ->name('inventory-procurement.department-default-warehouses.update');
     // ─── Inventory Analytics ─────────────────────────────────
     Route::get('inventory-procurement/analytics/consumption-trends', [InventoryAnalyticsController::class, 'consumptionTrends'])
         ->middleware('can:inventory.procurement.read')

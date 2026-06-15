@@ -24,6 +24,7 @@ use App\Modules\InventoryProcurement\Application\UseCases\UpdateDispensingClaimS
 use App\Modules\InventoryProcurement\Application\UseCases\UpdateInventoryDepartmentRequisitionStatusUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\UpdateWarehouseTransferStatusUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\UpdateWarehouseTransferVarianceReviewUseCase;
+use App\Modules\InventoryProcurement\Application\Services\DepartmentItemCatalogService;
 use App\Modules\InventoryProcurement\Application\Services\DepartmentRequisitionScopeResolver;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryDispensingClaimLinkRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryMsdOrderRepositoryInterface;
@@ -1073,5 +1074,135 @@ class InventoryExtendedController extends Controller
         $payload['meta']['readiness'] = in_array($readiness, ['ready', 'waiting'], true) ? $readiness : 'all';
 
         return $payload;
+    }
+
+    // ─── Department Item Catalog ─────────────────────────────
+
+    public function getDepartmentItemCatalog(
+        string $departmentId,
+        DepartmentItemCatalogService $catalogService,
+    ): JsonResponse {
+        $items = $catalogService->catalogItemsWithDetails($departmentId);
+
+        return response()->json([
+            'data' => $items,
+            'meta' => [
+                'total' => count($items),
+            ],
+        ]);
+    }
+
+    public function updateDepartmentItemCatalog(
+        string $departmentId,
+        Request $request,
+        DepartmentItemCatalogService $catalogService,
+    ): JsonResponse {
+        $validated = $request->validate([
+            'itemIds' => 'required|array|min:1',
+            'itemIds.*' => 'string|exists:inventory_items,id',
+        ]);
+
+        $catalogService->assignItemsToDepartment(
+            $departmentId,
+            $validated['itemIds'],
+            $request->user()?->id,
+        );
+
+        return response()->json([
+            'data' => $catalogService->catalogItemsWithDetails($departmentId),
+            'meta' => [
+                'total' => count($validated['itemIds']),
+            ],
+        ]);
+    }
+
+    public function syncDepartmentItemCatalog(
+        string $departmentId,
+        Request $request,
+        DepartmentItemCatalogService $catalogService,
+    ): JsonResponse {
+        $validated = $request->validate([
+            'items' => 'required|array|min:0',
+            'items.*' => 'string|exists:inventory_items,id',
+        ]);
+
+        $catalogService->assignItemsToDepartment(
+            $departmentId,
+            $validated['items'],
+            $request->user()?->id,
+        );
+
+        return response()->json([
+            'data' => $catalogService->catalogItemsWithDetails($departmentId),
+            'meta' => [
+                'total' => count($validated['items']),
+            ],
+        ]);
+    }
+
+    // ─── Department Default Warehouses ───────────────────────
+
+    public function departmentDefaultWarehouses(
+        DepartmentItemCatalogService $catalogService,
+    ): JsonResponse {
+        $departments = DepartmentModel::query()
+            ->where('status', 'active')
+            ->whereNotNull('default_warehouse_id')
+            ->select(['id', 'name', 'code', 'default_warehouse_id'])
+            ->get();
+
+        $warehouses = InventoryWarehouseModel::query()
+            ->whereIn('id', $departments->pluck('default_warehouse_id')->unique()->toArray())
+            ->select(['id', 'warehouse_name', 'warehouse_code'])
+            ->get()
+            ->keyBy('id');
+
+        $data = $departments->map(function ($dept) use ($warehouses) {
+            $warehouse = $warehouses->get($dept->default_warehouse_id);
+
+            return [
+                'departmentId' => (string) $dept->id,
+                'departmentName' => $dept->name,
+                'departmentCode' => $dept->code,
+                'defaultWarehouseId' => (string) $dept->default_warehouse_id,
+                'warehouseName' => $warehouse?->warehouse_name ?? 'Unknown',
+                'warehouseCode' => $warehouse?->warehouse_code ?? null,
+            ];
+        });
+
+        return response()->json([
+            'data' => $data->toArray(),
+            'meta' => [
+                'total' => count($data),
+            ],
+        ]);
+    }
+
+    public function updateDepartmentDefaultWarehouse(
+        string $departmentId,
+        Request $request,
+        DepartmentItemCatalogService $catalogService,
+    ): JsonResponse {
+        $validated = $request->validate([
+            'warehouseId' => 'nullable|string|exists:inventory_warehouses,id',
+        ]);
+
+        $catalogService->setPreferredWarehouse(
+            $departmentId,
+            $validated['warehouseId'] ?? null,
+        );
+
+        $department = DepartmentModel::query()->find($departmentId);
+
+        return response()->json([
+            'data' => [
+                'departmentId' => $departmentId,
+                'defaultWarehouseId' => $validated['warehouseId'] ?? null,
+                'departmentName' => $department?->name ?? 'Unknown',
+            ],
+            'meta' => [
+                'message' => $validated['warehouseId'] ? 'Default warehouse set.' : 'Default warehouse cleared.',
+            ],
+        ]);
     }
 }

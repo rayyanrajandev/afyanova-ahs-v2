@@ -30,6 +30,7 @@ class DepartmentModel extends Model
         'status',
         'status_reason',
         'description',
+        'default_warehouse_id',
     ];
 
     /**
@@ -41,6 +42,7 @@ class DepartmentModel extends Model
             'is_patient_facing' => 'boolean',
             'is_appointmentable' => 'boolean',
             'manager_user_id' => 'integer',
+            'default_warehouse_id' => 'string',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
