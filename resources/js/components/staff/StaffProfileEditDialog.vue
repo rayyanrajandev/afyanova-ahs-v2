@@ -38,6 +38,7 @@ export type EditableStaffProfile = {
     userEmailVerified?: boolean;
     employeeNumber: string | null;
     department: string | null;
+    departmentId?: string | null;
     jobTitle: string | null;
     professionalLicenseNumber: string | null;
     licenseType: string | null;
@@ -65,6 +66,7 @@ const departmentOptionsLoading = ref(false);
 const departmentsLoaded = ref(false);
 
 const form = reactive({
+    departmentId: '',
     department: '',
     jobTitle: '',
     professionalLicenseNumber: '',
@@ -74,6 +76,7 @@ const form = reactive({
 });
 
 function resetForm(profile: EditableStaffProfile | null): void {
+    form.departmentId = profile?.departmentId ?? '';
     form.department = profile?.department ?? '';
     form.jobTitle = profile?.jobTitle ?? '';
     form.professionalLicenseNumber = profile?.professionalLicenseNumber ?? '';
@@ -104,22 +107,7 @@ function departmentOptionLabel(row: DepartmentRecord): string {
 }
 
 function currentDepartmentOptions(): DepartmentOption[] {
-    const value = form.department.trim();
-    if (value === '') return departmentOptions.value;
-
-    const exists = departmentOptions.value.some((option) => option.value.trim().toLowerCase() === value.toLowerCase());
-    if (exists) return departmentOptions.value;
-
-    return [
-        {
-            value,
-            label: `${value} (Current)`,
-            group: 'Legacy / uncategorized',
-            description: 'Existing staff department value not yet linked to the department registry.',
-            keywords: ['legacy'],
-        },
-        ...departmentOptions.value,
-    ];
+    return departmentOptions.value;
 }
 
 async function loadDepartmentOptions(): Promise<void> {
@@ -249,7 +237,7 @@ async function saveProfile(): Promise<void> {
             credentials: 'same-origin',
             headers,
             body: JSON.stringify({
-                department: form.department.trim(),
+                departmentId: (form.departmentId || '').trim() || null,
                 jobTitle: form.jobTitle.trim(),
                 professionalLicenseNumber: form.professionalLicenseNumber.trim() || null,
                 licenseType: form.licenseType.trim() || null,
@@ -295,15 +283,15 @@ async function saveProfile(): Promise<void> {
                 <div class="grid gap-2">
                     <SearchableSelectField
                         input-id="staff-edit-department"
-                        v-model="form.department"
+                        v-model="form.departmentId"
                         label="Department"
                         :options="currentDepartmentOptions()"
                         placeholder="Select department"
                         search-placeholder="Search departments or categories"
                         helper-text="Departments are grouped by category from the registry. Legacy values remain selectable until they are cleaned up."
-                        :error-message="fieldErrors.department?.[0] ?? null"
+                        :error-message="fieldErrors.departmentId?.[0] ?? null"
                         :disabled="saving || departmentOptionsLoading"
-                        :allow-custom-value="true"
+                        :allow-custom-value="false"
                     />
                 </div>
                 <div class="grid gap-2">

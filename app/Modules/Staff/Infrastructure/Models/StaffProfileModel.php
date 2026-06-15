@@ -20,6 +20,7 @@ class StaffProfileModel extends Model
      */
     protected $fillable = [
         'user_id',
+        'department_id',
         'tenant_id',
         'employee_number',
         'department',
@@ -38,6 +39,7 @@ class StaffProfileModel extends Model
     protected function casts(): array
     {
         return [
+            'department_id' => 'string',
             'user_id' => 'integer',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',

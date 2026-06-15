@@ -274,7 +274,8 @@ type SearchForm = {
 
 type CreateForm = {
     userId: string;
-    department: string;
+    departmentId?: string;
+    department?: string;
     jobTitle: string;
     professionalLicenseNumber: string;
     licenseType: string;
@@ -525,6 +526,7 @@ const searchForm = reactive<SearchForm>({
 
 const createForm = reactive<CreateForm>({
     userId: '',
+    departmentId: '',
     department: '',
     jobTitle: '',
     professionalLicenseNumber: '',
@@ -930,7 +932,7 @@ const detailsSheetTabGridClass = computed(() => {
     return 'grid-cols-1';
 });
 const filterDepartmentOptions = computed(() => mergeSelectedDepartmentOption(departmentOptions.value, searchForm.department));
-const createDepartmentOptions = computed(() => mergeSelectedDepartmentOption(departmentOptions.value, createForm.department));
+const createDepartmentOptions = computed(() => mergeSelectedDepartmentOption(departmentOptions.value, createForm.departmentId));
 const scopeWarning = computed(() => {
     if (!scopeLoaded.value) return null;
     if (!scope.value) return 'Staff scope could not be loaded. Refresh the page or confirm facility access.';
@@ -1112,7 +1114,7 @@ function resetCreateForm(options?: { preserveLinkedUser?: boolean }) {
         createForm.userId = '';
         createLinkedUser.value = null;
     }
-    createForm.department = '';
+    createForm.departmentId = '';
     createForm.jobTitle = '';
     createForm.professionalLicenseNumber = '';
     createForm.licenseType = '';
@@ -1446,7 +1448,7 @@ async function createStaffProfile() {
         const response = await apiRequest<{ data: StaffProfile }>('POST', '/staff', {
             body: {
                 userId: Number.isNaN(normalizedUserId) ? null : normalizedUserId,
-                department: createForm.department.trim(),
+                departmentId: (createForm.departmentId || '').trim() || null,
                 jobTitle: createForm.jobTitle.trim(),
                 professionalLicenseNumber: createForm.professionalLicenseNumber.trim() || null,
                 licenseType: createForm.licenseType.trim() || null,
@@ -2900,17 +2902,17 @@ onMounted(refreshPage);
                                     />
                                 </div>
                                 <div class="grid gap-2 sm:col-span-2">
-                                    <SearchableSelectField
-                                        input-id="staff-department-sheet"
-                                        v-model="createForm.department"
-                                        label="Department"
-                                        :options="createDepartmentOptions"
-                                        placeholder="Select department"
-                                        search-placeholder="Search departments or categories"
-                                        helper-text="Departments are grouped by category from the registry."
-                                        :error-message="createErrors.department?.[0] ?? null"
-                                        :disabled="departmentOptionsLoading || createLoading"
-                                    />
+                                                                    <SearchableSelectField
+                                                                        input-id="staff-department-sheet"
+                                                                        v-model="createForm.departmentId"
+                                                                        label="Department"
+                                                                        :options="createDepartmentOptions"
+                                                                        placeholder="Select department"
+                                                                        search-placeholder="Search departments or categories"
+                                                                        helper-text="Departments are grouped by category from the registry."
+                                                                        :error-message="createErrors.departmentId?.[0] ?? null"
+                                                                        :disabled="departmentOptionsLoading || createLoading"
+                                                                    />
                                     <div
                                         v-if="createDepartmentCategorySuggestion"
                                         class="rounded-lg border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground"

@@ -251,6 +251,7 @@ class StaffProfileController extends Controller
         $fieldMap = [
             'userId' => 'user_id',
             'department' => 'department',
+            'departmentId' => 'department_id',
             'jobTitle' => 'job_title',
             'professionalLicenseNumber' => 'professional_license_number',
             'licenseType' => 'license_type',
@@ -264,6 +265,21 @@ class StaffProfileController extends Controller
                 continue;
             }
             $payload[$storageKey] = $validated[$requestKey];
+        }
+
+        // When departmentId is provided, look up department name and set both fields
+        if (array_key_exists('departmentId', $validated) && ! empty($validated['departmentId'])) {
+            $payload['department_id'] = $validated['departmentId'];
+            
+            // Look up department name from ID
+            $department = \Illuminate\Support\Facades\DB::table('departments')
+                ->where('id', $validated['departmentId'])
+                ->select('name')
+                ->first();
+            
+            if ($department) {
+                $payload['department'] = $department->name;
+            }
         }
 
         return $payload;

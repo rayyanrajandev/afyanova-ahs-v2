@@ -15,6 +15,7 @@ use App\Modules\InventoryProcurement\Application\UseCases\CreateInventoryProcure
 use App\Modules\InventoryProcurement\Application\UseCases\CreateInventoryStockMovementUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\GetInventoryItemUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\GetInventoryStockMovementSummaryUseCase;
+use App\Modules\InventoryProcurement\Application\Services\DepartmentRequisitionScopeResolver;
 use App\Modules\InventoryProcurement\Application\UseCases\GetInventoryStockAlertCountsUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\ListInventoryItemAuditLogsUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\ListInventoryItemsUseCase;
@@ -86,9 +87,18 @@ class InventoryProcurementController extends Controller
         'createdAt',
     ];
 
-    public function items(Request $request, ListInventoryItemsUseCase $useCase): JsonResponse
+    public function items(Request $request, ListInventoryItemsUseCase $useCase, DepartmentRequisitionScopeResolver $departmentScopeResolver): JsonResponse
     {
-        $result = $useCase->execute($request->all());
+        $filters = $request->all();
+        $context = $departmentScopeResolver->contextForUser($request->user());
+        if (! (bool) ($context['canSelectAnyDepartment'] ?? false)) {
+            $lockedDepartmentId = $context['lockedDepartment']['id'] ?? null;
+            if ($lockedDepartmentId) {
+                $filters['requestingDepartmentId'] = $lockedDepartmentId;
+            }
+        }
+
+        $result = $useCase->execute($filters);
 
         return response()->json([
             'data' => array_map([InventoryItemResponseTransformer::class, 'transform'], $result['data']),
@@ -217,9 +227,18 @@ class InventoryProcurementController extends Controller
         );
     }
 
-    public function stockAlertCounts(Request $request, GetInventoryStockAlertCountsUseCase $useCase): JsonResponse
+    public function stockAlertCounts(Request $request, GetInventoryStockAlertCountsUseCase $useCase, DepartmentRequisitionScopeResolver $departmentScopeResolver): JsonResponse
     {
-        $counts = $useCase->execute($request->all());
+        $filters = $request->all();
+        $context = $departmentScopeResolver->contextForUser($request->user());
+        if (! (bool) ($context['canSelectAnyDepartment'] ?? false)) {
+            $lockedDepartmentId = $context['lockedDepartment']['id'] ?? null;
+            if ($lockedDepartmentId) {
+                $filters['requestingDepartmentId'] = $lockedDepartmentId;
+            }
+        }
+
+        $counts = $useCase->execute($filters);
 
         return response()->json([
             'data' => $counts,
@@ -333,6 +352,54 @@ class InventoryProcurementController extends Controller
         return response()->json([
             'data' => array_map([InventoryProcurementRequestResponseTransformer::class, 'transform'], $result['data']),
             'meta' => $result['meta'],
+        ]);
+    }
+
+    /**
+     * Get active procurement requests grouped by item and department
+     * Used by workspace to prevent duplicate requests and show what's pending
+     */
+    public function activeProcurementRequests(Request $request): JsonResponse
+    {
+        $facility = $request->attributes->get('facility') ?? $request->user()?->facilityId();
+        
+        $activeStatuses = ['pending_approval', 'approved', 'ordered'];
+        
+        $requests = DB::table('inventory_procurement_requests')
+            ->select(
+                'item_id',
+                'requesting_department_id',
+                'status',
+                'requested_quantity',
+                'request_number',
+                'created_at',
+                'requested_by_user_id'
+            )
+            ->where('facility_id', $facility)
+            ->whereIn('status', $activeStatuses)
+            ->orderByDesc('created_at')
+            ->get()
+            ->groupBy(static fn($req) => "{$req->requesting_department_id}:{$req->item_id}");
+
+        $grouped = [];
+        foreach ($requests as $key => $items) {
+            $latest = $items[0]; // Most recent request for this dept+item combo
+            $grouped[$key] = [
+                'requestingDepartmentId' => $latest->requesting_department_id,
+                'itemId' => $latest->item_id,
+                'status' => $latest->status,
+                'quantity' => $latest->requested_quantity,
+                'requestNumber' => $latest->request_number,
+                'createdAt' => $latest->created_at,
+                'totalRequests' => count($items), // Show if there are multiple active requests
+            ];
+        }
+
+        return response()->json([
+            'data' => array_values($grouped),
+            'meta' => [
+                'total' => count($grouped),
+            ],
         ]);
     }
 

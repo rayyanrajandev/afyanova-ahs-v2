@@ -13,6 +13,7 @@ class UpdateStaffProfileRequest extends FormRequest
      */
     private const ALLOWED_FIELDS = [
         'department',
+        'departmentId',
         'jobTitle',
         'professionalLicenseNumber',
         'licenseType',
@@ -32,6 +33,7 @@ class UpdateStaffProfileRequest extends FormRequest
     {
         return [
             'userId' => ['prohibited'],
+            'departmentId' => ['sometimes', 'string', 'exists:departments,id'],
             'department' => ['sometimes', 'string', 'max:100'],
             'jobTitle' => ['sometimes', 'string', 'max:150'],
             'professionalLicenseNumber' => ['nullable', 'string', 'max:100'],

@@ -363,7 +363,11 @@ class InventoryExtendedController extends Controller
             'data' => $pageRows->all(),
             'summary' => [
                 'totalRows' => $total,
-                'departments' => $filteredRows->pluck('departmentId')->filter()->unique()->count(),
+                'departments' => $filteredRows
+                    ->map(static fn (array $row): ?string => $row['departmentId'] ?: ($row['departmentName'] ?? null))
+                    ->filter(static fn (?string $value): bool => $value !== null && $value !== '')
+                    ->unique()
+                    ->count(),
                 'items' => $filteredRows->pluck('itemId')->filter()->unique()->count(),
                 'totalIssuedQuantity' => round((float) $filteredRows->sum('issuedQuantity'), 3),
                 'lastIssuedAt' => $filteredRows->pluck('lastIssuedAt')->filter()->max(),

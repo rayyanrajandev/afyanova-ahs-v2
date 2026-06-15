@@ -19,7 +19,8 @@ class StoreStaffProfileRequest extends FormRequest
     {
         return [
             'userId' => ['required', 'integer', 'exists:users,id'],
-            'department' => ['required', 'string', 'max:100'],
+            'departmentId' => ['required', 'string', 'exists:departments,id'],
+            'department' => ['sometimes', 'string', 'max:100'],
             'jobTitle' => ['required', 'string', 'max:150'],
             'professionalLicenseNumber' => ['nullable', 'string', 'max:100'],
             'licenseType' => ['nullable', 'string', 'max:100'],

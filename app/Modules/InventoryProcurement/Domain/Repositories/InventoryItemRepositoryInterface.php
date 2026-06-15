@@ -31,6 +31,7 @@ interface InventoryItemRepositoryInterface
 
     public function stockAlertCounts(
         ?string $query,
-        ?string $category
+        ?string $category,
+        ?string $requestingDepartmentId = null
     ): array;
 }

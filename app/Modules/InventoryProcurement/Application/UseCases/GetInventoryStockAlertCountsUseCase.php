@@ -16,9 +16,13 @@ class GetInventoryStockAlertCountsUseCase
         $category = isset($filters['category']) ? trim((string) $filters['category']) : null;
         $category = $category === '' ? null : $category;
 
+        $requestingDepartmentId = isset($filters['requestingDepartmentId']) ? trim((string) $filters['requestingDepartmentId']) : null;
+        $requestingDepartmentId = $requestingDepartmentId === '' ? null : $requestingDepartmentId;
+
         return $this->inventoryItemRepository->stockAlertCounts(
             query: $query,
             category: $category,
+            requestingDepartmentId: $requestingDepartmentId,
         );
     }
 }

@@ -30,7 +30,7 @@ const ws = useInventoryWorkspace();
                             <AppIcon name="building-2" class="size-4 text-muted-foreground" />
                         </span>
                         <div>
-                            <p class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Departments</p>
+                            <p class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Depts with stock</p>
                             <p class="text-xl font-bold leading-tight tabular-nums">{{ ws.departmentStockSummary.departments ?? '—' }}</p>
                         </div>
                     </div>

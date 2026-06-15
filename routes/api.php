@@ -1372,6 +1372,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('inventory-procurement/procurement-requests', [InventoryProcurementController::class, 'procurementRequests'])
         ->middleware('can:inventory.procurement.read')
         ->name('inventory-procurement.procurement-requests.index');
+    Route::get('inventory-procurement/procurement-requests/active', [InventoryProcurementController::class, 'activeProcurementRequests'])
+        ->middleware('can:inventory.procurement.read')
+        ->name('inventory-procurement.procurement-requests.active');
     Route::post('inventory-procurement/procurement-requests', [InventoryProcurementController::class, 'storeProcurementRequest'])
         ->middleware('can:inventory.procurement.create-request')
         ->name('inventory-procurement.procurement-requests.store');

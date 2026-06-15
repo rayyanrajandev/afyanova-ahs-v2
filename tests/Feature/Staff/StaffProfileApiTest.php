@@ -4,6 +4,7 @@ use App\Models\User;
 use App\Http\Middleware\EnforceTenantIsolationWhenEnabled;
 use App\Modules\Staff\Infrastructure\Models\StaffProfileAuditLogModel;
 use App\Modules\Staff\Infrastructure\Models\StaffProfileModel;
+use App\Modules\Department\Infrastructure\Models\DepartmentModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -11,11 +12,85 @@ use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
 
+$testDepartmentId = null;
+function getTestDepartment(): string
+{
+    global $testDepartmentId;
+    // Reset if database was refreshed
+    if ($testDepartmentId !== null && !DB::table('departments')->where('id', $testDepartmentId)->exists()) {
+        $testDepartmentId = null;
+    }
+    if ($testDepartmentId === null) {
+        $facilityId = getTestFacility();
+        $department = DepartmentModel::create([
+            'facility_id' => $facilityId,
+            'code' => 'TEST',
+            'name' => 'Test Department',
+            'service_type' => 'general',
+            'is_patient_facing' => true,
+            'is_appointmentable' => false,
+            'status' => 'active',
+        ]);
+        $testDepartmentId = $department->id;
+    }
+    return $testDepartmentId;
+}
+
+$testFacilityId = null;
+function getTestFacility(): string
+{
+    global $testFacilityId;
+    // Reset if database was refreshed
+    if ($testFacilityId !== null && !DB::table('facilities')->where('id', $testFacilityId)->exists()) {
+        $testFacilityId = null;
+    }
+    if ($testFacilityId === null) {
+        $tenantId = getTestTenant();
+        $facilityId = (string) Str::uuid();
+        DB::table('facilities')->insert([
+            'id' => $facilityId,
+            'tenant_id' => $tenantId,
+            'code' => 'TEST-FAC',
+            'name' => 'Test Facility',
+            'facility_type' => 'hospital',
+            'timezone' => 'Africa/Dar_es_Salaam',
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $testFacilityId = $facilityId;
+    }
+    return $testFacilityId;
+}
+
+$testTenantId = null;
+function getTestTenant(): string
+{
+    global $testTenantId;
+    // Reset if database was refreshed
+    if ($testTenantId !== null && !DB::table('tenants')->where('id', $testTenantId)->exists()) {
+        $testTenantId = null;
+    }
+    if ($testTenantId === null) {
+        $testTenantId = (string) Str::uuid();
+        DB::table('tenants')->insert([
+            'id' => $testTenantId,
+            'code' => 'TEST-TEN',
+            'name' => 'Test Tenant',
+            'country_code' => 'TZ',
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+    return $testTenantId;
+}
+
 function staffProfilePayload(int $userId, array $overrides = []): array
 {
     return array_merge([
         'userId' => $userId,
-        'department' => 'Outpatient',
+        'departmentId' => getTestDepartment(),
         'jobTitle' => 'Clinical Officer',
         'professionalLicenseNumber' => 'CO-TZ-12345',
         'licenseType' => 'Clinical Officer',

@@ -170,7 +170,7 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
         return $this->toSearchResult($paginator);
     }
 
-    public function stockAlertCounts(?string $query, ?string $category): array
+    public function stockAlertCounts(?string $query, ?string $category, ?string $requestingDepartmentId = null): array
     {
         $queryBuilder = InventoryItemModel::query();
         $this->applyPlatformScopeIfEnabled($queryBuilder);
@@ -186,6 +186,8 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
                 });
             })
             ->when($category, fn (Builder $builder, string $requestedCategory) => $builder->where('category', $requestedCategory));
+
+        $this->departmentRequisitionScopeResolver->applyItemScope($queryBuilder, $requestingDepartmentId);
 
         $all = (clone $queryBuilder)->count();
         $outOfStock = (clone $queryBuilder)->where('current_stock', '<=', 0)->count();

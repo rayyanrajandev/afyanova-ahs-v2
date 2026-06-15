@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Modules\Department\Infrastructure\Models\DepartmentModel;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryItemCategory;
 use App\Modules\Staff\Infrastructure\Models\StaffProfileModel;
+
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
 use Illuminate\Database\Eloquent\Builder;
@@ -33,13 +34,17 @@ class DepartmentRequisitionScopeResolver
      */
     public function contextForUser(?User $user): array
     {
+        $staffDepartmentId = $this->staffDepartmentId($user);
         $staffDepartmentName = $this->staffDepartmentName($user);
-        $lockedDepartment = $this->departmentForStaffName($staffDepartmentName);
+        $lockedDepartment = $staffDepartmentId
+            ? $this->departmentByIdOrName($staffDepartmentId, null)
+            : $this->departmentByIdOrName(null, $staffDepartmentName);
 
         return [
             'canSelectAnyDepartment' => $this->canSelectAnyDepartment($user),
             'lockedDepartment' => $lockedDepartment,
             'staffDepartmentName' => $staffDepartmentName,
+            'staffDepartmentId' => $staffDepartmentId,
         ];
     }
 
@@ -240,6 +245,20 @@ class DepartmentRequisitionScopeResolver
         return $this->nullableString($department);
     }
 
+    private function staffDepartmentId(?User $user): ?string
+    {
+        if ($user === null) {
+            return null;
+        }
+
+        $departmentId = StaffProfileModel::query()
+            ->where('user_id', (int) $user->id)
+            ->where('status', 'active')
+            ->value('department_id');
+
+        return $this->nullableString($departmentId);
+    }
+
     /**
      * @return array{id:string,name:string,code:string|null}|null
      */
@@ -276,7 +295,11 @@ class DepartmentRequisitionScopeResolver
             })
             ->first();
 
-        return $department ? $this->toDepartmentPayload($department) : null;
+        if ($department !== null) {
+            return $this->toDepartmentPayload($department);
+        }
+
+        return null;
     }
 
     /**

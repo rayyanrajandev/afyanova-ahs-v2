@@ -177,6 +177,20 @@ const ws = useInventoryWorkspace();
                         Linked request: item name, category, and unit come from the inventory master and should not be retyped.
                     </p>
                 </div>
+                <div v-if="ws.procurementForm.itemId && ws.activeRequestsForItem" class="sm:col-span-2">
+                    <Alert v-if="ws.activeRequestsForItem.length > 0" class="border-blue-200 bg-blue-50 text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
+                        <AppIcon name="info" class="size-4" />
+                        <AlertTitle>Active Requests for This Item</AlertTitle>
+                        <AlertDescription>
+                            <div class="mt-2 space-y-1 text-xs">
+                                <div v-for="req in ws.activeRequestsForItem" :key="req.requestNumber" class="flex justify-between gap-2">
+                                    <span>{{ req.requestNumber }} - {{ req.quantity }} {{ req.unit }}</span>
+                                    <span class="text-blue-700 dark:text-blue-200">{{ req.status }}</span>
+                                </div>
+                            </div>
+                        </AlertDescription>
+                    </Alert>
+                </div>
                 <div class="grid gap-2">
                     <Label for="inv-proc-item-name">Item Name</Label>
                     <Input id="inv-proc-item-name" v-model="ws.procurementForm.itemName" :disabled="ws.procurementSubmitting || ws.procurementUsesExistingItem" />

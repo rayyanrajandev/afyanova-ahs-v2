@@ -731,8 +731,8 @@ onMounted(async () => {
                         <div class="min-w-0 space-y-0.5">
                             <div class="flex flex-wrap items-center gap-2">
                                 <h1 class="text-base font-semibold tracking-tight md:text-lg">
-                                    Service Point Registry
-                                </h1>
+                        Service Point Registry
+                    </h1>
                                 <Badge
                                     v-if="registryReadOnly"
                                     variant="outline"
@@ -740,7 +740,7 @@ onMounted(async () => {
                                 >
                                     View only
                                 </Badge>
-                            </div>
+                </div>
                             <p class="truncate text-xs text-muted-foreground">{{ workspaceIntroText }}</p>
                             <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
                                 <span class="inline-flex items-center gap-1">
@@ -762,14 +762,14 @@ onMounted(async () => {
                             @click="refreshPage"
                         >
                             <AppIcon name="refresh-cw" class="size-3.5" />
-                            {{ listLoading ? 'Refreshing...' : 'Refresh' }}
-                        </Button>
+                        {{ listLoading ? 'Refreshing...' : 'Refresh' }}
+                    </Button>
                         <Button v-if="canManage" size="sm" class="h-8 gap-1.5" @click="openCreateSheet">
-                            <AppIcon name="plus" class="size-3.5" />
+                        <AppIcon name="plus" class="size-3.5" />
                             Create service point
-                        </Button>
-                    </div>
+                    </Button>
                 </div>
+            </div>
             </section>
 
             <Alert v-if="errors.length" variant="destructive">
@@ -783,8 +783,8 @@ onMounted(async () => {
             <div class="flex min-w-0 flex-col gap-4">
             <Card v-if="canRead" class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70 shadow-sm">
                 <div class="flex flex-col gap-3 border-b px-4 py-3">
-                    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <div class="min-w-0">
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div class="min-w-0">
                         <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
                             <AppIcon name="layout-list" class="size-4 text-muted-foreground" />
                             Service points
@@ -792,22 +792,22 @@ onMounted(async () => {
                         <p class="mt-1 text-xs text-muted-foreground">
                             {{ counts.total }} in scope · {{ listFilterHintText }}
                         </p>
-                    </div>
+                            </div>
                     <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:max-w-2xl">
-                        <SearchInput
-                            v-model="filters.q"
+                                <SearchInput
+                                    v-model="filters.q"
                             placeholder="Search code, name, or location"
                             class="min-w-0 flex-1 text-xs [&_input]:h-8"
-                            @keyup.enter="search"
-                        />
+                                    @keyup.enter="search"
+                                />
                         <Button
                             variant="outline"
                             size="sm"
                             class="h-8 gap-1.5 rounded-lg text-xs"
                             @click="filtersSheetOpen = true"
                         >
-                            <AppIcon name="sliders-horizontal" class="size-3.5" />
-                            Filters
+                                            <AppIcon name="sliders-horizontal" class="size-3.5" />
+                                                Filters
                             <Badge
                                 v-if="filterCount > 0"
                                 variant="secondary"
@@ -816,8 +816,8 @@ onMounted(async () => {
                                 {{ filterCount }}
                             </Badge>
                         </Button>
-                    </div>
-                    </div>
+                                            </div>
+                                            </div>
                     <div class="flex flex-wrap items-center gap-2">
                         <button
                             type="button"
@@ -858,8 +858,8 @@ onMounted(async () => {
                             <span class="font-medium tabular-nums">{{ counts.other }}</span>
                             <span>Other</span>
                         </button>
-                    </div>
-                </div>
+                                            </div>
+                                            </div>
                 <div v-if="filterChips.length" class="flex flex-wrap items-center gap-1.5 border-b px-4 py-2">
                     <span class="text-[11px] text-muted-foreground">Filters:</span>
                     <button
@@ -878,9 +878,9 @@ onMounted(async () => {
                     >
                         Clear all
                     </button>
-                </div>
-                <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
-                    <ScrollArea class="min-h-0 flex-1">
+                                        </div>
+                    <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+                        <ScrollArea class="min-h-0 flex-1">
                         <div class="min-h-[12rem]">
                             <RegistryListSkeleton v-if="loading || listLoading" :count="6" />
                             <div
@@ -892,31 +892,31 @@ onMounted(async () => {
                                 </div>
                                 <div class="space-y-1">
                                     <p class="text-sm font-medium">No service points found</p>
-                                    <p class="text-xs text-muted-foreground">
+                                                <p class="text-xs text-muted-foreground">
                                         {{
                                             filterCount > 0
                                                 ? 'Adjust or clear filters to widen the registry.'
                                                 : 'Create the first service point before routing patients and handoffs.'
                                         }}
                                     </p>
-                                </div>
+                                            </div>
                                 <div class="flex flex-wrap justify-center gap-2">
-                                    <Button
+                                                <Button
                                         v-if="filterCount > 0"
                                         variant="outline"
-                                        size="sm"
+                                                    size="sm"
                                         class="h-8 gap-1.5"
                                         @click="reset"
-                                    >
+                                                >
                                         <AppIcon name="x" class="size-3.5" />
                                         Clear filters
-                                    </Button>
+                                                </Button>
                                     <Button v-if="canManage" size="sm" class="h-8 gap-1.5" @click="openCreateSheet">
                                         <AppIcon name="plus" class="size-3.5" />
                                         Create first service point
-                                    </Button>
-                                </div>
-                            </div>
+                                                </Button>
+                                            </div>
+                                        </div>
                             <div v-else class="divide-y px-4">
                                 <RegistryListRow
                                     v-for="item in items"
@@ -935,7 +935,7 @@ onMounted(async () => {
                                             <span class="shrink-0 text-xs text-muted-foreground">
                                                 {{ item.code || 'No code' }}
                                             </span>
-                                        </div>
+                                    </div>
                                     </template>
                                     <template #meta>
                                         <p class="truncate text-xs text-muted-foreground">
@@ -971,11 +971,11 @@ onMounted(async () => {
                                         </Button>
                                     </template>
                                 </RegistryListRow>
+                                </div>
                             </div>
-                        </div>
-                    </ScrollArea>
+                        </ScrollArea>
                     <footer class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
-                        <p class="text-xs text-muted-foreground">
+                            <p class="text-xs text-muted-foreground">
                             <template v-if="pagination">
                                 Showing {{ items.length }} of {{ pagination.total }} · Page
                                 {{ pagination.currentPage }} of {{ pagination.lastPage }}
@@ -983,15 +983,15 @@ onMounted(async () => {
                             <template v-else>No pagination data</template>
                         </p>
                         <div class="flex items-center gap-1">
-                            <Button
-                                variant="outline"
+                                <Button
+                                    variant="outline"
                                 size="icon"
                                 class="size-8"
                                 :disabled="!canPrev || listLoading"
-                                @click="prevPage"
-                            >
+                                    @click="prevPage"
+                                >
                                 <AppIcon name="chevron-left" class="size-4" />
-                            </Button>
+                                </Button>
                             <template v-for="page in paginationPageNumbers" :key="String(page)">
                                 <span v-if="page === '...'" class="px-1 text-xs text-muted-foreground">…</span>
                                 <Button
@@ -1005,37 +1005,37 @@ onMounted(async () => {
                                     {{ page }}
                                 </Button>
                             </template>
-                            <Button
-                                variant="outline"
+                                <Button
+                                    variant="outline"
                                 size="icon"
                                 class="size-8"
                                 :disabled="!canNext || listLoading"
-                                @click="nextPage"
-                            >
+                                    @click="nextPage"
+                                >
                                 <AppIcon name="chevron-right" class="size-4" />
-                            </Button>
-                        </div>
-                    </footer>
-                </CardContent>
-            </Card>
+                                </Button>
+                            </div>
+                        </footer>
+                    </CardContent>
+                </Card>
 
-            <Card v-else class="rounded-lg border-sidebar-border/70">
-                <CardHeader>
-                    <CardTitle class="flex items-center gap-2">
-                        <AppIcon name="layout-list" class="size-5 text-muted-foreground" />
+                <Card v-else class="rounded-lg border-sidebar-border/70">
+                    <CardHeader>
+                        <CardTitle class="flex items-center gap-2">
+                            <AppIcon name="layout-list" class="size-5 text-muted-foreground" />
                         Service points
-                    </CardTitle>
-                    <CardDescription>Service point access is permission restricted.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Alert variant="destructive">
-                        <AlertTitle>Access restricted</AlertTitle>
+                        </CardTitle>
+                        <CardDescription>Service point access is permission restricted.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Alert variant="destructive">
+                            <AlertTitle>Access restricted</AlertTitle>
                         <AlertDescription>
                             Request <code>platform.resources.read</code> permission.
                         </AlertDescription>
-                    </Alert>
-                </CardContent>
-            </Card>
+                        </Alert>
+                    </CardContent>
+                </Card>
 
             <!-- Filters sheet -->
             <Sheet v-if="canRead" :open="filtersSheetOpen" @update:open="filtersSheetOpen = $event">
@@ -1201,25 +1201,25 @@ onMounted(async () => {
                                             <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
                                                 <CardTitle class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                                                     Identity
-                                                </CardTitle>
-                                            </CardHeader>
+                        </CardTitle>
+                    </CardHeader>
                                             <CardContent class="divide-y divide-border/50 px-3 py-1.5 text-sm">
                                                 <div class="flex justify-between gap-4 py-2">
                                                     <span class="text-muted-foreground">Code</span>
                                                     <span class="font-medium">{{ detailsServicePoint.code || '—' }}</span>
-                                                </div>
+                        </div>
                                                 <div class="flex justify-between gap-4 py-2">
                                                     <span class="text-muted-foreground">Name</span>
                                                     <span class="max-w-[14rem] truncate text-right font-medium">{{
                                                         detailsServicePoint.name || '—'
                                                     }}</span>
-                                                </div>
+                            </div>
                                                 <div class="flex justify-between gap-4 py-2">
                                                     <span class="text-muted-foreground">Type</span>
                                                     <span class="font-medium">{{
                                                         detailsServicePoint.servicePointType || 'Uncategorized'
                                                     }}</span>
-                                                </div>
+                        </div>
                                             </CardContent>
                                         </Card>
                                         <Card class="!gap-0 overflow-hidden rounded-md border-border/50 !py-0 shadow-none">
@@ -1234,21 +1234,21 @@ onMounted(async () => {
                                                     <span class="max-w-[14rem] truncate text-right font-medium">{{
                                                         departmentLabelById(detailsServicePoint.departmentId)
                                                     }}</span>
-                                                </div>
+                                </div>
                                                 <div class="flex justify-between gap-4 py-2">
                                                     <span class="text-muted-foreground">Location</span>
                                                     <span class="max-w-[14rem] truncate text-right font-medium">{{
                                                         detailsServicePoint.location || '—'
                                                     }}</span>
-                                                </div>
+                                </div>
                                                 <div class="flex justify-between gap-4 py-2">
                                                     <span class="text-muted-foreground">Status</span>
                                                     <Badge :variant="statusVariant(detailsServicePoint.status)" class="capitalize">
                                                         {{ detailsServicePoint.status || 'unknown' }}
                                                     </Badge>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
+                        </div>
+                    </CardContent>
+                </Card>
                                     </div>
                                     <Card
                                         v-if="detailsServicePoint.notes"
@@ -1257,8 +1257,8 @@ onMounted(async () => {
                                         <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
                                             <CardTitle class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                                                 Notes
-                                            </CardTitle>
-                                        </CardHeader>
+                        </CardTitle>
+                    </CardHeader>
                                         <CardContent class="px-3 py-3 text-sm whitespace-pre-wrap">
                                             {{ detailsServicePoint.notes }}
                                         </CardContent>
@@ -1268,7 +1268,7 @@ onMounted(async () => {
                                     <Alert v-if="auditError" variant="destructive">
                                         <AlertTitle>Audit load issue</AlertTitle>
                                         <AlertDescription>{{ auditError }}</AlertDescription>
-                                    </Alert>
+                        </Alert>
                                     <div v-else-if="auditLoading" class="space-y-2">
                                         <Skeleton class="h-14 w-full" />
                                         <Skeleton class="h-14 w-full" />
@@ -1428,7 +1428,7 @@ onMounted(async () => {
                                     />
                                 </div>
                             </fieldset>
-                        </div>
+                            </div>
                     </ScrollArea>
                     <Alert
                         v-if="createRequestError || createValidationMessages.length"
@@ -1454,9 +1454,9 @@ onMounted(async () => {
                             Cancel
                         </Button>
                         <Button type="button" :disabled="createLoading" class="gap-1.5" @click="createItem">
-                            <AppIcon name="plus" class="size-3.5" />
+                                    <AppIcon name="plus" class="size-3.5" />
                             {{ createLoading ? 'Creating...' : 'Create service point' }}
-                        </Button>
+                                </Button>
                     </SheetFooter>
                 </SheetContent>
             </Sheet>
@@ -1475,24 +1475,24 @@ onMounted(async () => {
                         <div class="grid gap-4 px-6 py-4">
                             <fieldset class="grid gap-3 rounded-lg border p-3 sm:grid-cols-2">
                                 <legend class="px-2 text-sm font-medium text-muted-foreground">Identity</legend>
-                                <div class="grid gap-2">
-                                    <Label for="edit-sp-code">Code</Label>
+                        <div class="grid gap-2">
+                            <Label for="edit-sp-code">Code</Label>
                                     <Input
                                         id="edit-sp-code"
                                         v-model="editForm.code"
                                         :disabled="editLoading"
                                         :class="{ 'border-destructive': fieldError(editFormErrors, 'code') }"
                                     />
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="edit-sp-name">Name</Label>
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="edit-sp-name">Name</Label>
                                     <Input
                                         id="edit-sp-name"
                                         v-model="editForm.name"
                                         :disabled="editLoading"
                                         :class="{ 'border-destructive': fieldError(editFormErrors, 'name') }"
                                     />
-                                </div>
+                        </div>
                                 <div class="sm:col-span-2">
                                     <SearchableSelectField
                                         input-id="edit-sp-type"
@@ -1503,7 +1503,7 @@ onMounted(async () => {
                                         :disabled="editLoading"
                                         :error-message="fieldError(editFormErrors, 'servicePointType')"
                                     />
-                                </div>
+                        </div>
                             </fieldset>
                             <fieldset class="grid gap-3 rounded-lg border p-3">
                                 <legend class="px-2 text-sm font-medium text-muted-foreground">Placement</legend>
@@ -1514,21 +1514,21 @@ onMounted(async () => {
                                     :options="departmentOptions"
                                     :disabled="editLoading || departmentsLoading || !canDepartmentRead"
                                 />
-                                <div class="grid gap-2">
-                                    <Label for="edit-sp-location">Location</Label>
+                        <div class="grid gap-2">
+                            <Label for="edit-sp-location">Location</Label>
                                     <Input id="edit-sp-location" v-model="editForm.location" :disabled="editLoading" />
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="edit-sp-notes">Notes</Label>
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="edit-sp-notes">Notes</Label>
                                     <Textarea
                                         id="edit-sp-notes"
                                         v-model="editForm.notes"
                                         class="min-h-20"
                                         :disabled="editLoading"
                                     />
-                                </div>
-                            </fieldset>
                         </div>
+                            </fieldset>
+                    </div>
                     </ScrollArea>
                     <Alert
                         v-if="editRequestError || editValidationMessages.length"

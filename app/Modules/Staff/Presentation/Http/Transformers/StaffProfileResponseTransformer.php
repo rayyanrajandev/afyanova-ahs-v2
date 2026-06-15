@@ -15,6 +15,7 @@ class StaffProfileResponseTransformer
             'userEmailVerified' => ($profile['user_email_verified_at'] ?? null) !== null,
             'employeeNumber' => $profile['employee_number'] ?? null,
             'department' => $profile['department'] ?? null,
+            'departmentId' => $profile['department_id'] ?? null,
             'jobTitle' => $profile['job_title'] ?? null,
             'primarySpecialtyId' => $profile['primary_specialty_id'] ?? null,
             'primarySpecialtyCode' => $profile['primary_specialty_code'] ?? null,

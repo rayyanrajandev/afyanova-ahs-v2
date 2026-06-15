@@ -4,12 +4,14 @@ namespace App\Modules\InventoryProcurement\Application\UseCases;
 
 use App\Modules\InventoryProcurement\Application\Exceptions\InventoryItemNotFoundException;
 use App\Modules\InventoryProcurement\Application\Exceptions\InventoryProcurementWorkflowException;
+use App\Modules\InventoryProcurement\Application\Services\ProcurementApprovalRoutingService;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryProcurementRequestAuditLogRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryProcurementRequestRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryProcurementRequestStatus;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
+use App\Modules\Staff\Infrastructure\Models\StaffProfileModel;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -27,6 +29,7 @@ class CreateInventoryProcurementRequestUseCase
         private readonly InventoryProcurementRequestAuditLogRepositoryInterface $auditLogRepository,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
+        private readonly ProcurementApprovalRoutingService $routingService,
     ) {}
 
     public function execute(array $payload, ?int $actorId = null): array
@@ -42,16 +45,46 @@ class CreateInventoryProcurementRequestUseCase
             : null;
         $totalCostEstimate = $unitCostEstimate !== null ? $quantity * $unitCostEstimate : null;
 
+        // Determine requesting department from actor's staff profile
+        $requestingDepartmentId = null;
+        if ($actorId) {
+            $staffProfile = StaffProfileModel::where('user_id', $actorId)->first();
+            if ($staffProfile?->department_id) {
+                $requestingDepartmentId = $staffProfile->department_id;
+            }
+        }
+
+        // Determine approval routing and duplicate check
+        $approvalRouting = null;
+        $duplicateCheckHash = null;
+        if ($requestingDepartmentId && $item['id']) {
+            $approvalRouting = $this->routingService->determineApprovalRoute(
+                $requestingDepartmentId,
+                $item['id'],
+                $quantity,
+                $unitCostEstimate,
+            );
+            $duplicateCheckHash = $this->routingService->generateDuplicateCheckHash(
+                $requestingDepartmentId,
+                $item['id'],
+                InventoryProcurementRequestStatus::PENDING_APPROVAL->value,
+            );
+        }
+
         $requestPayload = [
             'request_number' => $this->generateRequestNumber(),
             'tenant_id' => $this->platformScopeContext->tenantId(),
             'facility_id' => $this->platformScopeContext->facilityId(),
             'item_id' => $item['id'],
+            'requesting_department_id' => $requestingDepartmentId,
             'requested_quantity' => $quantity,
             'unit_cost_estimate' => $unitCostEstimate,
             'total_cost_estimate' => $totalCostEstimate,
             'requested_by_user_id' => $actorId,
             'status' => InventoryProcurementRequestStatus::PENDING_APPROVAL->value,
+            'approval_route' => $approvalRouting['route'] ?? 'needs_review',
+            'is_catalog_item' => $approvalRouting['is_catalog_item'] ?? false,
+            'duplicate_check_hash' => $duplicateCheckHash,
             'needed_by' => $payload['needed_by'] ?? null,
             'supplier_id' => $payload['supplier_id'] ?? null,
             'supplier_name' => $payload['supplier_name'] ?? null,

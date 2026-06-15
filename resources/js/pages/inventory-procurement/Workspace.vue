@@ -586,6 +586,14 @@ const procurementUsesExistingItem = computed(() => procurementForm.itemId.trim()
 const procurementLockedToSource = computed(() => procurementForm.sourceDepartmentRequisitionLineId.trim().length > 0);
 const ACTIVE_SOURCE_PROCUREMENT_STATUSES = ['pending_approval', 'approved', 'ordered'];
 
+const activeRequests = ref<Record<string, any>[]>([]);
+const activeRequestsForItem = computed(() => {
+    if (!procurementForm.itemId.trim()) {
+        return [];
+    }
+    return activeRequests.value.filter((req) => req.itemId === procurementForm.itemId);
+});
+
 type LookupOption = {
     id: string;
     name: string;
@@ -2487,6 +2495,11 @@ async function loadPermissions() {
 
 async function loadItems() {
     if (!canRead.value) return;
+
+    if (isDepartmentRequester.value && requisitionContext.value === null) {
+        await loadSuppliersAndWarehouses();
+    }
+
     const [listResponse, countsResponse] = await Promise.all([
         apiRequest<{ data: any[]; meta: { currentPage: number; lastPage: number; total?: number } }>('GET', '/inventory-procurement/items', {
             query: {
@@ -2495,6 +2508,7 @@ async function loadItems() {
                 stockState: itemSearch.stockState || null,
                 sortBy: itemSearch.sortBy || null,
                 sortDir: itemSearch.sortDir || null,
+                requestingDepartmentId: inventoryItemRequestingDepartmentId.value || null,
                 page: itemSearch.page,
                 perPage: itemSearch.perPage,
             },
@@ -2503,6 +2517,7 @@ async function loadItems() {
             query: {
                 q: itemSearch.q.trim() || null,
                 category: itemSearch.category.trim() || null,
+                requestingDepartmentId: inventoryItemRequestingDepartmentId.value || null,
             },
         }),
     ]);
@@ -2527,6 +2542,17 @@ async function loadProcurementRequests() {
 
     procurementRequests.value = response.data;
     procurementPagination.value = response.meta;
+}
+
+async function loadActiveProcurementRequests() {
+    if (!canRead.value) return;
+    try {
+        const response = await apiRequest<{ data: any[]; meta: { total: number } }>('GET', '/inventory-procurement/procurement-requests/active', {});
+        activeRequests.value = response.data;
+    } catch (error) {
+        console.warn('Failed to load active procurement requests:', error);
+        activeRequests.value = [];
+    }
 }
 
 function stockLedgerQuery() {
@@ -2972,6 +2998,17 @@ const selectedRequisitionDepartment = computed(() => {
     return lockedRequisitionDepartment.value;
 });
 const selectedRequisitionDepartmentId = computed(() => (selectedRequisitionDepartment.value?.id ?? reqForm.requestingDepartmentId.trim()) || null);
+const inventoryItemRequestingDepartmentId = computed(() => {
+    if (!isDepartmentRequester.value) {
+        return null;
+    }
+
+    if (!canSelectAnyRequisitionDepartment.value) {
+        return lockedRequisitionDepartment.value?.id ?? null;
+    }
+
+    return selectedRequisitionDepartmentId.value;
+});
 const selectedRequisitionWarehouse = computed(() => {
     const selectedId = reqForm.issuingWarehouseId.trim();
 
@@ -3003,6 +3040,14 @@ function applyLockedDeptReqFilter(): void {
 
     deptReqSearch.departmentId = lockedDepartment.id;
 }
+
+watch(inventoryItemRequestingDepartmentId, (newDepartmentId, oldDepartmentId) => {
+    if (!canRead.value) return;
+    if (newDepartmentId === oldDepartmentId) return;
+    if (activeTab.value === 'inventory' || activeTab.value === 'overview' || activeTab.value === 'msd-orders') {
+        void loadItems();
+    }
+});
 
 function updateRequisitionDepartment(departmentId: string): void {
     const normalizedId = fromSelectValue(departmentId);
@@ -4949,10 +4994,10 @@ async function loadActiveWorkspaceTab(tab: InventoryWorkspaceTab = activeTab.val
     try {
     switch (tab) {
         case 'overview':
-            await Promise.all([loadItems(), loadProcurementRequests(), loadDeptRequisitions(), loadShortageQueue(), loadRequestPipelineCounts()]);
+            await Promise.all([loadItems(), loadProcurementRequests(), loadActiveProcurementRequests(), loadDeptRequisitions(), loadShortageQueue(), loadRequestPipelineCounts()]);
             break;
         case 'inventory':
-            await Promise.all([loadItems(), loadSuppliersAndWarehouses()]);
+            await Promise.all([loadItems(), loadSuppliersAndWarehouses(), loadActiveProcurementRequests()]);
             break;
         case 'procurement':
             await Promise.all([loadProcurementRequests(), loadSuppliersAndWarehouses()]);
@@ -6168,6 +6213,7 @@ bindInventoryWorkspace({
     procurementPages,
     goToProcurementPage,
     loadProcurementRequests,
+    loadActiveProcurementRequests,
     stockLedgerSummary,
     stockLedgerLoading,
     stockLedgerFiltersOpen,
@@ -6280,6 +6326,7 @@ bindInventoryWorkspace({
     procurementSubmitting,
     procurementUsesExistingItem,
     procurementLockedToSource,
+    activeRequestsForItem,
     submitProcurementRequest,
     createItemDialogOpen,
     hasCreateItemDraftContent,

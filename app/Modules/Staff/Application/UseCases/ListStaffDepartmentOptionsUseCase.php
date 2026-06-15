@@ -45,7 +45,8 @@ class ListStaffDepartmentOptionsUseCase
             $code = trim((string) ($department['code'] ?? ''));
             $serviceType = trim((string) ($department['service_type'] ?? ''));
             $options[] = [
-                'value' => $name,
+                'id' => $department['id'] ?? null,
+                'value' => $department['id'] ?? $name,
                 'label' => $code !== '' ? sprintf('%s - %s', $code, $name) : $name,
                 'group' => $serviceType !== '' ? $serviceType : null,
                 'description' => $serviceType !== '' ? sprintf('Category: %s', $serviceType) : null,
@@ -66,6 +67,7 @@ class ListStaffDepartmentOptionsUseCase
             }
 
             $options[] = [
+                'id' => null,
                 'value' => $value,
                 'label' => $value,
                 'group' => 'Legacy / uncategorized',
