@@ -5045,7 +5045,7 @@ async function loadActiveWorkspaceTab(tab: InventoryWorkspaceTab = activeTab.val
             await Promise.all([loadItems(), loadSuppliersAndWarehouses(), loadActiveProcurementRequests()]);
             break;
         case 'procurement':
-            await Promise.all([loadProcurementRequests(), loadSuppliersAndWarehouses()]);
+            await Promise.all([loadProcurementRequests(), loadSuppliersAndWarehouses(), loadItems(), loadActiveProcurementRequests()]);
             break;
         case 'ledger':
             await loadStockLedger();
@@ -5089,7 +5089,7 @@ async function prefetchTab(tab: InventoryWorkspaceTab): Promise<void> {
     try {
         switch (tab) {
             case 'procurement':
-                await Promise.all([loadProcurementRequests(), loadSuppliersAndWarehouses()]);
+                await Promise.all([loadProcurementRequests(), loadSuppliersAndWarehouses(), loadItems(), loadActiveProcurementRequests()]);
                 break;
             case 'inventory':
                 await Promise.all([loadItems(), loadSuppliersAndWarehouses(), loadActiveProcurementRequests()]);
