@@ -6730,7 +6730,10 @@ onMounted(async () => {
 
             <!-- Tab layout -->
             <Tabs :model-value="activeTab" class="flex min-h-0 flex-1 flex-col gap-4" @update:model-value="onTabChange">
-                <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <div
+                    class="grid gap-2"
+                    :style="{ gridTemplateColumns: `repeat(${Math.min(visibleWorkspaceAreas.length, 4)}, minmax(0, 1fr))` }"
+                >
                     <button
                         v-for="area in visibleWorkspaceAreas"
                         :key="area.id"
