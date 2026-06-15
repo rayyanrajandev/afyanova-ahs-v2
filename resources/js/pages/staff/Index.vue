@@ -622,16 +622,26 @@ async function apiRequest<T>(
     }
 
     const response = await fetch(url.toString(), { method, credentials: 'same-origin', headers, body });
-    const payload = (await response.json().catch(() => ({}))) as ValidationErrorResponse;
+    let payload: ValidationErrorResponse | { message?: string } = {};
+
+    try {
+        payload = (await response.json()) as ValidationErrorResponse;
+    } catch {
+        const text = await response.text();
+        const trimmed = String(text ?? '').trim();
+        payload = { message: trimmed || `${response.status} ${response.statusText}` };
+    }
+
     if (!response.ok) {
         const error = new Error(payload.message ?? `${response.status} ${response.statusText}`) as Error & {
             status?: number;
-            payload?: ValidationErrorResponse;
+            payload?: ValidationErrorResponse | { message?: string };
         };
         error.status = response.status;
         error.payload = payload;
         throw error;
     }
+
     return payload as T;
 }
 
@@ -646,11 +656,20 @@ async function apiRequestFormData<T>(method: 'POST' | 'PATCH', path: string, for
         headers,
         body: formData,
     });
-    const payload = (await response.json().catch(() => ({}))) as ValidationErrorResponse;
+    let payload: ValidationErrorResponse | { message?: string } = {};
+
+    try {
+        payload = (await response.json()) as ValidationErrorResponse;
+    } catch {
+        const text = await response.text();
+        const trimmed = String(text ?? '').trim();
+        payload = { message: trimmed || `${response.status} ${response.statusText}` };
+    }
+
     if (!response.ok) {
         const error = new Error(payload.message ?? `${response.status} ${response.statusText}`) as Error & {
             status?: number;
-            payload?: ValidationErrorResponse;
+            payload?: ValidationErrorResponse | { message?: string };
         };
         error.status = response.status;
         error.payload = payload;
