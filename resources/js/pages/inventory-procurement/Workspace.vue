@@ -5082,6 +5082,64 @@ async function loadActiveWorkspaceTab(tab: InventoryWorkspaceTab = activeTab.val
     }
 }
 
+// Prefetch data when user hovers over or clicks a tab
+async function prefetchTab(tab: InventoryWorkspaceTab): Promise<void> {
+    if (!canRead.value || loadedWorkspaceTabs.has(tab)) return;
+    // Silently load in background without blocking UI
+    try {
+        switch (tab) {
+            case 'procurement':
+                await Promise.all([loadProcurementRequests(), loadSuppliersAndWarehouses()]);
+                break;
+            case 'inventory':
+                await Promise.all([loadItems(), loadSuppliersAndWarehouses(), loadActiveProcurementRequests()]);
+                break;
+            case 'requisitions':
+                await Promise.all([loadDeptRequisitions(), loadSuppliersAndWarehouses()]);
+                break;
+            case 'shortage-queue':
+                await loadShortageQueue();
+                break;
+            case 'transfers':
+                await Promise.all([loadWarehouseTransfers(), loadSuppliersAndWarehouses()]);
+                break;
+            case 'ledger':
+                await loadStockLedger();
+                break;
+            case 'department-stock':
+                await loadDepartmentStock();
+                break;
+            case 'msd-orders':
+                await Promise.all([loadMsdOrders(), loadShortageQueue(), loadItems()]);
+                break;
+            case 'lead-times':
+                await Promise.all([loadSuppliersAndWarehouses(), loadLeadTimes()]);
+                break;
+            case 'analytics':
+                await loadAllAnalytics();
+                break;
+            case 'claims':
+                await loadClaimLinks();
+                break;
+            case 'overview':
+                await Promise.all([loadItems(), loadProcurementRequests(), loadActiveProcurementRequests(), loadDeptRequisitions(), loadShortageQueue(), loadRequestPipelineCounts()]);
+                break;
+        }
+        loadedWorkspaceTabs.add(tab);
+    } catch {
+        // Silently fail - prefetch is non-blocking
+    }
+}
+
+// Debounce prefetch to avoid excessive calls
+let prefetchTimeout: ReturnType<typeof setTimeout> | null = null;
+function debouncedPrefetch(tab: InventoryWorkspaceTab): void {
+    if (prefetchTimeout) clearTimeout(prefetchTimeout);
+    prefetchTimeout = setTimeout(() => {
+        void prefetchTab(tab);
+    }, 300);
+}
+
 async function reloadAll() {
     if (!canRead.value) {
         loading.value = false;
@@ -6696,39 +6754,39 @@ onMounted(async () => {
                 </div>
 
                 <TabsList class="flex h-auto w-full flex-wrap justify-start gap-2 rounded-lg bg-muted/30 p-1">
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('inventory')" value="inventory" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('inventory')" value="inventory" class="gap-1.5" @mouseenter="debouncedPrefetch('inventory')">
                         <AppIcon name="package" class="size-3.5" />
                         Items
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('ledger')" value="ledger" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('ledger')" value="ledger" class="gap-1.5" @mouseenter="debouncedPrefetch('ledger')">
                         <AppIcon name="activity" class="size-3.5" />
                         Ledger
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('department-stock')" value="department-stock" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('department-stock')" value="department-stock" class="gap-1.5" @mouseenter="debouncedPrefetch('department-stock')">
                         <AppIcon name="building-2" class="size-3.5" />
                         Department Stock
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('procurement')" value="procurement" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('procurement')" value="procurement" class="gap-1.5" @mouseenter="debouncedPrefetch('procurement')">
                         <AppIcon name="clipboard-list" class="size-3.5" />
                         Purchase Requests
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('msd-orders')" value="msd-orders" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('msd-orders')" value="msd-orders" class="gap-1.5" @mouseenter="debouncedPrefetch('msd-orders')">
                         <AppIcon name="package" class="size-3.5" />
                         MSD Orders
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('lead-times')" value="lead-times" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('lead-times')" value="lead-times" class="gap-1.5" @mouseenter="debouncedPrefetch('lead-times')">
                         <AppIcon name="activity" class="size-3.5" />
                         Lead Times
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('overview')" value="overview" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('overview')" value="overview" class="gap-1.5" @mouseenter="debouncedPrefetch('overview')">
                         <AppIcon name="alert-triangle" class="size-3.5" />
                         Priorities
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('requisitions')" value="requisitions" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('requisitions')" value="requisitions" class="gap-1.5" @mouseenter="debouncedPrefetch('requisitions')">
                         <AppIcon name="clipboard-list" class="size-3.5" />
                         Department Requests
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('shortage-queue')" value="shortage-queue" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('shortage-queue')" value="shortage-queue" class="gap-1.5" @mouseenter="debouncedPrefetch('shortage-queue')">
                         <AppIcon name="alert-triangle" class="size-3.5" />
                         Shortages
                         <Badge
@@ -6739,15 +6797,15 @@ onMounted(async () => {
                             {{ shortageQueueMeta!.readyLineCount }}
                         </Badge>
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('transfers')" value="transfers" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('transfers')" value="transfers" class="gap-1.5" @mouseenter="debouncedPrefetch('transfers')">
                         <AppIcon name="activity" class="size-3.5" />
                         Transfers
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('claims')" value="claims" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('claims')" value="claims" class="gap-1.5" @mouseenter="debouncedPrefetch('claims')">
                         <AppIcon name="shield-check" class="size-3.5" />
                         Claims
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('analytics')" value="analytics" class="gap-1.5">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('analytics')" value="analytics" class="gap-1.5" @mouseenter="debouncedPrefetch('analytics')">
                         <AppIcon name="activity" class="size-3.5" />
                         Analytics
                     </TabsTrigger>

@@ -27,7 +27,7 @@ const ws = useInventoryWorkspace();
                             </div>
                             <div class="flex shrink-0 items-center gap-2">
                                 <!-- Mobile filters -->
-                                <Button variant="outline" size="sm" class="h-9 gap-1.5 rounded-lg text-xs md:hidden" @click="ws.mobileProcurementDrawerOpen = true">
+                                <Button variant="outline" size="sm" class="h-9 gap-1.5 rounded-lg text-xs md:hidden" @click="ws.mobileProcurementDrawerOpen = true" :disabled="ws.loading">
                                     <AppIcon name="sliders-horizontal" class="size-3.5" />
                                     Filters
                                 </Button>
@@ -35,7 +35,7 @@ const ws = useInventoryWorkspace();
                                     v-if="ws.canCreateRequest"
                                     size="sm"
                                     class="h-9 gap-1.5 rounded-lg text-xs"
-                                    :disabled="!ws.canLaunchProcurementRequest"
+                                    :disabled="!ws.canLaunchProcurementRequest || ws.loading"
                                     @click="ws.openCreateProcurementDialog"
                                 >
                                     <AppIcon name="plus" class="size-3.5" />
@@ -44,8 +44,16 @@ const ws = useInventoryWorkspace();
                             </div>
                         </div>
 
+                        <!-- Toolbar - Skeleton while loading -->
+                        <div v-if="ws.loading" class="flex items-center gap-2 border-b px-4 py-3 opacity-50">
+                            <div class="relative min-w-0 flex-1 h-9 bg-muted rounded-lg animate-pulse"></div>
+                            <div class="h-9 w-44 bg-muted rounded-lg animate-pulse"></div>
+                            <div class="h-9 w-40 bg-muted rounded-lg animate-pulse"></div>
+                            <div class="h-9 w-16 bg-muted rounded-lg animate-pulse"></div>
+                        </div>
+
                         <!-- Toolbar -->
-                        <div class="flex items-center gap-2 border-b px-4 py-3">
+                        <div v-else class="flex items-center gap-2 border-b px-4 py-3">
                             <div class="relative min-w-0 flex-1">
                                 <AppIcon name="search" class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                                 <input
@@ -107,7 +115,7 @@ const ws = useInventoryWorkspace();
                             <button class="ml-1 text-[11px] text-muted-foreground underline-offset-2 hover:underline" @click="ws.resetProcurementFilters()">Clear all</button>
                         </div>
 
-                        <WorkflowQueueSkeleton v-if="ws.loading" :count="4" />
+                        <WorkflowQueueSkeleton v-if="ws.loading" :count="6" />
 
                         <!-- Empty state -->
                         <div
