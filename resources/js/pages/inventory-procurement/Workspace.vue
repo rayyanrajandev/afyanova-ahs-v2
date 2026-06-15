@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { computed, KeepAlive, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type Ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type Ref } from 'vue';
 import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue } from '@/pages/inventory-procurement/workspace/constants';
 import { clearInventoryWorkspace } from '@/pages/inventory-procurement/workspace/inventoryWorkspaceApi';
 import { bindInventoryWorkspace } from '@/pages/inventory-procurement/workspace/registerInventoryWorkspaceApi';
@@ -6813,86 +6813,62 @@ onMounted(async () => {
 
             <div class="flex min-w-0 flex-col gap-4">
                 <TabsContent value="overview" class="mt-0 flex flex-col gap-4">
-                    <KeepAlive>
-                        <WorkspaceOverviewTab v-if="activeTab === 'overview'"
-                            :workspace-next-actions="workspaceNextActions"
-                            :request-pipeline-stages="requestPipelineStages"
-                            :requisitions-ready-count="requisitionsReadyCount"
-                            :requisitions-waiting-count="requisitionsWaitingCount"
-                            :department-requisition-total="departmentRequisitionTotal"
-                            @change-tab="onTabChange"
-                            @refresh-pipeline="loadRequestPipelineCounts"
-                            @open-pipeline-stage="openRequestPipelineStage"
-                        />
-                    </KeepAlive>
+                    <WorkspaceOverviewTab
+                        :workspace-next-actions="workspaceNextActions"
+                        :request-pipeline-stages="requestPipelineStages"
+                        :requisitions-ready-count="requisitionsReadyCount"
+                        :requisitions-waiting-count="requisitionsWaitingCount"
+                        :department-requisition-total="departmentRequisitionTotal"
+                        @change-tab="onTabChange"
+                        @refresh-pipeline="loadRequestPipelineCounts"
+                        @open-pipeline-stage="openRequestPipelineStage"
+                    />
                 </TabsContent>
 
                 <!-- Department Requisitions tab -->
                 <TabsContent value="requisitions" class="mt-0 flex flex-col gap-4">
-                    <KeepAlive>
-                        <WorkspaceRequisitionsTab v-if="activeTab === 'requisitions'" />
-                    </KeepAlive>
+                    <WorkspaceRequisitionsTab />
                 </TabsContent>
                 <!-- ─── Shortage Queue Tab ─── -->
                 <TabsContent value="shortage-queue" class="mt-0 flex flex-col gap-4">
-                    <KeepAlive>
-                        <WorkspaceShortageQueueTab v-if="activeTab === 'shortage-queue'" />
-                    </KeepAlive>
+                    <WorkspaceShortageQueueTab />
                 </TabsContent>
 
                 <!-- Warehouse Transfers Tab -->
                 <!-- ─── Warehouse Transfers Tab ─── -->
                 <TabsContent value="transfers" class="mt-0 flex flex-col gap-4">
-                    <KeepAlive>
-                        <WorkspaceTransfersTab v-if="activeTab === 'transfers'" />
-                    </KeepAlive>
+                    <WorkspaceTransfersTab />
                 </TabsContent>
                 <TabsContent value="inventory" class="mt-0 flex flex-col gap-4">
-                    <KeepAlive>
-                        <WorkspaceInventoryTab v-if="activeTab === 'inventory'" />
-                    </KeepAlive>
+                    <WorkspaceInventoryTab />
                 </TabsContent>
 
                 <TabsContent value="ledger" class="mt-0 flex flex-col gap-4">
-                    <KeepAlive>
-                        <WorkspaceLedgerTab v-if="activeTab === 'ledger'" />
-                    </KeepAlive>
+                    <WorkspaceLedgerTab />
                 </TabsContent>
 
                 <TabsContent value="department-stock" class="mt-0 flex flex-col gap-4">
-                    <KeepAlive>
-                        <WorkspaceDepartmentStockTab v-if="activeTab === 'department-stock'" />
-                    </KeepAlive>
+                    <WorkspaceDepartmentStockTab />
                 </TabsContent>
 
                 <TabsContent value="procurement" class="mt-0 flex flex-col gap-4">
-                    <KeepAlive>
-                        <WorkspaceProcurementTab v-if="activeTab === 'procurement'" />
-                    </KeepAlive>
+                    <WorkspaceProcurementTab />
                 </TabsContent>
 
                 <!-- MSD Orders Tab (Feature 6) -->
                 <TabsContent value="msd-orders" class="mt-0 flex flex-col gap-4">
-                    <KeepAlive>
-                        <WorkspaceMsdOrdersTab v-if="activeTab === 'msd-orders'" />
-                    </KeepAlive>
+                    <WorkspaceMsdOrdersTab />
                 </TabsContent>
                 <!-- Supplier Lead Times Tab -->
                 <TabsContent value="lead-times" class="mt-0 flex flex-col gap-4">
-                    <KeepAlive>
-                        <WorkspaceLeadTimesTab v-if="activeTab === 'lead-times'" />
-                    </KeepAlive>
+                    <WorkspaceLeadTimesTab />
                 </TabsContent>
                 <TabsContent value="claims" class="mt-0 flex flex-col gap-4">
-                    <KeepAlive>
-                        <WorkspaceClaimsTab v-if="activeTab === 'claims'" />
-                    </KeepAlive>
+                    <WorkspaceClaimsTab />
                 </TabsContent>
                 <!-- Analytics Tab (Feature 8) -->
                 <TabsContent value="analytics" class="mt-0 flex flex-col gap-4">
-                    <KeepAlive>
-                        <WorkspaceAnalyticsTab v-if="activeTab === 'analytics'" />
-                    </KeepAlive>
+                    <WorkspaceAnalyticsTab />
                 </TabsContent>
 
             </div>
