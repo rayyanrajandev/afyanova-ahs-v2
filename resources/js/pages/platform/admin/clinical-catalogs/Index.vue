@@ -329,7 +329,106 @@ const consumptionStageOptions = [
     { value: 'procedure_completion', label: 'When procedure is completed' },
     { value: 'manual', label: 'Manual stock issue only' },
 ] as const;
+
+// ── Tanzania medicine selection options ──────────────────────────────────────
+
+const therapeuticClassOptions: SearchableSelectOption[] = [
+    { value: 'analgesics_antipyretics', label: 'Analgesics / antipyretics', description: 'Paracetamol, ibuprofen, aspirin, morphine' },
+    { value: 'antibiotics', label: 'Antibiotics / antimicrobials', description: 'Penicillins, cephalosporins, tetracyclines, macrolides' },
+    { value: 'antimalarials', label: 'Antimalarials', description: 'ACTs, chloroquine, amodiaquine, artemether' },
+    { value: 'antiretrovirals', label: 'Antiretrovirals', description: 'ARVs for HIV treatment and prevention' },
+    { value: 'antifungals', label: 'Antifungals', description: 'Fluconazole, amphotericin B, nystatin' },
+    { value: 'antivirals', label: 'Antivirals', description: 'Acyclovir, oseltamivir, tenofovir' },
+    { value: 'antihelminthics', label: 'Antihelminthics', description: 'Albendazole, mebendazole, praziquantel' },
+    { value: 'anti_inflammatory', label: 'Anti-inflammatory agents', description: 'NSAIDs, corticosteroids' },
+    { value: 'anaesthetics_general', label: 'General anaesthetics', description: 'Ketamine, thiopental, halothane' },
+    { value: 'anaesthetics_local', label: 'Local anaesthetics', description: 'Lidocaine, bupivacaine' },
+    { value: 'cardiovascular', label: 'Cardiovascular agents', description: 'Antihypertensives, diuretics, antiarrhythmics' },
+    { value: 'respiratory', label: 'Respiratory agents', description: 'Bronchodilators, mucolytics, cough preparations' },
+    { value: 'gastrointestinal', label: 'Gastrointestinal agents', description: 'Antacids, laxatives, antidiarrhoeals, PPIs' },
+    { value: 'endocrine_metabolic', label: 'Endocrine / metabolic', description: 'Insulin, metformin, thyroid hormones, steroids' },
+    { value: 'dermatological', label: 'Dermatological agents', description: 'Topical preparations, antifungal creams' },
+    { value: 'haematological', label: 'Haematological agents', description: 'Iron supplements, folic acid, anticoagulants' },
+    { value: 'hormones_contraceptives', label: 'Hormones / contraceptives', description: 'Oral contraceptives, implants, oestrogens' },
+    { value: 'immunological_vaccines', label: 'Immunological / vaccines', description: 'BCG, measles, polio, pentavalent, COVID-19' },
+    { value: 'mental_health_psychiatric', label: 'Mental health / psychiatric', description: 'Antipsychotics, antidepressants, anxiolytics' },
+    { value: 'neurological', label: 'Neurological agents', description: 'Anticonvulsants, antiepileptics' },
+    { value: 'nutritional', label: 'Nutritional supplements', description: 'Vitamins, minerals, amino acids' },
+    { value: 'oncological', label: 'Oncological agents', description: 'Chemotherapy, supportive oncology' },
+    { value: 'ophthalmological', label: 'Ophthalmological agents', description: 'Eye drops, ointments' },
+    { value: 'otological', label: 'Otic (ear) agents', description: 'Ear drops, ear preparations' },
+    { value: 'urological_genitourinary', label: 'Urological / genitourinary', description: 'Urinary antiseptics, bladder preparations' },
+    { value: 'vitamins_minerals', label: 'Vitamins & minerals', description: 'Calcium, iron, zinc, vitamin A, ORS' },
+    { value: 'antiprotozoals', label: 'Antiprotozoals', description: 'Metronidazole, tinidazole, iodoquinol' },
+    { value: 'traditional_medicines', label: 'Traditional medicines', description: 'Registered herbal and phytotherapy' },
+];
+
+const dispensingUnitOptions: SearchableSelectOption[] = [
+    { value: 'tablet', label: 'Tablet' },
+    { value: 'capsule', label: 'Capsule' },
+    { value: 'bottle', label: 'Bottle' },
+    { value: 'sachet', label: 'Sachet' },
+    { value: 'vial', label: 'Vial' },
+    { value: 'ampoule', label: 'Ampoule' },
+    { value: 'tube', label: 'Tube' },
+    { value: 'strip', label: 'Strip' },
+    { value: 'blister', label: 'Blister' },
+    { value: 'box', label: 'Box' },
+    { value: 'roll', label: 'Roll' },
+    { value: 'pack', label: 'Pack' },
+    { value: 'each', label: 'Each (piece)' },
+    { value: 'kit', label: 'Kit' },
+    { value: 'inhaler', label: 'Inhaler' },
+];
+
+const dosageFormOptions: SearchableSelectOption[] = [
+    { value: 'tablet', label: 'Tablet', group: 'Oral solid' },
+    { value: 'capsule', label: 'Capsule', group: 'Oral solid' },
+    { value: 'dispersible tablet', label: 'Dispersible tablet', group: 'Oral solid' },
+    { value: 'chewable tablet', label: 'Chewable tablet', group: 'Oral solid' },
+    { value: 'effervescent tablet', label: 'Effervescent tablet', group: 'Oral solid' },
+    { value: 'powder', label: 'Powder', group: 'Oral solid' },
+    { value: 'syrup', label: 'Syrup', group: 'Oral liquid' },
+    { value: 'suspension', label: 'Suspension', group: 'Oral liquid' },
+    { value: 'solution', label: 'Solution', group: 'Oral liquid' },
+    { value: 'elixir', label: 'Elixir', group: 'Oral liquid' },
+    { value: 'mixture', label: 'Mixture', group: 'Oral liquid' },
+    { value: 'injection', label: 'Injection', group: 'Parenteral' },
+    { value: 'cream', label: 'Cream', group: 'Topical' },
+    { value: 'ointment', label: 'Ointment', group: 'Topical' },
+    { value: 'gel', label: 'Gel', group: 'Topical' },
+    { value: 'lotion', label: 'Lotion', group: 'Topical' },
+    { value: 'eye drops', label: 'Eye drops', group: 'Ophthalmic' },
+    { value: 'ear drops', label: 'Ear drops', group: 'Otological' },
+    { value: 'nasal drops', label: 'Nasal drops', group: 'Nasal' },
+    { value: 'suppository', label: 'Suppository', group: 'Rectal / vaginal' },
+    { value: 'pessary', label: 'Pessary', group: 'Rectal / vaginal' },
+    { value: 'inhaler', label: 'Inhaler', group: 'Respiratory' },
+    { value: 'spray', label: 'Spray', group: 'Respiratory' },
+    { value: 'patch', label: 'Patch', group: 'Transdermal' },
+];
+
+const routeOfAdministrationOptions: SearchableSelectOption[] = [
+    { value: 'oral', label: 'Oral', group: 'Enteral' },
+    { value: 'sublingual', label: 'Sublingual', group: 'Enteral' },
+    { value: 'buccal', label: 'Buccal', group: 'Enteral' },
+    { value: 'intravenous', label: 'Intravenous (IV)', group: 'Parenteral' },
+    { value: 'intramuscular', label: 'Intramuscular (IM)', group: 'Parenteral' },
+    { value: 'subcutaneous', label: 'Subcutaneous (SC)', group: 'Parenteral' },
+    { value: 'intradermal', label: 'Intradermal', group: 'Parenteral' },
+    { value: 'topical', label: 'Topical', group: 'External' },
+    { value: 'transdermal', label: 'Transdermal', group: 'External' },
+    { value: 'rectal', label: 'Rectal', group: 'Other routes' },
+    { value: 'vaginal', label: 'Vaginal', group: 'Other routes' },
+    { value: 'inhalation', label: 'Inhalation', group: 'Other routes' },
+    { value: 'intranasal', label: 'Intranasal', group: 'Other routes' },
+    { value: 'ophthalmic', label: 'Ophthalmic (eye)', group: 'Other routes' },
+    { value: 'otical', label: 'Otological (ear)', group: 'Other routes' },
+    { value: 'intrathecal', label: 'Intrathecal', group: 'Other routes' },
+];
+
 const filters = reactive({ q: '', status: '', category: '', perPage: 10, page: 1 });
+
 const filtersSheetOpen = ref(false);
 const createSheetOpen = ref(false);
 
@@ -2427,6 +2526,17 @@ onMounted(() => {
                                         empty-text="No matching discipline found."
                                         :reserve-message-space="false"
                                     />
+                                    <ComboboxField
+                                        v-else-if="catalogKey === 'formulary-items'"
+                                        input-id="create-clinical-definition-therapeutic-class"
+                                        :label="catalog.categoryLabel"
+                                        v-model="createForm.category"
+                                        :options="therapeuticClassOptions"
+                                        placeholder="Select therapeutic class"
+                                        search-placeholder="Search therapeutic class"
+                                        empty-text="No matching therapeutic class found."
+                                        :reserve-message-space="false"
+                                    />
                                     <template v-else>
                                         <Label>{{ catalog.categoryLabel }}</Label>
                                         <Input v-model="createForm.category" :placeholder="catalog.categoryPlaceholder" />
@@ -2442,6 +2552,17 @@ onMounted(() => {
                                         placeholder="Select reporting unit"
                                         search-placeholder="Search reporting unit"
                                         empty-text="No matching reporting unit found."
+                                        :reserve-message-space="false"
+                                    />
+                                    <ComboboxField
+                                        v-else-if="catalogKey === 'formulary-items'"
+                                        input-id="create-clinical-definition-dispensing-unit"
+                                        :label="catalog.unitLabel"
+                                        v-model="createForm.unit"
+                                        :options="dispensingUnitOptions"
+                                        placeholder="Select dispensing unit"
+                                        search-placeholder="Search dispensing unit"
+                                        empty-text="No matching dispensing unit found."
                                         :reserve-message-space="false"
                                     />
                                     <template v-else>
@@ -2506,8 +2627,26 @@ onMounted(() => {
                                 </div>
                                 <div v-else class="grid gap-3 md:grid-cols-2">
                                     <div class="grid gap-1.5"><Label>Strength</Label><Input v-model="createForm.strength" placeholder="500 mg" /></div>
-                                    <div class="grid gap-1.5"><Label>Dosage form</Label><Input v-model="createForm.dosageForm" placeholder="capsule" /></div>
-                                    <div class="grid gap-1.5"><Label>Route</Label><Input v-model="createForm.route" placeholder="oral" /></div>
+                                    <ComboboxField
+                                        input-id="create-clinical-definition-dosage-form"
+                                        label="Dosage form"
+                                        v-model="createForm.dosageForm"
+                                        :options="dosageFormOptions"
+                                        placeholder="Select dosage form"
+                                        search-placeholder="Search tablet, capsule, syrup..."
+                                        empty-text="No matching dosage form found."
+                                        :reserve-message-space="false"
+                                    />
+                                    <ComboboxField
+                                        input-id="create-clinical-definition-route"
+                                        label="Route"
+                                        v-model="createForm.route"
+                                        :options="routeOfAdministrationOptions"
+                                        placeholder="Select route"
+                                        search-placeholder="Search oral, IV, IM..."
+                                        empty-text="No matching route found."
+                                        :reserve-message-space="false"
+                                    />
                                     <div class="grid gap-1.5"><Label>Pack size</Label><Input v-model="createForm.packSize" placeholder="10 capsules" /></div>
                                     <div class="grid gap-1.5 md:col-span-2"><Label>OTC sellable</Label><Select v-model="createForm.otcAllowed"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">OTC allowed</SelectItem><SelectItem value="no">Restricted</SelectItem></SelectContent></Select></div>
                                 </div>
@@ -2832,12 +2971,60 @@ onMounted(() => {
                                     :reserve-message-space="false"
                                 />
                                 <div class="grid gap-1.5">
-                                    <Label>{{ catalog.categoryLabel }}</Label>
-                                    <Input v-model="editForm.category" :placeholder="catalog.categoryPlaceholder" />
+                                    <ComboboxField
+                                        v-if="selectedCatalogKey === 'lab-tests'"
+                                        input-id="edit-clinical-definition-discipline"
+                                        :label="catalog.categoryLabel"
+                                        v-model="editForm.category"
+                                        :options="labDisciplineOptions"
+                                        placeholder="Select discipline"
+                                        search-placeholder="Search lab discipline"
+                                        empty-text="No matching discipline found."
+                                        :reserve-message-space="false"
+                                    />
+                                    <ComboboxField
+                                        v-else-if="selectedCatalogKey === 'formulary-items'"
+                                        input-id="edit-clinical-definition-therapeutic-class"
+                                        :label="catalog.categoryLabel"
+                                        v-model="editForm.category"
+                                        :options="therapeuticClassOptions"
+                                        placeholder="Select therapeutic class"
+                                        search-placeholder="Search therapeutic class"
+                                        empty-text="No matching therapeutic class found."
+                                        :reserve-message-space="false"
+                                    />
+                                    <template v-else>
+                                        <Label>{{ catalog.categoryLabel }}</Label>
+                                        <Input v-model="editForm.category" :placeholder="catalog.categoryPlaceholder" />
+                                    </template>
                                 </div>
                                 <div class="grid gap-1.5">
-                                    <Label>{{ catalog.unitLabel }}</Label>
-                                    <Input v-model="editForm.unit" :placeholder="catalog.unitPlaceholder" />
+                                    <ComboboxField
+                                        v-if="selectedCatalogKey === 'lab-tests'"
+                                        input-id="edit-clinical-definition-reporting-unit"
+                                        :label="catalog.unitLabel"
+                                        v-model="editForm.unit"
+                                        :options="labReportingUnitOptions"
+                                        placeholder="Select reporting unit"
+                                        search-placeholder="Search reporting unit"
+                                        empty-text="No matching reporting unit found."
+                                        :reserve-message-space="false"
+                                    />
+                                    <ComboboxField
+                                        v-else-if="selectedCatalogKey === 'formulary-items'"
+                                        input-id="edit-clinical-definition-dispensing-unit"
+                                        :label="catalog.unitLabel"
+                                        v-model="editForm.unit"
+                                        :options="dispensingUnitOptions"
+                                        placeholder="Select dispensing unit"
+                                        search-placeholder="Search dispensing unit"
+                                        empty-text="No matching dispensing unit found."
+                                        :reserve-message-space="false"
+                                    />
+                                    <template v-else>
+                                        <Label>{{ catalog.unitLabel }}</Label>
+                                        <Input v-model="editForm.unit" :placeholder="catalog.unitPlaceholder" />
+                                    </template>
                                 </div>
                                 <div v-if="selected" class="md:col-span-3 rounded-lg border border-dashed bg-muted/10 p-3">
                                     <p class="text-sm font-medium">Hospital pricing</p>
@@ -2889,8 +3076,26 @@ onMounted(() => {
                                 </div>
                                 <div v-else class="grid gap-3 md:grid-cols-2">
                                     <div class="grid gap-1.5"><Label>Strength</Label><Input v-model="editForm.strength" placeholder="500 mg" /></div>
-                                    <div class="grid gap-1.5"><Label>Dosage form</Label><Input v-model="editForm.dosageForm" placeholder="capsule" /></div>
-                                    <div class="grid gap-1.5"><Label>Route</Label><Input v-model="editForm.route" placeholder="oral" /></div>
+                                    <ComboboxField
+                                        input-id="edit-clinical-definition-dosage-form"
+                                        label="Dosage form"
+                                        v-model="editForm.dosageForm"
+                                        :options="dosageFormOptions"
+                                        placeholder="Select dosage form"
+                                        search-placeholder="Search tablet, capsule, syrup..."
+                                        empty-text="No matching dosage form found."
+                                        :reserve-message-space="false"
+                                    />
+                                    <ComboboxField
+                                        input-id="edit-clinical-definition-route"
+                                        label="Route"
+                                        v-model="editForm.route"
+                                        :options="routeOfAdministrationOptions"
+                                        placeholder="Select route"
+                                        search-placeholder="Search oral, IV, IM..."
+                                        empty-text="No matching route found."
+                                        :reserve-message-space="false"
+                                    />
                                     <div class="grid gap-1.5"><Label>Pack size</Label><Input v-model="editForm.packSize" placeholder="10 capsules" /></div>
                                     <div class="grid gap-1.5 md:col-span-2"><Label>OTC sellable</Label><Select v-model="editForm.otcAllowed"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">OTC allowed</SelectItem><SelectItem value="no">Restricted</SelectItem></SelectContent></Select></div>
                                 </div>
