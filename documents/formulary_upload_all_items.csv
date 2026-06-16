@@ -1,0 +1,200 @@
+﻿code,name,category,unit,facility_tier,department_code,billing_service_code,description,status,status_reason,standard_local,standard_loinc,standard_snomed_ct,standard_nhif,standard_msd,standard_cpt,standard_icd,strength,dosage_form,route,pack_size,otc_allowed
+MED-AMOX-250CAP,Amoxicillin 250 mg capsule,antibiotics,capsule,,PHA,,"Broad-spectrum penicillin antibiotic for respiratory, urinary, and ENT infections.",active,,,,,,,,,250 mg,capsule,oral,100 capsules,yes
+MED-AMPCLOX-500CAP,Ampicillin + Cloxacillin 500 mg capsule,antibiotics,capsule,,PHA,,"Combined penicillin antibiotic for skin, soft tissue, and respiratory infections.",active,,,,,,,,,500 mg,capsule,oral,100 capsules,yes
+MED-CEFAD-500CAP,Cefadroxil 500 mg capsule,antibiotics,capsule,,PHA,,"First-generation cephalosporin for skin, urinary tract, and respiratory infections.",active,,,,,,,,,500 mg,capsule,oral,100 capsules,yes
+MED-CEPH-250CAP,Cephalexin 250 mg capsule,antibiotics,capsule,,PHA,,"First-generation cephalosporin for bacterial infections of skin, bone, and respiratory tract.",active,,,,,,,,,250 mg,capsule,oral,100 capsules,yes
+MED-DOXY-100CAP,Doxycycline 100 mg capsule,antibiotics,capsule,,PHA,,"Tetracycline antibiotic for malaria prophylaxis, respiratory, and sexually transmitted infections.",active,,,,,,,,,100 mg,capsule,oral,100 capsules,yes
+MED-FERR-162CAP,Ferrotone 162 mg capsule,haematological,capsule,,PHA,,Iron supplement capsule for prevention and treatment of iron-deficiency anaemia.,active,,,,,,,,,162 mg,capsule,oral,100 capsules,yes
+MED-OMPZ-20CAP,Omeprazole 20 mg capsule,gastrointestinal,capsule,,PHA,,"Proton pump inhibitor for gastric ulcer, GERD, and H. pylori eradication.",active,,,,,,,,,20 mg,capsule,oral,30 capsules,yes
+MED-PREG-75CAP,Pregabalin 75 mg capsule,neurological,capsule,,PHA,,Anticonvulsant and neuropathic pain agent for diabetic neuropathy and post-herpetic neuralgia.,active,,,,,,,,,75 mg,capsule,oral,30 capsules,no
+MED-PIROX-20CAP,Piroxicam 20 mg capsule,anti_inflammatory,capsule,,PHA,,Non-steroidal anti-inflammatory drug (NSAID) for pain and inflammation.,active,,,,,,,,,20 mg,capsule,oral,30 capsules,yes
+MED-TRAM-50CAP,Tramadol 50 mg capsule,analgesics_antipyretics,capsule,,PHA,,Opioid analgesic for moderate to severe pain management.,active,,,,,,,,,50 mg,capsule,oral,100 capsules,no
+MED-TAMS-04CAP,Tamsulosin 0.4 mg capsule,urological_genitourinary,capsule,,PHA,,Alpha-1 blocker for benign prostatic hyperplasia (BPH) symptom relief.,active,,,,,,,,,0.4 mg,capsule,oral,30 capsules,no
+MED-MISO-200TAB,Misoprostol 200 mcg tablet,hormones_contraceptives,tablet,,PHA,,"Prostaglandin analogue for prevention of NSAID-induced gastric ulcer, and obstetric use.",active,,,,,,,,,200 mcg,tablet,oral,100 tablets,no
+MED-LOPER-5CAP,Loperamide 5 mg capsule,gastrointestinal,capsule,,PHA,,Antidiarrhoeal agent for symptomatic relief of acute diarrhoea.,active,,,,,,,,,5 mg,capsule,oral,100 capsules,yes
+MED-ACICV-10CREAM,Aciclovir 5% cream 10 g,antivirals,tube,,PHA,,Antiviral cream for treatment of herpes simplex and varicella-zoster skin infections.,active,,,,,,,,,5%,cream,topical,10 g,yes
+MED-BURN-30CREAM,Burnox 30 g cream,dermatological,tube,,PHA,,Topical burn care cream for minor burns and wound healing.,active,,,,,,,,,,cream,topical,30 g,yes
+MED-CLTR-15CREAM,Clotrimazole 1% cream 15 g,antifungals,tube,,PHA,,Azole antifungal cream for dermatophyte and Candida skin infections.,active,,,,,,,,,1%,cream,topical,15 g,yes
+MED-CLOB-10CREAM,Clobetasol propionate 0.05% cream 10 g,anti_inflammatory,tube,,PHA,,Potent topical corticosteroid for inflammatory dermatoses and eczema.,active,,,,,,,,,0.05%,cream,topical,10 g,no
+MED-DICLO-20GEL,Diclofenac 1% gel 20 g,anti_inflammatory,tube,,PHA,,"Topical NSAID gel for局部 pain, inflammation, and joint conditions.",active,,,,,,,,,1%,gel,topical,20 g,yes
+MED-GENTR-10CREAM,Gentrisone 10 g cream,anti_inflammatory,tube,,PHA,,Combined betamethasone and gentamicin cream for infected inflammatory skin conditions.,active,,,,,,,,,,cream,topical,10 g,no
+MED-HYDC-15CREAM,Hydrocortisone 1% cream 15 g,anti_inflammatory,tube,,PHA,,"Mild topical corticosteroid for eczema, dermatitis, and allergic skin reactions.",active,,,,,,,,,1%,cream,topical,15 g,yes
+MED-KETO-30CREAM,Ketoconazole 2% cream 30 g,antifungals,tube,,PHA,,"Azole antifungal cream for seborrhoeic dermatitis, tinea, and cutaneous candidiasis.",active,,,,,,,,,2%,cream,topical,30 g,yes
+MED-MUPI-10OINT,Mupirocin 2% ointment 10 g,antibiotics,tube,,PHA,,Topical antibiotic ointment for impetigo and secondary skin infections.,active,,,,,,,,,2%,ointment,topical,10 g,no
+MED-SKDERM-30CREAM,SK Derm 30 g cream,anti_inflammatory,tube,,PHA,,Combined clotrimazole and betamethasone cream for infected eczema and dermatophytosis.,active,,,,,,,,,,cream,topical,30 g,no
+MED-SILVEX-10CREAM,Silver sulfadiazine + chlorhexidine (Silverex) 10 g,antibiotics,tube,,PHA,,Topical antimicrobial cream for prevention and treatment of burn wound infections.,active,,,,,,,,,1%,cream,topical,10 g,no
+MED-TETRA-15OINT,Tetracycline 1% ointment 15 g,antibiotics,tube,,PHA,,Topical tetracycline antibiotic for superficial eye and skin infections.,active,,,,,,,,,1%,ointment,topical,15 g,yes
+MED-WHFL-20OINT,Whitfield's ointment 20 g,antifungals,tube,,PHA,,Salicylic acid and benzoic acid ointment for fungal skin infections (tinea).,active,,,,,,,,,,ointment,topical,20 g,yes
+MED-BPO-20GEL,Benzoyl peroxide 5% gel (Persone) 20 g,dermatological,tube,,PHA,,Topical agent for mild to moderate acne vulgaris.,active,,,,,,,,,5%,gel,topical,20 g,yes
+MED-BETBZ-30CREAM,Betamethasone benzoate 0.1% cream 30 g,anti_inflammatory,tube,,PHA,,Topical corticosteroid for inflammatory and pruritic skin conditions.,active,,,,,,,,,0.1%,cream,topical,30 g,no
+MED-CIPRO-EYEDROP,Ciprofloxacin 0.3% eye drops 10 ml,antibiotics,each,,PHA,,Fluoroquinolone antibiotic eye drops for bacterial conjunctivitis and eye infections.,active,,,,,,,,,0.3%,eye drops,ophthalmic,10 ml,no
+MED-NASAL-ADULT,Nasal decongestant drops (adult) 15 ml,respiratory,each,,PHA,,Imidazoline-based nasal decongestant drops for nasal congestion in adults.,active,,,,,,,,,,nasal drops,intranasal,15 ml,yes
+MED-NASAL-PAED,Nasal decongestant drops (paediatric) 15 ml,respiratory,each,,PHA,,Gentle nasal decongestant drops for nasal congestion in children.,active,,,,,,,,,,nasal drops,intranasal,15 ml,yes
+MED-GENT-EYEDROP,Gentamicin 0.3% eye drops 10 ml,antibiotics,each,,PHA,,Aminoglycoside antibiotic eye drops for external eye infections.,active,,,,,,,,,0.3%,eye drops,ophthalmic,10 ml,no
+MED-BORIC-EARDROP,Boric acid ear drops 15 ml,otological,each,,PHA,,Antiseptic ear drops for chronic otitis externa and ear canal infections.,active,,,,,,,,,,ear drops,otical,15 ml,yes
+MED-CHLOR-EYEINT,Chloramphenicol eye ointment,antibiotics,tube,,PHA,,Broad-spectrum antibiotic eye ointment for bacterial conjunctivitis and eye infections.,active,,,,,,,,,1%,ointment,ophthalmic,5 g,no
+MED-DEXNEO-EYEDROP,Dexamethasone + Neomycin (Dexaneomycin) eye drops 10 ml,anti_inflammatory,each,,PHA,,Combined corticosteroid and antibiotic eye drops for inflammatory eye conditions with infection.,active,,,,,,,,,,eye drops,ophthalmic,10 ml,no
+MED-DEXP-EYEDROP,Dexamethasone sodium phosphate eye drops 0.1%,anti_inflammatory,each,,PHA,,Corticosteroid eye drops for non-infective inflammatory eye conditions.,active,,,,,,,,,0.1%,eye drops,ophthalmic,5 ml,no
+MED-CHLOR-EYEDROP,Chloramphenicol eye drops 0.5% 5 ml,antibiotics,each,,PHA,,Broad-spectrum antibiotic eye drops for bacterial conjunctivitis.,active,,,,,,,,,0.5%,eye drops,ophthalmic,5 ml,no
+MED-CIPRO-IV100,Ciprofloxacin 200 mg/100 ml IV infusion,antibiotics,each,,PHA,,Fluoroquinolone antibiotic IV infusion for severe bacterial infections.,active,,,,,,,,,200 mg,solution,intravenous,100 ml,no
+MED-D5-IV500,Dextrose 5% 500 ml IV infusion,nutritional,each,,PHA,,Isotonic glucose solution for fluid replacement and calorie provision.,active,,,,,,,,,5%,solution,intravenous,500 ml,no
+MED-DNS-IV500,Dextrose Normal Saline 500 ml IV infusion,nutritional,each,,PHA,,Combined dextrose and sodium chloride solution for fluid and electrolyte replacement.,active,,,,,,,,,,solution,intravenous,500 ml,no
+MED-FLUC-IV100,Fluconazole 200 mg/100 ml IV infusion,antifungals,each,,PHA,,Antifungal IV infusion for systemic candidiasis and cryptococcal meningitis.,active,,,,,,,,,200 mg,solution,intravenous,100 ml,no
+MED-METRO-IV100,Metronidazole 500 mg/100 ml IV infusion,antiprotozoals,each,,PHA,,Antiprotozoal and anaerobic antibacterial IV infusion for serious infections.,active,,,,,,,,,500 mg,solution,intravenous,100 ml,no
+MED-NS-IV500,Normal Saline 0.9% 500 ml IV infusion,nutritional,each,,PHA,,Isotonic sodium chloride solution for fluid and electrolyte replacement.,active,,,,,,,,,0.9%,solution,intravenous,500 ml,no
+MED-RL-IV500,Ringer's Lactate 500 ml IV infusion,nutritional,each,,PHA,,Crystalloid solution for fluid resuscitation and electrolyte replacement.,active,,,,,,,,,,solution,intravenous,500 ml,no
+MED-SALB-NEB25,Salbutamol 2.5 mg nebulisation solution,respiratory,each,,PHA,,Short-acting beta-2 agonist solution for nebulisation in acute asthma and bronchospasm.,active,,,,,,,,,2.5 mg,solution,inhalation,2.5 ml,no
+MED-PARA-IV100,Paracetamol 1 g/100 ml IV infusion,analgesics_antipyretics,each,,PHA,,IV paracetamol for pain and fever when oral route is not suitable.,active,,,,,,,,,1 g,solution,intravenous,100 ml,no
+MED-ADREN-1ML,Adrenaline (Epinephrine) 1 mg/ml injection 1 ml,cardiovascular,ampoule,,PHA,,"Sympathomimetic amine for cardiac arrest, anaphylaxis, and severe asthma.",active,,,,,,,,,1 mg,injection,intravenous,1 ml,no
+MED-AMINO-250IV,Aminophylline 250 mg/10 ml injection,respiratory,ampoule,,PHA,,Xanthine bronchodilator for acute severe asthma and bronchospasm.,active,,,,,,,,,250 mg,injection,intravenous,10 ml,no
+MED-AMPIC-250IV,Ampicillin 250 mg injection,antibiotics,vial,,PHA,,"Aminopenicillin antibiotic for respiratory, urinary, and meningococcal infections.",active,,,,,,,,,250 mg,injection,intramuscular,1 vial,no
+MED-AMPCLOX-500IV,Ampicillin + Cloxacillin 500 mg injection,antibiotics,vial,,PHA,,"Combined penicillin injection for severe skin, soft tissue, and respiratory infections.",active,,,,,,,,,500 mg,injection,intramuscular,1 vial,no
+MED-AMOCL-12IV,Amoxicillin + Clavulanate (Amox-Clav) 1.2 g injection,antibiotics,vial,,PHA,,Beta-lactamase inhibitor combination for severe infections unresponsive to amoxicillin alone.,active,,,,,,,,,1.2 g,injection,intravenous,1 vial,no
+MED-ARTE-80IM,Artemether 80 mg/ml injection 1 ml,antimalarials,ampoule,,PHA,,Artemisinin derivative for treatment of severe falciparum malaria.,active,,,,,,,,,80 mg,injection,intramuscular,1 ml,no
+MED-ARTSN-60IV,Artesunate 60 mg injection (IV/IM),antimalarials,vial,,PHA,,Water-soluble artemisinin for treatment of severe and complicated malaria.,active,,,,,,,,,60 mg,injection,intravenous,1 vial,no
+MED-ARTSN-120IV,Artesunate 120 mg injection (IV/IM),antimalarials,vial,,PHA,,Water-soluble artemisinin for treatment of severe and complicated malaria.,active,,,,,,,,,120 mg,injection,intravenous,1 vial,no
+MED-ATROP-1IV,Atropine sulfate 1 mg/ml injection 1 ml,cardiovascular,ampoule,,PHA,,"Anticholinergic for bradycardia, organophosphate poisoning, and pre-anaesthesia.",active,,,,,,,,,1 mg,injection,intravenous,1 ml,no
+MED-CEFOT-12IV,Cefotaxime 1.2 g injection,antibiotics,vial,,PHA,,"Third-generation cephalosporin for meningitis, septicaemia, and severe bacterial infections.",active,,,,,,,,,1.2 g,injection,intravenous,1 vial,no
+MED-CEFTR-1IV,Ceftriaxone 1 g injection,antibiotics,vial,,PHA,,"Third-generation cephalosporin for meningitis, pneumonia, and septicaemia.",active,,,,,,,,,1 g,injection,intravenous,1 vial,no
+MED-DEXAM-4IV,Dexamethasone sodium phosphate 4 mg injection,anti_inflammatory,ampoule,,PHA,,"Corticosteroid injection for cerebral oedema, severe allergic reactions, and inflammation.",active,,,,,,,,,4 mg,injection,intravenous,1 ml,no
+MED-DIAZ-10IV,Diazepam 10 mg/2 ml injection,mental_health_psychiatric,ampoule,,PHA,,"Benzodiazepine for status epilepticus, severe anxiety, and muscle spasms.",active,,,,,,,,,10 mg,injection,intravenous,2 ml,no
+MED-DICLO-3IM,Diclofenac sodium 75 mg/3 ml injection,anti_inflammatory,ampoule,,PHA,,"NSAID injection for acute pain, renal colic, and musculoskeletal conditions.",active,,,,,,,,,75 mg,injection,intramuscular,3 ml,no
+MED-FURO-10IV,Furosemide 10 mg/ml injection 2 ml,cardiovascular,ampoule,,PHA,,"Loop diuretic for acute pulmonary oedema, heart failure, and fluid overload.",active,,,,,,,,,20 mg,injection,intravenous,2 ml,no
+MED-GENT-40IM,Gentamicin 40 mg/ml injection 2 ml,antibiotics,ampoule,,PHA,,Aminoglycoside antibiotic for serious gram-negative infections.,active,,,,,,,,,40 mg,injection,intramuscular,2 ml,no
+MED-HYDC-100IV,Hydrocortisone 100 mg injection,anti_inflammatory,vial,,PHA,,"Corticosteroid for adrenal crisis, severe allergic reactions, and acute asthma.",active,,,,,,,,,100 mg,injection,intravenous,1 vial,no
+MED-HYOSC-10IV,Hyoscine butylbromide 20 mg/5 ml injection,gastrointestinal,ampoule,,PHA,,Antispasmodic for acute abdominal cramps and renal/ biliary colic.,active,,,,,,,,,20 mg,injection,intravenous,5 ml,no
+MED-METOC-2IV,Metoclopramide hydrochloride 10 mg/2 ml injection,gastrointestinal,ampoule,,PHA,,"Antiemetic and prokinetic for nausea, vomiting, and gastroparesis.",active,,,,,,,,,10 mg,injection,intravenous,2 ml,no
+MED-MEDRO-150IM,Medroxyprogesterone acetate 150 mg/ml injection,hormones_contraceptives,vial,,PHA,,Depot progestogen contraceptive injection for long-acting reversible contraception.,active,,,,,,,,,150 mg,injection,intramuscular,1 ml,no
+MED-PANTO-40IV,Pantoprazole 40 mg injection,gastrointestinal,vial,,PHA,,Proton pump inhibitor IV for stress ulcer prophylaxis and acute GI bleeding.,active,,,,,,,,,40 mg,injection,intravenous,1 vial,no
+MED-PROM-2IM,Promethazine hydrochloride 25 mg/ml injection 2 ml,mental_health_psychiatric,ampoule,,PHA,,Phenothiazine antihistamine and antiemetic for severe allergy and nausea.,active,,,,,,,,,25 mg,injection,intramuscular,2 ml,no
+MED-PENAD-24IM,Benzathine benzylpenicillin (Penadur) 2.4 MU injection,antibiotics,vial,,PHA,,"Long-acting penicillin for syphilis, rheumatic fever prophylaxis, and streptococcal infections.",active,,,,,,,,,2.4 MU,injection,intramuscular,1 vial,no
+MED-CEFTRS-15IV,Ceftriaxone + Sulbactam 1.5 g injection,antibiotics,vial,,PHA,,Third-generation cephalosporin with beta-lactamase inhibitor for resistant infections.,active,,,,,,,,,1.5 g,injection,intravenous,1 vial,no
+MED-TETAN-05IM,Tetanus toxoid vaccine 0.5 ml,immunological_vaccines,ampoule,,PHA,,Active immunisation agent for prevention of tetanus.,active,,,,,,,,,0.5 ml,injection,intramuscular,0.5 ml,no
+MED-TRAM-2IV,Tramadol hydrochloride 100 mg/2 ml injection,analgesics_antipyretics,ampoule,,PHA,,Opioid analgesic injection for moderate to severe acute pain.,active,,,,,,,,,100 mg,injection,intravenous,2 ml,no
+MED-TRIAM-40IM,Triamcinolone acetonide 40 mg/ml injection,anti_inflammatory,vial,,PHA,,Intramuscular corticosteroid for severe inflammatory and allergic conditions.,active,,,,,,,,,40 mg,injection,intramuscular,1 ml,no
+MED-TRANE-5IV,Tranexamic acid 500 mg/5 ml injection,haematological,ampoule,,PHA,,Antifibrinolytic agent for control of haemorrhage and excessive bleeding.,active,,,,,,,,,500 mg,injection,intravenous,5 ml,no
+MED-VITB-10IM,Vitamin B complex 10 ml injection,vitamins_minerals,ampoule,,PHA,,B-complex vitamin injection for deficiency states and neuropathy.,active,,,,,,,,,,injection,intramuscular,10 ml,yes
+MED-IRONS-20IV,Iron sucrose 20 mg/ml injection,haematological,vial,,PHA,,Intravenous iron replacement for iron-deficiency anaemia when oral iron is not tolerated.,active,,,,,,,,,20 mg,injection,intravenous,1 ml,no
+MED-BENZP-5MU,Benzylpenicillin (Penicillin G) 5 MU injection,antibiotics,vial,,PHA,,"Natural penicillin for syphilis, meningococcal infections, and gas gangrene.",active,,,,,,,,,5 MU,injection,intramuscular,1 vial,no
+MED-OXYT-10IU,Oxytocin 10 IU/ml injection,hormones_contraceptives,ampoule,,PHA,,Oxytocic hormone for prevention and treatment of postpartum haemorrhage.,active,,,,,,,,,10 IU,injection,intramuscular,1 ml,no
+MED-BBE-100LOT,BB lotion 100 ml,dermatological,bottle,,PHA,,Topical lotion for skin moisturising and minor skin conditions.,active,,,,,,,,,,lotion,topical,100 ml,yes
+MED-CALZ-100LOT,Calamine + Zinc oxide lotion 100 ml,dermatological,bottle,,PHA,,"Anti-pruritic and soothing lotion for chickenpox, sunburn, and mild skin irritations.",active,,,,,,,,,,lotion,topical,100 ml,yes
+MED-GYNEX-PESS,Miconazole + Metronidazole (Gynex) pessary,antifungals,each,,PHA,,Combined antifungal and antiprotozoal vaginal pessary for vaginitis and vaginal trichomoniasis.,active,,,,,,,,,,pessary,vaginal,1 pessary,no
+MED-CLTR-100PESS,Clotrimazole 100 mg vaginal pessary,antifungals,each,,PHA,,Azole antifungal vaginal pessary for vulvovaginal candidiasis.,active,,,,,,,,,100 mg,pessary,vaginal,1 pessary,yes
+MED-MICG-400PESS,Miconazole (Gynazol) nitrate 400 mg vaginal pessary,antifungals,each,,PHA,,Azole antifungal vaginal pessary for single-dose treatment of vulvovaginal candidiasis.,active,,,,,,,,,400 mg,pessary,vaginal,1 pessary,yes
+MED-GLUC-80POW,Oral rehydration glucose powder 80 g sachet,nutritional,sachet,,PHA,,Glucose powder for preparation of oral rehydration solution.,active,,,,,,,,,80 g,powder,oral,80 g sachet,yes
+MED-ORS-POW,ORS rehydration salt sachet,nutritional,sachet,,PHA,,Oral rehydration salts for prevention and treatment of dehydration from diarrhoea.,active,,,,,,,,,,powder,oral,1 sachet,yes
+MED-ALBEN-10SYR,Albendazole 400 mg/10 ml syrup,antihelminthics,bottle,,PHA,,Broad-spectrum anthelmintic syrup for intestinal worms and hydatid disease.,active,,,,,,,,,400 mg,suspension,oral,10 ml,yes
+MED-AZITH-30SYR,Azithromycin 200 mg/5 ml syrup 30 ml,antibiotics,bottle,,PHA,,"Macrolide antibiotic syrup for respiratory, ENT, and sexually transmitted infections.",active,,,,,,,,,200 mg,suspension,oral,30 ml,yes
+MED-AMOCL-100SYR,Amoxicillin + Clavulanate (Amox-Clav) syrup 100 ml,antibiotics,bottle,,PHA,,Beta-lactamase inhibitor combination syrup for upper respiratory and ear infections.,active,,,,,,,,,,suspension,oral,100 ml,yes
+MED-AMOX-100SYR,Amoxicillin 250 mg/5 ml syrup 100 ml,antibiotics,bottle,,PHA,,Broad-spectrum penicillin syrup for childhood respiratory and ENT infections.,active,,,,,,,,,250 mg,suspension,oral,100 ml,yes
+MED-AMPCLX-100SYR,Ampicillin + Cloxacillin (Ampiclox) syrup 100 ml,antibiotics,bottle,,PHA,,"Combined penicillin syrup for skin, respiratory, and urinary tract infections.",active,,,,,,,,,,suspension,oral,100 ml,yes
+MED-ANTAC-100SYR,Antacid / Relcergel syrup 100 ml,gastrointestinal,bottle,,PHA,,Aluminium and magnesium hydroxide antacid syrup for dyspepsia and gastric hyperacidity.,active,,,,,,,,,,suspension,oral,100 ml,yes
+MED-AL-22SYR,Artemether + Lumefantrine (AL) 22.8 mg/ml syrup,antimalarials,bottle,,PHA,,ACT combination antimalarial syrup for uncomplicated falciparum malaria in children.,active,,,,,,,,,22.8 mg,suspension,oral,60 ml,no
+MED-AMPCLXN-06SYR,Ampicillin + Cloxacillin neonatal syrup 60 mg/ml,antibiotics,bottle,,PHA,,Combined penicillin syrup formulated for neonatal and infant infections.,active,,,,,,,,,60 mg,suspension,oral,100 ml,no
+MED-CEPH-100SYR,Cephalexin 250 mg/5 ml syrup 100 ml,antibiotics,bottle,,PHA,,"First-generation cephalosporin syrup for paediatric skin, bone, and respiratory infections.",active,,,,,,,,,250 mg,suspension,oral,100 ml,yes
+MED-CETIR-60SYR,Cetirizine hydrochloride 10 mg syrup 60 ml,respiratory,bottle,,PHA,,"Second-generation antihistamine syrup for allergic rhinitis, urticaria, and pruritus.",active,,,,,,,,,10 mg,syrup,oral,60 ml,yes
+MED-CITAL-100SYR,Sodium citrate (Cital) syrup 100 ml,gastrointestinal,bottle,,PHA,,Urinary alkaliniser syrup for urinary tract infections and gout.,active,,,,,,,,,,syrup,oral,100 ml,yes
+MED-COTRI-100SYR,Co-trimoxazole 240 mg/5 ml syrup 100 ml,antibiotics,bottle,,PHA,,"Sulphonamide antibiotic syrup for respiratory, urinary, and gastrointestinal infections.",active,,,,,,,,,240 mg,suspension,oral,100 ml,yes
+MED-CODRIL-100SYR,Codril cough syrup 100 ml,respiratory,bottle,,PHA,,Combined cough suppressant and expectorant syrup for dry and productive cough.,active,,,,,,,,,,syrup,oral,100 ml,yes
+MED-BELLAD-100SYR,Belladonna syrup 100 ml,gastrointestinal,bottle,,PHA,,Anticholinergic syrup for gastrointestinal spasms and colic.,active,,,,,,,,,,syrup,oral,100 ml,yes
+MED-GRIPE-100SYR,Gripe water 100 ml,gastrointestinal,bottle,,PHA,,Carminative remedy for infantile colic and flatulence.,active,,,,,,,,,,syrup,oral,100 ml,yes
+MED-DRCOLD-100SYR,Dr Cold (Phenylephrine + Chlorphenamine) syrup 100 ml,respiratory,bottle,,PHA,,Combined decongestant and antihistamine syrup for cold and flu symptoms.,active,,,,,,,,,,syrup,oral,100 ml,yes
+MED-GLOBZ-200SYR,Globin Z haematinic syrup 200 ml,haematological,bottle,,PHA,,"Iron, folic acid, and vitamin B12 haematinic syrup for anaemia.",active,,,,,,,,,,syrup,oral,200 ml,yes
+MED-ERYTH-100SYR,Erythromycin stearate 250 mg/5 ml syrup 100 ml,antibiotics,bottle,,PHA,,"Macrolide antibiotic syrup for respiratory, skin, and ENT infections in penicillin-allergic patients.",active,,,,,,,,,250 mg,suspension,oral,100 ml,yes
+MED-HEMOV-200SYR,Hemovit syrup 200 ml,haematological,bottle,,PHA,,Iron and vitamin haematinic syrup for iron-deficiency anaemia.,active,,,,,,,,,,syrup,oral,200 ml,yes
+MED-HEMAT-200SYR,Hematone haematinic syrup 200 ml,haematological,bottle,,PHA,,"Iron, folic acid, and B-vitamin haematinic syrup for anaemia.",active,,,,,,,,,,syrup,oral,200 ml,yes
+MED-IBUP-100SYR,Ibuprofen 100 mg/5 ml syrup 100 ml,anti_inflammatory,bottle,,PHA,,"NSAID syrup for pain, fever, and inflammation in children and adults.",active,,,,,,,,,100 mg,suspension,oral,100 ml,yes
+MED-LACT-100SYR,Lactulose syrup 100 ml,gastrointestinal,bottle,,PHA,,Osmotic laxative syrup for constipation and hepatic encephalopathy.,active,,,,,,,,,,syrup,oral,100 ml,yes
+MED-LONART-24SYR,Artemether + Lumefantrine (Lonart DS) 80 mg/480 mg syrup 24 ml,antimalarials,bottle,,PHA,,ACT combination antimalarial syrup for treatment of uncomplicated malaria.,active,,,,,,,,,80 mg,suspension,oral,24 ml,no
+MED-METRO-100SYR,Metronidazole 200 mg/5 ml syrup 100 ml,antiprotozoals,bottle,,PHA,,"Antiprotozoal and anaerobic antibacterial syrup for giardiasis, amoebiasis, and dental infections.",active,,,,,,,,,200 mg,suspension,oral,100 ml,yes
+MED-MUCAD-100SYR,Ambroxol (Mucolyn Adult) syrup 100 ml,respiratory,bottle,,PHA,,Mucolytic syrup for productive cough and respiratory secretions.,active,,,,,,,,,,syrup,oral,100 ml,yes
+MED-MUCPA-100SYR,Ambroxol (Mucolyn Paediatric) syrup 100 ml,respiratory,bottle,,PHA,,Mucolytic syrup for productive cough in children.,active,,,,,,,,,,suspension,oral,100 ml,yes
+MED-MULTV-100SYR,Multivitamin syrup 100 ml,nutritional,bottle,,PHA,,"Multivitamin supplement syrup for growth, development, and nutritional support.",active,,,,,,,,,,syrup,oral,100 ml,yes
+MED-PARA-100SYR,Paracetamol 120 mg/5 ml syrup 100 ml,analgesics_antipyretics,bottle,,PHA,,Analgesic and antipyretic syrup for pain and fever in children.,active,,,,,,,,,120 mg,syrup,oral,100 ml,yes
+MED-COUGH-100SYR,Cough syrup (Prynalyn) 100 ml,respiratory,bottle,,PHA,,Combined cough suppressant syrup for dry cough.,active,,,,,,,,,,syrup,oral,100 ml,yes
+MED-NYST-30SYR,"Nystatin oral suspension 100,000 IU/ml 30 ml",antifungals,bottle,,PHA,,Antifungal oral suspension for oral and oesophageal candidiasis.,active,,,,,,,,,100000 IU,suspension,oral,30 ml,yes
+MED-VITBC-100SYR,Vitamin B-complex syrup 100 ml,vitamins_minerals,bottle,,PHA,,B-complex vitamin supplement syrup.,active,,,,,,,,,,syrup,oral,100 ml,yes
+MED-ZECUF-100SYR,Zecuf herbal cough syrup 100 ml,respiratory,bottle,,PHA,,Herbal cough syrup for relief of cough and respiratory discomfort.,active,,,,,,,,,,syrup,oral,100 ml,yes
+MED-ZNSUL-100SYR,Zinc sulphate 20 mg/5 ml syrup 100 ml,nutritional,bottle,,PHA,,Zinc supplement syrup for diarrhoea management in children and nutritional supplementation.,active,,,,,,,,,20 mg,syrup,oral,100 ml,yes
+MED-SKTONE-100SYR,"Sktonic (Iron, Vitamin B, Folic Acid, Zinc) syrup 100 ml",haematological,bottle,,PHA,,"Combined haematinic syrup with iron, B-vitamins, folic acid, and zinc for anaemia.",active,,,,,,,,,,syrup,oral,100 ml,yes
+MED-TERMID-100SYR,Termidol (Ibuprofen + Paracetamol) syrup 100 ml,anti_inflammatory,bottle,,PHA,,Combined NSAID and analgesic syrup for pain and fever.,active,,,,,,,,,,suspension,oral,100 ml,yes
+MED-MUMFER-150SYR,Mumfer iron and folic acid syrup 150 ml,haematological,bottle,,PHA,,Iron and folic acid supplement syrup for pregnancy and anaemia.,active,,,,,,,,,,syrup,oral,150 ml,yes
+MED-ASPJ-75TAB,Aspirin Junior 75 mg tablet,cardiovascular,tablet,,PHA,,Low-dose aspirin for cardiovascular prophylaxis and antiplatelet therapy.,active,,,,,,,,,75 mg,tablet,oral,100 tablets,yes
+MED-ACICV-200TAB,Aciclovir 200 mg tablet,antivirals,tablet,,PHA,,Antiviral tablet for herpes simplex and varicella-zoster infections.,active,,,,,,,,,200 mg,tablet,oral,100 tablets,yes
+MED-ACECL-100TAB,Aceclofenac 100 mg tablet,anti_inflammatory,tablet,,PHA,,"NSAID tablet for pain, inflammation, and musculoskeletal conditions.",active,,,,,,,,,100 mg,tablet,oral,30 tablets,yes
+MED-ALBEN-200TAB,Albendazole 400 mg tablet,antihelminthics,tablet,,PHA,,"Broad-spectrum anthelmintic for intestinal worms, neurocysticercosis, and hydatid disease.",active,,,,,,,,,400 mg,tablet,oral,1 tablet,yes
+MED-ALUME-12TAB,Artemether + Lumefantrine 20/120 mg (12 tablets),antimalarials,tablet,,PHA,,ACT combination antimalarial for uncomplicated falciparum malaria.,active,,,,,,,,,20 mg,tablet,oral,12 tablets,no
+MED-ALUME-6TAB,Artemether + Lumefantrine 80/480 mg (Lonart DS) (6 tablets),antimalarials,tablet,,PHA,,ACT combination antimalarial for treatment of uncomplicated malaria.,active,,,,,,,,,80 mg,tablet,oral,6 tablets,no
+MED-ALUME-24TAB,Artemether + Lumefantrine 20/120 mg (24 tablets),antimalarials,tablet,,PHA,,ACT combination antimalarial for uncomplicated falciparum malaria.,active,,,,,,,,,20 mg,tablet,oral,24 tablets,no
+MED-AMOCL-625TAB,Amoxicillin + Clavulanate (Amox-Clav) 625 mg tablet,antibiotics,tablet,,PHA,,Beta-lactamase inhibitor combination for resistant bacterial infections.,active,,,,,,,,,625 mg,tablet,oral,10 tablets,yes
+MED-AMOCL-375TAB,Amoxicillin + Clavulanate (Amox-Clav) 375 mg tablet,antibiotics,tablet,,PHA,,Beta-lactamase inhibitor combination for respiratory and ENT infections.,active,,,,,,,,,375 mg,tablet,oral,10 tablets,yes
+MED-AMINO-100TAB,Aminophylline 100 mg tablet,respiratory,tablet,,PHA,,Xanthine bronchodilator tablet for chronic asthma and bronchospasm.,active,,,,,,,,,100 mg,tablet,oral,100 tablets,yes
+MED-ATEN-50TAB,Atenolol 50 mg tablet,cardiovascular,tablet,,PHA,,"Beta-1 selective blocker for hypertension, angina, and post-MI prophylaxis.",active,,,,,,,,,50 mg,tablet,oral,30 tablets,yes
+MED-BACL-10TAB,Baclofen 10 mg tablet,neurological,tablet,,PHA,,"GABA-B agonist for spasticity in multiple sclerosis, spinal cord injury, and stroke.",active,,,,,,,,,10 mg,tablet,oral,30 tablets,no
+MED-BENDFT-5TAB,Bendroflumethiazide 5 mg tablet,cardiovascular,tablet,,PHA,,Thiazide diuretic for hypertension and oedema.,active,,,,,,,,,5 mg,tablet,oral,30 tablets,yes
+MED-BISAC-5TAB,Bisacodyl 5 mg tablet,gastrointestinal,tablet,,PHA,,Stimulant laxative for constipation and bowel evacuation.,active,,,,,,,,,5 mg,tablet,oral,30 tablets,yes
+MED-CAPT-25TAB,Captopril 25 mg tablet,cardiovascular,tablet,,PHA,,"ACE inhibitor for hypertension, heart failure, and diabetic nephropathy.",active,,,,,,,,,25 mg,tablet,oral,100 tablets,yes
+MED-CLARI-500TAB,Clarithromycin 500 mg tablet,antibiotics,tablet,,PHA,,"Macrolide antibiotic for respiratory, skin, and H. pylori infections.",active,,,,,,,,,500 mg,tablet,oral,10 tablets,no
+MED-CETIR-10TAB,Cetirizine 10 mg tablet,respiratory,tablet,,PHA,,Second-generation antihistamine for allergic rhinitis and chronic urticaria.,active,,,,,,,,,10 mg,tablet,oral,100 tablets,yes
+MED-CEFIX-400TAB,Cefixime 400 mg tablet,antibiotics,tablet,,PHA,,Third-generation cephalosporin for urinary tract and respiratory infections.,active,,,,,,,,,400 mg,tablet,oral,10 tablets,no
+MED-CIPRO-500TAB,Ciprofloxacin 500 mg tablet,antibiotics,tablet,,PHA,,"Fluoroquinolone antibiotic for urinary tract, gastrointestinal, and respiratory infections.",active,,,,,,,,,500 mg,tablet,oral,20 tablets,no
+MED-CIPT-600TAB,Ciprofloxacin + Tinidazole 600 mg tablet,antibiotics,tablet,,PHA,,Combined fluoroquinolone and antiprotozoal for mixed aerobic-anaerobic infections.,active,,,,,,,,,600 mg,tablet,oral,10 tablets,no
+MED-CMAG-250TAB,Compound Magnesium Trisilicate 250 mg tablet,gastrointestinal,tablet,,PHA,,"Antacid tablet for dyspepsia, heartburn, and gastric hyperacidity.",active,,,,,,,,,250 mg,tablet,oral,100 tablets,yes
+MED-COTRI-480TAB,Co-trimoxazole 480 mg tablet,antibiotics,tablet,,PHA,,"Sulphonamide antibiotic for respiratory, urinary, and gastrointestinal infections.",active,,,,,,,,,480 mg,tablet,oral,100 tablets,yes
+MED-DIAZ-5TAB,Diazepam 5 mg tablet,mental_health_psychiatric,tablet,,PHA,,"Benzodiazepine for anxiety, muscle spasms, seizures, and alcohol withdrawal.",active,,,,,,,,,5 mg,tablet,oral,100 tablets,no
+MED-AZITH-500TAB,Azithromycin 500 mg (Azuma) tablet,antibiotics,tablet,,PHA,,"Macrolide antibiotic for respiratory, ENT, and sexually transmitted infections.",active,,,,,,,,,500 mg,tablet,oral,3 tablets,yes
+MED-AZITH-250TAB,Azithromycin 250 mg (Azuma) tablet,antibiotics,tablet,,PHA,,Macrolide antibiotic for paediatric respiratory and ENT infections.,active,,,,,,,,,250 mg,tablet,oral,6 tablets,yes
+MED-ERYTH-250TAB,Erythromycin stearate 250 mg tablet,antibiotics,tablet,,PHA,,"Macrolide antibiotic for respiratory, skin, and ENT infections in penicillin-allergic patients.",active,,,,,,,,,250 mg,tablet,oral,100 tablets,yes
+MED-FERSUL-200TAB,Ferrous sulphate 200 mg tablet,haematological,tablet,,PHA,,Iron supplement tablet for prevention and treatment of iron-deficiency anaemia.,active,,,,,,,,,200 mg,tablet,oral,100 tablets,yes
+MED-FLUC-150TAB,Fluconazole 150 mg capsule,antifungals,capsule,,PHA,,Azole antifungal for vaginal candidiasis and systemic fungal infections.,active,,,,,,,,,150 mg,capsule,oral,1 capsule,yes
+MED-FOLIC-5TAB,Folic acid 5 mg tablet,haematological,tablet,,PHA,,Vitamin supplement for folic acid deficiency anaemia and neural tube defect prophylaxis.,active,,,,,,,,,5 mg,tablet,oral,100 tablets,yes
+MED-FURO-40TAB,Furosemide 40 mg tablet,cardiovascular,tablet,,PHA,,"Loop diuretic for hypertension, heart failure, and oedema.",active,,,,,,,,,40 mg,tablet,oral,100 tablets,yes
+MED-GRIS-500TAB,Griseofulvin 500 mg tablet,antifungals,tablet,,PHA,,"Antifungal tablet for dermatophyte infections of skin, hair, and nails.",active,,,,,,,,,500 mg,tablet,oral,30 tablets,no
+MED-HYDR-25TAB,Hydralazine 25 mg tablet,cardiovascular,tablet,,PHA,,Direct vasodilator for hypertension and heart failure.,active,,,,,,,,,25 mg,tablet,oral,100 tablets,no
+MED-HYOSC-10TAB,Hyoscine butylbromide 10 mg tablet,gastrointestinal,tablet,,PHA,,Antispasmodic tablet for irritable bowel syndrome and abdominal cramps.,active,,,,,,,,,10 mg,tablet,oral,30 tablets,yes
+MED-IBUP-200TAB,Ibuprofen 200 mg tablet,anti_inflammatory,tablet,,PHA,,"NSAID tablet for pain, fever, and inflammation.",active,,,,,,,,,200 mg,tablet,oral,100 tablets,yes
+MED-LOPER-2TAB,Loperamide hydrochloride 2 mg tablet,gastrointestinal,tablet,,PHA,,Antidiarrhoeal agent for symptomatic relief of acute and chronic diarrhoea.,active,,,,,,,,,2 mg,tablet,oral,100 capsules,yes
+MED-LORA-10TAB,Loratadine 10 mg tablet,respiratory,tablet,,PHA,,Second-generation antihistamine for allergic rhinitis and chronic urticaria.,active,,,,,,,,,10 mg,tablet,oral,100 tablets,yes
+MED-MALAF-525TAB,Malafin (Sulfamethoxypyrazine + Pyrimethamine) 525 mg tablet,antimalarials,tablet,,PHA,,Antimalarial combination for treatment of uncomplicated malaria.,active,,,,,,,,,525 mg,tablet,oral,10 tablets,no
+MED-METF-500TAB,Metformin hydrochloride 500 mg tablet,endocrine_metabolic,tablet,,PHA,,Biguanide oral antidiabetic for type 2 diabetes mellitus.,active,,,,,,,,,500 mg,tablet,oral,100 tablets,yes
+MED-METGLIM-501TAB,Metformin + Glimepiride 500 mg/1 mg tablet,endocrine_metabolic,tablet,,PHA,,Combined oral antidiabetic for type 2 diabetes not controlled by monotherapy.,active,,,,,,,,,500 mg,tablet,oral,30 tablets,no
+MED-METOC-10TAB,Metoclopramide hydrochloride 10 mg tablet,gastrointestinal,tablet,,PHA,,"Antiemetic and prokinetic for nausea, vomiting, and gastroparesis.",active,,,,,,,,,10 mg,tablet,oral,100 tablets,yes
+MED-METRO-200TAB,Metronidazole 200 mg tablet,antiprotozoals,tablet,,PHA,,"Antiprotozoal and anaerobic antibacterial for giardiasis, amoebiasis, and dental infections.",active,,,,,,,,,200 mg,tablet,oral,100 tablets,yes
+MED-METMI-200TAB,Metronidazole + Miconazole vaginal tablet,antifungals,tablet,,PHA,,Combined antiprotozoal and antifungal vaginal tablet for mixed vaginitis.,active,,,,,,,,,,tablet,vaginal,10 tablets,no
+MED-MEBEN-100TAB,Mebendazole 100 mg tablet,antihelminthics,tablet,,PHA,,"Anthelmintic tablet for threadworm, roundworm, and whipworm infections.",active,,,,,,,,,100 mg,tablet,oral,1 tablet,yes
+MED-MONT-10TAB,Montelukast 10 mg tablet,respiratory,tablet,,PHA,,Leukotriene receptor antagonist for prevention of chronic asthma.,active,,,,,,,,,10 mg,tablet,oral,30 tablets,yes
+MED-MONT-5TAB,Montelukast 5 mg tablet,respiratory,tablet,,PHA,,Leukotriene receptor antagonist for prevention of chronic asthma in children.,active,,,,,,,,,5 mg,tablet,oral,30 tablets,yes
+MED-MELOX-15TAB,Meloxicam 15 mg tablet,anti_inflammatory,tablet,,PHA,,"COX-2 preferential NSAID for osteoarthritis, rheumatoid arthritis, and pain.",active,,,,,,,,,15 mg,tablet,oral,30 tablets,yes
+MED-MULTV-TAB,Multivitamin tablet,nutritional,tablet,,PHA,,Daily multivitamin supplement for nutritional support.,active,,,,,,,,,,tablet,oral,100 tablets,yes
+MED-NIFE-20TAB,Nifedipine 20 mg tablet,cardiovascular,tablet,,PHA,,Calcium channel blocker for hypertension and angina pectoris.,active,,,,,,,,,20 mg,tablet,oral,100 tablets,yes
+MED-NITF-100TAB,Nitrofurantoin 100 mg tablet,antibiotics,tablet,,PHA,,Urinary antiseptic for prevention and treatment of urinary tract infections.,active,,,,,,,,,100 mg,tablet,oral,30 tablets,yes
+MED-PARA-500TAB,Paracetamol 500 mg tablet,analgesics_antipyretics,tablet,,PHA,,Analgesic and antipyretic for pain and fever.,active,,,,,,,,,500 mg,tablet,oral,100 tablets,yes
+MED-PARA-SUP125,Paracetamol suppository 125 mg,analgesics_antipyretics,each,,PHA,,Rectal paracetamol for pain and fever when oral route is not suitable.,active,,,,,,,,,125 mg,suppository,rectal,10 suppositories,yes
+MED-PRED-5TAB,Prednisolone 5 mg tablet,anti_inflammatory,tablet,,PHA,,"Corticosteroid for asthma, allergic conditions, autoimmune diseases, and inflammation.",active,,,,,,,,,5 mg,tablet,oral,100 tablets,no
+MED-NEURO-300TAB,Neurotone (Methylcobalamin) 300 mcg tablet,vitamins_minerals,tablet,,PHA,,Vitamin B12 supplement for peripheral neuropathy and B12 deficiency.,active,,,,,,,,,300 mcg,tablet,oral,30 tablets,yes
+MED-PANTO-40TAB,Pantoprazole 40 mg tablet,gastrointestinal,tablet,,PHA,,"Proton pump inhibitor for gastric ulcer, GERD, and erosive oesophagitis.",active,,,,,,,,,40 mg,tablet,oral,30 tablets,yes
+MED-DUOCO-360TAB,Duo-Cotex 360 mg tablet,anti_inflammatory,tablet,,PHA,,Combined analgesic tablet for pain and inflammation.,active,,,,,,,,,360 mg,tablet,oral,30 tablets,yes
+MED-VITBC-10TAB,Vitamin B complex 10 mg tablet,vitamins_minerals,tablet,,PHA,,B-complex vitamin supplement for deficiency states.,active,,,,,,,,,10 mg,tablet,oral,100 tablets,yes
+MED-ZNSUL-20TAB,Zinc sulphate 20 mg dispersible tablet,nutritional,tablet,,PHA,,Zinc supplement dispersible tablet for diarrhoea management and nutritional deficiency.,active,,,,,,,,,20 mg,dispersible tablet,oral,100 tablets,yes
+MED-TIZA-4TAB,Tizanidine 4 mg tablet,neurological,tablet,,PHA,,Centrally acting muscle relaxant for spasticity and musculoskeletal pain.,active,,,,,,,,,4 mg,tablet,oral,30 tablets,no
+MED-TINI-500TAB,Tinidazole 500 mg tablet,antiprotozoals,tablet,,PHA,,"Antiprotozoal for giardiasis, amoebiasis, and bacterial vaginosis.",active,,,,,,,,,500 mg,tablet,oral,10 tablets,yes
+MED-PVPC-250TAB,Phenoxymethylpenicillin 250 mg tablet,antibiotics,tablet,,PHA,,"Oral penicillin for streptococcal pharyngitis, tonsillitis, and rheumatic fever prophylaxis.",active,,,,,,,,,250 mg,tablet,oral,100 tablets,yes
+MED-PROM-25TAB,Promethazine 25 mg tablet,mental_health_psychiatric,tablet,,PHA,,"Phenothiazine antihistamine for allergy, sedation, and nausea.",active,,,,,,,,,25 mg,tablet,oral,100 tablets,yes
+MED-NORE-5TAB,Norethisterone (NOR 5) 5 mg tablet,hormones_contraceptives,tablet,,PHA,,"Progestogen for menstrual disorders, endometriosis, and contraception.",active,,,,,,,,,5 mg,tablet,oral,30 tablets,no
+MED-DUPH-10TAB,Duphaston (Dydrogesterone) 10 mg tablet,hormones_contraceptives,tablet,,PHA,,"Progestogen for threatened miscarriage, endometriosis, and menstrual disorders.",active,,,,,,,,,10 mg,tablet,oral,20 tablets,no
+MED-CANN-22G,Cannula 22G (Blue),Medical consumable,each,,PHA,,Intravenous cannula 22 gauge for venous access.,active,,,,,,,,,,,,1 piece,no
+MED-CANN-20G,Cannula 20G (Pink),Medical consumable,each,,PHA,,Intravenous cannula 20 gauge for venous access.,active,,,,,,,,,,,,1 piece,no
+MED-CANN-24G,Cannula 24G (Yellow),Medical consumable,each,,PHA,,Intravenous cannula 24 gauge for paediatric and small vein access.,active,,,,,,,,,,,,1 piece,no
+MED-CANN-18G,Cannula 18G (Green),Medical consumable,each,,PHA,,Intravenous cannula 18 gauge for rapid fluid resuscitation and blood transfusion.,active,,,,,,,,,,,,1 piece,no
+MED-IVSET-1PC,Giving IV set 1 piece,Medical consumable,each,,PHA,,Standard IV infusion set with flow regulator.,active,,,,,,,,,,,,1 piece,no
+MED-SCALPV-1PC,Scalp vein set 1 piece,Medical consumable,each,,PHA,,Butterfly needle scalp vein set for difficult venous access.,active,,,,,,,,,,,,1 piece,no
+MED-SYR10-1PC,Syringe 10 ml (10 CC) 1 piece,Medical consumable,each,,PHA,,Disposable 10 ml syringe for injection and aspiration.,active,,,,,,,,,,,,1 piece,no
+MED-SYR2-1PC,Syringe 2 ml (2 CC) 1 piece,Medical consumable,each,,PHA,,Disposable 2 ml syringe for small volume injections.,active,,,,,,,,,,,,1 piece,no
+MED-SYR5-1PC,Syringe 5 ml (5 CC) 1 piece,Medical consumable,each,,PHA,,Disposable 5 ml syringe for standard injections.,active,,,,,,,,,,,,1 piece,no
+MED-DELIK-6PCS,Delivery kit 6 pieces,Medical consumable,kit,,PHA,,Clean delivery kit for safe childbirth.,active,,,,,,,,,,,,6 pieces,no
+MED-URBAG-1PC,Urine bag 1 piece,Medical consumable,each,,PHA,,Sterile urine collection bag for catheterised patients.,active,,,,,,,,,,,,1 piece,no
+MED-CATH-1PC,Catheter 1 piece,Medical consumable,each,,PHA,,Urinary catheter for bladder drainage.,active,,,,,,,,,,,,1 piece,no
+MED-DETTL-100,Dettol Juniors soap 100 g,dermatological,each,,PHA,,Antibacterial soap for children.,active,,,,,,,,,,,,100 g,yes
+MED-TMCIT-100,Tetmosol Citronella soap 100 g,dermatological,each,,PHA,,Insect-repellent medicated soap.,active,,,,,,,,,,,,100 g,yes
+MED-TMJNR-75,Tetmosol Juniors soap 75 g,dermatological,each,,PHA,,Medicated soap for children.,active,,,,,,,,,,,,75 g,yes
