@@ -472,7 +472,7 @@ def write_csv(filename, items, include_medicines=True):
                 category,         # category (therapeutic class)
                 unit,             # unit (dispensing unit)
                 "",               # facility_tier
-                "PHA",            # department_code (pharmacy)
+                "PHM",            # department_code (pharmacy department)
                 "",               # billing_service_code
                 description,      # description
                 "active",         # status
