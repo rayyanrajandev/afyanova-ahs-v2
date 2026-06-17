@@ -133,6 +133,68 @@ class InventoryProcurementController extends Controller
         ], 201);
     }
 
+    public function downloadInventoryItemsImportTemplate(): StreamedResponse
+    {
+        $filename = 'inventory-items-import-template.csv';
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+        ];
+
+        $columns = [
+            'itemCode',
+            'itemName',
+            'genericName',
+            'category',
+            'subcategory',
+            'unit',
+            'dispensingUnit',
+            'conversionFactor',
+            'dosageForm',
+            'strength',
+            'manufacturer',
+            'storageConditions',
+            'requiresColdChain',
+            'isControlledSubstance',
+            'controlledSubstanceSchedule',
+            'reorderLevel',
+            'maxStockLevel',
+            'binLocation',
+            'msdCode',
+            'nhifCode',
+            'barcode',
+        ];
+
+        return response()->stream(function () use ($columns) {
+            $output = fopen('php://output', 'w');
+            fputcsv($output, $columns);
+            fputcsv($output, [
+                'ITEM-001',
+                'Paracetamol 500mg Tab',
+                'Paracetamol',
+                'Pharmaceutical',
+                'Analgesics',
+                'Tablet',
+                'Strip',
+                '10',
+                'Tablet',
+                '500mg',
+                'PharmaCo',
+                'Room temperature',
+                'false',
+                'false',
+                '',
+                '100',
+                '500',
+                'A-01-01',
+                'MSD-001',
+                'NHIF-001',
+                '123456789',
+            ]);
+            fclose($output);
+        }, 200, $headers);
+    }
+
     public function importItems(ImportInventoryItemsRequest $request, ImportInventoryItemsUseCase $useCase): JsonResponse
     {
         /** @var UploadedFile $file */

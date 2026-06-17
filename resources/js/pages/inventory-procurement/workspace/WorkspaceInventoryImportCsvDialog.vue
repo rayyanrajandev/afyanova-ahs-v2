@@ -4,11 +4,14 @@ import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { notifySuccess } from '@/lib/notify';
 import { useInventoryWorkspace } from './inventoryWorkspaceApi';
 
 const ws = useInventoryWorkspace();
 const importFileInput = ref<HTMLInputElement | null>(null);
+
+function downloadTemplate() {
+    window.open('/api/v1/inventory-procurement/items/import-template', '_blank');
+}
 </script>
 
 <template>
@@ -16,7 +19,7 @@ const importFileInput = ref<HTMLInputElement | null>(null);
     <SheetContent side="right" variant="form" size="xl">
         <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
             <SheetTitle class="flex items-center gap-2">
-                <AppIcon name="upload" class="size-5 text-muted-foreground" />
+                <AppIcon name="file-text" class="size-5 text-muted-foreground" />
                 Import Inventory Items
             </SheetTitle>
             <SheetDescription>Upload a CSV file to bulk-create inventory items. The file must follow the inventory item import template.</SheetDescription>
@@ -28,7 +31,7 @@ const importFileInput = ref<HTMLInputElement | null>(null);
                     @click="importFileInput?.click()"
                 >
                     <div class="flex size-12 items-center justify-center rounded-full bg-primary/10">
-                        <AppIcon name="upload" class="size-6 text-primary" />
+                        <AppIcon name="file-text" class="size-6 text-primary" />
                     </div>
                     <div>
                         <p class="text-sm font-medium">Click to choose a CSV file</p>
@@ -43,11 +46,9 @@ const importFileInput = ref<HTMLInputElement | null>(null);
                         @change="(e: Event) => { const target = e.target as HTMLInputElement | null; (ws as any).importItemsCsvFile = target?.files?.[0] ?? null; (ws as any).importItemsCsvResult = null; }"
                     />
                 </div>
-                <p class="text-xs text-muted-foreground">
-                    Required columns: itemCode, itemName, category, unit. See the
-                    <a href="#" class="underline hover:text-foreground" @click.prevent="notifySuccess('Template: Refer to StoreInventoryItemRequest validation rules for all supported columns.')">template guide</a>
-                    for optional columns.
-                </p>
+                <Button variant="link" class="h-auto p-0 text-xs" @click="downloadTemplate">
+                    Download import template (CSV)
+                </Button>
             </div>
             <div v-else class="flex flex-col gap-4">
                 <div class="flex items-center gap-3 rounded-lg border bg-muted/20 p-3">
@@ -78,7 +79,7 @@ const importFileInput = ref<HTMLInputElement | null>(null);
                 :disabled="!(ws.importItemsCsvFile as any) || (ws.importItemsCsvSubmitting as any)"
                 @click="(ws.submitImportItemsCsv as () => Promise<void>)()"
             >
-                <AppIcon name="upload" class="size-3.5" />
+                <AppIcon name="file-text" class="size-3.5" />
                 {{ (ws.importItemsCsvSubmitting as any) ? 'Importing…' : 'Import Items' }}
             </Button>
         </SheetFooter>
