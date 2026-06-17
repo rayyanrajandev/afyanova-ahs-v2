@@ -1336,6 +1336,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::post('inventory-procurement/items', [InventoryProcurementController::class, 'storeItem'])
         ->middleware('can:inventory.procurement.manage-items')
         ->name('inventory-procurement.items.store');
+    Route::post('inventory-procurement/items/import', [InventoryProcurementController::class, 'importItems'])
+        ->middleware('can:inventory.procurement.manage-items')
+        ->name('inventory-procurement.items.import');
     Route::get('inventory-procurement/items/{id}', [InventoryProcurementController::class, 'showItem'])
         ->middleware('can:inventory.procurement.read')
         ->name('inventory-procurement.items.show');

@@ -12,6 +12,7 @@ use App\Modules\InventoryProcurement\Application\Exceptions\InventoryStockOperat
 use App\Modules\InventoryProcurement\Application\Exceptions\InventoryWarehouseNotFoundException;
 use App\Modules\InventoryProcurement\Application\UseCases\CreateInventoryItemUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\CreateInventoryProcurementRequestUseCase;
+use App\Modules\InventoryProcurement\Application\UseCases\ImportInventoryItemsUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\CreateInventoryStockMovementUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\GetInventoryItemUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\GetInventoryStockMovementSummaryUseCase;
@@ -31,6 +32,7 @@ use App\Modules\InventoryProcurement\Application\UseCases\UpdateInventoryProcure
 use App\Modules\InventoryProcurement\Presentation\Http\Requests\PlaceInventoryProcurementOrderRequest;
 use App\Modules\InventoryProcurement\Presentation\Http\Requests\ReconcileInventoryStockRequest;
 use App\Modules\InventoryProcurement\Presentation\Http\Requests\ReceiveInventoryProcurementRequestRequest;
+use App\Modules\InventoryProcurement\Presentation\Http\Requests\ImportInventoryItemsRequest;
 use App\Modules\InventoryProcurement\Presentation\Http\Requests\StoreInventoryItemRequest;
 use App\Modules\InventoryProcurement\Presentation\Http\Requests\StoreInventoryProcurementRequestRequest;
 use App\Modules\InventoryProcurement\Presentation\Http\Requests\StoreInventoryStockMovementRequest;
@@ -47,7 +49,9 @@ use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationE
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use SplFileObject;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class InventoryProcurementController extends Controller
@@ -127,6 +131,20 @@ class InventoryProcurementController extends Controller
         return response()->json([
             'data' => InventoryItemResponseTransformer::transform($item),
         ], 201);
+    }
+
+    public function importItems(ImportInventoryItemsRequest $request, ImportInventoryItemsUseCase $useCase): JsonResponse
+    {
+        /** @var UploadedFile $file */
+        $file = $request->file('file');
+        $csvFile = new SplFileObject($file->getPathname(), 'r');
+
+        $results = $useCase->execute(
+            csvFile: $csvFile,
+            actorId: $request->user()?->id,
+        );
+
+        return response()->json($results, count($results['failed']) > 0 ? 422 : 200);
     }
 
     public function showItem(string $id, GetInventoryItemUseCase $useCase): JsonResponse

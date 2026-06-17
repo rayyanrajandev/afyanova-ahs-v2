@@ -95,16 +95,27 @@ const ws = useInventoryWorkspace();
                                 <AppIcon name="refresh-cw" class="size-3.5" :class="{ 'animate-spin': ws.loading }" />
                                 Refresh
                             </Button>
-                            <Button
-                                v-if="ws.canManageItems"
-                                size="sm"
-                                class="h-9 gap-1.5 rounded-lg text-xs"
-                                :disabled="!ws.canLaunchCreateItem"
-                                @click="ws.openCreateItemDialog"
-                            >
-                                <AppIcon name="plus" class="size-3.5" />
-                                Create Item
-                            </Button>
+                             <Button
+                                 v-if="ws.canManageItems"
+                                 size="sm"
+                                 variant="outline"
+                                 class="h-9 gap-1.5 rounded-lg text-xs"
+                                 :disabled="!ws.canLaunchCreateItem"
+                                 @click="ws.openImportItemsCsvDialog"
+                             >
+                                 <AppIcon name="upload" class="size-3.5" />
+                                 Import CSV
+                             </Button>
+                             <Button
+                                 v-if="ws.canManageItems"
+                                 size="sm"
+                                 class="h-9 gap-1.5 rounded-lg text-xs"
+                                 :disabled="!ws.canLaunchCreateItem"
+                                 @click="ws.openCreateItemDialog"
+                             >
+                                 <AppIcon name="plus" class="size-3.5" />
+                                 Create Item
+                             </Button>
                         </div>
                     </div>
 

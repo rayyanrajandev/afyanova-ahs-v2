@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type Ref } from 'vue';
+import { computed, ref, nextTick, onBeforeUnmount, onMounted, reactive, watch, type Ref } from 'vue';
 import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue } from '@/pages/inventory-procurement/workspace/constants';
 import { clearInventoryWorkspace } from '@/pages/inventory-procurement/workspace/inventoryWorkspaceApi';
 import { bindInventoryWorkspace } from '@/pages/inventory-procurement/workspace/registerInventoryWorkspaceApi';
@@ -27,6 +27,7 @@ import WorkspaceRequisitionDetailsSheet from '@/pages/inventory-procurement/work
 import WorkspaceProcurementLifecycleSheets from '@/pages/inventory-procurement/workspace/WorkspaceProcurementLifecycleSheets.vue';
 import WorkspaceItemDetailsSheet from '@/pages/inventory-procurement/workspace/WorkspaceItemDetailsSheet.vue';
 import WorkspaceClaimsAndMsdSheets from '@/pages/inventory-procurement/workspace/WorkspaceClaimsAndMsdSheets.vue';
+import WorkspaceInventoryImportCsvDialog from '@/pages/inventory-procurement/workspace/WorkspaceInventoryImportCsvDialog.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import BillingInvoiceLookupField from '@/components/billing/BillingInvoiceLookupField.vue';
 import ClaimsInsuranceCaseLookupField from '@/components/claims/ClaimsInsuranceCaseLookupField.vue';
@@ -511,6 +512,72 @@ const canLaunchProcurementRequest = computed(() => canCreateRequest.value && !pr
 const itemFiltersSheetOpen = ref(false);
 const mobileProcurementDrawerOpen = ref(false);
 const mobileLedgerDrawerOpen = ref(false);
+
+const importItemsCsvDialogOpen = ref(false);
+const importItemsCsvSubmitting = ref(false);
+const importItemsCsvFile = ref<File | null>(null);
+const importItemsCsvInputKey = ref(0);
+const importItemsCsvResult = ref<{ successful: number; failed: number; errors?: string } | null>(null);
+
+function openImportItemsCsvDialog() {
+    if (inventoryItemSetupBlockedReason.value) {
+        notifyError(inventoryItemSetupBlockedReason.value);
+        return;
+    }
+    importItemsCsvDialogOpen.value = true;
+    importItemsCsvResult.value = null;
+    importItemsCsvFile.value = null;
+    importItemsCsvInputKey.value += 1;
+}
+
+function closeImportItemsCsvDialog() {
+    importItemsCsvDialogOpen.value = false;
+    importItemsCsvResult.value = null;
+    importItemsCsvFile.value = null;
+    importItemsCsvSubmitting.value = false;
+}
+
+async function submitImportItemsCsv() {
+    if (!importItemsCsvFile.value || importItemsCsvSubmitting.value) return;
+    importItemsCsvSubmitting.value = true;
+    importItemsCsvResult.value = null;
+    try {
+        const formData = new FormData();
+        formData.append('file', importItemsCsvFile.value);
+        const response = await fetch('/api/v1/inventory-procurement/items/import', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                ...window.csrfToken ? { 'X-CSRF-TOKEN': window.csrfToken } : {},
+            },
+            body: formData,
+        });
+        const payload = await response.json() as { successful?: any[]; failed?: any[]; message?: string };
+        const successfulCount = payload.successful?.length ?? 0;
+        const failedCount = payload.failed?.length ?? 0;
+        if (successfulCount > 0) {
+            notifySuccess(`${successfulCount} item${successfulCount === 1 ? '' : 's'} imported successfully.`);
+        }
+        if (failedCount > 0) {
+            notifyError(`${failedCount} row${failedCount === 1 ? '' : 's'} failed validation.`);
+            importItemsCsvResult.value = {
+                successful: successfulCount,
+                failed: failedCount,
+                errors: payload.failed?.slice(0, 3).map((f: any) => `Row ${f.row}: ${Object.values(f.errors ?? {}).flat().join(', ')}`).join('\n') || undefined,
+            };
+        } else {
+            importItemsCsvResult.value = { successful: successfulCount, failed: 0 };
+            importItemsCsvDialogOpen.value = false;
+            importItemsCsvFile.value = null;
+            await reloadAll();
+        }
+    } catch (error: any) {
+        notifyError(messageFromUnknown(error, 'Unable to import CSV.'));
+    } finally {
+        importItemsCsvSubmitting.value = false;
+    }
+}
 
 const createItemDialogOpen = ref(false);
 const createItemWarehouseOpen = ref(false);
@@ -6285,6 +6352,14 @@ bindInventoryWorkspace({
     inventoryAutoRefreshInterval,
     INVENTORY_AUTO_REFRESH_LABEL,
     refreshInventoryItems,
+    importItemsCsvDialogOpen,
+    importItemsCsvSubmitting,
+    importItemsCsvFile,
+    importItemsCsvInputKey,
+    importItemsCsvResult,
+    openImportItemsCsvDialog,
+    closeImportItemsCsvDialog,
+    submitImportItemsCsv,
     openCreateItemDialog,
     itemSearch,
     itemFiltersSheetOpen,
@@ -6895,6 +6970,7 @@ onMounted(async () => {
     <WorkspaceProcurementLifecycleSheets />
     <WorkspaceItemDetailsSheet />
     <WorkspaceClaimsAndMsdSheets />
+    <WorkspaceInventoryImportCsvDialog />
 
 
 
