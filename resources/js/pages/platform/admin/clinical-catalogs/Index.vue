@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -484,6 +485,15 @@ const auditFilters = reactive({ q: '', action: '', actorType: '', actorId: '', f
 const clinicalStatusFilterSelectValue = computed(() => filters.status || SELECT_ALL_VALUE);
 const auditActorTypeSelectValue = computed(() => auditFilters.actorType || SELECT_ALL_VALUE);
 
+// ── Overview consumables collapsible state ───────────────────────────────────
+
+const overviewConsumablesOpen = ref(false);
+
+// ── Recipe sheet collapsible state ───────────────────────────────────────────
+
+const recipeCollapsibleOpen = ref<Record<string, boolean>>({});
+const recipeAddFormOpen = ref(false);
+
 function preferredDepartmentServiceType(key: CatalogKey): string {
     if (key === 'lab-tests') return 'laboratory';
     if (key === 'radiology-procedures') return 'radiology';
@@ -714,10 +724,10 @@ async function loadFilteredClinicalCatalogItemsForPrint(): Promise<{ data: Item[
 
 function escapePrintHtml(value: string | number | null | undefined): string {
     return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
+        .replace(/&/g, '&')
+        .replace(/</g, '<')
+        .replace(/>/g, '>')
+        .replace(/"/g, '"')
         .replace(/'/g, '&#039;');
 }
 
@@ -1234,6 +1244,17 @@ const consumptionRecipeSummary = computed(() => {
 
     return `${count} consumable line${count === 1 ? '' : 's'} mapped`;
 });
+const consumptionInventoryComboboxOptions = computed<SearchableSelectOption[]>(() =>
+    consumptionInventoryOptions.value.map((opt) => ({
+        value: opt.id,
+        label: inventoryOptionLabel(opt),
+        keywords: [opt.itemName ?? '', opt.itemCode ?? '', opt.category ?? '', opt.subcategory ?? ''].filter(Boolean),
+        description: [
+            opt.category ? `Category: ${opt.category}` : '',
+            opt.currentStock !== null && opt.currentStock !== undefined ? `Stock: ${opt.currentStock}` : '',
+        ].filter(Boolean).join(' · ') || undefined,
+    })),
+);
 const consumptionRecipeValidationMessage = computed(() => {
     const errors = consumptionRecipeErrors.value;
 
@@ -1344,6 +1365,9 @@ function resetConsumptionRecipeWorkspace(): void {
     consumptionRecipeErrors.value = {};
     consumptionRecipeItems.value = [];
     consumptionInventoryOptions.value = [];
+    overviewConsumablesOpen.value = false;
+    recipeCollapsibleOpen.value = {};
+    recipeAddFormOpen.value = false;
     Object.assign(consumptionRecipeForm, {
         inventoryItemId: '',
         quantityPerOrder: '',
@@ -1364,16 +1388,6 @@ function inventoryOptionLabel(item: ConsumptionInventoryOption | null): string {
     if (!item) return 'Select stock item';
 
     return `${item.itemName || 'Unnamed stock'} (${item.itemCode || 'NO-CODE'})`;
-}
-
-function updateConsumptionInventorySelection(value: unknown): void {
-    const inventoryItemId = value === SELECT_NOT_SPECIFIED_VALUE ? '' : String(value);
-    consumptionRecipeForm.inventoryItemId = inventoryItemId;
-
-    const option = consumptionInventoryOptions.value.find((item) => item.id === inventoryItemId);
-    if (option?.unit && !consumptionRecipeForm.unit.trim()) {
-        consumptionRecipeForm.unit = option.unit;
-    }
 }
 
 function addConsumptionRecipeLine(): void {
@@ -1419,6 +1433,7 @@ function addConsumptionRecipeLine(): void {
 
 function removeConsumptionRecipeLine(inventoryItemId: string): void {
     consumptionRecipeItems.value = consumptionRecipeItems.value.filter((item) => item.inventoryItemId !== inventoryItemId);
+    delete recipeCollapsibleOpen.value[inventoryItemId];
 }
 
 async function loadConsumptionRecipe(item: Item): Promise<void> {
@@ -1667,6 +1682,11 @@ async function openDetails(item: Item): Promise<void> {
         const response = await apiRequest<{ data: Item }>('GET', `${base.value}/${id}`);
         selected.value = response.data;
         hydrateEdit(response.data);
+
+        // Load consumption recipe data so overview card shows inline items
+        if (supportsConsumptionRecipe.value && selected.value) {
+            await loadConsumptionRecipe(selected.value);
+        }
     } catch (error) {
         detailsError.value = messageFromUnknown(error, 'Unable to load item details.');
     } finally {
@@ -1730,6 +1750,15 @@ function closeRecipeSheet(open?: boolean): void {
         return;
     }
     recipeSheetOpen.value = false;
+}
+
+function consumptionStageLabel(value: string): string {
+    const stage = consumptionStageOptions.find((s) => s.value === value);
+    return stage?.label ?? value;
+}
+
+function toggleRecipeCollapsible(inventoryItemId: string): void {
+    recipeCollapsibleOpen.value[inventoryItemId] = !recipeCollapsibleOpen.value[inventoryItemId];
 }
 
 async function saveItem(): Promise<void> {
@@ -2486,7 +2515,7 @@ onMounted(() => {
                             {{ createButtonLabel }}
                         </SheetTitle>
                         <SheetDescription>
-                            Register what care teams order. Hospital prices are added separately in Tariffs &amp; services.
+                            Register what care teams order. Hospital prices are added separately in Tariffs & services.
                         </SheetDescription>
                     </SheetHeader>
                     <ScrollArea class="min-h-0 flex-1">
@@ -2851,10 +2880,30 @@ onMounted(() => {
                                             </div>
                                         </CardHeader>
                                         <CardContent class="space-y-3 px-3 py-3">
-                                            <p class="text-sm text-muted-foreground">
+                                            <!-- Inline consumables list (always visible when items exist) -->
+                                            <div v-if="consumptionRecipeItems.length > 0 && !consumptionRecipeLoading" class="space-y-1.5">
+                                                <div
+                                                    v-for="line in consumptionRecipeItems"
+                                                    :key="line.inventoryItemId"
+                                                    class="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background px-3 py-2 text-xs hover:bg-accent/30 transition-colors"
+                                                >
+                                                    <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+                                                        <AppIcon name="circle-check-big" class="size-3.5 text-emerald-500 shrink-0" />
+                                                        <span class="font-medium text-foreground">{{ line.inventoryItem?.itemName || 'Unnamed item' }}</span>
+                                                        <span class="text-muted-foreground">{{ line.quantityPerOrder }} {{ line.unit }}</span>
+                                                        <span v-if="Number(line.wasteFactorPercent) > 0" class="text-muted-foreground">Waste {{ line.wasteFactorPercent }}%</span>
+                                                        <Badge variant="outline" class="text-[10px]">{{ consumptionStageLabel(line.consumptionStage) }}</Badge>
+                                                    </div>
+                                                    <span v-if="line.inventoryItem?.currentStock !== null && line.inventoryItem?.currentStock !== undefined" class="shrink-0 whitespace-nowrap rounded bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                                        Stock {{ line.inventoryItem.currentStock }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <p v-else-if="consumptionRecipeLoading" class="text-xs text-muted-foreground">Loading consumables…</p>
+                                            <p v-else class="text-sm text-muted-foreground">
                                                 Map store items (tubes, reagents, gloves, etc.) and quantities deducted when this
                                                 {{ domains[selectedCatalogKey].singular.toLowerCase() }} is completed. Create items in
-                                                Inventory &amp; Procurement first.
+                                                Inventory & Procurement first.
                                             </p>
                                             <div class="flex flex-wrap items-center gap-2">
                                                 <Button size="sm" variant="outline" class="gap-1.5" as-child>
@@ -2942,7 +2991,7 @@ onMounted(() => {
                             {{ editSheetTitle }}
                         </SheetTitle>
                         <SheetDescription v-if="selected">
-                            Update clinical details here. Change hospital prices in Tariffs &amp; services.
+                            Update clinical details here. Change hospital prices in Tariffs & services.
                         </SheetDescription>
                     </SheetHeader>
                     <ScrollArea class="min-h-0 flex-1">
@@ -3032,14 +3081,14 @@ onMounted(() => {
                                     <Button size="sm" variant="outline" class="mt-2 h-8 gap-1.5" as-child>
                                         <Link href="/billing-service-catalog">
                                             <AppIcon name="receipt" class="size-3.5" />
-                                            Open tariffs &amp; services
+                                            Open tariffs & services
                                         </Link>
                                     </Button>
                                 </div>
                                 <details class="md:col-span-3 rounded-lg border bg-muted/10 p-3">
                                     <summary class="cursor-pointer text-sm font-medium text-muted-foreground">Billing service code (optional)</summary>
                                     <p class="mt-2 text-xs text-muted-foreground">
-                                        Use this when the billing/tariff code should differ from the clinical definition code. Tariffs &amp; services will use it when creating prices from this definition.
+                                        Use this when the billing/tariff code should differ from the clinical definition code. Tariffs & services will use it when creating prices from this definition.
                                     </p>
                                     <div class="mt-3 grid gap-1.5">
                                         <Label>Billing service code</Label>
@@ -3197,13 +3246,13 @@ onMounted(() => {
                         </SheetDescription>
                         <div class="mt-3 rounded-lg border border-dashed bg-muted/10 px-3 py-2.5">
                             <p class="text-xs text-muted-foreground">
-                                New consumables are created in Inventory &amp; Procurement (item master), then selected here. Use categories such as
+                                New consumables are created in Inventory & Procurement (item master), then selected here. Use categories such as
                                 Medical consumable, Laboratory, or Radiology so they appear in the list below.
                             </p>
                             <Button size="sm" variant="outline" class="mt-2 h-8 gap-1.5" as-child>
                                 <Link :href="inventoryStoreItemsHref">
                                     <AppIcon name="building-2" class="size-3.5" />
-                                    Open Inventory &amp; Procurement
+                                    Open Inventory & Procurement
                                 </Link>
                             </Button>
                         </div>
@@ -3223,11 +3272,55 @@ onMounted(() => {
                                 <Skeleton class="h-12 w-full" />
                             </div>
                             <template v-else>
+                                <!-- Add consumable form FIRST — always visible, collapsible -->
+                                <Collapsible v-model:open="recipeAddFormOpen" class="rounded-lg border">
+                                    <CollapsibleTrigger class="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/30 [&[data-state=open]>svg]:rotate-90">
+                                        <span class="flex items-center gap-2">
+                                            <AppIcon name="plus" class="size-3.5" />
+                                            <span>{{ recipeAddFormOpen ? 'Hide add form' : 'Add consumable' }}</span>
+                                        </span>
+                                        <AppIcon name="chevron-right" class="size-3 shrink-0 text-muted-foreground transition-transform duration-200" />
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent class="border-t px-3 pb-3 pt-3">
+                                        <div class="grid gap-3 md:grid-cols-2">
+                                            <div class="grid gap-1.5 md:col-span-2">
+                                                <Label>Store item</Label>
+                                                <ComboboxField
+                                                    input-id="recipe-add-store-item"
+                                                    v-model="consumptionRecipeForm.inventoryItemId"
+                                                    :options="consumptionInventoryComboboxOptions"
+                                                    placeholder="Search and select store item"
+                                                    search-placeholder="Search by name or code"
+                                                    empty-text="No matching store items found."
+                                                    :reserve-message-space="false"
+                                                />
+                                            </div>
+                                            <div class="grid gap-1.5"><Label>Qty per service</Label><Input v-model="consumptionRecipeForm.quantityPerOrder" inputmode="decimal" placeholder="1" /></div>
+                                            <div class="grid gap-1.5"><Label>Unit</Label><Input v-model="consumptionRecipeForm.unit" placeholder="kit" /></div>
+                                            <div class="grid gap-1.5"><Label>Waste %</Label><Input v-model="consumptionRecipeForm.wasteFactorPercent" inputmode="decimal" placeholder="0" /></div>
+                                            <div class="grid gap-1.5">
+                                                <Label>When to deduct</Label>
+                                                <Select v-model="consumptionRecipeForm.consumptionStage">
+                                                    <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem v-for="stage in consumptionStageOptions" :key="stage.value" :value="stage.value">{{ stage.label }}</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div class="grid gap-1.5 md:col-span-2"><Label>Notes</Label><Textarea v-model="consumptionRecipeForm.notes" class="min-h-16" /></div>
+                                        </div>
+                                        <Button type="button" variant="outline" size="sm" class="mt-3 w-fit gap-1.5" @click="addConsumptionRecipeLine">
+                                            <AppIcon name="plus" class="size-3.5" />
+                                            Add to list
+                                        </Button>
+                                    </CollapsibleContent>
+                                </Collapsible>
+
                                 <div
                                     v-if="consumptionRecipeItems.length === 0"
                                     class="space-y-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground"
                                 >
-                                    <p>No consumables listed yet. Add each store item and how much is used per service.</p>
+                                    <p>No consumables listed yet. Use the add form above to map store items.</p>
                                     <Button size="sm" variant="outline" class="h-8 gap-1.5" as-child>
                                         <Link :href="inventoryStoreItemsHref">
                                             <AppIcon name="building-2" class="size-3.5" />
@@ -3236,64 +3329,58 @@ onMounted(() => {
                                     </Button>
                                 </div>
                                 <div v-else class="space-y-2">
-                                    <div v-for="line in consumptionRecipeItems" :key="line.inventoryItemId" class="rounded-lg border p-3">
-                                        <div class="grid gap-3 md:grid-cols-2">
-                                            <div class="grid gap-1.5 md:col-span-2">
-                                                <Label>Store item</Label>
-                                                <p class="rounded-md border bg-muted/20 px-3 py-2 text-sm font-medium">{{ inventoryOptionLabel(line.inventoryItem) }}</p>
-                                            </div>
-                                            <div class="grid gap-1.5"><Label>Qty per service</Label><Input v-model="line.quantityPerOrder" inputmode="decimal" /></div>
-                                            <div class="grid gap-1.5"><Label>Unit</Label><Input v-model="line.unit" /></div>
-                                            <div class="grid gap-1.5"><Label>Waste %</Label><Input v-model="line.wasteFactorPercent" inputmode="decimal" /></div>
-                                            <div class="grid gap-1.5">
-                                                <Label>When to deduct</Label>
-                                                <Select
-                                                    :model-value="line.consumptionStage || 'per_order'"
-                                                    @update:model-value="(value) => { line.consumptionStage = String(value); }"
-                                                >
-                                                    <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem v-for="stage in consumptionStageOptions" :key="stage.value" :value="stage.value">{{ stage.label }}</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div class="grid gap-1.5 md:col-span-2"><Label>Notes</Label><Textarea v-model="line.notes" class="min-h-16" /></div>
-                                        </div>
-                                        <Button type="button" variant="outline" size="sm" class="mt-3" @click="removeConsumptionRecipeLine(line.inventoryItemId)">Remove</Button>
+                                    <div class="flex items-center justify-between gap-2">
+                                        <p class="text-xs text-muted-foreground">Click a consumable to expand and edit its details.</p>
+                                        <span class="text-xs text-muted-foreground">{{ consumptionRecipeItems.length }} item{{ consumptionRecipeItems.length === 1 ? '' : 's' }}</span>
+                                    </div>
+                                    <div v-for="line in consumptionRecipeItems" :key="line.inventoryItemId" class="rounded-lg border">
+                                        <!-- Collapsible trigger: compact summary row -->
+                                        <Collapsible
+                                            :open="recipeCollapsibleOpen[line.inventoryItemId] ?? false"
+                                            @update:open="toggleRecipeCollapsible(line.inventoryItemId)"
+                                        >
+                                            <CollapsibleTrigger class="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/30 [&[data-state=open]>svg]:rotate-90">
+                                                <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+                                                    <AppIcon name="circle-check-big" class="size-3.5 text-emerald-500 shrink-0" />
+                                                    <span class="font-medium text-foreground">{{ line.inventoryItem?.itemName || 'Unnamed item' }}</span>
+                                                    <Badge variant="outline" class="text-[10px]">{{ consumptionStageLabel(line.consumptionStage) }}</Badge>
+                                                </div>
+                                                <div class="flex items-center gap-3 shrink-0">
+                                                    <span class="text-xs text-muted-foreground whitespace-nowrap">{{ line.quantityPerOrder }} {{ line.unit }}</span>
+                                                    <AppIcon name="chevron-right" class="size-3 shrink-0 text-muted-foreground transition-transform duration-200" />
+                                                </div>
+                                            </CollapsibleTrigger>
+                                            <CollapsibleContent class="border-t px-3 pb-3 pt-3">
+                                                <div class="grid gap-3 md:grid-cols-2">
+                                                    <div class="grid gap-1.5 md:col-span-2">
+                                                        <Label>Store item</Label>
+                                                        <p class="rounded-md border bg-muted/20 px-3 py-2 text-sm font-medium">{{ inventoryOptionLabel(line.inventoryItem) }}</p>
+                                                    </div>
+                                                    <div class="grid gap-1.5"><Label>Qty per service</Label><Input :model-value="line.quantityPerOrder" @update:model-value="(v) => { line.quantityPerOrder = String(v); }" inputmode="decimal" /></div>
+                                                    <div class="grid gap-1.5"><Label>Unit</Label><Input :model-value="line.unit" @update:model-value="(v) => { line.unit = String(v); }" /></div>
+                                                    <div class="grid gap-1.5"><Label>Waste %</Label><Input :model-value="line.wasteFactorPercent" @update:model-value="(v) => { line.wasteFactorPercent = String(v); }" inputmode="decimal" /></div>
+                                                    <div class="grid gap-1.5">
+                                                        <Label>When to deduct</Label>
+                                                        <Select
+                                                            :model-value="line.consumptionStage || 'per_order'"
+                                                            @update:model-value="(value) => { line.consumptionStage = String(value); }"
+                                                        >
+                                                            <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem v-for="stage in consumptionStageOptions" :key="stage.value" :value="stage.value">{{ stage.label }}</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div class="grid gap-1.5 md:col-span-2"><Label>Notes</Label><Textarea :model-value="line.notes ?? ''" @update:model-value="(v) => { line.notes = String(v) || null; }" class="min-h-16" /></div>
+                                                </div>
+                                                <Button type="button" variant="outline" size="sm" class="mt-3 gap-1.5" @click="removeConsumptionRecipeLine(line.inventoryItemId)">
+                                                    <AppIcon name="trash-2" class="size-3.5" />
+                                                    Remove
+                                                </Button>
+                                            </CollapsibleContent>
+                                        </Collapsible>
                                     </div>
                                 </div>
-                                <fieldset class="grid gap-3 rounded-lg border p-3">
-                                    <legend class="px-2 text-sm font-medium text-muted-foreground">Add consumable</legend>
-                                    <div class="grid gap-3 md:grid-cols-2">
-                                        <div class="grid gap-1.5 md:col-span-2">
-                                            <Label>Store item</Label>
-                                            <Select
-                                                :model-value="consumptionRecipeForm.inventoryItemId || SELECT_NOT_SPECIFIED_VALUE"
-                                                @update:model-value="updateConsumptionInventorySelection"
-                                            >
-                                                <SelectTrigger class="w-full"><SelectValue placeholder="Select store item" /></SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Select store item</SelectItem>
-                                                    <SelectItem v-for="option in consumptionInventoryOptions" :key="option.id" :value="option.id">{{ inventoryOptionLabel(option) }}</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div class="grid gap-1.5"><Label>Qty per service</Label><Input v-model="consumptionRecipeForm.quantityPerOrder" inputmode="decimal" placeholder="1" /></div>
-                                        <div class="grid gap-1.5"><Label>Unit</Label><Input v-model="consumptionRecipeForm.unit" placeholder="kit" /></div>
-                                        <div class="grid gap-1.5"><Label>Waste %</Label><Input v-model="consumptionRecipeForm.wasteFactorPercent" inputmode="decimal" placeholder="0" /></div>
-                                        <div class="grid gap-1.5">
-                                            <Label>When to deduct</Label>
-                                            <Select v-model="consumptionRecipeForm.consumptionStage">
-                                                <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem v-for="stage in consumptionStageOptions" :key="stage.value" :value="stage.value">{{ stage.label }}</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div class="grid gap-1.5 md:col-span-2"><Label>Notes</Label><Textarea v-model="consumptionRecipeForm.notes" class="min-h-16" /></div>
-                                    </div>
-                                    <Button type="button" variant="outline" size="sm" class="w-fit" @click="addConsumptionRecipeLine">Add consumable</Button>
-                                </fieldset>
                             </template>
                         </div>
                     </ScrollArea>
