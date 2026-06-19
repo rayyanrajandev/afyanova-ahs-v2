@@ -8,9 +8,11 @@ export type BreadcrumbItem = {
 };
 
 export type NavItem = {
+    id?: string;
     title: string;
     href: NonNullable<InertiaLinkProps['href']>;
     icon?: Component;
     iconName?: AppIconName;
     isActive?: boolean;
+    badge?: string | number;
 };

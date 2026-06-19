@@ -11,6 +11,7 @@ export type NavSectionKey =
     | 'system_access';
 
 export type AppNavCatalogItem = {
+    id?: string;
     title: string;
     href: string;
     iconName: AppIconName;
@@ -315,9 +316,15 @@ export const appNavCatalog: AppNavCatalogItem[] = [
             'platform.facilities.',
             'platform.multi-facility.',
             'platform.resources.',
+            'platform.clinical-catalog.',
+            'platform.subscription-plans.',
+            'platform.settings.',
+            'departments.',
+            'specialties.',
+            'billing.service-catalog.',
             'platform.users.manage-facilities',
         ],
-        helpNote: 'Tenant, facility, owner, and subscription assignment',
+        helpNote: 'Facility foundation, departments, resources, catalogs, subscriptions, and access',
     },
     {
         title: 'Subscription plans',
