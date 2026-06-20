@@ -142,6 +142,14 @@ watch(
         }
     },
 );
+
+watch(
+    () => props.options,
+    () => {
+        commandSearch.value = '';
+    },
+    { deep: true },
+);
 </script>
 
 <template>

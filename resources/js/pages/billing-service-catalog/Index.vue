@@ -613,12 +613,7 @@ const createUnitSelectValue = computed({
     },
 });
 
-const createUnitOptions = computed(() => {
-    if (createForm.serviceType === 'pharmacy') {
-        return pharmacyUnitOptions;
-    }
-    return unitOptions;
-});
+const createUnitOptions = computed(() => unitOptions);
 
 const createTaxableSelectValue = computed({
     get: () => createForm.isTaxable || '__none__',
@@ -656,12 +651,7 @@ const editUnitSelectValue = computed({
     },
 });
 
-const editUnitOptions = computed(() => {
-    if (editForm.serviceType === 'pharmacy') {
-        return pharmacyUnitOptions;
-    }
-    return unitOptions;
-});
+const editUnitOptions = computed(() => unitOptions);
 
 const editPriceUnitSelectValue = computed({
     get: () => editForm.priceUnit || '__none__',
