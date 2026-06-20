@@ -13,6 +13,7 @@ use App\Modules\Pos\Presentation\Http\Controllers\PosRegisterSessionDocumentCont
 use App\Modules\Pos\Presentation\Http\Controllers\PosSaleDocumentController;
 use App\Support\Branding\SystemBrandingManager;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
@@ -233,8 +234,21 @@ Route::get('platform/admin/facility-rollouts', function () {
 })->middleware(['auth', 'verified', 'can:platform.multi-facility.read'])->name('platform-admin-facility-rollouts.page');
 
 Route::get('platform/admin/facility-config', function () {
+    abort_unless(Gate::any([
+        'platform.facilities.read',
+        'platform.resources.read',
+        'platform.clinical-catalog.read',
+        'departments.read',
+        'specialties.read',
+        'billing.service-catalog.read',
+        'platform.subscription-plans.read',
+        'platform.multi-facility.read',
+        'platform.users.read',
+        'platform.settings.manage-branding',
+    ]), 403);
+
     return Inertia::render('platform/admin/facility-config/Index');
-})->middleware(['auth', 'verified', 'can:platform.facilities.read'])->name('platform-admin-facility-config.page');
+})->middleware(['auth', 'verified'])->name('platform-admin-facility-config.page');
 
 Route::get('platform/admin/service-plans', function () {
     return Inertia::render('platform/admin/service-plans/Index');

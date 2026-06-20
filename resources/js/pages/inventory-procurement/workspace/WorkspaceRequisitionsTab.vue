@@ -53,7 +53,7 @@ const ws = useInventoryWorkspace();
             <Select
                 v-if="ws.canSelectAnyRequisitionDepartment"
                 :model-value="ws.toSelectValue(ws.deptReqSearch.departmentId)"
-                @update:model-value="ws.deptReqSearch.departmentId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))"
+                @update:model-value="ws.setDeptReqDepartmentFilter(String($event ?? ws.EMPTY_SELECT_VALUE))"
             >
                 <SelectTrigger class="h-9 w-44 text-xs" :disabled="!ws.canSelectAnyRequisitionDepartment">
                     <SelectValue placeholder="All departments" />

@@ -32,6 +32,8 @@ class StoreBillingServiceCatalogItemRequest extends FormRequest
             'departmentId' => ['nullable', 'uuid'],
             'department' => ['nullable', 'string', 'max:120'],
             'unit' => ['nullable', 'string', 'max:50'],
+            'priceUnit' => ['nullable', 'string', 'max:50'],
+            'unitsPerPack' => ['nullable', 'integer', 'min:1'],
             'basePrice' => ['required', 'numeric', 'min:0'],
             'currencyCode' => ['required', 'string', 'size:3'],
             'taxRatePercent' => ['nullable', 'numeric', 'min:0', 'max:100'],

@@ -98,6 +98,8 @@ class CreatePharmacyOrderUseCase
 
         $payload['quantity_dispensed'] = round((float) ($payload['quantity_dispensed'] ?? 0), 2);
         $payload['quantity_prescribed'] = round((float) ($payload['quantity_prescribed'] ?? 0), 2);
+        $this->normalizeStructuredDoseFields($payload);
+        $this->applyDispenseUnitDefaults($payload, $selectedCatalogItem);
 
         $this->applyLifecycleLinkage($payload);
         $payload['clinical_order_session_id'] = $this->resolveClinicalOrderSessionId(
@@ -135,8 +137,16 @@ class CreatePharmacyOrderUseCase
                     'medication_code' => $payload['medication_code'] ?? null,
                     'medication_name' => $payload['medication_name'] ?? null,
                     'dosage_instruction' => $payload['dosage_instruction'] ?? null,
+                    'dose_quantity' => $payload['dose_quantity'] ?? null,
+                    'dose_unit' => $payload['dose_unit'] ?? null,
+                    'route' => $payload['route'] ?? null,
+                    'frequency' => $payload['frequency'] ?? null,
+                    'duration_value' => $payload['duration_value'] ?? null,
+                    'duration_unit' => $payload['duration_unit'] ?? null,
                     'clinical_indication' => $payload['clinical_indication'] ?? null,
                     'quantity_prescribed' => $payload['quantity_prescribed'] ?? null,
+                    'prescribed_unit' => $payload['prescribed_unit'] ?? null,
+                    'dispensed_unit' => $payload['dispensed_unit'] ?? null,
                     'appointment_id' => $payload['appointment_id'] ?? null,
                     'admission_id' => $payload['admission_id'] ?? null,
                     'formulary_decision_status' => $payload['formulary_decision_status'] ?? null,
@@ -231,9 +241,17 @@ class CreatePharmacyOrderUseCase
             'medication_code',
             'medication_name',
             'dosage_instruction',
+            'dose_quantity',
+            'dose_unit',
+            'route',
+            'frequency',
+            'duration_value',
+            'duration_unit',
             'clinical_indication',
             'quantity_prescribed',
+            'prescribed_unit',
             'quantity_dispensed',
+            'dispensed_unit',
             'dispensing_notes',
             'dispensed_at',
             'formulary_decision_status',
@@ -323,6 +341,54 @@ class CreatePharmacyOrderUseCase
         $payload['medication_name'] = $resolvedMedicationName;
 
         return $catalogItem;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @param array<string, mixed> $catalogItem
+     */
+    private function applyDispenseUnitDefaults(array &$payload, array $catalogItem): void
+    {
+        $resolvedUnit = $this->normalizeUnit($payload['prescribed_unit'] ?? null)
+            ?? $this->normalizeUnit($payload['dispensed_unit'] ?? null)
+            ?? $this->normalizeUnit($catalogItem['unit'] ?? null);
+
+        $payload['prescribed_unit'] = $this->normalizeUnit($payload['prescribed_unit'] ?? null) ?? $resolvedUnit;
+        $payload['dispensed_unit'] = $this->normalizeUnit($payload['dispensed_unit'] ?? null)
+            ?? $payload['prescribed_unit']
+            ?? $resolvedUnit;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function normalizeStructuredDoseFields(array &$payload): void
+    {
+        foreach (['dose_unit', 'route', 'frequency', 'duration_unit'] as $field) {
+            if (array_key_exists($field, $payload)) {
+                $payload[$field] = $this->normalizeNullableString($payload[$field] ?? null);
+            }
+        }
+
+        if (array_key_exists('dose_quantity', $payload) && $payload['dose_quantity'] !== null && $payload['dose_quantity'] !== '') {
+            $payload['dose_quantity'] = round((float) $payload['dose_quantity'], 4);
+        }
+
+        if (array_key_exists('duration_value', $payload) && $payload['duration_value'] !== null && $payload['duration_value'] !== '') {
+            $payload['duration_value'] = round((float) $payload['duration_value'], 2);
+        }
+    }
+
+    private function normalizeUnit(mixed $value): ?string
+    {
+        return $this->normalizeNullableString($value);
+    }
+
+    private function normalizeNullableString(mixed $value): ?string
+    {
+        $normalized = trim((string) $value);
+
+        return $normalized === '' ? null : mb_strtolower($normalized);
     }
 
     /**

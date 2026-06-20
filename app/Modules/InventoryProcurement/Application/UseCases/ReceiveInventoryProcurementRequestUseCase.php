@@ -85,6 +85,8 @@ class ReceiveInventoryProcurementRequestUseCase
                 'procurement_request_id' => $id,
                 'source_supplier_id' => $existing['supplier_id'] ?? ($item['default_supplier_id'] ?? null),
                 'destination_warehouse_id' => $warehouseId,
+                'unit_id' => $payload['unit_id'] ?? null,
+                'unit' => $payload['unit'] ?? null,
                 'quantity' => $receivedQuantity,
                 'received_unit_cost' => $receivedUnitCost,
                 'batch_number' => $payload['batch_number'] ?? null,

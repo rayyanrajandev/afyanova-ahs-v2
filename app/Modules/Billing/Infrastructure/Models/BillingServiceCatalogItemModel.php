@@ -44,6 +44,8 @@ class BillingServiceCatalogItemModel extends Model
         'status',
         'status_reason',
         'supersedes_billing_service_catalog_item_id',
+        'price_unit',
+        'units_per_pack',
     ];
 
     /**

@@ -65,6 +65,16 @@ class UpdateBillingServiceCatalogItemUseCase
             $payload['unit'] = trim($payload['unit']);
         }
 
+        if (array_key_exists('price_unit', $payload)) {
+            $payload['price_unit'] = $this->nullableTrimmedValue($payload['price_unit']);
+        }
+
+        if (array_key_exists('units_per_pack', $payload)) {
+            $payload['units_per_pack'] = $payload['units_per_pack'] !== null && $payload['units_per_pack'] !== ''
+                ? (int) $payload['units_per_pack']
+                : null;
+        }
+
         if (array_key_exists('service_type', $payload) && is_string($payload['service_type'])) {
             $payload['service_type'] = $this->nullableTrimmedValue($payload['service_type']);
         }
@@ -135,6 +145,8 @@ class UpdateBillingServiceCatalogItemUseCase
             'department_id',
             'department',
             'unit',
+            'price_unit',
+            'units_per_pack',
             'base_price',
             'currency_code',
             'tax_rate_percent',

@@ -158,14 +158,14 @@ const ws = useInventoryWorkspace();
                             <Select
                                 v-if="ws.canSelectAnyRequisitionDepartment"
                                 :model-value="ws.toSelectValue(ws.shortageQueueFilters.departmentId)"
-                                @update:model-value="(v: string) => { ws.shortageQueueFilters.departmentId = ws.fromSelectValue(v); ws.shortageQueueFilters.page = 1; ws.loadShortageQueue() }"
+                                @update:model-value="(v: string) => { ws.setShortageQueueDepartmentFilter(v); ws.shortageQueueFilters.page = 1; ws.loadShortageQueue() }"
                             >
                                 <SelectTrigger class="h-9 w-44 text-xs">
                                     <SelectValue placeholder="All departments" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem :value="ws.EMPTY_SELECT_VALUE">All departments</SelectItem>
-                                    <SelectItem v-for="dept in ws.departments" :key="dept.id" :value="dept.id">{{ dept.name }}</SelectItem>
+                                    <SelectItem v-for="dept in ws.departmentFilterOptions" :key="dept.id" :value="dept.id">{{ ws.lookupOptionText(dept) }}</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>

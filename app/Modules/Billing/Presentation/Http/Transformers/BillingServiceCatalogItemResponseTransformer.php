@@ -21,6 +21,8 @@ class BillingServiceCatalogItemResponseTransformer
             'departmentId' => $item['department_id'] ?? null,
             'department' => $item['department'] ?? null,
             'unit' => $item['unit'] ?? null,
+            'priceUnit' => $item['price_unit'] ?? null,
+            'unitsPerPack' => $item['units_per_pack'] ?? null,
             'basePrice' => $item['base_price'] ?? null,
             'currencyCode' => $item['currency_code'] ?? null,
             'taxRatePercent' => $item['tax_rate_percent'] ?? null,

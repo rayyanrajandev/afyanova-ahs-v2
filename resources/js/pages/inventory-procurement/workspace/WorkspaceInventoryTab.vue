@@ -125,7 +125,7 @@ const ws = useInventoryWorkspace();
                             v-model="ws.itemSearch.q"
                             placeholder="Item code, name, category..."
                             class="min-w-0 flex-1 text-xs"
-                            @keyup.enter="ws.itemSearch.page = 1; ws.reloadAll()"
+                            @keyup.enter="ws.itemSearch.page = 1; ws.refreshInventoryItems()"
                         />
                         <Button variant="outline" size="sm" class="h-9 gap-1.5 rounded-lg text-xs" @click="ws.itemFiltersSheetOpen = true">
                             <AppIcon name="sliders-horizontal" class="size-3.5" />
@@ -241,7 +241,7 @@ const ws = useInventoryWorkspace();
                                     size="sm"
                                     class="gap-1.5"
                                     :disabled="!ws.itemPagination || ws.itemPagination.currentPage <= 1 || ws.loading"
-                                    @click="ws.itemSearch.page -= 1; ws.reloadAll()"
+                                    @click="ws.itemSearch.page -= 1; ws.refreshInventoryItems()"
                                 >
                                     <AppIcon name="chevron-left" class="size-3.5" />
                                     Previous
@@ -251,10 +251,10 @@ const ws = useInventoryWorkspace();
                                     <Button
                                         v-else
                                         size="sm"
-                                        :variant="pg === (ws.itemPagination?.currentPage ?? 1) ? 'default' : 'outline'"
-                                        class="h-8 w-8 p-0"
-                                        :disabled="ws.loading"
-                                        @click="ws.goToItemPage(pg)"
+                                    :variant="pg === (ws.itemPagination?.currentPage ?? 1) ? 'default' : 'outline'"
+                                    class="h-8 w-8 p-0"
+                                    :disabled="ws.loading"
+                                    @click="ws.goToItemPage(pg)"
                                     >
                                         {{ pg }}
                                     </Button>
@@ -264,7 +264,7 @@ const ws = useInventoryWorkspace();
                                     size="sm"
                                     class="gap-1.5"
                                     :disabled="!ws.itemPagination || ws.itemPagination.currentPage >= ws.itemPagination.lastPage || ws.loading"
-                                    @click="ws.itemSearch.page += 1; ws.reloadAll()"
+                                    @click="ws.itemSearch.page += 1; ws.refreshInventoryItems()"
                                 >
                                     Next
                                     <AppIcon name="chevron-right" class="size-3.5" />

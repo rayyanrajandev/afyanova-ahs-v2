@@ -47,7 +47,18 @@ const routeAccessRules: RouteAccessRule[] = [
     },
     {
         pathPrefix: '/platform/admin/facility-config',
-        requiredPermissions: ['platform.facilities.read'],
+        requiredPermissions: [
+            'platform.facilities.read',
+            'platform.resources.read',
+            'platform.clinical-catalog.read',
+            'departments.read',
+            'specialties.read',
+            'billing.service-catalog.read',
+            'platform.subscription-plans.read',
+            'platform.multi-facility.read',
+            'platform.users.read',
+            'platform.settings.manage-branding',
+        ],
     },
     {
         pathPrefix: '/platform/admin/service-plans',

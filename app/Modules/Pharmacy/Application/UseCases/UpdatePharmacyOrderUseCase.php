@@ -49,12 +49,21 @@ class UpdatePharmacyOrderUseCase
             $working['quantity_prescribed'] = round((float) $working['quantity_prescribed'], 2);
         }
 
+        $this->normalizeStructuredDoseFields($working);
+
         $updatePayload = [];
         foreach ([
             'ordered_at',
             'dosage_instruction',
+            'dose_quantity',
+            'dose_unit',
+            'route',
+            'frequency',
+            'duration_value',
+            'duration_unit',
             'clinical_indication',
             'quantity_prescribed',
+            'prescribed_unit',
             'dispensing_notes',
         ] as $field) {
             if (array_key_exists($field, $payload)) {
@@ -63,10 +72,14 @@ class UpdatePharmacyOrderUseCase
         }
 
         if ($catalogSelectionChanged) {
+            $this->applyDispenseUnitDefaults($working, $selectedCatalogItem);
+
             foreach ([
                 'approved_medicine_catalog_item_id',
                 'medication_code',
                 'medication_name',
+                'prescribed_unit',
+                'dispensed_unit',
                 'formulary_decision_status',
                 'formulary_decision_reason',
                 'formulary_reviewed_at',
@@ -167,6 +180,54 @@ class UpdatePharmacyOrderUseCase
         $payload['medication_name'] = $resolvedMedicationName;
 
         return $catalogItem;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @param array<string, mixed> $catalogItem
+     */
+    private function applyDispenseUnitDefaults(array &$payload, array $catalogItem): void
+    {
+        $resolvedUnit = $this->normalizeUnit($payload['prescribed_unit'] ?? null)
+            ?? $this->normalizeUnit($payload['dispensed_unit'] ?? null)
+            ?? $this->normalizeUnit($catalogItem['unit'] ?? null);
+
+        $payload['prescribed_unit'] = $this->normalizeUnit($payload['prescribed_unit'] ?? null) ?? $resolvedUnit;
+        $payload['dispensed_unit'] = $this->normalizeUnit($payload['dispensed_unit'] ?? null)
+            ?? $payload['prescribed_unit']
+            ?? $resolvedUnit;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function normalizeStructuredDoseFields(array &$payload): void
+    {
+        foreach (['dose_unit', 'route', 'frequency', 'duration_unit', 'prescribed_unit'] as $field) {
+            if (array_key_exists($field, $payload)) {
+                $payload[$field] = $this->normalizeNullableString($payload[$field] ?? null);
+            }
+        }
+
+        if (array_key_exists('dose_quantity', $payload) && $payload['dose_quantity'] !== null && $payload['dose_quantity'] !== '') {
+            $payload['dose_quantity'] = round((float) $payload['dose_quantity'], 4);
+        }
+
+        if (array_key_exists('duration_value', $payload) && $payload['duration_value'] !== null && $payload['duration_value'] !== '') {
+            $payload['duration_value'] = round((float) $payload['duration_value'], 2);
+        }
+    }
+
+    private function normalizeUnit(mixed $value): ?string
+    {
+        return $this->normalizeNullableString($value);
+    }
+
+    private function normalizeNullableString(mixed $value): ?string
+    {
+        $normalized = trim((string) $value);
+
+        return $normalized === '' ? null : mb_strtolower($normalized);
     }
 
     /**

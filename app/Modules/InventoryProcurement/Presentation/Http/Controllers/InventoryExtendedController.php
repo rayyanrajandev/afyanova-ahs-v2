@@ -226,12 +226,23 @@ class InventoryExtendedController extends Controller
         Request $request,
         PlatformScopeQueryApplier $platformScopeQueryApplier,
         FeatureFlagResolverInterface $featureFlagResolver,
+        DepartmentRequisitionScopeResolver $departmentScopeResolver,
     ): JsonResponse {
         $page = max((int) $request->query('page', 1), 1);
         $perPage = min(max((int) $request->query('perPage', 20), 1), 100);
         $searchTerm = trim((string) $request->query('q', ''));
         $itemId = trim((string) $request->query('itemId', ''));
         $departmentId = trim((string) $request->query('departmentId', ''));
+        $context = $departmentScopeResolver->contextForUser($request->user());
+
+        if (! (bool) ($context['canSelectAnyDepartment'] ?? false)) {
+            $lockedDepartmentId = $context['lockedDepartment']['id'] ?? null;
+            if (! $lockedDepartmentId) {
+                return response()->json($this->emptyDepartmentStockPayload($page, $perPage));
+            }
+
+            $departmentId = $lockedDepartmentId;
+        }
 
         $movementQuery = InventoryStockMovementModel::query()
             ->with('item')
@@ -1074,6 +1085,26 @@ class InventoryExtendedController extends Controller
         $payload['meta']['readiness'] = in_array($readiness, ['ready', 'waiting'], true) ? $readiness : 'all';
 
         return $payload;
+    }
+
+    private function emptyDepartmentStockPayload(int $page, int $perPage): array
+    {
+        return [
+            'data' => [],
+            'summary' => [
+                'totalRows' => 0,
+                'departments' => 0,
+                'items' => 0,
+                'totalIssuedQuantity' => 0,
+                'lastIssuedAt' => null,
+            ],
+            'meta' => [
+                'currentPage' => $page,
+                'lastPage' => 1,
+                'perPage' => $perPage,
+                'total' => 0,
+            ],
+        ];
     }
 
     // ─── Department Item Catalog ─────────────────────────────

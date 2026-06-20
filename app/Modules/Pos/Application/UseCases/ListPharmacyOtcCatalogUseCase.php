@@ -6,6 +6,7 @@ use App\Modules\InventoryProcurement\Application\Services\InventoryBatchStockSer
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemRepositoryInterface;
 use App\Modules\Pos\Application\Support\PharmacyOtcCatalogSupport;
 use App\Modules\Pos\Infrastructure\Services\InStockPharmacyOtcCatalogSearchService;
+use App\Modules\InventoryProcurement\Domain\Services\InventoryUnitConversionService;
 
 class ListPharmacyOtcCatalogUseCase
 {
@@ -14,6 +15,7 @@ class ListPharmacyOtcCatalogUseCase
         private readonly InventoryItemRepositoryInterface $inventoryItemRepository,
         private readonly InventoryBatchStockService $inventoryBatchStockService,
         private readonly PharmacyOtcCatalogSupport $pharmacyOtcCatalogSupport,
+        private readonly InventoryUnitConversionService $unitConversionService,
     ) {}
 
     public function execute(array $filters): array
@@ -45,6 +47,15 @@ class ListPharmacyOtcCatalogUseCase
                 continue;
             }
 
+            $units = [];
+            if ($inventoryItem !== null) {
+                try {
+                    $units = $this->unitConversionService->listSellableUnits((string) $inventoryItem['id']);
+                } catch (\Throwable) {
+                    $units = [];
+                }
+            }
+
             $rows[] = array_merge($catalogItem, [
                 'inventory_item' => $inventoryItem === null
                     ? null
@@ -54,6 +65,7 @@ class ListPharmacyOtcCatalogUseCase
                         'batch_tracking_mode' => $availability['trackingMode'] ?? 'untracked',
                         'blocked_batch_quantity' => $availability['blockedQuantity'] ?? 0,
                     ]),
+                'units' => $units,
                 'stock_state' => $availability['stockState'] ?? $this->pharmacyOtcCatalogSupport->stockState($inventoryItem),
                 'available_quantity' => $availability['availableQuantity'] ?? ($inventoryItem['current_stock'] ?? null),
                 'dosage_form' => $otcContext['dosageForm'],

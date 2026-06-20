@@ -150,6 +150,9 @@ type OtcBasketItem = {
     catalogItemId: string;
     code: string | null;
     name: string | null;
+    inventoryItemId: string | null;
+    unitId: string | null;
+    unit: string | null;
     quantity: number;
     unitPrice: number;
     note: string | null;

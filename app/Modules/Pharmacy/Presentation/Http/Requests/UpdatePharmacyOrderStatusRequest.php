@@ -22,6 +22,7 @@ class UpdatePharmacyOrderStatusRequest extends FormRequest
             'status' => ['required', Rule::in(PharmacyOrderStatus::values())],
             'reason' => ['nullable', 'string', 'max:255', 'required_if:status,cancelled'],
             'quantityDispensed' => ['nullable', 'numeric', 'min:0'],
+            'dispensedUnit' => ['nullable', 'string', 'max:40'],
             'dispensingNotes' => ['nullable', 'string', 'max:2000'],
         ];
     }

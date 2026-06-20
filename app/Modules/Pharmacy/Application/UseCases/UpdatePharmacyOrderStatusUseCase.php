@@ -29,6 +29,7 @@ class UpdatePharmacyOrderStatusUseCase
         string $status,
         ?string $reason,
         ?float $quantityDispensed,
+        ?string $dispensedUnit,
         ?string $dispensingNotes,
         ?int $actorId = null
     ): ?array {
@@ -63,6 +64,11 @@ class UpdatePharmacyOrderStatusUseCase
 
         if ($quantityDispensed !== null) {
             $payload['quantity_dispensed'] = round(max($quantityDispensed, 0), 2);
+        }
+
+        $resolvedDispensedUnit = $this->resolveDispensedUnit($existing, $dispensedUnit);
+        if ($resolvedDispensedUnit !== null) {
+            $payload['dispensed_unit'] = $resolvedDispensedUnit;
         }
 
         if ($dispensingNotes !== null) {
@@ -119,6 +125,10 @@ class UpdatePharmacyOrderStatusUseCase
                 );
             }
 
+            if (isset($updated['dispensed_unit'])) {
+                $payload['dispensed_unit'] = $updated['dispensed_unit'];
+            }
+
             $this->auditLogRepository->write(
                 pharmacyOrderId: $id,
                 action: 'pharmacy-order.status.updated',
@@ -135,6 +145,10 @@ class UpdatePharmacyOrderStatusUseCase
                     'quantity_dispensed' => [
                         'before' => $existing['quantity_dispensed'] ?? null,
                         'after' => $updated['quantity_dispensed'] ?? null,
+                    ],
+                    'dispensed_unit' => [
+                        'before' => $existing['dispensed_unit'] ?? null,
+                        'after' => $updated['dispensed_unit'] ?? null,
                     ],
                     'dispensing_notes' => [
                         'before' => $existing['dispensing_notes'] ?? null,
@@ -157,6 +171,7 @@ class UpdatePharmacyOrderStatusUseCase
                     'dispensed_timestamp_required' => $dispensedTimestampRequired,
                     'dispensed_timestamp_provided' => ! empty($updated['dispensed_at'] ?? null),
                     'inventory_issue_quantity' => $stockIssueQuantity > 0 ? $stockIssueQuantity : null,
+                    'inventory_issue_unit' => $updated['dispensed_unit'] ?? $existing['dispensed_unit'] ?? $existing['prescribed_unit'] ?? null,
                 ],
             );
 
@@ -307,6 +322,22 @@ class UpdatePharmacyOrderStatusUseCase
     }
 
     /**
+     * @param array<string, mixed> $order
+     */
+    private function resolveDispensedUnit(array $order, ?string $requestedUnit): ?string
+    {
+        $normalizedRequestedUnit = $this->normalizeUnit($requestedUnit);
+        $prescribedUnit = $this->normalizeUnit($order['prescribed_unit'] ?? null);
+        $existingDispensedUnit = $this->normalizeUnit($order['dispensed_unit'] ?? null);
+
+        if ($normalizedRequestedUnit !== null) {
+            return $normalizedRequestedUnit;
+        }
+
+        return $existingDispensedUnit ?? $prescribedUnit;
+    }
+
+    /**
      * @param array<string, mixed> $existing
      * @param array<string, mixed> $payload
      */
@@ -368,11 +399,14 @@ class UpdatePharmacyOrderStatusUseCase
             ? 'Pharmacy partial dispense release.'
             : 'Pharmacy dispense release.';
 
+        $resolvedDispenseUnit = $this->normalizeUnit($updated['dispensed_unit'] ?? $existing['dispensed_unit'] ?? $existing['prescribed_unit'] ?? null);
+
         $this->inventoryBatchStockService->issue(
             payload: [
                 'item_id' => (string) $inventoryItem['id'],
                 'source_warehouse_id' => $inventoryItem['default_warehouse_id'] ?? null,
                 'quantity' => $quantityIssued,
+                'unit' => $resolvedDispenseUnit,
                 'reason' => $movementReason,
                 'notes' => $updated['dispensing_notes'] ?? null,
                 'occurred_at' => $updated['dispensed_at'] ?? now(),
@@ -388,6 +422,7 @@ class UpdatePharmacyOrderStatusUseCase
                     'status_to' => $updated['status'] ?? null,
                     'quantity_dispensed_before' => $existing['quantity_dispensed'] ?? null,
                     'quantity_dispensed_after' => $updated['quantity_dispensed'] ?? null,
+                    'dispensed_unit' => $resolvedDispenseUnit,
                     'dispense_target_code' => $dispenseTargetCode,
                     'dispense_target_name' => $dispenseTargetName,
                     'substitution_made' => $this->orderIndicatesSubstitution($updated),
@@ -438,5 +473,12 @@ class UpdatePharmacyOrderStatusUseCase
         $normalized = trim((string) $value);
 
         return $normalized === '' ? null : $normalized;
+    }
+
+    private function normalizeUnit(mixed $value): ?string
+    {
+        $normalized = trim((string) $value);
+
+        return $normalized === '' ? null : mb_strtolower($normalized);
     }
 }

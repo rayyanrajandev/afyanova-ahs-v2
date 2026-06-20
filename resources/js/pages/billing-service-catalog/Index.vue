@@ -2861,6 +2861,19 @@ watch(
 );
 
 watch(
+    () => editForm.serviceType,
+    (serviceType) => {
+        if (serviceType !== 'pharmacy') {
+            editForm.priceUnit = '';
+            editForm.unitsPerPack = '';
+        }
+        if (!serviceType) {
+            editForm.unit = '';
+        }
+    },
+);
+
+watch(
     createLinkedClinicalModeLocked,
     (locked) => {
         if (locked && createForm.identitySource === 'clinical') {
@@ -2868,6 +2881,19 @@ watch(
         }
     },
     { immediate: true },
+);
+
+watch(
+    () => createForm.serviceType,
+    (serviceType) => {
+        if (serviceType !== 'pharmacy') {
+            createForm.priceUnit = '';
+            createForm.unitsPerPack = '';
+        }
+        if (!serviceType) {
+            createForm.unit = '';
+        }
+    },
 );
 </script>
 <template>

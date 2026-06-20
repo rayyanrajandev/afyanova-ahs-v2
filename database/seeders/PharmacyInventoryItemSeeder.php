@@ -238,6 +238,8 @@ class PharmacyInventoryItemSeeder extends Seeder
                     'category' => InventoryItemCategory::PHARMACEUTICAL->value,
                     'subcategory' => $blueprint['category'],
                     'unit' => $blueprint['unit'],
+                    'dispensing_unit' => $blueprint['unit'],
+                    'conversion_factor' => 1,
                     'current_stock' => $blueprint['currentStock'],
                     'reorder_level' => $blueprint['reorderLevel'],
                     'max_stock_level' => $blueprint['maxStockLevel'],

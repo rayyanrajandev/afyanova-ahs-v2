@@ -351,7 +351,7 @@ class ListBillingChargeCaptureCandidatesUseCase
                     sourceStatus: $order->status,
                     performedAt: $this->dateTimeString($order->dispensed_at ?? $order->updated_at ?? $order->ordered_at),
                     quantity: max((float) ($order->quantity_dispensed ?? 0), 1),
-                    unit: $this->resolveUnit('unit', $catalogItem),
+                    unit: $this->resolvePharmacyBillableUnit($order, $catalogItem),
                     currencyCode: $currencyCode,
                     invoicedSources: $invoicedSources,
                 );
@@ -952,6 +952,22 @@ class ListBillingChargeCaptureCandidatesUseCase
         $catalogUnit = trim((string) ($clinicalCatalogItem['unit'] ?? ''));
 
         return $catalogUnit !== '' ? $catalogUnit : $fallbackUnit;
+    }
+
+    private function resolvePharmacyBillableUnit(PharmacyOrderModel $order, ?array $clinicalCatalogItem): string
+    {
+        foreach ([
+            $order->dispensed_unit,
+            $order->prescribed_unit,
+            $clinicalCatalogItem['unit'] ?? null,
+        ] as $candidateUnit) {
+            $normalizedUnit = trim((string) $candidateUnit);
+            if ($normalizedUnit !== '') {
+                return $normalizedUnit;
+            }
+        }
+
+        return 'unit';
     }
 
     private function applyClinicalContextFilters(

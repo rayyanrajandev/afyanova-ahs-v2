@@ -250,6 +250,9 @@ class PharmacyClinicalCatalogSeeder extends Seeder
         $metadata = [
             'dosageForm' => $blueprint['dosageForm'],
             'strength' => $blueprint['strength'],
+            'dispensingUnit' => $blueprint['unit'],
+            'priceUnit' => $blueprint['unit'],
+            'stockIssueUnit' => $blueprint['unit'],
             'countryContext' => 'TZ',
             'formularyStatus' => 'formulary',
             'reviewMode' => 'auto_formulary',

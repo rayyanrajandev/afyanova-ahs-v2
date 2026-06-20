@@ -672,6 +672,7 @@ const advancedFiltersSheetOpen = ref(false);
 const mobileFiltersDrawerOpen = ref(false);
 const compactQueueRows = useLocalStorageBoolean('opd.queueRows.compact', false);
 const statusDialogOpen = ref(false);
+const showConsumablesDetails = ref(false);
 const statusDialogTab = ref<'overview' | 'results' | 'verification'>('overview');
 const completeResultSheetOpen = ref(false);
 const statusDialogOrder = ref<LaboratoryOrder | null>(null);

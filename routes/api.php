@@ -18,6 +18,7 @@ use App\Modules\EmergencyTriage\Presentation\Http\Controllers\EmergencyTriageCas
 use App\Modules\InpatientWard\Presentation\Http\Controllers\InpatientWardController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryAnalyticsController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryExtendedController;
+use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryItemUnitController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryProcurementController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventorySupplierController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryWarehouseController;
@@ -1357,6 +1358,27 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('inventory-procurement/items/{id}/audit-logs', [InventoryProcurementController::class, 'itemAuditLogs'])
         ->middleware('can:inventory.procurement.view-audit-logs')
         ->name('inventory-procurement.items.audit-logs');
+    Route::get('inventory-procurement/items/{itemId}/units', [InventoryItemUnitController::class, 'index'])
+        ->middleware('can:inventory.procurement.read')
+        ->name('inventory-procurement.items.units.index');
+    Route::post('inventory-procurement/items/{itemId}/units', [InventoryItemUnitController::class, 'store'])
+        ->middleware('can:inventory.procurement.manage-item-units')
+        ->name('inventory-procurement.items.units.store');
+    Route::patch('inventory-procurement/items/{itemId}/units/{unitId}', [InventoryItemUnitController::class, 'update'])
+        ->middleware('can:inventory.procurement.manage-item-units')
+        ->name('inventory-procurement.items.units.update');
+    Route::delete('inventory-procurement/items/{itemId}/units/{unitId}', [InventoryItemUnitController::class, 'destroy'])
+        ->middleware('can:inventory.procurement.manage-item-units')
+        ->name('inventory-procurement.items.units.destroy');
+    Route::get('inventory-procurement/items/{itemId}/unit-prices', [InventoryItemUnitController::class, 'prices'])
+        ->middleware('can:inventory.procurement.read')
+        ->name('inventory-procurement.items.unit-prices.index');
+    Route::post('inventory-procurement/items/{itemId}/unit-prices', [InventoryItemUnitController::class, 'storePrice'])
+        ->middleware('can:inventory.procurement.manage-unit-prices')
+        ->name('inventory-procurement.items.unit-prices.store');
+    Route::delete('inventory-procurement/items/{itemId}/unit-prices/{priceId}', [InventoryItemUnitController::class, 'destroyPrice'])
+        ->middleware('can:inventory.procurement.manage-unit-prices')
+        ->name('inventory-procurement.items.unit-prices.destroy');
     Route::get('inventory-procurement/stock-alert-counts', [InventoryProcurementController::class, 'stockAlertCounts'])
         ->middleware('can:inventory.procurement.read')
         ->name('inventory-procurement.stock-alert-counts');

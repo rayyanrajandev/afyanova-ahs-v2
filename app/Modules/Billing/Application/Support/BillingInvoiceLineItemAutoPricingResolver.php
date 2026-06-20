@@ -7,6 +7,7 @@ use App\Modules\Billing\Domain\Repositories\BillingPayerAuthorizationRuleReposit
 use App\Modules\Billing\Domain\Repositories\BillingPayerContractPriceOverrideRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingPayerContractRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
+use App\Modules\InventoryProcurement\Domain\Services\InventoryItemUnitPricingService;
 
 class BillingInvoiceLineItemAutoPricingResolver
 {
@@ -15,6 +16,7 @@ class BillingInvoiceLineItemAutoPricingResolver
         private readonly BillingPayerContractRepositoryInterface $payerContractRepository,
         private readonly BillingPayerContractPriceOverrideRepositoryInterface $payerContractPriceOverrideRepository,
         private readonly BillingPayerAuthorizationRuleRepositoryInterface $payerAuthorizationRuleRepository,
+        private readonly InventoryItemUnitPricingService $inventoryItemUnitPricingService,
     ) {}
 
     /**
@@ -118,26 +120,40 @@ class BillingInvoiceLineItemAutoPricingResolver
                 );
             }
 
-            $catalogUnitPrice = round((float) ($catalogItem['base_price'] ?? 0), 2);
-            $priceOverride = null;
-            $unitPrice = $catalogUnitPrice;
-            $pricingSource = 'service_catalog';
-            $pricingSourceId = $catalogItem['id'] ?? null;
+            $medicineUnitPrice = $this->resolveMedicineUnitPrice(
+                catalogItem: $catalogItem,
+                lineItem: $lineItem,
+                currencyCode: $normalizedCurrency,
+                payerContract: $payerContract,
+                effectiveAt: $effectiveAt,
+            );
 
-            if ($payerContract !== null) {
-                $priceOverride = $this->payerContractPriceOverrideRepository->findActiveApplicableOverride(
-                    billingPayerContractId: (string) $payerContract['id'],
-                    serviceCode: $serviceCode,
-                    currencyCode: $normalizedCurrency,
-                    asOfDateTime: $effectiveAt,
-                );
+            if ($medicineUnitPrice !== null) {
+                $unitPrice = $medicineUnitPrice['price'];
+                $pricingSource = $medicineUnitPrice['source'];
+                $pricingSourceId = $medicineUnitPrice['sourceId'] ?? null;
+            } else {
+                $catalogUnitPrice = round((float) ($catalogItem['base_price'] ?? 0), 2);
+                $priceOverride = null;
+                $unitPrice = $catalogUnitPrice;
+                $pricingSource = 'service_catalog';
+                $pricingSourceId = $catalogItem['id'] ?? null;
 
-                if ($priceOverride !== null) {
-                    $unitPrice = $this->resolveOverriddenUnitPrice($catalogUnitPrice, $priceOverride);
-                    $pricingSource = 'payer_contract_price_override';
-                    $pricingSourceId = $priceOverride['id'] ?? null;
-                    $matchedPriceOverrideCount++;
-                    $matchedPriceOverrideServiceCodes[] = $serviceCode;
+                if ($payerContract !== null) {
+                    $priceOverride = $this->payerContractPriceOverrideRepository->findActiveApplicableOverride(
+                        billingPayerContractId: (string) $payerContract['id'],
+                        serviceCode: $serviceCode,
+                        currencyCode: $normalizedCurrency,
+                        asOfDateTime: $effectiveAt,
+                    );
+
+                    if ($priceOverride !== null) {
+                        $unitPrice = $this->resolveOverriddenUnitPrice($catalogUnitPrice, $priceOverride);
+                        $pricingSource = 'payer_contract_price_override';
+                        $pricingSourceId = $priceOverride['id'] ?? null;
+                        $matchedPriceOverrideCount++;
+                        $matchedPriceOverrideServiceCodes[] = $serviceCode;
+                    }
                 }
             }
 
@@ -585,6 +601,56 @@ class BillingInvoiceLineItemAutoPricingResolver
         $normalized = trim($value);
 
         return $normalized === '' ? null : $normalized;
+    }
+
+    private function resolveMedicineUnitPrice(array $catalogItem, array $lineItem, string $currencyCode, ?array $payerContract, string $effectiveAt): ?array
+    {
+        $inventoryItemId = $this->normalizeNullableUuidLike($catalogItem['inventory_item_id'] ?? null)
+            ?? $this->normalizeNullableUuidLike($lineItem['inventoryItemId'] ?? null)
+            ?? $this->normalizeNullableUuidLike($lineItem['inventory_item_id'] ?? null);
+
+        if ($inventoryItemId === null) {
+            return null;
+        }
+
+        $unitId = $this->normalizeNullableUuidLike($lineItem['inventoryItemUnitId'] ?? null)
+            ?? $this->normalizeNullableUuidLike($lineItem['unitId'] ?? null);
+
+        $priceType = $this->resolvePriceTypeForPayerContract($payerContract);
+
+        try {
+            $resolved = $this->inventoryItemUnitPricingService->resolvePrice(
+                itemId: $inventoryItemId,
+                unitId: $unitId,
+                priceType: $priceType,
+                currencyCode: $currencyCode,
+                billingPayerContractId: $payerContract['id'] ?? null,
+                effectiveAt: $effectiveAt,
+            );
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return [
+            'price' => (float) ($resolved['price'] ?? 0),
+            'source' => $priceType === 'insurance' || $priceType === 'contract' ? 'inventory_item_unit_payer_price' : 'inventory_item_unit_price',
+            'sourceId' => $resolved['id'] ?? null,
+        ];
+    }
+
+    private function resolvePriceTypeForPayerContract(?array $payerContract): string
+    {
+        if ($payerContract === null) {
+            return 'retail';
+        }
+
+        $normalized = strtolower(trim((string) ($payerContract['contract_type'] ?? '')));
+
+        return match ($normalized) {
+            'insurance', 'insurrance', 'nhif', 'insurance_contract' => 'insurance',
+            'corporate', 'wholesale', 'b2b' => 'wholesale',
+            default => 'contract',
+        };
     }
 
     private function normalizeEffectiveDateTime(?string $value): string

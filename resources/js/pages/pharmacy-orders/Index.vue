@@ -128,7 +128,9 @@ type PharmacyOrder = {
     dosageInstruction: string | null;
     clinicalIndication: string | null;
     quantityPrescribed: string | number | null;
+    prescribedUnit: string | null;
     quantityDispensed: string | number | null;
+    dispensedUnit: string | null;
     dispensingNotes: string | null;
     dispensedAt: string | null;
     verifiedAt: string | null;
@@ -630,6 +632,7 @@ type CreateForm = {
     dosageInstruction: string;
     clinicalIndication: string;
     quantityPrescribed: string | number;
+    prescribedUnit: string;
     dispensingNotes: string;
 };
 
@@ -645,6 +648,7 @@ type PharmacyOrderBasketItem = {
     dosageInstruction: string;
     clinicalIndication: string;
     quantityPrescribed: string;
+    prescribedUnit: string;
     dispensingNotes: string;
 };
 
@@ -732,6 +736,8 @@ type InventoryItem = {
     itemName: string | null;
     category: string | null;
     unit: string | null;
+    dispensingUnit: string | null;
+    conversionFactor: string | number | null;
     currentStock: string | number | null;
     reorderLevel: string | number | null;
     maxStockLevel: string | number | null;
@@ -1008,6 +1014,7 @@ const statusDialogOrder = ref<PharmacyOrder | null>(null);
 const statusDialogAction = ref<PharmacyOrderStatusAction | null>(null);
 const statusDialogReason = ref('');
 const statusDialogQuantityDispensed = ref('');
+const statusDialogDispensedUnit = ref('');
 const statusDialogDispensingNotes = ref('');
 const statusDialogVerificationNote = ref('');
 const statusDialogError = ref<string | null>(null);
@@ -1333,6 +1340,7 @@ const createForm = reactive<CreateForm>({
     dosageInstruction: '',
     clinicalIndication: '',
     quantityPrescribed: '1',
+    prescribedUnit: '',
     dispensingNotes: '',
 });
 const initialCreateRouteContext = Object.freeze({
@@ -2937,6 +2945,7 @@ function orderDispenseTargetMedicationName(order: PharmacyOrder): string | null 
 function clearCreateApprovedMedicineDerivedFields() {
     createForm.medicationCode = '';
     createForm.medicationName = '';
+    createForm.prescribedUnit = '';
 }
 
 function syncCreateApprovedMedicineSelection() {
@@ -2953,6 +2962,7 @@ function syncCreateApprovedMedicineSelection() {
 
     createForm.medicationCode = catalogItem.code?.trim() ?? '';
     createForm.medicationName = catalogItem.name?.trim() ?? '';
+    createForm.prescribedUnit = medicineDispensingUnit(catalogItem, null) ?? '';
 }
 
 function validateCurrentCreateOrderDraft(options?: {
@@ -3014,6 +3024,18 @@ function validateCurrentCreateOrderDraft(options?: {
     const normalizedQuantity = normalizeCreateQuantityInput(
         createForm.quantityPrescribed,
     );
+    const prescribedUnit =
+        normalizeUnitLabel(createForm.prescribedUnit) ??
+        medicineDispensingUnit(selectedCreateApprovedMedicineItem.value, selectedCreateInventoryItem.value);
+
+    if (!prescribedUnit) {
+        createErrors.value = {
+            prescribedUnit: [
+                'Set the dispensing unit for this medicine before prescribing.',
+            ],
+        };
+        return null;
+    }
 
     return {
         clientKey: nextCreateOrderBasketItemKey(),
@@ -3028,6 +3050,7 @@ function validateCurrentCreateOrderDraft(options?: {
         dosageInstruction: createForm.dosageInstruction.trim(),
         clinicalIndication: createForm.clinicalIndication.trim(),
         quantityPrescribed: normalizedQuantity,
+        prescribedUnit,
         dispensingNotes: createForm.dispensingNotes.trim(),
     };
 }
@@ -3056,6 +3079,8 @@ function buildCreatePharmacyOrderPayload(
         dosageInstruction: item.dosageInstruction,
         clinicalIndication: item.clinicalIndication || null,
         quantityPrescribed: Number(item.quantityPrescribed),
+        prescribedUnit: item.prescribedUnit || null,
+        dispensedUnit: item.prescribedUnit || null,
         quantityDispensed: null,
         dispensingNotes: item.dispensingNotes || null,
     };
@@ -6206,8 +6231,43 @@ function quantityText(value: string | number | null): string {
     return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2);
 }
 
+function normalizeUnitLabel(unit: string | null | undefined): string | null {
+    const normalized = unit?.trim();
+    return normalized ? normalized.toLowerCase() : null;
+}
+
+function quantityWithUnitText(
+    value: string | number | null | undefined,
+    unit: string | null | undefined,
+): string {
+    const quantity = quantityText(value ?? null);
+    const normalizedUnit = normalizeUnitLabel(unit);
+    return normalizedUnit && quantity !== 'N/A' ? `${quantity} ${normalizedUnit}` : quantity;
+}
+
+function medicineDispensingUnit(
+    catalogItem: ClinicalCatalogItem | null,
+    inventoryItem: InventoryItem | null,
+): string | null {
+    return (
+        normalizeUnitLabel(inventoryItem?.dispensingUnit) ??
+        normalizeUnitLabel(catalogItem?.metadata?.dispensingUnit as string | null | undefined) ??
+        normalizeUnitLabel(catalogItem?.unit) ??
+        normalizeUnitLabel(inventoryItem?.unit)
+    );
+}
+
+function orderPrescribedUnit(order: PharmacyOrder): string | null {
+    return normalizeUnitLabel(order.prescribedUnit ?? order.dispensedUnit);
+}
+
+function orderDispensedUnit(order: PharmacyOrder): string | null {
+    return normalizeUnitLabel(order.dispensedUnit ?? order.prescribedUnit);
+}
+
 function dispenseProgressLabel(order: PharmacyOrder): string {
-    return `${quantityText(order.quantityDispensed)} / ${quantityText(order.quantityPrescribed)}`;
+    const unit = orderDispensedUnit(order) ?? orderPrescribedUnit(order);
+    return `${quantityWithUnitText(order.quantityDispensed, unit)} / ${quantityWithUnitText(order.quantityPrescribed, unit)}`;
 }
 
 function quantityBadgeVariant(order: PharmacyOrder) {
@@ -16703,4 +16763,3 @@ onMounted(async () => {
     animation: pharmacy-row-flash 1.5s ease-out;
 }
 </style>
-

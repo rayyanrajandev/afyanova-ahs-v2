@@ -91,17 +91,26 @@ const ws = useInventoryWorkspace();
                     <div v-if="ws.departmentStockFiltersOpen" class="grid gap-3 border-b px-4 py-3 sm:grid-cols-4">
                         <div class="sm:col-span-2">
                             <Label for="department-stock-q" class="sr-only">Search</Label>
-                            <SearchInput id="department-stock-q" v-model="ws.departmentStockFilters.q" placeholder="Department, item, category, warehouse…" class="w-full" />
+                            <SearchInput
+                                id="department-stock-q"
+                                v-model="ws.departmentStockFilters.q"
+                                placeholder="Department, item, category, warehouse…"
+                                class="w-full"
+                                @keyup.enter="ws.applyDepartmentStockFilters"
+                            />
                         </div>
                         <div>
                             <Label for="department-stock-department" class="sr-only">Department</Label>
-                            <Select :model-value="ws.toSelectValue(ws.departmentStockFilters.departmentId)" @update:model-value="ws.departmentStockFilters.departmentId = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                <SelectTrigger class="h-9 w-full text-xs">
-                                    <SelectValue placeholder="All departments" />
+                            <Select
+                                :model-value="ws.toSelectValue(ws.departmentStockFilters.departmentId)"
+                                @update:model-value="ws.setDepartmentStockDepartmentFilter(String($event ?? ws.EMPTY_SELECT_VALUE))"
+                            >
+                                <SelectTrigger class="h-9 w-full text-xs" :disabled="!ws.canSelectAnyRequisitionDepartment">
+                                    <SelectValue :placeholder="ws.canSelectAnyRequisitionDepartment ? 'All departments' : 'Your department'" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem :value="ws.EMPTY_SELECT_VALUE">All departments</SelectItem>
-                                    <SelectItem v-for="department in ws.requisitionDepartmentOptions" :key="`department-stock-${department.id}`" :value="department.id" :text-value="ws.lookupOptionText(department)">
+                                    <SelectItem v-if="ws.canSelectAnyRequisitionDepartment" :value="ws.EMPTY_SELECT_VALUE">All departments</SelectItem>
+                                    <SelectItem v-for="department in ws.departmentFilterOptions" :key="`department-stock-${department.id}`" :value="department.id" :text-value="ws.lookupOptionText(department)">
                                         {{ department.name }}<span v-if="department.code" class="text-muted-foreground"> ({{ department.code }})</span>
                                     </SelectItem>
                                 </SelectContent>

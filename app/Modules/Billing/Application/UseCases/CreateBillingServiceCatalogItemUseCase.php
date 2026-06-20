@@ -52,6 +52,10 @@ class CreateBillingServiceCatalogItemUseCase
             'service_type' => $this->nullableTrimmedValue($payload['service_type'] ?? null),
             ...$departmentData,
             'unit' => $this->nullableTrimmedValue($payload['unit'] ?? null) ?? 'service',
+            'price_unit' => $this->nullableTrimmedValue($payload['price_unit'] ?? null),
+            'units_per_pack' => isset($payload['units_per_pack']) && $payload['units_per_pack'] !== null && $payload['units_per_pack'] !== ''
+                ? (int) $payload['units_per_pack']
+                : null,
             'base_price' => round((float) $payload['base_price'], 2),
             'currency_code' => $this->normalizeCurrency((string) $payload['currency_code']),
             'tax_rate_percent' => round((float) ($payload['tax_rate_percent'] ?? 0), 2),

@@ -7,6 +7,7 @@ use App\Modules\InventoryProcurement\Application\Exceptions\InventoryItemNotFoun
 use App\Modules\InventoryProcurement\Application\Exceptions\InventoryProcurementReceiptValidationException;
 use App\Modules\InventoryProcurement\Application\Exceptions\InventoryStockOperationValidationException;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryItemCategory;
+use App\Modules\InventoryProcurement\Domain\Services\InventoryUnitConversionService;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryStockMovementType;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryBatchModel;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
@@ -23,6 +24,7 @@ class InventoryBatchStockService
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
         private readonly InventoryStockReservationService $inventoryStockReservationService,
+        private readonly InventoryUnitConversionService $unitConversionService,
     ) {}
 
     /**
@@ -107,6 +109,14 @@ class InventoryBatchStockService
                 throw new InventoryItemNotFoundException('Inventory item not found.');
             }
 
+            $conversion = $this->unitConversionService->toBaseQuantity(
+                $item->id,
+                $quantity,
+                $this->stringOrNull($payload['unit_id'] ?? null),
+                $this->stringOrNull($payload['unit'] ?? null),
+            );
+
+            $baseQuantity = $conversion['base_quantity'];
             $occurredAt = $this->normalizeOccurredAt($payload['occurred_at'] ?? null);
             $warehouseId = $this->resolvedWarehouseId($item, $payload['source_warehouse_id'] ?? null);
             $reservationExclusionIds = $this->reservationExclusionIds($payload);
@@ -116,13 +126,13 @@ class InventoryBatchStockService
             $adjustmentDirection = $this->stringOrNull($payload['adjustment_direction'] ?? null);
 
             if ($batchState['hasBatchRecords']) {
-                if ($batchState['availableQuantity'] < $quantity) {
+                if ($batchState['availableQuantity'] < $baseQuantity) {
                     throw new InsufficientInventoryStockException('Valid FEFO batch stock is insufficient for this issue.');
                 }
 
                 $allocations = $this->allocateAcrossBatches(
                     $batchState['validBatches'],
-                    $quantity,
+                    $baseQuantity,
                     $batchState['reservedByBatch'],
                 );
             } else {
@@ -132,7 +142,7 @@ class InventoryBatchStockService
                     0
                 ), 3);
 
-                if ($availableQuantity < $quantity) {
+                if ($availableQuantity < $baseQuantity) {
                     throw new InsufficientInventoryStockException('Unreserved stock is insufficient for this issue.');
                 }
 
@@ -140,7 +150,7 @@ class InventoryBatchStockService
             }
 
             $stockBefore = round((float) ($item->current_stock ?? 0), 3);
-            $stockAfter = round($stockBefore - $quantity, 3);
+            $stockAfter = round($stockBefore - $baseQuantity, 3);
             if ($stockAfter < 0) {
                 throw new InsufficientInventoryStockException('Stock movement would result in negative stock.');
             }
@@ -165,15 +175,15 @@ class InventoryBatchStockService
                 'adjustment_direction' => $movementType === InventoryStockMovementType::ADJUST
                     ? ($adjustmentDirection ?? 'decrease')
                     : $adjustmentDirection,
-                'quantity' => $quantity,
-                'quantity_delta' => -1 * $quantity,
+                'quantity' => $baseQuantity,
+                'quantity_delta' => -1 * $baseQuantity,
                 'stock_before' => $stockBefore,
                 'stock_after' => $stockAfter,
                 'reason' => $payload['reason'] ?? null,
                 'notes' => $payload['notes'] ?? null,
                 'actor_id' => $actorId,
                 'metadata' => $this->mergedMetadata(
-                    $payload['metadata'] ?? null,
+                    array_merge($payload['metadata'] ?? [], $conversion),
                     $allocations === []
                         ? ['batchMode' => 'untracked']
                         : [
@@ -183,6 +193,12 @@ class InventoryBatchStockService
                             'batchAllocations' => $allocations,
                         ],
                 ),
+                'requested_quantity' => $conversion['requested_quantity'],
+                'requested_unit' => $conversion['requested_unit'],
+                'requested_unit_id' => $conversion['requested_unit_id'],
+                'base_unit' => $conversion['base_unit'],
+                'base_quantity' => $conversion['base_quantity'],
+                'conversion_factor' => $conversion['conversion_factor'],
                 'occurred_at' => $occurredAt,
                 'created_at' => now(),
             ]);
@@ -238,6 +254,15 @@ class InventoryBatchStockService
                 throw new InventoryItemNotFoundException('Inventory item not found.');
             }
 
+            $conversion = $this->unitConversionService->toBaseQuantity(
+                $item->id,
+                $quantity,
+                $this->stringOrNull($payload['unit_id'] ?? null),
+                $this->stringOrNull($payload['unit'] ?? null),
+            );
+
+            $baseQuantity = $conversion['base_quantity'];
+
             $warehouseId = $this->resolvedWarehouseId($item, $payload['source_warehouse_id'] ?? null);
             $batch = InventoryBatchModel::query()
                 ->whereKey($batchId)
@@ -276,7 +301,7 @@ class InventoryBatchStockService
                 $reservationExclusionIds,
             );
             $availableInBatch = round(max((float) ($batch->quantity ?? 0) - $reservedQuantity, 0), 3);
-            if ($availableInBatch < $quantity) {
+            if ($availableInBatch < $baseQuantity) {
                 $this->throwValidationException(
                     InventoryStockOperationValidationException::class,
                     $quantityField,
@@ -285,7 +310,7 @@ class InventoryBatchStockService
             }
 
             $stockBefore = round((float) ($item->current_stock ?? 0), 3);
-            $stockAfter = round($stockBefore - $quantity, 3);
+            $stockAfter = round($stockBefore - $baseQuantity, 3);
             if ($stockAfter < 0) {
                 $this->throwValidationException(
                     InventoryStockOperationValidationException::class,
@@ -295,7 +320,7 @@ class InventoryBatchStockService
             }
 
             $batch->forceFill([
-                'quantity' => round($availableInBatch - $quantity, 3),
+                'quantity' => round($availableInBatch - $baseQuantity, 3),
             ])->save();
 
             $item->forceFill(['current_stock' => $stockAfter])->save();
@@ -309,7 +334,7 @@ class InventoryBatchStockService
                 'lotNumber' => $batch->lot_number,
                 'expiryDate' => $batch->expiry_date?->toDateString(),
                 'warehouseId' => $batch->warehouse_id,
-                'quantity' => $quantity,
+                'quantity' => $baseQuantity,
             ];
 
             $movement = InventoryStockMovementModel::query()->create([
@@ -330,15 +355,15 @@ class InventoryBatchStockService
                 'adjustment_direction' => $movementType === InventoryStockMovementType::ADJUST
                     ? ($adjustmentDirection ?? 'decrease')
                     : $adjustmentDirection,
-                'quantity' => $quantity,
-                'quantity_delta' => -1 * $quantity,
+                'quantity' => $baseQuantity,
+                'quantity_delta' => -1 * $baseQuantity,
                 'stock_before' => $stockBefore,
                 'stock_after' => $stockAfter,
                 'reason' => $payload['reason'] ?? null,
                 'notes' => $payload['notes'] ?? null,
                 'actor_id' => $actorId,
                 'metadata' => $this->mergedMetadata(
-                    $payload['metadata'] ?? null,
+                    array_merge($payload['metadata'] ?? [], $conversion),
                     [
                         'batchMode' => 'tracked',
                         'issuePolicy' => 'exact_batch',
@@ -346,6 +371,12 @@ class InventoryBatchStockService
                         'batchAllocations' => [$allocation],
                     ],
                 ),
+                'requested_quantity' => $conversion['requested_quantity'],
+                'requested_unit' => $conversion['requested_unit'],
+                'requested_unit_id' => $conversion['requested_unit_id'],
+                'base_unit' => $conversion['base_unit'],
+                'base_quantity' => $conversion['base_quantity'],
+                'conversion_factor' => $conversion['conversion_factor'],
                 'occurred_at' => $occurredAt,
                 'created_at' => now(),
             ]);
@@ -388,6 +419,15 @@ class InventoryBatchStockService
                 throw new InventoryItemNotFoundException('Inventory item not found.');
             }
 
+            $conversion = $this->unitConversionService->toBaseQuantity(
+                $item->id,
+                $quantity,
+                $this->stringOrNull($payload['unit_id'] ?? null),
+                $this->stringOrNull($payload['unit'] ?? null),
+            );
+
+            $baseQuantity = $conversion['base_quantity'];
+
             $resolvedAllocations = $this->normalizeBatchAllocations($batchAllocations);
             if ($resolvedAllocations !== []) {
                 foreach ($resolvedAllocations as $allocation) {
@@ -413,7 +453,7 @@ class InventoryBatchStockService
             }
 
             $stockBefore = round((float) ($item->current_stock ?? 0), 3);
-            $stockAfter = round($stockBefore + $quantity, 3);
+            $stockAfter = round($stockBefore + $baseQuantity, 3);
             $item->forceFill(['current_stock' => $stockAfter])->save();
 
             $occurredAt = $this->normalizeOccurredAt($payload['occurred_at'] ?? null);
@@ -433,15 +473,15 @@ class InventoryBatchStockService
                 'consumption_recipe_item_id' => $payload['consumption_recipe_item_id'] ?? null,
                 'movement_type' => InventoryStockMovementType::ADJUST->value,
                 'adjustment_direction' => 'increase',
-                'quantity' => $quantity,
-                'quantity_delta' => $quantity,
+                'quantity' => $baseQuantity,
+                'quantity_delta' => $baseQuantity,
                 'stock_before' => $stockBefore,
                 'stock_after' => $stockAfter,
                 'reason' => $payload['reason'] ?? null,
                 'notes' => $payload['notes'] ?? null,
                 'actor_id' => $actorId,
                 'metadata' => $this->mergedMetadata(
-                    $payload['metadata'] ?? null,
+                    array_merge($payload['metadata'] ?? [], $conversion),
                     $resolvedAllocations === []
                         ? ['batchMode' => 'untracked']
                         : [
@@ -450,6 +490,12 @@ class InventoryBatchStockService
                             'batchAllocations' => $resolvedAllocations,
                         ],
                 ),
+                'requested_quantity' => $conversion['requested_quantity'],
+                'requested_unit' => $conversion['requested_unit'],
+                'requested_unit_id' => $conversion['requested_unit_id'],
+                'base_unit' => $conversion['base_unit'],
+                'base_quantity' => $conversion['base_quantity'],
+                'conversion_factor' => $conversion['conversion_factor'],
                 'occurred_at' => $occurredAt,
                 'created_at' => now(),
             ]);
@@ -986,7 +1032,7 @@ class InventoryBatchStockService
 
         return DB::transaction(function () use ($payload, $actorId, $quantityField, $validationExceptionClass): array {
             $itemId = trim((string) ($payload['item_id'] ?? ''));
-            $quantity = round((float) ($payload['quantity'] ?? 0), 3);
+            $quantity = round((float) ($payload['quantity'] ?? 0), 6);
 
             if ($itemId === '') {
                 throw new InventoryItemNotFoundException('Inventory item not found.');
@@ -1008,6 +1054,15 @@ class InventoryBatchStockService
             if (! $item instanceof InventoryItemModel) {
                 throw new InventoryItemNotFoundException('Inventory item not found.');
             }
+
+            $conversion = $this->unitConversionService->toBaseQuantity(
+                $item->id,
+                round((float) ($payload['quantity'] ?? 0), 6),
+                $this->stringOrNull($payload['unit_id'] ?? null),
+                $this->stringOrNull($payload['unit'] ?? null),
+            );
+
+            $baseQuantity = $conversion['base_quantity'];
 
             $occurredAt = $this->normalizeOccurredAt($payload['occurred_at'] ?? null);
             $warehouseId = $this->resolvedWarehouseId($item, $payload['destination_warehouse_id'] ?? null);
@@ -1098,18 +1153,18 @@ class InventoryBatchStockService
                         validationExceptionClass: $validationExceptionClass,
                     );
 
-                    $batch->forceFill([
-                        'lot_number' => $lotNumber ?? $batch->lot_number,
-                        'manufacture_date' => $manufactureDate?->toDateString() ?? $batch->manufacture_date,
-                        'expiry_date' => $expiryDate?->toDateString() ?? $batch->expiry_date,
-                        'quantity' => round((float) ($batch->quantity ?? 0) + $quantity, 3),
-                        'warehouse_id' => $warehouseId,
-                        'bin_location' => $binLocation ?? $batch->bin_location,
-                        'supplier_id' => $this->stringOrNull($payload['source_supplier_id'] ?? null) ?? $batch->supplier_id,
-                        'unit_cost' => $receivedUnitCost ?? $batch->unit_cost,
-                        'status' => 'available',
-                        'notes' => $payload['notes'] ?? $batch->notes,
-                    ])->save();
+            $batch->forceFill([
+                'lot_number' => $lotNumber ?? $batch->lot_number,
+                'manufacture_date' => $manufactureDate?->toDateString() ?? $batch->manufacture_date,
+                'expiry_date' => $expiryDate?->toDateString() ?? $batch->expiry_date,
+                'quantity' => round((float) ($batch->quantity ?? 0) + $baseQuantity, 3),
+                'warehouse_id' => $warehouseId,
+                'bin_location' => $binLocation ?? $batch->bin_location,
+                'supplier_id' => $this->stringOrNull($payload['source_supplier_id'] ?? null) ?? $batch->supplier_id,
+                'unit_cost' => $receivedUnitCost ?? $batch->unit_cost,
+                'status' => 'available',
+                'notes' => $payload['notes'] ?? $batch->notes,
+            ])->save();
                 } else {
                     $batch = InventoryBatchModel::query()->create([
                         'tenant_id' => $this->stringOrNull($payload['tenant_id'] ?? null) ?? $this->platformScopeContext->tenantId(),
@@ -1119,7 +1174,7 @@ class InventoryBatchStockService
                         'lot_number' => $lotNumber,
                         'manufacture_date' => $manufactureDate?->toDateString(),
                         'expiry_date' => $expiryDate?->toDateString(),
-                        'quantity' => $quantity,
+                        'quantity' => $baseQuantity,
                         'warehouse_id' => $warehouseId,
                         'bin_location' => $binLocation,
                         'supplier_id' => $this->stringOrNull($payload['source_supplier_id'] ?? null),
@@ -1131,7 +1186,7 @@ class InventoryBatchStockService
             }
 
             $stockBefore = $currentStock;
-            $stockAfter = round($stockBefore + $quantity, 3);
+            $stockAfter = round($stockBefore + $baseQuantity, 3);
             $item->forceFill(['current_stock' => $stockAfter])->save();
 
             $movementType = InventoryStockMovementType::tryFrom((string) ($payload['movement_type'] ?? ''))
@@ -1156,15 +1211,15 @@ class InventoryBatchStockService
                 'adjustment_direction' => $movementType === InventoryStockMovementType::ADJUST
                     ? ($adjustmentDirection ?? 'increase')
                     : $adjustmentDirection,
-                'quantity' => $quantity,
-                'quantity_delta' => $quantity,
+                'quantity' => $baseQuantity,
+                'quantity_delta' => $baseQuantity,
                 'stock_before' => $stockBefore,
                 'stock_after' => $stockAfter,
                 'reason' => $payload['reason'] ?? null,
                 'notes' => $payload['notes'] ?? null,
                 'actor_id' => $actorId,
                 'metadata' => $this->mergedMetadata(
-                    $payload['metadata'] ?? null,
+                    array_merge($payload['metadata'] ?? [], $conversion),
                     $batch instanceof InventoryBatchModel
                         ? [
                             'batchMode' => 'tracked',
@@ -1182,6 +1237,12 @@ class InventoryBatchStockService
                             'receivingWarehouseId' => $warehouseId,
                         ],
                 ),
+                'requested_quantity' => $conversion['requested_quantity'],
+                'requested_unit' => $conversion['requested_unit'],
+                'requested_unit_id' => $conversion['requested_unit_id'],
+                'base_unit' => $conversion['base_unit'],
+                'base_quantity' => $conversion['base_quantity'],
+                'conversion_factor' => $conversion['conversion_factor'],
                 'occurred_at' => $occurredAt,
                 'created_at' => now(),
             ]);

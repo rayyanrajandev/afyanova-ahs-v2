@@ -147,8 +147,11 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
                         ->orWhere('item_name', 'like', $like)
                         ->orWhere('generic_name', 'like', $like)
                         ->orWhere('category', 'like', $like)
+                        ->orWhere('subcategory', 'like', $like)
                         ->orWhere('msd_code', 'like', $like)
-                        ->orWhere('barcode', 'like', $like);
+                        ->orWhere('nhif_code', 'like', $like)
+                        ->orWhere('barcode', 'like', $like)
+                        ->orWhere('manufacturer', 'like', $like);
                 });
             })
             ->when($category, fn (Builder $builder, string $requestedCategory) => $builder->where('category', $requestedCategory))
@@ -182,7 +185,13 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
                     $nestedQuery
                         ->where('item_code', 'like', $like)
                         ->orWhere('item_name', 'like', $like)
-                        ->orWhere('category', 'like', $like);
+                        ->orWhere('generic_name', 'like', $like)
+                        ->orWhere('category', 'like', $like)
+                        ->orWhere('subcategory', 'like', $like)
+                        ->orWhere('msd_code', 'like', $like)
+                        ->orWhere('nhif_code', 'like', $like)
+                        ->orWhere('barcode', 'like', $like)
+                        ->orWhere('manufacturer', 'like', $like);
                 });
             })
             ->when($category, fn (Builder $builder, string $requestedCategory) => $builder->where('category', $requestedCategory));

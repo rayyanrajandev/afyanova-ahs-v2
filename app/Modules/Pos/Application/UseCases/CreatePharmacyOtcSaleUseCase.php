@@ -88,6 +88,8 @@ class CreatePharmacyOtcSaleUseCase
                     $stockMovements[] = $this->inventoryBatchStockService->issue([
                         'item_id' => $item['inventory_item']['id'],
                         'source_warehouse_id' => $item['inventory_item']['default_warehouse_id'] ?? null,
+                        'unit_id' => $item['unit_id'] ?? null,
+                        'unit' => $item['unit'] ?? null,
                         'quantity' => $item['quantity'],
                         'reason' => 'pharmacy_otc_sale',
                         'notes' => sprintf(
@@ -208,6 +210,8 @@ class CreatePharmacyOtcSaleUseCase
                 ]),
                 'otc_context' => $otcContext,
                 'quantity' => $quantity,
+                'unit_id' => $item['unit_id'] ?? null,
+                'unit' => $item['unit'] ?? null,
                 'unit_price' => $pricing['unitPrice'],
                 'price_source' => $pricing['source'],
                 'discount_amount' => round(max((float) ($item['discount_amount'] ?? 0), 0), 2),

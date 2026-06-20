@@ -85,6 +85,21 @@ class InventoryItemModel extends Model
         return $this->hasMany(InventoryStockMovementModel::class, 'item_id');
     }
 
+    public function units(): HasMany
+    {
+        return $this->hasMany(InventoryItemUnitModel::class, 'item_id');
+    }
+
+    public function activeUnits(): HasMany
+    {
+        return $this->hasMany(InventoryItemUnitModel::class, 'item_id')->where('is_active', true);
+    }
+
+    public function unitPrices(): HasMany
+    {
+        return $this->hasMany(InventoryItemUnitPriceModel::class, 'item_id');
+    }
+
     protected static function booted(): void
     {
         static::saving(function (InventoryItemModel $item): void {
