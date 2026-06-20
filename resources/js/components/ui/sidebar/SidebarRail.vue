@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue"
+import { ref } from "vue"
+import { useEventListener } from "@vueuse/core"
 import { cn } from "@/lib/utils"
 import { useSidebar } from "./utils"
 
@@ -7,7 +9,46 @@ const props = defineProps<{
   class?: HTMLAttributes["class"]
 }>()
 
-const { toggleSidebar } = useSidebar()
+const { sidebarWidth, setSidebarWidth, toggleSidebar } = useSidebar()
+const dragStart = ref<{ x: number; width: number } | null>(null)
+const wasDragged = ref(false)
+
+function onPointerDown(event: PointerEvent) {
+  if (event.button !== 0) return
+
+  dragStart.value = {
+    x: event.clientX,
+    width: sidebarWidth.value,
+  }
+  wasDragged.value = false
+}
+
+function onClick() {
+  if (wasDragged.value) {
+    wasDragged.value = false
+    return
+  }
+
+  toggleSidebar()
+}
+
+useEventListener("pointermove", (event: PointerEvent) => {
+  if (!dragStart.value) return
+
+  const delta = event.clientX - dragStart.value.x
+  if (Math.abs(delta) > 4) {
+    wasDragged.value = true
+  }
+
+  if (wasDragged.value) {
+    event.preventDefault()
+    setSidebarWidth(dragStart.value.width + delta)
+  }
+})
+
+useEventListener("pointerup", () => {
+  dragStart.value = null
+})
 </script>
 
 <template>
@@ -26,7 +67,8 @@ const { toggleSidebar } = useSidebar()
       '[[data-side=right][data-collapsible=offcanvas]_&]:-left-2',
       props.class,
     )"
-    @click="toggleSidebar"
+    @pointerdown="onPointerDown"
+    @click="onClick"
   >
     <slot />
   </button>

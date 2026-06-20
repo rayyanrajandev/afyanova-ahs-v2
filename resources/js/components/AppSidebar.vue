@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import AppSidebarFacilitySwitcher from '@/components/AppSidebarFacilitySwitcher.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
 import {
@@ -12,6 +13,7 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
+    SidebarRail,
     SidebarInput,
     SidebarGroup,
     SidebarGroupLabel,
@@ -25,6 +27,7 @@ import {
     navSectionLabels,
     navSectionOrder,
     navSectionIcons,
+    navSubGroupLabels,
     type NavSectionKey,
 } from '@/config/appNavCatalog';
 import { filterSidebarNavCatalogItems } from '@/lib/routeAccess';
@@ -38,19 +41,16 @@ type NavSection = {
     items: NavItem[];
 };
 
-const { permissionNames, hasUniversalAdminAccess, facilityEntitlementNames } = usePlatformAccess();
+const { permissionNames, hasUniversalAdminAccess, facilityEntitlementNames } =
+    usePlatformAccess();
 const { toggleFavorite, getFavorites } = useSidebarFavorites();
-const { recentItems } = useSidebarHistory();
+const { recentItems, recordVisit } = useSidebarHistory();
 
-const permissionsLoaded = ref(false);
 const searchQuery = ref('');
 
-onMounted(() => {
-    requestAnimationFrame(() => {
-        permissionsLoaded.value = true;
-    });
-});
-
+const permissionsLoaded = computed(
+    () => hasUniversalAdminAccess.value || permissionNames.value !== null,
+);
 const resolvedPermissionNames = computed(() => permissionNames.value ?? []);
 
 const visibleNavItems = computed(() =>
@@ -63,8 +63,18 @@ const visibleNavItems = computed(() =>
 );
 
 const homeItems = computed<NavItem[]>(() => [
-    { id: 'dashboard', title: 'Dashboard', href: dashboard(), iconName: 'layout-grid' },
-    { id: 'help-shortcuts', title: 'Help & shortcuts', href: '/help/shortcuts', iconName: 'book-open' },
+    {
+        id: 'dashboard',
+        title: 'Dashboard',
+        href: dashboard(),
+        iconName: 'layout-grid',
+    },
+    {
+        id: 'help-shortcuts',
+        title: 'Help & shortcuts',
+        href: '/help/shortcuts',
+        iconName: 'book-open',
+    },
 ]);
 
 const allNavItems = computed<NavItem[]>(() => {
@@ -72,19 +82,40 @@ const allNavItems = computed<NavItem[]>(() => {
     for (const key of navSectionOrder) {
         const sectionItems = visibleNavItems.value
             .filter((item) => item.section === key)
-            .map(({ id, title, href, iconName }) => ({
+            .map(({ id, title, href, iconName, section, subGroup }) => ({
                 id: id ?? `${key}:${href}`,
                 title,
                 href,
                 iconName,
+                section,
+                subGroup,
+                subGroupLabel: subGroup
+                    ? (navSubGroupLabels[section]?.[subGroup] ?? subGroup)
+                    : undefined,
             }));
         items.push(...sectionItems);
     }
     return items;
 });
 
-const favoriteItems = computed<NavItem[]>(() => getFavorites(allNavItems.value));
+const favoriteItems = computed<NavItem[]>(() =>
+    getFavorites(allNavItems.value),
+);
 const hasFavorites = computed(() => favoriteItems.value.length > 0);
+const recentNavItems = computed<NavItem[]>(() => {
+    const visibleItemsByHref = new Map<string, NavItem>();
+
+    for (const item of allNavItems.value) {
+        if (typeof item.href === 'string') {
+            visibleItemsByHref.set(item.href, item);
+        }
+    }
+
+    return recentItems.value
+        .map((item) => visibleItemsByHref.get(item.href))
+        .filter((item): item is NavItem => Boolean(item));
+});
+const hasRecentItems = computed(() => recentNavItems.value.length > 0);
 
 const navSections = computed<NavSection[]>(() =>
     navSectionOrder
@@ -93,23 +124,71 @@ const navSections = computed<NavSection[]>(() =>
             label: navSectionLabels[key],
             items: visibleNavItems.value
                 .filter((item) => item.section === key)
-                .map(({ id, title, href, iconName }) => ({
+                .map(({ id, title, href, iconName, section, subGroup }) => ({
                     id: id ?? `${key}:${href}`,
                     title,
                     href,
                     iconName,
+                    section,
+                    subGroup,
+                    subGroupLabel: subGroup
+                        ? (navSubGroupLabels[section]?.[subGroup] ?? subGroup)
+                        : undefined,
                 })),
         }))
         .filter((section) => section.items.length > 0),
 );
 
-const showLimitedAccessHint = computed(
-    () => !hasUniversalAdminAccess.value && visibleNavItems.value.length === 0,
-);
-
 function onToggleFavorite(item: NavItem) {
     if (item.id) toggleFavorite(item.id);
 }
+
+function onItemSelect(item: NavItem) {
+    if (!item.id || typeof item.href !== 'string') return;
+
+    recordVisit({
+        id: item.id,
+        title: item.title,
+        href: item.href,
+        iconName: item.iconName,
+    });
+
+    emitSidebarNavigationEvent(item);
+}
+
+function emitSidebarNavigationEvent(item: NavItem) {
+    if (typeof window === 'undefined' || typeof item.href !== 'string') return;
+
+    const payload = {
+        id: item.id ?? item.href,
+        title: item.title,
+        href: item.href,
+        section: item.section ?? null,
+        subGroup: item.subGroup ?? null,
+    };
+
+    window.dispatchEvent(
+        new CustomEvent('afyanova:sidebar-navigation', {
+            detail: payload,
+        }),
+    );
+
+    const analyticsWindow = window as Window & {
+        dataLayer?: Array<Record<string, unknown>>;
+    };
+
+    analyticsWindow.dataLayer?.push({
+        event: 'sidebar_navigation_select',
+        ...payload,
+    });
+}
+
+const showLimitedAccessHint = computed(
+    () =>
+        permissionsLoaded.value &&
+        !hasUniversalAdminAccess.value &&
+        visibleNavItems.value.length === 0,
+);
 
 function sectionHasMatches(key: NavSectionKey): boolean {
     if (!searchQuery.value) return true;
@@ -136,11 +215,13 @@ function sectionHasMatches(key: NavSectionKey): boolean {
 
         <SidebarContent>
             <!-- Nav search (hidden when collapsed) -->
-            <SidebarGroup class="px-2 py-0 group-data-[collapsible=icon]:hidden">
+            <SidebarGroup
+                class="px-2 py-0 group-data-[collapsible=icon]:hidden"
+            >
                 <div class="relative px-1 py-1">
                     <AppIcon
                         name="search"
-                        class="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50 pointer-events-none"
+                        class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground/50"
                     />
                     <SidebarInput
                         v-model="searchQuery"
@@ -165,32 +246,47 @@ function sectionHasMatches(key: NavSectionKey): boolean {
                     label="Favorites"
                     :show-favorites="false"
                     is-favorites-section
+                    @item-select="onItemSelect"
                 />
 
                 <!-- Recent navigation history -->
                 <NavMain
-                    v-if="recentItems.length > 0 && !searchQuery"
-                    :items="recentItems as unknown as NavItem[]"
+                    v-if="hasRecentItems && !searchQuery"
+                    :items="recentNavItems"
                     label="Recent"
                     :show-favorites="false"
                     is-favorites-section
+                    @item-select="onItemSelect"
                 />
 
-                <NavMain :items="homeItems" label="Home" :search-query="searchQuery" />
+                <NavMain
+                    :items="homeItems"
+                    label="Home"
+                    :search-query="searchQuery"
+                    @item-select="onItemSelect"
+                />
 
                 <template v-for="section in navSections" :key="section.key">
                     <template v-if="sectionHasMatches(section.key)">
                         <!-- Section header: shows icon when collapsed, label when expanded -->
                         <SidebarGroup class="px-2 py-0">
                             <SidebarGroupLabel
-                                class="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:rounded-md group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-0 group-data-[collapsible=icon]:opacity-100 hidden pointer-events-none"
+                                class="pointer-events-none group-data-[collapsible=icon]:hidden"
+                            >
+                                {{ section.label }}
+                            </SidebarGroupLabel>
+                            <div
+                                class="hidden size-8 items-center justify-center rounded-md text-muted-foreground group-data-[collapsible=icon]:flex"
+                                :title="section.label"
                             >
                                 <AppIcon
-                                    :name="navSectionIcons[section.key] ?? 'layout-grid'"
-                                    class="size-4 group-data-[collapsible=icon]:block hidden shrink-0"
+                                    :name="
+                                        navSectionIcons[section.key] ??
+                                        'layout-grid'
+                                    "
+                                    class="size-4 shrink-0"
                                 />
-                                <span class="group-data-[collapsible=icon]:hidden block text-xs font-medium uppercase tracking-wider text-muted-foreground/70">{{ section.label }}</span>
-                            </SidebarGroupLabel>
+                            </div>
                         </SidebarGroup>
 
                         <NavMain
@@ -198,6 +294,7 @@ function sectionHasMatches(key: NavSectionKey): boolean {
                             :search-query="searchQuery"
                             :show-favorites="true"
                             @toggle-favorite="onToggleFavorite"
+                            @item-select="onItemSelect"
                         />
                     </template>
                 </template>
@@ -209,7 +306,17 @@ function sectionHasMatches(key: NavSectionKey): boolean {
                     No module permissions are assigned to this account yet.
                 </div>
                 <div
-                    v-if="searchQuery && !showLimitedAccessHint && !navSections.some(s => s.items.some(i => i.title.toLowerCase().includes(searchQuery.toLowerCase())))"
+                    v-if="
+                        searchQuery &&
+                        !showLimitedAccessHint &&
+                        !navSections.some((s) =>
+                            s.items.some((i) =>
+                                i.title
+                                    .toLowerCase()
+                                    .includes(searchQuery.toLowerCase()),
+                            ),
+                        )
+                    "
                     class="mx-3 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground"
                 >
                     No modules match "{{ searchQuery }}"
@@ -217,9 +324,11 @@ function sectionHasMatches(key: NavSectionKey): boolean {
             </template>
         </SidebarContent>
 
-        <SidebarFooter>
+        <SidebarFooter class="gap-2">
+            <AppSidebarFacilitySwitcher />
             <NavUser />
         </SidebarFooter>
+        <SidebarRail />
     </Sidebar>
     <slot />
 </template>

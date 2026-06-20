@@ -56,6 +56,20 @@ export const navSectionIcons: Record<NavSectionKey, AppIconName> = {
     system_access: 'shield-check',
 };
 
+export const navSubGroupLabels: Partial<
+    Record<NavSectionKey, Record<string, string>>
+> = {
+    billing: {
+        operations: 'Operations',
+        rates: 'Coverage & rates',
+        reports: 'Reporting',
+    },
+    stores: {
+        transactions: 'Transactions',
+        admin: 'Administration',
+    },
+};
+
 export const appNavCatalog: AppNavCatalogItem[] = [
     {
         title: 'Patient registry',
@@ -272,7 +286,8 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         section: 'stores',
         subGroup: 'admin',
         permissionPrefixes: ['inventory.procurement.'],
-        helpNote: 'Supervisor workspace for item master, procurement, ledger, requisitions, MSD, and analytics',
+        helpNote:
+            'Supervisor workspace for item master, procurement, ledger, requisitions, MSD, and analytics',
     },
     {
         title: 'Warehouses',
@@ -341,7 +356,8 @@ export const appNavCatalog: AppNavCatalogItem[] = [
             'billing.service-catalog.',
             'platform.users.manage-facilities',
         ],
-        helpNote: 'Facility foundation, departments, resources, catalogs, subscriptions, and access',
+        helpNote:
+            'Facility foundation, departments, resources, catalogs, subscriptions, and access',
     },
     {
         title: 'Subscription plans',

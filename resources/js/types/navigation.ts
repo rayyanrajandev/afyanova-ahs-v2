@@ -1,6 +1,7 @@
 import type { InertiaLinkProps } from '@inertiajs/vue3';
 import type { Component } from 'vue';
 import type { AppIconName } from '@/lib/icons';
+import type { NavSectionKey } from '@/config/appNavCatalog';
 
 export type BreadcrumbItem = {
     title: string;
@@ -13,6 +14,9 @@ export type NavItem = {
     href: NonNullable<InertiaLinkProps['href']>;
     icon?: Component;
     iconName?: AppIconName;
+    section?: NavSectionKey;
+    subGroup?: string;
+    subGroupLabel?: string;
     isActive?: boolean;
     badge?: string | number;
 };

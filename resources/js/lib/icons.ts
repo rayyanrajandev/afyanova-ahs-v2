@@ -97,6 +97,7 @@ import {
     SlidersHorizontal,
     SquarePen,
     Stethoscope,
+    Star,
     Truck,
     Tag,
     Undo2,
@@ -170,6 +171,7 @@ export type AppIconName =
     | 'shopping-cart'
     | 'sliders-horizontal'
     | 'stethoscope'
+    | 'star'
     | 'tag'
     | 'truck'
     | 'undo-2'
@@ -240,6 +242,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     'shopping-cart': ShoppingCart,
     'sliders-horizontal': SlidersHorizontal,
     stethoscope: Stethoscope,
+    star: Star,
     tag: Tag,
     truck: Truck,
     'undo-2': Undo2,
@@ -311,6 +314,7 @@ const HUGE_ICON_MAP = {
     'shopping-cart': Invoice01Icon,
     'sliders-horizontal': SlidersHorizontalIcon,
     stethoscope: StethoscopeIcon,
+    star: CheckmarkCircle01Icon,
     tag: Invoice01Icon,
     truck: PackageIcon,
     'undo-2': ArrowLeft01Icon,
