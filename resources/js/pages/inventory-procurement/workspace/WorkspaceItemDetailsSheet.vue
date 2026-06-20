@@ -750,50 +750,7 @@ const ws = useInventoryWorkspace();
                                     </CardContent>
                                 </Card>
 
-                                <Card class="min-w-0">
-                                    <CardHeader class="pb-3">
-                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                            <div>
-                                                <CardTitle class="text-base">Unit Prices</CardTitle>
-                                                <CardDescription>Per-unit price records for retail, purchase, wholesale, insurance, and contract pricing.</CardDescription>
-                                            </div>
-                                            <Badge variant="outline" class="text-[10px]">Configured in Tariffs & services</Badge>
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent class="space-y-3">
-                                        <p v-if="ws.unitPricesLoading" class="text-sm text-muted-foreground">Loading prices...</p>
-                                        <div v-else-if="ws.unitPrices.length === 0" class="rounded-lg border border-dashed bg-muted/10 p-4 text-sm text-muted-foreground">
-                                            No prices configured yet. Set retail/wholesale/insurance prices in Tariffs & services or via the pricing API.
-                                        </div>
-                                        <div v-else class="overflow-hidden rounded-lg border">
-                                            <div v-for="price in ws.unitPrices" :key="price.id" class="border-b bg-background/70 p-3 last:border-b-0">
-                                                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                                                    <div class="min-w-0 space-y-1">
-                                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Type</p>
-                                                        <p class="text-sm font-medium">{{ formatEnumLabel(price.priceType) }}</p>
-                                                    </div>
-                                                    <div class="min-w-0 space-y-1">
-                                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Amount</p>
-                                                        <p class="text-sm font-medium">{{ price.price }}</p>
-                                                    </div>
-                                                    <div class="min-w-0 space-y-1">
-                                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Currency</p>
-                                                        <p class="text-sm font-medium">{{ price.currencyCode || 'TZS' }}</p>
-                                                    </div>
-                                                    <div class="min-w-0 space-y-1">
-                                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Window</p>
-                                                        <p class="text-xs text-muted-foreground">
-                                                            <span v-if="price.effectiveFrom || price.effectiveTo">
-                                                                {{ price.effectiveFrom || '...' }} – {{ price.effectiveTo || '...' }}
-                                                            </span>
-                                                            <span v-else>Open-ended</span>
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                                <p class="text-xs text-muted-foreground">Prices per unit are configured in <span class="font-medium">Tariffs & services</span>.</p>
                             </TabsContent>
 
                             <TabsContent v-if="ws.canViewAudit" value="audit" class="mt-0 min-w-0 space-y-4">
