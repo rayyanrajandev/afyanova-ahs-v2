@@ -23,6 +23,8 @@ const props = defineProps<{
     showFavorites?: boolean;
     /** Treat as "favorites" section (disable toggle on these items) */
     isFavoritesSection?: boolean;
+    /** Icon name to show when sidebar is collapsed (section-level icon) */
+    sectionIcon?: string;
 }>();
 
 const emit = defineEmits<{
@@ -45,8 +47,19 @@ function itemMatchesSearch(item: NavItem, query: string | undefined): boolean {
 
 <template>
     <SidebarGroup class="px-2 py-0">
+        <!-- Section label text in expanded state, section icon in collapsed state -->
         <SidebarGroupLabel
-            v-if="label && (!searchQuery || items.some((item) => itemMatchesSearch(item, searchQuery)))"
+            v-if="label && (!searchQuery || items.some((item) => itemMatchesSearch(item, searchQuery))) && sectionIcon"
+            class="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-1 group-data-[collapsible=icon]:opacity-100 hidden pointer-events-none"
+        >
+            <AppIcon
+                :name="sectionIcon"
+                class="size-4 group-data-[collapsible=icon]:block hidden"
+            />
+            <span class="group-data-[collapsible=icon]:hidden block">{{ label }}</span>
+        </SidebarGroupLabel>
+        <SidebarGroupLabel
+            v-else-if="label && (!searchQuery || items.some((item) => itemMatchesSearch(item, searchQuery)))"
             class="pointer-events-none group-data-[collapsible=icon]:hidden"
         >
             {{ label }}
@@ -89,7 +102,7 @@ function itemMatchesSearch(item: NavItem, query: string | undefined): boolean {
                         </SidebarMenuBadge>
                     </Link>
                 </SidebarMenuButton>
-                <!-- Favorite star (always visible in expanded state, hidden when collapsed) -->
+                <!-- Favorite star (hover reveal in expanded state, hidden when collapsed) -->
                 <button
                     v-if="showFavorites && item.id && !isFavoritesSection"
                     class="absolute right-1 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded-sm text-muted-foreground/40 opacity-0 transition-all duration-150 hover:text-amber-500 group-hover/menu-button:opacity-100 group-data-[collapsible=icon]:hidden"

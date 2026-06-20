@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -14,13 +14,17 @@ import {
     SidebarMenuItem,
     SidebarInput,
     SidebarGroup,
+    SidebarGroupLabel,
+    SidebarMenuSkeleton,
 } from '@/components/ui/sidebar';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useSidebarFavorites } from '@/composables/useSidebarFavorites';
+import { useSidebarHistory } from '@/composables/useSidebarHistory';
 import {
     appNavCatalog,
     navSectionLabels,
     navSectionOrder,
+    navSectionIcons,
     type NavSectionKey,
 } from '@/config/appNavCatalog';
 import { filterSidebarNavCatalogItems } from '@/lib/routeAccess';
@@ -36,8 +40,16 @@ type NavSection = {
 
 const { permissionNames, hasUniversalAdminAccess, facilityEntitlementNames } = usePlatformAccess();
 const { toggleFavorite, getFavorites } = useSidebarFavorites();
+const { recentItems } = useSidebarHistory();
 
-/** Resolved permission list — never omit filtering when null server-side gaps would otherwise show entire catalog */
+const permissionsLoaded = ref(false);
+
+onMounted(() => {
+    requestAnimationFrame(() => {
+        permissionsLoaded.value = true;
+    });
+});
+
 const resolvedPermissionNames = computed(() => permissionNames.value ?? []);
 
 const visibleNavItems = computed(() =>
@@ -52,21 +64,10 @@ const visibleNavItems = computed(() =>
 const searchQuery = ref('');
 
 const homeItems = computed<NavItem[]>(() => [
-    {
-        id: 'dashboard',
-        title: 'Dashboard',
-        href: dashboard(),
-        iconName: 'layout-grid',
-    },
-    {
-        id: 'help-shortcuts',
-        title: 'Help & shortcuts',
-        href: '/help/shortcuts',
-        iconName: 'book-open',
-    },
+    { id: 'dashboard', title: 'Dashboard', href: dashboard(), iconName: 'layout-grid' },
+    { id: 'help-shortcuts', title: 'Help & shortcuts', href: '/help/shortcuts', iconName: 'book-open' },
 ]);
 
-/** Build all nav items from the catalog with stable IDs from section+href */
 const allNavItems = computed<NavItem[]>(() => {
     const items: NavItem[] = [];
     for (const key of navSectionOrder) {
@@ -83,31 +84,23 @@ const allNavItems = computed<NavItem[]>(() => {
     return items;
 });
 
-/** Favorites derived from the full visible set */
-const favoriteItems = computed<NavItem[]>(() => {
-    return getFavorites(allNavItems.value);
-});
-
+const favoriteItems = computed<NavItem[]>(() => getFavorites(allNavItems.value));
 const hasFavorites = computed(() => favoriteItems.value.length > 0);
 
 const navSections = computed<NavSection[]>(() =>
     navSectionOrder
-        .map((key) => {
-            const items = visibleNavItems.value
+        .map((key) => ({
+            key,
+            label: navSectionLabels[key],
+            items: visibleNavItems.value
                 .filter((item) => item.section === key)
                 .map(({ id, title, href, iconName }) => ({
                     id: id ?? `${key}:${href}`,
                     title,
                     href,
                     iconName,
-                }));
-
-            return {
-                key,
-                label: navSectionLabels[key],
-                items,
-            };
-        })
+                })),
+        }))
         .filter((section) => section.items.length > 0),
 );
 
@@ -116,9 +109,15 @@ const showLimitedAccessHint = computed(
 );
 
 function onToggleFavorite(item: NavItem) {
-    if (item.id) {
-        toggleFavorite(item.id);
-    }
+    if (item.id) toggleFavorite(item.id);
+}
+
+function sectionHasMatches(key: NavSectionKey): boolean {
+    if (!searchQuery.value) return true;
+    const q = searchQuery.value.toLowerCase();
+    return visibleNavItems.value
+        .filter((item) => item.section === key)
+        .some((item) => item.title.toLowerCase().includes(q));
 }
 </script>
 
@@ -137,7 +136,7 @@ function onToggleFavorite(item: NavItem) {
         </SidebarHeader>
 
         <SidebarContent>
-            <!-- Nav search -->
+            <!-- 1. Nav search -->
             <SidebarGroup class="px-2 py-0 group-data-[collapsible=icon]:hidden">
                 <div class="relative px-1 py-1">
                     <AppIcon
@@ -152,38 +151,74 @@ function onToggleFavorite(item: NavItem) {
                 </div>
             </SidebarGroup>
 
-            <!-- Favorites section -->
-            <NavMain
-                v-if="hasFavorites && !searchQuery"
-                :items="favoriteItems"
-                label="Favorites"
-                :show-favorites="false"
-                is-favorites-section
-            />
+            <!-- 4. Loading skeleton while permissions resolve -->
+            <SidebarGroup v-if="!permissionsLoaded" class="px-2 py-0">
+                <SidebarMenu>
+                    <SidebarMenuSkeleton v-for="n in 5" :key="n" show-icon />
+                </SidebarMenu>
+            </SidebarGroup>
 
-            <NavMain :items="homeItems" label="Home" :search-query="searchQuery" />
-            <NavMain
-                v-for="section in navSections"
-                :key="section.key"
-                :items="section.items"
-                :label="section.label"
-                :search-query="searchQuery"
-                :show-favorites="true"
-                @toggle-favorite="onToggleFavorite"
-            />
-            <div
-                v-if="showLimitedAccessHint"
-                class="mx-3 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground"
-            >
-                No module permissions are assigned to this account yet.
-            </div>
-            <!-- No results message -->
-            <div
-                v-if="searchQuery && !showLimitedAccessHint && allNavItems.filter(i => i.title.toLowerCase().includes(searchQuery.toLowerCase())).length === 0"
-                class="mx-3 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground"
-            >
-                No modules match "{{ searchQuery }}"
-            </div>
+            <template v-else>
+                <!-- Favorites section -->
+                <NavMain
+                    v-if="hasFavorites && !searchQuery"
+                    :items="favoriteItems"
+                    label="Favorites"
+                    :show-favorites="false"
+                    is-favorites-section
+                />
+
+                <!-- 2. Recent history section -->
+                <NavMain
+                    v-if="recentItems.length > 0 && !searchQuery"
+                    :items="recentItems as unknown as NavItem[]"
+                    label="Recent"
+                    :show-favorites="false"
+                    is-favorites-section
+                />
+
+                <NavMain :items="homeItems" label="Home" :search-query="searchQuery" />
+
+                <template v-for="section in navSections" :key="section.key">
+                    <!-- Only show sections that have a match in search mode -->
+                    <template v-if="sectionHasMatches(section.key)">
+                        <!-- 3. Section header with icon in collapsed state -->
+                        <SidebarGroup class="px-2 py-0">
+                            <SidebarGroupLabel
+                                class="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:rounded-md group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-0 group-data-[collapsible=icon]:opacity-100 group-data-[collapsible=icon]:text-sidebar-foreground hidden pointer-events-none"
+                            >
+                                <AppIcon
+                                    :name="navSectionIcons[section.key] ?? 'layout-grid'"
+                                    class="size-4 group-data-[collapsible=icon]:block hidden shrink-0"
+                                />
+                                <span class="group-data-[collapsible=icon]:hidden block text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+                                    {{ section.label }}
+                                </span>
+                            </SidebarGroupLabel>
+                        </SidebarGroup>
+
+                        <NavMain
+                            :items="section.items"
+                            :search-query="searchQuery"
+                            :show-favorites="true"
+                            @toggle-favorite="onToggleFavorite"
+                        />
+                    </template>
+                </template>
+
+                <div
+                    v-if="showLimitedAccessHint"
+                    class="mx-3 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground"
+                >
+                    No module permissions are assigned to this account yet.
+                </div>
+                <div
+                    v-if="searchQuery && !showLimitedAccessHint && !navSections.some(s => s.items.some(i => i.title.toLowerCase().includes(searchQuery.toLowerCase())))"
+                    class="mx-3 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground"
+                >
+                    No modules match "{{ searchQuery }}"
+                </div>
+            </template>
         </SidebarContent>
 
         <SidebarFooter>
