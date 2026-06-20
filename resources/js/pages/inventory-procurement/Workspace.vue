@@ -549,7 +549,9 @@ async function submitImportItemsCsv() {
             credentials: 'same-origin',
             headers: {
                 'X-Requested-With': 'XMLHttpRequest',
-                ...window.csrfToken ? { 'X-CSRF-TOKEN': window.csrfToken } : {},
+                ...(typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).csrfToken
+                    ? { 'X-CSRF-TOKEN': String((window as unknown as Record<string, unknown>).csrfToken) }
+                    : {}),
             },
             body: formData,
         });
@@ -2564,7 +2566,7 @@ function nullableNumericFormValue(value: unknown): number | null {
     return Number.isFinite(numeric) ? numeric : null;
 }
 
-async function apiRequest<T>(method: 'GET' | 'POST' | 'PATCH', path: string, opts?: { query?: Record<string, string | number | null>; body?: Record<string, unknown> }): Promise<T> {
+async function apiRequest<T>(method: 'GET' | 'POST' | 'PATCH', path: string, opts?: { query?: Record<string, string | number | null>; body?: Record<string, unknown>; meta?: Record<string, unknown> }): Promise<T> {
     return apiRequestJson<T>(method, path, opts);
 }
 
@@ -2889,6 +2891,14 @@ async function exportStockLedgerCsv() {
 const itemBatches = ref<any[]>([]);
 const itemBatchesLoading = ref(false);
 const createBatchDialogOpen = ref(false);
+
+// --- Unit Management ---
+const itemUnits = ref<any[]>([]);
+const itemUnitsLoading = ref(false);
+const unitPrices = ref<any[]>([]);
+const unitPricesLoading = ref(false);
+const createUnitDialogOpen = ref(false);
+const createPriceDialogOpen = ref(false);
 const batchCreateSubmitting = ref(false);
 const batchCreateErrors = ref<Record<string, string[]>>({});
 const batchForm = reactive({
@@ -2925,6 +2935,50 @@ async function loadItemBatches(itemId: string) {
     } finally {
         itemBatchesLoading.value = false;
     }
+}
+
+async function loadItemUnits(itemId: string) {
+    if (!itemId.trim()) {
+        itemUnits.value = [];
+        return;
+    }
+    itemUnitsLoading.value = true;
+    try {
+        const response = await apiRequest<{ data: any[] }>('GET', `/inventory-procurement/items/${itemId}/units`);
+        itemUnits.value = response.data ?? [];
+    } catch {
+        itemUnits.value = [];
+    } finally {
+        itemUnitsLoading.value = false;
+    }
+}
+
+async function loadItemUnitPrices(itemId: string) {
+    if (!itemId.trim()) {
+        unitPrices.value = [];
+        return;
+    }
+    unitPricesLoading.value = true;
+    try {
+        const response = await apiRequest<{ data: any[] }>('GET', `/inventory-procurement/items/${itemId}/unit-prices`);
+        unitPrices.value = response.data ?? [];
+    } catch {
+        unitPrices.value = [];
+    } finally {
+        unitPricesLoading.value = false;
+    }
+}
+
+async function submitCreateUnit() {
+    if (!itemDetails.value || createUnitDialogOpen.value === false) return;
+    // Placeholder for unit creation form submission — extend when unit create sheet is added.
+    notifyError('Unit creation form is not yet implemented in this workspace.');
+}
+
+async function submitCreateUnitPrice() {
+    if (!itemDetails.value || createPriceDialogOpen.value === false) return;
+    // Placeholder for unit price creation form submission — extend when price create sheet is added.
+    notifyError('Unit price creation form is not yet implemented in this workspace.');
 }
 
 async function fetchItemBatchOptions(itemId: string): Promise<any[]> {
@@ -5323,9 +5377,11 @@ async function submitCreateItem() {
         applyItemCategoryRules(itemCreateForm);
         await apiRequest('POST', '/inventory-procurement/items', {
             body: buildItemPayload(itemCreateForm),
-            idempotencyKey: createItemRequestKey.value,
-            requestId: createItemRequestKey.value,
-            entitlementContext: 'Inventory item create',
+            meta: {
+                idempotencyKey: createItemRequestKey.value,
+                requestId: createItemRequestKey.value,
+                entitlementContext: 'Inventory item create',
+            },
         });
         notifySuccess('Inventory item created.');
         closeCreateItemDialog();
@@ -5389,6 +5445,8 @@ async function loadItemDetails(itemId: string) {
         hydrateItemForms(response.data);
         captureItemDetailWorkflowSnapshots();
         void loadItemBatches(itemId);
+        void loadItemUnits(itemId);
+        void loadItemUnitPrices(itemId);
     } catch (error) {
         itemDetails.value = null;
         itemDetailsError.value = messageFromUnknown(error, 'Unable to load inventory item details.');
@@ -5515,9 +5573,11 @@ async function submitItemUpdate() {
     try {
         const response = await apiRequest<{ data: any }>('PATCH', `/inventory-procurement/items/${itemDetails.value.id}`, {
             body: buildItemPayload(itemUpdateForm),
-            idempotencyKey: itemUpdateRequestKey.value,
-            requestId: itemUpdateRequestKey.value,
-            entitlementContext: 'Inventory item update',
+            meta: {
+                idempotencyKey: itemUpdateRequestKey.value,
+                requestId: itemUpdateRequestKey.value,
+                entitlementContext: 'Inventory item update',
+            },
         });
         itemDetails.value = response.data;
         hydrateItemForms(response.data);
@@ -5547,9 +5607,11 @@ async function submitItemStatus() {
                 status: itemStatusForm.status,
                 reason: itemStatusForm.reason.trim() || null,
             },
-            idempotencyKey: itemStatusRequestKey.value,
-            requestId: itemStatusRequestKey.value,
-            entitlementContext: 'Inventory item status update',
+            meta: {
+                idempotencyKey: itemStatusRequestKey.value,
+                requestId: itemStatusRequestKey.value,
+                entitlementContext: 'Inventory item status update',
+            },
         });
         itemDetails.value = response.data;
         hydrateItemForms(response.data);
@@ -6513,6 +6575,12 @@ bindInventoryWorkspace({
     fieldError,
     itemDetails,
     submitCreateBatch,
+    itemUnits,
+    itemUnitsLoading,
+    loadItemUnits,
+    unitPrices,
+    unitPricesLoading,
+    loadItemUnitPrices,
     leadTimeForm,
     leadTimeErrors,
     leadTimeSubmitting,
@@ -6900,39 +6968,39 @@ onMounted(async () => {
                 </div>
 
                 <TabsList class="flex h-auto w-full flex-wrap justify-start gap-2 rounded-lg bg-muted/30 p-1">
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('inventory')" value="inventory" class="gap-1.5" @mouseenter="debouncedPrefetch('inventory')">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('inventory')" value="inventory" class="gap-1.5" @mouseenter="() => debouncedPrefetch('inventory')">
                         <AppIcon name="package" class="size-3.5" />
                         Items
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('ledger')" value="ledger" class="gap-1.5" @mouseenter="debouncedPrefetch('ledger')">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('ledger')" value="ledger" class="gap-1.5" @mouseenter="() => debouncedPrefetch('ledger')">
                         <AppIcon name="activity" class="size-3.5" />
                         Ledger
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('department-stock')" value="department-stock" class="gap-1.5" @mouseenter="debouncedPrefetch('department-stock')">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('department-stock')" value="department-stock" class="gap-1.5" @mouseenter="() => debouncedPrefetch('department-stock')">
                         <AppIcon name="building-2" class="size-3.5" />
                         Department Stock
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('procurement')" value="procurement" class="gap-1.5" @mouseenter="debouncedPrefetch('procurement')">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('procurement')" value="procurement" class="gap-1.5" @mouseenter="() => debouncedPrefetch('procurement')">
                         <AppIcon name="clipboard-list" class="size-3.5" />
                         Purchase Requests
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('msd-orders')" value="msd-orders" class="gap-1.5" @mouseenter="debouncedPrefetch('msd-orders')">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('msd-orders')" value="msd-orders" class="gap-1.5" @mouseenter="() => debouncedPrefetch('msd-orders')">
                         <AppIcon name="package" class="size-3.5" />
                         MSD Orders
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('lead-times')" value="lead-times" class="gap-1.5" @mouseenter="debouncedPrefetch('lead-times')">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('lead-times')" value="lead-times" class="gap-1.5" @mouseenter="() => debouncedPrefetch('lead-times')">
                         <AppIcon name="activity" class="size-3.5" />
                         Lead Times
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('overview')" value="overview" class="gap-1.5" @mouseenter="debouncedPrefetch('overview')">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('overview')" value="overview" class="gap-1.5" @mouseenter="() => debouncedPrefetch('overview')">
                         <AppIcon name="alert-triangle" class="size-3.5" />
                         Priorities
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('requisitions')" value="requisitions" class="gap-1.5" @mouseenter="debouncedPrefetch('requisitions')">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('requisitions')" value="requisitions" class="gap-1.5" @mouseenter="() => debouncedPrefetch('requisitions')">
                         <AppIcon name="clipboard-list" class="size-3.5" />
                         Department Requests
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('shortage-queue')" value="shortage-queue" class="gap-1.5" @mouseenter="debouncedPrefetch('shortage-queue')">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('shortage-queue')" value="shortage-queue" class="gap-1.5" @mouseenter="() => debouncedPrefetch('shortage-queue')">
                         <AppIcon name="alert-triangle" class="size-3.5" />
                         Shortages
                         <Badge
@@ -6943,15 +7011,15 @@ onMounted(async () => {
                             {{ shortageQueueMeta!.readyLineCount }}
                         </Badge>
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('transfers')" value="transfers" class="gap-1.5" @mouseenter="debouncedPrefetch('transfers')">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('transfers')" value="transfers" class="gap-1.5" @mouseenter="() => debouncedPrefetch('transfers')">
                         <AppIcon name="activity" class="size-3.5" />
                         Transfers
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('claims')" value="claims" class="gap-1.5" @mouseenter="debouncedPrefetch('claims')">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('claims')" value="claims" class="gap-1.5" @mouseenter="() => debouncedPrefetch('claims')">
                         <AppIcon name="shield-check" class="size-3.5" />
                         Claims
                     </TabsTrigger>
-                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('analytics')" value="analytics" class="gap-1.5" @mouseenter="debouncedPrefetch('analytics')">
+                    <TabsTrigger v-if="activeWorkspaceAreaTabs.includes('analytics')" value="analytics" class="gap-1.5" @mouseenter="() => debouncedPrefetch('analytics')">
                         <AppIcon name="activity" class="size-3.5" />
                         Analytics
                     </TabsTrigger>

@@ -118,6 +118,7 @@ const ws = useInventoryWorkspace();
                                     <TabsTrigger value="maintenance" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Edit</TabsTrigger>
                                     <TabsTrigger v-if="ws.canManageItems" value="status" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Status</TabsTrigger>
                                     <TabsTrigger value="stock" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Batches</TabsTrigger>
+                                    <TabsTrigger v-if="ws.canManageItems" value="units" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Units</TabsTrigger>
                                     <TabsTrigger v-if="ws.canViewAudit" value="audit" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Audit</TabsTrigger>
                                 </TabsList>
                             </div>
@@ -690,6 +691,106 @@ const ws = useInventoryWorkspace();
                                                             </span>
                                                             <span v-else class="text-sm text-muted-foreground">{{ formatEnumLabel(batch.status) }}</span>
                                                         </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </TabsContent>
+
+                            <TabsContent v-if="ws.canManageItems" value="units" class="mt-0 min-w-0 space-y-4">
+                                <Card class="min-w-0">
+                                    <CardHeader class="pb-3">
+                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                            <div>
+                                                <CardTitle class="text-base">Selling Units</CardTitle>
+                                                <CardDescription>Manage conversion units and per-unit pricing for this item.</CardDescription>
+                                            </div>
+                                            <Button size="sm" variant="outline" class="gap-1" @click="ws.submitCreateUnit">
+                                                <AppIcon name="plus" class="size-3" />
+                                                Add Unit
+                                            </Button>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent class="space-y-3">
+                                        <p v-if="ws.itemUnitsLoading" class="text-sm text-muted-foreground">Loading units...</p>
+                                        <div v-else-if="ws.itemUnits.length === 0" class="rounded-lg border border-dashed bg-muted/10 p-4 text-sm text-muted-foreground">
+                                            No units configured yet. Add the base unit and any selling units.
+                                        </div>
+                                        <div v-else class="overflow-hidden rounded-lg border">
+                                            <div v-for="unit in ws.itemUnits" :key="unit.id" class="border-b bg-background/70 p-3 last:border-b-0">
+                                                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                                    <div class="min-w-0 space-y-1">
+                                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Unit</p>
+                                                        <p class="break-words text-sm font-medium">{{ unit.unitName || unit.unitCode || '-' }}</p>
+                                                    </div>
+                                                    <div class="min-w-0 space-y-1">
+                                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Base quantity</p>
+                                                        <p class="text-sm font-medium">{{ unit.baseQuantity }}</p>
+                                                    </div>
+                                                    <div class="min-w-0 space-y-1">
+                                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Role</p>
+                                                        <p class="text-xs">
+                                                            <span v-if="unit.isBaseUnit" class="mr-2 inline-block rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">Base</span>
+                                                            <span v-if="unit.isDefaultSalesUnit" class="mr-2 inline-block rounded bg-sky-50 px-1.5 py-0.5 text-sky-700 dark:bg-sky-950 dark:text-sky-200">Default sales</span>
+                                                            <span v-if="unit.isDefaultPurchaseUnit" class="inline-block rounded bg-amber-50 px-1.5 py-0.5 text-amber-700 dark:bg-amber-950 dark:text-amber-200">Default purchase</span>
+                                                            <span v-if="!unit.isBaseUnit && !unit.isDefaultSalesUnit && !unit.isDefaultPurchaseUnit" class="text-muted-foreground">Extra unit</span>
+                                                        </p>
+                                                    </div>
+                                                    <div class="min-w-0 space-y-1">
+                                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Status</p>
+                                                        <p class="text-xs">
+                                                            <span :class="unit.isActive ? 'text-emerald-700' : 'text-muted-foreground'">{{ unit.isActive ? 'Active' : 'Inactive' }}</span>
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                <Card class="min-w-0">
+                                    <CardHeader class="pb-3">
+                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                            <div>
+                                                <CardTitle class="text-base">Unit Prices</CardTitle>
+                                                <CardDescription>Per-unit price records for retail, purchase, wholesale, insurance, and contract pricing.</CardDescription>
+                                            </div>
+                                            <Button size="sm" variant="outline" class="gap-1" @click="ws.submitCreateUnitPrice">
+                                                <AppIcon name="plus" class="size-3" />
+                                                Add Price
+                                            </Button>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent class="space-y-3">
+                                        <p v-if="ws.unitPricesLoading" class="text-sm text-muted-foreground">Loading prices...</p>
+                                        <div v-else-if="ws.unitPrices.length === 0" class="rounded-lg border border-dashed bg-muted/10 p-4 text-sm text-muted-foreground">
+                                            No price rows yet. Create a price row once a unit exists.
+                                        </div>
+                                        <div v-else class="overflow-hidden rounded-lg border">
+                                            <div v-for="price in ws.unitPrices" :key="price.id" class="border-b bg-background/70 p-3 last:border-b-0">
+                                                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                                    <div class="min-w-0 space-y-1">
+                                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Type</p>
+                                                        <p class="text-sm font-medium">{{ formatEnumLabel(price.priceType) }}</p>
+                                                    </div>
+                                                    <div class="min-w-0 space-y-1">
+                                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Amount</p>
+                                                        <p class="text-sm font-medium">{{ price.price }}</p>
+                                                    </div>
+                                                    <div class="min-w-0 space-y-1">
+                                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Currency</p>
+                                                        <p class="text-sm font-medium">{{ price.currencyCode || 'TZS' }}</p>
+                                                    </div>
+                                                    <div class="min-w-0 space-y-1">
+                                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Window</p>
+                                                        <p class="text-xs text-muted-foreground">
+                                                            <span v-if="price.effectiveFrom || price.effectiveTo">
+                                                                {{ price.effectiveFrom || '...' }} – {{ price.effectiveTo || '...' }}
+                                                            </span>
+                                                            <span v-else>Open-ended</span>
+                                                        </p>
                                                     </div>
                                                 </div>
                                             </div>
