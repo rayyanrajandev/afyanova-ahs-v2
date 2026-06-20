@@ -757,16 +757,13 @@ const ws = useInventoryWorkspace();
                                                 <CardTitle class="text-base">Unit Prices</CardTitle>
                                                 <CardDescription>Per-unit price records for retail, purchase, wholesale, insurance, and contract pricing.</CardDescription>
                                             </div>
-                                            <Button size="sm" variant="outline" class="gap-1" @click="ws.submitCreateUnitPrice">
-                                                <AppIcon name="plus" class="size-3" />
-                                                Add Price
-                                            </Button>
+                                            <Badge variant="outline" class="text-[10px]">Configured in Tariffs & services</Badge>
                                         </div>
                                     </CardHeader>
                                     <CardContent class="space-y-3">
                                         <p v-if="ws.unitPricesLoading" class="text-sm text-muted-foreground">Loading prices...</p>
                                         <div v-else-if="ws.unitPrices.length === 0" class="rounded-lg border border-dashed bg-muted/10 p-4 text-sm text-muted-foreground">
-                                            No price rows yet. Create a price row once a unit exists.
+                                            No prices configured yet. Set retail/wholesale/insurance prices in Tariffs & services or via the pricing API.
                                         </div>
                                         <div v-else class="overflow-hidden rounded-lg border">
                                             <div v-for="price in ws.unitPrices" :key="price.id" class="border-b bg-background/70 p-3 last:border-b-0">
