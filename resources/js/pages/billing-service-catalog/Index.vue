@@ -1,14 +1,15 @@
 
 <script setup lang="ts">
+import type { AcceptableValue } from 'reka-ui';
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import RegistryListRow from '@/components/list/RegistryListRow.vue';
-import RegistryListSkeleton from '@/components/list/RegistryListSkeleton.vue';
 import ComboboxField from '@/components/forms/ComboboxField.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vue';
 import TimePopoverField from '@/components/forms/TimePopoverField.vue';
+import RegistryListRow from '@/components/list/RegistryListRow.vue';
+import RegistryListSkeleton from '@/components/list/RegistryListSkeleton.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,9 +18,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -58,6 +59,8 @@ type CatalogItem = {
     departmentId: string | null;
     department: string | null;
     unit: string | null;
+    priceUnit: string | null;
+    unitsPerPack: number | null;
     basePrice: string | null;
     currencyCode: string | null;
     taxRatePercent: string | null;
@@ -176,6 +179,7 @@ const serviceTypeOptions = [
 ];
 
 const unitOptions = ['service', 'study', 'test', 'item', 'session', 'day', 'procedure', 'dose', 'package'];
+const pharmacyUnitOptions = ['tablet', 'capsule', 'vial', 'ampoule', 'sachet', 'bottle', 'inhaler', 'pack', 'box', 'strip', 'dose', 'ml', 'mg', 'g', 'iu'];
 const facilityTierOptions = [
     { value: 'dispensary', label: 'Dispensary' },
     { value: 'health_centre', label: 'Health centre' },
@@ -288,6 +292,8 @@ const createForm = reactive({
     standardsCpt: '',
     standardsIcd: '',
     metadataText: '',
+    priceUnit: '',
+    unitsPerPack: '',
 });
 
 const detailsOpen = ref(false);
@@ -302,30 +308,6 @@ const versionHistory = ref<CatalogItem[]>([]);
 const payerImpactLoading = ref(false);
 const payerImpactError = ref<string | null>(null);
 const payerImpactSummary = ref<CatalogPayerImpactSummary | null>(null);
-
-const catalogQueueStateLabel = computed(() => {
-    const labels: string[] = [];
-
-    if (filters.status) {
-        labels.push(formatEnumLabel(filters.status));
-    } else {
-        labels.push('All statuses');
-    }
-
-    if (filters.lifecycle) {
-        const lifecycleLabels: Record<string, string> = {
-            effective: 'Effective now',
-            scheduled: 'Scheduled',
-            expired: 'Expired',
-            no_window: 'No window',
-        };
-        labels.push(lifecycleLabels[filters.lifecycle] ?? 'All windows');
-    } else {
-        labels.push('All windows');
-    }
-
-    return labels.join(' | ');
-});
 
 const catalogActiveFilterChips = computed(() => {
     const chips: string[] = [];
@@ -352,16 +334,6 @@ const catalogActiveFilterChips = computed(() => {
 });
 
 const catalogActiveFilterCount = computed(() => catalogActiveFilterChips.value.length);
-const catalogAdvancedFilterCount = computed(() => {
-    let count = 0;
-    if (filters.departmentId.trim()) count += 1;
-    if (filters.currencyCode.trim()) count += 1;
-    if (filters.lifecycle) count += 1;
-    if (filters.sortBy !== 'serviceName') count += 1;
-    if (filters.sortDir !== 'asc') count += 1;
-    if (filters.perPage !== 10) count += 1;
-    return count;
-});
 const listFilterHintText = computed(() =>
     catalogActiveFilterCount.value > 0 ? `${catalogActiveFilterCount.value} filters applied` : 'Search by code, name, type, or department',
 );
@@ -375,9 +347,9 @@ const pageItemIds = computed(() =>
     items.value.map((item) => String(item.id ?? '').trim()).filter((id) => id.length > 0),
 );
 const selectedCount = computed(() => selectedItemIds.value.length);
-const allVisibleSelected = computed(
-    () => pageItemIds.value.length > 0 && pageItemIds.value.every((id) => selectedItemIds.value.includes(id)),
-);
+const allVisibleSelected = computed(() => (
+    pageItemIds.value.length > 0 && pageItemIds.value.every((id) => selectedItemIds.value.includes(id))
+));
 const canUseBulkSelection = computed(() => canRead.value && canManagePricing.value);
 const bulkStatusDialogTitle = computed(() => {
     if (bulkStatusTarget.value === 'retired') return 'Retire selected billable services';
@@ -450,7 +422,7 @@ function buildDepartmentOptions(preferredServiceType = ''): SearchableSelectOpti
                 description: serviceType ? `${formatEnumLabel(serviceType)} department` : 'Hospital department',
                 keywords: [name, code, serviceType].filter((entry) => entry.trim().length > 0),
                 group: serviceType ? formatEnumLabel(serviceType) : 'Other',
-            } satisfies SearchableSelectOption;
+            } as SearchableSelectOption;
         })
         .filter((option): option is SearchableSelectOption => option !== null);
 }
@@ -492,10 +464,6 @@ const createDepartmentOptions = computed<SearchableSelectOption[]>(() => buildDe
 const editDepartmentOptions = computed<SearchableSelectOption[]>(() => buildDepartmentOptions(editForm.serviceType));
 const filterDepartmentOptions = computed<SearchableSelectOption[]>(() => allDepartmentOptions.value);
 
-const createSelectedDepartmentOption = computed(
-    () => findDepartmentOption(createDepartmentOptions.value, createForm.departmentId)
-        ?? findDepartmentOption(allDepartmentOptions.value, createForm.departmentId),
-);
 const editSelectedDepartmentOption = computed(
     () => findDepartmentOption(editDepartmentOptions.value, editForm.departmentId)
         ?? findDepartmentOption(allDepartmentOptions.value, editForm.departmentId),
@@ -645,10 +613,24 @@ const createUnitSelectValue = computed({
     },
 });
 
+const createUnitOptions = computed(() => {
+    if (createForm.serviceType === 'pharmacy') {
+        return pharmacyUnitOptions;
+    }
+    return unitOptions;
+});
+
 const createTaxableSelectValue = computed({
     get: () => createForm.isTaxable || '__none__',
     set: (value: string) => {
         createForm.isTaxable = value === '__none__' ? '' : value;
+    },
+});
+
+const createPriceUnitSelectValue = computed({
+    get: () => createForm.priceUnit || '__none__',
+    set: (value: string) => {
+        createForm.priceUnit = value === '__none__' ? '' : value;
     },
 });
 
@@ -671,6 +653,20 @@ const editUnitSelectValue = computed({
     get: () => editForm.unit || '__none__',
     set: (value: string) => {
         editForm.unit = value === '__none__' ? '' : value;
+    },
+});
+
+const editUnitOptions = computed(() => {
+    if (editForm.serviceType === 'pharmacy') {
+        return pharmacyUnitOptions;
+    }
+    return unitOptions;
+});
+
+const editPriceUnitSelectValue = computed({
+    get: () => editForm.priceUnit || '__none__',
+    set: (value: string) => {
+        editForm.priceUnit = value === '__none__' ? '' : value;
     },
 });
 
@@ -1015,6 +1011,8 @@ const editForm = reactive({
     standardsCpt: '',
     standardsIcd: '',
     metadataText: '',
+    priceUnit: '',
+    unitsPerPack: '',
 });
 
 type StandardsForm = {
@@ -1277,6 +1275,8 @@ function resetCreateCatalogForm(): void {
     createForm.serviceType = '';
     createForm.departmentId = '';
     createForm.unit = '';
+    createForm.priceUnit = '';
+    createForm.unitsPerPack = '';
     createForm.basePrice = '';
     createForm.currencyCode = defaultCurrencyCode.value;
     createForm.taxRatePercent = '';
@@ -1356,18 +1356,6 @@ function applyFiltersFromSheet(): void {
 function resetFiltersFromSheet(): void {
     filtersSheetOpen.value = false;
     resetFilters();
-}
-
-function applyCatalogStatusPreset(status: '' | CatalogStatus): void {
-    filters.status = status;
-    filters.page = 1;
-    void loadItems();
-}
-
-function applyCatalogLifecyclePreset(lifecycle: '' | 'effective' | 'scheduled' | 'expired' | 'no_window'): void {
-    filters.lifecycle = lifecycle;
-    filters.page = 1;
-    void loadItems();
 }
 
 function applyCatalogListModePreset(
@@ -1654,6 +1642,8 @@ const hasPendingPricingWorkflow = computed(() => {
         || editForm.effectiveFrom.trim() !== toDateTimeInput(item.effectiveFrom)
         || editForm.effectiveTo.trim() !== toDateTimeInput(item.effectiveTo)
         || editForm.description.trim() !== String(item.description ?? '').trim()
+        || editForm.priceUnit.trim() !== String(item.priceUnit ?? '').trim()
+        || editForm.unitsPerPack.trim() !== String(item.unitsPerPack ?? '').trim()
         || !metadataValuesEqual(item.metadata, editForm.metadataText)
     );
 });
@@ -1735,6 +1725,8 @@ function hydrateEditForm(item: CatalogItem): void {
     editForm.facilityTier = item.facilityTier ?? '';
     applyStandardsCodesToForm(editForm, item.codes);
     editForm.metadataText = metadataToFormText(item.metadata);
+    editForm.priceUnit = item.priceUnit ?? '';
+    editForm.unitsPerPack = item.unitsPerPack !== null ? String(item.unitsPerPack) : '';
 
     statusForm.status = (item.status ?? 'active') as CatalogStatus;
     statusForm.reason = item.statusReason ?? '';
@@ -2354,6 +2346,8 @@ async function createItem(): Promise<void> {
                 description: createForm.description.trim() || null,
                 facilityTier: createForm.facilityTier.trim() || null,
                 codes: standardsCodesFromForm(createForm),
+                priceUnit: createForm.priceUnit.trim() || null,
+                unitsPerPack: createForm.unitsPerPack.trim() ? Number.parseInt(createForm.unitsPerPack.trim(), 10) : null,
                 metadata,
             },
             entitlementContext: 'Billing service catalog create',
@@ -2547,6 +2541,8 @@ async function savePricing(): Promise<void> {
                 effectiveFrom: toApiDateTime(editForm.effectiveFrom),
                 effectiveTo: toApiDateTime(editForm.effectiveTo),
                 description: editForm.description.trim() || null,
+                priceUnit: editForm.priceUnit.trim() || null,
+                unitsPerPack: editForm.unitsPerPack.trim() ? Number.parseInt(editForm.unitsPerPack.trim(), 10) : null,
                 metadata,
             },
             entitlementContext: 'Billing service catalog pricing update',
@@ -2957,11 +2953,11 @@ watch(
                 <AlertDescription>Permission context is still loading.</AlertDescription>
             </Alert>
 
-            <Alert v-else-if="!canRead" variant="destructive">
-                <AlertTitle class="flex items-center gap-2">
-                    <AppIcon name="shield-alert" class="size-4" />
-                    Access denied
-                </AlertTitle>
+                            <Alert v-else-if="!canRead" variant="destructive">
+                                <AlertTitle class="flex items-center gap-2">
+                                    <AppIcon name="alert-triangle" class="size-4" />
+                                    Access denied
+                                </AlertTitle>
                 <AlertDescription>
                     You do not have `billing.service-catalog.read`, so this page cannot load the price list.
                 </AlertDescription>
@@ -3183,11 +3179,42 @@ watch(
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="__none__">No billing unit yet</SelectItem>
-                                                        <SelectItem v-for="option in unitOptions" :key="option" :value="option">
+                                                        <SelectItem v-for="option in createUnitOptions" :key="option" :value="option">
                                                             {{ formatEnumLabel(option) }}
                                                         </SelectItem>
                                                     </SelectContent>
                                                 </Select>
+                                            </FormFieldShell>
+                                            <FormFieldShell
+                                                input-id="create-price-pharmacy-unit"
+                                                label="Pharmacy unit"
+                                                v-if="createForm.serviceType === 'pharmacy'"
+                                                container-class="col-span-6 sm:col-span-3"
+                                            >
+                                                <Select v-model="createPriceUnitSelectValue">
+                                                    <SelectTrigger id="create-price-pharmacy-unit" class="w-full">
+                                                        <SelectValue placeholder="Select unit" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="__none__">No pharmacy unit</SelectItem>
+                                                        <SelectItem v-for="option in pharmacyUnitOptions" :key="option" :value="option">
+                                                            {{ formatEnumLabel(option) }}
+                                                        </SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </FormFieldShell>
+                                            <FormFieldShell
+                                                input-id="create-price-units-per-pack"
+                                                label="Units per pack"
+                                                v-if="createForm.serviceType === 'pharmacy'"
+                                                container-class="col-span-6 sm:col-span-3"
+                                            >
+                                                <Input
+                                                    id="create-price-units-per-pack"
+                                                    v-model="createForm.unitsPerPack"
+                                                    inputmode="numeric"
+                                                    placeholder="e.g. 30"
+                                                />
                                             </FormFieldShell>
                                         </div>
 
@@ -3438,10 +3465,10 @@ watch(
                                     class="min-w-0 flex-1 text-xs [&_input]:h-8"
                                     @keyup.enter="search"
                                 />
-                                <Select
-                                    :model-value="filterServiceTypeSelectValue"
-                                    @update:model-value="updateCatalogServiceTypeFilter"
-                                >
+                                                        <Select
+                                                            :model-value="filterServiceTypeSelectValue"
+                                                            @update:model-value="(value: AcceptableValue) => updateCatalogServiceTypeFilter(String(value as string))"
+                                                        >
                                     <SelectTrigger class="h-8 w-full min-w-[10rem] text-xs sm:w-[11rem]">
                                         <SelectValue placeholder="All types" />
                                     </SelectTrigger>
@@ -3459,7 +3486,7 @@ watch(
                                     :disabled="catalogExporting"
                                     @click="exportCatalogItemsCsv"
                                 >
-                                    <AppIcon :name="catalogExporting ? 'loader-circle' : 'download'" class="size-3.5" :class="{ 'animate-spin': catalogExporting }" />
+                                    <AppIcon :name="catalogExporting ? 'loader-circle' : 'download'" :class="catalogExporting ? 'size-3.5 animate-spin' : 'size-3.5'" />
                                     Export
                                 </Button>
                                 <Button
@@ -3469,7 +3496,7 @@ watch(
                                     :disabled="catalogPrinting || catalogShowInitialSkeleton || listLoading"
                                     @click="printCatalogItems"
                                 >
-                                    <AppIcon :name="catalogPrinting ? 'loader-circle' : 'printer'" class="size-3.5" :class="{ 'animate-spin': catalogPrinting }" />
+                                    <AppIcon :name="catalogPrinting ? 'loader-circle' : 'printer'" :class="catalogPrinting ? 'size-3.5 animate-spin' : 'size-3.5'" />
                                     Print
                                 </Button>
                                 <Button
@@ -3493,9 +3520,9 @@ watch(
                             <label class="flex items-center gap-2 text-xs text-muted-foreground">
                                 <Checkbox
                                     id="billing-service-catalog-select-page"
-                                    :model-value="allVisibleSelected"
+                                    :checked="allVisibleSelected as boolean"
                                     :disabled="pageItemIds.length === 0 || bulkStatusBusy"
-                                    @update:model-value="toggleSelectAllVisible"
+                                    @update:checked="toggleSelectAllVisible"
                                 />
                                 Select page
                             </label>
@@ -4006,7 +4033,7 @@ watch(
                                                         <Input id="edit-price-service-name" v-model="editForm.serviceName" :disabled="!canManageIdentity" />
                                                     </FormFieldShell>
                                                     <FormFieldShell input-id="edit-price-service-type" label="Service type">
-                                                        <Select v-model="editServiceTypeSelectValue">
+                                                        <Select v-model="editServiceTypeSelectValue" @update:model-value="(value: AcceptableValue) => updateCatalogServiceTypeFilter(String(value as string))">
                                                             <SelectTrigger id="edit-price-service-type" class="w-full" :disabled="!canManageIdentity">
                                                                 <SelectValue placeholder="Select type" />
                                                             </SelectTrigger>
@@ -4035,20 +4062,34 @@ watch(
                                                             </SelectTrigger>
                                                             <SelectContent>
                                                                 <SelectItem value="__none__">Select unit</SelectItem>
-                                                                <SelectItem v-for="option in unitOptions" :key="option" :value="option">{{ formatEnumLabel(option) }}</SelectItem>
+                                                                <SelectItem v-for="option in editUnitOptions" :key="option" :value="option">{{ formatEnumLabel(option) }}</SelectItem>
                                                             </SelectContent>
                                                         </Select>
+                                                    </FormFieldShell>
+                                                    <FormFieldShell input-id="edit-price-pharmacy-unit" label="Pharmacy unit" v-if="editForm.serviceType === 'pharmacy'">
+                                                        <Select v-model="editPriceUnitSelectValue">
+                                                            <SelectTrigger id="edit-price-pharmacy-unit" class="w-full" :disabled="!canManageIdentity">
+                                                                <SelectValue placeholder="Select unit" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="__none__">No pharmacy unit</SelectItem>
+                                                                <SelectItem v-for="option in pharmacyUnitOptions" :key="option" :value="option">{{ formatEnumLabel(option) }}</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </FormFieldShell>
+                                                    <FormFieldShell input-id="edit-price-units-per-pack" label="Units per pack" v-if="editForm.serviceType === 'pharmacy'">
+                                                        <Input id="edit-price-units-per-pack" v-model="editForm.unitsPerPack" inputmode="numeric" :disabled="!canManageIdentity" placeholder="e.g. 30" />
                                                     </FormFieldShell>
                                                 </div>
                                                 <details class="mt-3 rounded-lg border bg-muted/10 p-3">
                                                     <summary class="cursor-pointer text-sm font-medium">Advanced / Standards</summary>
                                                     <div class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                                                         <FormFieldShell input-id="edit-price-facility-tier" label="Minimum facility tier">
-                                                            <Select
-                                                                :disabled="!canManageIdentity"
-                                                                :model-value="editForm.facilityTier || '__none__'"
-                                                                @update:model-value="(value) => { editForm.facilityTier = value === '__none__' ? '' : String(value); }"
-                                                            >
+                                                                <Select
+                                                                    :disabled="!canManageIdentity"
+                                                                    :model-value="editForm.facilityTier || '__none__'"
+                                                                    @update:model-value="(value: AcceptableValue) => { editForm.facilityTier = value === '__none__' ? '' : String(value as string); }"
+                                                                >
                                                                 <SelectTrigger id="edit-price-facility-tier" class="w-full">
                                                                     <SelectValue placeholder="All tiers" />
                                                                 </SelectTrigger>
@@ -4131,7 +4172,7 @@ watch(
                                                     <Input id="edit-price-tax-rate" v-model="editForm.taxRatePercent" inputmode="decimal" :disabled="!canManagePricing" />
                                                 </FormFieldShell>
                                                 <FormFieldShell input-id="edit-price-taxable" label="Taxable">
-                                                    <Select v-model="editTaxableSelectValue">
+                                                    <Select v-model="editTaxableSelectValue" @update:model-value="(value: AcceptableValue) => updateCatalogServiceTypeFilter(String(value as string))">
                                                         <SelectTrigger id="edit-price-taxable" class="w-full" :disabled="!canManagePricing">
                                                             <SelectValue placeholder="N/A" />
                                                         </SelectTrigger>
