@@ -43,6 +43,7 @@ const { toggleFavorite, getFavorites } = useSidebarFavorites();
 const { recentItems } = useSidebarHistory();
 
 const permissionsLoaded = ref(false);
+const searchQuery = ref('');
 
 onMounted(() => {
     requestAnimationFrame(() => {
@@ -60,8 +61,6 @@ const visibleNavItems = computed(() =>
         facilityEntitlementNames.value,
     ),
 );
-
-const searchQuery = ref('');
 
 const homeItems = computed<NavItem[]>(() => [
     { id: 'dashboard', title: 'Dashboard', href: dashboard(), iconName: 'layout-grid' },
@@ -136,7 +135,7 @@ function sectionHasMatches(key: NavSectionKey): boolean {
         </SidebarHeader>
 
         <SidebarContent>
-            <!-- 1. Nav search -->
+            <!-- Nav search (hidden when collapsed) -->
             <SidebarGroup class="px-2 py-0 group-data-[collapsible=icon]:hidden">
                 <div class="relative px-1 py-1">
                     <AppIcon
@@ -151,7 +150,7 @@ function sectionHasMatches(key: NavSectionKey): boolean {
                 </div>
             </SidebarGroup>
 
-            <!-- 4. Loading skeleton while permissions resolve -->
+            <!-- Loading skeleton while permissions resolve -->
             <SidebarGroup v-if="!permissionsLoaded" class="px-2 py-0">
                 <SidebarMenu>
                     <SidebarMenuSkeleton v-for="n in 5" :key="n" show-icon />
@@ -168,7 +167,7 @@ function sectionHasMatches(key: NavSectionKey): boolean {
                     is-favorites-section
                 />
 
-                <!-- 2. Recent history section -->
+                <!-- Recent navigation history -->
                 <NavMain
                     v-if="recentItems.length > 0 && !searchQuery"
                     :items="recentItems as unknown as NavItem[]"
@@ -180,20 +179,17 @@ function sectionHasMatches(key: NavSectionKey): boolean {
                 <NavMain :items="homeItems" label="Home" :search-query="searchQuery" />
 
                 <template v-for="section in navSections" :key="section.key">
-                    <!-- Only show sections that have a match in search mode -->
                     <template v-if="sectionHasMatches(section.key)">
-                        <!-- 3. Section header with icon in collapsed state -->
+                        <!-- Section header: shows icon when collapsed, label when expanded -->
                         <SidebarGroup class="px-2 py-0">
                             <SidebarGroupLabel
-                                class="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:rounded-md group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-0 group-data-[collapsible=icon]:opacity-100 group-data-[collapsible=icon]:text-sidebar-foreground hidden pointer-events-none"
+                                class="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:rounded-md group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-0 group-data-[collapsible=icon]:opacity-100 hidden pointer-events-none"
                             >
                                 <AppIcon
                                     :name="navSectionIcons[section.key] ?? 'layout-grid'"
                                     class="size-4 group-data-[collapsible=icon]:block hidden shrink-0"
                                 />
-                                <span class="group-data-[collapsible=icon]:hidden block text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
-                                    {{ section.label }}
-                                </span>
+                                <span class="group-data-[collapsible=icon]:hidden block text-xs font-medium uppercase tracking-wider text-muted-foreground/70">{{ section.label }}</span>
                             </SidebarGroupLabel>
                         </SidebarGroup>
 
