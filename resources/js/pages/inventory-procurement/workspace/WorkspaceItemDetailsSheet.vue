@@ -114,9 +114,7 @@ const ws = useInventoryWorkspace();
 
                             <div class="pb-1">
                                 <TabsList class="flex h-auto w-full flex-wrap justify-start gap-2 rounded-lg bg-transparent p-0">
-                                    <TabsTrigger value="overview" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Details</TabsTrigger>
-                                    <TabsTrigger value="maintenance" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Edit</TabsTrigger>
-                                    <TabsTrigger v-if="ws.canManageItems" value="status" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Status</TabsTrigger>
+                                    <TabsTrigger value="overview" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Overview</TabsTrigger>
                                     <TabsTrigger value="stock" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Batches</TabsTrigger>
                                     <TabsTrigger v-if="ws.canManageItems" value="units" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Units</TabsTrigger>
                                     <TabsTrigger v-if="ws.canViewAudit" value="audit" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Audit</TabsTrigger>
@@ -272,6 +270,12 @@ const ws = useInventoryWorkspace();
                                 </Alert>
 
                                 <template v-else>
+                                    <div class="flex items-center gap-2 mb-3">
+                                        <Button size="sm" variant="outline" class="h-8 gap-1.5 text-xs" @click="ws.itemDetailsTab = 'overview'">
+                                            <AppIcon name="chevron-left" class="size-3.5" />
+                                            Back to Overview
+                                        </Button>
+                                    </div>
                                     <Card class="min-w-0">
                                         <CardHeader class="pb-3">
                                             <CardTitle class="text-base">Update Record</CardTitle>
@@ -598,44 +602,6 @@ const ws = useInventoryWorkspace();
                                 </template>
                             </TabsContent>
 
-                            <TabsContent v-if="ws.canManageItems" value="status" class="mt-0 min-w-0 space-y-4">
-                                <Card class="min-w-0">
-                                    <CardHeader class="pb-3">
-                                        <CardTitle class="text-base">Status Control</CardTitle>
-                                        <CardDescription>Control whether this item remains active for stores, receiving, and downstream workflows.</CardDescription>
-                                    </CardHeader>
-                                    <CardContent class="space-y-3">
-                                        <div class="grid gap-3 sm:grid-cols-2">
-                                            <div class="grid gap-1">
-                                                <Label for="inv-item-status">Status</Label>
-                                                <Select :model-value="ws.toSelectValue(ws.itemStatusForm.status)" @update:model-value="ws.itemStatusForm.status = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                                    <SelectTrigger class="w-full" :disabled="ws.itemStatusSubmitting">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem v-for="status in ws.itemStatusOptions" :key="status" :value="status">
-                                                            {{ formatEnumLabel(status) }}
-                                                        </SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div class="grid gap-1">
-                                                <Label for="inv-item-status-reason">Reason</Label>
-                                                <Input id="inv-item-status-reason" v-model="ws.itemStatusForm.reason" :disabled="ws.itemStatusSubmitting" placeholder="Required for inactive" />
-                                            </div>
-                                        </div>
-                                        <Alert v-if="ws.itemStatusError" variant="destructive">
-                                            <AlertTitle>Status update failed</AlertTitle>
-                                            <AlertDescription>{{ ws.itemStatusError }}</AlertDescription>
-                                        </Alert>
-                                        <div class="flex justify-end">
-                                            <Button size="sm" :disabled="ws.itemStatusSubmitting" @click="ws.submitItemStatus">
-                                                {{ ws.itemStatusSubmitting ? 'Saving...' : 'Update Status' }}
-                                            </Button>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            </TabsContent>
 
                             <TabsContent value="stock" class="mt-0 min-w-0 space-y-4">
                                 <Card class="min-w-0">
