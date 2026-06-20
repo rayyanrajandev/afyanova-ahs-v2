@@ -709,6 +709,7 @@ const flashedRequestId = ref<string | null>(null);
 let flashedItemTimer: ReturnType<typeof setTimeout> | null = null;
 let flashedRequestTimer: ReturnType<typeof setTimeout> | null = null;
 let pollingTimer: ReturnType<typeof setInterval> | null = null;
+let inventorySearchTimer: ReturnType<typeof setTimeout> | null = null;
 let stockMovementSelectionResetLocked = false;
 
 function openCreateItemDialog() {
@@ -2780,7 +2781,7 @@ function applyDepartmentStockFilters() {
 
 function resetDepartmentStockFilters() {
     departmentStockFilters.q = '';
-    departmentStockFilters.departmentId = '';
+    departmentStockFilters.departmentId = normalizeScopedDepartmentFilter('');
     departmentStockFilters.itemId = '';
     departmentStockScopedItem.value = null;
     departmentStockFilters.page = 1;
@@ -3101,6 +3102,13 @@ const requisitionDepartmentOptions = computed(() => {
 
     return options;
 });
+const departmentFilterOptions = computed(() => {
+    if (canSelectAnyRequisitionDepartment.value) {
+        return requisitionDepartmentOptions.value;
+    }
+
+    return lockedRequisitionDepartment.value ? [lockedRequisitionDepartment.value] : [];
+});
 const selectedRequisitionDepartment = computed(() => {
     const selectedId = reqForm.requestingDepartmentId.trim();
     if (selectedId) {
@@ -3151,6 +3159,36 @@ function applyLockedDeptReqFilter(): void {
     if (canSelectAnyRequisitionDepartment.value || !lockedDepartment) return;
 
     deptReqSearch.departmentId = lockedDepartment.id;
+}
+
+function normalizeScopedDepartmentFilter(departmentId: string): string {
+    const lockedDepartment = lockedRequisitionDepartment.value;
+    if (!canSelectAnyRequisitionDepartment.value) {
+        return lockedDepartment?.id ?? '';
+    }
+
+    return fromSelectValue(departmentId);
+}
+
+function setDeptReqDepartmentFilter(departmentId: string): void {
+    deptReqSearch.departmentId = normalizeScopedDepartmentFilter(departmentId);
+}
+
+function setShortageQueueDepartmentFilter(departmentId: string): void {
+    shortageQueueFilters.departmentId = normalizeScopedDepartmentFilter(departmentId);
+}
+
+function setDepartmentStockDepartmentFilter(departmentId: string): void {
+    departmentStockFilters.departmentId = normalizeScopedDepartmentFilter(departmentId);
+}
+
+function applyLockedDepartmentFilters(): void {
+    const lockedDepartment = lockedRequisitionDepartment.value;
+    if (canSelectAnyRequisitionDepartment.value || !lockedDepartment) return;
+
+    deptReqSearch.departmentId = lockedDepartment.id;
+    shortageQueueFilters.departmentId = lockedDepartment.id;
+    departmentStockFilters.departmentId = lockedDepartment.id;
 }
 
 watch(inventoryItemRequestingDepartmentId, (newDepartmentId, oldDepartmentId) => {
@@ -4422,7 +4460,7 @@ async function loadSuppliersAndWarehouses() {
                             .filter((dept): dept is LookupOption => dept !== null);
         requisitionContext.value = requisitionContextRes.data ?? null;
         applyLockedRequisitionDepartment();
-        applyLockedDeptReqFilter();
+        applyLockedDepartmentFilters();
     } catch {
         suppliers.value = [];
         warehouses.value = [];
@@ -5235,7 +5273,6 @@ async function refreshInventoryItems(): Promise<void> {
     loading.value = true;
     queueError.value = null;
     try {
-        await loadReferenceData();
         await loadActiveWorkspaceTab('inventory', { force: true });
     } catch (error) {
         queueError.value = messageFromUnknown(error, 'Unable to load inventory items.');
@@ -5243,6 +5280,26 @@ async function refreshInventoryItems(): Promise<void> {
         loading.value = false;
     }
 }
+
+function scheduleInventorySearchRefresh(): void {
+    if (inventorySearchTimer) {
+        clearTimeout(inventorySearchTimer);
+    }
+
+    inventorySearchTimer = setTimeout(() => {
+        inventorySearchTimer = null;
+        if (!canRead.value || activeTab.value !== 'inventory') return;
+
+        itemSearch.page = 1;
+        void refreshInventoryItems();
+    }, 350);
+}
+
+watch(() => itemSearch.q, (newQuery, previousQuery) => {
+    if (newQuery === previousQuery) return;
+
+    scheduleInventorySearchRefresh();
+});
 
 async function submitCreateItem() {
     if (itemCreateSubmitting.value) return;
@@ -6067,7 +6124,7 @@ function goToItemPage(page: number) {
     const target = Math.max(1, Math.min(page, last));
     if (target === (itemPagination.value?.currentPage ?? 1)) return;
     itemSearch.page = target;
-    void reloadAll();
+    void refreshInventoryItems();
 }
 
 function goToProcurementPage(page: number) {
@@ -6124,12 +6181,12 @@ function resetItemFilters() {
     itemSearch.sortBy = 'itemName';
     itemSearch.sortDir = 'asc';
     itemSearch.page = 1;
-    void reloadAll();
+    void refreshInventoryItems();
 }
 function submitItemFiltersFromSheet() {
     itemFiltersSheetOpen.value = false;
     itemSearch.page = 1;
-    void reloadAll();
+    void refreshInventoryItems();
 }
 function resetItemFiltersFromSheet() {
     itemFiltersSheetOpen.value = false;
@@ -6260,7 +6317,11 @@ bindInventoryWorkspace({
     REQUISITION_STATUSES,
     EMPTY_SELECT_VALUE,
     requisitionDepartmentOptions,
+    departmentFilterOptions,
     canSelectAnyRequisitionDepartment,
+    setDeptReqDepartmentFilter,
+    setShortageQueueDepartmentFilter,
+    setDepartmentStockDepartmentFilter,
     loadDeptRequisitions,
     resetDeptReqFilters,
     openCreateRequisitionDialog,
@@ -6723,6 +6784,7 @@ onBeforeUnmount(() => {
     stopPolling();
     if (flashedItemTimer) clearTimeout(flashedItemTimer);
     if (flashedRequestTimer) clearTimeout(flashedRequestTimer);
+    if (inventorySearchTimer) clearTimeout(inventorySearchTimer);
     document.removeEventListener('keydown', handleKeyboardShortcut);
     clearInventoryWorkspace();
 });
