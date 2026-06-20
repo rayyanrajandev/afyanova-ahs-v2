@@ -168,8 +168,20 @@ const ws = useInventoryWorkspace();
 
                 <Separator />
 
-                <!-- Received quantity + actual unit cost -->
-                <div class="grid gap-4 sm:grid-cols-2">
+                <!-- Received unit + quantity + actual unit cost -->
+                <div class="grid gap-4 sm:grid-cols-3">
+                    <div class="grid gap-2">
+                        <Label for="inv-receive-unit">Received Unit</Label>
+                        <Select :model-value="(ws.receiveForm as any).receivedUnit || undefined" @update:model-value="(ws.receiveForm as any).receivedUnit = ($event ?? '')">
+                            <SelectTrigger class="w-full">
+                                <SelectValue placeholder="Select unit" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="">Base / default</SelectItem>
+                                <SelectItem v-for="u in (ws as any).receiveItemUnits ?? []" :key="u.id ?? u.unitName" :value="u.unitName">{{ u.unitName }} ({{ u.baseQuantity }} {{ ws.receiveRequest?.unit ?? 'base' }})</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
                     <div class="grid gap-2">
                         <Label for="inv-receive-qty">Received Quantity *</Label>
                         <Input id="inv-receive-qty" v-model="ws.receiveForm.receivedQuantity" type="number" min="0.001" step="0.001" />
