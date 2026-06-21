@@ -908,7 +908,16 @@ function metadataStringValue(metadata: Record<string, unknown>, key: string): st
         return String(value);
     }
 
-    return typeof value === 'string' ? value.trim() : '';
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        const num = Number(trimmed);
+        if (!isNaN(num)) {
+            return String(num);
+        }
+        return trimmed;
+    }
+
+    return '';
 }
 
 function metadataBooleanSelectValue(metadata: Record<string, unknown>, key: string): '' | 'yes' | 'no' {

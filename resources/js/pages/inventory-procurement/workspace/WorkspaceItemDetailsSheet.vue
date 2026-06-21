@@ -258,7 +258,7 @@ const ws = useInventoryWorkspace();
                                         </div>
                                         <div v-if="ws.itemDetails.conversionFactor != null" class="space-y-1 sm:col-span-2">
                                             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Unit conversion</p>
-                                            <p class="text-sm font-medium">1 {{ ws.itemDetails.unit || 'stock unit' }} = {{ ws.itemDetails.conversionFactor }} {{ ws.itemDetails.dispensingUnit || 'dispensing unit' }}(s)</p>
+                                            <p class="text-sm font-medium">1 {{ ws.itemDetails.unit || 'stock unit' }} = {{ Number(ws.itemDetails.conversionFactor) }} {{ ws.itemDetails.dispensingUnit || 'dispensing unit' }}(s)</p>
                                         </div>
                                         <div v-else class="space-y-1">
                                             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Conversion factor</p>
