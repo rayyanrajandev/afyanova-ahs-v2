@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted } from 'vue';
+import { AlertCircle, CheckCircle2 } from 'lucide-vue-next';
 import AppIcon from '@/components/AppIcon.vue';
 import RegistryListRow from '@/components/list/RegistryListRow.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -164,22 +165,18 @@ const hasSelection = computed(() => selectedIds.value.size > 0);
         <!-- Results -->
         <div v-if="syncResult" class="border-b px-4 py-3">
             <Alert v-if="syncResult.errors.length === 0" variant="default" class="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950">
-                <AlertTitle class="flex items-center gap-2 text-green-700 dark:text-green-300">
-                    <AppIcon name="check-circle" class="size-4" />
-                    Sync complete
-                </AlertTitle>
+                <CheckCircle2 class="size-4 text-green-700 dark:text-green-300" />
+                <AlertTitle class="text-green-700 dark:text-green-300">Sync complete</AlertTitle>
                 <AlertDescription class="text-green-600 dark:text-green-400">
                     {{ syncResult.created }} created<template v-if="syncResult.updated > 0">, {{ syncResult.updated }} updated</template>.
                 </AlertDescription>
             </Alert>
             <Alert v-else variant="destructive">
-                <AlertTitle class="flex items-center gap-2">
-                    <AppIcon name="alert-triangle" class="size-4" />
-                    {{ syncResult.errors.length }} error{{ syncResult.errors.length !== 1 ? 's' : '' }}
-                </AlertTitle>
+                <AlertCircle class="size-4" />
+                <AlertTitle>{{ syncResult.errors.length }} error{{ syncResult.errors.length !== 1 ? 's' : '' }}</AlertTitle>
                 <AlertDescription>
-                    {{ syncResult.created }} created<template v-if="syncResult.updated > 0">, {{ syncResult.updated }} updated</template>, {{ syncResult.errors.length }} failed.
-                    <ul class="mt-2 list-disc pl-4 text-xs">
+                    <p>{{ syncResult.created }} created<template v-if="syncResult.updated > 0">, {{ syncResult.updated }} updated</template>, {{ syncResult.errors.length }} failed.</p>
+                    <ul class="mt-2 list-inside list-disc space-y-1">
                         <li v-for="err in syncResult.errors" :key="err.catalogItemId">
                             <strong>{{ err.name }}</strong> ({{ err.code }}): {{ err.error }}
                         </li>
