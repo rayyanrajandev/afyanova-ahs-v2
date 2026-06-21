@@ -173,6 +173,18 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
         return $this->toSearchResult($paginator);
     }
 
+    public function findLinkedClinicalCatalogItemIds(array $catalogItemIds): array
+    {
+        return InventoryItemModel::query()
+            ->whereIn('clinical_catalog_item_id', $catalogItemIds)
+            ->whereNotNull('clinical_catalog_item_id')
+            ->where('clinical_catalog_item_id', '!=', '')
+            ->pluck('clinical_catalog_item_id')
+            ->map(fn ($id): string => (string) $id)
+            ->values()
+            ->all();
+    }
+
     public function stockAlertCounts(?string $query, ?string $category, ?string $requestingDepartmentId = null): array
     {
         $queryBuilder = InventoryItemModel::query();

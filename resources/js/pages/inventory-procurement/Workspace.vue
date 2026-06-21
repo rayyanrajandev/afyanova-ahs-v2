@@ -27,6 +27,7 @@ import WorkspaceRequisitionDetailsSheet from '@/pages/inventory-procurement/work
 import WorkspaceProcurementLifecycleSheets from '@/pages/inventory-procurement/workspace/WorkspaceProcurementLifecycleSheets.vue';
 import WorkspaceItemDetailsSheet from '@/pages/inventory-procurement/workspace/WorkspaceItemDetailsSheet.vue';
 import WorkspaceClaimsAndMsdSheets from '@/pages/inventory-procurement/workspace/WorkspaceClaimsAndMsdSheets.vue';
+import WorkspaceCatalogSyncDialog from '@/pages/inventory-procurement/workspace/WorkspaceCatalogSyncDialog.vue';
 import WorkspaceInventoryImportCsvDialog from '@/pages/inventory-procurement/workspace/WorkspaceInventoryImportCsvDialog.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import BillingInvoiceLookupField from '@/components/billing/BillingInvoiceLookupField.vue';
@@ -513,11 +514,16 @@ const itemFiltersSheetOpen = ref(false);
 const mobileProcurementDrawerOpen = ref(false);
 const mobileLedgerDrawerOpen = ref(false);
 
+const catalogSyncDialogOpen = ref(false);
 const importItemsCsvDialogOpen = ref(false);
 const importItemsCsvSubmitting = ref(false);
 const importItemsCsvFile = ref<File | null>(null);
 const importItemsCsvInputKey = ref(0);
 const importItemsCsvResult = ref<{ successful: number; failed: number; errors?: string } | null>(null);
+
+function openCatalogSyncDialog() {
+    catalogSyncDialogOpen.value = true;
+}
 
 function openImportItemsCsvDialog() {
     if (inventoryItemSetupBlockedReason.value) {
@@ -2089,7 +2095,7 @@ function resolveStockStateForPreview(currentStock: number, reorderLevel: number)
     return 'healthy';
 }
 
-const selectedStockMovementTypeMeta = computed(() => stockMovementTypeMeta[stockMovementForm.movementType]);
+const selectedStockMovementTypeMeta = computed(() => stockMovementTypeMeta[stockMovementForm.movementType as keyof typeof stockMovementTypeMeta]);
 const stockMovementSubcategoryOptions = computed(() => (
     stockMovementForm.category.trim() ? subcategoryOptionsForCategory(stockMovementForm.category) : []
 ));
@@ -2899,6 +2905,17 @@ const unitPrices = ref<any[]>([]);
 const unitPricesLoading = ref(false);
 const createUnitDialogOpen = ref(false);
 const createPriceDialogOpen = ref(false);
+const unitForm = reactive({
+    unitName: '',
+    unitCode: '',
+    baseQuantity: '',
+    isDefaultSalesUnit: false,
+    isDefaultPurchaseUnit: false,
+    barcode: '',
+});
+const unitFormErrors = ref<Record<string, string[]>>({});
+const unitFormSubmitting = ref(false);
+const editingUnitId = ref<string | null>(null);
 const batchCreateSubmitting = ref(false);
 const batchCreateErrors = ref<Record<string, string[]>>({});
 const batchForm = reactive({
@@ -2969,10 +2986,90 @@ async function loadItemUnitPrices(itemId: string) {
     }
 }
 
-async function submitCreateUnit() {
+function resetUnitForm(): void {
+    unitForm.unitName = '';
+    unitForm.unitCode = '';
+    unitForm.baseQuantity = '';
+    unitForm.isDefaultSalesUnit = false;
+    unitForm.isDefaultPurchaseUnit = false;
+    unitForm.barcode = '';
+    unitFormErrors.value = {};
+    editingUnitId.value = null;
+}
+
+function openCreateUnitDialog(): void {
+    if (!itemDetails.value) return;
+    resetUnitForm();
+    editingUnitId.value = null;
+    // Default to item's base unit name suggestion
+    unitForm.unitName = String(itemDetails.value.unit ?? '');
+    createUnitDialogOpen.value = true;
+}
+
+async function openEditUnitDialog(unit: any): Promise<void> {
+    if (!itemDetails.value) return;
+    editingUnitId.value = String(unit.id ?? '');
+    unitForm.unitName = String(unit.unitName ?? unit.unitCode ?? '');
+    unitForm.unitCode = String(unit.unitCode ?? '');
+    unitForm.baseQuantity = String(unit.baseQuantity ?? '');
+    unitForm.isDefaultSalesUnit = Boolean(unit.isDefaultSalesUnit);
+    unitForm.isDefaultPurchaseUnit = Boolean(unit.isDefaultPurchaseUnit);
+    unitForm.barcode = String(unit.barcode ?? '');
+    unitFormErrors.value = {};
+    createUnitDialogOpen.value = true;
+}
+
+async function submitCreateUnit(): Promise<void> {
     if (!itemDetails.value || createUnitDialogOpen.value === false) return;
-    // Placeholder for unit creation form submission — extend when unit create sheet is added.
-    notifyError('Unit creation form is not yet implemented in this workspace.');
+    if (unitFormSubmitting.value) return;
+
+    unitFormSubmitting.value = true;
+    unitFormErrors.value = {};
+
+    try {
+        const body: Record<string, unknown> = {
+            unit_name: unitForm.unitName,
+            base_quantity: Number(unitForm.baseQuantity),
+            is_default_sales_unit: unitForm.isDefaultSalesUnit,
+            is_default_purchase_unit: unitForm.isDefaultPurchaseUnit,
+        };
+
+        if (unitForm.unitCode.trim()) {
+            body.unit_code = unitForm.unitCode.trim();
+        }
+        if (unitForm.barcode.trim()) {
+            body.barcode = unitForm.barcode.trim();
+        }
+
+        const url = editingUnitId.value
+            ? `/inventory-procurement/items/${itemDetails.value.id}/units/${editingUnitId.value}`
+            : `/inventory-procurement/items/${itemDetails.value.id}/units`;
+
+        await apiRequest(editingUnitId.value ? 'PATCH' : 'POST', url, { body });
+
+        createUnitDialogOpen.value = false;
+        resetUnitForm();
+        notifySuccess(editingUnitId.value ? 'Unit updated successfully.' : 'Unit created successfully.');
+        await loadItemUnits(String(itemDetails.value.id));
+    } catch (error: any) {
+        unitFormErrors.value = (error as ApiError).payload?.errors ?? {};
+        notifyError(messageFromUnknown(error, 'Failed to save unit.'));
+    } finally {
+        unitFormSubmitting.value = false;
+    }
+}
+
+async function submitDeactivateUnit(unitId: string): Promise<void> {
+    if (!itemDetails.value) return;
+    if (!confirm('Deactivate this unit? It will be hidden from active selections but preserved for historical records.')) return;
+
+    try {
+        await apiRequestJson('DELETE', `/inventory-procurement/items/${itemDetails.value.id}/units/${unitId}`);
+        notifySuccess('Unit deactivated.');
+        await loadItemUnits(String(itemDetails.value.id));
+    } catch (error: any) {
+        notifyError(messageFromUnknown(error, 'Failed to deactivate unit.'));
+    }
 }
 
 async function submitCreateUnitPrice() {
@@ -6475,6 +6572,8 @@ bindInventoryWorkspace({
     inventoryAutoRefreshInterval,
     INVENTORY_AUTO_REFRESH_LABEL,
     refreshInventoryItems,
+    catalogSyncDialogOpen,
+    openCatalogSyncDialog,
     importItemsCsvDialogOpen,
     importItemsCsvSubmitting,
     importItemsCsvFile,
@@ -6575,9 +6674,20 @@ bindInventoryWorkspace({
     fieldError,
     itemDetails,
     submitCreateBatch,
+    createUnitDialogOpen,
+    openCreateUnitDialog,
+    createPriceDialogOpen,
+    unitForm,
+    unitFormErrors,
+    unitFormSubmitting,
+    editingUnitId,
+    submitCreateUnit,
+    submitDeactivateUnit,
+    openEditUnitDialog,
     itemUnits,
     itemUnitsLoading,
     loadItemUnits,
+    resetUnitForm,
     unitPrices,
     unitPricesLoading,
     loadItemUnitPrices,
@@ -7100,12 +7210,73 @@ onMounted(async () => {
     <WorkspaceProcurementLifecycleSheets />
     <WorkspaceItemDetailsSheet />
     <WorkspaceClaimsAndMsdSheets />
+    <WorkspaceCatalogSyncDialog />
     <WorkspaceInventoryImportCsvDialog />
 
-
-
-
-
+    <!-- Create / Edit Unit Sheet -->
+    <Sheet :open="createUnitDialogOpen" @update:open="createUnitDialogOpen = $event">
+        <SheetContent side="right" variant="form" size="2xl">
+            <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
+                <SheetTitle class="flex items-center gap-2">
+                    <AppIcon name="package" class="size-5 text-muted-foreground" />
+                    {{ editingUnitId ? 'Edit Unit' : 'Add Selling Unit' }}
+                </SheetTitle>
+                <SheetDescription>
+                    {{ editingUnitId ? 'Update conversion and defaults for this unit.' : 'Define a new sellable or receivable unit for this item.' }}
+                </SheetDescription>
+            </SheetHeader>
+            <div class="min-h-0 flex-1 overflow-y-auto p-4">
+                <Alert v-if="Object.keys(unitFormErrors).length > 0" variant="destructive" class="mb-4">
+                    <AlertTitle>Form needs review</AlertTitle>
+                    <AlertDescription>{{ Object.values(unitFormErrors).flat().join(', ') }}</AlertDescription>
+                </Alert>
+                <div class="grid gap-4">
+                    <fieldset class="grid gap-2 rounded-lg border p-2 sm:grid-cols-2">
+                        <legend class="px-2 text-xs font-medium text-muted-foreground">Unit Identity</legend>
+                        <div class="grid gap-1">
+                            <Label for="inv-unit-name">Unit Name *</Label>
+                            <Input id="inv-unit-name" v-model="unitForm.unitName" :disabled="unitFormSubmitting" placeholder="e.g. tablet, blister, box" />
+                            <p v-if="unitFormErrors['unit_name']" class="text-xs text-destructive">{{ unitFormErrors['unit_name'][0] }}</p>
+                        </div>
+                        <div class="grid gap-1">
+                            <Label for="inv-unit-code">Unit Code</Label>
+                            <Input id="inv-unit-code" v-model="unitForm.unitCode" :disabled="unitFormSubmitting" placeholder="e.g. TAB, BLT, BOX" />
+                            <p v-if="unitFormErrors['unit_code']" class="text-xs text-destructive">{{ unitFormErrors['unit_code'][0] }}</p>
+                        </div>
+                        <div class="grid gap-1">
+                            <Label for="inv-unit-base-qty">Base Quantity *</Label>
+                            <Input id="inv-unit-base-qty" v-model="unitForm.baseQuantity" :disabled="unitFormSubmitting" type="number" min="0.000001" step="1" placeholder="1" />
+                            <p class="text-xs text-muted-foreground">How many base units make 1 of this unit?</p>
+                            <p v-if="unitFormErrors['base_quantity']" class="text-xs text-destructive">{{ unitFormErrors['base_quantity'][0] }}</p>
+                        </div>
+                        <div class="grid gap-1">
+                            <Label for="inv-unit-barcode">Barcode</Label>
+                            <Input id="inv-unit-barcode" v-model="unitForm.barcode" :disabled="unitFormSubmitting" placeholder="Optional unit-level barcode" />
+                            <p v-if="unitFormErrors['barcode']" class="text-xs text-destructive">{{ unitFormErrors['barcode'][0] }}</p>
+                        </div>
+                    </fieldset>
+                    <fieldset class="grid gap-2 rounded-lg border p-2 sm:grid-cols-2">
+                        <legend class="px-2 text-xs font-medium text-muted-foreground">Defaults</legend>
+                        <label class="flex items-center gap-2 pt-2 text-sm">
+                            <input type="checkbox" v-model="unitForm.isDefaultSalesUnit" :disabled="unitFormSubmitting" class="accent-primary" />
+                            Default sales unit
+                        </label>
+                        <label class="flex items-center gap-2 pt-2 text-sm">
+                            <input type="checkbox" v-model="unitForm.isDefaultPurchaseUnit" :disabled="unitFormSubmitting" class="accent-primary" />
+                            Default purchase unit
+                        </label>
+                    </fieldset>
+                </div>
+            </div>
+            <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
+                <Button variant="outline" @click="resetUnitForm(); createUnitDialogOpen = false">Cancel</Button>
+                <Button :disabled="unitFormSubmitting" class="gap-1.5" @click="submitCreateUnit">
+                    <AppIcon name="plus" class="size-3.5" />
+                    {{ unitFormSubmitting ? 'Saving...' : (editingUnitId ? 'Update Unit' : 'Create Unit') }}
+                </Button>
+            </SheetFooter>
+        </SheetContent>
+    </Sheet>
 
 
 

@@ -34,4 +34,12 @@ interface InventoryItemRepositoryInterface
         ?string $category,
         ?string $requestingDepartmentId = null
     ): array;
+
+    /**
+     * Find clinical_catalog_item_id values that are already linked to inventory items.
+     *
+     * @param list<string> $catalogItemIds
+     * @return list<string>
+     */
+    public function findLinkedClinicalCatalogItemIds(array $catalogItemIds): array;
 }

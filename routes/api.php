@@ -1506,6 +1506,11 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:inventory.procurement.read')
         ->name('inventory-procurement.reference-data');
 
+    // ─── Bulk Sync from Clinical Catalog ─────────────────────
+    Route::post('inventory-procurement/items/bulk-create-from-catalog', [InventoryExtendedController::class, 'bulkCreateFromCatalog'])
+        ->middleware('can:inventory.procurement.manage-items')
+        ->name('inventory-procurement.items.bulk-create-from-catalog');
+
     // ─── Supplier Lead Times ──────────────────────────────────
     Route::get('inventory-procurement/supplier-lead-times', [InventoryExtendedController::class, 'supplierLeadTimes'])
         ->middleware('can:inventory.procurement.read')

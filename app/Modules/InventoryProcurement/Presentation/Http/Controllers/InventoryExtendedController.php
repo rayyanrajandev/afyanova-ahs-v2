@@ -17,6 +17,7 @@ use App\Modules\InventoryProcurement\Application\UseCases\GetSupplierPerformance
 use App\Modules\InventoryProcurement\Application\UseCases\ListInventoryBatchesUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\GetShortageQueueUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\ListInventoryDepartmentRequisitionsUseCase;
+use App\Modules\InventoryProcurement\Application\UseCases\BulkCreateInventoryItemsFromCatalogUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\RecordSupplierDeliveryUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\RecordSupplierLeadTimeUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\SyncMsdOrderStatusUseCase;
@@ -1105,6 +1106,37 @@ class InventoryExtendedController extends Controller
                 'total' => 0,
             ],
         ];
+    }
+
+    // ─── Bulk Sync from Clinical Catalog ─────────────────────
+
+    public function bulkCreateFromCatalog(
+        Request $request,
+        BulkCreateInventoryItemsFromCatalogUseCase $useCase,
+    ): JsonResponse {
+        $validated = $request->validate([
+            'catalogItemIds' => ['nullable', 'array'],
+            'catalogItemIds.*' => ['string', 'uuid'],
+            'defaultWarehouseId' => ['nullable', 'uuid'],
+            'defaultSupplierId' => ['nullable', 'uuid'],
+        ]);
+
+        try {
+            $result = $useCase->execute(
+                catalogItemIds: $validated['catalogItemIds'] ?? null,
+                defaultWarehouseId: $validated['defaultWarehouseId'] ?? null,
+                defaultSupplierId: $validated['defaultSupplierId'] ?? null,
+                actorId: $request->user()?->id,
+            );
+        } catch (\App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 403);
+        }
+
+        $statusCode = empty($result['errors']) ? 200 : 207;
+
+        return response()->json([
+            'data' => $result,
+        ], $statusCode);
     }
 
     // ─── Department Item Catalog ─────────────────────────────
