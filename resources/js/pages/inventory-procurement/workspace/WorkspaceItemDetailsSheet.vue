@@ -19,6 +19,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatEnumLabel } from '@/lib/labels';
 import { useInventoryWorkspace } from './inventoryWorkspaceApi';
 
+function formatDate(value: string | null | undefined): string {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+    }).format(date);
+}
+
 const ws = useInventoryWorkspace();
 </script>
 
@@ -653,7 +664,7 @@ const ws = useInventoryWorkspace();
                                                     </div>
                                                     <div class="min-w-0 space-y-1">
                                                         <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Expiry</p>
-                                                        <p class="text-sm">{{ batch.expiryDate ?? '-' }}</p>
+                                                        <p class="text-sm">{{ formatDate(batch.expiryDate) }}</p>
                                                     </div>
                                                     <div class="min-w-0 space-y-1">
                                                         <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Status</p>

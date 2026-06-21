@@ -1993,6 +1993,12 @@ const itemDetailsSummaryCards = computed(() => {
         item.dosageForm ?? null,
     ].filter((value): value is string => Boolean(value && String(value).trim())).join(' | ');
 
+    const conversionFactor = Number(item.conversionFactor ?? 0);
+    const dispensingUnit = item.dispensingUnit ?? null;
+    const converterHelper = item.currentStock != null && conversionFactor > 0 && dispensingUnit && dispensingUnit.toLowerCase() !== unitLabel.toLowerCase()
+        ? ` = ${formatAmount(item.currentStock * conversionFactor)} ${dispensingUnit}s`
+        : '';
+
     return [
         {
             key: 'status',
@@ -2004,7 +2010,7 @@ const itemDetailsSummaryCards = computed(() => {
             key: 'stock',
             label: 'Store stock',
             value: currentStockLabel,
-            helper: `Reorder ${reorderLevelLabel} | Max ${maxStockLevelLabel}`,
+            helper: `Reorder ${reorderLevelLabel} | Max ${maxStockLevelLabel}${converterHelper}`,
         },
         {
             key: 'classification',
