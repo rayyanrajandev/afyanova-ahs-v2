@@ -30,7 +30,7 @@ const selectAll = ref(false);
 const syncing = ref(false);
 const catalogLoading = ref(false);
 const catalogLoadError = ref<string | null>(null);
-const syncResult = ref<{ created: number; skipped: number; errors: Array<{ catalogItemId: string; code: string; name: string; error: string }> } | null>(null);
+const syncResult = ref<{ created: number; updated: number; errors: Array<{ catalogItemId: string; code: string; name: string; error: string }> } | null>(null);
 
 const catalogItems = ref<CatalogItem[]>([]);
 
@@ -112,14 +112,14 @@ async function executeSync() {
             },
         });
 
-        syncResult.value = response ?? { created: 0, skipped: 0, errors: [] };
+        syncResult.value = response ?? { created: 0, updated: 0, errors: [] };
 
         // Refresh inventory items when done
         if ((ws as any).refreshInventoryItems) {
             (ws as any).refreshInventoryItems();
         }
     } catch (err: any) {
-        syncResult.value = { created: 0, skipped: 0, errors: [{ catalogItemId: '', code: '', name: '', error: err.message }] };
+        syncResult.value = { created: 0, updated: 0, errors: [{ catalogItemId: '', code: '', name: '', error: err.message }] };
     } finally {
         syncing.value = false;
     }
@@ -170,12 +170,9 @@ const hasSelection = computed(() => selectedIds.value.size > 0);
                 </AlertTitle>
                 <AlertDescription class="text-green-600 dark:text-green-400">
                     <span class="text-lg font-semibold">{{ syncResult.created }}</span>
-                    inventory item{{ syncResult.created !== 1 ? 's were' : ' was' }} created.
-                    <template v-if="syncResult.skipped > 0">
-                        <br />
-                        <span class="text-lg font-semibold">{{ syncResult.skipped }}</span>
-                        already-linked item{{ syncResult.skipped !== 1 ? 's were' : ' was' }} skipped.
-                    </template>
+                    created<template v-if="syncResult.updated > 0">,
+                    <span class="text-lg font-semibold">{{ syncResult.updated }}</span>
+                    updated</template>.
                 </AlertDescription>
             </Alert>
             <Alert v-else variant="destructive">
@@ -184,12 +181,12 @@ const hasSelection = computed(() => selectedIds.value.size > 0);
                     {{ syncResult.errors.length }} error{{ syncResult.errors.length !== 1 ? 's' : '' }}
                 </AlertTitle>
                 <AlertDescription>
-                    <p>
-                        <span class="text-lg font-semibold">{{ syncResult.created }}</span>
-                        created,
-                        <span class="text-lg font-semibold">{{ syncResult.skipped }}</span>
-                        skipped.
-                    </p>
+                    <span class="text-lg font-semibold">{{ syncResult.created }}</span>
+                    created<template v-if="syncResult.updated > 0">,
+                    <span class="text-lg font-semibold">{{ syncResult.updated }}</span>
+                    updated</template>,
+                    <span class="text-lg font-semibold">{{ syncResult.errors.length }}</span>
+                    failed.
                     <ul class="mt-2 list-disc pl-4 text-xs">
                         <li v-for="err in syncResult.errors" :key="err.catalogItemId">
                             <strong>{{ err.name }}</strong> ({{ err.code }}): {{ err.error }}

@@ -13,6 +13,7 @@ use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogType;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
 use App\Support\CatalogGovernance\StandardsCodeSupport;
+use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemUnitModel;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemAuditLogRepositoryInterface;
 use App\Support\CatalogGovernance\InventoryClinicalLinkGuard;
@@ -32,17 +33,18 @@ class BulkCreateInventoryItemsFromCatalogUseCase
     ) {}
 
     /**
-     * Bulk-create inventory items from active formulary (clinical catalog) items.
+     * Bulk-create inventory items from active formulary (clinical catalog) items,
+     * and update existing linked items with the latest catalog data.
      *
-     * Only creates items for formulary entries that do NOT already have
-     * a corresponding inventory item linked via clinical_catalog_item_id.
+     * Creates items for formulary entries that do NOT already have
+     * a corresponding inventory item. Updates items that already have one.
      *
      * @param list<string>|null $catalogItemIds  Optional subset of catalog item IDs to sync.
      *                                           If null, syncs all eligible active formulary items.
      * @param string|null $defaultWarehouseId   Default warehouse UUID for all created items.
      * @param string|null $defaultSupplierId    Default supplier UUID for all created items.
      * @param int|null $actorId
-     * @return array{created: positive-int, skipped: positive-int, errors: list<array{catalogItemId: string, code: string, name: string, error: string}>}
+     * @return array{created: positive-int, updated: positive-int, errors: list<array{catalogItemId: string, code: string, name: string, error: string}>}
      */
     public function execute(
         ?array $catalogItemIds = null,
@@ -75,7 +77,7 @@ class BulkCreateInventoryItemsFromCatalogUseCase
         if ($catalogItems->isEmpty()) {
             return [
                 'created' => 0,
-                'skipped' => 0,
+                'updated' => 0,
                 'errors' => [],
             ];
         }
@@ -89,22 +91,15 @@ class BulkCreateInventoryItemsFromCatalogUseCase
 
         // 3. Build inventory item payloads for unlinked catalog items
         $created = 0;
-        $skipped = 0;
+        $updated = 0;
         $errors = [];
 
         foreach ($catalogItems as $catalogItem) {
             $catalogId = (string) $catalogItem->id;
 
-            // Skip if already linked
-            if (isset($existingLinkedSet[$catalogId])) {
-                $skipped++;
-                continue;
-            }
-
             $metadata = is_array($catalogItem->metadata) ? $catalogItem->metadata : [];
             $codes = is_array($catalogItem->codes) ? $catalogItem->codes : [];
 
-            $itemCode = $this->generateItemCode($catalogItem->code, $catalogItem->name);
             $dosageForm = $metadata['dosageForm'] ?? $metadata['dosage_form'] ?? null;
             $strength = $metadata['strength'] ?? null;
             $stockUnit = $metadata['stockUnit'] ?? $metadata['stock_unit'] ?? $catalogItem->unit;
@@ -112,96 +107,150 @@ class BulkCreateInventoryItemsFromCatalogUseCase
             $genericName = $metadata['genericName'] ?? $metadata['generic_name'] ?? null;
             $conversionFactor = $metadata['conversionFactor'] ?? $metadata['conversion_factor'] ?? null;
 
-            // Check for duplicate item code
-            if ($this->inventoryItemRepository->existsByItemCode($itemCode)) {
-                // Append a suffix to make it unique
-                $suffix = 1;
-                $baseCode = $itemCode;
-                while ($this->inventoryItemRepository->existsByItemCode($itemCode)) {
-                    $itemCode = $baseCode . '-' . $suffix;
-                    $suffix++;
-                }
-            }
-
-            $createPayload = [
-                'tenant_id' => $tenantId,
-                'facility_id' => $facilityId,
-                'clinical_catalog_item_id' => $catalogId,
-                'item_code' => $itemCode,
-                'codes' => $this->standardsCodeSupport->normalize($codes),
-                'item_name' => $catalogItem->name,
-                'generic_name' => $genericName,
-                'dosage_form' => $dosageForm ? (is_string($dosageForm) ? $dosageForm : null) : null,
-                'strength' => $strength ? (is_string($strength) ? $strength : null) : null,
-                'category' => InventoryItemCategory::PHARMACEUTICAL->value,
-                'subcategory' => $catalogItem->category,
-                'unit' => $stockUnit ?? 'Each',
-                'dispensing_unit' => $dispensingUnit ? (is_string($dispensingUnit) ? $dispensingUnit : null) : null,
-                'conversion_factor' => $conversionFactor ? (is_numeric($conversionFactor) ? (float) $conversionFactor : null) : null,
-                'current_stock' => 0,
-                'reorder_level' => 0,
-                'default_warehouse_id' => $defaultWarehouseId,
-                'default_supplier_id' => $defaultSupplierId,
-                'status' => 'active',
-            ];
-
             try {
-                $this->clinicalLinkGuard->assertPayloadCanPersist($createPayload);
+                if (isset($existingLinkedSet[$catalogId])) {
+                    // Update existing linked inventory item
+                    $invQuery = InventoryItemModel::query()
+                        ->where('clinical_catalog_item_id', $catalogId);
 
-                $createdItem = $this->inventoryItemRepository->create($createPayload);
+                    if ($this->isPlatformScopingEnabled()) {
+                        app(PlatformScopeQueryApplier::class)->apply($invQuery);
+                    }
 
-                // Auto-seed base unit
-                $unitName = trim((string) ($stockUnit ?: 'Each'));
-                if ($unitName !== '') {
-                    InventoryItemUnitModel::query()->create([
+                    $inventoryItem = $invQuery->first();
+
+                    if ($inventoryItem === null) {
+                        $errors[] = [
+                            'catalogItemId' => $catalogId,
+                            'code' => $catalogItem->code,
+                            'name' => $catalogItem->name,
+                            'error' => 'Linked inventory item not found by clinical_catalog_item_id.',
+                        ];
+                        continue;
+                    }
+
+                    $updatePayload = [
+                        'codes' => $this->standardsCodeSupport->normalize($codes),
+                        'item_name' => $catalogItem->name,
+                        'generic_name' => $genericName,
+                        'dosage_form' => $dosageForm ? (is_string($dosageForm) ? $dosageForm : null) : null,
+                        'strength' => $strength ? (is_string($strength) ? $strength : null) : null,
+                        'subcategory' => $catalogItem->category,
+                        'unit' => $stockUnit ?? 'Each',
+                        'dispensing_unit' => $dispensingUnit ? (is_string($dispensingUnit) ? $dispensingUnit : null) : null,
+                        'conversion_factor' => $conversionFactor ? (is_numeric($conversionFactor) ? (float) $conversionFactor : null) : null,
+                    ];
+
+                    $before = $this->extractTrackedFields($inventoryItem->toArray());
+                    $inventoryItem->fill($updatePayload);
+                    $inventoryItem->save();
+                    $after = $this->extractTrackedFields($inventoryItem->toArray());
+
+                    $this->auditLogRepository->write(
+                        inventoryItemId: $inventoryItem->id,
+                        action: 'inventory-item.synced-from-catalog',
+                        actorId: $actorId,
+                        changes: [
+                            'before' => $before,
+                            'after' => $after,
+                            'source_catalog_item_id' => $catalogId,
+                            'source_catalog_code' => $catalogItem->code,
+                        ],
+                    );
+
+                    $updated++;
+                } else {
+                    // Create new inventory item
+                    $itemCode = $this->generateItemCode($catalogItem->code, $catalogItem->name);
+
+                    // Check for duplicate item code
+                    if ($this->inventoryItemRepository->existsByItemCode($itemCode)) {
+                        $suffix = 1;
+                        $baseCode = $itemCode;
+                        while ($this->inventoryItemRepository->existsByItemCode($itemCode)) {
+                            $itemCode = $baseCode . '-' . $suffix;
+                            $suffix++;
+                        }
+                    }
+
+                    $createPayload = [
                         'tenant_id' => $tenantId,
                         'facility_id' => $facilityId,
-                        'item_id' => $createdItem['id'],
-                        'unit_name' => $unitName,
-                        'unit_code' => $unitName,
-                        'base_quantity' => 1.0,
-                        'is_base_unit' => true,
-                        'is_default_sales_unit' => true,
-                        'is_default_purchase_unit' => true,
-                        'is_active' => true,
-                    ]);
+                        'clinical_catalog_item_id' => $catalogId,
+                        'item_code' => $itemCode,
+                        'codes' => $this->standardsCodeSupport->normalize($codes),
+                        'item_name' => $catalogItem->name,
+                        'generic_name' => $genericName,
+                        'dosage_form' => $dosageForm ? (is_string($dosageForm) ? $dosageForm : null) : null,
+                        'strength' => $strength ? (is_string($strength) ? $strength : null) : null,
+                        'category' => InventoryItemCategory::PHARMACEUTICAL->value,
+                        'subcategory' => $catalogItem->category,
+                        'unit' => $stockUnit ?? 'Each',
+                        'dispensing_unit' => $dispensingUnit ? (is_string($dispensingUnit) ? $dispensingUnit : null) : null,
+                        'conversion_factor' => $conversionFactor ? (is_numeric($conversionFactor) ? (float) $conversionFactor : null) : null,
+                        'current_stock' => 0,
+                        'reorder_level' => 0,
+                        'default_warehouse_id' => $defaultWarehouseId,
+                        'default_supplier_id' => $defaultSupplierId,
+                        'status' => 'active',
+                    ];
 
-                    // Auto-seed dispensing unit when it differs from the stock unit
-                    $dispUnitName = $createPayload['dispensing_unit'] ?? null;
-                    $convFactor = $createPayload['conversion_factor'] ?? null;
-                    if (
-                        $dispUnitName !== null
-                        && strtolower(trim($dispUnitName)) !== strtolower($unitName)
-                        && is_numeric($convFactor)
-                        && (float) $convFactor > 0
-                    ) {
+                    $this->clinicalLinkGuard->assertPayloadCanPersist($createPayload);
+
+                    $createdItem = $this->inventoryItemRepository->create($createPayload);
+
+                    // Auto-seed base unit
+                    $unitName = trim((string) ($stockUnit ?: 'Each'));
+                    if ($unitName !== '') {
                         InventoryItemUnitModel::query()->create([
                             'tenant_id' => $tenantId,
                             'facility_id' => $facilityId,
                             'item_id' => $createdItem['id'],
-                            'unit_name' => trim($dispUnitName),
-                            'unit_code' => trim($dispUnitName),
-                            'base_quantity' => round(1.0 / (float) $convFactor, 6),
-                            'is_base_unit' => false,
-                            'is_default_sales_unit' => false,
-                            'is_default_purchase_unit' => false,
+                            'unit_name' => $unitName,
+                            'unit_code' => $unitName,
+                            'base_quantity' => 1.0,
+                            'is_base_unit' => true,
+                            'is_default_sales_unit' => true,
+                            'is_default_purchase_unit' => true,
                             'is_active' => true,
                         ]);
+
+                        $dispUnitName = $createPayload['dispensing_unit'] ?? null;
+                        $convFactor = $createPayload['conversion_factor'] ?? null;
+                        if (
+                            $dispUnitName !== null
+                            && strtolower(trim($dispUnitName)) !== strtolower($unitName)
+                            && is_numeric($convFactor)
+                            && (float) $convFactor > 0
+                        ) {
+                            InventoryItemUnitModel::query()->create([
+                                'tenant_id' => $tenantId,
+                                'facility_id' => $facilityId,
+                                'item_id' => $createdItem['id'],
+                                'unit_name' => trim($dispUnitName),
+                                'unit_code' => trim($dispUnitName),
+                                'base_quantity' => round(1.0 / (float) $convFactor, 6),
+                                'is_base_unit' => false,
+                                'is_default_sales_unit' => false,
+                                'is_default_purchase_unit' => false,
+                                'is_active' => true,
+                            ]);
+                        }
                     }
+
+                    $this->auditLogRepository->write(
+                        inventoryItemId: $createdItem['id'],
+                        action: 'inventory-item.bulk-created-from-catalog',
+                        actorId: $actorId,
+                        changes: [
+                            'after' => $this->extractTrackedFields($createdItem),
+                            'source_catalog_item_id' => $catalogId,
+                            'source_catalog_code' => $catalogItem->code,
+                        ],
+                    );
+
+                    $created++;
                 }
-
-                $this->auditLogRepository->write(
-                    inventoryItemId: $createdItem['id'],
-                    action: 'inventory-item.bulk-created-from-catalog',
-                    actorId: $actorId,
-                    changes: [
-                        'after' => $this->extractTrackedFields($createdItem),
-                        'source_catalog_item_id' => $catalogId,
-                        'source_catalog_code' => $catalogItem->code,
-                    ],
-                );
-
-                $created++;
             } catch (\Throwable $e) {
                 $errors[] = [
                     'catalogItemId' => $catalogId,
@@ -214,7 +263,7 @@ class BulkCreateInventoryItemsFromCatalogUseCase
 
         return [
             'created' => $created,
-            'skipped' => $skipped,
+            'updated' => $updated,
             'errors' => $errors,
         ];
     }
