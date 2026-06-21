@@ -30,6 +30,17 @@ readonly class InventoryUnitConversionService
             }
         }
 
+        // Fall back to the base unit when no unit is specified
+        $baseUnit = InventoryItemUnitModel::query()
+            ->where('item_id', $itemId)
+            ->where('is_base_unit', true)
+            ->where('is_active', true)
+            ->first();
+
+        if ($baseUnit instanceof InventoryItemUnitModel) {
+            return $baseUnit;
+        }
+
         throw new InventoryStockOperationValidationException(
             'unit',
             'Selected inventory unit could not be resolved for this item.',
