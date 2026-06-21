@@ -1343,6 +1343,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::post('inventory-procurement/items/import', [InventoryProcurementController::class, 'importItems'])
         ->middleware('can:inventory.procurement.manage-items')
         ->name('inventory-procurement.items.import');
+    Route::post('inventory-procurement/items/bulk-sync-from-catalog', [InventoryProcurementController::class, 'bulkSyncFromCatalog'])
+        ->middleware('can:inventory.procurement.manage-items')
+        ->name('inventory-procurement.items.bulk-sync-from-catalog');
     Route::get('inventory-procurement/items/{id}', [InventoryProcurementController::class, 'showItem'])
         ->middleware('can:inventory.procurement.read')
         ->name('inventory-procurement.items.show');

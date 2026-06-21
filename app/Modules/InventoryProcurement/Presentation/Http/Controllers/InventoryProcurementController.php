@@ -10,6 +10,7 @@ use App\Modules\InventoryProcurement\Application\Exceptions\InventoryProcurement
 use App\Modules\InventoryProcurement\Application\Exceptions\InventoryProcurementWorkflowException;
 use App\Modules\InventoryProcurement\Application\Exceptions\InventoryStockOperationValidationException;
 use App\Modules\InventoryProcurement\Application\Exceptions\InventoryWarehouseNotFoundException;
+use App\Modules\InventoryProcurement\Application\UseCases\BulkCreateInventoryItemsFromCatalogUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\CreateInventoryItemUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\CreateInventoryProcurementRequestUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\ImportInventoryItemsUseCase;
@@ -207,6 +208,25 @@ class InventoryProcurementController extends Controller
         );
 
         return response()->json($results, count($results['failed']) > 0 ? 422 : 200);
+    }
+
+    public function bulkSyncFromCatalog(Request $request, BulkCreateInventoryItemsFromCatalogUseCase $useCase): JsonResponse
+    {
+        $validated = $request->validate([
+            'catalogItemIds' => ['required', 'array', 'min:1'],
+            'catalogItemIds.*' => ['uuid'],
+            'defaultWarehouseId' => ['nullable', 'uuid'],
+            'defaultSupplierId' => ['nullable', 'uuid'],
+        ]);
+
+        $result = $useCase->execute(
+            catalogItemIds: $validated['catalogItemIds'],
+            defaultWarehouseId: $validated['defaultWarehouseId'] ?? null,
+            defaultSupplierId: $validated['defaultSupplierId'] ?? null,
+            actorId: $request->user()?->id,
+        );
+
+        return response()->json($result, count($result['errors']) > 0 ? 422 : 200);
     }
 
     public function showItem(string $id, GetInventoryItemUseCase $useCase): JsonResponse

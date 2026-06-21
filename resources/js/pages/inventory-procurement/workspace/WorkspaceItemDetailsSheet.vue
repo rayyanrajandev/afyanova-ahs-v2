@@ -30,6 +30,10 @@ const ws = useInventoryWorkspace();
                     {{ ws.itemDetails?.itemName || 'Review identity, stock, maintenance, and audit activity for this inventory item.' }}
                 </SheetDescription>
                 <div v-if="ws.itemDetails" class="mt-2 flex flex-wrap items-center gap-2">
+                    <Button v-if="ws.canManageItems" size="sm" variant="default" class="h-8 gap-1.5 rounded-lg text-xs" @click="ws.itemDetailsTab = 'maintenance'">
+                        <AppIcon name="pencil" class="size-3.5" />
+                        Edit
+                    </Button>
                     <Button size="sm" variant="outline" class="h-8 gap-1.5 rounded-lg text-xs" @click="ws.openDepartmentStockForItem(ws.itemDetails)">
                         <AppIcon name="building-2" class="size-3.5" />
                         Where issued?

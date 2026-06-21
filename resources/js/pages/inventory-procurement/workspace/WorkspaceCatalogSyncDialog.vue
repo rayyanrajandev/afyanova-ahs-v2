@@ -169,9 +169,12 @@ const hasSelection = computed(() => selectedIds.value.size > 0);
                     Sync complete
                 </AlertTitle>
                 <AlertDescription class="text-green-600 dark:text-green-400">
-                    Created <strong>{{ syncResult.created }}</strong> inventory item{{ syncResult.created !== 1 ? 's' : '' }}.
+                    <span class="text-lg font-semibold">{{ syncResult.created }}</span>
+                    inventory item{{ syncResult.created !== 1 ? 's were' : ' was' }} created.
                     <template v-if="syncResult.skipped > 0">
-                        Skipped <strong>{{ syncResult.skipped }}</strong> already-linked item{{ syncResult.skipped !== 1 ? 's' : '' }}.
+                        <br />
+                        <span class="text-lg font-semibold">{{ syncResult.skipped }}</span>
+                        already-linked item{{ syncResult.skipped !== 1 ? 's were' : ' was' }} skipped.
                     </template>
                 </AlertDescription>
             </Alert>
@@ -181,7 +184,12 @@ const hasSelection = computed(() => selectedIds.value.size > 0);
                     {{ syncResult.errors.length }} error{{ syncResult.errors.length !== 1 ? 's' : '' }}
                 </AlertTitle>
                 <AlertDescription>
-                    <p>Created {{ syncResult.created }}, skipped {{ syncResult.skipped }}.</p>
+                    <p>
+                        <span class="text-lg font-semibold">{{ syncResult.created }}</span>
+                        created,
+                        <span class="text-lg font-semibold">{{ syncResult.skipped }}</span>
+                        skipped.
+                    </p>
                     <ul class="mt-2 list-disc pl-4 text-xs">
                         <li v-for="err in syncResult.errors" :key="err.catalogItemId">
                             <strong>{{ err.name }}</strong> ({{ err.code }}): {{ err.error }}

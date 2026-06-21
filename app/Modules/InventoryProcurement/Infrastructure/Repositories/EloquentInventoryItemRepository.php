@@ -178,7 +178,6 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
         return InventoryItemModel::query()
             ->whereIn('clinical_catalog_item_id', $catalogItemIds)
             ->whereNotNull('clinical_catalog_item_id')
-            ->where('clinical_catalog_item_id', '!=', '')
             ->pluck('clinical_catalog_item_id')
             ->map(fn ($id): string => (string) $id)
             ->values()
