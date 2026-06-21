@@ -6,6 +6,7 @@ use App\Modules\InventoryProcurement\Application\Exceptions\DuplicateInventoryIt
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemAuditLogRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryItemStatus;
+use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemUnitModel;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use App\Support\CatalogGovernance\InventoryClinicalLinkGuard;
@@ -68,6 +69,23 @@ class CreateInventoryItemUseCase
         $this->clinicalLinkGuard->assertPayloadCanPersist($createPayload);
 
         $created = $this->inventoryItemRepository->create($createPayload);
+
+        // Auto-seed base unit from the stock unit field
+        $unitName = trim((string) ($payload['unit'] ?? ''));
+        if ($unitName !== '') {
+            InventoryItemUnitModel::query()->create([
+                'tenant_id' => $this->platformScopeContext->tenantId(),
+                'facility_id' => $this->platformScopeContext->facilityId(),
+                'item_id' => $created['id'],
+                'unit_name' => $unitName,
+                'unit_code' => $unitName,
+                'base_quantity' => 1.0,
+                'is_base_unit' => true,
+                'is_default_sales_unit' => true,
+                'is_default_purchase_unit' => true,
+                'is_active' => true,
+            ]);
+        }
 
         $this->auditLogRepository->write(
             inventoryItemId: $created['id'],

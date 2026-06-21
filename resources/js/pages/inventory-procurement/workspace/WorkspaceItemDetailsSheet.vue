@@ -673,7 +673,7 @@ const ws = useInventoryWorkspace();
                                                 <CardTitle class="text-base">Selling Units</CardTitle>
                                                 <CardDescription>Manage conversion units and per-unit pricing for this item.</CardDescription>
                                             </div>
-                                            <Button size="sm" variant="outline" class="gap-1" @click="ws.submitCreateUnit">
+                                            <Button size="sm" variant="outline" class="gap-1" @click="ws.openCreateUnitDialog">
                                                 <AppIcon name="plus" class="size-3" />
                                                 Add Unit
                                             </Button>
