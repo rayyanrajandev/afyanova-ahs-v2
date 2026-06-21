@@ -1115,6 +1115,12 @@ function domainMetadataSummary(item: Item | null): string {
         if (metadataStringValue(metadata, 'route')) parts.push(`Route ${metadataStringValue(metadata, 'route')}`);
         if (metadataStringValue(metadata, 'packSize')) parts.push(`Pack ${metadataStringValue(metadata, 'packSize')}`);
         if (metadataBooleanSelectValue(metadata, 'otcAllowed')) parts.push(metadataBooleanSelectValue(metadata, 'otcAllowed') === 'yes' ? 'OTC allowed' : 'Restricted');
+        if (metadataStringValue(metadata, 'stockUnit')) parts.push(`Stock ${metadataStringValue(metadata, 'stockUnit')}`);
+        if (metadataStringValue(metadata, 'conversionFactor')) {
+            const su = metadataStringValue(metadata, 'stockUnit') || item.unit || 'unit';
+            const du = metadataStringValue(metadata, 'dispensingUnit') || item.unit || 'unit';
+            parts.push(`1 ${su} = ${metadataStringValue(metadata, 'conversionFactor')} ${du}`);
+        }
     }
 
     return parts.length > 0 ? parts.join(' | ') : 'Domain-specific workflow details not set.';
@@ -2850,6 +2856,10 @@ onMounted(() => {
                                                 <div class="flex justify-between gap-4 py-2">
                                                     <span class="text-muted-foreground">{{ catalog.unitLabel }}</span>
                                                     <span class="font-medium">{{ selected.unit || '—' }}</span>
+                                                </div>
+                                                <div v-if="selected && selected.metadata && selected.catalogType === 'formulary_item' && metadataStringValue(selected.metadata, 'conversionFactor') && metadataStringValue(selected.metadata, 'stockUnit') && metadataStringValue(selected.metadata, 'stockUnit') !== (selected.unit ?? '').toLowerCase()" class="flex justify-between gap-4 py-2">
+                                                    <span class="text-muted-foreground">Unit conversion</span>
+                                                    <span class="text-right font-medium">1 {{ metadataStringValue(selected.metadata, 'stockUnit') }} = {{ metadataStringValue(selected.metadata, 'conversionFactor') }} {{ selected.unit }}(s)</span>
                                                 </div>
                                             </CardContent>
                                         </Card>
