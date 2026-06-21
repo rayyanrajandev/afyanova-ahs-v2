@@ -846,7 +846,6 @@ function createClinicalDefinitionForm() {
         otcAllowed: '',
         packSize: '',
         stockUnit: '',
-        dispensingUnit: '',
         conversionFactor: '',
     };
 }
@@ -895,7 +894,7 @@ function knownMetadataKeysForCatalog(key: CatalogKey): string[] {
     if (key === 'radiology-procedures') return ['modality', 'bodySite', 'contrastRequired', 'studyDurationMinutes'];
     if (key === 'theatre-procedures') return ['procedureClass', 'anesthesiaType', 'expectedDurationMinutes', 'sterilePrepRequired'];
 
-    return ['strength', 'dosageForm', 'route', 'otcAllowed', 'packSize', 'stockUnit', 'dispensingUnit', 'conversionFactor'];
+    return ['strength', 'dosageForm', 'route', 'otcAllowed', 'packSize', 'stockUnit', 'conversionFactor'];
 }
 
 function metadataObject(value: Record<string, unknown> | null | undefined): Record<string, unknown> {
@@ -952,7 +951,6 @@ function applyDomainMetadataToForm(form: ReturnType<typeof createClinicalDefinit
     form.otcAllowed = '';
     form.packSize = '';
     form.stockUnit = '';
-    form.dispensingUnit = '';
     form.conversionFactor = '';
 
     if (key === 'lab-tests') {
@@ -985,7 +983,6 @@ function applyDomainMetadataToForm(form: ReturnType<typeof createClinicalDefinit
     form.otcAllowed = metadataBooleanSelectValue(values, 'otcAllowed');
     form.packSize = metadataStringValue(values, 'packSize');
     form.stockUnit = metadataStringValue(values, 'stockUnit');
-    form.dispensingUnit = metadataStringValue(values, 'dispensingUnit');
     form.conversionFactor = metadataStringValue(values, 'conversionFactor');
 }
 
@@ -996,7 +993,11 @@ function booleanValueFromSelect(value: string): boolean | null {
     return null;
 }
 
-function appendIfPresent(target: Record<string, unknown>, key: string, value: string): void {
+function appendIfPresent(target: Record<string, unknown>, key: string, value: string | number): void {
+    if (typeof value === 'number') {
+        target[key] = value;
+        return;
+    }
     const normalized = value.trim();
     if (normalized !== '') {
         target[key] = normalized;
@@ -1040,7 +1041,6 @@ function buildKnownDomainMetadata(form: ReturnType<typeof createClinicalDefiniti
     const otcAllowed = booleanValueFromSelect(form.otcAllowed);
     if (otcAllowed !== null) metadata.otcAllowed = otcAllowed;
     appendIfPresent(metadata, 'stockUnit', form.stockUnit);
-    appendIfPresent(metadata, 'dispensingUnit', form.dispensingUnit);
     appendIfPresent(metadata, 'conversionFactor', form.conversionFactor);
 
     return metadata;
@@ -2700,16 +2700,6 @@ onMounted(() => {
                                         empty-text="No matching unit found."
                                         :reserve-message-space="false"
                                     />
-                                    <ComboboxField
-                                        input-id="create-clinical-definition-dispensing-unit"
-                                        label="Dispensing unit (patient)"
-                                        v-model="createForm.dispensingUnit"
-                                        :options="dispensingUnitOptions"
-                                        placeholder="Select dispensing unit"
-                                        search-placeholder="Search tablet, ml, capsule..."
-                                        empty-text="No matching unit found."
-                                        :reserve-message-space="false"
-                                    />
                                     <div class="grid gap-1.5">
                                         <Label>Conversion factor</Label>
                                         <Input v-model="createForm.conversionFactor" type="number" min="0" step="0.001" placeholder="How many dispensing units = 1 stock unit" />
@@ -3191,16 +3181,6 @@ onMounted(() => {
                                         :options="dispensingUnitOptions"
                                         placeholder="Select stock unit"
                                         search-placeholder="Search bottle, box, vial..."
-                                        empty-text="No matching unit found."
-                                        :reserve-message-space="false"
-                                    />
-                                    <ComboboxField
-                                        input-id="edit-clinical-definition-dispensing-unit"
-                                        label="Dispensing unit (patient)"
-                                        v-model="editForm.dispensingUnit"
-                                        :options="dispensingUnitOptions"
-                                        placeholder="Select dispensing unit"
-                                        search-placeholder="Search tablet, ml, capsule..."
                                         empty-text="No matching unit found."
                                         :reserve-message-space="false"
                                     />
