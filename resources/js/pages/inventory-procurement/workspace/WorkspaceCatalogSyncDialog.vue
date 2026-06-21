@@ -169,10 +169,7 @@ const hasSelection = computed(() => selectedIds.value.size > 0);
                     Sync complete
                 </AlertTitle>
                 <AlertDescription class="text-green-600 dark:text-green-400">
-                    <span class="text-lg font-semibold">{{ syncResult.created }}</span>
-                    created<template v-if="syncResult.updated > 0">,
-                    <span class="text-lg font-semibold">{{ syncResult.updated }}</span>
-                    updated</template>.
+                    {{ syncResult.created }} created<template v-if="syncResult.updated > 0">, {{ syncResult.updated }} updated</template>.
                 </AlertDescription>
             </Alert>
             <Alert v-else variant="destructive">
@@ -181,12 +178,7 @@ const hasSelection = computed(() => selectedIds.value.size > 0);
                     {{ syncResult.errors.length }} error{{ syncResult.errors.length !== 1 ? 's' : '' }}
                 </AlertTitle>
                 <AlertDescription>
-                    <span class="text-lg font-semibold">{{ syncResult.created }}</span>
-                    created<template v-if="syncResult.updated > 0">,
-                    <span class="text-lg font-semibold">{{ syncResult.updated }}</span>
-                    updated</template>,
-                    <span class="text-lg font-semibold">{{ syncResult.errors.length }}</span>
-                    failed.
+                    {{ syncResult.created }} created<template v-if="syncResult.updated > 0">, {{ syncResult.updated }} updated</template>, {{ syncResult.errors.length }} failed.
                     <ul class="mt-2 list-disc pl-4 text-xs">
                         <li v-for="err in syncResult.errors" :key="err.catalogItemId">
                             <strong>{{ err.name }}</strong> ({{ err.code }}): {{ err.error }}
