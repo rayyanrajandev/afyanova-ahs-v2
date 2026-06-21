@@ -194,10 +194,6 @@ const ws = useInventoryWorkspace();
                                                 {{ ws.itemDetails.isControlledSubstance ? (ws.itemDetails.controlledSubstanceSchedule || 'Yes') : 'No' }}
                                             </p>
                                         </div>
-                                        <div class="space-y-1">
-                                            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Dispensing unit</p>
-                                            <p class="text-sm font-medium">{{ ws.itemDetails.dispensingUnit || 'Not recorded' }}</p>
-                                        </div>
                                     </CardContent>
                                 </Card>
 
@@ -260,9 +256,13 @@ const ws = useInventoryWorkspace();
                                             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Dispensing unit</p>
                                             <p class="text-sm font-medium">{{ ws.itemDetails.dispensingUnit || 'Not recorded' }}</p>
                                         </div>
-                                        <div class="space-y-1">
+                                        <div v-if="ws.itemDetails.conversionFactor != null" class="space-y-1 sm:col-span-2">
+                                            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Unit conversion</p>
+                                            <p class="text-sm font-medium">1 {{ ws.itemDetails.unit || 'stock unit' }} = {{ ws.itemDetails.conversionFactor }} {{ ws.itemDetails.dispensingUnit || 'dispensing unit' }}(s)</p>
+                                        </div>
+                                        <div v-else class="space-y-1">
                                             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Conversion factor</p>
-                                            <p class="text-sm font-medium">{{ ws.itemDetails.conversionFactor ?? 'Not recorded' }}</p>
+                                            <p class="text-sm font-medium">Not recorded</p>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -387,7 +387,8 @@ const ws = useInventoryWorkspace();
                                                     </div>
                                                     <div class="grid gap-1 sm:col-span-2">
                                                         <Label for="inv-item-edit-conversion">Conversion Factor</Label>
-                                                        <Input id="inv-item-edit-conversion" v-model="ws.itemUpdateForm.conversionFactor" :disabled="ws.itemUpdateSubmitting" type="number" min="0" step="0.001" />
+                                                        <Input id="inv-item-edit-conversion" v-model="ws.itemUpdateForm.conversionFactor" :disabled="ws.itemUpdateSubmitting" type="number" min="0" step="0.001" placeholder="How many dispensing units = 1 stock unit" />
+                                                        <p class="text-xs text-muted-foreground">e.g. 100 if 1 bottle = 100 tablets</p>
                                                     </div>
                                                 </fieldset>
 
