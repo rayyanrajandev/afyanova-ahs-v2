@@ -1995,9 +1995,10 @@ const itemDetailsSummaryCards = computed(() => {
 
     const conversionFactor = Number(item.conversionFactor ?? 0);
     const dispensingUnit = item.dispensingUnit ?? null;
-    const converterHelper = item.currentStock != null && conversionFactor > 0 && dispensingUnit && dispensingUnit.toLowerCase() !== unitLabel.toLowerCase()
-        ? ` = ${formatAmount(item.currentStock * conversionFactor)} ${dispensingUnit}s`
-        : '';
+    const showConverted = item.currentStock != null && conversionFactor > 0 && dispensingUnit && dispensingUnit.toLowerCase() !== unitLabel.toLowerCase();
+    const stockValue = showConverted
+        ? `${formatAmount(item.currentStock)} ${unitLabel} (${formatAmount(item.currentStock * conversionFactor)} ${dispensingUnit}s)`
+        : currentStockLabel;
 
     return [
         {
@@ -2009,8 +2010,8 @@ const itemDetailsSummaryCards = computed(() => {
         {
             key: 'stock',
             label: 'Store stock',
-            value: currentStockLabel,
-            helper: `Reorder ${reorderLevelLabel} | Max ${maxStockLevelLabel}${converterHelper}`,
+            value: stockValue,
+            helper: `Reorder ${reorderLevelLabel} | Max ${maxStockLevelLabel}`,
         },
         {
             key: 'classification',
