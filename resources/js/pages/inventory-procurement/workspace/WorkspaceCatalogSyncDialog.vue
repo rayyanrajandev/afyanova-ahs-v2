@@ -104,18 +104,15 @@ async function executeSync() {
     syncResult.value = null;
 
     try {
-        const response = await window.fetch('/api/v1/inventory-procurement/items/bulk-create-from-catalog', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': (window as any).csrfToken ?? '' },
-            body: JSON.stringify({
+        const response = await apiRequestJson<any>('POST', '/inventory-procurement/items/bulk-sync-from-catalog', {
+            body: {
                 catalogItemIds: items,
                 defaultWarehouseId: null,
                 defaultSupplierId: null,
-            }),
+            },
         });
 
-        const body = await response.json();
-        syncResult.value = body.data ?? { created: 0, skipped: 0, errors: [] };
+        syncResult.value = response ?? { created: 0, skipped: 0, errors: [] };
 
         // Refresh inventory items when done
         if ((ws as any).refreshInventoryItems) {
