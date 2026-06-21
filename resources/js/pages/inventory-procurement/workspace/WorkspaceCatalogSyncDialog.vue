@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, onMounted } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import RegistryListRow from '@/components/list/RegistryListRow.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -11,6 +11,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useInventoryWorkspace } from './inventoryWorkspaceApi';
+import { apiRequestJson } from '@/lib/apiClient';
 
 const ws = useInventoryWorkspace();
 
@@ -27,18 +28,34 @@ const searchQuery = ref('');
 const selectedIds = ref<Set<string>>(new Set());
 const selectAll = ref(false);
 const syncing = ref(false);
+const catalogLoading = ref(false);
+const catalogLoadError = ref<string | null>(null);
 const syncResult = ref<{ created: number; skipped: number; errors: Array<{ catalogItemId: string; code: string; name: string; error: string }> } | null>(null);
 
-const catalogItems = computed<CatalogItem[]>(() => {
-    const raw = (ws as any).clinicalCatalogItems ?? [];
-    return raw.map((item: any) => ({
-        id: item.id,
-        code: item.code ?? '',
-        name: item.name ?? '',
-        category: item.category ?? null,
-        unit: item.unit ?? null,
-        description: item.description ?? null,
-    }));
+const catalogItems = ref<CatalogItem[]>([]);
+
+onMounted(async () => {
+    catalogLoading.value = true;
+    catalogLoadError.value = null;
+    try {
+        const response = await apiRequestJson<any>('GET', '/inventory-procurement/reference-data');
+        const raw = Array.isArray(response?.clinicalCatalogItems) ? response.clinicalCatalogItems : [];
+        catalogItems.value = raw
+            .filter((item: any) => item && (item.catalogType === 'formulary_item' || item.catalog_type === 'formulary_item'))
+            .map((item: any) => ({
+                id: String(item.id ?? ''),
+                code: item.code ?? '',
+                name: item.name ?? '',
+                category: item.category ?? null,
+                unit: item.unit ?? null,
+                description: item.description ?? null,
+            }));
+    } catch (err: any) {
+        catalogLoadError.value = err?.message ?? 'Unable to load clinical catalog items.';
+        catalogItems.value = [];
+    } finally {
+        catalogLoading.value = false;
+    }
 });
 
 const filteredItems = computed(() => {
