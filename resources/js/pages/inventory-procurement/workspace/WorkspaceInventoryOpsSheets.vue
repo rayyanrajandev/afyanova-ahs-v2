@@ -9,6 +9,7 @@ import InventoryItemLookupField from '@/components/inventory/InventoryItemLookup
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -193,7 +194,7 @@ const ws = useInventoryWorkspace();
                     <div v-if="ws.selectedCreateCategory?.supportsStorageFields" class="grid gap-2">
                         <Label>Temperature Handling</Label>
                         <label class="flex items-center gap-2 text-sm pt-2">
-                            <input type="checkbox" v-model="ws.itemCreateForm.requiresColdChain" :disabled="ws.itemCreateSubmitting || Boolean(ws.selectedCreateCategory?.requiresColdChain)" class="accent-primary" />
+                            <Checkbox :checked="ws.itemCreateForm.requiresColdChain" :disabled="ws.itemCreateSubmitting || Boolean(ws.selectedCreateCategory?.requiresColdChain)" @update:checked="ws.itemCreateForm.requiresColdChain = $event" />
                             {{ ws.selectedCreateCategory?.requiresColdChain ? 'Cold chain required for this category' : 'Requires cold chain' }}
                         </label>
                         <p v-if="ws.fieldError(ws.itemCreateErrors, 'requiresColdChain')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'requiresColdChain') }}</p>
@@ -201,7 +202,7 @@ const ws = useInventoryWorkspace();
                     <div v-if="ws.selectedCreateCategory?.controlledSubstanceEligible" class="grid gap-2">
                         <Label>Controlled Substance</Label>
                         <label class="flex items-center gap-2 text-sm pt-2">
-                            <input type="checkbox" v-model="ws.itemCreateForm.isControlledSubstance" :disabled="ws.itemCreateSubmitting" class="accent-primary" />
+                            <Checkbox :checked="ws.itemCreateForm.isControlledSubstance" :disabled="ws.itemCreateSubmitting" @update:checked="ws.itemCreateForm.isControlledSubstance = $event" />
                             Controlled substance stock
                         </label>
                         <p v-if="ws.fieldError(ws.itemCreateErrors, 'isControlledSubstance')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'isControlledSubstance') }}</p>

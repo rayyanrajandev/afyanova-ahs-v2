@@ -85,6 +85,24 @@ class CreateInventoryItemUseCase
                 'is_default_purchase_unit' => true,
                 'is_active' => true,
             ]);
+
+            // Auto-seed dispensing unit when it differs from the stock unit
+            $dispensingUnit = strtolower(trim((string) ($payload['dispensing_unit'] ?? '')));
+            $conversionFactor = (float) ($payload['conversion_factor'] ?? 0);
+            if ($dispensingUnit !== '' && $dispensingUnit !== strtolower($unitName) && $conversionFactor > 0) {
+                InventoryItemUnitModel::query()->create([
+                    'tenant_id' => $this->platformScopeContext->tenantId(),
+                    'facility_id' => $this->platformScopeContext->facilityId(),
+                    'item_id' => $created['id'],
+                    'unit_name' => $dispensingUnit,
+                    'unit_code' => $dispensingUnit,
+                    'base_quantity' => round(1.0 / $conversionFactor, 6),
+                    'is_base_unit' => false,
+                    'is_default_sales_unit' => false,
+                    'is_default_purchase_unit' => false,
+                    'is_active' => true,
+                ]);
+            }
         }
 
         $this->auditLogRepository->write(

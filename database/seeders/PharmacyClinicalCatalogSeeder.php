@@ -247,10 +247,38 @@ class PharmacyClinicalCatalogSeeder extends Seeder
      */
     private function metadataForBlueprint(array $blueprint): array
     {
+        $stockUnit = $blueprint['unit'];
+        $dispensingUnit = $blueprint['unit'];
+        $conversionFactor = null;
+
+        // Map known items where stock/purchase unit differs from dispensing unit
+        $stockUnitOverrides = [
+            'MED-PARA-500TAB' => ['stockUnit' => 'bottle', 'conversionFactor' => 100],
+            'MED-IBU-400TAB' => ['stockUnit' => 'bottle', 'conversionFactor' => 100],
+            'MED-AMOX-500CAP' => ['stockUnit' => 'bottle', 'conversionFactor' => 100],
+            'MED-COTR-960TAB' => ['stockUnit' => 'bottle', 'conversionFactor' => 100],
+            'MED-METR-400TAB' => ['stockUnit' => 'bottle', 'conversionFactor' => 100],
+            'MED-ALU-20-120TAB' => ['stockUnit' => 'blister', 'conversionFactor' => 24],
+            'MED-ZINC-20TAB' => ['stockUnit' => 'bottle', 'conversionFactor' => 100],
+            'MED-OMEP-20CAP' => ['stockUnit' => 'bottle', 'conversionFactor' => 100],
+            'MED-METF-500TAB' => ['stockUnit' => 'bottle', 'conversionFactor' => 100],
+            'MED-AMLO-5TAB' => ['stockUnit' => 'bottle', 'conversionFactor' => 100],
+            'MED-FURO-40TAB' => ['stockUnit' => 'bottle', 'conversionFactor' => 100],
+            'MED-IRON-FOLTAB' => ['stockUnit' => 'bottle', 'conversionFactor' => 100],
+        ];
+
+        if (isset($stockUnitOverrides[$blueprint['code']])) {
+            $override = $stockUnitOverrides[$blueprint['code']];
+            $stockUnit = $override['stockUnit'];
+            $conversionFactor = $override['conversionFactor'];
+        }
+
         $metadata = [
             'dosageForm' => $blueprint['dosageForm'],
             'strength' => $blueprint['strength'],
-            'dispensingUnit' => $blueprint['unit'],
+            'stockUnit' => $stockUnit,
+            'dispensingUnit' => $dispensingUnit,
+            'conversionFactor' => $conversionFactor,
             'priceUnit' => $blueprint['unit'],
             'stockIssueUnit' => $blueprint['unit'],
             'countryContext' => 'TZ',

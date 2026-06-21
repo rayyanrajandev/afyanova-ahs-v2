@@ -845,6 +845,9 @@ function createClinicalDefinitionForm() {
         route: '',
         otcAllowed: '',
         packSize: '',
+        stockUnit: '',
+        dispensingUnit: '',
+        conversionFactor: '',
     };
 }
 
@@ -892,7 +895,7 @@ function knownMetadataKeysForCatalog(key: CatalogKey): string[] {
     if (key === 'radiology-procedures') return ['modality', 'bodySite', 'contrastRequired', 'studyDurationMinutes'];
     if (key === 'theatre-procedures') return ['procedureClass', 'anesthesiaType', 'expectedDurationMinutes', 'sterilePrepRequired'];
 
-    return ['strength', 'dosageForm', 'route', 'otcAllowed', 'packSize'];
+    return ['strength', 'dosageForm', 'route', 'otcAllowed', 'packSize', 'stockUnit', 'dispensingUnit', 'conversionFactor'];
 }
 
 function metadataObject(value: Record<string, unknown> | null | undefined): Record<string, unknown> {
@@ -948,6 +951,9 @@ function applyDomainMetadataToForm(form: ReturnType<typeof createClinicalDefinit
     form.route = '';
     form.otcAllowed = '';
     form.packSize = '';
+    form.stockUnit = '';
+    form.dispensingUnit = '';
+    form.conversionFactor = '';
 
     if (key === 'lab-tests') {
         form.sampleType = metadataStringValue(values, 'sampleType');
@@ -978,6 +984,9 @@ function applyDomainMetadataToForm(form: ReturnType<typeof createClinicalDefinit
     form.route = metadataStringValue(values, 'route');
     form.otcAllowed = metadataBooleanSelectValue(values, 'otcAllowed');
     form.packSize = metadataStringValue(values, 'packSize');
+    form.stockUnit = metadataStringValue(values, 'stockUnit');
+    form.dispensingUnit = metadataStringValue(values, 'dispensingUnit');
+    form.conversionFactor = metadataStringValue(values, 'conversionFactor');
 }
 
 function booleanValueFromSelect(value: string): boolean | null {
@@ -1030,6 +1039,9 @@ function buildKnownDomainMetadata(form: ReturnType<typeof createClinicalDefiniti
     appendIfPresent(metadata, 'packSize', form.packSize);
     const otcAllowed = booleanValueFromSelect(form.otcAllowed);
     if (otcAllowed !== null) metadata.otcAllowed = otcAllowed;
+    appendIfPresent(metadata, 'stockUnit', form.stockUnit);
+    appendIfPresent(metadata, 'dispensingUnit', form.dispensingUnit);
+    appendIfPresent(metadata, 'conversionFactor', form.conversionFactor);
 
     return metadata;
 }
@@ -2678,6 +2690,31 @@ onMounted(() => {
                                     />
                                     <div class="grid gap-1.5"><Label>Pack size</Label><Input v-model="createForm.packSize" placeholder="10 capsules" /></div>
                                     <div class="grid gap-1.5 md:col-span-2"><Label>OTC sellable</Label><Select v-model="createForm.otcAllowed"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">OTC allowed</SelectItem><SelectItem value="no">Restricted</SelectItem></SelectContent></Select></div>
+                                    <ComboboxField
+                                        input-id="create-clinical-definition-stock-unit"
+                                        label="Stock unit (purchase/receive)"
+                                        v-model="createForm.stockUnit"
+                                        :options="dispensingUnitOptions"
+                                        placeholder="Select stock unit"
+                                        search-placeholder="Search bottle, box, vial..."
+                                        empty-text="No matching unit found."
+                                        :reserve-message-space="false"
+                                    />
+                                    <ComboboxField
+                                        input-id="create-clinical-definition-dispensing-unit"
+                                        label="Dispensing unit (patient)"
+                                        v-model="createForm.dispensingUnit"
+                                        :options="dispensingUnitOptions"
+                                        placeholder="Select dispensing unit"
+                                        search-placeholder="Search tablet, ml, capsule..."
+                                        empty-text="No matching unit found."
+                                        :reserve-message-space="false"
+                                    />
+                                    <div class="grid gap-1.5">
+                                        <Label>Conversion factor</Label>
+                                        <Input v-model="createForm.conversionFactor" type="number" min="0" step="0.001" placeholder="How many dispensing units = 1 stock unit" />
+                                        <p class="text-xs text-muted-foreground">e.g. 1000 if 1 bottle = 1000 tablets</p>
+                                    </div>
                                 </div>
                             </fieldset>
 
@@ -3147,6 +3184,31 @@ onMounted(() => {
                                     />
                                     <div class="grid gap-1.5"><Label>Pack size</Label><Input v-model="editForm.packSize" placeholder="10 capsules" /></div>
                                     <div class="grid gap-1.5 md:col-span-2"><Label>OTC sellable</Label><Select v-model="editForm.otcAllowed"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">OTC allowed</SelectItem><SelectItem value="no">Restricted</SelectItem></SelectContent></Select></div>
+                                    <ComboboxField
+                                        input-id="edit-clinical-definition-stock-unit"
+                                        label="Stock unit (purchase/receive)"
+                                        v-model="editForm.stockUnit"
+                                        :options="dispensingUnitOptions"
+                                        placeholder="Select stock unit"
+                                        search-placeholder="Search bottle, box, vial..."
+                                        empty-text="No matching unit found."
+                                        :reserve-message-space="false"
+                                    />
+                                    <ComboboxField
+                                        input-id="edit-clinical-definition-dispensing-unit"
+                                        label="Dispensing unit (patient)"
+                                        v-model="editForm.dispensingUnit"
+                                        :options="dispensingUnitOptions"
+                                        placeholder="Select dispensing unit"
+                                        search-placeholder="Search tablet, ml, capsule..."
+                                        empty-text="No matching unit found."
+                                        :reserve-message-space="false"
+                                    />
+                                    <div class="grid gap-1.5">
+                                        <Label>Conversion factor</Label>
+                                        <Input v-model="editForm.conversionFactor" type="number" min="0" step="0.001" placeholder="How many dispensing units = 1 stock unit" />
+                                        <p class="text-xs text-muted-foreground">e.g. 1000 if 1 bottle = 1000 tablets</p>
+                                    </div>
                                 </div>
                             </fieldset>
 

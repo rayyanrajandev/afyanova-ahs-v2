@@ -5,6 +5,7 @@ import SearchableSelectField from '@/components/forms/SearchableSelectField.vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Input } from '@/components/ui/input';
@@ -408,7 +409,7 @@ const ws = useInventoryWorkspace();
                                                     <div v-if="ws.selectedUpdateCategory?.supportsStorageFields" class="grid gap-1">
                                                         <Label>Temperature Handling</Label>
                                                         <label class="flex items-center gap-2 pt-2 text-sm">
-                                                            <input type="checkbox" v-model="ws.itemUpdateForm.requiresColdChain" :disabled="ws.itemUpdateSubmitting || Boolean(ws.selectedUpdateCategory?.requiresColdChain)" class="accent-primary" />
+                                                            <Checkbox :checked="ws.itemUpdateForm.requiresColdChain" :disabled="ws.itemUpdateSubmitting || Boolean(ws.selectedUpdateCategory?.requiresColdChain)" @update:checked="ws.itemUpdateForm.requiresColdChain = $event" />
                                                             {{ ws.selectedUpdateCategory?.requiresColdChain ? 'Cold chain required for this category' : 'Requires cold chain' }}
                                                         </label>
                                                         <p v-if="ws.fieldError(ws.itemUpdateErrors, 'requiresColdChain')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'requiresColdChain') }}</p>
@@ -416,7 +417,7 @@ const ws = useInventoryWorkspace();
                                                     <div v-if="ws.selectedUpdateCategory?.controlledSubstanceEligible" class="grid gap-1">
                                                         <Label>Controlled Substance</Label>
                                                         <label class="flex items-center gap-2 pt-2 text-sm">
-                                                            <input type="checkbox" v-model="ws.itemUpdateForm.isControlledSubstance" :disabled="ws.itemUpdateSubmitting" class="accent-primary" />
+                                                            <Checkbox :checked="ws.itemUpdateForm.isControlledSubstance" :disabled="ws.itemUpdateSubmitting" @update:checked="ws.itemUpdateForm.isControlledSubstance = $event" />
                                                             Controlled substance stock
                                                         </label>
                                                         <p v-if="ws.fieldError(ws.itemUpdateErrors, 'isControlledSubstance')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'isControlledSubstance') }}</p>

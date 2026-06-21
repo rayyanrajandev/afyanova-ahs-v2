@@ -87,7 +87,7 @@ class InventoryBackfillItemUnits extends Command
                         'item_id' => $item->id,
                         'unit_name' => $dispensingUnit,
                         'unit_code' => null,
-                        'base_quantity' => $conversionFactor,
+                        'base_quantity' => round(1.0 / $conversionFactor, 6),
                         'is_base_unit' => false,
                         'is_default_sales_unit' => false,
                         'is_default_purchase_unit' => false,

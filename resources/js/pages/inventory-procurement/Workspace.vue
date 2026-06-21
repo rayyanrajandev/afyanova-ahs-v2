@@ -48,6 +48,7 @@ import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
@@ -7258,11 +7259,11 @@ onMounted(async () => {
                     <fieldset class="grid gap-2 rounded-lg border p-2 sm:grid-cols-2">
                         <legend class="px-2 text-xs font-medium text-muted-foreground">Defaults</legend>
                         <label class="flex items-center gap-2 pt-2 text-sm">
-                            <input type="checkbox" v-model="unitForm.isDefaultSalesUnit" :disabled="unitFormSubmitting" class="accent-primary" />
+                            <Checkbox :checked="unitForm.isDefaultSalesUnit" :disabled="unitFormSubmitting" @update:checked="unitForm.isDefaultSalesUnit = $event" />
                             Default sales unit
                         </label>
                         <label class="flex items-center gap-2 pt-2 text-sm">
-                            <input type="checkbox" v-model="unitForm.isDefaultPurchaseUnit" :disabled="unitFormSubmitting" class="accent-primary" />
+                            <Checkbox :checked="unitForm.isDefaultPurchaseUnit" :disabled="unitFormSubmitting" @update:checked="unitForm.isDefaultPurchaseUnit = $event" />
                             Default purchase unit
                         </label>
                     </fieldset>

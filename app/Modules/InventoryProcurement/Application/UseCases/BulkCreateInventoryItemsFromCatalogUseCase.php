@@ -107,6 +107,7 @@ class BulkCreateInventoryItemsFromCatalogUseCase
             $itemCode = $this->generateItemCode($catalogItem->code, $catalogItem->name);
             $dosageForm = $metadata['dosageForm'] ?? $metadata['dosage_form'] ?? null;
             $strength = $metadata['strength'] ?? null;
+            $stockUnit = $metadata['stockUnit'] ?? $metadata['stock_unit'] ?? $catalogItem->unit;
             $dispensingUnit = $metadata['dispensingUnit'] ?? $metadata['dispensing_unit'] ?? $catalogItem->unit;
             $genericName = $metadata['genericName'] ?? $metadata['generic_name'] ?? null;
             $conversionFactor = $metadata['conversionFactor'] ?? $metadata['conversion_factor'] ?? null;
@@ -134,7 +135,7 @@ class BulkCreateInventoryItemsFromCatalogUseCase
                 'strength' => $strength ? (is_string($strength) ? $strength : null) : null,
                 'category' => InventoryItemCategory::PHARMACEUTICAL->value,
                 'subcategory' => $catalogItem->category,
-                'unit' => $catalogItem->unit ?? 'Each',
+                'unit' => $stockUnit ?? 'Each',
                 'dispensing_unit' => $dispensingUnit ? (is_string($dispensingUnit) ? $dispensingUnit : null) : null,
                 'conversion_factor' => $conversionFactor ? (is_numeric($conversionFactor) ? (float) $conversionFactor : null) : null,
                 'current_stock' => 0,
@@ -150,7 +151,7 @@ class BulkCreateInventoryItemsFromCatalogUseCase
                 $createdItem = $this->inventoryItemRepository->create($createPayload);
 
                 // Auto-seed base unit
-                $unitName = trim((string) ($catalogItem->unit ?: 'Each'));
+                $unitName = trim((string) ($stockUnit ?: 'Each'));
                 if ($unitName !== '') {
                     InventoryItemUnitModel::query()->create([
                         'tenant_id' => $tenantId,
@@ -164,6 +165,29 @@ class BulkCreateInventoryItemsFromCatalogUseCase
                         'is_default_purchase_unit' => true,
                         'is_active' => true,
                     ]);
+
+                    // Auto-seed dispensing unit when it differs from the stock unit
+                    $dispUnitName = $createPayload['dispensing_unit'] ?? null;
+                    $convFactor = $createPayload['conversion_factor'] ?? null;
+                    if (
+                        $dispUnitName !== null
+                        && strtolower(trim($dispUnitName)) !== strtolower($unitName)
+                        && is_numeric($convFactor)
+                        && (float) $convFactor > 0
+                    ) {
+                        InventoryItemUnitModel::query()->create([
+                            'tenant_id' => $tenantId,
+                            'facility_id' => $facilityId,
+                            'item_id' => $createdItem['id'],
+                            'unit_name' => trim($dispUnitName),
+                            'unit_code' => trim($dispUnitName),
+                            'base_quantity' => round(1.0 / (float) $convFactor, 6),
+                            'is_base_unit' => false,
+                            'is_default_sales_unit' => false,
+                            'is_default_purchase_unit' => false,
+                            'is_active' => true,
+                        ]);
+                    }
                 }
 
                 $this->auditLogRepository->write(
