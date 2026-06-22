@@ -430,7 +430,6 @@ const routeOfAdministrationOptions: SearchableSelectOption[] = [
 
 const filters = reactive({ q: '', status: '', category: '', perPage: 10, page: 1 });
 
-const filtersSheetOpen = ref(false);
 const createSheetOpen = ref(false);
 
 const createBusy = ref(false);
@@ -482,7 +481,6 @@ const auditError = ref<string | null>(null);
 const auditLogs = ref<AuditLog[]>([]);
 const auditPager = ref<Pager | null>(null);
 const auditFilters = reactive({ q: '', action: '', actorType: '', actorId: '', from: '', to: '', perPage: 20, page: 1 });
-const clinicalStatusFilterSelectValue = computed(() => filters.status || SELECT_ALL_VALUE);
 const auditActorTypeSelectValue = computed(() => auditFilters.actorType || SELECT_ALL_VALUE);
 
 // ── Overview consumables collapsible state ───────────────────────────────────
@@ -581,10 +579,6 @@ function csrfToken(): string | null {
 
 function firstError(errors: Record<string, string[]> | null | undefined, key: string): string | null {
     return errors?.[key]?.[0] ?? null;
-}
-
-function updateClinicalStatusFilter(value: string | null): void {
-    filters.status = value === SELECT_ALL_VALUE || !value ? '' : value;
 }
 
 function updateAuditActorTypeFilter(value: string | null): void {
@@ -1137,7 +1131,7 @@ function domainMetadataSummary(item: Item | null): string {
 
 const catalogScopeText = computed(() => `${counts.value.total} ${catalog.value.label.toLowerCase()} in scope`);
 const listFilterHintText = computed(() =>
-    filterCount.value > 0 ? `${filterCount.value} filters applied` : 'Use filters for category or page size',
+    filterCount.value > 0 ? `${filterCount.value} filters applied` : 'Filter by search, status, or category',
 );
 const filterCount = computed(() => {
     let count = 0;
@@ -1306,16 +1300,6 @@ function closeCreateSheet(open?: boolean): void {
         return;
     }
     createSheetOpen.value = false;
-}
-
-function applyFiltersFromSheet(): void {
-    filtersSheetOpen.value = false;
-    search();
-}
-
-function resetFiltersFromSheet(): void {
-    filtersSheetOpen.value = false;
-    resetFilters();
 }
 
 function setCatalogTab(value: string | number): void {
@@ -2204,13 +2188,26 @@ onMounted(() => {
                                 <AppIcon :name="catalogPrinting ? 'loader-circle' : 'printer'" class="size-3.5" :class="{ 'animate-spin': catalogPrinting }" />
                                 Print
                             </Button>
-                            <Button variant="outline" size="sm" class="h-8 gap-1.5 rounded-lg text-xs" @click="filtersSheetOpen = true">
-                                <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                Filters
-                                <Badge v-if="filterCount > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">
-                                    {{ filterCount }}
-                                </Badge>
-                            </Button>
+                            <div class="flex items-center gap-2">
+                                <Input
+                                    v-model="filters.category"
+                                    :placeholder="catalog.categoryLabel"
+                                    class="h-8 w-36 text-xs"
+                                    @keyup.enter="search"
+                                />
+                                <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event); search()">
+                                    <SelectTrigger class="h-8 w-16 gap-1 text-xs">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="10">10</SelectItem>
+                                        <SelectItem value="15">15</SelectItem>
+                                        <SelectItem value="20">20</SelectItem>
+                                        <SelectItem value="25">25</SelectItem>
+                                        <SelectItem value="50">50</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                     </div>
                     <div
@@ -2455,80 +2452,6 @@ onMounted(() => {
                     </Alert>
                 </CardContent>
             </Card>
-
-            <Sheet v-if="canRead" :open="filtersSheetOpen" @update:open="filtersSheetOpen = $event">
-                <SheetContent side="right" variant="form" size="md" class="flex h-full min-h-0 flex-col">
-                    <SheetHeader>
-                        <SheetTitle class="flex items-center gap-2">
-                            <AppIcon name="sliders-horizontal" class="size-4 text-muted-foreground" />
-                            Catalog filters
-                        </SheetTitle>
-                        <SheetDescription>Filter {{ catalog.label.toLowerCase() }} without crowding the list.</SheetDescription>
-                    </SheetHeader>
-                    <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-                        <div class="rounded-lg border p-3">
-                            <div class="grid gap-3">
-                                <div class="grid gap-2">
-                                    <Label for="clinical-filter-q">Search</Label>
-                                    <Input
-                                        id="clinical-filter-q"
-                                        v-model="filters.q"
-                                        placeholder="Code, name, or description"
-                                        @keyup.enter="applyFiltersFromSheet"
-                                    />
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="clinical-filter-status">Status</Label>
-                                    <Select :model-value="clinicalStatusFilterSelectValue" @update:model-value="updateClinicalStatusFilter">
-                                        <SelectTrigger id="clinical-filter-status" class="w-full">
-                                            <SelectValue placeholder="All statuses" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem :value="SELECT_ALL_VALUE">All statuses</SelectItem>
-                                            <SelectItem value="active">Active</SelectItem>
-                                            <SelectItem value="inactive">Inactive</SelectItem>
-                                            <SelectItem value="retired">Retired</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="clinical-filter-category">{{ catalog.categoryLabel }}</Label>
-                                    <Input
-                                        id="clinical-filter-category"
-                                        v-model="filters.category"
-                                        :placeholder="catalog.categoryPlaceholder"
-                                        @keyup.enter="applyFiltersFromSheet"
-                                    />
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="clinical-filter-per-page">Results per page</Label>
-                                    <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event)">
-                                        <SelectTrigger id="clinical-filter-per-page" class="w-full">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="10">10</SelectItem>
-                                            <SelectItem value="15">15</SelectItem>
-                                            <SelectItem value="20">20</SelectItem>
-                                            <SelectItem value="25">25</SelectItem>
-                                            <SelectItem value="50">50</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <SheetFooter class="gap-2 border-t px-4 py-3">
-                        <Button :disabled="listLoading" class="gap-1.5" @click="applyFiltersFromSheet">
-                            <AppIcon name="search" class="size-3.5" />
-                            Apply filters
-                        </Button>
-                        <Button variant="outline" :disabled="listLoading && filterCount === 0" @click="resetFiltersFromSheet">
-                            Reset filters
-                        </Button>
-                    </SheetFooter>
-                </SheetContent>
-            </Sheet>
 
             <Sheet v-if="canManage" :open="createSheetOpen" @update:open="closeCreateSheet">
                 <SheetContent side="right" variant="workspace" size="4xl" class="flex h-full min-h-0 flex-col">

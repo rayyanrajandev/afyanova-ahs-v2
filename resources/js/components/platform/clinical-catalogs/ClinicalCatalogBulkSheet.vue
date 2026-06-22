@@ -25,12 +25,13 @@ type ImportStep = 'prepare' | 'upload' | 'review' | 'complete';
 type PreviewFilter = 'all' | 'ready' | 'issues';
 
 type ImportApiResult = {
-    dryRun: boolean;
+    dry_run: boolean;
     mode: ImportMode;
-    requestedCount: number;
-    createdCount: number;
-    updatedCount: number;
-    failedCount: number;
+    requested_count: number;
+    created_count: number;
+    updated_count: number;
+    failed_count: number;
+    validation_errors: string[];
     results: Array<{
         rowNumber: number;
         code: string;
@@ -267,9 +268,9 @@ async function runImport(dryRun: boolean): Promise<boolean> {
         }
 
         lastApplyCounts.value = {
-            created: result.createdCount ?? 0,
-            updated: result.updatedCount ?? 0,
-            failed: result.failedCount ?? 0,
+            created: result.created_count ?? 0,
+            updated: result.updated_count ?? 0,
+            failed: result.failed_count ?? 0,
         };
         importStep.value = 'complete';
         notifySuccess(`Import complete: ${lastApplyCounts.value.created} created, ${lastApplyCounts.value.updated} updated.`);
