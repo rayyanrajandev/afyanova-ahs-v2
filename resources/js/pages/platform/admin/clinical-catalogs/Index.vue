@@ -270,6 +270,32 @@ const labDisciplineOptions: SearchableSelectOption[] = [
     { value: 'molecular_diagnostics', label: 'Molecular diagnostics', description: 'PCR and GeneXpert style testing' },
     { value: 'histopathology_cytology', label: 'Histopathology / cytology', description: 'Biopsy, FNAC, Pap smear specimens' },
 ];
+const radiologyCategoryOptions: SearchableSelectOption[] = [
+    { value: 'xray', label: 'X-ray', description: 'Plain film and contrast studies' },
+    { value: 'ultrasound', label: 'Ultrasound', description: 'Diagnostic and obstetric sonography' },
+    { value: 'ct', label: 'CT scan', description: 'Computed tomography' },
+    { value: 'mri', label: 'MRI', description: 'Magnetic resonance imaging' },
+    { value: 'mammography', label: 'Mammography', description: 'Breast imaging and screening' },
+    { value: 'fluoroscopy', label: 'Fluoroscopy', description: 'Real-time X-ray imaging' },
+    { value: 'nuclear_medicine', label: 'Nuclear medicine', description: 'Radionuclide imaging and therapy' },
+    { value: 'interventional_radiology', label: 'Interventional radiology', description: 'Image-guided minimally invasive procedures' },
+];
+const theatreCategoryOptions: SearchableSelectOption[] = [
+    { value: 'general_surgery', label: 'General surgery', description: 'Abdominal, breast, hernia, soft tissue' },
+    { value: 'orthopedics', label: 'Orthopedics', description: 'Bone, joint, fracture repair, arthroplasty' },
+    { value: 'obstetrics', label: 'Obstetrics', description: 'Caesarean section, instrumental delivery' },
+    { value: 'gynecology', label: 'Gynecology', description: 'Hysterectomy, ovarian, pelvic procedures' },
+    { value: 'urology', label: 'Urology', description: 'Prostate, bladder, kidney, ureteric procedures' },
+    { value: 'ent', label: 'ENT', description: 'Ear, nose, throat, head and neck surgery' },
+    { value: 'ophthalmology', label: 'Ophthalmology', description: 'Cataract, glaucoma, retinal surgery' },
+    { value: 'neurosurgery', label: 'Neurosurgery', description: 'Brain, spine, nerve procedures' },
+    { value: 'cardiothoracic', label: 'Cardiothoracic', description: 'Heart, lung, chest wall procedures' },
+    { value: 'pediatric_surgery', label: 'Pediatric surgery', description: 'Surgery specific to children' },
+    { value: 'plastic_reconstructive', label: 'Plastic / reconstructive', description: 'Skin grafts, flaps, cosmetic' },
+    { value: 'vascular_surgery', label: 'Vascular surgery', description: 'Artery, vein, bypass, endovascular' },
+    { value: 'wound_care', label: 'Wound care', description: 'Debridement, dressing, minor wound repair' },
+    { value: 'minor_procedure', label: 'Minor procedure', description: 'Small office-based surgical procedures' },
+];
 const labReportingUnitOptions: SearchableSelectOption[] = [
     { value: 'test', label: 'Test', description: 'Single reported laboratory test' },
     { value: 'panel', label: 'Panel', description: 'Grouped results reported together' },
@@ -1133,6 +1159,20 @@ const catalogScopeText = computed(() => `${counts.value.total} ${catalog.value.l
 const listFilterHintText = computed(() =>
     filterCount.value > 0 ? `${filterCount.value} filters applied` : 'Filter by search, status, or category',
 );
+const categoryOptions = computed<SearchableSelectOption[]>(() => {
+    switch (catalogKey.value) {
+        case 'lab-tests':
+            return labDisciplineOptions;
+        case 'radiology-procedures':
+            return radiologyCategoryOptions;
+        case 'theatre-procedures':
+            return theatreCategoryOptions;
+        case 'formulary-items':
+            return therapeuticClassOptions;
+        default:
+            return [];
+    }
+});
 const filterCount = computed(() => {
     let count = 0;
     if (filters.q.trim()) count += 1;
@@ -1167,9 +1207,10 @@ const filterChips = computed(() => {
         });
     }
     if (filters.category.trim()) {
+        const matched = categoryOptions.value.find((o) => o.value === filters.category.trim());
         chips.push({
             key: 'category',
-            label: filters.category.trim(),
+            label: matched?.label ?? filters.category.trim(),
             clear: () => {
                 filters.category = '';
                 filters.page = 1;
@@ -2189,12 +2230,17 @@ onMounted(() => {
                                 Print
                             </Button>
                             <div class="flex items-center gap-2">
-                                <Input
-                                    v-model="filters.category"
-                                    :placeholder="catalog.categoryLabel"
-                                    class="h-8 w-36 text-xs"
-                                    @keyup.enter="search"
-                                />
+                                <Select :model-value="filters.category || SELECT_ALL_VALUE" @update:model-value="filters.category = $event === SELECT_ALL_VALUE ? '' : $event; search()">
+                                    <SelectTrigger class="h-8 w-40 gap-1 text-xs">
+                                        <SelectValue :placeholder="catalog.categoryLabel" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem :value="SELECT_ALL_VALUE">All {{ catalog.categoryLabel.toLowerCase() }}s</SelectItem>
+                                        <SelectItem v-for="opt in categoryOptions" :key="opt.value" :value="opt.value">
+                                            {{ opt.label }}
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
                                 <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event); search()">
                                     <SelectTrigger class="h-8 w-16 gap-1 text-xs">
                                         <SelectValue />
