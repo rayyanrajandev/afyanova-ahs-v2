@@ -2,7 +2,6 @@
 import { Link } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import AppSidebarFacilitySwitcher from '@/components/AppSidebarFacilitySwitcher.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
 import {
@@ -13,7 +12,6 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
-    SidebarRail,
     SidebarInput,
     SidebarGroup,
     SidebarGroupLabel,
@@ -325,10 +323,8 @@ function sectionHasMatches(key: NavSectionKey): boolean {
         </SidebarContent>
 
         <SidebarFooter class="gap-2">
-            <AppSidebarFacilitySwitcher />
             <NavUser />
         </SidebarFooter>
-        <SidebarRail />
     </Sidebar>
     <slot />
 </template>
