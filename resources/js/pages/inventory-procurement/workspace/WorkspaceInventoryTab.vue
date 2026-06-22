@@ -168,15 +168,6 @@ const ws = useInventoryWorkspace();
                                 <SelectItem value="createdAt">Created</SelectItem>
                             </SelectContent>
                         </Select>
-                        <Select :model-value="ws.toSelectValue(ws.itemSearch.sortDir)" @update:model-value="ws.itemSearch.sortDir = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE)); ws.itemSearch.page = 1; ws.refreshInventoryItems()">
-                            <SelectTrigger class="h-8 w-28 text-xs">
-                                <SelectValue placeholder="Direction" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="asc">Ascending</SelectItem>
-                                <SelectItem value="desc">Descending</SelectItem>
-                            </SelectContent>
-                        </Select>
                         <Select :model-value="String(ws.itemSearch.perPage)" @update:model-value="ws.itemSearch.perPage = Number($event); ws.itemSearch.page = 1; ws.refreshInventoryItems()">
                             <SelectTrigger class="h-8 w-24 text-xs">
                                 <SelectValue placeholder="Per page" />
