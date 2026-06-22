@@ -2804,7 +2804,15 @@ onMounted(() => {
                     >
                         <SheetTitle class="flex min-w-0 flex-wrap items-center gap-2 text-base">
                             <AppIcon :name="activeCatalogTab.icon" class="size-5 text-muted-foreground" />
-                            <span class="min-w-0 truncate">{{ selected.name || 'Unnamed item' }}</span>
+                            <span class="min-w-0 truncate">
+                                {{ selected.name || 'Unnamed item' }}
+                                <template v-if="selected.catalogType === 'formulary_item' && metadataStringValue(selected.metadata, 'strength')">
+                                    {{ ' ' + metadataStringValue(selected.metadata, 'strength') }}
+                                </template>
+                                <template v-if="selected.catalogType === 'formulary_item' && metadataStringValue(selected.metadata, 'dosageForm')">
+                                    {{ ' ' + metadataStringValue(selected.metadata, 'dosageForm') }}
+                                </template>
+                            </span>
                             <Badge v-if="selected.code" variant="outline" class="shrink-0 font-normal">{{ selected.code }}</Badge>
                             <Badge :variant="statusVariant(selected.status)" class="shrink-0 capitalize">
                                 {{ formatEnumLabel(selected.status) }}
@@ -2893,10 +2901,6 @@ onMounted(() => {
                                                     <span class="text-muted-foreground">{{ catalog.unitLabel }}</span>
                                                     <span class="font-medium">{{ selected.unit || '—' }}</span>
                                                 </div>
-                                                <div v-if="selected && selected.metadata && selected.catalogType === 'formulary_item' && metadataStringValue(selected.metadata, 'conversionFactor') && metadataStringValue(selected.metadata, 'stockUnit') && metadataStringValue(selected.metadata, 'stockUnit') !== (selected.unit ?? '').toLowerCase()" class="flex justify-between gap-4 py-2">
-                                                    <span class="text-muted-foreground">Unit conversion</span>
-                                                    <span class="text-right font-medium">1 {{ metadataStringValue(selected.metadata, 'stockUnit') }} = {{ metadataStringValue(selected.metadata, 'conversionFactor') }} {{ selected.unit }}(s)</span>
-                                                </div>
                                             </CardContent>
                                         </Card>
                                         <Card class="!gap-0 overflow-hidden rounded-md border-border/50 !py-0 shadow-none">
@@ -2925,10 +2929,51 @@ onMounted(() => {
                                     <Card class="!gap-0 overflow-hidden rounded-md border-border/50 !py-0 shadow-none">
                                         <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
                                             <CardTitle class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                                                Workflow
+                                                {{ selected.catalogType === 'formulary_item' ? 'Medicine workflow details' : 'Workflow' }}
                                             </CardTitle>
                                         </CardHeader>
-                                        <CardContent class="px-3 py-3 text-sm text-muted-foreground">
+                                        <CardContent v-if="selected.catalogType === 'formulary_item'" class="divide-y divide-border/50 px-3 py-1.5 text-sm">
+                                            <div v-if="metadataStringValue(selected.metadata, 'strength')" class="flex justify-between gap-4 py-2">
+                                                <span class="text-muted-foreground">Strength</span>
+                                                <span class="font-medium">{{ metadataStringValue(selected.metadata, 'strength') }}</span>
+                                            </div>
+                                            <div v-if="metadataStringValue(selected.metadata, 'dosageForm')" class="flex justify-between gap-4 py-2">
+                                                <span class="text-muted-foreground">Dosage form</span>
+                                                <span class="font-medium capitalize">{{ metadataStringValue(selected.metadata, 'dosageForm') }}</span>
+                                            </div>
+                                            <div v-if="metadataStringValue(selected.metadata, 'route')" class="flex justify-between gap-4 py-2">
+                                                <span class="text-muted-foreground">Route</span>
+                                                <span class="font-medium capitalize">{{ metadataStringValue(selected.metadata, 'route') }}</span>
+                                            </div>
+                                            <div class="flex justify-between gap-4 py-2">
+                                                <span class="text-muted-foreground">Prescription type</span>
+                                                <span class="font-medium">{{ metadataBooleanSelectValue(selected.metadata, 'otcAllowed') === 'yes' ? 'OTC' : 'Rx' }}</span>
+                                            </div>
+                                            <div v-if="metadataStringValue(selected.metadata, 'stockUnit')" class="flex justify-between gap-4 py-2">
+                                                <span class="text-muted-foreground">Stock unit</span>
+                                                <span class="font-medium capitalize">{{ metadataStringValue(selected.metadata, 'stockUnit') }}</span>
+                                            </div>
+                                            <div v-if="metadataStringValue(selected.metadata, 'packSize')" class="flex justify-between gap-4 py-2">
+                                                <span class="text-muted-foreground">Pack size</span>
+                                                <span class="font-medium">{{ metadataStringValue(selected.metadata, 'packSize') }} {{ selected.unit?.toLowerCase() }}{{ metadataStringValue(selected.metadata, 'packSize') !== '1' ? 's' : '' }}</span>
+                                            </div>
+                                            <div v-if="metadataStringValue(selected.metadata, 'conversionFactor')" class="flex justify-between gap-4 py-2">
+                                                <span class="text-muted-foreground">Conversion</span>
+                                                <span class="text-right font-medium">1 {{ metadataStringValue(selected.metadata, 'stockUnit') || 'unit' }} = {{ metadataStringValue(selected.metadata, 'conversionFactor') }} {{ selected.unit?.toLowerCase() || 'unit' }}{{ metadataStringValue(selected.metadata, 'conversionFactor') !== '1' ? 's' : '' }}</span>
+                                            </div>
+                                            <div v-if="metadataStringValue(selected.metadata, 'purchaseUnit')" class="flex justify-between gap-4 py-2">
+                                                <span class="text-muted-foreground">Purchase unit</span>
+                                                <span class="font-medium capitalize">{{ metadataStringValue(selected.metadata, 'purchaseUnit') }}</span>
+                                            </div>
+                                            <div v-if="metadataStringValue(selected.metadata, 'purchaseUnit')" class="flex justify-between gap-4 py-2">
+                                                <span class="text-muted-foreground">Box conversion</span>
+                                                <span class="text-right font-medium">
+                                                    1 {{ metadataStringValue(selected.metadata, 'purchaseUnit') }} = {{ metadataStringValue(selected.metadata, 'purchaseUnitQuantity') || '—' }} {{ metadataStringValue(selected.metadata, 'stockUnit') || 'unit' }}{{ metadataStringValue(selected.metadata, 'purchaseUnitQuantity') !== '1' ? 's' : '' }}
+                                                    <span class="block text-[10px] text-muted-foreground">may vary by supplier</span>
+                                                </span>
+                                            </div>
+                                        </CardContent>
+                                        <CardContent v-else class="px-3 py-3 text-sm text-muted-foreground">
                                             {{ domainMetadataSummary(selected) }}
                                         </CardContent>
                                     </Card>
