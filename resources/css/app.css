@@ -1,19 +1,19 @@
 /* ================================================================
-   APP.CSS — AFYANOVA HOSPITAL SYSTEM 2026
+   APP5.CSS — AFYANOVA HOSPITAL SYSTEM 2026
    ================================================================
    Tailwind CSS v4 + shadcn-vue production theme.
    Designed for 12-hour clinical shifts: high legibility, low fatigue,
    instant status recognition, WCAG 2.2 AA+ contrast in both modes.
 
    Architecture:
-     1. Tailwind v4 imports, source directives, layer ordering
+     1. Tailwind v4 imports & source directives
      2. @theme inline — shadcn-vue token bridge
      3. :root  — Light mode (clinical daylight)
      4. .dark  — Dark mode (night-shift / low-light)
-     5. Theme settings — font family, neutral base, presets, radius
-     6. UI-scale presets (density)
-     7. @layer base   — resets, scrollbars, selection, typography, a11y
-     8. @layer utilities — theme helpers, glass, focus, motion, clinical
+     5. UI-scale presets (density)
+     6. @layer base   — resets, scrollbars, selection, typography
+     7. @layer utilities — theme helpers, glass, focus, motion
+     8. @layer components — healthcare UI primitives
      9. Sonner / Radix dialog integration
     10. Keyframes & animations
     11. Responsive + container queries
@@ -27,9 +27,6 @@
 @source '../../storage/framework/views/*.php';
 
 @custom-variant dark (&:is(.dark *));
-
-/* Explicit layer ordering — prevents cascade bugs from third-party CSS */
-@layer base, components, utilities;
 
 /* ================================================================
    1. TAILWIND CSS V4 THEME — shadcn-vue token bridge
@@ -199,12 +196,6 @@
     --shadow-warning: 0 0 18px rgba(245, 166, 35, 0.28);
     --shadow-success: 0 0 18px rgba(34, 154, 87, 0.28);
     --shadow-info: 0 0 18px rgba(14, 165, 233, 0.28);
-
-    /* Fluid typography — clamp(min, preferred, max) */
-    --font-size-h1: clamp(1.875rem, 1.4rem + 1.5vw, 2.25rem);
-    --font-size-h2: clamp(1.5rem, 1.2rem + 1vw, 1.875rem);
-    --font-size-h3: clamp(1.25rem, 1.1rem + 0.5vw, 1.5rem);
-    --font-size-h4: clamp(1.125rem, 1rem + 0.3vw, 1.25rem);
 }
 
 /* ================================================================
@@ -250,7 +241,7 @@
     --info: hsl(200 95% 55%);
     --info-foreground: hsl(0 0% 100%);
 
-    --border: hsl(240deg 7.55% 20.78%);
+    --border: hsl(240deg 7.55% 20.78%); /* hsl(224 14% 22%); */
     --input: hsl(224 14% 18%);
     --ring: hsl(213 92% 58%);
 
@@ -286,19 +277,6 @@
     --shadow-warning: 0 0 22px rgba(250, 190, 40, 0.35);
     --shadow-success: 0 0 22px rgba(52, 211, 122, 0.35);
     --shadow-info: 0 0 22px rgba(56, 189, 248, 0.35);
-}
-
-/* ================================================================
-   3b. SYSTEM PREFERENCE — Auto-detect OS dark mode
-   ================================================================
-   When no explicit data-theme-mode='light' is set, follow the OS
-   preference. This ensures clinicians in night-shift environments
-   get dark mode automatically without manual toggle.
-   ================================================================ */
-@media (prefers-color-scheme: dark) {
-    html:not([data-theme-mode='light']):not(.dark) {
-        color-scheme: dark;
-    }
 }
 
 /* ================================================================
@@ -497,7 +475,7 @@
 :root[data-border-radius='2'] { --radius: 1rem; }
 
 /* ================================================================
-   4b. THEME PRESETS — switchable accent palettes
+   4. THEME PRESETS — switchable accent palettes
    ================================================================
    Values must match UiThemePreset type: 'yaru' | 'clinic' | 'emerald' | 'violet' | 'amber' | 'sky'
    'yaru' = default (Hospital Blue) — uses base :root colours, no override needed.
@@ -650,11 +628,11 @@
             color var(--transition-speed) var(--transition-ease);
     }
 
-    /* Typography scale — fluid sizing for hospital displays */
-    h1 { font-size: var(--font-size-h1); @apply font-bold tracking-tight; }
-    h2 { font-size: var(--font-size-h2); @apply font-bold tracking-tight; }
-    h3 { font-size: var(--font-size-h3); @apply font-semibold tracking-tight; }
-    h4 { font-size: var(--font-size-h4); @apply font-semibold; }
+    /* Typography scale — readable on hospital displays */
+    h1 { @apply text-3xl font-bold tracking-tight sm:text-4xl; }
+    h2 { @apply text-2xl font-bold tracking-tight sm:text-3xl; }
+    h3 { @apply text-xl font-semibold tracking-tight sm:text-2xl; }
+    h4 { @apply text-lg font-semibold; }
     h5 { @apply text-base font-semibold; }
     h6 { @apply text-sm font-semibold uppercase tracking-wide; }
 
@@ -694,18 +672,6 @@
         font-variant-numeric: tabular-nums;
         font-feature-settings: 'tnum' 1;
     }
-
-    /* WCAG 2.2 SC 2.5.8 — minimum target size for touch/click targets.
-       Only applies to standalone interactive elements that are not part
-       of the design-system component library (no data-size attribute).
-       Inline links (breadcrumbs, prose) and sized icons are exempt. */
-    button:not([data-size]):not([data-slot='sidebar-trigger']),
-    [role='button']:not([data-size]), [role='menuitem']:not([data-size]),
-    [role='switch']:not([data-size]), [role='checkbox']:not([data-size]),
-    [role='radio']:not([data-size]) {
-        min-height: 44px;
-        min-width: 44px;
-    }
 }
 
 /* ================================================================
@@ -726,12 +692,10 @@
         transition: none !important;
     }
 
-    /* Scoped theme transition — only applies to app-controlled elements,
-       not third-party components (Radix, Sonner, chart libraries) */
-    .theme-transition[data-theme-transition],
-    .theme-transition [data-theme-transition],
-    .theme-transition[data-theme-transition] *,
-    .theme-transition [data-theme-transition] * {
+    .theme-transition,
+    .theme-transition *,
+    .theme-transition *::before,
+    .theme-transition *::after {
         transition:
             background-color 0.28s var(--transition-ease),
             border-color 0.28s var(--transition-ease),
@@ -820,55 +784,6 @@
     .gradient-success  { background: linear-gradient(135deg, var(--success), color-mix(in srgb, var(--success) 82%, black)); }
     .gradient-warning  { background: linear-gradient(135deg, var(--warning), color-mix(in srgb, var(--warning) 82%, black)); }
 
-    /* ---- Healthcare-specific utilities ---- */
-
-    /* Vital sign display — large monospace number with unit suffix */
-    .vital-value {
-        font-family: var(--font-mono);
-        font-variant-numeric: tabular-nums;
-        font-feature-settings: 'tnum' 1;
-        font-size: clamp(1.25rem, 1rem + 1vw, 1.5rem);
-        font-weight: 700;
-        line-height: 1;
-        letter-spacing: -0.02em;
-    }
-    .vital-unit {
-        font-size: 0.75rem;
-        font-weight: 400;
-        color: var(--muted-foreground);
-        margin-left: 0.25rem;
-    }
-
-    /* Clinical alert banner — proper ARIA semantics */
-    .clinical-alert[role='alert'] {
-        @apply border-l-4 p-4;
-    }
-
-    /* Status dot with label — common in patient lists */
-    .status-dot {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    .status-dot::before {
-        content: '';
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: currentColor;
-        flex-shrink: 0;
-    }
-    .status-dot.status-critical::before { color: var(--critical); }
-    .status-dot.status-warning::before  { color: var(--warning); }
-    .status-dot.status-success::before  { color: var(--success); }
-    .status-dot.status-info::before     { color: var(--info); }
-
-    /* Compact data row — for dense tables (lab results, meds) */
-    .data-row-compact {
-        @apply flex items-center justify-between py-1.5;
-        min-height: 2rem;
-    }
-
     /* Reduced motion */
     @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after {
@@ -891,34 +806,6 @@
         }
     }
 
-    /* Windows High Contrast Mode (forced-colors) */
-    @media (forced-colors: active) {
-        :root {
-            forced-color-adjust: none;
-        }
-
-        .status-dot::before,
-        [class*='status-'] {
-            forced-color-adjust: none;
-        }
-
-        /* Ensure focus ring is visible in WHCM */
-        :focus-visible {
-            outline: 2px solid Highlight !important;
-        }
-
-        /* Maintain badge visibility */
-        [role='badge'], .badge {
-            forced-color-adjust: none;
-            border: 1px solid currentColor;
-        }
-
-        /* Keep sidebar active state visible */
-        .nav-item.active {
-            forced-color-adjust: none;
-        }
-    }
-
     /* Skip-to-content link */
     .sr-only-focusable:not(:focus):not(:focus-within) {
         @apply sr-only;
@@ -926,44 +813,561 @@
 }
 
 /* ================================================================
-   8. SONNER TOAST & RADIX DIALOG INTEGRATION
-   ================================================================
-   Uses CSS custom properties for theme-aware overrides instead of
-   brittle !important selectors. Shadcn Vue components handle base
-   styling; these rules provide healthcare-specific enhancements.
+   8. COMPONENT LAYER — Healthcare UI Primitives
+   ================================================================ */
+@layer components {
+
+    /* ---- Buttons ---- */
+    .btn-base {
+        @apply inline-flex items-center justify-center gap-2
+               px-4 py-2.5 rounded-md text-sm font-medium
+               transition-all duration-200
+               disabled:opacity-50 disabled:pointer-events-none;
+        outline: none;
+    }
+    .btn-base:focus-visible {
+        @apply ring-2 ring-ring ring-offset-2 ring-offset-background;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 85%, black));
+        color: var(--primary-foreground);
+        border: 1px solid var(--primary);
+        box-shadow: var(--shadow-sm);
+    }
+    .btn-primary:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-md);
+        background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 92%, white), var(--primary));
+    }
+
+    .btn-secondary {
+        @apply bg-secondary text-secondary-foreground border border-border;
+    }
+    .btn-secondary:hover:not(:disabled) {
+        @apply bg-accent text-accent-foreground border-accent;
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-sm);
+    }
+    .dark .btn-secondary:hover:not(:disabled) {
+        color: var(--foreground);
+    }
+
+    .btn-critical {
+        background: linear-gradient(135deg, var(--critical), color-mix(in srgb, var(--critical) 85%, black));
+        color: var(--critical-foreground);
+        border: 1px solid var(--critical);
+        box-shadow: var(--shadow-critical);
+    }
+    .btn-critical:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-lg), var(--shadow-critical);
+    }
+
+    .btn-success {
+        background: linear-gradient(135deg, var(--success), color-mix(in srgb, var(--success) 85%, black));
+        color: var(--success-foreground);
+        border: 1px solid var(--success);
+    }
+    .btn-success:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-md), var(--shadow-success);
+    }
+
+    .btn-ghost {
+        @apply bg-transparent text-foreground;
+    }
+    .btn-ghost:hover:not(:disabled) {
+        @apply bg-muted;
+    }
+
+    /* ---- Cards ---- */
+    .card-enhanced {
+        @apply rounded-lg border border-border bg-card p-6;
+        box-shadow: var(--shadow-sm);
+        transition: all 0.25s var(--transition-ease);
+    }
+    .card-enhanced:hover {
+        box-shadow: var(--shadow-md);
+        border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+    }
+
+    .patient-card {
+        @apply bg-card border border-border p-6 relative overflow-hidden;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-sm);
+        transition: all 0.3s var(--transition-ease);
+    }
+    .patient-card::before {
+        content: '';
+        @apply absolute top-0 left-0 right-0;
+        height: 3px;
+        background: linear-gradient(90deg, var(--primary), var(--accent));
+        transform: scaleX(0);
+        transform-origin: left;
+        transition: transform 0.3s var(--transition-ease);
+    }
+    .patient-card:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--shadow-lg);
+        border-color: var(--primary);
+    }
+    .patient-card:hover::before {
+        transform: scaleX(1);
+    }
+
+    /* ---- Glass Card ---- */
+    .glass-card {
+        background: var(--glass-bg);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius);
+        @apply p-6 relative overflow-hidden;
+    }
+
+    /* ---- Inputs ---- */
+    .input-enhanced {
+        @apply w-full px-3 py-2.5 rounded-md border border-input
+               bg-background text-foreground placeholder:text-muted-foreground
+               transition-colors duration-200
+               disabled:opacity-50 disabled:pointer-events-none;
+    }
+    .input-enhanced:focus {
+        border-color: var(--ring);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 18%, transparent);
+        outline: none;
+    }
+
+    /* ---- Badges ---- */
+    .badge {
+        @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium uppercase tracking-wide;
+        border-radius: calc(var(--radius) - 2px);
+        border: 1px solid transparent;
+        transition: all 0.2s var(--transition-ease);
+    }
+    .badge-primary {
+        background: color-mix(in srgb, var(--primary) 12%, transparent);
+        color: var(--primary);
+        border-color: color-mix(in srgb, var(--primary) 22%, transparent);
+    }
+    .badge-critical {
+        background: color-mix(in srgb, var(--critical) 12%, transparent);
+        color: var(--critical);
+        border-color: color-mix(in srgb, var(--critical) 22%, transparent);
+    }
+    .badge-warning {
+        background: color-mix(in srgb, var(--warning) 12%, transparent);
+        color: var(--warning);
+        border-color: color-mix(in srgb, var(--warning) 22%, transparent);
+    }
+    .badge-success {
+        background: color-mix(in srgb, var(--success) 12%, transparent);
+        color: var(--success);
+        border-color: color-mix(in srgb, var(--success) 22%, transparent);
+    }
+    .badge-info {
+        background: color-mix(in srgb, var(--info) 12%, transparent);
+        color: var(--info);
+        border-color: color-mix(in srgb, var(--info) 22%, transparent);
+    }
+
+    /* ---- Alert boxes ---- */
+    .alert-box {
+        @apply rounded-lg border p-4 text-sm;
+    }
+    .alert-success  { @apply border-success/25 bg-success/5 text-success; }
+    .alert-warning  { @apply border-warning/25 bg-warning/5 text-warning; }
+    .alert-destructive { @apply border-destructive/25 bg-destructive/5 text-destructive; }
+    .alert-info     { @apply border-info/25 bg-info/5 text-info; }
+
+    .dark .alert-success  { @apply border-success/35 bg-success/10; }
+    .dark .alert-warning  { @apply border-warning/35 bg-warning/10; }
+    .dark .alert-destructive { @apply border-destructive/35 bg-destructive/10; }
+    .dark .alert-info     { @apply border-info/35 bg-info/10; }
+
+    /* ---- Priority system ---- */
+    .priority-critical {
+        background: linear-gradient(135deg, var(--critical), color-mix(in srgb, var(--critical) 85%, black));
+        color: var(--critical-foreground);
+        border: 2px solid var(--critical);
+        box-shadow: var(--shadow-critical);
+        animation: pulse-critical 2s ease-in-out infinite;
+    }
+    .priority-high {
+        background: linear-gradient(135deg, var(--warning), color-mix(in srgb, var(--warning) 85%, black));
+        color: var(--warning-foreground);
+        border: 2px solid var(--warning);
+        box-shadow: var(--shadow-warning);
+    }
+    .priority-medium {
+        background: linear-gradient(135deg, var(--info), color-mix(in srgb, var(--info) 85%, black));
+        color: var(--info-foreground);
+        border: 2px solid var(--info);
+    }
+    .priority-low {
+        background: linear-gradient(135deg, var(--success), color-mix(in srgb, var(--success) 85%, black));
+        color: var(--success-foreground);
+        border: 2px solid var(--success);
+    }
+
+    /* ---- Status indicators ---- */
+    .status-indicator {
+        @apply inline-block relative;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 10px;
+        box-shadow: 0 0 6px currentColor;
+    }
+    .status-indicator::after {
+        content: '';
+        @apply absolute inset-0 rounded-full;
+        background: currentColor;
+        animation: pulse-dot 2s ease-in-out infinite;
+    }
+    .status-critical { color: var(--critical); }
+    .status-warning  { color: var(--warning); }
+    .status-success  { color: var(--success); }
+    .status-info     { color: var(--info); }
+
+    /* ---- Status cards ---- */
+    .status-card {
+        @apply bg-card border-2 border-border p-5 relative overflow-hidden;
+        border-radius: var(--radius);
+        transition: all 0.25s var(--transition-ease);
+    }
+    .status-card-critical {
+        border-color: var(--critical);
+        background: linear-gradient(135deg, var(--card), color-mix(in srgb, var(--critical) 3%, var(--card)));
+    }
+    .status-card-warning {
+        border-color: var(--warning);
+        background: linear-gradient(135deg, var(--card), color-mix(in srgb, var(--warning) 3%, var(--card)));
+    }
+    .status-card-success {
+        border-color: var(--success);
+        background: linear-gradient(135deg, var(--card), color-mix(in srgb, var(--success) 3%, var(--card)));
+    }
+    .status-card-info {
+        border-color: var(--info);
+        background: linear-gradient(135deg, var(--card), color-mix(in srgb, var(--info) 3%, var(--card)));
+    }
+
+    /* ---- Dashboard widgets ---- */
+    .dashboard-widget {
+        @apply bg-card border border-border p-6 relative overflow-hidden;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-sm);
+        transition: all 0.3s var(--transition-ease);
+    }
+    .dashboard-widget::before {
+        content: '';
+        @apply absolute top-0 left-0 right-0;
+        height: 3px;
+        background: linear-gradient(90deg, var(--chart-1), var(--chart-2), var(--chart-3));
+        opacity: 0;
+        transition: opacity 0.3s var(--transition-ease);
+    }
+    .dashboard-widget:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-xl);
+        border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+    }
+    .dashboard-widget:hover::before {
+        opacity: 1;
+    }
+
+    .widget-header  { @apply flex items-center justify-between mb-4; }
+    .widget-title   { @apply text-lg font-semibold text-foreground tracking-tight; }
+    .widget-value   {
+        @apply text-4xl font-bold text-primary leading-none;
+        font-variant-numeric: tabular-nums;
+    }
+    .widget-trend {
+        @apply flex items-center gap-1.5 mt-2 text-sm font-medium;
+    }
+    .widget-trend.positive { color: var(--success); }
+    .widget-trend.negative { color: var(--critical); }
+    .widget-trend.neutral  { color: var(--muted-foreground); }
+
+    /* ---- Chart containers ---- */
+    .chart-container {
+        @apply bg-card border border-border p-6 relative overflow-hidden;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-md);
+    }
+    .chart-container::before {
+        content: '';
+        @apply absolute top-0 left-0 w-full;
+        height: 3px;
+        background: linear-gradient(90deg,
+            var(--chart-1) 0%, var(--chart-2) 20%, var(--chart-3) 40%,
+            var(--chart-4) 60%, var(--chart-5) 80%, var(--chart-6) 100%);
+        opacity: 0.75;
+    }
+    .chart-title    { @apply text-xl font-semibold text-foreground mb-4 tracking-tight; }
+    .chart-subtitle { @apply text-sm text-muted-foreground mb-6 leading-relaxed; }
+
+    /* ---- Medical tables ---- */
+    .medical-table {
+        @apply w-full bg-card border border-border overflow-hidden;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-sm);
+    }
+    .medical-table thead {
+        background: var(--muted);
+    }
+    .medical-table th {
+        @apply px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-foreground;
+        border-bottom: 2px solid var(--border);
+    }
+    .medical-table td {
+        @apply px-5 py-3.5 text-sm text-muted-foreground;
+        border-bottom: 1px solid var(--border);
+        transition: all 0.15s ease;
+    }
+    .medical-table tbody tr:hover {
+        background: color-mix(in srgb, var(--primary) 4%, transparent);
+    }
+    .medical-table tbody tr:hover td {
+        color: var(--foreground);
+    }
+
+    /* ---- Medical forms ---- */
+    .medical-form {
+        @apply bg-card border border-border p-8;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-md);
+    }
+    .form-group { @apply mb-6 relative; }
+    .form-label {
+        @apply block text-sm font-medium text-foreground mb-2;
+        letter-spacing: -0.01em;
+    }
+    .form-input,
+    .form-select,
+    .form-textarea {
+        @apply w-full bg-background text-foreground border-2 border-border;
+        padding: 0.75rem 1rem;
+        border-radius: calc(var(--radius) - 2px);
+        font-family: var(--font-sans);
+        font-size: 0.9375rem;
+        transition: all 0.2s var(--transition-ease);
+        outline: none;
+    }
+    .form-input:focus,
+    .form-select:focus,
+    .form-textarea:focus {
+        border-color: var(--ring);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 16%, transparent);
+    }
+
+    /* ---- Hospital navigation ---- */
+    .hospital-nav {
+        @apply min-h-screen py-5;
+        background: var(--sidebar-background);
+        border-right: 1px solid var(--sidebar-border);
+        box-shadow: var(--shadow-lg);
+    }
+    .nav-section       { @apply mb-6 px-5; }
+    .nav-section-title {
+        @apply text-xs font-semibold uppercase tracking-widest mb-3 opacity-60;
+        color: var(--sidebar-foreground);
+    }
+    .nav-item {
+        @apply flex items-center px-4 py-2.5 mx-3 my-0.5 relative font-medium text-sm;
+        color: var(--sidebar-foreground);
+        border-radius: calc(var(--radius) - 2px);
+        transition: all 0.2s var(--transition-ease);
+    }
+    .nav-item::before {
+        content: '';
+        @apply absolute left-0 top-1/2 -translate-y-1/2;
+        width: 3px;
+        height: 0;
+        background: var(--sidebar-primary);
+        border-radius: 0 2px 2px 0;
+        transition: height 0.2s var(--transition-ease);
+    }
+    .nav-item:hover {
+        background: var(--sidebar-accent);
+        color: var(--sidebar-accent-foreground);
+        transform: translateX(3px);
+    }
+    .nav-item:hover::before { height: 55%; }
+    .nav-item.active {
+        background: linear-gradient(135deg, var(--sidebar-primary), color-mix(in srgb, var(--sidebar-primary) 85%, black));
+        color: var(--sidebar-primary-foreground);
+        box-shadow: var(--shadow-md);
+    }
+    .nav-item.active::before { height: 100%; }
+    .nav-icon {
+        width: 20px;
+        height: 20px;
+        margin-right: 10px;
+        flex-shrink: 0;
+    }
+
+    /* ---- Emergency alert ---- */
+    .emergency-alert {
+        border: 2px solid var(--critical);
+        border-radius: var(--radius);
+        @apply p-5 relative overflow-hidden;
+        background: linear-gradient(135deg,
+            color-mix(in srgb, var(--critical) 12%, transparent),
+            color-mix(in srgb, var(--critical) 4%, transparent));
+        box-shadow: var(--shadow-critical);
+        animation: emergency-pulse 2s ease-in-out infinite;
+    }
+    .emergency-alert::before {
+        content: '';
+        @apply absolute top-0 left-0 w-full h-full;
+        background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--critical) 18%, transparent), transparent);
+        animation: emergency-shine 3s ease-in-out infinite;
+        left: -100%;
+    }
+
+    /* ---- Modal ---- */
+    .modal-overlay {
+        @apply fixed inset-0 flex items-center justify-center z-50;
+        background: color-mix(in srgb, var(--background) 78%, transparent);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        animation: fade-in 0.25s var(--transition-ease);
+    }
+    .modal-content {
+        @apply bg-card border border-border p-8 relative overflow-auto;
+        border-radius: var(--radius);
+        max-width: 90vw;
+        max-height: 88vh;
+        box-shadow: var(--shadow-2xl);
+        animation: slide-up 0.3s var(--transition-ease);
+    }
+
+    /* ---- Toast system ---- */
+    .toast {
+        @apply bg-card border border-border relative overflow-hidden;
+        border-radius: var(--radius);
+        padding: 1rem 1.25rem;
+        box-shadow: var(--shadow-lg);
+        transition: all 0.3s var(--transition-ease);
+    }
+    .toast::before {
+        content: '';
+        @apply absolute left-0 top-0 bottom-0;
+        width: 3px;
+        background: var(--primary);
+    }
+    .toast-critical::before { background: var(--critical); }
+    .toast-warning::before  { background: var(--warning); }
+    .toast-success::before  { background: var(--success); }
+    .toast-info::before     { background: var(--info); }
+
+    /* ---- Loading states ---- */
+    .loading-spinner {
+        width: 20px;
+        height: 20px;
+        border: 2px solid color-mix(in srgb, var(--primary) 20%, transparent);
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+    .loading-dots {
+        @apply inline-flex gap-1;
+    }
+    .loading-dots span {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--primary);
+        animation: bounce-dot 1.2s ease-in-out infinite both;
+    }
+    .loading-dots span:nth-child(1) { animation-delay: -0.3s; }
+    .loading-dots span:nth-child(2) { animation-delay: -0.15s; }
+    .loading-dots span:nth-child(3) { animation-delay: 0s; }
+
+    /* ---- Skeleton loading ---- */
+    .skeleton {
+        @apply rounded-md bg-muted;
+        background: linear-gradient(
+            90deg,
+            var(--muted) 0%,
+            color-mix(in srgb, var(--muted) 60%, var(--card)) 50%,
+            var(--muted) 100%
+        );
+        background-size: 200% 100%;
+        animation: shimmer 1.8s ease-in-out infinite;
+    }
+}
+
+/* ================================================================
+   9. SONNER TOAST & RADIX DIALOG INTEGRATION
    ================================================================ */
 
-/* Radix dialog — enhanced overlay blur */
+/* Radix dialog overlay */
 [data-radix-dialog-overlay] {
-    background: color-mix(in srgb, var(--background) 78%, transparent);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    background: color-mix(in srgb, var(--background) 78%, transparent) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+}
+
+[data-radix-dialog-content] {
+    background: var(--card) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--foreground) !important;
+    box-shadow: var(--shadow-2xl) !important;
+}
+
+[data-radix-dialog-title] {
+    color: var(--foreground) !important;
+    font-weight: 600;
+    font-size: 1.125rem;
+}
+[data-radix-dialog-description] {
+    color: var(--muted-foreground) !important;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    margin-top: 0.375rem;
+}
+
+/* Radix dialog buttons */
+[data-radix-dialog-content] button {
+    border-radius: calc(var(--radius) - 2px) !important;
+    transition: all 0.2s var(--transition-ease) !important;
+}
+[data-radix-dialog-content] button[class*='destructive'],
+[data-radix-dialog-content] button[class*='bg-destructive'] {
+    background: linear-gradient(135deg, var(--destructive), color-mix(in srgb, var(--destructive) 85%, black)) !important;
+    color: var(--destructive-foreground) !important;
+    border: 1px solid var(--destructive) !important;
+}
+[data-radix-dialog-content] button[class*='destructive']:hover,
+[data-radix-dialog-content] button[class*='bg-destructive']:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: var(--shadow-md) !important;
+}
+
+[data-radix-dialog-content] button:disabled {
+    opacity: 0.5 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
 }
 
 /* Remove native dialog border */
 .dialog, [role='dialog'] {
-    border: none;
+    border: none !important;
 }
 
 /* ================================================================
-   8b. SETTINGS DIALOG — Workspace Preferences & Account
-   ================================================================
-   Uses [data-dialog-variant='workspace'] as a stable anchor and
-   targets children via Shadcn Vue data-slot attributes instead of
-   fragile compound class selectors.
+   9b. SETTINGS DIALOG — Workspace Preferences & Account
    ================================================================ */
 
 /* Workspace-variant dialog container */
 [data-dialog-variant='workspace'] {
-    --ws-bg: var(--background);
-    --ws-card: var(--card);
-    --ws-muted: var(--muted);
-    --ws-border: var(--border);
-    --ws-primary: var(--primary);
-
-    background: var(--ws-bg);
-    border-color: var(--ws-border);
-    box-shadow: var(--shadow-2xl);
+    background: var(--background) !important;
+    border-color: var(--border) !important;
+    box-shadow: var(--shadow-2xl) !important;
     transition:
         background-color 0.3s var(--transition-ease),
         border-color 0.3s var(--transition-ease),
@@ -971,51 +1375,65 @@
 }
 
 .dark [data-dialog-variant='workspace'] {
-    --ws-bg: var(--card);
+    background: var(--card) !important;
 }
 
-/* Dialog header area — use data-slot selectors */
-[data-dialog-variant='workspace'] [data-slot='dialog-header'] {
-    background: var(--ws-card);
+/* Dialog header area */
+[data-dialog-variant='workspace'] [data-slot='dialog-header'],
+[data-dialog-variant='workspace'] > div > .border-b {
+    background: var(--card);
     transition: background-color 0.3s var(--transition-ease);
 }
 
-.dark [data-dialog-variant='workspace'] [data-slot='dialog-header'] {
-    background: color-mix(in srgb, var(--ws-card) 90%, var(--ws-bg));
+.dark [data-dialog-variant='workspace'] [data-slot='dialog-header'],
+.dark [data-dialog-variant='workspace'] > div > .border-b {
+    background: color-mix(in srgb, var(--card) 90%, var(--background));
 }
 
-/* Settings section nav tabs */
-[data-dialog-variant='workspace'] [data-slot='dialog-header'] .bg-primary {
-    background: var(--ws-primary);
-    color: var(--primary-foreground);
+/* Settings section nav tabs (General / Account toggle) */
+[data-dialog-variant='workspace'] .bg-primary {
+    background: var(--primary) !important;
+    color: var(--primary-foreground) !important;
     box-shadow: var(--shadow-sm);
     transition: all 0.2s var(--transition-ease);
 }
 
-/* Option cards — use data-slot instead of compound class selectors */
-[data-dialog-variant='workspace'] [data-slot='dialog-content'] button:has(.rounded-lg) {
-    transition: all 0.22s var(--transition-ease);
-    background: color-mix(in srgb, var(--ws-muted) 25%, var(--ws-card));
-    border-color: var(--ws-border);
+/* Sub-header bar */
+[data-dialog-variant='workspace'] .border-b + .border-b,
+[data-dialog-variant='workspace'] .hidden.md\:flex {
+    background: color-mix(in srgb, var(--muted) 40%, var(--card));
+    transition: background-color 0.3s var(--transition-ease);
 }
 
-[data-dialog-variant='workspace'] [data-slot='dialog-content'] button:has(.rounded-lg):hover {
-    background: color-mix(in srgb, var(--ws-muted) 55%, var(--ws-card));
-    border-color: color-mix(in srgb, var(--ws-primary) 30%, var(--ws-border));
+.dark [data-dialog-variant='workspace'] .border-b + .border-b,
+.dark [data-dialog-variant='workspace'] .hidden.md\:flex {
+    background: color-mix(in srgb, var(--muted) 25%, var(--card));
+}
+
+/* Option cards in preferences (density, theme, icon pack) */
+[data-dialog-variant='workspace'] button[class*='rounded-lg'][class*='border'][class*='text-left'] {
+    transition: all 0.22s var(--transition-ease);
+    background: color-mix(in srgb, var(--muted) 25%, var(--card));
+    border-color: var(--border);
+}
+
+[data-dialog-variant='workspace'] button[class*='rounded-lg'][class*='border'][class*='text-left']:hover {
+    background: color-mix(in srgb, var(--muted) 55%, var(--card));
+    border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
     box-shadow: var(--shadow-xs);
     transform: translateY(-1px);
 }
 
-/* Active/selected option card */
-[data-dialog-variant='workspace'] [data-slot='dialog-content'] button.border-primary {
-    background: color-mix(in srgb, var(--ws-primary) 8%, var(--ws-card));
-    border-color: var(--ws-primary);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--ws-primary) 15%, transparent), var(--shadow-sm);
+/* Active/selected option card — overrides bg-primary/5 */
+[data-dialog-variant='workspace'] button[class*='border-primary'] {
+    background: color-mix(in srgb, var(--primary) 8%, var(--card)) !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 15%, transparent), var(--shadow-sm) !important;
 }
 
-.dark [data-dialog-variant='workspace'] [data-slot='dialog-content'] button.border-primary {
-    background: color-mix(in srgb, var(--ws-primary) 12%, var(--ws-card));
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--ws-primary) 22%, transparent), var(--shadow-sm);
+.dark [data-dialog-variant='workspace'] button[class*='border-primary'] {
+    background: color-mix(in srgb, var(--primary) 12%, var(--card)) !important;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 22%, transparent), var(--shadow-sm) !important;
 }
 
 /* Theme swatch circles */
@@ -1029,40 +1447,65 @@
     box-shadow: var(--shadow-sm), inset 0 1px 2px rgba(255, 255, 255, 0.2);
 }
 
+/* Density mini-preview boxes */
+[data-dialog-variant='workspace'] .flex.flex-col.justify-center.rounded-lg {
+    transition: all 0.2s var(--transition-ease);
+}
+
 /* Account link cards */
-[data-dialog-variant='workspace'] a[data-slot] {
-    background: color-mix(in srgb, var(--ws-muted) 20%, var(--ws-card));
+[data-dialog-variant='workspace'] a[class*='group'][class*='rounded-lg'] {
+    background: color-mix(in srgb, var(--muted) 20%, var(--card));
     transition: all 0.22s var(--transition-ease);
 }
 
-[data-dialog-variant='workspace'] a[data-slot]:hover {
-    background: color-mix(in srgb, var(--ws-muted) 50%, var(--ws-card));
-    border-color: color-mix(in srgb, var(--ws-primary) 25%, var(--ws-border));
+[data-dialog-variant='workspace'] a[class*='group'][class*='rounded-lg']:hover {
+    background: color-mix(in srgb, var(--muted) 50%, var(--card));
+    border-color: color-mix(in srgb, var(--primary) 25%, var(--border)) !important;
     box-shadow: var(--shadow-sm);
     transform: translateX(2px);
 }
 
-.dark [data-dialog-variant='workspace'] a[data-slot] {
-    background: color-mix(in srgb, var(--ws-muted) 30%, var(--ws-card));
+.dark [data-dialog-variant='workspace'] a[class*='group'][class*='rounded-lg'] {
+    background: color-mix(in srgb, var(--muted) 30%, var(--card));
 }
 
-.dark [data-dialog-variant='workspace'] a[data-slot]:hover {
-    background: color-mix(in srgb, var(--ws-muted) 55%, var(--ws-card));
+.dark [data-dialog-variant='workspace'] a[class*='group'][class*='rounded-lg']:hover {
+    background: color-mix(in srgb, var(--muted) 55%, var(--card));
 }
 
-/* ScrollArea inside dialog */
+/* Account link icon container */
+[data-dialog-variant='workspace'] a[class*='group'] .rounded-lg.bg-background {
+    transition: all 0.2s var(--transition-ease);
+}
+
+[data-dialog-variant='workspace'] a[class*='group']:hover .rounded-lg.bg-background {
+    background: color-mix(in srgb, var(--primary) 8%, var(--background));
+    box-shadow: var(--shadow-xs);
+}
+
+/* Chevron arrow on account links */
+[data-dialog-variant='workspace'] a[class*='group'] .text-muted-foreground\/40 {
+    transition: all 0.2s var(--transition-ease);
+}
+
+[data-dialog-variant='workspace'] a[class*='group']:hover .text-muted-foreground\/40 {
+    transform: translateX(2px);
+}
+
+/* ScrollArea inside dialog — smooth content transitions */
 [data-dialog-variant='workspace'] [data-radix-scroll-area-viewport] {
     scroll-behavior: smooth;
 }
 
 /* Section dividers inside preferences panel */
 [data-dialog-variant='workspace'] .border-t {
-    border-color: color-mix(in srgb, var(--ws-border) 60%, transparent);
+    border-color: color-mix(in srgb, var(--border) 60%, transparent);
     transition: border-color 0.3s var(--transition-ease);
 }
 
-/* Ensure dialog content responds to theme switch */
-[data-dialog-variant='workspace'] {
+/* Ensure all text inside dialog responds to theme switch */
+[data-dialog-variant='workspace'],
+[data-dialog-variant='workspace'] * {
     transition:
         color 0.25s var(--transition-ease),
         background-color 0.25s var(--transition-ease),
@@ -1070,11 +1513,53 @@
         box-shadow 0.25s var(--transition-ease);
 }
 
+/* Appearance mode tab buttons (Light/Dark/System) — enhanced feedback */
+[data-dialog-variant='workspace'] .grid.gap-2 button .size-9,
+[data-dialog-variant='workspace'] .grid.gap-2 button .size-10 {
+    transition: all 0.2s var(--transition-ease);
+}
+
+[data-dialog-variant='workspace'] .grid.gap-2 button:hover .size-9,
+[data-dialog-variant='workspace'] .grid.gap-2 button:hover .size-10 {
+    transform: scale(1.06);
+}
+
 /* ================================================================
-   9. KEYFRAMES & ANIMATIONS
+   10. KEYFRAMES & ANIMATIONS
    ================================================================ */
 @keyframes spin {
     to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-critical {
+    0%, 100% {
+        box-shadow: var(--shadow-critical);
+    }
+    50% {
+        box-shadow: var(--shadow-critical), 0 0 36px color-mix(in srgb, var(--critical) 35%, transparent);
+    }
+}
+
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.5; transform: scale(0.75); }
+}
+
+@keyframes emergency-pulse {
+    0%, 100% {
+        border-color: var(--critical);
+        box-shadow: var(--shadow-critical);
+    }
+    50% {
+        border-color: color-mix(in srgb, var(--critical) 75%, white);
+        box-shadow: var(--shadow-critical), 0 0 28px color-mix(in srgb, var(--critical) 40%, transparent);
+    }
+}
+
+@keyframes emergency-shine {
+    0%   { left: -100%; }
+    50%  { left: 100%; }
+    100% { left: 100%; }
 }
 
 @keyframes fade-in {
@@ -1087,34 +1572,87 @@
     to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+@keyframes bounce-dot {
+    0%, 80%, 100% { transform: scale(0); opacity: 0.4; }
+    40%           { transform: scale(1); opacity: 1; }
+}
+
 @keyframes shimmer {
     0%   { background-position: 200% 0; }
     100% { background-position: -200% 0; }
 }
 
 /* ================================================================
-   10. RESPONSIVE + CONTAINER QUERIES
+   11. RESPONSIVE + CONTAINER QUERIES
    ================================================================ */
+@media (max-width: 1024px) {
+    .dashboard-widget { padding: 1.25rem; }
+    .medical-form     { padding: 1.5rem; }
+    .chart-container  { padding: 1.25rem; }
+}
+
 @media (max-width: 768px) {
-    /* Ensure touch targets remain accessible on mobile (non-component targets) */
-    button:not([data-size]):not([data-slot='sidebar-trigger']),
-    [role='button']:not([data-size]) {
-        min-height: 44px;
+    .hospital-nav {
+        @apply fixed bottom-0 left-0 right-0;
+        min-height: auto;
+        border-right: none;
+        border-top: 1px solid var(--sidebar-border);
+        @apply flex justify-around py-2 px-1 z-50;
+        background: var(--sidebar-background);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
     }
+    .nav-section       { display: contents; }
+    .nav-section-title { display: none; }
+    .nav-item {
+        @apply flex-col py-2 px-1 mx-0 text-xs text-center;
+        min-width: 56px;
+        border-radius: calc(var(--radius) - 2px);
+    }
+    .nav-item::before  { display: none; }
+    .nav-item:hover    { transform: translateY(-2px); }
+    .nav-icon          { margin-right: 0; margin-bottom: 2px; width: 18px; height: 18px; }
+
+    .medical-form      { padding: 1.25rem; }
+    .dashboard-widget  { padding: 1rem; }
+    .patient-card      { padding: 1.25rem; }
+    .modal-content     { padding: 1.5rem; margin: 0.75rem; max-width: calc(100vw - 1.5rem); }
+    .widget-value      { font-size: 2rem; }
+
+    .medical-table th,
+    .medical-table td  { padding: 0.75rem 0.875rem; font-size: 0.875rem; }
+}
+
+@media (max-width: 480px) {
+    .medical-form     { padding: 1rem; }
+    .dashboard-widget { padding: 0.875rem; }
+    .patient-card     { padding: 1rem; }
+    .modal-content    { padding: 1.25rem; }
+    .btn-base         { padding: 0.625rem 1rem; font-size: 0.8125rem; }
+    .form-input,
+    .form-select,
+    .form-textarea    { padding: 0.625rem 0.875rem; }
+}
+
+/* Container queries for widgets */
+@container (max-width: 380px) {
+    .dashboard-widget { padding: 0.875rem; }
+    .widget-value     { font-size: 1.5rem; }
+}
+@container (min-width: 800px) {
+    .dashboard-widget { padding: 2rem; }
 }
 
 /* ================================================================
-   11. PRINT / ACCESSIBILITY / PERFORMANCE
+   12. PRINT / ACCESSIBILITY / PERFORMANCE
    ================================================================ */
 
 /* Print styles for medical records */
 @media print {
-    @page {
-        margin: 0.75in;
-        size: letter;
-    }
-
+    .hospital-nav,
     .no-print,
+    .modal-overlay,
+    .toast,
     [data-sonner-toaster] {
         display: none !important;
     }
@@ -1122,15 +1660,14 @@
     body {
         background: white !important;
         color: black !important;
-        font-size: 11pt;
-        line-height: 1.4;
     }
 
-    /* Reset containers for print — targets Shadcn Vue components */
-    [data-slot='card'],
-    [data-slot='card-header'],
-    [role='dialog'],
-    [role='alertdialog'] {
+    .medical-table,
+    .patient-card,
+    .medical-form,
+    .dashboard-widget,
+    .chart-container,
+    .card-enhanced {
         border: 1px solid #444 !important;
         background: white !important;
         color: black !important;
@@ -1139,7 +1676,6 @@
         page-break-inside: avoid;
     }
 
-    /* Priority indicators — convert to bordered text for B&W print */
     .priority-critical,
     .priority-high,
     .priority-medium,
@@ -1150,13 +1686,11 @@
         box-shadow: none !important;
     }
 
-    /* Status indicators — visible border in B&W */
     .status-indicator {
         border: 1px solid #444 !important;
         box-shadow: none !important;
     }
 
-    /* Ensure headings and labels are dark for readability */
     .widget-value,
     .chart-title,
     .widget-title,
@@ -1164,43 +1698,8 @@
         color: #222 !important;
     }
 
-    /* Links — show URL for reference */
     a { text-decoration: underline; }
     a[href]::after { content: ' (' attr(href) ')'; font-size: 0.8em; color: #666; }
-
-    /* Clinical print additions */
-    .print-signature-block {
-        border-top: 1px solid #000;
-        width: 300px;
-        margin-top: 3rem;
-        padding-top: 0.5rem;
-        font-size: 0.875rem;
-        color: #000;
-    }
-
-    .print-consent-text {
-        font-size: 0.8125rem;
-        line-height: 1.5;
-        color: #222;
-    }
-
-    /* Medication lists — two-column layout for space efficiency */
-    .print-medication-list {
-        columns: 2;
-        column-gap: 2rem;
-    }
-
-    /* Lab reference ranges — smaller, muted */
-    .print-ref-range {
-        font-size: 0.75rem;
-        color: #666;
-    }
-
-    /* Remove animations in print */
-    *, *::before, *::after {
-        animation: none !important;
-        transition: none !important;
-    }
 }
 
 /* Accessibility — focus visible */
@@ -1237,7 +1736,14 @@
     outline: none;
 }
 
-/* Encounter workspace — min-height reset for nested flex containers */
+/* Performance hints */
+.gpu {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+.will-change-transform { will-change: transform; }
+.will-change-opacity   { will-change: opacity; }
+
 .encounter-workspace-tabs {
     min-height: 0;
 }
