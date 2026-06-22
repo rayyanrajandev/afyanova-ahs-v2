@@ -2,17 +2,21 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePageHeader.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
-import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePageHeader.vue';
-import SupplyChainStatCard from '@/pages/inventory-procurement/components/SupplyChainStatCard.vue';
-import SupplyChainStatGrid from '@/pages/inventory-procurement/components/SupplyChainStatGrid.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
+import {
+    type DepartmentRequisitionContext,
+    departmentCardDescription,
+    departmentDisplayName,
+    departmentRequesterHeaderDescription,
+} from '@/lib/departmentRequisitionContext';
 import {
     INVENTORY_PROCUREMENT_COUNT_PATH,
     INVENTORY_PROCUREMENT_HOME_PATH,
@@ -29,13 +33,9 @@ import {
     visibleInventoryWorkspaceSections,
     type InventoryProcurementAccess,
 } from '@/lib/inventoryProcurementAccess';
-import {
-    type DepartmentRequisitionContext,
-    departmentCardDescription,
-    departmentDisplayName,
-    departmentRequesterHeaderDescription,
-} from '@/lib/departmentRequisitionContext';
 import { messageFromUnknown } from '@/lib/notify';
+import SupplyChainStatCard from '@/pages/inventory-procurement/components/SupplyChainStatCard.vue';
+import SupplyChainStatGrid from '@/pages/inventory-procurement/components/SupplyChainStatGrid.vue';
 import type { BreadcrumbItem } from '@/types';
 
 type StockAlertCounts = {

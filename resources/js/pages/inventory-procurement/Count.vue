@@ -2,9 +2,9 @@
 import { Head } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import InventoryBarcodeScanField from '@/components/inventory/InventoryBarcodeScanField.vue';
 import InventoryItemLookupField from '@/components/inventory/InventoryItemLookupField.vue';
-import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePageHeader.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';

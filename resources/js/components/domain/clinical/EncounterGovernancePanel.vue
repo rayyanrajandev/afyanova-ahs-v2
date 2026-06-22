@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

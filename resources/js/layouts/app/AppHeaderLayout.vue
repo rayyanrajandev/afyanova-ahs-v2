@@ -2,8 +2,8 @@
 import AppContent from '@/components/AppContent.vue';
 import AppHeader from '@/components/AppHeader.vue';
 import AppShell from '@/components/AppShell.vue';
-import CareQuickLauncher from '@/components/workspace/CareQuickLauncher.vue';
 import ThemeSettingsFloatingButton from '@/components/ThemeSettingsFloatingButton.vue';
+import CareQuickLauncher from '@/components/workspace/CareQuickLauncher.vue';
 import type { BreadcrumbItem } from '@/types';
 
 type Props = {

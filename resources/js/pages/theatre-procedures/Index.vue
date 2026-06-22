@@ -53,12 +53,12 @@ import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { patientChartHref } from '@/lib/patientChart';
 import { mergeSearchableOptions, type SearchableSelectOption } from '@/lib/patientLocations';
+import { type BreadcrumbItem } from '@/types';
 import {
     clinicalStockPrecheckTitle,
     formatClinicalStockQuantity,
     type ClinicalStockPrecheck,
 } from '@/types/clinicalStockPrecheck';
-import { type BreadcrumbItem } from '@/types';
 
 type ApiError = Error & { status?: number; payload?: { errors?: Record<string, string[]>; message?: string } };
 type TheatreWorkspaceView = 'queue' | 'board' | 'create';

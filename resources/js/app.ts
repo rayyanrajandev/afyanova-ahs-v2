@@ -7,8 +7,8 @@ import '../css/app.css';
 import { Toaster } from './components/ui/sonner';
 import { initializeTheme } from './composables/useAppearance';
 import { initializeUiPreferences } from './composables/useUiPreferences';
-import { purgeKnownSensitiveBrowserStorage } from './lib/browserStoragePolicy';
 import { buildDocumentTitle, syncClientBranding } from './lib/branding';
+import { purgeKnownSensitiveBrowserStorage } from './lib/browserStoragePolicy';
 
 syncClientBranding(
     typeof window !== 'undefined' ? window.__AFYANOVA_BRANDING__ : undefined,

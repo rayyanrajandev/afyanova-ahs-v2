@@ -12,6 +12,7 @@ import {
 import AppIcon from '@/components/AppIcon.vue';
 import LinkedContextLookupField from '@/components/context/LinkedContextLookupField.vue';
 import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
+import EncounterReturnBanner from '@/components/domain/clinical/EncounterReturnBanner.vue';
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycleActionDialog.vue';
@@ -93,19 +94,18 @@ import {
 } from '@/composables/usePlatformAccess';
 import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersistence';
 import AppLayout from '@/layouts/AppLayout.vue';
-import EncounterReturnBanner from '@/components/domain/clinical/EncounterReturnBanner.vue';
+import { clearSensitiveSessionStorageKey } from '@/lib/browserStoragePolicy';
 import { parseEncounterReturnTo } from '@/lib/encounterWorkspace';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { patientChartHref } from '@/lib/patientChart';
 import { type SearchableSelectOption } from '@/lib/patientLocations';
+import { type BreadcrumbItem } from '@/types';
 import {
     clinicalStockPrecheckTitle,
     formatClinicalStockQuantity,
     type ClinicalStockPrecheck,
 } from '@/types/clinicalStockPrecheck';
-import { clearSensitiveSessionStorageKey } from '@/lib/browserStoragePolicy';
-import { type BreadcrumbItem } from '@/types';
 
 type ScopeData = {
     resolvedFrom: string;

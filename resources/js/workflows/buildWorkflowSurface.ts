@@ -1,3 +1,4 @@
+import type { DashboardWorkflowKey, DashboardWorkflowWidget } from '@/types/dashboard';
 import { buildAdminSurface } from '@/workflows/admin/surface';
 import { buildCashierSurface } from '@/workflows/cashier/surface';
 import { buildClinicianSurface } from '@/workflows/clinician/surface';
@@ -8,7 +9,6 @@ import { buildNursingSurface } from '@/workflows/nursing/surface';
 import { buildOperationsSurface } from '@/workflows/operations/surface';
 import { buildRecordsSurface } from '@/workflows/records/surface';
 import { buildSupplySurface } from '@/workflows/supply/surface';
-import { buildTheatreSurface } from '@/workflows/theatre/surface';
 import {
     createWidgetGate,
     type DashboardSurfaceHelpers,
@@ -16,7 +16,7 @@ import {
     type WorkflowSurface,
     type WorkflowSurfaceBuilder,
 } from '@/workflows/surfaceTypes';
-import type { DashboardWorkflowKey, DashboardWorkflowWidget } from '@/types/dashboard';
+import { buildTheatreSurface } from '@/workflows/theatre/surface';
 
 const SURFACE_BUILDERS: Record<DashboardWorkflowKey, WorkflowSurfaceBuilder> = {
     admin: buildAdminSurface,

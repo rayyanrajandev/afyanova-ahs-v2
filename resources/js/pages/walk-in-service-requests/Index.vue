@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
 import AppIcon from '@/components/AppIcon.vue';
-import WorkflowQueueRow from '@/components/list/WorkflowQueueRow.vue';
-import WorkflowQueueSkeleton from '@/components/list/WorkflowQueueSkeleton.vue';
+import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
 import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
+import WorkflowQueueRow from '@/components/list/WorkflowQueueRow.vue';
+import WorkflowQueueSkeleton from '@/components/list/WorkflowQueueSkeleton.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -48,8 +48,8 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { apiGet, apiGetBlob, apiPatch, apiPost, isApiClientError } from '@/lib/apiClient';
 import type { AuditActorSummary } from '@/lib/audit';
 import type { AppIconName } from '@/lib/icons';
-import { walkInServiceRequestStripeClass } from '@/lib/listRows';
 import { formatEnumLabel } from '@/lib/labels';
+import { walkInServiceRequestStripeClass } from '@/lib/listRows';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { patientChartHref } from '@/lib/patientChart';
 import type { BreadcrumbItem } from '@/types';

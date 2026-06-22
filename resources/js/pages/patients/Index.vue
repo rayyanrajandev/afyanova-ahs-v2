@@ -14,8 +14,6 @@ import SearchableSelectField from '@/components/forms/SearchableSelectField.vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
-import ProcessingStatePanel from '@/components/workflow/ProcessingStatePanel.vue';
 import {
     Card,
     CardContent,
@@ -64,8 +62,10 @@ import {
     SheetTitle,
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import ProcessingStatePanel from '@/components/workflow/ProcessingStatePanel.vue';
 import {
     usePlatformAccess,
     type PermissionState,

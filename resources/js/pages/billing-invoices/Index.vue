@@ -38,23 +38,31 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
 import LeaveWorkflowDialog from '@/components/workflow/LeaveWorkflowDialog.vue';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
+import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
+import { usePlatformCountryProfile } from '@/composables/usePlatformCountryProfile';
+import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersistence';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { apiRequestJson } from '@/lib/apiClient';
 import {
     auditActionDisplayLabel,
     auditActorDisplayName,
     buildAuditMetadataPreview,
 } from '@/lib/audit';
-import { patientChartHref } from '@/lib/patientChart';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Textarea } from '@/components/ui/textarea';
-import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
-import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersistence';
-import { usePlatformCountryProfile } from '@/composables/usePlatformCountryProfile';
-import AppLayout from '@/layouts/AppLayout.vue';
-import { apiRequestJson } from '@/lib/apiClient';
 import { clearSensitiveSessionStorageKey } from '@/lib/browserStoragePolicy';
+import {
+    compactVisitCoverageSummary,
+    financialClassLabel,
+    isThirdPartyFinancialClass,
+    normalizeFinancialClass,
+} from '@/lib/financialCoverage';
 import { generateRequestKey } from '@/lib/idempotency';
+import { formatEnumLabel } from '@/lib/labels';
+import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
+import { patientChartHref } from '@/lib/patientChart';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
 import BillingBoardView from './components/BillingBoardView.vue';
 import BillingCreateAccessRestrictedCard from './components/BillingCreateAccessRestrictedCard.vue';
@@ -82,14 +90,6 @@ import PaymentReversalDialog from './components/PaymentReversalDialog.vue';
 import { useBillingFinancialControls } from './composables/useBillingFinancialControls';
 import { useBillingPermissions } from './composables/useBillingPermissions';
 import { usePaymentReversal } from './composables/usePaymentReversal';
-import {
-    compactVisitCoverageSummary,
-    financialClassLabel,
-    isThirdPartyFinancialClass,
-    normalizeFinancialClass,
-} from '@/lib/financialCoverage';
-import { formatEnumLabel } from '@/lib/labels';
-import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import {
     billingPaymentPayerTypeOptions,
     billingPaymentMethodOptions,

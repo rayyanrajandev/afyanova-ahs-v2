@@ -2,15 +2,16 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
 import LinkedContextLookupField from '@/components/context/LinkedContextLookupField.vue';
+import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
+import EncounterReturnBanner from '@/components/domain/clinical/EncounterReturnBanner.vue';
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycleActionDialog.vue';
 import OrdersWorkspacePageHeader from '@/components/orders/OrdersWorkspacePageHeader.vue';
+import PatientOrderGroupList from '@/components/orders/PatientOrderGroupList.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import WalkInServiceRequestsPanel from '@/components/service-requests/WalkInServiceRequestsPanel.vue';
-import PatientOrderGroupList from '@/components/orders/PatientOrderGroupList.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -42,19 +43,18 @@ import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLe
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersistence';
 import AppLayout from '@/layouts/AppLayout.vue';
-import EncounterReturnBanner from '@/components/domain/clinical/EncounterReturnBanner.vue';
-import { parseEncounterReturnTo } from '@/lib/encounterWorkspace';
 import { csrfRequestHeaders, refreshCsrfToken } from '@/lib/csrf';
+import { parseEncounterReturnTo } from '@/lib/encounterWorkspace';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { patientChartHref } from '@/lib/patientChart';
 import { type SearchableSelectOption } from '@/lib/patientLocations';
+import { type BreadcrumbItem } from '@/types';
 import {
     clinicalStockPrecheckTitle,
     formatClinicalStockQuantity,
     type ClinicalStockPrecheck,
 } from '@/types/clinicalStockPrecheck';
-import { type BreadcrumbItem } from '@/types';
 
 type ScopeData = {
     resolvedFrom: string;

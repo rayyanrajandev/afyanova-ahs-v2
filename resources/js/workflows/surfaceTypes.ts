@@ -1,6 +1,6 @@
 import type { DashboardQueueRow } from '@/lib/dashboardOperationsQueue';
-import type { AppIconName } from '@/lib/icons';
 import type { DirectServiceModuleKey } from '@/lib/directServicePatientWorklist';
+import type { AppIconName } from '@/lib/icons';
 import type { DashboardWorkflowWidget } from '@/types/dashboard';
 
 export type DirectServiceModuleSummary = {

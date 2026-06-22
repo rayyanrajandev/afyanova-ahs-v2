@@ -1,7 +1,7 @@
 
 <script setup lang="ts">
-import type { AcceptableValue } from 'reka-ui';
 import { Head, Link } from '@inertiajs/vue3';
+import type { AcceptableValue } from 'reka-ui';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import ComboboxField from '@/components/forms/ComboboxField.vue';

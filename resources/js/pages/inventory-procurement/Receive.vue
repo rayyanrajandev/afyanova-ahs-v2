@@ -5,7 +5,6 @@ import AppIcon from '@/components/AppIcon.vue';
 import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vue';
 import InventoryBarcodeScanField from '@/components/inventory/InventoryBarcodeScanField.vue';
 import InventoryItemLookupField from '@/components/inventory/InventoryItemLookupField.vue';
-import type { InventoryBarcodeItem } from '@/composables/useInventoryBarcodeLookup';
 import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePageHeader.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import type { InventoryBarcodeItem } from '@/composables/useInventoryBarcodeLookup';
 import { useInventoryMasterLookups } from '@/composables/useInventoryMasterLookups';
 import { useInventoryProcurementAccess } from '@/composables/useInventoryProcurementAccess';
 import AppLayout from '@/layouts/AppLayout.vue';

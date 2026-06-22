@@ -20,8 +20,6 @@ import { DASHBOARD_PRESETS, type DashboardPresetKey } from '@/config/dashboardPr
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiGet } from '@/lib/apiClient';
 import { buildOperationsPrivilegeQueueRows } from '@/lib/dashboardOperationsQueue';
-import { appendWorkflowBatchEntries } from '@/workflows/appendWorkflowBatch';
-import { buildWorkflowSurface } from '@/workflows/buildWorkflowSurface';
 import {
     directServicePatientWorklistHref,
     groupDirectServiceOrdersByPatient,
@@ -32,6 +30,8 @@ import type { AppIconName } from '@/lib/icons';
 import { formatEnumLabel } from '@/lib/labels';
 import type { BreadcrumbItem } from '@/types';
 import type { DashboardContextPayload } from '@/types/dashboard';
+import { appendWorkflowBatchEntries } from '@/workflows/appendWorkflowBatch';
+import { buildWorkflowSurface } from '@/workflows/buildWorkflowSurface';
 
 type TabKey = 'overview' | 'handoff' | 'status' | 'resources';
 

@@ -1,5 +1,5 @@
-import { formatEnumLabel } from '@/lib/labels';
 import type { DashboardQueueRow } from '@/lib/dashboardOperationsQueue';
+import { formatEnumLabel } from '@/lib/labels';
 
 export function mapProcurementRequestToQueueRow(request: Record<string, unknown>): DashboardQueueRow {
     const id = String(request.id ?? '').trim();

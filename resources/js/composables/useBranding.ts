@@ -1,5 +1,5 @@
-import { computed, watch } from 'vue';
 import { usePage } from '@inertiajs/vue3';
+import { computed, watch } from 'vue';
 import { normalizeBranding, syncClientBranding } from '@/lib/branding';
 import type { SharedBranding } from '@/types/branding';
 

@@ -4,8 +4,8 @@ import { computed } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import DocumentShell from '@/components/documents/DocumentShell.vue';
 import { Button } from '@/components/ui/button';
-import { formatEnumLabel } from '@/lib/labels';
 import { INVENTORY_PROCUREMENT_HOME_PATH, procurementGrnPdfHref } from '@/lib/inventoryProcurement';
+import { formatEnumLabel } from '@/lib/labels';
 import type { SharedDocumentBranding } from '@/types';
 
 type DocumentActor = {

@@ -1,34 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, ref, nextTick, onBeforeUnmount, onMounted, reactive, watch, type Ref } from 'vue';
-import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue } from '@/pages/inventory-procurement/workspace/constants';
-import { clearInventoryWorkspace } from '@/pages/inventory-procurement/workspace/inventoryWorkspaceApi';
-import { bindInventoryWorkspace } from '@/pages/inventory-procurement/workspace/registerInventoryWorkspaceApi';
-import {
-    WorkspaceAnalyticsTab,
-    WorkspaceClaimsTab,
-    WorkspaceDepartmentStockTab,
-    WorkspaceInventoryTab,
-    WorkspaceLeadTimesTab,
-    WorkspaceLedgerTab,
-    WorkspaceMsdOrdersTab,
-    WorkspaceOverviewTab,
-    WorkspaceProcurementTab,
-    WorkspaceRequisitionsTab,
-    WorkspaceShortageQueueTab,
-    WorkspaceTransfersTab,
-} from '@/pages/inventory-procurement/workspace/workspaceTabComponents';
-import WorkspaceFilterOverlays from '@/pages/inventory-procurement/workspace/WorkspaceFilterOverlays.vue';
-import WorkspaceAuxiliarySheets from '@/pages/inventory-procurement/workspace/WorkspaceAuxiliarySheets.vue';
-import WorkspaceTransferSheets from '@/pages/inventory-procurement/workspace/WorkspaceTransferSheets.vue';
-import WorkspaceRequestEntrySheets from '@/pages/inventory-procurement/workspace/WorkspaceRequestEntrySheets.vue';
-import WorkspaceInventoryOpsSheets from '@/pages/inventory-procurement/workspace/WorkspaceInventoryOpsSheets.vue';
-import WorkspaceRequisitionDetailsSheet from '@/pages/inventory-procurement/workspace/WorkspaceRequisitionDetailsSheet.vue';
-import WorkspaceProcurementLifecycleSheets from '@/pages/inventory-procurement/workspace/WorkspaceProcurementLifecycleSheets.vue';
-import WorkspaceItemDetailsSheet from '@/pages/inventory-procurement/workspace/WorkspaceItemDetailsSheet.vue';
-import WorkspaceClaimsAndMsdSheets from '@/pages/inventory-procurement/workspace/WorkspaceClaimsAndMsdSheets.vue';
-import WorkspaceCatalogSyncDialog from '@/pages/inventory-procurement/workspace/WorkspaceCatalogSyncDialog.vue';
-import WorkspaceInventoryImportCsvDialog from '@/pages/inventory-procurement/workspace/WorkspaceInventoryImportCsvDialog.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import BillingInvoiceLookupField from '@/components/billing/BillingInvoiceLookupField.vue';
 import ClaimsInsuranceCaseLookupField from '@/components/claims/ClaimsInsuranceCaseLookupField.vue';
@@ -48,8 +20,8 @@ import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -71,21 +43,16 @@ import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersistence';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
-import { generateRequestKey } from '@/lib/idempotency';
-import { formatEnumLabel } from '@/lib/labels';
 import {
     departmentDisplayName,
     departmentRequesterHeaderDescription,
 } from '@/lib/departmentRequisitionContext';
-import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
-import type { SearchableSelectOption } from '@/lib/patientLocations';
+import { generateRequestKey } from '@/lib/idempotency';
 import {
     INVENTORY_PROCUREMENT_HOME_PATH,
     inventoryWorkspaceHref,
     normalizeInventoryWorkspaceSection,
 } from '@/lib/inventoryProcurement';
-import { type RequestPipelineStage, type WorkspaceNextAction } from '@/pages/inventory-procurement/workspace/workspaceOverview';
-import { useRequestPipelineCounts } from '@/pages/inventory-procurement/workspace/useRequestPipelineCounts';
 import {
     departmentRequisitionStripeClass,
     procurementRequestStripeClass,
@@ -99,6 +66,39 @@ import {
     isInventoryStoreOperations,
     type InventoryProcurementAccess,
 } from '@/lib/inventoryProcurementAccess';
+import { formatEnumLabel } from '@/lib/labels';
+import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
+import type { SearchableSelectOption } from '@/lib/patientLocations';
+import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue } from '@/pages/inventory-procurement/workspace/constants';
+import { clearInventoryWorkspace } from '@/pages/inventory-procurement/workspace/inventoryWorkspaceApi';
+import { bindInventoryWorkspace } from '@/pages/inventory-procurement/workspace/registerInventoryWorkspaceApi';
+import { useRequestPipelineCounts } from '@/pages/inventory-procurement/workspace/useRequestPipelineCounts';
+import WorkspaceAuxiliarySheets from '@/pages/inventory-procurement/workspace/WorkspaceAuxiliarySheets.vue';
+import WorkspaceCatalogSyncDialog from '@/pages/inventory-procurement/workspace/WorkspaceCatalogSyncDialog.vue';
+import WorkspaceClaimsAndMsdSheets from '@/pages/inventory-procurement/workspace/WorkspaceClaimsAndMsdSheets.vue';
+import WorkspaceFilterOverlays from '@/pages/inventory-procurement/workspace/WorkspaceFilterOverlays.vue';
+import WorkspaceInventoryImportCsvDialog from '@/pages/inventory-procurement/workspace/WorkspaceInventoryImportCsvDialog.vue';
+import WorkspaceInventoryOpsSheets from '@/pages/inventory-procurement/workspace/WorkspaceInventoryOpsSheets.vue';
+import WorkspaceItemDetailsSheet from '@/pages/inventory-procurement/workspace/WorkspaceItemDetailsSheet.vue';
+import { type RequestPipelineStage, type WorkspaceNextAction } from '@/pages/inventory-procurement/workspace/workspaceOverview';
+import WorkspaceProcurementLifecycleSheets from '@/pages/inventory-procurement/workspace/WorkspaceProcurementLifecycleSheets.vue';
+import WorkspaceRequestEntrySheets from '@/pages/inventory-procurement/workspace/WorkspaceRequestEntrySheets.vue';
+import WorkspaceRequisitionDetailsSheet from '@/pages/inventory-procurement/workspace/WorkspaceRequisitionDetailsSheet.vue';
+import {
+    WorkspaceAnalyticsTab,
+    WorkspaceClaimsTab,
+    WorkspaceDepartmentStockTab,
+    WorkspaceInventoryTab,
+    WorkspaceLeadTimesTab,
+    WorkspaceLedgerTab,
+    WorkspaceMsdOrdersTab,
+    WorkspaceOverviewTab,
+    WorkspaceProcurementTab,
+    WorkspaceRequisitionsTab,
+    WorkspaceShortageQueueTab,
+    WorkspaceTransfersTab,
+} from '@/pages/inventory-procurement/workspace/workspaceTabComponents';
+import WorkspaceTransferSheets from '@/pages/inventory-procurement/workspace/WorkspaceTransferSheets.vue';
 import { type BreadcrumbItem } from '@/types';
 
 type ApiError = Error & {
@@ -2144,6 +2144,33 @@ function inventoryItemNeedsOpeningStock(item: StockMovementLookupItem | Record<s
 
 function inventoryItemStockActionLabel(item: StockMovementLookupItem | Record<string, unknown>): string {
     return inventoryItemNeedsOpeningStock(item) ? 'Set Opening Stock' : 'Record Item Movement';
+}
+
+function inventoryItemListMeta(item: Record<string, unknown>): string {
+    const category = item.category ? formatEnumLabel(String(item.category)) : 'Uncategorized';
+    const unit = String(item.unit ?? 'No unit');
+
+    const medParts: string[] = [];
+    if (item.genericName) medParts.push(String(item.genericName));
+    if (item.strength) medParts.push(String(item.strength));
+    if (item.dosageForm) medParts.push(String(item.dosageForm));
+    const medicineInfo = medParts.length > 0 ? medParts.join(' · ') : null;
+
+    const conversionFactor = Number(item.conversionFactor ?? 0);
+    const dispensingUnit = item.dispensingUnit ? String(item.dispensingUnit) : null;
+    const canConvert = item.currentStock != null && conversionFactor > 0 && dispensingUnit !== null && dispensingUnit.toLowerCase() !== unit.toLowerCase();
+
+    const stockDisplay = canConvert
+        ? `Store ${formatAmount(Number(item.currentStock))} ${unit} (${formatAmount(Number(item.currentStock) * conversionFactor)} ${dispensingUnit}s)`
+        : `Store ${item.currentStock != null ? formatAmount(Number(item.currentStock)) : '—'}`;
+
+    const reorder = item.reorderLevel != null ? formatAmount(Number(item.reorderLevel)) : '—';
+
+    const parts = [category];
+    if (medicineInfo) parts.push(medicineInfo);
+    parts.push(unit, stockDisplay, `Reorder ${reorder}`);
+
+    return parts.join(' · ');
 }
 
 const stockMovementItem = computed<StockMovementLookupItem | null>(() => {
@@ -6594,6 +6621,7 @@ bindInventoryWorkspace({
     stockAlertBadgeClass,
     openStockMovementDialog,
     inventoryItemStockActionLabel,
+    inventoryItemListMeta,
     openDepartmentStockForItem,
     itemPagination,
     itemPages,

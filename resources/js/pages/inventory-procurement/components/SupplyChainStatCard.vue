@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Card, CardContent } from '@/components/ui/card';
-import { computed } from 'vue';
 
 const props = withDefaults(
     defineProps<{

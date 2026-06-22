@@ -3,7 +3,6 @@ import { computed, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import EncounterMedicationSafetyPanel from '@/components/domain/clinical/EncounterMedicationSafetyPanel.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
-import ConfirmationDialog from '@/components/workflow/ConfirmationDialog.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +15,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import ConfirmationDialog from '@/components/workflow/ConfirmationDialog.vue';
 import { useConfirmationDialog } from '@/composables/useConfirmationDialog';
 import { ApiClientError } from '@/lib/apiClient';
 import {

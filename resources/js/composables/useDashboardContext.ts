@@ -1,5 +1,6 @@
 import { usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import {
     DASHBOARD_PRESETS,
     eligibleDashboardPresets,
@@ -7,7 +8,6 @@ import {
     resolveDirectServicePresentation,
     type InferDashboardPresetInput,
 } from '@/config/dashboardPresets';
-import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { apiGet } from '@/lib/apiClient';
 import type { DashboardContextPayload, DashboardWorkflowDefinition, DashboardWorkflowKey } from '@/types/dashboard';
 

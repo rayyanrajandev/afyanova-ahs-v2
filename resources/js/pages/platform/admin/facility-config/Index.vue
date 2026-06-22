@@ -22,16 +22,16 @@ import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { usePlatformCountryProfile } from '@/composables/usePlatformCountryProfile';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
+import type { AppIconName } from '@/lib/icons';
 import { formatEnumLabel } from '@/lib/labels';
 import { activeInactiveStatusDotClass } from '@/lib/listRows';
-import type { AppIconName } from '@/lib/icons';
-import { type BreadcrumbItem } from '@/types';
+import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import {
     WorkspaceProfileTab,
     WorkspaceSubscriptionTab,
     WorkspaceAuditTab,
 } from '@/pages/platform/admin/facility-config/workspaceTabComponents';
-import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
+import { type BreadcrumbItem } from '@/types';
 
 type Facility = {
     id: string | null; code: string | null; name: string | null; facilityType: string | null; timezone: string | null;

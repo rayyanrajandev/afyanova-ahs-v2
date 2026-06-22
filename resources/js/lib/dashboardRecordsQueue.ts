@@ -1,5 +1,5 @@
-import { formatEnumLabel } from '@/lib/labels';
 import type { DashboardQueueRow } from '@/lib/dashboardOperationsQueue';
+import { formatEnumLabel } from '@/lib/labels';
 
 function formatRecordTimestamp(value: string): string {
     const parsed = new Date(value);

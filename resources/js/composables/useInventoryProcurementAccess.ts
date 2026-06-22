@@ -1,6 +1,6 @@
 import { ref } from 'vue';
-import { apiRequestJson } from '@/lib/apiClient';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
+import { apiRequestJson } from '@/lib/apiClient';
 
 export function useInventoryProcurementAccess() {
     const { permissionNames: sharedPermissionNames, isFacilitySuperAdmin } = usePlatformAccess();

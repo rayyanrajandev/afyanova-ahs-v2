@@ -12,6 +12,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Kbd } from '@/components/ui/kbd';
+import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import {
     appNavCatalog,
     generalHelpTips,
@@ -23,7 +24,6 @@ import {
     navSectionOrder,
     type NavSectionKey,
 } from '@/config/appNavCatalog';
-import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
 import {
     filterSidebarNavCatalogItems,

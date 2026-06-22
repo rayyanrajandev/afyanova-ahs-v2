@@ -30,11 +30,11 @@ import EncounterLifecycleDialog from '@/components/domain/clinical/EncounterLife
 import EncounterNoteComposerShell from '@/components/domain/clinical/EncounterNoteComposerShell.vue';
 import EncounterOrdersCommandCenter from '@/components/domain/clinical/EncounterOrdersCommandCenter.vue';
 import EncounterOrdersFocusSkeleton from '@/components/domain/clinical/EncounterOrdersFocusSkeleton.vue';
+import EncounterTriageVitalsPanel from '@/components/domain/clinical/EncounterTriageVitalsPanel.vue';
+import EncounterWorkflowCareStreams from '@/components/domain/clinical/EncounterWorkflowCareStreams.vue';
 import EncounterWorkspaceHeader from '@/components/domain/clinical/EncounterWorkspaceHeader.vue';
 import EncounterWorkspaceNavBar from '@/components/domain/clinical/EncounterWorkspaceNavBar.vue';
 import EncounterWorkspacePaneHeader from '@/components/domain/clinical/EncounterWorkspacePaneHeader.vue';
-import EncounterWorkflowCareStreams from '@/components/domain/clinical/EncounterWorkflowCareStreams.vue';
-import EncounterTriageVitalsPanel from '@/components/domain/clinical/EncounterTriageVitalsPanel.vue';
 import RichTextEditorField from '@/components/editor/RichTextEditorField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -55,7 +55,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
     Select,
     SelectContent,
@@ -67,6 +66,7 @@ import {
     Sheet,
     SheetContent,
 } from '@/components/ui/sheet';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
@@ -77,19 +77,16 @@ import {
     type AuditActorSummary,
 } from '@/lib/audit';
 import { clearSensitiveLocalStorageKey } from '@/lib/browserStoragePolicy';
-import { formatEnumLabel } from '@/lib/labels';
-import { createLocaleTranslator } from '@/lib/locale';
-import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
+import type { EncounterCloseReadiness } from '@/lib/encounterCloseReadiness';
+import type {
+    EncounterInlineOrderLinkageContext,
+    EncounterInlineOrderType,
+} from '@/lib/encounterInlineOrders';
 import {
     encounterWorkspaceHref,
     encounterWorkspaceHrefForRecord,
     encounterWorkspaceLegacyAppointmentHref,
 } from '@/lib/encounterWorkspace';
-import type {
-    EncounterInlineOrderLinkageContext,
-    EncounterInlineOrderType,
-} from '@/lib/encounterInlineOrders';
-import type { EncounterCloseReadiness } from '@/lib/encounterCloseReadiness';
 import {
     encounterCareState,
     theatreProcedureStatusVariant,
@@ -106,9 +103,10 @@ encounterLifecycleActionLabel,
     type EncounterLifecycleAction,
     type EncounterLifecycleTargetKind,
 } from '@/lib/encounterWorkspaceLifecycle';
+import { formatEnumLabel } from '@/lib/labels';
+import { createLocaleTranslator } from '@/lib/locale';
+import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { patientChartHref } from '@/lib/patientChart';
-import { type BreadcrumbItem } from '@/types';
-import type { EncounterWorkspacePaneFocus } from '@/types/encounterWorkspace';
 import {
     MEDICAL_RECORD_NOTE_TYPE_OPTIONS,
     medicalRecordNoteTypeHelperText,
@@ -118,6 +116,8 @@ import {
     medicalRecordNoteTypeSectionUi,
     sanitizeMedicalRecordNoteType,
 } from '@/pages/medical-records/noteTypes';
+import { type BreadcrumbItem } from '@/types';
+import type { EncounterWorkspacePaneFocus } from '@/types/encounterWorkspace';
 type ScopeData = {
     resolvedFrom: string;
     tenant: { code: string; name: string } | null;

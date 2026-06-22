@@ -1,7 +1,7 @@
 import type { InertiaLinkProps } from '@inertiajs/vue3';
 import type { Component } from 'vue';
-import type { AppIconName } from '@/lib/icons';
 import type { NavSectionKey } from '@/config/appNavCatalog';
+import type { AppIconName } from '@/lib/icons';
 
 export type BreadcrumbItem = {
     title: string;

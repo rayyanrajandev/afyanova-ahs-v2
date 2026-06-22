@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Link } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import AppearanceTabs from '@/components/AppearanceTabs.vue';
 import AppIcon from '@/components/AppIcon.vue';
@@ -14,7 +15,6 @@ import {
 } from '@/components/ui/sheet';
 import UiPreferencesPanel from '@/components/UiPreferencesPanel.vue';
 import { edit as editAppearance } from '@/routes/appearance';
-import { Link } from '@inertiajs/vue3';
 
 type Props = {
     open: boolean;
