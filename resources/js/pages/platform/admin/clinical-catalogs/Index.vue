@@ -2955,11 +2955,11 @@ onMounted(() => {
                                             </div>
                                             <div v-if="metadataStringValue(selected.metadata, 'packSize')" class="flex justify-between gap-4 py-2">
                                                 <span class="text-muted-foreground">Pack size</span>
-                                                <span class="font-medium">{{ metadataStringValue(selected.metadata, 'packSize') }} {{ selected.unit?.toLowerCase() }}{{ metadataStringValue(selected.metadata, 'packSize') !== '1' ? 's' : '' }}</span>
+                                                <span class="font-medium">{{ metadataStringValue(selected.metadata, 'packSize') }} {{ selected.unit?.toLowerCase() || 'unit' }}</span>
                                             </div>
                                             <div v-if="metadataStringValue(selected.metadata, 'conversionFactor')" class="flex justify-between gap-4 py-2">
                                                 <span class="text-muted-foreground">Conversion</span>
-                                                <span class="text-right font-medium">1 {{ metadataStringValue(selected.metadata, 'stockUnit') || 'unit' }} = {{ metadataStringValue(selected.metadata, 'conversionFactor') }} {{ selected.unit?.toLowerCase() || 'unit' }}{{ metadataStringValue(selected.metadata, 'conversionFactor') !== '1' ? 's' : '' }}</span>
+                                                <span class="text-right font-medium">1 {{ metadataStringValue(selected.metadata, 'stockUnit') || 'unit' }} = {{ metadataStringValue(selected.metadata, 'conversionFactor') }} {{ selected.unit?.toLowerCase() || 'unit' }}</span>
                                             </div>
                                             <div v-if="metadataStringValue(selected.metadata, 'purchaseUnit')" class="flex justify-between gap-4 py-2">
                                                 <span class="text-muted-foreground">Purchase unit</span>
@@ -2968,7 +2968,7 @@ onMounted(() => {
                                             <div v-if="metadataStringValue(selected.metadata, 'purchaseUnit')" class="flex justify-between gap-4 py-2">
                                                 <span class="text-muted-foreground">Box conversion</span>
                                                 <span class="text-right font-medium">
-                                                    1 {{ metadataStringValue(selected.metadata, 'purchaseUnit') }} = {{ metadataStringValue(selected.metadata, 'purchaseUnitQuantity') || '—' }} {{ metadataStringValue(selected.metadata, 'stockUnit') || 'unit' }}{{ metadataStringValue(selected.metadata, 'purchaseUnitQuantity') !== '1' ? 's' : '' }}
+                                                    1 {{ metadataStringValue(selected.metadata, 'purchaseUnit') }} = {{ metadataStringValue(selected.metadata, 'purchaseUnitQuantity') || '—' }} {{ metadataStringValue(selected.metadata, 'stockUnit') || 'unit' }}
                                                     <span class="block text-[10px] text-muted-foreground">may vary by supplier</span>
                                                 </span>
                                             </div>
