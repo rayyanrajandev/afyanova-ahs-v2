@@ -2131,9 +2131,6 @@ onMounted(() => {
                 </div>
 
                 <div v-if="canRead" class="border-t px-4 pb-4 pt-4 md:px-4">
-                    <p id="clinical-catalog-domain-label" class="mb-2.5 text-xs font-semibold text-foreground">
-                        Catalog domain
-                    </p>
                     <Tabs
                         :model-value="catalogKey"
                         class="w-full"
@@ -2141,7 +2138,6 @@ onMounted(() => {
                     >
                         <TabsList
                             class="grid h-auto w-full grid-cols-2 gap-1 bg-muted/40 p-1 sm:grid-cols-4"
-                            aria-labelledby="clinical-catalog-domain-label"
                         >
                             <TabsTrigger
                                 v-for="tab in clinicalCatalogTabs"
