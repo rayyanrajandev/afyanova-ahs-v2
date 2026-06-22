@@ -173,9 +173,9 @@ const ws = useInventoryWorkspace();
                                 <SelectValue placeholder="Per page" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="10">10 / page</SelectItem>
-                                <SelectItem value="20">20 / page</SelectItem>
-                                <SelectItem value="50">50 / page</SelectItem>
+                                <SelectItem value="10">10</SelectItem>
+                                <SelectItem value="20">20</SelectItem>
+                                <SelectItem value="50">50</SelectItem>
                             </SelectContent>
                         </Select>
                         <Button v-if="ws.hasAnyItemFilters" variant="ghost" size="sm" class="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground" @click="ws.resetItemFilters()">
