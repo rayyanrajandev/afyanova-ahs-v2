@@ -2774,7 +2774,7 @@ onMounted(() => {
                                         empty-text="No matching unit found."
                                         :reserve-message-space="false"
                                     />
-                                    <div class="grid gap-1.5">
+                                    <div class="grid gap-1.5 md:col-span-2">
                                         <Label>Stock units per purchase unit</Label>
                                         <Input v-model="createForm.purchaseUnitQuantity" type="number" min="0" step="0.001" placeholder="e.g. 10" />
                                         <p class="text-xs text-muted-foreground">How many stock units per purchase unit. Example: 10 if 1 box = 10 blisters</p>
@@ -3119,7 +3119,7 @@ onMounted(() => {
 
             
             <Sheet v-if="canManage" :open="editSheetOpen" @update:open="closeEditSheet">
-                <SheetContent side="right" variant="form" size="3xl" class="flex h-full min-h-0 flex-col">
+                <SheetContent side="right" variant="workspace" size="4xl" class="flex h-full min-h-0 flex-col">
                     <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
                         <SheetTitle class="flex items-center gap-2">
                             <AppIcon name="pencil" class="size-5 text-muted-foreground" />
@@ -3307,7 +3307,7 @@ onMounted(() => {
                                         empty-text="No matching unit found."
                                         :reserve-message-space="false"
                                     />
-                                    <div class="grid gap-1.5">
+                                    <div class="grid gap-1.5 md:col-span-2">
                                         <Label>Stock units per purchase unit</Label>
                                         <Input v-model="editForm.purchaseUnitQuantity" type="number" min="0" step="0.001" placeholder="e.g. 10" />
                                         <p class="text-xs text-muted-foreground">How many stock units per purchase unit. Example: 10 if 1 box = 10 blisters</p>
