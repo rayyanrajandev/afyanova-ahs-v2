@@ -169,7 +169,7 @@ const ws = useInventoryWorkspace();
                             </SelectContent>
                         </Select>
                         <Select :model-value="String(ws.itemSearch.perPage)" @update:model-value="ws.itemSearch.perPage = Number($event); ws.itemSearch.page = 1; ws.refreshInventoryItems()">
-                            <SelectTrigger class="h-8 w-28 text-xs">
+                            <SelectTrigger class="h-8 w-20 text-xs">
                                 <SelectValue placeholder="Per page" />
                             </SelectTrigger>
                             <SelectContent>

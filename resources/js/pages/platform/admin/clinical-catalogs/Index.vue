@@ -2319,7 +2319,7 @@ onMounted(() => {
                             </SelectContent>
                         </Select>
                         <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event); search()">
-                            <SelectTrigger class="h-8 w-16 gap-1 text-xs">
+                            <SelectTrigger class="h-8 w-20 gap-1 text-xs">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
