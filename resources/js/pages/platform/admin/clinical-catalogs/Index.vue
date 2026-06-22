@@ -2957,19 +2957,24 @@ onMounted(() => {
                                                 <span class="text-muted-foreground">Pack size</span>
                                                 <span class="font-medium">{{ metadataStringValue(selected.metadata, 'packSize') }} {{ selected.unit?.toLowerCase() || 'unit' }}</span>
                                             </div>
-                                            <div v-if="metadataStringValue(selected.metadata, 'conversionFactor')" class="flex justify-between gap-4 py-2">
-                                                <span class="text-muted-foreground">Conversion</span>
-                                                <span class="text-right font-medium">1 {{ metadataStringValue(selected.metadata, 'stockUnit') || 'unit' }} = {{ metadataStringValue(selected.metadata, 'conversionFactor') }} {{ selected.unit?.toLowerCase() || 'unit' }}</span>
-                                            </div>
                                             <div v-if="metadataStringValue(selected.metadata, 'purchaseUnit')" class="flex justify-between gap-4 py-2">
                                                 <span class="text-muted-foreground">Purchase unit</span>
                                                 <span class="font-medium capitalize">{{ metadataStringValue(selected.metadata, 'purchaseUnit') }}</span>
                                             </div>
-                                            <div v-if="metadataStringValue(selected.metadata, 'purchaseUnit')" class="flex justify-between gap-4 py-2">
-                                                <span class="text-muted-foreground">Box conversion</span>
+                                            <div v-if="metadataStringValue(selected.metadata, 'conversionFactor') || metadataStringValue(selected.metadata, 'purchaseUnit')" class="flex justify-between gap-4 py-2">
+                                                <span class="text-muted-foreground">Conversion</span>
                                                 <span class="text-right font-medium">
-                                                    1 {{ metadataStringValue(selected.metadata, 'purchaseUnit') }} = {{ metadataStringValue(selected.metadata, 'purchaseUnitQuantity') || '—' }} {{ metadataStringValue(selected.metadata, 'stockUnit') || 'unit' }}
-                                                    <span class="block text-[10px] text-muted-foreground">may vary by supplier</span>
+                                                    <template v-if="metadataStringValue(selected.metadata, 'purchaseUnit') && metadataStringValue(selected.metadata, 'purchaseUnitQuantity') && metadataStringValue(selected.metadata, 'conversionFactor')">
+                                                        1 {{ metadataStringValue(selected.metadata, 'purchaseUnit') }} = {{ metadataStringValue(selected.metadata, 'purchaseUnitQuantity') }} {{ metadataStringValue(selected.metadata, 'stockUnit') || 'unit' }} = {{ Number(metadataStringValue(selected.metadata, 'purchaseUnitQuantity')) * Number(metadataStringValue(selected.metadata, 'conversionFactor')) }} {{ selected.unit?.toLowerCase() || 'unit' }}
+                                                        <span class="block text-[10px] text-muted-foreground">may vary by supplier</span>
+                                                    </template>
+                                                    <template v-else-if="metadataStringValue(selected.metadata, 'conversionFactor')">
+                                                        1 {{ metadataStringValue(selected.metadata, 'stockUnit') || 'unit' }} = {{ metadataStringValue(selected.metadata, 'conversionFactor') }} {{ selected.unit?.toLowerCase() || 'unit' }}
+                                                    </template>
+                                                    <template v-else-if="metadataStringValue(selected.metadata, 'purchaseUnit') && metadataStringValue(selected.metadata, 'purchaseUnitQuantity')">
+                                                        1 {{ metadataStringValue(selected.metadata, 'purchaseUnit') }} = {{ metadataStringValue(selected.metadata, 'purchaseUnitQuantity') }} {{ metadataStringValue(selected.metadata, 'stockUnit') || 'unit' }}
+                                                        <span class="block text-[10px] text-muted-foreground">may vary by supplier</span>
+                                                    </template>
                                                 </span>
                                             </div>
                                         </CardContent>
