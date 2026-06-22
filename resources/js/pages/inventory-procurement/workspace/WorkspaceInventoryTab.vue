@@ -130,7 +130,7 @@ const ws = useInventoryWorkspace();
                         </div>
                     </div>
 
-                    <div class="flex items-center gap-2 border-b px-4 py-3">
+                    <div class="flex flex-wrap items-center gap-2 border-b px-4 py-2">
                         <SearchInput
                             id="inv-items-q"
                             v-model="ws.itemSearch.q"
@@ -138,8 +138,6 @@ const ws = useInventoryWorkspace();
                             class="min-w-0 flex-1 text-xs"
                             @keyup.enter="ws.itemSearch.page = 1; ws.refreshInventoryItems()"
                         />
-                    </div>
-                    <div class="flex flex-wrap items-center gap-2 border-b px-4 py-2">
                         <Select :model-value="ws.toSelectValue(ws.itemSearch.category)" @update:model-value="ws.itemSearch.category = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE)); ws.itemSearch.page = 1; ws.refreshInventoryItems()">
                             <SelectTrigger class="h-8 w-40 text-xs">
                                 <SelectValue placeholder="Category" />
