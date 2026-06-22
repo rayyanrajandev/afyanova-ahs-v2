@@ -943,7 +943,8 @@ function metadataStringValue(metadata: Record<string, unknown>, key: string): st
 
 function pn(count: string | number, unit: string): string {
     const n = typeof count === 'string' ? Number(count) : count;
-    return unit + (n > 1 && !unit.endsWith('s') ? 's' : '');
+    if (isNaN(n)) return unit;
+    return n > 1 && !unit.endsWith('s') ? unit + 's' : unit;
 }
 
 function metadataBooleanSelectValue(metadata: Record<string, unknown>, key: string): '' | 'yes' | 'no' {
@@ -1262,6 +1263,23 @@ const filterChips = computed(() => {
     }
 
     return chips;
+});
+const conversionLabel = computed(() => {
+    const item = selected.value;
+    if (!item || item.catalogType !== 'formulary_item') return '';
+    const m = item.metadata ?? {};
+    const cf = metadataStringValue(m, 'conversionFactor');
+    const su = metadataStringValue(m, 'stockUnit') || item.unit || 'unit';
+    const du = item.unit?.toLowerCase() || 'unit';
+    const pu = metadataStringValue(m, 'purchaseUnit');
+    const pq = metadataStringValue(m, 'purchaseUnitQuantity');
+    if (pu && pq && cf) {
+        const total = Number(pq) * Number(cf);
+        return `1 ${pu} = ${pq} ${pn(pq, su)} = ${total} ${pn(String(total), du)}<span class="block text-[10px] text-muted-foreground">may vary by supplier</span>`;
+    }
+    if (cf) return `1 ${su} = ${cf} ${pn(cf, du)}`;
+    if (pu && pq) return `1 ${pu} = ${pq} ${pn(pq, su)}<span class="block text-[10px] text-muted-foreground">may vary by supplier</span>`;
+    return '';
 });
 const createButtonLabel = computed(() => `Create ${catalog.value.singular.toLowerCase()}`);
 const canPrev = computed(() => (pager.value?.currentPage ?? 1) > 1);
@@ -2960,19 +2978,7 @@ onMounted(() => {
                                             </div>
                                             <div v-if="metadataStringValue(selected.metadata, 'conversionFactor') || metadataStringValue(selected.metadata, 'purchaseUnit')" class="flex justify-between gap-4 py-2">
                                                 <span class="text-muted-foreground">Conversion</span>
-                                                <span class="text-right font-medium">
-                                                    <template v-if="metadataStringValue(selected.metadata, 'purchaseUnit') && metadataStringValue(selected.metadata, 'purchaseUnitQuantity') && metadataStringValue(selected.metadata, 'conversionFactor')">
-                                                        1 {{ metadataStringValue(selected.metadata, 'purchaseUnit') }} = {{ metadataStringValue(selected.metadata, 'purchaseUnitQuantity') }} {{ pn(metadataStringValue(selected.metadata, 'purchaseUnitQuantity'), metadataStringValue(selected.metadata, 'stockUnit') || 'unit') }} = {{ Number(metadataStringValue(selected.metadata, 'purchaseUnitQuantity')) * Number(metadataStringValue(selected.metadata, 'conversionFactor')) }} {{ pn(String(Number(metadataStringValue(selected.metadata, 'purchaseUnitQuantity')) * Number(metadataStringValue(selected.metadata, 'conversionFactor'))), selected.unit?.toLowerCase() || 'unit') }}
-                                                        <span class="block text-[10px] text-muted-foreground">may vary by supplier</span>
-                                                    </template>
-                                                    <template v-else-if="metadataStringValue(selected.metadata, 'conversionFactor')">
-                                                        1 {{ metadataStringValue(selected.metadata, 'stockUnit') || 'unit' }} = {{ metadataStringValue(selected.metadata, 'conversionFactor') }} {{ pn(metadataStringValue(selected.metadata, 'conversionFactor'), selected.unit?.toLowerCase() || 'unit') }}
-                                                    </template>
-                                                    <template v-else-if="metadataStringValue(selected.metadata, 'purchaseUnit') && metadataStringValue(selected.metadata, 'purchaseUnitQuantity')">
-                                                        1 {{ metadataStringValue(selected.metadata, 'purchaseUnit') }} = {{ metadataStringValue(selected.metadata, 'purchaseUnitQuantity') }} {{ pn(metadataStringValue(selected.metadata, 'purchaseUnitQuantity'), metadataStringValue(selected.metadata, 'stockUnit') || 'unit') }}
-                                                        <span class="block text-[10px] text-muted-foreground">may vary by supplier</span>
-                                                    </template>
-                                                </span>
+                                                <span class="text-right font-medium" v-html="conversionLabel"></span>
                                             </div>
                                         </CardContent>
                                         <CardContent v-else class="px-3 py-3 text-sm text-muted-foreground">
