@@ -2809,15 +2809,7 @@ onMounted(() => {
                     >
                         <SheetTitle class="flex min-w-0 flex-wrap items-center gap-2 text-base">
                             <AppIcon :name="activeCatalogTab.icon" class="size-5 text-muted-foreground" />
-                            <span class="min-w-0 truncate">
-                                {{ selected.name || 'Unnamed item' }}
-                                <template v-if="selected.catalogType === 'formulary_item' && metadataStringValue(selected.metadata, 'strength')">
-                                    {{ ' ' + metadataStringValue(selected.metadata, 'strength') }}
-                                </template>
-                                <template v-if="selected.catalogType === 'formulary_item' && metadataStringValue(selected.metadata, 'dosageForm')">
-                                    {{ ' ' + metadataStringValue(selected.metadata, 'dosageForm') }}
-                                </template>
-                            </span>
+                            <span class="min-w-0 truncate">{{ selected.name || 'Unnamed item' }}</span>
                             <Badge v-if="selected.code" variant="outline" class="shrink-0 font-normal">{{ selected.code }}</Badge>
                             <Badge :variant="statusVariant(selected.status)" class="shrink-0 capitalize">
                                 {{ formatEnumLabel(selected.status) }}
