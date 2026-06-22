@@ -2252,7 +2252,7 @@ onMounted(() => {
 
             <Card v-if="canRead" class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70 shadow-sm">
                 <div class="flex flex-col gap-3 border-b px-4 py-3">
-                    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div class="flex items-center justify-between gap-4">
                         <div class="min-w-0">
                             <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
                                 <AppIcon :name="activeCatalogTab.icon" class="size-4 text-primary" />
@@ -2262,78 +2262,78 @@ onMounted(() => {
                                 {{ catalogScopeText }} · {{ listFilterHintText }}
                             </p>
                         </div>
-                        <div class="flex flex-col gap-2">
-                            <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
-                                <SearchInput
-                                    v-model="filters.q"
-                                    :placeholder="`Search code, name, or ${catalog.categoryLabel.toLowerCase()}`"
-                                    class="min-w-0 flex-1 text-xs [&_input]:h-8"
-                                    @keyup.enter="search"
-                                />
-                                <div class="flex shrink-0 items-center gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        class="h-8 gap-1.5 rounded-lg text-xs"
-                                        :disabled="catalogExporting"
-                                        @click="exportClinicalCatalogCsv"
-                                    >
-                                        <AppIcon :name="catalogExporting ? 'loader-circle' : 'download'" class="size-3.5" :class="{ 'animate-spin': catalogExporting }" />
-                                        Export
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        class="h-8 gap-1.5 rounded-lg text-xs"
-                                        :disabled="catalogPrinting || loading || listLoading"
-                                        @click="printClinicalCatalogItems"
-                                    >
-                                        <AppIcon :name="catalogPrinting ? 'loader-circle' : 'printer'" class="size-3.5" :class="{ 'animate-spin': catalogPrinting }" />
-                                        Print
-                                    </Button>
-                                </div>
-                            </div>
-                            <div class="flex flex-wrap items-center gap-2">
-                                <Select :model-value="filters.category || SELECT_ALL_VALUE" @update:model-value="filters.category = $event === SELECT_ALL_VALUE ? '' : $event; search()">
-                                    <SelectTrigger class="h-8 w-44 gap-1 text-xs">
-                                        <SelectValue :placeholder="catalog.categoryLabel" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem :value="SELECT_ALL_VALUE">All {{ catalog.categoryLabel.toLowerCase() }}s</SelectItem>
-                                        <SelectItem v-for="opt in categoryOptions" :key="opt.value" :value="opt.value">
-                                            {{ opt.label }}
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <Select
-                                    v-if="catalogKey === 'formulary-items'"
-                                    :model-value="filters.dosageForm || SELECT_ALL_VALUE"
-                                    @update:model-value="filters.dosageForm = $event === SELECT_ALL_VALUE ? '' : $event; search()"
-                                >
-                                    <SelectTrigger class="h-8 w-36 gap-1 text-xs">
-                                        <SelectValue placeholder="Dosage form" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem :value="SELECT_ALL_VALUE">All dosage forms</SelectItem>
-                                        <SelectItem v-for="opt in dosageFormOptions" :key="opt.value" :value="opt.value">
-                                            {{ opt.label }}
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event); search()">
-                                    <SelectTrigger class="h-8 w-16 gap-1 text-xs">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="10">10</SelectItem>
-                                        <SelectItem value="15">15</SelectItem>
-                                        <SelectItem value="20">20</SelectItem>
-                                        <SelectItem value="25">25</SelectItem>
-                                        <SelectItem value="50">50</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                        <div class="flex shrink-0 flex-wrap items-center gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                class="h-8 gap-1.5 rounded-lg text-xs"
+                                :disabled="catalogExporting"
+                                @click="exportClinicalCatalogCsv"
+                            >
+                                <AppIcon :name="catalogExporting ? 'loader-circle' : 'download'" class="size-3.5" :class="{ 'animate-spin': catalogExporting }" />
+                                Export
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                class="h-8 gap-1.5 rounded-lg text-xs"
+                                :disabled="catalogPrinting || loading || listLoading"
+                                @click="printClinicalCatalogItems"
+                            >
+                                <AppIcon :name="catalogPrinting ? 'loader-circle' : 'printer'" class="size-3.5" :class="{ 'animate-spin': catalogPrinting }" />
+                                Print
+                            </Button>
                         </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <SearchInput
+                            v-model="filters.q"
+                            :placeholder="`Search code, name, or ${catalog.categoryLabel.toLowerCase()}`"
+                            class="min-w-0 flex-1 text-xs [&_input]:h-8"
+                            @keyup.enter="search"
+                        />
+                        <Select :model-value="filters.category || SELECT_ALL_VALUE" @update:model-value="filters.category = $event === SELECT_ALL_VALUE ? '' : $event; search()">
+                            <SelectTrigger class="h-8 w-44 gap-1 text-xs">
+                                <SelectValue :placeholder="catalog.categoryLabel" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem :value="SELECT_ALL_VALUE">All {{ catalog.categoryLabel.toLowerCase() }}s</SelectItem>
+                                <SelectItem v-for="opt in categoryOptions" :key="opt.value" :value="opt.value">
+                                    {{ opt.label }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select
+                            v-if="catalogKey === 'formulary-items'"
+                            :model-value="filters.dosageForm || SELECT_ALL_VALUE"
+                            @update:model-value="filters.dosageForm = $event === SELECT_ALL_VALUE ? '' : $event; search()"
+                        >
+                            <SelectTrigger class="h-8 w-36 gap-1 text-xs">
+                                <SelectValue placeholder="Dosage form" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem :value="SELECT_ALL_VALUE">All dosage forms</SelectItem>
+                                <SelectItem v-for="opt in dosageFormOptions" :key="opt.value" :value="opt.value">
+                                    {{ opt.label }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event); search()">
+                            <SelectTrigger class="h-8 w-16 gap-1 text-xs">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="10">10</SelectItem>
+                                <SelectItem value="15">15</SelectItem>
+                                <SelectItem value="20">20</SelectItem>
+                                <SelectItem value="25">25</SelectItem>
+                                <SelectItem value="50">50</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Button v-if="filterChips.length" variant="ghost" size="sm" class="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground" @click="resetFilters">
+                            <AppIcon name="x" class="size-3" />
+                            Clear
+                        </Button>
                     </div>
                     <div
                         v-if="canUseBulkSelection"

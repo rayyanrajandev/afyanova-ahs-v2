@@ -70,7 +70,7 @@ const ws = useInventoryWorkspace();
                         <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
                             <Select v-model="ws.inventoryAutoRefreshInterval">
                                 <SelectTrigger
-                                    class="h-9 w-[8rem] rounded-lg text-xs data-[size=default]:h-9"
+                                    class="h-8 w-[8rem] rounded-lg text-xs data-[size=default]:h-8"
                                     :title="ws.inventoryAutoRefreshInterval !== 'off' ? `Auto-refresh every ${ws.inventoryAutoRefreshInterval}` : 'Auto-refresh off'"
                                 >
                                     <SelectValue placeholder="Auto" />
@@ -88,7 +88,7 @@ const ws = useInventoryWorkspace();
                             <Button
                                 variant="outline"
                                 size="sm"
-                                class="h-9 gap-1.5 rounded-lg text-xs"
+                                class="h-8 gap-1.5 rounded-lg text-xs"
                                 :disabled="ws.loading"
                                 @click="ws.refreshInventoryItems"
                             >
@@ -99,7 +99,7 @@ const ws = useInventoryWorkspace();
                                   v-if="ws.canManageItems"
                                   size="sm"
                                   variant="outline"
-                                  class="h-9 gap-1.5 rounded-lg text-xs"
+                                  class="h-8 gap-1.5 rounded-lg text-xs"
                                   :disabled="!ws.canLaunchCreateItem"
                                   @click="ws.openCatalogSyncDialog"
                               >
@@ -110,7 +110,7 @@ const ws = useInventoryWorkspace();
                                   v-if="ws.canManageItems"
                                   size="sm"
                                   variant="outline"
-                                  class="h-9 gap-1.5 rounded-lg text-xs"
+                                  class="h-8 gap-1.5 rounded-lg text-xs"
                                   :disabled="!ws.canLaunchCreateItem"
                                   @click="ws.openImportItemsCsvDialog"
                               >
@@ -120,7 +120,7 @@ const ws = useInventoryWorkspace();
                              <Button
                                  v-if="ws.canManageItems"
                                  size="sm"
-                                 class="h-9 gap-1.5 rounded-lg text-xs"
+                                 class="h-8 gap-1.5 rounded-lg text-xs"
                                  :disabled="!ws.canLaunchCreateItem"
                                  @click="ws.openCreateItemDialog"
                              >
