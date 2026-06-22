@@ -80,6 +80,8 @@ class ClinicalCatalogBulkCsvSchema
                 'otc_allowed',
                 'stock_unit',
                 'conversion_factor',
+                'purchase_unit',
+                'purchase_unit_quantity',
             ],
             default => throw new InvalidArgumentException('Unsupported clinical catalog type for bulk CSV.'),
         };
@@ -168,7 +170,7 @@ class ClinicalCatalogBulkCsvSchema
                 '',
                 '',
                 '',
-            ], ['500mg', 'capsule', 'oral', '21', 'no', 'bottle', '100']),
+            ], ['500mg', 'capsule', 'oral', '21', 'no', 'bottle', '100', 'box', '10']),
             default => throw new InvalidArgumentException('Unsupported clinical catalog type for bulk CSV.'),
         };
     }
@@ -330,6 +332,8 @@ class ClinicalCatalogBulkCsvSchema
         }
         self::appendIfPresent($metadata, 'stockUnit', (string) ($row['stock_unit'] ?? ''));
         self::appendIfPresent($metadata, 'conversionFactor', (string) ($row['conversion_factor'] ?? ''));
+        self::appendIfPresent($metadata, 'purchaseUnit', (string) ($row['purchase_unit'] ?? ''));
+        self::appendIfPresent($metadata, 'purchaseUnitQuantity', (string) ($row['purchase_unit_quantity'] ?? ''));
 
         return $metadata;
     }
@@ -398,6 +402,8 @@ class ClinicalCatalogBulkCsvSchema
             [ClinicalCatalogType::FORMULARY_ITEM->value, 'otc_allowed'] => self::booleanCsv(self::metadataBool($metadata, 'otcAllowed')),
             [ClinicalCatalogType::FORMULARY_ITEM->value, 'stock_unit'] => self::metadataString($metadata, 'stockUnit'),
             [ClinicalCatalogType::FORMULARY_ITEM->value, 'conversion_factor'] => self::metadataString($metadata, 'conversionFactor'),
+            [ClinicalCatalogType::FORMULARY_ITEM->value, 'purchase_unit'] => self::metadataString($metadata, 'purchaseUnit'),
+            [ClinicalCatalogType::FORMULARY_ITEM->value, 'purchase_unit_quantity'] => self::metadataString($metadata, 'purchaseUnitQuantity'),
             default => '',
         };
     }

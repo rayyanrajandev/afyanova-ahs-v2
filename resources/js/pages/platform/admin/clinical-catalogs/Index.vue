@@ -866,6 +866,8 @@ function createClinicalDefinitionForm() {
         packSize: '',
         stockUnit: '',
         conversionFactor: '',
+        purchaseUnit: '',
+        purchaseUnitQuantity: '',
     };
 }
 
@@ -980,6 +982,8 @@ function applyDomainMetadataToForm(form: ReturnType<typeof createClinicalDefinit
     form.packSize = '';
     form.stockUnit = '';
     form.conversionFactor = '';
+    form.purchaseUnit = '';
+    form.purchaseUnitQuantity = '';
 
     if (key === 'lab-tests') {
         form.sampleType = metadataStringValue(values, 'sampleType');
@@ -1012,6 +1016,8 @@ function applyDomainMetadataToForm(form: ReturnType<typeof createClinicalDefinit
     form.packSize = metadataStringValue(values, 'packSize');
     form.stockUnit = metadataStringValue(values, 'stockUnit');
     form.conversionFactor = metadataStringValue(values, 'conversionFactor');
+    form.purchaseUnit = metadataStringValue(values, 'purchaseUnit');
+    form.purchaseUnitQuantity = metadataStringValue(values, 'purchaseUnitQuantity');
 }
 
 function booleanValueFromSelect(value: string): boolean | null {
@@ -1070,6 +1076,8 @@ function buildKnownDomainMetadata(form: ReturnType<typeof createClinicalDefiniti
     if (otcAllowed !== null) metadata.otcAllowed = otcAllowed;
     appendIfPresent(metadata, 'stockUnit', form.stockUnit);
     appendIfPresent(metadata, 'conversionFactor', form.conversionFactor);
+    appendIfPresent(metadata, 'purchaseUnit', form.purchaseUnit);
+    appendIfPresent(metadata, 'purchaseUnitQuantity', form.purchaseUnitQuantity);
 
     return metadata;
 }
@@ -1148,6 +1156,12 @@ function domainMetadataSummary(item: Item | null): string {
             const su = metadataStringValue(metadata, 'stockUnit') || item.unit || 'unit';
             const du = metadataStringValue(metadata, 'dispensingUnit') || item.unit || 'unit';
             parts.push(`1 ${su} = ${metadataStringValue(metadata, 'conversionFactor')} ${du}`);
+        }
+        if (metadataStringValue(metadata, 'purchaseUnit')) {
+            const pu = metadataStringValue(metadata, 'purchaseUnit');
+            const pq = metadataStringValue(metadata, 'purchaseUnitQuantity');
+            const su = metadataStringValue(metadata, 'stockUnit') || item.unit || 'unit';
+            parts.push(pq ? `1 ${pu} = ${pq} ${su}` : `Purchase ${pu}`);
         }
     }
 
@@ -2718,6 +2732,21 @@ onMounted(() => {
                                         <Input v-model="createForm.conversionFactor" type="number" min="0" step="0.001" placeholder="How many dispensing units = 1 stock unit" />
                                         <p class="text-xs text-muted-foreground">e.g. 1000 if 1 bottle = 1000 tablets</p>
                                     </div>
+                                    <ComboboxField
+                                        input-id="create-clinical-definition-purchase-unit"
+                                        label="Purchase unit (optional)"
+                                        v-model="createForm.purchaseUnit"
+                                        :options="dispensingUnitOptions"
+                                        placeholder="Select purchase unit"
+                                        search-placeholder="Search box, carton, pack..."
+                                        empty-text="No matching unit found."
+                                        :reserve-message-space="false"
+                                    />
+                                    <div class="grid gap-1.5">
+                                        <Label>Stock units per purchase unit</Label>
+                                        <Input v-model="createForm.purchaseUnitQuantity" type="number" min="0" step="0.001" placeholder="How many stock units = 1 purchase unit" />
+                                        <p class="text-xs text-muted-foreground">e.g. 10 if 1 box = 10 blisters</p>
+                                    </div>
                                 </div>
                             </fieldset>
 
@@ -3205,6 +3234,21 @@ onMounted(() => {
                                         <Label>Conversion factor</Label>
                                         <Input v-model="editForm.conversionFactor" type="number" min="0" step="0.001" placeholder="How many dispensing units = 1 stock unit" />
                                         <p class="text-xs text-muted-foreground">e.g. 1000 if 1 bottle = 1000 tablets</p>
+                                    </div>
+                                    <ComboboxField
+                                        input-id="edit-clinical-definition-purchase-unit"
+                                        label="Purchase unit (optional)"
+                                        v-model="editForm.purchaseUnit"
+                                        :options="dispensingUnitOptions"
+                                        placeholder="Select purchase unit"
+                                        search-placeholder="Search box, carton, pack..."
+                                        empty-text="No matching unit found."
+                                        :reserve-message-space="false"
+                                    />
+                                    <div class="grid gap-1.5">
+                                        <Label>Stock units per purchase unit</Label>
+                                        <Input v-model="editForm.purchaseUnitQuantity" type="number" min="0" step="0.001" placeholder="How many stock units = 1 purchase unit" />
+                                        <p class="text-xs text-muted-foreground">e.g. 10 if 1 box = 10 blisters</p>
                                     </div>
                                 </div>
                             </fieldset>
