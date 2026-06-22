@@ -30,11 +30,15 @@ class ListClinicalCatalogItemStatusCountsUseCase
         $category = isset($filters['category']) ? trim((string) $filters['category']) : null;
         $category = $category === '' ? null : $category;
 
+        $dosageForm = isset($filters['dosageForm']) ? trim((string) $filters['dosageForm']) : null;
+        $dosageForm = $dosageForm === '' ? null : $dosageForm;
+
         return $this->repository->statusCounts(
             catalogType: $catalogType,
             query: $query,
             departmentId: $departmentId,
             category: $category,
+            dosageForm: $dosageForm,
         );
     }
 }

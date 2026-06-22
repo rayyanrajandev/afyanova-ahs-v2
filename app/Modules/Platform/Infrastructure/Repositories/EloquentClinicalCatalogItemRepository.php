@@ -115,6 +115,7 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
         ?string $status,
         ?string $departmentId,
         ?string $category,
+        ?string $dosageForm = null,
         int $page,
         int $perPage,
         ?string $sortBy,
@@ -149,6 +150,7 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
             ->when($status, fn (Builder $builder, string $value) => $builder->where('status', $value))
             ->when($departmentId, fn (Builder $builder, string $value) => $builder->where('department_id', $value))
             ->when($category, fn (Builder $builder, string $value) => $builder->where('category', $value))
+            ->when($dosageForm, fn (Builder $builder, string $value) => $builder->where('metadata->dosageForm', $value))
             ->when($ids !== null && $ids !== [], fn (Builder $builder) => $builder->whereIn('id', $ids))
             ->orderBy($sortBy, $sortDirection);
 
@@ -166,7 +168,8 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
         string $catalogType,
         ?string $query,
         ?string $departmentId,
-        ?string $category
+        ?string $category,
+        ?string $dosageForm = null,
     ): array {
         $queryBuilder = ClinicalCatalogItemModel::query()
             ->where('catalog_type', $catalogType);
@@ -190,7 +193,8 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
                 });
             })
             ->when($departmentId, fn (Builder $builder, string $value) => $builder->where('department_id', $value))
-            ->when($category, fn (Builder $builder, string $value) => $builder->where('category', $value));
+            ->when($category, fn (Builder $builder, string $value) => $builder->where('category', $value))
+            ->when($dosageForm, fn (Builder $builder, string $value) => $builder->where('metadata->dosageForm', $value));
 
         $rows = $queryBuilder
             ->selectRaw('status, COUNT(*) as aggregate')

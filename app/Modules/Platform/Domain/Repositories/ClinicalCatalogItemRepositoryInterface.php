@@ -24,6 +24,7 @@ interface ClinicalCatalogItemRepositoryInterface
         ?string $status,
         ?string $departmentId,
         ?string $category,
+        ?string $dosageForm = null,
         int $page,
         int $perPage,
         ?string $sortBy,
@@ -42,6 +43,7 @@ interface ClinicalCatalogItemRepositoryInterface
         string $catalogType,
         ?string $query,
         ?string $departmentId,
-        ?string $category
+        ?string $category,
+        ?string $dosageForm = null,
     ): array;
 }

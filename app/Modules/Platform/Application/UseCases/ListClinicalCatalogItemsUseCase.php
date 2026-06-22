@@ -57,12 +57,16 @@ class ListClinicalCatalogItemsUseCase
         $category = isset($filters['category']) ? trim((string) $filters['category']) : null;
         $category = $category === '' ? null : $category;
 
+        $dosageForm = isset($filters['dosageForm']) ? trim((string) $filters['dosageForm']) : null;
+        $dosageForm = $dosageForm === '' ? null : $dosageForm;
+
         $result = $this->repository->search(
             catalogType: $catalogType,
             query: $query,
             status: $status,
             departmentId: $departmentId,
             category: $category,
+            dosageForm: $dosageForm,
             page: $page,
             perPage: $perPage,
             sortBy: $sortBy,

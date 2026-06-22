@@ -454,7 +454,7 @@ const routeOfAdministrationOptions: SearchableSelectOption[] = [
     { value: 'intrathecal', label: 'Intrathecal', group: 'Other routes' },
 ];
 
-const filters = reactive({ q: '', status: '', category: '', perPage: 10, page: 1 });
+const filters = reactive({ q: '', status: '', category: '', dosageForm: '', perPage: 10, page: 1 });
 
 const createSheetOpen = ref(false);
 
@@ -1157,7 +1157,7 @@ function domainMetadataSummary(item: Item | null): string {
 
 const catalogScopeText = computed(() => `${counts.value.total} ${catalog.value.label.toLowerCase()} in scope`);
 const listFilterHintText = computed(() =>
-    filterCount.value > 0 ? `${filterCount.value} filters applied` : 'Filter by search, status, or category',
+    filterCount.value > 0 ? `${filterCount.value} filters applied` : 'Filter by search, status, category, or dosage form',
 );
 const categoryOptions = computed<SearchableSelectOption[]>(() => {
     switch (catalogKey.value) {
@@ -1178,6 +1178,7 @@ const filterCount = computed(() => {
     if (filters.q.trim()) count += 1;
     if (filters.status) count += 1;
     if (filters.category.trim()) count += 1;
+    if (filters.dosageForm) count += 1;
     if (filters.perPage !== 10) count += 1;
     return count;
 });
@@ -1213,6 +1214,18 @@ const filterChips = computed(() => {
             label: matched?.label ?? filters.category.trim(),
             clear: () => {
                 filters.category = '';
+                filters.page = 1;
+                void loadItems();
+            },
+        });
+    }
+    if (filters.dosageForm) {
+        const matched = dosageFormOptions.find((o) => o.value === filters.dosageForm);
+        chips.push({
+            key: 'dosageForm',
+            label: matched?.label ?? filters.dosageForm,
+            clear: () => {
+                filters.dosageForm = '';
                 filters.page = 1;
                 void loadItems();
             },
@@ -1598,6 +1611,7 @@ async function loadItems(): Promise<void> {
                     q: filters.q.trim() || null,
                     status: filters.status || null,
                     category: filters.category.trim() || null,
+                    dosageForm: filters.dosageForm || null,
                     perPage: filters.perPage,
                     page: filters.page,
                 },
@@ -1626,6 +1640,7 @@ function resetFilters(): void {
     filters.q = '';
     filters.status = '';
     filters.category = '';
+    filters.dosageForm = '';
     filters.perPage = 10;
     filters.page = 1;
     void loadItems();
@@ -2202,41 +2217,60 @@ onMounted(() => {
                                 {{ catalogScopeText }} · {{ listFilterHintText }}
                             </p>
                         </div>
-                        <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:max-w-2xl">
-                            <SearchInput
-                                v-model="filters.q"
-                                :placeholder="`Search code, name, or ${catalog.categoryLabel.toLowerCase()}`"
-                                class="min-w-0 flex-1 text-xs [&_input]:h-8"
-                                @keyup.enter="search"
-                            />
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                class="h-8 gap-1.5 rounded-lg text-xs"
-                                :disabled="catalogExporting"
-                                @click="exportClinicalCatalogCsv"
-                            >
-                                <AppIcon :name="catalogExporting ? 'loader-circle' : 'download'" class="size-3.5" :class="{ 'animate-spin': catalogExporting }" />
-                                Export
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                class="h-8 gap-1.5 rounded-lg text-xs"
-                                :disabled="catalogPrinting || loading || listLoading"
-                                @click="printClinicalCatalogItems"
-                            >
-                                <AppIcon :name="catalogPrinting ? 'loader-circle' : 'printer'" class="size-3.5" :class="{ 'animate-spin': catalogPrinting }" />
-                                Print
-                            </Button>
-                            <div class="flex items-center gap-2">
+                        <div class="flex flex-col gap-2">
+                            <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
+                                <SearchInput
+                                    v-model="filters.q"
+                                    :placeholder="`Search code, name, or ${catalog.categoryLabel.toLowerCase()}`"
+                                    class="min-w-0 flex-1 text-xs [&_input]:h-8"
+                                    @keyup.enter="search"
+                                />
+                                <div class="flex shrink-0 items-center gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        class="h-8 gap-1.5 rounded-lg text-xs"
+                                        :disabled="catalogExporting"
+                                        @click="exportClinicalCatalogCsv"
+                                    >
+                                        <AppIcon :name="catalogExporting ? 'loader-circle' : 'download'" class="size-3.5" :class="{ 'animate-spin': catalogExporting }" />
+                                        Export
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        class="h-8 gap-1.5 rounded-lg text-xs"
+                                        :disabled="catalogPrinting || loading || listLoading"
+                                        @click="printClinicalCatalogItems"
+                                    >
+                                        <AppIcon :name="catalogPrinting ? 'loader-circle' : 'printer'" class="size-3.5" :class="{ 'animate-spin': catalogPrinting }" />
+                                        Print
+                                    </Button>
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
                                 <Select :model-value="filters.category || SELECT_ALL_VALUE" @update:model-value="filters.category = $event === SELECT_ALL_VALUE ? '' : $event; search()">
-                                    <SelectTrigger class="h-8 w-40 gap-1 text-xs">
+                                    <SelectTrigger class="h-8 w-44 gap-1 text-xs">
                                         <SelectValue :placeholder="catalog.categoryLabel" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem :value="SELECT_ALL_VALUE">All {{ catalog.categoryLabel.toLowerCase() }}s</SelectItem>
                                         <SelectItem v-for="opt in categoryOptions" :key="opt.value" :value="opt.value">
+                                            {{ opt.label }}
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <Select
+                                    v-if="catalogKey === 'formulary-items'"
+                                    :model-value="filters.dosageForm || SELECT_ALL_VALUE"
+                                    @update:model-value="filters.dosageForm = $event === SELECT_ALL_VALUE ? '' : $event; search()"
+                                >
+                                    <SelectTrigger class="h-8 w-36 gap-1 text-xs">
+                                        <SelectValue placeholder="Dosage form" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem :value="SELECT_ALL_VALUE">All dosage forms</SelectItem>
+                                        <SelectItem v-for="opt in dosageFormOptions" :key="opt.value" :value="opt.value">
                                             {{ opt.label }}
                                         </SelectItem>
                                     </SelectContent>

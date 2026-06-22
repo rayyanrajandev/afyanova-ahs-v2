@@ -30,6 +30,7 @@ class ExportClinicalCatalogItemsCsvUseCase
                 status: $this->normalizedStatus($filters['status'] ?? null),
                 departmentId: $this->nullableFilter($filters['departmentId'] ?? null),
                 category: $this->nullableFilter($filters['category'] ?? null),
+                dosageForm: $this->nullableFilter($filters['dosageForm'] ?? null),
                 page: $page,
                 perPage: 100,
                 sortBy: 'code',
