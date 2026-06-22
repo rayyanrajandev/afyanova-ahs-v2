@@ -32,7 +32,7 @@ const DOMAIN_COLUMNS: Record<ClinicalCatalogBulkKey, readonly string[]> = {
     'lab-tests': ['sample_type', 'specimen_container', 'turnaround_hours', 'fasting_required'],
     'radiology-procedures': ['modality', 'body_site', 'contrast_required', 'study_duration_minutes'],
     'theatre-procedures': ['procedure_class', 'anesthesia_type', 'expected_duration_minutes', 'sterile_prep_required'],
-    'formulary-items': ['strength', 'dosage_form', 'route', 'pack_size', 'otc_allowed'],
+    'formulary-items': ['strength', 'dosage_form', 'route', 'pack_size', 'otc_allowed', 'stock_unit', 'conversion_factor'],
 };
 
 export function clinicalCatalogBulkColumns(catalogKey: ClinicalCatalogBulkKey): string[] {

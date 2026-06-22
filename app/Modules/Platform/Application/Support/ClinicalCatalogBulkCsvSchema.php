@@ -78,6 +78,8 @@ class ClinicalCatalogBulkCsvSchema
                 'route',
                 'pack_size',
                 'otc_allowed',
+                'stock_unit',
+                'conversion_factor',
             ],
             default => throw new InvalidArgumentException('Unsupported clinical catalog type for bulk CSV.'),
         };
@@ -166,7 +168,7 @@ class ClinicalCatalogBulkCsvSchema
                 '',
                 '',
                 '',
-            ], ['500mg', 'capsule', 'oral', '21', 'no']),
+            ], ['500mg', 'capsule', 'oral', '21', 'no', 'bottle', '100']),
             default => throw new InvalidArgumentException('Unsupported clinical catalog type for bulk CSV.'),
         };
     }
@@ -326,6 +328,8 @@ class ClinicalCatalogBulkCsvSchema
         if ($otc !== null) {
             $metadata['otcAllowed'] = $otc;
         }
+        self::appendIfPresent($metadata, 'stockUnit', (string) ($row['stock_unit'] ?? ''));
+        self::appendIfPresent($metadata, 'conversionFactor', (string) ($row['conversion_factor'] ?? ''));
 
         return $metadata;
     }
@@ -366,6 +370,10 @@ class ClinicalCatalogBulkCsvSchema
         if ($catalogType === ClinicalCatalogType::THEATRE_PROCEDURE->value) {
             self::assertPositiveWholeNumber($row['expected_duration_minutes'] ?? '', 'expected_duration_minutes', $errors);
         }
+
+        if ($catalogType === ClinicalCatalogType::FORMULARY_ITEM->value) {
+            self::assertPositiveNumeric($row['conversion_factor'] ?? '', 'conversion_factor', $errors);
+        }
     }
 
     private static function domainColumnValue(string $catalogType, string $column, array $metadata): string
@@ -388,6 +396,8 @@ class ClinicalCatalogBulkCsvSchema
             [ClinicalCatalogType::FORMULARY_ITEM->value, 'route'] => self::metadataString($metadata, 'route'),
             [ClinicalCatalogType::FORMULARY_ITEM->value, 'pack_size'] => self::metadataString($metadata, 'packSize'),
             [ClinicalCatalogType::FORMULARY_ITEM->value, 'otc_allowed'] => self::booleanCsv(self::metadataBool($metadata, 'otcAllowed')),
+            [ClinicalCatalogType::FORMULARY_ITEM->value, 'stock_unit'] => self::metadataString($metadata, 'stockUnit'),
+            [ClinicalCatalogType::FORMULARY_ITEM->value, 'conversion_factor'] => self::metadataString($metadata, 'conversionFactor'),
             default => '',
         };
     }
@@ -487,6 +497,21 @@ class ClinicalCatalogBulkCsvSchema
 
         if (! preg_match('/^\d+$/', $normalized) || (int) $normalized <= 0) {
             $errors[$field] = sprintf('%s must be a whole number greater than 0.', str_replace('_', ' ', $field));
+        }
+    }
+
+    /**
+     * @param  array<string, string>  $errors
+     */
+    private static function assertPositiveNumeric(mixed $value, string $field, array &$errors): void
+    {
+        $normalized = trim((string) $value);
+        if ($normalized === '') {
+            return;
+        }
+
+        if (! is_numeric($normalized) || (float) $normalized <= 0) {
+            $errors[$field] = sprintf('%s must be a positive number greater than 0.', str_replace('_', ' ', $field));
         }
     }
 
