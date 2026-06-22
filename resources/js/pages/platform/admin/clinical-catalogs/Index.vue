@@ -941,6 +941,11 @@ function metadataStringValue(metadata: Record<string, unknown>, key: string): st
     return '';
 }
 
+function pn(count: string | number, unit: string): string {
+    const n = typeof count === 'string' ? Number(count) : count;
+    return unit + (n > 1 && !unit.endsWith('s') ? 's' : '');
+}
+
 function metadataBooleanSelectValue(metadata: Record<string, unknown>, key: string): '' | 'yes' | 'no' {
     const value = metadata[key];
 
@@ -2955,7 +2960,7 @@ onMounted(() => {
                                             </div>
                                             <div v-if="metadataStringValue(selected.metadata, 'packSize')" class="flex justify-between gap-4 py-2">
                                                 <span class="text-muted-foreground">Pack size</span>
-                                                <span class="font-medium">{{ metadataStringValue(selected.metadata, 'packSize') }} {{ selected.unit?.toLowerCase() || 'unit' }}</span>
+                                                <span class="font-medium">{{ metadataStringValue(selected.metadata, 'packSize') }} {{ pn(metadataStringValue(selected.metadata, 'packSize'), selected.unit?.toLowerCase() || 'unit') }}</span>
                                             </div>
                                             <div v-if="metadataStringValue(selected.metadata, 'purchaseUnit')" class="flex justify-between gap-4 py-2">
                                                 <span class="text-muted-foreground">Purchase unit</span>
@@ -2965,14 +2970,14 @@ onMounted(() => {
                                                 <span class="text-muted-foreground">Conversion</span>
                                                 <span class="text-right font-medium">
                                                     <template v-if="metadataStringValue(selected.metadata, 'purchaseUnit') && metadataStringValue(selected.metadata, 'purchaseUnitQuantity') && metadataStringValue(selected.metadata, 'conversionFactor')">
-                                                        1 {{ metadataStringValue(selected.metadata, 'purchaseUnit') }} = {{ metadataStringValue(selected.metadata, 'purchaseUnitQuantity') }} {{ metadataStringValue(selected.metadata, 'stockUnit') || 'unit' }} = {{ Number(metadataStringValue(selected.metadata, 'purchaseUnitQuantity')) * Number(metadataStringValue(selected.metadata, 'conversionFactor')) }} {{ selected.unit?.toLowerCase() || 'unit' }}
+                                                        1 {{ metadataStringValue(selected.metadata, 'purchaseUnit') }} = {{ metadataStringValue(selected.metadata, 'purchaseUnitQuantity') }} {{ pn(metadataStringValue(selected.metadata, 'purchaseUnitQuantity'), metadataStringValue(selected.metadata, 'stockUnit') || 'unit') }} = {{ Number(metadataStringValue(selected.metadata, 'purchaseUnitQuantity')) * Number(metadataStringValue(selected.metadata, 'conversionFactor')) }} {{ pn(String(Number(metadataStringValue(selected.metadata, 'purchaseUnitQuantity')) * Number(metadataStringValue(selected.metadata, 'conversionFactor'))), selected.unit?.toLowerCase() || 'unit') }}
                                                         <span class="block text-[10px] text-muted-foreground">may vary by supplier</span>
                                                     </template>
                                                     <template v-else-if="metadataStringValue(selected.metadata, 'conversionFactor')">
-                                                        1 {{ metadataStringValue(selected.metadata, 'stockUnit') || 'unit' }} = {{ metadataStringValue(selected.metadata, 'conversionFactor') }} {{ selected.unit?.toLowerCase() || 'unit' }}
+                                                        1 {{ metadataStringValue(selected.metadata, 'stockUnit') || 'unit' }} = {{ metadataStringValue(selected.metadata, 'conversionFactor') }} {{ pn(metadataStringValue(selected.metadata, 'conversionFactor'), selected.unit?.toLowerCase() || 'unit') }}
                                                     </template>
                                                     <template v-else-if="metadataStringValue(selected.metadata, 'purchaseUnit') && metadataStringValue(selected.metadata, 'purchaseUnitQuantity')">
-                                                        1 {{ metadataStringValue(selected.metadata, 'purchaseUnit') }} = {{ metadataStringValue(selected.metadata, 'purchaseUnitQuantity') }} {{ metadataStringValue(selected.metadata, 'stockUnit') || 'unit' }}
+                                                        1 {{ metadataStringValue(selected.metadata, 'purchaseUnit') }} = {{ metadataStringValue(selected.metadata, 'purchaseUnitQuantity') }} {{ pn(metadataStringValue(selected.metadata, 'purchaseUnitQuantity'), metadataStringValue(selected.metadata, 'stockUnit') || 'unit') }}
                                                         <span class="block text-[10px] text-muted-foreground">may vary by supplier</span>
                                                     </template>
                                                 </span>
