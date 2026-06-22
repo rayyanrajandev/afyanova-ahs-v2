@@ -1269,16 +1269,25 @@ const conversionLabel = computed(() => {
     if (!item || item.catalogType !== 'formulary_item') return '';
     const m = item.metadata ?? {};
     const cf = metadataStringValue(m, 'conversionFactor');
-    const su = metadataStringValue(m, 'stockUnit') || item.unit || 'unit';
-    const du = item.unit?.toLowerCase() || 'unit';
+    const su = (metadataStringValue(m, 'stockUnit') || item.unit || '').toLowerCase();
+    const du = (item.unit || '').toLowerCase();
     const pu = metadataStringValue(m, 'purchaseUnit');
     const pq = metadataStringValue(m, 'purchaseUnitQuantity');
     if (pu && pq && cf) {
         const total = Number(pq) * Number(cf);
-        return `1 ${pu} = ${pq} ${pn(pq, su)} = ${total} ${pn(String(total), du)}<span class="block text-[10px] text-muted-foreground">may vary by supplier</span>`;
+        let label = `1 ${pu} = ${pq} ${pn(pq, su)}`;
+        if (su !== du || Number(cf) !== 1) {
+            label += ` = ${total} ${pn(String(total), du)}`;
+        }
+        return label + '<span class="block text-[10px] text-muted-foreground mt-0.5">may vary by supplier</span>';
     }
-    if (cf) return `1 ${su} = ${cf} ${pn(cf, du)}`;
-    if (pu && pq) return `1 ${pu} = ${pq} ${pn(pq, su)}<span class="block text-[10px] text-muted-foreground">may vary by supplier</span>`;
+    if (cf) {
+        if (su !== du || Number(cf) !== 1) {
+            return `1 ${su} = ${cf} ${pn(cf, du)}`;
+        }
+        return '';
+    }
+    if (pu && pq) return `1 ${pu} = ${pq} ${pn(pq, su)}<span class="block text-[10px] text-muted-foreground mt-0.5">may vary by supplier</span>`;
     return '';
 });
 const createButtonLabel = computed(() => `Create ${catalog.value.singular.toLowerCase()}`);
