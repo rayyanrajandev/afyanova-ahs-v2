@@ -191,7 +191,7 @@ const domains = {
         unitLabel: 'Dispensing unit',
         unitPlaceholder: 'capsule',
         domainSectionTitle: 'Medicine workflow details',
-        domainSectionDescription: 'Capture strength, dosage form, route, pack behavior, and OTC posture so pharmacy and OTC workflows stay consistent.',
+        domainSectionDescription: 'Define strength, dosage form, route, and prescription type. Configure stock unit, pack size, dispensing conversion, and optional purchase unit for procurement.',
     },
 } as const;
 
@@ -1156,7 +1156,7 @@ function domainMetadataSummary(item: Item | null): string {
         if (metadataStringValue(metadata, 'dosageForm')) parts.push(metadataStringValue(metadata, 'dosageForm'));
         if (metadataStringValue(metadata, 'route')) parts.push(`Route ${metadataStringValue(metadata, 'route')}`);
         if (metadataStringValue(metadata, 'packSize')) parts.push(`Pack ${metadataStringValue(metadata, 'packSize')}`);
-        if (metadataBooleanSelectValue(metadata, 'otcAllowed')) parts.push(metadataBooleanSelectValue(metadata, 'otcAllowed') === 'yes' ? 'OTC allowed' : 'Restricted');
+        if (metadataBooleanSelectValue(metadata, 'otcAllowed')) parts.push(metadataBooleanSelectValue(metadata, 'otcAllowed') === 'yes' ? 'OTC' : 'Rx');
         if (metadataStringValue(metadata, 'stockUnit')) parts.push(`Stock ${metadataStringValue(metadata, 'stockUnit')}`);
         if (metadataStringValue(metadata, 'conversionFactor')) {
             const su = metadataStringValue(metadata, 'stockUnit') || item.unit || 'unit';
@@ -2747,11 +2747,10 @@ onMounted(() => {
                                         empty-text="No matching route found."
                                         :reserve-message-space="false"
                                     />
-                                    <div class="grid gap-1.5"><Label>Pack size</Label><Input v-model="createForm.packSize" placeholder="10 capsules" /></div>
-                                    <div class="grid gap-1.5 md:col-span-2"><Label>OTC sellable</Label><Select v-model="createForm.otcAllowed"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">OTC allowed</SelectItem><SelectItem value="no">Restricted</SelectItem></SelectContent></Select></div>
+                                    <div class="grid gap-1.5"><Label>Prescription type</Label><Select v-model="createForm.otcAllowed"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">OTC</SelectItem><SelectItem value="no">Rx</SelectItem></SelectContent></Select></div>
                                     <ComboboxField
                                         input-id="create-clinical-definition-stock-unit"
-                                        label="Stock unit (purchase/receive)"
+                                        label="Stock unit"
                                         v-model="createForm.stockUnit"
                                         :options="dispensingUnitOptions"
                                         placeholder="Select stock unit"
@@ -2759,14 +2758,15 @@ onMounted(() => {
                                         empty-text="No matching unit found."
                                         :reserve-message-space="false"
                                     />
+                                    <div class="grid gap-1.5"><Label>Pack size</Label><Input v-model="createForm.packSize" placeholder="e.g. 28" /><p class="text-xs text-muted-foreground">How many dispensing units per pack</p></div>
                                     <div class="grid gap-1.5">
-                                        <Label>Conversion factor</Label>
-                                        <Input v-model="createForm.conversionFactor" type="number" min="0" step="0.001" placeholder="How many dispensing units = 1 stock unit" />
-                                        <p class="text-xs text-muted-foreground">e.g. 1000 if 1 bottle = 1000 tablets</p>
+                                        <Label>Conversion</Label>
+                                        <Input v-model="createForm.conversionFactor" type="number" min="0" step="0.001" placeholder="e.g. 4" />
+                                        <p class="text-xs text-muted-foreground">1 stock unit = N dispensing units. Example: 4 if 1 blister = 4 tablets</p>
                                     </div>
                                     <ComboboxField
                                         input-id="create-clinical-definition-purchase-unit"
-                                        label="Purchase unit (optional)"
+                                        label="Purchase unit"
                                         v-model="createForm.purchaseUnit"
                                         :options="dispensingUnitOptions"
                                         placeholder="Select purchase unit"
@@ -2776,8 +2776,8 @@ onMounted(() => {
                                     />
                                     <div class="grid gap-1.5">
                                         <Label>Stock units per purchase unit</Label>
-                                        <Input v-model="createForm.purchaseUnitQuantity" type="number" min="0" step="0.001" placeholder="How many stock units = 1 purchase unit" />
-                                        <p class="text-xs text-muted-foreground">e.g. 10 if 1 box = 10 blisters</p>
+                                        <Input v-model="createForm.purchaseUnitQuantity" type="number" min="0" step="0.001" placeholder="e.g. 10" />
+                                        <p class="text-xs text-muted-foreground">How many stock units per purchase unit. Example: 10 if 1 box = 10 blisters</p>
                                     </div>
                                 </div>
                             </fieldset>
@@ -3280,11 +3280,10 @@ onMounted(() => {
                                         empty-text="No matching route found."
                                         :reserve-message-space="false"
                                     />
-                                    <div class="grid gap-1.5"><Label>Pack size</Label><Input v-model="editForm.packSize" placeholder="10 capsules" /></div>
-                                    <div class="grid gap-1.5 md:col-span-2"><Label>OTC sellable</Label><Select v-model="editForm.otcAllowed"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">OTC allowed</SelectItem><SelectItem value="no">Restricted</SelectItem></SelectContent></Select></div>
+                                    <div class="grid gap-1.5"><Label>Prescription type</Label><Select v-model="editForm.otcAllowed"><SelectTrigger class="w-full"><SelectValue placeholder="Not specified" /></SelectTrigger><SelectContent><SelectItem :value="SELECT_NOT_SPECIFIED_VALUE">Not specified</SelectItem><SelectItem value="yes">OTC</SelectItem><SelectItem value="no">Rx</SelectItem></SelectContent></Select></div>
                                     <ComboboxField
                                         input-id="edit-clinical-definition-stock-unit"
-                                        label="Stock unit (purchase/receive)"
+                                        label="Stock unit"
                                         v-model="editForm.stockUnit"
                                         :options="dispensingUnitOptions"
                                         placeholder="Select stock unit"
@@ -3292,14 +3291,15 @@ onMounted(() => {
                                         empty-text="No matching unit found."
                                         :reserve-message-space="false"
                                     />
+                                    <div class="grid gap-1.5"><Label>Pack size</Label><Input v-model="editForm.packSize" placeholder="e.g. 28" /><p class="text-xs text-muted-foreground">How many dispensing units per pack</p></div>
                                     <div class="grid gap-1.5">
-                                        <Label>Conversion factor</Label>
-                                        <Input v-model="editForm.conversionFactor" type="number" min="0" step="0.001" placeholder="How many dispensing units = 1 stock unit" />
-                                        <p class="text-xs text-muted-foreground">e.g. 1000 if 1 bottle = 1000 tablets</p>
+                                        <Label>Conversion</Label>
+                                        <Input v-model="editForm.conversionFactor" type="number" min="0" step="0.001" placeholder="e.g. 4" />
+                                        <p class="text-xs text-muted-foreground">1 stock unit = N dispensing units. Example: 4 if 1 blister = 4 tablets</p>
                                     </div>
                                     <ComboboxField
                                         input-id="edit-clinical-definition-purchase-unit"
-                                        label="Purchase unit (optional)"
+                                        label="Purchase unit"
                                         v-model="editForm.purchaseUnit"
                                         :options="dispensingUnitOptions"
                                         placeholder="Select purchase unit"
@@ -3309,8 +3309,8 @@ onMounted(() => {
                                     />
                                     <div class="grid gap-1.5">
                                         <Label>Stock units per purchase unit</Label>
-                                        <Input v-model="editForm.purchaseUnitQuantity" type="number" min="0" step="0.001" placeholder="How many stock units = 1 purchase unit" />
-                                        <p class="text-xs text-muted-foreground">e.g. 10 if 1 box = 10 blisters</p>
+                                        <Input v-model="editForm.purchaseUnitQuantity" type="number" min="0" step="0.001" placeholder="e.g. 10" />
+                                        <p class="text-xs text-muted-foreground">How many stock units per purchase unit. Example: 10 if 1 box = 10 blisters</p>
                                     </div>
                                 </div>
                             </fieldset>
