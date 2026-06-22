@@ -511,7 +511,6 @@ const canLaunchStockMovement = computed(() => canCreateMovement.value && !stockE
 const canLaunchReconciliation = computed(() => canReconcileStock.value && !stockExecutionBlockedReason.value);
 const canLaunchProcurementRequest = computed(() => canCreateRequest.value && !procurementSetupBlockedReason.value);
 
-const itemFiltersSheetOpen = ref(false);
 const mobileProcurementDrawerOpen = ref(false);
 const mobileLedgerDrawerOpen = ref(false);
 
@@ -6350,15 +6349,6 @@ function resetItemFilters() {
     itemSearch.page = 1;
     void refreshInventoryItems();
 }
-function submitItemFiltersFromSheet() {
-    itemFiltersSheetOpen.value = false;
-    itemSearch.page = 1;
-    void refreshInventoryItems();
-}
-function resetItemFiltersFromSheet() {
-    itemFiltersSheetOpen.value = false;
-    resetItemFilters();
-}
 function resetProcurementFilters() {
     procurementSearch.q = '';
     procurementSearch.status = '';
@@ -6592,7 +6582,6 @@ bindInventoryWorkspace({
     submitImportItemsCsv,
     openCreateItemDialog,
     itemSearch,
-    itemFiltersSheetOpen,
     hasAnyItemFilters,
     itemFilterChips,
     items,
@@ -6666,8 +6655,6 @@ bindInventoryWorkspace({
     consumptionGranularity,
     consumptionDays,
     loadConsumptionTrends,
-    submitItemFiltersFromSheet,
-    resetItemFiltersFromSheet,
     itemCategoryOptions,
     stockStateOptions,
     submitProcurementSearchFromMobileDrawer,

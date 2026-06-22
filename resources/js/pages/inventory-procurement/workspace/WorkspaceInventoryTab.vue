@@ -138,12 +138,60 @@ const ws = useInventoryWorkspace();
                             class="min-w-0 flex-1 text-xs"
                             @keyup.enter="ws.itemSearch.page = 1; ws.refreshInventoryItems()"
                         />
-                        <Button variant="outline" size="sm" class="h-9 gap-1.5 rounded-lg text-xs" @click="ws.itemFiltersSheetOpen = true">
-                            <AppIcon name="sliders-horizontal" class="size-3.5" />
-                            Filters
-                            <Badge v-if="ws.hasAnyItemFilters" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">
-                                {{ ws.itemFilterChips.length }}
-                            </Badge>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 border-b px-4 py-2">
+                        <Select :model-value="ws.toSelectValue(ws.itemSearch.category)" @update:model-value="ws.itemSearch.category = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE)); ws.itemSearch.page = 1; ws.refreshInventoryItems()">
+                            <SelectTrigger class="h-8 w-40 text-xs">
+                                <SelectValue placeholder="Category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem :value="ws.EMPTY_SELECT_VALUE">All Categories</SelectItem>
+                                <SelectItem v-for="cat in ws.itemCategoryOptions" :key="cat.value" :value="cat.value">{{ cat.label }}</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select :model-value="ws.toSelectValue(ws.itemSearch.stockState)" @update:model-value="ws.itemSearch.stockState = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE)); ws.itemSearch.page = 1; ws.refreshInventoryItems()">
+                            <SelectTrigger class="h-8 w-36 text-xs">
+                                <SelectValue placeholder="Stock state" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem :value="ws.EMPTY_SELECT_VALUE">All stock states</SelectItem>
+                                <SelectItem v-for="opt in ws.stockStateOptions" :key="opt" :value="opt">{{ ws.stockStateLabel(opt) }}</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select :model-value="ws.toSelectValue(ws.itemSearch.sortBy)" @update:model-value="ws.itemSearch.sortBy = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE)); ws.itemSearch.page = 1; ws.refreshInventoryItems()">
+                            <SelectTrigger class="h-8 w-32 text-xs">
+                                <SelectValue placeholder="Sort by" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="itemName">Name</SelectItem>
+                                <SelectItem value="itemCode">Code</SelectItem>
+                                <SelectItem value="currentStock">Store Stock</SelectItem>
+                                <SelectItem value="category">Category</SelectItem>
+                                <SelectItem value="createdAt">Created</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select :model-value="ws.toSelectValue(ws.itemSearch.sortDir)" @update:model-value="ws.itemSearch.sortDir = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE)); ws.itemSearch.page = 1; ws.refreshInventoryItems()">
+                            <SelectTrigger class="h-8 w-28 text-xs">
+                                <SelectValue placeholder="Direction" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="asc">Ascending</SelectItem>
+                                <SelectItem value="desc">Descending</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select :model-value="String(ws.itemSearch.perPage)" @update:model-value="ws.itemSearch.perPage = Number($event); ws.itemSearch.page = 1; ws.refreshInventoryItems()">
+                            <SelectTrigger class="h-8 w-24 text-xs">
+                                <SelectValue placeholder="Per page" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="10">10 / page</SelectItem>
+                                <SelectItem value="20">20 / page</SelectItem>
+                                <SelectItem value="50">50 / page</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Button v-if="ws.hasAnyItemFilters" variant="ghost" size="sm" class="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground" @click="ws.resetItemFilters()">
+                            <AppIcon name="x" class="size-3" />
+                            Clear
                         </Button>
                     </div>
                     <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden p-0">

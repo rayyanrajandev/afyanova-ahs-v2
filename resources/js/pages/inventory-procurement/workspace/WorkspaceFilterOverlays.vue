@@ -5,8 +5,6 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { formatEnumLabel } from '@/lib/labels';
 import { useInventoryWorkspace } from './inventoryWorkspaceApi';
 
@@ -14,108 +12,6 @@ const ws = useInventoryWorkspace();
 </script>
 
 <template>
-<!-- Inventory filters sheet -->
-            <Sheet v-if="ws.canRead" :open="ws.itemFiltersSheetOpen" @update:open="ws.itemFiltersSheetOpen = $event">
-                <SheetContent side="right" variant="form" size="md" class="flex h-full min-h-0 flex-col">
-                    <SheetHeader>
-                        <SheetTitle class="flex items-center gap-2">
-                            <AppIcon name="sliders-horizontal" class="size-4 text-muted-foreground" />
-                            Inventory Filters
-                        </SheetTitle>
-                        <SheetDescription>Filter and sort inventory ws.items without crowding the main list.</SheetDescription>
-                    </SheetHeader>
-                    <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-                        <div class="rounded-lg border p-3">
-                            <div class="grid gap-3">
-                                <div class="grid gap-2">
-                                    <Label for="inv-search-q-sheet">Search</Label>
-                                    <Input
-                                        id="inv-search-q-sheet"
-                                        v-model="ws.itemSearch.q"
-                                        placeholder="Item code, name, category..."
-                                        @keyup.enter="ws.submitItemFiltersFromSheet"
-                                    />
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="inv-search-category-sheet">Category</Label>
-                                    <Select :model-value="ws.toSelectValue(ws.itemSearch.category)" @update:model-value="ws.itemSearch.category = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                        <SelectTrigger class="w-full">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                        <SelectItem :value="ws.EMPTY_SELECT_VALUE">All Categories</SelectItem>
-                                        <SelectItem v-for="cat in ws.itemCategoryOptions" :key="cat.value" :value="cat.value">{{ cat.label }}</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="inv-search-stock-state-sheet">Store Stock State</Label>
-                                    <Select :model-value="ws.toSelectValue(ws.itemSearch.stockState)" @update:model-value="ws.itemSearch.stockState = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                        <SelectTrigger class="w-full">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                        <SelectItem :value="ws.EMPTY_SELECT_VALUE">All</SelectItem>
-                                        <SelectItem v-for="opt in ws.stockStateOptions" :key="opt" :value="opt">{{ ws.stockStateLabel(opt) }}</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <Separator />
-                                <div class="grid gap-2">
-                                    <Label for="inv-sort-by-sheet">Sort by</Label>
-                                    <Select :model-value="ws.toSelectValue(ws.itemSearch.sortBy)" @update:model-value="ws.itemSearch.sortBy = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                        <SelectTrigger class="w-full">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="itemName">Name</SelectItem>
-                                            <SelectItem value="itemCode">Code</SelectItem>
-                                            <SelectItem value="currentStock">Store Stock</SelectItem>
-                                            <SelectItem value="category">Category</SelectItem>
-                                            <SelectItem value="createdAt">Created</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="inv-sort-dir-sheet">Sort direction</Label>
-                                    <Select :model-value="ws.toSelectValue(ws.itemSearch.sortDir)" @update:model-value="ws.itemSearch.sortDir = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE))">
-                                        <SelectTrigger class="w-full">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="asc">Ascending</SelectItem>
-                                            <SelectItem value="desc">Descending</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="inv-search-per-page-sheet">Results per page</Label>
-                                    <Select :model-value="String(ws.itemSearch.perPage)" @update:model-value="ws.itemSearch.perPage = Number($event)">
-                                        <SelectTrigger class="w-full">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                        <SelectItem value="10">10</SelectItem>
-                                        <SelectItem value="20">20</SelectItem>
-                                        <SelectItem value="50">50</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <SheetFooter class="gap-2 border-t px-4 py-3">
-                        <Button :disabled="ws.loading" class="gap-1.5" @click="ws.submitItemFiltersFromSheet">
-                            <AppIcon name="search" class="size-3.5" />
-                            Apply Filters
-                        </Button>
-                        <Button variant="outline" :disabled="ws.loading && !ws.hasAnyItemFilters" @click="ws.resetItemFiltersFromSheet">
-                            Reset Filters
-                        </Button>
-                    </SheetFooter>
-                </SheetContent>
-            </Sheet>
-
             <!-- Mobile procurement filters drawer -->
             <Drawer v-if="ws.canRead" :open="ws.mobileProcurementDrawerOpen" @update:open="ws.mobileProcurementDrawerOpen = $event">
                 <DrawerContent class="max-h-[90vh]">
