@@ -23,22 +23,26 @@ class InventoryAccessRolesSeeder extends Seeder
      */
     public function run(): void
     {
-        // Get first tenant and facility for demo purposes
+        // Get first tenant
         $tenant = TenantModel::first();
-        $facility = FacilityModel::first();
 
-        if (!$tenant || !$facility) {
-            $this->command->warn('No tenant or facility found. Skipping inventory role creation.');
+        if (!$tenant) {
+            $this->command->warn('No tenant found. Skipping inventory role creation.');
             return;
         }
 
-        // Get Laboratory department
-        $labDepartment = DepartmentModel::where('facility_id', $facility->id)
-            ->where('name', 'ilike', '%Laboratory%')
-            ->first();
+        // Find a Laboratory department across any facility
+        $labDepartment = DepartmentModel::where('name', 'LIKE', '%Laboratory%')->first();
 
         if (!$labDepartment) {
             $this->command->warn('No Laboratory department found. Skipping inventory role creation.');
+            return;
+        }
+
+        $facility = FacilityModel::find($labDepartment->facility_id);
+
+        if (!$facility) {
+            $this->command->warn("Facility not found for Laboratory department. Skipping inventory role creation.");
             return;
         }
 
