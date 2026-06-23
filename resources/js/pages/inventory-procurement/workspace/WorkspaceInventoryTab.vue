@@ -136,7 +136,7 @@ const ws = useInventoryWorkspace();
                             v-model="ws.itemSearch.q"
                             placeholder="Item code, name, category..."
                             class="min-w-0 flex-1 text-xs"
-                            @keyup.enter="ws.itemSearch.page = 1; ws.refreshInventoryItems()"
+                            @keyup.enter="ws.flushInventorySearch()"
                         />
                         <Select :model-value="ws.toSelectValue(ws.itemSearch.category)" @update:model-value="ws.itemSearch.category = ws.fromSelectValue(String($event ?? ws.EMPTY_SELECT_VALUE)); ws.itemSearch.page = 1; ws.refreshInventoryItems()">
                             <SelectTrigger class="h-8 w-40 text-xs">

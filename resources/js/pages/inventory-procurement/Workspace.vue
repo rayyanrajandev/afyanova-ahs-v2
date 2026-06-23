@@ -5477,7 +5477,17 @@ function scheduleInventorySearchRefresh(): void {
 
         itemSearch.page = 1;
         void refreshInventoryItems();
-    }, 350);
+    }, 180);
+}
+
+function flushInventorySearch(): void {
+    if (inventorySearchTimer) {
+        clearTimeout(inventorySearchTimer);
+        inventorySearchTimer = null;
+    }
+    if (!canRead.value || activeTab.value !== 'inventory') return;
+    itemSearch.page = 1;
+    void refreshInventoryItems();
 }
 
 watch(() => itemSearch.q, (newQuery, previousQuery) => {
@@ -6597,6 +6607,7 @@ bindInventoryWorkspace({
     inventoryAutoRefreshInterval,
     INVENTORY_AUTO_REFRESH_LABEL,
     refreshInventoryItems,
+    flushInventorySearch,
     catalogSyncDialogOpen,
     openCatalogSyncDialog,
     importItemsCsvDialogOpen,
