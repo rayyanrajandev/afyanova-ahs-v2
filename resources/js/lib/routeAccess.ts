@@ -38,6 +38,12 @@ const routeAccessRules: RouteAccessRule[] = [
         ],
     },
     {
+        pathPrefix: '/inventory-procurement/pending-approvals',
+        requiredPermissions: [
+            'inventory.approve-requisition-own-department',
+        ],
+    },
+    {
         pathPrefix: '/platform/admin/user-approval-cases',
         requiredPermissions: ['platform.users.approval-cases.read'],
     },

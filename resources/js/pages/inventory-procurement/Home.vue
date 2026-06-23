@@ -223,6 +223,16 @@ const storeTasks = computed<TaskCard[]>(() => [
         permission: canReconcileStock.value,
     },
     {
+        id: 'pending-approvals',
+        title: 'Pending approvals',
+        description: 'Review and approve department requisitions in the approval queue.',
+        icon: 'shield-check',
+        href: '/inventory-procurement/pending-approvals',
+        badge: pendingApprovalCount.value > 0 ? pendingApprovalCount.value : null,
+        badgeVariant: pendingApprovalCount.value > 0 ? 'destructive' : 'outline',
+        permission: canUpdateRequestStatus.value,
+    },
+    {
         id: 'shortage',
         title: 'Shortage queue',
         description: 'Prioritise VEN-sensitive lines waiting for replenishment or procurement.',
@@ -608,10 +618,10 @@ onMounted(async () => {
                             </CardDescription>
                         </CardHeader>
                         <CardContent class="space-y-3 text-sm">
-                            <div v-if="canUpdateRequestStatus" class="flex items-center justify-between rounded-md border px-3 py-2">
+                            <Link v-if="canUpdateRequestStatus" href="/inventory-procurement/pending-approvals" class="flex items-center justify-between rounded-md border px-3 py-2 transition-colors hover:bg-muted/50">
                                 <span class="text-muted-foreground">Pending approval</span>
                                 <Badge :variant="pendingApprovalCount > 0 ? 'destructive' : 'outline'">{{ pendingApprovalCount }}</Badge>
-                            </div>
+                            </Link>
                             <div v-if="canUpdateRequestStatus" class="flex items-center justify-between rounded-md border px-3 py-2">
                                 <span class="text-muted-foreground">Approved — place order</span>
                                 <Badge variant="secondary">{{ approvedAwaitingOrderCount }}</Badge>

@@ -4,6 +4,7 @@ namespace App\Modules\InventoryProcurement\Infrastructure\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class InventoryDepartmentRequisitionModel extends Model
 {
@@ -44,5 +45,13 @@ class InventoryDepartmentRequisitionModel extends Model
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Get the requisition lines
+     */
+    public function lines(): HasMany
+    {
+        return $this->hasMany(InventoryDepartmentRequisitionLineModel::class, 'requisition_id', 'id');
     }
 }

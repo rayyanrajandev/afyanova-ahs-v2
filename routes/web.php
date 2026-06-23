@@ -312,6 +312,10 @@ Route::get('inventory-procurement/workspace', function () {
     return Inertia::render('inventory-procurement/Workspace');
 })->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])->name('inventory-procurement-workspace.page');
 
+Route::get('inventory-procurement/pending-approvals', function () {
+    return Inertia::render('inventory-procurement/PendingApprovals');
+})->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])->name('inventory-procurement-pending-approvals.page');
+
 Route::get('inventory-procurement/receive', function () {
     return Inertia::render('inventory-procurement/Receive');
 })->middleware(['auth', 'verified', 'can:inventory.procurement.create-movement', 'facility.entitlement:inventory.stock_movements'])->name('inventory-procurement-receive.page');

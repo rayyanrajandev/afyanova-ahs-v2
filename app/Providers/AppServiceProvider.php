@@ -10,7 +10,13 @@ use App\Modules\MedicalRecord\Infrastructure\Models\MedicalRecordModel;
 use App\Modules\Platform\Infrastructure\Services\RequestCurrentPlatformScopeContext;
 use App\Modules\Platform\Infrastructure\Services\RequestScopedDefaultCurrencyResolver;
 use App\Modules\Platform\Infrastructure\Services\RequestScopedFeatureFlagResolver;
+use App\Support\Audit\InventoryAccessAuditLogger;
+use App\Support\Audit\SodAlertNotifier;
+use App\Support\Audit\WebhookChannel;
 use App\Support\Auth\ConsultationProviderAuthorization;
+use App\Support\Auth\DepartmentScopedPermissionResolver;
+use App\Support\ApprovalWorkflow\ApprovalWorkflowEngine;
+use App\Support\ApprovalWorkflow\SegregationOfDutiesValidator;
 use App\Support\Branding\SystemBrandingManager;
 use Illuminate\Contracts\Auth\Access\Gate as GateContract;
 use Illuminate\Support\Facades\Gate;
@@ -36,11 +42,27 @@ class AppServiceProvider extends ServiceProvider
             DefaultCurrencyResolverInterface::class,
             RequestScopedDefaultCurrencyResolver::class,
         );
+
+        // Phase 1: Inventory RBAC Services
+        $this->app->singleton('inventory.permission_resolver', DepartmentScopedPermissionResolver::class);
+        $this->app->singleton(InventoryAccessAuditLogger::class, InventoryAccessAuditLogger::class);
+
+        // Phase 2: Approval Workflow Services
+        $this->app->singleton(ApprovalWorkflowEngine::class, ApprovalWorkflowEngine::class);
+        $this->app->singleton(SegregationOfDutiesValidator::class, SegregationOfDutiesValidator::class);
+        $this->app->singleton('inventory.approval_engine', ApprovalWorkflowEngine::class);
+        $this->app->singleton('inventory.sod_validator', SegregationOfDutiesValidator::class);
+
+        // Phase 2: SOD Alerting
+        $this->app->singleton(SodAlertNotifier::class, SodAlertNotifier::class);
     }
 
     public function boot(): void
     {
         $this->applyRuntimeBrandingConfig();
+
+        // Register custom notification channels
+        $this->app->make('config')->set('notifications.channels.webhook', WebhookChannel::class);
 
         Gate::before(function ($user, string $ability): ?bool {
             if (! method_exists($user, 'hasPermissionTo')) {

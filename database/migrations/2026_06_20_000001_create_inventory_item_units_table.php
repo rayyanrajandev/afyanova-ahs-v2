@@ -36,7 +36,13 @@ return new class extends Migration
             $table->foreign('item_id')->references('id')->on('inventory_items')->cascadeOnDelete();
         });
 
-        DB::statement('ALTER TABLE inventory_item_units ADD CONSTRAINT inv_item_units_base_quantity_positive CHECK (base_quantity > 0)');
+        // PostgreSQL supports CHECK constraints via ALTER TABLE;
+        // SQLite does not, so we skip. The validation is enforced
+        // at the application layer for SQLite-compatible environments.
+        $driver = DB::connection()->getDriverName();
+        if ($driver === 'pgsql') {
+            DB::statement('ALTER TABLE inventory_item_units ADD CONSTRAINT inv_item_units_base_quantity_positive CHECK (base_quantity > 0)');
+        }
     }
 
     public function down(): void

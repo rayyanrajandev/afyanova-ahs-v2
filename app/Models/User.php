@@ -5,11 +5,13 @@ namespace App\Models;
 use App\Notifications\UserEmailVerificationNotification;
 use App\Notifications\UserCredentialLinkNotification;
 use App\Modules\Platform\Infrastructure\Models\RoleModel;
+use App\Modules\Staff\Infrastructure\Models\StaffProfileModel;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\QueryException;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -88,6 +90,33 @@ class User extends Authenticatable implements MustVerifyEmail
             foreignPivotKey: 'user_id',
             relatedPivotKey: 'role_id',
         );
+    }
+
+    /**
+     * Inventory access roles (department-scoped)
+     * For Phase 1: Department-Level RBAC
+     *
+     * @return BelongsToMany<RoleModel, $this>
+     */
+    public function inventoryAccessRoles(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            related: RoleModel::class,
+            table: 'role_user',
+            foreignPivotKey: 'user_id',
+            relatedPivotKey: 'role_id',
+        )->where('access_level', '!=', null); // Only roles with access_level are inventory access roles
+    }
+
+    /**
+     * Staff profile relationship
+     * Links user to their professional/employment identity
+     *
+     * @return HasOne<StaffProfileModel, $this>
+     */
+    public function staffProfile(): HasOne
+    {
+        return $this->hasOne(StaffProfileModel::class, 'user_id', 'id');
     }
 
     public function hasPermissionTo(string $permission): bool

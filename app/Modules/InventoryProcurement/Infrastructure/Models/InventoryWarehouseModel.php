@@ -21,6 +21,7 @@ class InventoryWarehouseModel extends Model
     protected $fillable = [
         'tenant_id',
         'facility_id',
+        'department_id',
         'warehouse_code',
         'warehouse_name',
         'warehouse_type',
@@ -28,6 +29,7 @@ class InventoryWarehouseModel extends Model
         'contact_person',
         'phone',
         'email',
+        'is_default',
         'status',
         'status_reason',
         'notes',

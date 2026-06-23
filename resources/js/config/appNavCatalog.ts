@@ -250,6 +250,15 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Hospital stores, procurement, and stock tasks',
     },
     {
+        title: 'Pending approvals',
+        href: '/inventory-procurement/pending-approvals',
+        iconName: 'clipboard-list',
+        section: 'stores',
+        subGroup: 'transactions',
+        permissionPrefixes: ['inventory.approve-requisition.'],
+        helpNote: 'Approve or reject requisitions in your department approval queue',
+    },
+    {
         title: 'Receive stock',
         href: '/inventory-procurement/receive',
         iconName: 'package',
@@ -491,6 +500,7 @@ export const helpTipsBySection: Record<NavSectionKey, string[]> = {
         'Stores and procurement covers stock levels, requisitions, and goods receipt.',
         'Warehouse and supplier screens are available when your role includes those admin permissions.',
         'Department requisitions may be available without full storekeeper access depending on your role.',
+        'Pending approvals shows requisitions awaiting your decision in the approval workflow.',
     ],
     people: [
         'Staff directory is the starting point for profiles, assignments, and status changes.',

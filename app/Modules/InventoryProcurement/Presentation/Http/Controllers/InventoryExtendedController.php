@@ -424,11 +424,30 @@ class InventoryExtendedController extends Controller
     public function referenceData(
         PlatformScopeQueryApplier $platformScopeQueryApplier,
         FeatureFlagResolverInterface $featureFlagResolver,
+        DepartmentRequisitionScopeResolver $departmentScopeResolver,
+        Request $request,
     ): JsonResponse
     {
+        $userDepartmentId = $departmentScopeResolver->contextForUser($request->user())['lockedDepartment']['id'] ?? null;
+        $allowedCategoryValues = $departmentScopeResolver->allowedCategoriesForDepartmentId($userDepartmentId);
+        $allCategories = InventoryItemCategory::labelMap();
+        $allOptions = InventoryItemCategory::optionMetadata();
+
+        if ($allowedCategoryValues !== null) {
+            $allowedCategoryValues = array_flip($allowedCategoryValues);
+            $categories = array_intersect_key($allCategories, $allowedCategoryValues);
+            $categoryOptions = array_values(array_filter(
+                $allOptions,
+                static fn (array $option): bool => isset($allowedCategoryValues[$option['value']]),
+            ));
+        } else {
+            $categories = $allCategories;
+            $categoryOptions = $allOptions;
+        }
+
         return response()->json([
-            'categories' => InventoryItemCategory::labelMap(),
-            'categoryOptions' => InventoryItemCategory::optionMetadata(),
+            'categories' => $categories,
+            'categoryOptions' => $categoryOptions,
             'venClassifications' => array_map(
                 static fn ($case) => ['value' => $case->value, 'label' => $case->label()],
                 InventoryVenClassification::cases(),

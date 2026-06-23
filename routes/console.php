@@ -96,6 +96,13 @@ Schedule::command('inventory:expire-warehouse-transfer-reservations --json')
     ->runInBackground()
     ->appendOutputTo(storage_path('logs/inventory-transfer-hold-expiry.log'));
 
+// Phase 1: Department-Level RBAC - Temporal Access Expiry
+Schedule::command('inventory:revoke-expired-access-roles')
+    ->hourly()
+    ->withoutOverlapping()
+    ->runInBackground()
+    ->appendOutputTo(storage_path('logs/inventory-access-expiry.log'));
+
 if (! function_exists('billingPermissionProfile')) {
     /**
      * @return array<int, string>

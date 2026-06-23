@@ -56,6 +56,77 @@ function something()
 }
 
 /**
+ * Phase 1 RBAC test helpers - shared across inventory procurement tests
+ */
+function createRbacScope(): array
+{
+    $tenant = \App\Modules\Platform\Infrastructure\Models\TenantModel::create([
+        'code' => 'RBAC-TENANT',
+        'name' => 'RBAC Test Tenant',
+        'country_code' => 'TZ',
+    ]);
+    $facility = \App\Modules\Platform\Infrastructure\Models\FacilityModel::create([
+        'tenant_id' => $tenant->id,
+        'code' => 'RBAC-FACILITY',
+        'name' => 'RBAC Test Facility',
+        'facility_type' => 'Hospital',
+        'status' => 'active',
+    ]);
+    $department = \App\Modules\Department\Infrastructure\Models\DepartmentModel::create([
+        'tenant_id' => $tenant->id,
+        'facility_id' => $facility->id,
+        'code' => 'RBAC-DEPT-LAB',
+        'name' => 'RBAC Lab Department',
+        'status' => 'active',
+    ]);
+    $warehouse = \App\Modules\InventoryProcurement\Infrastructure\Models\InventoryWarehouseModel::create([
+        'tenant_id' => $tenant->id,
+        'facility_id' => $facility->id,
+        'department_id' => $department->id,
+        'warehouse_code' => 'RBAC-WH-LAB',
+        'warehouse_name' => 'RBAC Lab Warehouse',
+        'status' => 'active',
+        'is_default' => true,
+    ]);
+
+    return [
+        'tenant' => $tenant,
+        'facility' => $facility,
+        'department' => $department,
+        'warehouse' => $warehouse,
+    ];
+}
+
+function createInventoryItems(array $scope, int $count = 3): array
+{
+    $items = [];
+    for ($i = 0; $i < $count; $i++) {
+        $items[] = \App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel::create([
+            'tenant_id' => $scope['tenant']->id,
+            'facility_id' => $scope['facility']->id,
+            'default_warehouse_id' => $scope['warehouse']->id,
+            'item_code' => 'RBAC-ITM-'.strtoupper(\Illuminate\Support\Str::random(8)),
+            'item_name' => 'RBAC Test Item '.($i + 1),
+            'category' => 'medical_consumable',
+            'unit' => 'box',
+            'current_stock' => 100,
+            'reorder_level' => 10,
+            'max_stock_level' => 100,
+            'status' => 'active',
+        ]);
+    }
+    return $items;
+}
+
+function scopeHeaders(array $scope): array
+{
+    return [
+        'X-Tenant-Code' => $scope['tenant']->code,
+        'X-Facility-Code' => $scope['facility']->code,
+    ];
+}
+
+/**
  * @return array<string, mixed>
  */
 function clinicalRecipeStockInventoryItem(array $overrides = []): array

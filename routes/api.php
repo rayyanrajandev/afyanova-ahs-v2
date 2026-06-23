@@ -17,6 +17,7 @@ use App\Modules\Department\Presentation\Http\Controllers\DepartmentController;
 use App\Modules\EmergencyTriage\Presentation\Http\Controllers\EmergencyTriageCaseController;
 use App\Modules\InpatientWard\Presentation\Http\Controllers\InpatientWardController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryAnalyticsController;
+use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryDepartmentAccessController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryExtendedController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryItemUnitController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryProcurementController;
@@ -1603,9 +1604,42 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('inventory-procurement/analytics/expiry-wastage', [InventoryAnalyticsController::class, 'expiryWastage'])
         ->middleware('can:inventory.procurement.read')
         ->name('inventory-procurement.analytics.expiry-wastage');
-    Route::get('inventory-procurement/analytics/stock-turnover', [InventoryAnalyticsController::class, 'stockTurnover'])
+     Route::get('inventory-procurement/analytics/stock-turnover', [InventoryAnalyticsController::class, 'stockTurnover'])
         ->middleware('can:inventory.procurement.read')
         ->name('inventory-procurement.analytics.stock-turnover');
+
+    // Phase 1: Department-Level RBAC Implementation
+    // These endpoints enforce department-scoped inventory access with temporal control
+    Route::get('inventory-department/items', [InventoryDepartmentAccessController::class, 'listItems'])
+        ->middleware('auth')
+        ->name('inventory-department.items.index');
+    Route::get('inventory-department/items/{itemId}', [InventoryDepartmentAccessController::class, 'getItem'])
+        ->middleware('auth')
+        ->name('inventory-department.items.show');
+    Route::post('inventory-department/requisitions', [InventoryDepartmentAccessController::class, 'createRequisition'])
+        ->middleware('auth')
+        ->name('inventory-department.requisitions.store');
+    Route::get('inventory-department/requisitions', [InventoryDepartmentAccessController::class, 'listRequisitions'])
+        ->middleware('auth')
+        ->name('inventory-department.requisitions.index');
+    Route::get('inventory-department/requisitions/{requisitionId}', [InventoryDepartmentAccessController::class, 'getRequisition'])
+        ->middleware('auth')
+        ->name('inventory-department.requisitions.show');
+
+    // Phase 2: Multi-Role Approval Workflows
+    // These endpoints implement multi-step approval workflows with segregation of duties
+    Route::get('inventory-department/approvals/pending', [InventoryDepartmentAccessController::class, 'listPendingApprovals'])
+        ->middleware('auth')
+        ->name('inventory-department.approvals.pending');
+    Route::post('inventory-department/approvals/{workflowInstanceId}/approve', [InventoryDepartmentAccessController::class, 'approveRequisition'])
+        ->middleware('auth')
+        ->name('inventory-department.approvals.approve');
+    Route::post('inventory-department/approvals/{workflowInstanceId}/reject', [InventoryDepartmentAccessController::class, 'rejectRequisition'])
+        ->middleware('auth')
+        ->name('inventory-department.approvals.reject');
+    Route::post('inventory-department/approvals/{workflowInstanceId}/recall', [InventoryDepartmentAccessController::class, 'recallRequisition'])
+        ->middleware('auth')
+        ->name('inventory-department.approvals.recall');
 
     Route::get('theatre-procedures', [TheatreProcedureController::class, 'index'])
         ->middleware('can:theatre.procedures.read')

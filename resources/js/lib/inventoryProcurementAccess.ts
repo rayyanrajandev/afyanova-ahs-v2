@@ -11,6 +11,7 @@ export type InventoryProcurementAccess = {
     canCreateRequest: boolean;
     canUpdateRequestStatus: boolean;
     canViewAudit: boolean;
+    canApproveRequisitions: boolean;
     canManageSuppliers: boolean;
     canManageWarehouses: boolean;
 };

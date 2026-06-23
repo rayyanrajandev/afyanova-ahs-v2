@@ -316,6 +316,7 @@ const canReconcileStock = ref(false);
 const canCreateRequest = ref(false);
 const canUpdateRequestStatus = ref(false);
 const canViewAudit = ref(false);
+const canApproveRequisitions = ref(false);
 const canManageSuppliers = ref(false);
 const canManageWarehouses = ref(false);
 const { permissionNames: sharedPermissionNames, isFacilitySuperAdmin, hasPermission } = usePlatformAccess();
@@ -329,6 +330,7 @@ const inventoryAccess = computed<InventoryProcurementAccess>(() => ({
     canCreateRequest: canCreateRequest.value,
     canUpdateRequestStatus: canUpdateRequestStatus.value,
     canViewAudit: canViewAudit.value,
+    canApproveRequisitions: canApproveRequisitions.value,
     canManageSuppliers: canManageSuppliers.value,
     canManageWarehouses: canManageWarehouses.value,
 }));
@@ -2629,6 +2631,7 @@ async function loadPermissions() {
         canCreateRequest.value = hasSuperAdminAccess || permissionSet.has('inventory.procurement.create-request');
         canUpdateRequestStatus.value = hasSuperAdminAccess || permissionSet.has('inventory.procurement.update-request-status');
         canViewAudit.value = hasSuperAdminAccess || permissionSet.has('inventory.procurement.view-audit-logs');
+        canApproveRequisitions.value = hasSuperAdminAccess || permissionSet.has('inventory.approve-requisition-own-department');
         canManageSuppliers.value = hasSuperAdminAccess || permissionSet.has('inventory.procurement.manage-suppliers');
         canManageWarehouses.value = hasSuperAdminAccess || permissionSet.has('inventory.procurement.manage-warehouses');
     };
@@ -6351,7 +6354,7 @@ const itemFilterChips = computed<string[]>(() => {
     const chips: string[] = [];
     if (itemSearch.q) chips.push(`Search: "${itemSearch.q}"`);
     if (itemSearch.category) chips.push(`Category: ${itemSearch.category}`);
-                if (itemSearch.stockState) chips.push(`Store stock: ${stockStateLabel(itemSearch.stockState)}`);
+    if (itemSearch.stockState) chips.push(`Store stock: ${stockStateLabel(itemSearch.stockState)}`);
     if (itemSearch.sortBy !== 'itemName' || itemSearch.sortDir !== 'asc') chips.push(`Sort: ${formatEnumLabel(itemSearch.sortBy)} ${itemSearch.sortDir.toUpperCase()}`);
     if (itemSearch.perPage !== 20) chips.push(`${itemSearch.perPage} per page`);
     return chips;
@@ -6498,6 +6501,7 @@ bindInventoryWorkspace({
     canCreateRequest,
     canManageItems,
     canCreateMovement,
+    canApproveRequisitions,
     canLaunchCreateItem,
     canLaunchStockMovement,
     canLaunchProcurementRequest,
