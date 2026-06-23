@@ -273,7 +273,12 @@ class DepartmentRequisitionScopeResolver
             ->where('status', 'active')
             ->value('department');
 
-        return $this->nullableString($department);
+        if ($department !== null) {
+            return $this->nullableString($department);
+        }
+
+        // Fallback: derive from the user's first role's department
+        return $this->roleDepartmentName($user);
     }
 
     private function staffDepartmentId(?User $user): ?string
@@ -287,7 +292,42 @@ class DepartmentRequisitionScopeResolver
             ->where('status', 'active')
             ->value('department_id');
 
-        return $this->nullableString($departmentId);
+        if ($departmentId !== null) {
+            return $this->nullableString($departmentId);
+        }
+
+        // Fallback: derive from the user's first role's department
+        return $this->roleDepartmentId($user);
+    }
+
+    private function roleDepartmentId(?User $user): ?string
+    {
+        /*
+         * When the user has no staff profile, derive the department from their
+         * first inventory-scoped role.  This covers the common case where a
+         * role like LAB.SUPERVISOR is assigned directly in the admin panel
+         * without a corresponding staff-profile record.
+         */
+        $role = $user->roles()
+            ->whereNotNull('department_id')
+            ->where('status', 'active')
+            ->first();
+
+        return $role?->department_id;
+    }
+
+    private function roleDepartmentName(?User $user): ?string
+    {
+        $role = $user->roles()
+            ->whereNotNull('department_id')
+            ->where('status', 'active')
+            ->first();
+
+        if ($role === null) {
+            return null;
+        }
+
+        return DepartmentModel::where('id', $role->department_id)->value('name');
     }
 
     /**

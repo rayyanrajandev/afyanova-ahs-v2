@@ -103,9 +103,14 @@ class InventoryProcurementController extends Controller
         $context = $departmentScopeResolver->contextForUser($request->user());
         if (! (bool) ($context['canSelectAnyDepartment'] ?? false)) {
             $lockedDepartmentId = $context['lockedDepartment']['id'] ?? null;
-            if ($lockedDepartmentId) {
-                $filters['requestingDepartmentId'] = $lockedDepartmentId;
+            if (!$lockedDepartmentId) {
+                return response()->json([
+                    'data' => [],
+                    'meta' => ['currentPage' => 1, 'lastPage' => 1, 'total' => 0],
+                ]);
             }
+
+            $filters['requestingDepartmentId'] = $lockedDepartmentId;
         }
 
         $result = $useCase->execute($filters);
@@ -338,9 +343,13 @@ class InventoryProcurementController extends Controller
         $context = $departmentScopeResolver->contextForUser($request->user());
         if (! (bool) ($context['canSelectAnyDepartment'] ?? false)) {
             $lockedDepartmentId = $context['lockedDepartment']['id'] ?? null;
-            if ($lockedDepartmentId) {
-                $filters['requestingDepartmentId'] = $lockedDepartmentId;
+            if (!$lockedDepartmentId) {
+                return response()->json([
+                    'data' => ['outOfStock' => 0, 'lowStock' => 0, 'healthy' => 0, 'total' => 0],
+                ]);
             }
+
+            $filters['requestingDepartmentId'] = $lockedDepartmentId;
         }
 
         $counts = $useCase->execute($filters);
