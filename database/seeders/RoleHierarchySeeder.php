@@ -195,6 +195,9 @@ class RoleHierarchySeeder extends Seeder
         // Migrate users from old roles to new
         $this->migrateOldRoles($tenant);
 
+        // Clean up deactivated old roles
+        $this->deleteOldRoles();
+
         $this->command->info('Role hierarchy seeded successfully!');
     }
 
@@ -379,6 +382,18 @@ class RoleHierarchySeeder extends Seeder
 
         if ($migrated > 0) {
             $this->command->info("Migrated {$migrated} user assignments to new roles.");
+        }
+    }
+
+    private function deleteOldRoles(): void
+    {
+        $oldCodes = array_keys(self::OLD_TO_NEW);
+        $deleted = RoleModel::whereIn('code', $oldCodes)
+            ->where('status', 'inactive')
+            ->delete();
+
+        if ($deleted > 0) {
+            $this->command->info("Deleted {$deleted} deactivated old roles.");
         }
     }
 
