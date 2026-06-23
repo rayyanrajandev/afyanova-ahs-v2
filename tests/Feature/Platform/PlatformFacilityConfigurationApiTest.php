@@ -285,7 +285,7 @@ it('creates a facility with a new facility admin and generates an invite link', 
     $facilityAdminRole = RoleModel::query()->create([
         'tenant_id' => null,
         'facility_id' => null,
-        'code' => 'HOSPITAL.FACILITY.ADMIN',
+            'code' => 'ADMIN.FACILITY',
         'name' => 'Facility Administrator',
         'status' => 'active',
         'is_system' => true,

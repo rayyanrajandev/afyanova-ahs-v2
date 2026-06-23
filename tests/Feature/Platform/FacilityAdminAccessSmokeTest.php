@@ -54,7 +54,7 @@ function facilityAdminSmokeContext(): array
     $role = RoleModel::query()->create([
         'tenant_id' => null,
         'facility_id' => null,
-        'code' => 'HOSPITAL.FACILITY.ADMIN',
+            'code' => 'ADMIN.FACILITY',
         'name' => 'Facility Administrator',
         'status' => 'active',
         'is_system' => true,
@@ -66,7 +66,6 @@ function facilityAdminSmokeContext(): array
         'patients.update',
         'laboratory.orders.read',
         'inventory.procurement.read',
-        'departments.read',
         'staff.clinical-directory.read',
     ];
 

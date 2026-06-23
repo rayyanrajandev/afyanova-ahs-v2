@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 class FacilityAdminEligibilityPolicy
 {
     private const FACILITY_ADMIN_ROLE_CODES = [
-        'HOSPITAL.FACILITY.ADMIN',
+        'ADMIN.FACILITY',
     ];
 
     /**

@@ -129,14 +129,38 @@ class SyncPlatformUserRolesUseCase
         foreach ($roles as $role) {
             $code = strtoupper(trim((string) ($role->code ?? '')));
             if (
-                ! str_starts_with($code, 'HOSPITAL.')
-                || $code === 'HOSPITAL.FACILITY.ADMIN'
-                || str_contains($code, 'SUPER.ADMIN')
+                ! $this->isAllowedHospitalRoleCode($code)
             ) {
                 throw new UnknownPlatformRbacRoleException(
                     'Facility administrators can assign hospital operational roles only.',
                 );
             }
         }
+    }
+
+    private function isAllowedHospitalRoleCode(string $code): bool
+    {
+        if (str_starts_with($code, 'PLATFORM.') || str_contains($code, 'SUPER.ADMIN')) {
+            return false;
+        }
+
+        if ($code === 'ADMIN.FACILITY') {
+            return false;
+        }
+
+        $allowedPrefixes = [
+            'ADMIN.', 'CLINICAL.', 'FINANCE.',
+            'LAB.', 'RADIOLOGY.', 'PHARMACY.', 'THEATRE.',
+            'INVENTORY.',
+        ];
+
+        foreach ($allowedPrefixes as $prefix) {
+            if (str_starts_with($code, $prefix)) {
+                return true;
+            }
+        }
+
+        // Also allow legacy HOSPITAL. prefix for backward compatibility
+        return str_starts_with($code, 'HOSPITAL.');
     }
 }

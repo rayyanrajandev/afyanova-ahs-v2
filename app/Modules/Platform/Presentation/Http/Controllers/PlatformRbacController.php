@@ -308,9 +308,29 @@ class PlatformRbacController extends Controller
     {
         $code = strtoupper(trim((string) $roleCode));
 
+        if (str_starts_with($code, 'PLATFORM.') || str_contains($code, 'SUPER.ADMIN')) {
+            return false;
+        }
+
+        if ($code === 'ADMIN.FACILITY') {
+            return false;
+        }
+
+        $allowedPrefixes = [
+            'ADMIN.', 'CLINICAL.', 'FINANCE.',
+            'LAB.', 'RADIOLOGY.', 'PHARMACY.', 'THEATRE.',
+            'INVENTORY.',
+        ];
+
+        foreach ($allowedPrefixes as $prefix) {
+            if (str_starts_with($code, $prefix)) {
+                return true;
+            }
+        }
+
+        // Legacy backward compatibility
         return str_starts_with($code, 'HOSPITAL.')
-            && $code !== 'HOSPITAL.FACILITY.ADMIN'
-            && ! str_contains($code, 'SUPER.ADMIN');
+            && $code !== 'HOSPITAL.FACILITY.ADMIN';
     }
 
     private function toRolePersistencePayload(array $validated): array

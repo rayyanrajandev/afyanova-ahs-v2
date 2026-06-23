@@ -43,7 +43,16 @@ class PlatformRoleResponseTransformer
             return 'platform';
         }
 
-        if (str_starts_with($code, 'HOSPITAL.')) {
+        if (str_starts_with($code, 'ADMIN.')
+            || str_starts_with($code, 'CLINICAL.')
+            || str_starts_with($code, 'FINANCE.')
+            || str_starts_with($code, 'LAB.')
+            || str_starts_with($code, 'RADIOLOGY.')
+            || str_starts_with($code, 'PHARMACY.')
+            || str_starts_with($code, 'THEATRE.')
+            || str_starts_with($code, 'INVENTORY.')
+            || str_starts_with($code, 'HOSPITAL.')
+        ) {
             return 'hospital';
         }
 
@@ -60,7 +69,7 @@ class PlatformRoleResponseTransformer
 
         return str_starts_with($code, 'PLATFORM.')
             || str_contains($code, 'SUPER.ADMIN')
-            || $code === 'HOSPITAL.FACILITY.ADMIN';
+            || $code === 'ADMIN.FACILITY';
     }
 }
 

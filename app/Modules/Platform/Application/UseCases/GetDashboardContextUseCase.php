@@ -79,8 +79,7 @@ class GetDashboardContextUseCase
                 'PLATFORM.USER.ADMIN',
                 'PLATFORM.RBAC.ADMIN',
                 'PLATFORM.SUBSCRIPTION.ADMIN',
-                'HOSPITAL.FACILITY.ADMIN',
-                'HOSPITAL.DEPARTMENT.HEAD',
+                'ADMIN.FACILITY',
             ])
             || count($eligibleKeys) > 1;
 

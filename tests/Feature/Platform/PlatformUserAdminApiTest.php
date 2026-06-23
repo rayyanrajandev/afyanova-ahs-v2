@@ -472,7 +472,7 @@ it('limits facility assigned user admins to hospital operational role assignment
         'email' => 'facility-role-target@example.com',
     ]);
     $hospitalRole = RoleModel::query()->create([
-        'code' => 'HOSPITAL.REGISTRATION.CLERK',
+        'code' => 'ADMIN.REGISTRATION',
         'name' => 'Registration Clerk',
         'status' => 'active',
         'is_system' => true,
@@ -546,7 +546,7 @@ it('filters assignable roles in rbac list for facility scoped user admins', func
         'status' => 'active',
     ]);
     RoleModel::query()->create([
-        'code' => 'HOSPITAL.REGISTRATION.CLERK',
+        'code' => 'ADMIN.REGISTRATION',
         'name' => 'Registration Clerk',
         'status' => 'active',
         'is_system' => true,
@@ -579,13 +579,13 @@ it('filters assignable roles in rbac list for facility scoped user admins', func
 
     $codes = collect($response->json('data'))->pluck('code')->map(fn ($code) => strtoupper((string) $code))->all();
 
-    expect($codes)->toContain('HOSPITAL.REGISTRATION.CLERK');
+    expect($codes)->toContain('ADMIN.REGISTRATION');
     expect($codes)->not->toContain('PLATFORM.USER.ADMIN');
-    expect(collect($response->json('data'))->firstWhere('code', 'HOSPITAL.REGISTRATION.CLERK'))->toMatchArray([
+    expect(collect($response->json('data'))->firstWhere('code', 'ADMIN.REGISTRATION'))->toMatchArray([
         'riskTier' => 'hospital',
         'isElevated' => false,
     ]);
-    expect(collect($response->json('data'))->every(fn (array $role): bool => str_starts_with(strtoupper((string) ($role['code'] ?? '')), 'HOSPITAL.')))->toBeTrue();
+    expect(collect($response->json('data'))->every(fn (array $role): bool => !str_starts_with(strtoupper((string) ($role['code'] ?? '')), 'PLATFORM.') && !str_contains(strtoupper((string) ($role['code'] ?? '')), 'SUPER.ADMIN')))->toBeTrue();
 });
 
 it('forbids bulk platform role assignment without permission', function (): void {

@@ -58,22 +58,28 @@ final class ConsultationProviderAuthorization
      * @var array<int, string>
      */
     private const PROVIDER_ROLE_CODES = [
-        'HOSPITAL.CLINICAL.USER',
-        'HOSPITAL.CLINICIAN.ORDERING',
+        'CLINICAL.PHYSICIAN',
+        'CLINICAL.GENERAL',
     ];
 
     /**
      * @var array<int, string>
      */
     private const EXCLUDED_ROLE_CODES = [
-        'HOSPITAL.NURSING.USER',
-        'HOSPITAL.LABORATORY.USER',
-        'HOSPITAL.RADIOLOGY.USER',
-        'HOSPITAL.PHARMACY.USER',
-        'HOSPITAL.REGISTRATION.CLERK',
-        'HOSPITAL.MEDICAL.RECORDS.OFFICER',
-        'HOSPITAL.BILLING.CASHIER',
-        'HOSPITAL.BILLING.OFFICER',
+        'CLINICAL.NURSE',
+        'LAB.STAFF',
+        'LAB.SUPERVISOR',
+        'LAB.MANAGER',
+        'RADIOLOGY.STAFF',
+        'RADIOLOGY.SUPERVISOR',
+        'RADIOLOGY.MANAGER',
+        'PHARMACY.STAFF',
+        'PHARMACY.SUPERVISOR',
+        'PHARMACY.MANAGER',
+        'ADMIN.REGISTRATION',
+        'ADMIN.MEDICAL.RECORDS',
+        'FINANCE.CASHIER',
+        'FINANCE.OFFICER',
     ];
 
     public function __construct(

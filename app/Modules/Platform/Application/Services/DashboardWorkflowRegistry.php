@@ -55,88 +55,86 @@ final class DashboardWorkflowRegistry
         'PLATFORM.USER.ADMIN',
         'PLATFORM.RBAC.ADMIN',
         'PLATFORM.SUBSCRIPTION.ADMIN',
-        'HOSPITAL.FACILITY.ADMIN',
-        'HOSPITAL.DEPARTMENT.HEAD',
+        'ADMIN.FACILITY',
     ];
 
     /**
      * @var array<int, string>
      */
     private const CASHIER_ROLE_CODES = [
-        'HOSPITAL.BILLING.CASHIER',
-        'HOSPITAL.BILLING.OFFICER',
-        'HOSPITAL.FINANCE.CONTROLLER',
+        'FINANCE.CASHIER',
+        'FINANCE.OFFICER',
+        'FINANCE.CONTROLLER',
     ];
 
     /**
      * @var array<int, string>
      */
     private const CLINICIAN_ROLE_CODES = [
-        'HOSPITAL.CLINICAL.USER',
-        'HOSPITAL.CLINICIAN.ORDERING',
+        'CLINICAL.PHYSICIAN',
+        'CLINICAL.GENERAL',
     ];
 
     /**
      * @var array<int, string>
      */
     private const NURSING_ROLE_CODES = [
-        'HOSPITAL.NURSING.USER',
+        'CLINICAL.NURSE',
     ];
 
     /**
      * @var array<int, string>
      */
     private const EMERGENCY_ROLE_CODES = [
-        'HOSPITAL.EMERGENCY.USER',
-        'HOSPITAL.EMERGENCY.NURSE',
-        'HOSPITAL.TRIAGE.USER',
+        'CLINICAL.EMERGENCY',
     ];
 
     /**
      * @var array<int, string>
      */
     private const DIRECT_SERVICE_ROLE_CODES = [
-        'HOSPITAL.LABORATORY.USER',
-        'HOSPITAL.PHARMACY.USER',
-        'HOSPITAL.RADIOLOGY.USER',
+        'LAB.STAFF',
+        'PHARMACY.STAFF',
+        'RADIOLOGY.STAFF',
     ];
 
     /**
      * @var array<int, string>
      */
     private const FRONT_DESK_ROLE_CODES = [
-        'HOSPITAL.REGISTRATION.CLERK',
+        'ADMIN.REGISTRATION',
     ];
 
     /**
      * @var array<int, string>
      */
     private const OPERATIONS_ROLE_CODES = [
-        'HOSPITAL.STAFF.ADMIN',
-        'HOSPITAL.CREDENTIALING.OFFICER',
-        'HOSPITAL.PRIVILEGING.REVIEWER',
-        'HOSPITAL.PRIVILEGING.APPROVER',
+        'ADMIN.HR',
     ];
 
     /**
      * @var array<int, string>
      */
     private const RECORDS_ROLE_CODES = [
-        'HOSPITAL.MEDICAL.RECORDS.OFFICER',
+        'ADMIN.MEDICAL.RECORDS',
     ];
 
     /**
      * @var array<int, string>
      */
     private const SUPPLY_ROLE_CODES = [
-        'HOSPITAL.INVENTORY.STOREKEEPER',
+        'INVENTORY.STAFF',
+        'INVENTORY.SUPERVISOR',
+        'INVENTORY.MANAGER',
     ];
 
     /**
      * @var array<int, string>
      */
     private const THEATRE_ROLE_CODES = [
-        'HOSPITAL.THEATRE.USER',
+        'THEATRE.STAFF',
+        'THEATRE.SUPERVISOR',
+        'THEATRE.MANAGER',
     ];
 
     /**
@@ -308,15 +306,22 @@ final class DashboardWorkflowRegistry
      * @var array<int, string>
      */
     private const PROCUREMENT_REQUISITION_ROLE_CODES = [
-        'HOSPITAL.CLINICAL.USER',
-        'HOSPITAL.CLINICIAN.ORDERING',
-        'HOSPITAL.NURSING.USER',
-        'HOSPITAL.EMERGENCY.USER',
-        'HOSPITAL.EMERGENCY.NURSE',
-        'HOSPITAL.TRIAGE.USER',
-        'HOSPITAL.LABORATORY.USER',
-        'HOSPITAL.PHARMACY.USER',
-        'HOSPITAL.RADIOLOGY.USER',
+        'CLINICAL.GENERAL',
+        'CLINICAL.PHYSICIAN',
+        'CLINICAL.NURSE',
+        'CLINICAL.EMERGENCY',
+        'LAB.STAFF',
+        'LAB.SUPERVISOR',
+        'LAB.MANAGER',
+        'PHARMACY.STAFF',
+        'PHARMACY.SUPERVISOR',
+        'PHARMACY.MANAGER',
+        'RADIOLOGY.STAFF',
+        'RADIOLOGY.SUPERVISOR',
+        'RADIOLOGY.MANAGER',
+        'THEATRE.STAFF',
+        'THEATRE.SUPERVISOR',
+        'THEATRE.MANAGER',
     ];
 
     /**
@@ -515,15 +520,39 @@ final class DashboardWorkflowRegistry
 
         if (count($heldRoles) === 1) {
             return match ($heldRoles[0]) {
-                'HOSPITAL.LABORATORY.USER' => [
+                'LAB.STAFF' => [
                     'label' => 'Laboratory',
                     'description' => 'Laboratory order queue, specimen processing, and result verification for bench staff.',
                 ],
-                'HOSPITAL.PHARMACY.USER' => [
+                'LAB.SUPERVISOR' => [
+                    'label' => 'Laboratory',
+                    'description' => 'Laboratory order queue, specimen processing, and result verification for bench staff.',
+                ],
+                'LAB.MANAGER' => [
+                    'label' => 'Laboratory',
+                    'description' => 'Laboratory order queue, specimen processing, and result verification for bench staff.',
+                ],
+                'PHARMACY.STAFF' => [
                     'label' => 'Pharmacy',
                     'description' => 'Pharmacy dispensing queue, order preparation, and verification for dispensary staff.',
                 ],
-                'HOSPITAL.RADIOLOGY.USER' => [
+                'PHARMACY.SUPERVISOR' => [
+                    'label' => 'Pharmacy',
+                    'description' => 'Pharmacy dispensing queue, order preparation, and verification for dispensary staff.',
+                ],
+                'PHARMACY.MANAGER' => [
+                    'label' => 'Pharmacy',
+                    'description' => 'Pharmacy dispensing queue, order preparation, and verification for dispensary staff.',
+                ],
+                'RADIOLOGY.STAFF' => [
+                    'label' => 'Radiology',
+                    'description' => 'Imaging order queue, scheduling, and reporting for radiology staff.',
+                ],
+                'RADIOLOGY.SUPERVISOR' => [
+                    'label' => 'Radiology',
+                    'description' => 'Imaging order queue, scheduling, and reporting for radiology staff.',
+                ],
+                'RADIOLOGY.MANAGER' => [
                     'label' => 'Radiology',
                     'description' => 'Imaging order queue, scheduling, and reporting for radiology staff.',
                 ],

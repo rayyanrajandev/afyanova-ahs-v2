@@ -3,11 +3,11 @@
 use App\Modules\Platform\Application\Services\DashboardWorkflowRegistry;
 use App\Modules\Platform\Domain\ValueObjects\DashboardSessionContext;
 
-it('prioritizes operations for credentialing officer role', function (): void {
+it('prioritizes operations for HR role', function (): void {
     $registry = new DashboardWorkflowRegistry;
 
     $context = new DashboardSessionContext(
-        roleCodesUpper: ['HOSPITAL.CREDENTIALING.OFFICER'],
+        roleCodesUpper: ['ADMIN.HR'],
         permissionNames: [
             'staff.read',
             'staff.credentialing.read',
@@ -25,7 +25,7 @@ it('prioritizes records for medical records officer without clinical roles', fun
     $registry = new DashboardWorkflowRegistry;
 
     $context = new DashboardSessionContext(
-        roleCodesUpper: ['HOSPITAL.MEDICAL.RECORDS.OFFICER'],
+        roleCodesUpper: ['ADMIN.MEDICAL.RECORDS'],
         permissionNames: [
             'patients.read',
             'medical.records.read',
@@ -43,7 +43,7 @@ it('does not add records workflow for nursing role with medical records read', f
     $registry = new DashboardWorkflowRegistry;
 
     $context = new DashboardSessionContext(
-        roleCodesUpper: ['HOSPITAL.NURSING.USER'],
+        roleCodesUpper: ['CLINICAL.NURSE'],
         permissionNames: [
             'medical.records.read',
             'inpatient.ward.read',
@@ -60,7 +60,7 @@ it('adds supply workflow from inventory procurement permission', function (): vo
     $registry = new DashboardWorkflowRegistry;
 
     $context = new DashboardSessionContext(
-        roleCodesUpper: ['HOSPITAL.INVENTORY.STOREKEEPER'],
+        roleCodesUpper: ['INVENTORY.STAFF'],
         permissionNames: ['inventory.procurement.read'],
         isFacilitySuperAdmin: false,
         isPlatformSuperAdmin: false,
@@ -86,7 +86,7 @@ it('includes permission-gated widgets in workflow definitions', function (): voi
     $registry = new DashboardWorkflowRegistry;
 
     $context = new DashboardSessionContext(
-        roleCodesUpper: ['HOSPITAL.CREDENTIALING.OFFICER'],
+        roleCodesUpper: ['ADMIN.HR'],
         permissionNames: ['staff.read', 'staff.credentialing.read'],
         isFacilitySuperAdmin: false,
         isPlatformSuperAdmin: false,
@@ -104,7 +104,7 @@ it('prioritizes laboratory dashboard for lab user and excludes supply chain', fu
     $registry = new DashboardWorkflowRegistry;
 
     $context = new DashboardSessionContext(
-        roleCodesUpper: ['HOSPITAL.LABORATORY.USER'],
+        roleCodesUpper: ['LAB.STAFF'],
         permissionNames: [
             'laboratory.orders.read',
             'laboratory.orders.update-status',
@@ -161,7 +161,7 @@ it('prioritizes clinician dashboard and excludes front desk and supply chain noi
     ];
 
     $context = new DashboardSessionContext(
-        roleCodesUpper: ['HOSPITAL.CLINICAL.USER', 'HOSPITAL.CLINICIAN.ORDERING'],
+        roleCodesUpper: ['CLINICAL.GENERAL', 'CLINICAL.PHYSICIAN'],
         permissionNames: array_values(array_unique(array_merge($clinicalPermissions, $orderingPermissions))),
         isFacilitySuperAdmin: false,
         isPlatformSuperAdmin: false,
@@ -180,7 +180,7 @@ it('does not add supply workflow for nursing role with procurement requisition p
     $registry = new DashboardWorkflowRegistry;
 
     $context = new DashboardSessionContext(
-        roleCodesUpper: ['HOSPITAL.NURSING.USER'],
+        roleCodesUpper: ['CLINICAL.NURSE'],
         permissionNames: [
             'inpatient.ward.read',
             'inventory.procurement.read',

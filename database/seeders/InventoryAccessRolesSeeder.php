@@ -17,7 +17,7 @@ class InventoryAccessRolesSeeder extends Seeder
      * Phase 1: Department-Level RBAC Implementation
      *
      * Creates roles:
-     * - LAB.TECH (Request level)
+     * - LAB.STAFF (Request level)
      * - LAB.SUPERVISOR (Approve level)
      * - LAB.MANAGER (Manage level)
      */
@@ -49,18 +49,18 @@ class InventoryAccessRolesSeeder extends Seeder
         // Get or create permissions
         $this->ensurePermissionsExist();
 
-        // Create LAB.TECH role
-        $labTechRole = RoleModel::firstOrCreate(
+        // Create LAB.STAFF role
+        $labStaffRole = RoleModel::firstOrCreate(
             [
                 'tenant_id' => $tenant->id,
                 'facility_id' => $facility->id,
                 'department_id' => $labDepartment->id,
-                'code' => 'LAB.TECH',
+                'code' => 'LAB.STAFF',
             ],
             [
-                'name' => 'Laboratory Technician',
+                'name' => 'Laboratory Staff',
                 'status' => 'active',
-                'description' => 'Lab technician - can view own department inventory and create requisitions',
+                'description' => 'Lab staff - can view own department inventory and create requisitions',
                 'is_system' => false,
                 'access_level' => 'request',
                 'scope_type' => 'own_department',
@@ -69,8 +69,8 @@ class InventoryAccessRolesSeeder extends Seeder
             ]
         );
 
-        // Assign permissions to LAB.TECH
-        $this->assignPermissionsToRole($labTechRole, [
+        // Assign permissions to LAB.STAFF
+        $this->assignPermissionsToRole($labStaffRole, [
             'inventory.view-own-items',
             'inventory.create-requisition-own-department',
             'inventory.view-requisition-own',
@@ -159,7 +159,7 @@ class InventoryAccessRolesSeeder extends Seeder
         ]);
 
         $this->command->info('Inventory access roles created successfully for Laboratory department!');
-        $this->command->info("  - LAB.TECH (Request level)");
+        $this->command->info("  - LAB.STAFF (Request level)");
         $this->command->info("  - LAB.SUPERVISOR (Approve level)");
         $this->command->info("  - LAB.MANAGER (Manage level)");
     }
