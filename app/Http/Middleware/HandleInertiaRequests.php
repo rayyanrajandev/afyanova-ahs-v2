@@ -55,6 +55,7 @@ class HandleInertiaRequests extends Middleware
                 'roleCodes' => fn (): array => $this->roleCodes($request),
                 'isFacilitySuperAdmin' => fn (): bool => $this->isFacilitySuperAdmin($request),
                 'isPlatformSuperAdmin' => fn (): bool => $this->isPlatformSuperAdmin($request),
+                'hasFacilityAssignments' => fn (): bool => $this->hasFacilityAssignments($request),
             ],
             'platform' => [
                 'scope' => fn (): ?array => $this->platformScope($request),
@@ -114,6 +115,16 @@ class HandleInertiaRequests extends Middleware
         }
 
         return (bool) $user->isPlatformSuperAdminAccess();
+    }
+
+    private function hasFacilityAssignments(Request $request): bool
+    {
+        $user = $request->user();
+        if ($user === null || ! method_exists($user, 'hasFacilityAssignments')) {
+            return false;
+        }
+
+        return (bool) $user->hasFacilityAssignments();
     }
 
     /**

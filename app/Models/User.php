@@ -219,6 +219,17 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasUniversalAdminAccess();
     }
 
+    public function hasFacilityAssignments(): bool
+    {
+        try {
+            return DB::table('facility_user')
+                ->where('user_id', $this->id)
+                ->exists();
+        } catch (QueryException) {
+            return false;
+        }
+    }
+
     public function isPlatformSuperAdminAccess(): bool
     {
         return $this->isPlatformSuperAdmin();

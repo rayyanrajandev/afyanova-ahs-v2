@@ -14,9 +14,11 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const page = usePage<{
-    auth: { isFacilitySuperAdmin: boolean };
+    auth: { isFacilitySuperAdmin: boolean; hasFacilityAssignments: boolean };
 }>();
 const isFacilitySuperAdmin = computed(() => page.props.auth?.isFacilitySuperAdmin ?? false);
+const hasFacilityAssignments = computed(() => page.props.auth?.hasFacilityAssignments ?? false);
+const needsPlatformAdmin = computed(() => isFacilitySuperAdmin.value || !hasFacilityAssignments.value);
 </script>
 
 <template>
@@ -35,6 +37,11 @@ const isFacilitySuperAdmin = computed(() => page.props.auth?.isFacilitySuperAdmi
                             A platform super administrator needs to assign the appropriate roles before you can
                             manage this facility.
                         </template>
+                        <template v-else-if="!hasFacilityAssignments">
+                            Your account has been created but has not been linked to a facility yet.
+                            A platform super administrator needs to assign the appropriate roles before you can
+                            access the system.
+                        </template>
                         <template v-else>
                             Your account has been created but has not been assigned any module permissions yet.
                         </template>
@@ -52,12 +59,12 @@ const isFacilitySuperAdmin = computed(() => page.props.auth?.isFacilitySuperAdmi
                 </div>
             </div>
 
-            <Alert v-if="isFacilitySuperAdmin" class="rounded-lg">
+            <Alert v-if="needsPlatformAdmin" class="rounded-lg">
                 <AppIcon name="info" class="size-4" />
                 <AlertTitle>Platform administrator action needed</AlertTitle>
                 <AlertDescription>
-                    Contact your platform super administrator to assign roles to your facility admin account.
-                    Once roles are assigned, you will be able to access the system and manage this facility.
+                    Contact your platform super administrator to assign the appropriate roles to your account.
+                    Once roles are assigned, you will be able to access the system.
                 </AlertDescription>
             </Alert>
             <Alert v-else class="rounded-lg">
@@ -78,12 +85,19 @@ const isFacilitySuperAdmin = computed(() => page.props.auth?.isFacilitySuperAdmi
                         <p v-if="isFacilitySuperAdmin" class="mt-1 truncate text-sm font-medium text-foreground">
                             No roles assigned to this facility admin account
                         </p>
+                        <p v-else-if="!hasFacilityAssignments" class="mt-1 truncate text-sm font-medium text-foreground">
+                            No facility or roles assigned
+                        </p>
                         <p v-else class="mt-1 truncate text-sm font-medium text-foreground">
                             No roles assigned to your account
                         </p>
                         <p v-if="isFacilitySuperAdmin" class="mt-0.5 text-xs text-muted-foreground">
                             A platform super administrator needs to assign at least one role to grant you
                             access to the relevant modules and facility management features.
+                        </p>
+                        <p v-else-if="!hasFacilityAssignments" class="mt-0.5 text-xs text-muted-foreground">
+                            A platform super administrator needs to link you to a facility and assign
+                            at least one role to grant you access.
                         </p>
                         <p v-else class="mt-0.5 text-xs text-muted-foreground">
                             An administrator needs to assign at least one role to grant you access to the
@@ -97,7 +111,7 @@ const isFacilitySuperAdmin = computed(() => page.props.auth?.isFacilitySuperAdmi
                         <p class="text-xs font-medium tracking-normal text-muted-foreground uppercase">
                             Next steps
                         </p>
-                        <p v-if="isFacilitySuperAdmin" class="mt-1 truncate text-sm font-medium text-foreground">
+                        <p v-if="needsPlatformAdmin" class="mt-1 truncate text-sm font-medium text-foreground">
                             Reach out to your platform super administrator
                         </p>
                         <p v-else class="mt-1 truncate text-sm font-medium text-foreground">
