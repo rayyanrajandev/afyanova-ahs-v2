@@ -1,15 +1,27 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import AppLayout from '@/layouts/AppLayout.vue';
+import type { BreadcrumbItem } from '@/types';
+
+const breadcrumbs: BreadcrumbItem[] = [
+    { title: 'Account Pending Setup', href: '/pending-setup' },
+];
+
+const page = usePage<{
+    auth: { isFacilitySuperAdmin: boolean };
+}>();
+const isFacilitySuperAdmin = computed(() => page.props.auth?.isFacilitySuperAdmin ?? false);
 </script>
 
 <template>
     <Head title="Account Pending Setup" />
-    <AppLayout :breadcrumbs="[{ title: 'Account Pending Setup', href: '/pending-setup' }]">
+    <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex flex-1 flex-col gap-4 overflow-x-hidden p-4 md:p-6">
             <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div class="min-w-0">
@@ -18,8 +30,19 @@ import AppLayout from '@/layouts/AppLayout.vue';
                         <span>Account not configured</span>
                     </div>
                     <p class="mt-1 max-w-3xl text-sm text-muted-foreground">
-                        Your account has been created but has not been assigned any module permissions yet.
+                        <template v-if="isFacilitySuperAdmin">
+                            Your facility admin account has been created but has not been assigned any roles yet.
+                            A platform super administrator needs to assign the appropriate roles before you can
+                            manage this facility.
+                        </template>
+                        <template v-else>
+                            Your account has been created but has not been assigned any module permissions yet.
+                        </template>
                     </p>
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        <Badge variant="outline">Setup pending</Badge>
+                        <Badge variant="secondary">No role assigned</Badge>
+                    </div>
                 </div>
 
                 <div class="flex flex-wrap gap-2">
@@ -29,7 +52,15 @@ import AppLayout from '@/layouts/AppLayout.vue';
                 </div>
             </div>
 
-            <Alert class="rounded-lg">
+            <Alert v-if="isFacilitySuperAdmin" class="rounded-lg">
+                <AppIcon name="info" class="size-4" />
+                <AlertTitle>Platform administrator action needed</AlertTitle>
+                <AlertDescription>
+                    Contact your platform super administrator to assign roles to your facility admin account.
+                    Once roles are assigned, you will be able to access the system and manage this facility.
+                </AlertDescription>
+            </Alert>
+            <Alert v-else class="rounded-lg">
                 <AppIcon name="info" class="size-4" />
                 <AlertTitle>Administrator action needed</AlertTitle>
                 <AlertDescription>
@@ -44,12 +75,19 @@ import AppLayout from '@/layouts/AppLayout.vue';
                         <p class="text-xs font-medium tracking-normal text-muted-foreground uppercase">
                             What's missing
                         </p>
-                        <p class="mt-1 text-sm font-medium text-foreground">
+                        <p v-if="isFacilitySuperAdmin" class="mt-1 truncate text-sm font-medium text-foreground">
+                            No roles assigned to this facility admin account
+                        </p>
+                        <p v-else class="mt-1 truncate text-sm font-medium text-foreground">
                             No roles assigned to your account
                         </p>
-                        <p class="mt-0.5 text-xs text-muted-foreground">
-                            An administrator needs to assign at least one role (e.g. LAB.STAFF, ADMIN.FACILITY)
-                            to grant you access to the relevant modules.
+                        <p v-if="isFacilitySuperAdmin" class="mt-0.5 text-xs text-muted-foreground">
+                            A platform super administrator needs to assign at least one role to grant you
+                            access to the relevant modules and facility management features.
+                        </p>
+                        <p v-else class="mt-0.5 text-xs text-muted-foreground">
+                            An administrator needs to assign at least one role to grant you access to the
+                            relevant modules.
                         </p>
                     </CardContent>
                 </Card>
@@ -59,7 +97,10 @@ import AppLayout from '@/layouts/AppLayout.vue';
                         <p class="text-xs font-medium tracking-normal text-muted-foreground uppercase">
                             Next steps
                         </p>
-                        <p class="mt-1 text-sm font-medium text-foreground">
+                        <p v-if="isFacilitySuperAdmin" class="mt-1 truncate text-sm font-medium text-foreground">
+                            Reach out to your platform super administrator
+                        </p>
+                        <p v-else class="mt-1 truncate text-sm font-medium text-foreground">
                             Reach out to your facility admin
                         </p>
                         <p class="mt-0.5 text-xs text-muted-foreground">

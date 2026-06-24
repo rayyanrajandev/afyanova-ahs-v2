@@ -12,7 +12,7 @@ class EnsureUserHasActiveRole
     {
         $user = $request->user();
 
-        if ($user !== null && ! $user->hasUniversalAdminAccess()) {
+        if ($user !== null && ! $user->isPlatformSuperAdminAccess()) {
             if ($user->email_verified_at === null) {
                 return $next($request);
             }
