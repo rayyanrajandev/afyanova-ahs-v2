@@ -160,7 +160,6 @@ class SyncPlatformUserRolesUseCase
             }
         }
 
-        // Also allow legacy HOSPITAL. prefix for backward compatibility
-        return str_starts_with($code, 'HOSPITAL.');
+        return false;
     }
 }

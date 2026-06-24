@@ -276,13 +276,5 @@ it('shares the saved branding payload with the inertia admin page', function ():
 
 function makeBrandingActor(array $permissions = []): User
 {
-    $user = User::factory()->create([
-        'email_verified_at' => now(),
-    ]);
-
-    foreach ($permissions as $permission) {
-        $user->givePermissionTo($permission);
-    }
-
-    return $user;
+    return makeUserWithRole($permissions);
 }

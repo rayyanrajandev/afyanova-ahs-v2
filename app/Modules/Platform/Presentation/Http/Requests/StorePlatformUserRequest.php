@@ -19,6 +19,8 @@ class StorePlatformUserRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'roleIds' => ['required', 'array', 'min:1'],
+            'roleIds.*' => ['required', 'string', 'uuid'],
         ];
     }
 }

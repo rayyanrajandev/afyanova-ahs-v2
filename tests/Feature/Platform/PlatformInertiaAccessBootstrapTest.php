@@ -18,6 +18,14 @@ it('shares auth permissions and platform bootstrap scope in inertia payload', fu
     ]);
     $user->givePermissionTo('patients.read');
 
+    $role = RoleModel::query()->create([
+        'code' => 'ADMIN.REGISTRATION',
+        'name' => 'Registration Admin',
+        'status' => 'active',
+        'is_system' => false,
+    ]);
+    $user->roles()->syncWithoutDetaching([$role->id]);
+
     seedInertiaScopeAssignment(
         userId: $user->id,
         tenantCode: 'TZH',

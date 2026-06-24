@@ -10,15 +10,7 @@ uses(RefreshDatabase::class);
 
 function makePosReceiptActor(array $permissions = []): User
 {
-    $user = User::factory()->create([
-        'email_verified_at' => now(),
-    ]);
-
-    foreach ($permissions as $permission) {
-        $user->givePermissionTo($permission);
-    }
-
-    return $user;
+    return makeUserWithRole($permissions);
 }
 
 /**

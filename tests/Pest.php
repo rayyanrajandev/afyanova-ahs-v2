@@ -50,9 +50,42 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+/**
+ * Create a minimal active test role for route-authorization tests.
+ */
+function createTestRole(): \App\Modules\Platform\Infrastructure\Models\RoleModel
 {
-    // ..
+    /** @var \App\Modules\Platform\Infrastructure\Models\RoleModel $role */
+    $role = \App\Modules\Platform\Infrastructure\Models\RoleModel::query()->create([
+        'id' => (string) \Illuminate\Support\Str::uuid(),
+        'code' => 'TEST-ROLE',
+        'name' => 'Test Role',
+        'status' => 'active',
+        'effective_from' => now(),
+    ]);
+
+    return $role;
+}
+
+/**
+ * Create a verified user with an active test role and the given permissions.
+ */
+function makeUserWithRole(array $permissions = []): \App\Models\User
+{
+    $role = createTestRole();
+
+    /** @var \App\Models\User $user */
+    $user = \App\Models\User::factory()->create([
+        'email_verified_at' => now(),
+    ]);
+
+    $user->roles()->attach($role->id);
+
+    foreach ($permissions as $permission) {
+        $user->givePermissionTo($permission);
+    }
+
+    return $user;
 }
 
 /**

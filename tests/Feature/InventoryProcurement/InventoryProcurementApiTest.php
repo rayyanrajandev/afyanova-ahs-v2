@@ -13,12 +13,7 @@ uses(RefreshDatabase::class);
 
 function makeInventoryProcurementUser(array $permissions = []): User
 {
-    $user = User::factory()->create();
-    foreach ($permissions as $permission) {
-        $user->givePermissionTo($permission);
-    }
-
-    return $user;
+    return makeUserWithRole($permissions);
 }
 
 /**

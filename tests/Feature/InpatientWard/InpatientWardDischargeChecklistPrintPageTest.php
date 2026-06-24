@@ -19,15 +19,7 @@ uses(RefreshDatabase::class);
 
 function makeInpatientDischargePrintActor(array $permissions = []): User
 {
-    $user = User::factory()->create([
-        'email_verified_at' => now(),
-    ]);
-
-    foreach ($permissions as $permission) {
-        $user->givePermissionTo($permission);
-    }
-
-    return $user;
+    return makeUserWithRole($permissions);
 }
 
 function makeInpatientDischargePrintPatient(): PatientModel

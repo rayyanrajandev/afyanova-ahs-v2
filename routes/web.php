@@ -35,6 +35,12 @@ Route::get('/', function () {
     ]);
 })->name('home');
 
+Route::get('pending-setup', function () {
+    return Inertia::render('errors/PendingSetup');
+})->middleware(['auth'])->name('pending-setup');
+
+Route::middleware(['user.has-role'])->group(function () {
+
 Route::get('dashboard', function (GetDashboardContextUseCase $dashboardContext) {
     return Inertia::render('Dashboard', [
         'dashboardContext' => $dashboardContext->execute(request()->user()),
@@ -534,5 +540,7 @@ Route::get('docs/platform-facility-configuration-and-ownership-v1-contract', fun
         'Content-Type' => 'text/markdown; charset=UTF-8',
     ]);
 })->middleware(['auth', 'verified'])->name('docs.platform-facility-configuration-and-ownership-v1-contract');
+
+});
 
 require __DIR__.'/settings.php';

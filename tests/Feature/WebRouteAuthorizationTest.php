@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Modules\Platform\Infrastructure\Models\RoleModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -11,6 +12,14 @@ function makeVerifiedWebUser(array $permissions = []): User
     $user = User::factory()->create([
         'email_verified_at' => now(),
     ]);
+
+    $role = RoleModel::query()->create([
+        'code' => 'ADMIN.REGISTRATION',
+        'name' => 'Registration Admin',
+        'status' => 'active',
+        'is_system' => false,
+    ]);
+    $user->roles()->syncWithoutDetaching([$role->id]);
 
     foreach ($permissions as $permission) {
         $user->givePermissionTo($permission);

@@ -3,6 +3,8 @@
 namespace App\Modules\Platform\Application\UseCases;
 
 use App\Modules\Platform\Application\Exceptions\DuplicatePlatformUserEmailException;
+use App\Modules\Platform\Application\Exceptions\UnknownPlatformRbacRoleException;
+use App\Modules\Platform\Domain\Repositories\PlatformRbacRepositoryInterface;
 use App\Modules\Platform\Domain\Repositories\PlatformUserAdminRepositoryInterface;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
@@ -13,6 +15,7 @@ class CreatePlatformUserUseCase
 {
     public function __construct(
         private readonly PlatformUserAdminRepositoryInterface $platformUserAdminRepository,
+        private readonly PlatformRbacRepositoryInterface $platformRbacRepository,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
     ) {}
@@ -56,6 +59,18 @@ class CreatePlatformUserUseCase
             }
         }
 
+        $roleIds = $payload['role_ids'] ?? [];
+        if ($roleIds !== [] && $targetUserId !== null) {
+            $resolvedRoleIds = $this->platformRbacRepository->resolveExistingRoleIdsInScope($roleIds);
+
+            if (count($resolvedRoleIds) !== count($roleIds)) {
+                throw new UnknownPlatformRbacRoleException('One or more role ids are invalid for the current scope.');
+            }
+
+            $this->platformRbacRepository->syncUserRoles($targetUserId, $resolvedRoleIds);
+            $created['assigned_role_ids'] = $resolvedRoleIds;
+        }
+
         $this->platformUserAdminRepository->writeAuditLog(
             tenantId: $this->platformScopeContext->tenantId(),
             facilityId: $facilityId,
@@ -64,6 +79,7 @@ class CreatePlatformUserUseCase
             action: 'platform-user.created',
             changes: [
                 'after' => $this->extractTrackedFields($created),
+                'assigned_role_ids' => $roleIds,
             ],
         );
 

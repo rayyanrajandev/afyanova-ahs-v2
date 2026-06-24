@@ -55,7 +55,7 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/dashboard' 
 const today = new Date(Date.now() - (new Date().getTimezoneOffset() * 60 * 1000)).toISOString().slice(0, 10);
 const page = usePage<{ dashboardContext?: DashboardContextPayload | null }>();
 
-const { hasPermission, isFacilitySuperAdmin, isPlatformSuperAdmin, multiTenantIsolationEnabled, sessionRoleCodes, scope: platformScope } =
+const { hasPermission, permissionNames, isFacilitySuperAdmin, isPlatformSuperAdmin, multiTenantIsolationEnabled, sessionRoleCodes, scope: platformScope } =
     usePlatformAccess();
 
 const {
@@ -64,6 +64,18 @@ const {
     workflowDefinitions,
     canSwitchWorkflow: canSwitchPreset,
 } = useDashboardContext(page.props.dashboardContext);
+
+const permissionsLoaded = computed(
+    () => isPlatformSuperAdmin.value || isFacilitySuperAdmin.value || permissionNames.value !== null,
+);
+
+const showNoModulePermissions = computed(
+    () =>
+        permissionsLoaded.value &&
+        !isPlatformSuperAdmin.value &&
+        !isFacilitySuperAdmin.value &&
+        (permissionNames.value?.length ?? 0) === 0,
+);
 
 const loading = ref(true);
 const refreshing = ref(false);
@@ -1992,6 +2004,19 @@ function switchPreset(key: DashboardPresetKey): void {
                     </div>
                 </div>
             </section>
+
+            <!-- ─── No module permissions alert ────────────────────────────── -->
+            <Alert
+                v-if="showNoModulePermissions"
+                class="rounded-lg border border-dashed border-muted-foreground/20 bg-muted/30 py-2.5 text-muted-foreground"
+            >
+                <AppIcon name="shield-off" class="size-4 text-muted-foreground" />
+                <AlertTitle class="text-sm font-medium">No module permissions assigned</AlertTitle>
+                <AlertDescription class="mt-1 text-xs">
+                    No module permissions are assigned to this account yet. Contact your facility administrator
+                    to request access to available modules.
+                </AlertDescription>
+            </Alert>
 
             <!-- ─── Partial-data alert ─────────────────────────────────────── -->
             <Alert

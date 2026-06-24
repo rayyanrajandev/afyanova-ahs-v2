@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\EnsureFacilitySubscriptionEntitlement;
 use App\Http\Middleware\EnsureFacilitySubscriptionEntitlementAny;
+use App\Http\Middleware\EnsureUserHasActiveRole;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\InventoryAccessMiddleware;
@@ -40,7 +41,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'facility.entitlement' => EnsureFacilitySubscriptionEntitlement::class,
             'facility.entitlement.any' => EnsureFacilitySubscriptionEntitlementAny::class,
             'inventory.access' => InventoryAccessMiddleware::class,
+            'user.has-role' => EnsureUserHasActiveRole::class,
         ]);
+
+
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

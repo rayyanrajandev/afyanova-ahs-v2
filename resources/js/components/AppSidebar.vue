@@ -181,12 +181,6 @@ function emitSidebarNavigationEvent(item: NavItem) {
     });
 }
 
-const showLimitedAccessHint = computed(
-    () =>
-        permissionsLoaded.value &&
-        !hasUniversalAdminAccess.value &&
-        visibleNavItems.value.length === 0,
-);
 
 function sectionHasMatches(key: NavSectionKey): boolean {
     if (!searchQuery.value) return true;
@@ -297,12 +291,7 @@ function sectionHasMatches(key: NavSectionKey): boolean {
                     </template>
                 </template>
 
-                <div
-                    v-if="showLimitedAccessHint"
-                    class="mx-3 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground"
-                >
-                    No module permissions are assigned to this account yet.
-                </div>
+
                 <div
                     v-if="
                         searchQuery &&

@@ -416,6 +416,7 @@ class PlatformUserAdminController extends Controller
         $fieldMap = [
             'name' => 'name',
             'email' => 'email',
+            'roleIds' => 'role_ids',
         ];
 
         $payload = [];
