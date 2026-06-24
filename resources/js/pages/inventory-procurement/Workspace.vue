@@ -213,6 +213,25 @@ const stockStateOptions = ['out_of_stock', 'low_stock', 'healthy'] as const;
 const procurementStatusOptions = ['draft', 'pending_approval', 'approved', 'rejected', 'ordered', 'received', 'cancelled'] as const;
 const procurementManualStatusOptions = procurementStatusOptions;
 const movementTypeOptions = ['receive', 'issue', 'adjust', 'transfer'] as const;
+
+const correctionReasonOptions: Array<{ value: string; label: string }> = [
+    { value: 'opening_balance', label: 'Opening Balance Correction' },
+    { value: 'physical_count_adjustment', label: 'Physical Count Adjustment' },
+    { value: 'audit_correction', label: 'Audit Correction' },
+    { value: 'other', label: 'Other' },
+];
+
+const stockMovementReasonOptions: Array<{ value: string; label: string }> = [
+    { value: 'opening_balance', label: 'Opening Balance' },
+    { value: 'physical_count_adjustment', label: 'Physical Count Adjustment' },
+    { value: 'expiry_write_off', label: 'Expiry Write-off' },
+    { value: 'damaged_stock', label: 'Damaged Stock' },
+    { value: 'donation', label: 'Donation' },
+    { value: 'emergency_replenishment', label: 'Emergency Replenishment' },
+    { value: 'audit_correction', label: 'Audit Correction' },
+    { value: 'return_to_supplier', label: 'Return to Supplier' },
+    { value: 'other', label: 'Other' },
+];
 const stockMovementTypeMeta: Record<(typeof movementTypeOptions)[number], { label: string; description: string; impact: string; reasonPlaceholder: string }> = {
     receive: {
         label: 'Receive',
@@ -312,6 +331,7 @@ const referenceStructureLoaded = ref(false);
 const canRead = ref(false);
 const canManageItems = ref(false);
 const canCreateMovement = ref(false);
+const canSetOpeningStock = ref(false);
 const canReconcileStock = ref(false);
 const canCreateRequest = ref(false);
 const canUpdateRequestStatus = ref(false);
@@ -325,8 +345,9 @@ const canReadDepartments = computed(() => isFacilitySuperAdmin.value || hasPermi
 const inventoryAccess = computed<InventoryProcurementAccess>(() => ({
     canRead: canRead.value,
     canManageItems: canManageItems.value,
-    canCreateMovement: canCreateMovement.value,
-    canReconcileStock: canReconcileStock.value,
+        canCreateMovement: canCreateMovement.value,
+        canSetOpeningStock: canSetOpeningStock.value,
+        canReconcileStock: canReconcileStock.value,
     canCreateRequest: canCreateRequest.value,
     canUpdateRequestStatus: canUpdateRequestStatus.value,
     canViewAudit: canViewAudit.value,
@@ -510,6 +531,7 @@ const procurementSetupBlockedReason = computed(() => {
 });
 const canLaunchCreateItem = computed(() => canManageItems.value && !inventoryItemSetupBlockedReason.value);
 const canLaunchStockMovement = computed(() => canCreateMovement.value && !stockExecutionBlockedReason.value);
+const canLaunchOpeningStock = computed(() => canSetOpeningStock.value && canCreateMovement.value && !stockExecutionBlockedReason.value);
 const canLaunchReconciliation = computed(() => canReconcileStock.value && !stockExecutionBlockedReason.value);
 const canLaunchProcurementRequest = computed(() => canCreateRequest.value && !procurementSetupBlockedReason.value);
 
@@ -595,6 +617,23 @@ const createItemSupplierOpen = ref(false);
 const updateItemWarehouseOpen = ref(false);
 const updateItemSupplierOpen = ref(false);
 const stockMovementDialogOpen = ref(false);
+const stockMovementCorrectionDialogOpen = ref(false);
+const stockMovementCorrectionSubmitting = ref(false);
+const stockMovementCorrectionErrors = ref<Record<string, string[]>>({});
+const stockMovementCorrectionItem = ref<StockMovementLookupItem | null>(null);
+const stockMovementCorrectionMovement = ref<any>(null);
+const stockMovementCorrectionForm = reactive({
+    quantity: '',
+    reason: '',
+    reasonCode: 'audit_correction',
+});
+function resetStockMovementCorrectionForm(item: StockMovementLookupItem | null = null): void {
+    stockMovementCorrectionItem.value = item;
+    stockMovementCorrectionMovement.value = null;
+    stockMovementCorrectionForm.quantity = '';
+    stockMovementCorrectionForm.reason = '';
+    stockMovementCorrectionForm.reasonCode = 'audit_correction';
+}
 const reconcileDialogOpen = ref(false);
 const createProcurementDialogOpen = ref(false);
 const createItemDiscardConfirmOpen = ref(false);
@@ -626,6 +665,7 @@ const stockMovementForm = reactive({
     destinationDepartmentId: '',
     quantity: '',
     reason: '',
+    reasonCode: '',
     notes: '',
     occurredAt: '',
 });
@@ -808,9 +848,83 @@ function resetStockMovementForm(item: StockMovementLookupItem | null = null): vo
     });
 }
 
+async function openStockMovementCorrection(item: StockMovementLookupItem) {
+    if (stockExecutionBlockedReason.value) {
+        notifyError(stockExecutionBlockedReason.value);
+        return;
+    }
+
+    if (!canSetOpeningStock.value) {
+        notifyError('You do not have permission to correct opening stock.');
+        return;
+    }
+
+    stockMovementCorrectionErrors.value = {};
+    resetStockMovementCorrectionForm(item);
+
+    try {
+        const response = await apiRequest<{ data: any[] }>('GET', '/inventory-procurement/stock-movements', {
+            query: {
+                itemId: item.id,
+                isOpeningStock: 'true',
+                perPage: 1,
+                sortBy: 'occurredAt',
+                sortDir: 'desc',
+            },
+        });
+        const movements = response.data ?? [];
+        if (movements.length === 0) {
+            notifyError('No opening stock movement found for this item.');
+            return;
+        }
+        stockMovementCorrectionMovement.value = movements[0];
+    } catch (error) {
+        notifyError(messageFromUnknown(error, 'Unable to load opening stock details.'));
+        return;
+    }
+
+    stockMovementCorrectionDialogOpen.value = true;
+}
+
+async function submitStockMovementCorrection() {
+    const movement = stockMovementCorrectionMovement.value;
+    if (!movement || stockMovementCorrectionSubmitting.value) return;
+    stockMovementCorrectionSubmitting.value = true;
+    stockMovementCorrectionErrors.value = {};
+    try {
+        await apiRequest('POST', `/inventory-procurement/stock-movements/${movement.id}/correct`, {
+            body: {
+                quantity: Number(stockMovementCorrectionForm.quantity),
+                reason: stockMovementCorrectionForm.reason.trim()
+                    || (correctionReasonOptions.find((opt) => opt.value === stockMovementCorrectionForm.reasonCode)?.label)
+                    || 'Opening stock correction',
+            },
+        });
+        notifySuccess('Opening stock corrected.');
+        stockMovementCorrectionDialogOpen.value = false;
+        resetStockMovementCorrectionForm();
+        await reloadAll();
+    } catch (error) {
+        stockMovementCorrectionErrors.value = (error as ApiError).payload?.errors ?? {};
+        notifyError(messageFromUnknown(error, 'Unable to correct opening stock.'));
+    } finally {
+        stockMovementCorrectionSubmitting.value = false;
+    }
+}
+
 function openStockMovementDialog(item: StockMovementLookupItem | null = null) {
     if (stockExecutionBlockedReason.value) {
         notifyError(stockExecutionBlockedReason.value);
+        return;
+    }
+
+    if (item && inventoryItemNeedsOpeningStock(item) && !canSetOpeningStock.value) {
+        notifyError('You do not have permission to set opening stock. Contact a supervisor or manager.');
+        return;
+    }
+
+    if (item && !inventoryItemNeedsOpeningStock(item) && !canCreateMovement.value) {
+        notifyError('You do not have permission to record stock movements.');
         return;
     }
 
@@ -823,6 +937,7 @@ function handleStockMovementItemSelected(item: StockMovementLookupItem | null): 
     stockMovementSelectedItem.value = item;
     if (inventoryItemNeedsOpeningStock(item)) {
         stockMovementForm.movementType = 'receive';
+        stockMovementForm.reasonCode = 'opening_balance';
         stockMovementForm.sourceSupplierId = '';
         stockMovementForm.sourceWarehouseId = '';
         stockMovementForm.destinationDepartmentId = '';
@@ -2015,6 +2130,16 @@ const itemDetailsSummaryCards = computed(() => {
             helper: `Reorder ${reorderLevelLabel} | Max ${maxStockLevelLabel}`,
         },
         {
+            key: 'openingStock',
+            label: 'Opening stock',
+            value: inventoryItemHasOpeningStock(item)
+                ? `${formatAmount(item.openingStockMovementCount)} entry(ies)`
+                : 'Not set',
+            helper: inventoryItemHasOpeningStock(item)
+                ? 'Correct from the action bar above'
+                : 'Use "Set Opening Stock" after creating the item',
+        },
+        {
             key: 'classification',
             label: 'Inventory class',
             value: item.category ? formatEnumLabel(item.category) : 'Unclassified',
@@ -2142,6 +2267,10 @@ function inventoryItemMovementCount(item: StockMovementLookupItem | Record<strin
 
 function inventoryItemNeedsOpeningStock(item: StockMovementLookupItem | Record<string, unknown> | null | undefined): boolean {
     return Boolean(item) && inventoryItemMovementCount(item) <= 0;
+}
+
+function inventoryItemHasOpeningStock(item: StockMovementLookupItem | Record<string, unknown> | null | undefined): boolean {
+    return Boolean(item) && (Number(item?.openingStockMovementCount ?? 0) > 0);
 }
 
 function inventoryItemStockActionLabel(item: StockMovementLookupItem | Record<string, unknown>): string {
@@ -2300,7 +2429,7 @@ const stockMovementSubmitDisabled = computed(() => {
         return true;
     }
 
-    if (stockMovementReasonRequired.value && !stockMovementForm.reason.trim()) {
+    if (stockMovementReasonRequired.value && !(stockMovementOpeningBalanceMode.value ? stockMovementForm.reasonCode.trim() : stockMovementForm.reason.trim())) {
         return true;
     }
 
@@ -2625,6 +2754,7 @@ async function loadPermissions() {
         canRead.value = hasSuperAdminAccess || permissionSet.has('inventory.procurement.read');
         canManageItems.value = hasSuperAdminAccess || permissionSet.has('inventory.procurement.manage-items');
         canCreateMovement.value = hasSuperAdminAccess || permissionSet.has('inventory.procurement.create-movement');
+        canSetOpeningStock.value = hasSuperAdminAccess || permissionSet.has('inventory.procurement.set-opening-stock');
         canReconcileStock.value = hasSuperAdminAccess
             || permissionSet.has('inventory.procurement.reconcile-stock')
             || permissionSet.has('inventory.procurement.create-movement');
@@ -5845,7 +5975,11 @@ async function submitStockMovement() {
                 destinationWarehouseId: ['receive', 'transfer'].includes(effectiveMovementType) ? (stockMovementForm.destinationWarehouseId || null) : null,
                 destinationDepartmentId: effectiveMovementType === 'issue' ? (stockMovementForm.destinationDepartmentId || null) : null,
                 quantity: Number(stockMovementForm.quantity),
-                reason: stockMovementForm.reason.trim() || null,
+                isOpeningStock: stockMovementOpeningBalanceMode.value,
+                reasonCode: stockMovementForm.reasonCode || null,
+                reason: stockMovementOpeningBalanceMode.value
+                    ? ((stockMovementReasonOptions.find((opt) => opt.value === stockMovementForm.reasonCode)?.label) ?? (stockMovementForm.reason.trim() || null))
+                    : stockMovementForm.reason.trim() || null,
                 notes: stockMovementForm.notes.trim() || null,
                 occurredAt: stockMovementForm.occurredAt || null,
             },
@@ -6501,9 +6635,11 @@ bindInventoryWorkspace({
     canCreateRequest,
     canManageItems,
     canCreateMovement,
+    canSetOpeningStock,
     canApproveRequisitions,
     canLaunchCreateItem,
     canLaunchStockMovement,
+    canLaunchOpeningStock,
     canLaunchProcurementRequest,
     loading,
     deptReqSearch,
@@ -6633,6 +6769,7 @@ bindInventoryWorkspace({
     stockStateLabel,
     flashedItemId,
     inventoryItemNeedsOpeningStock,
+    inventoryItemHasOpeningStock,
     stockAlertBadgeClass,
     openStockMovementDialog,
     inventoryItemStockActionLabel,
@@ -6856,6 +6993,17 @@ bindInventoryWorkspace({
     stockMovementProjectedState,
     stockMovementTypeMeta,
     selectedStockMovementTypeMeta,
+    stockMovementReasonOptions,
+    correctionReasonOptions,
+    stockMovementCorrectionDialogOpen,
+    stockMovementCorrectionSubmitting,
+    stockMovementCorrectionErrors,
+    stockMovementCorrectionItem,
+    stockMovementCorrectionMovement,
+    stockMovementCorrectionForm,
+    resetStockMovementCorrectionForm,
+    openStockMovementCorrection,
+    submitStockMovementCorrection,
     requiresAdjustmentDirection,
     stockMovementUnitLabel,
     stockMovementRequiresBatchSelection,

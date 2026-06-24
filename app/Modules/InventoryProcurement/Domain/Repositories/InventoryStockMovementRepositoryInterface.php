@@ -6,6 +6,8 @@ interface InventoryStockMovementRepositoryInterface
 {
     public function create(array $attributes): array;
 
+    public function findById(string $id): ?array;
+
     public function search(
         ?string $query,
         ?string $itemId,
@@ -18,7 +20,8 @@ interface InventoryStockMovementRepositoryInterface
         int $page,
         int $perPage,
         ?string $sortBy,
-        string $sortDirection
+        string $sortDirection,
+        ?bool $isOpeningStock = null,
     ): array;
 
     public function summary(
@@ -30,5 +33,6 @@ interface InventoryStockMovementRepositoryInterface
         ?int $actorId,
         ?string $fromDateTime,
         ?string $toDateTime,
+        ?bool $isOpeningStock = null,
     ): array;
 }

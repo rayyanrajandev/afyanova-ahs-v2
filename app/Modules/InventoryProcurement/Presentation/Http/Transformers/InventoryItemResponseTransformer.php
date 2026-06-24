@@ -40,6 +40,7 @@ class InventoryItemResponseTransformer
             'reorderLevel' => $item['reorder_level'] ?? null,
             'maxStockLevel' => $item['max_stock_level'] ?? null,
             'movementCount' => (int) ($item['stock_movements_count'] ?? 0),
+            'openingStockMovementCount' => (int) ($item['opening_stock_movements_count'] ?? 0),
             'status' => $item['status'] ?? null,
             'statusReason' => $item['status_reason'] ?? null,
             'stockState' => self::stockState($item),

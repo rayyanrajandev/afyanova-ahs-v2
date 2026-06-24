@@ -1211,11 +1211,13 @@ class InventoryBatchStockService
                 'adjustment_direction' => $movementType === InventoryStockMovementType::ADJUST
                     ? ($adjustmentDirection ?? 'increase')
                     : $adjustmentDirection,
+                'is_opening_stock' => (bool) ($payload['is_opening_stock'] ?? false),
                 'quantity' => $baseQuantity,
                 'quantity_delta' => $baseQuantity,
                 'stock_before' => $stockBefore,
                 'stock_after' => $stockAfter,
                 'reason' => $payload['reason'] ?? null,
+                'reason_code' => $payload['reason_code'] ?? null,
                 'notes' => $payload['notes'] ?? null,
                 'actor_id' => $actorId,
                 'metadata' => $this->mergedMetadata(

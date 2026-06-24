@@ -46,6 +46,10 @@ const ws = useInventoryWorkspace();
                         <AppIcon name="pencil" class="size-3.5" />
                         Edit
                     </Button>
+                    <Button v-if="ws.inventoryItemHasOpeningStock(ws.itemDetails) && ws.canSetOpeningStock" size="sm" variant="outline" class="h-8 gap-1.5 rounded-lg text-xs" @click="ws.openStockMovementCorrection(ws.itemDetails)">
+                        <AppIcon name="pencil" class="size-3.5" />
+                        Correct Opening Stock
+                    </Button>
                     <Button size="sm" variant="outline" class="h-8 gap-1.5 rounded-lg text-xs" @click="ws.openDepartmentStockForItem(ws.itemDetails)">
                         <AppIcon name="building-2" class="size-3.5" />
                         Where issued?

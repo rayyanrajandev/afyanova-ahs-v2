@@ -42,9 +42,15 @@ class InventoryStockMovementModel extends Model
         'stock_before',
         'stock_after',
         'reason',
+        'reason_code',
         'notes',
         'actor_id',
         'metadata',
+        'is_opening_stock',
+        'superseded_by_id',
+        'approval_status',
+        'approved_at',
+        'approved_by_id',
         'occurred_at',
         'created_at',
     ];
@@ -60,8 +66,10 @@ class InventoryStockMovementModel extends Model
             'stock_before' => 'decimal:3',
             'stock_after' => 'decimal:3',
             'metadata' => 'array',
+            'is_opening_stock' => 'boolean',
             'occurred_at' => 'datetime',
             'created_at' => 'datetime',
+            'approved_at' => 'datetime',
         ];
     }
 

@@ -14,9 +14,12 @@ use App\Modules\InventoryProcurement\Application\UseCases\BulkCreateInventoryIte
 use App\Modules\InventoryProcurement\Application\UseCases\CreateInventoryItemUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\CreateInventoryProcurementRequestUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\ImportInventoryItemsUseCase;
+use App\Modules\InventoryProcurement\Application\UseCases\CorrectInventoryStockMovementUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\CreateInventoryStockMovementUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\GetInventoryItemUseCase;
+use App\Modules\InventoryProcurement\Application\UseCases\ShowInventoryStockMovementUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\GetInventoryStockMovementSummaryUseCase;
+use App\Modules\InventoryProcurement\Application\UseCases\GetOpeningStockReportUseCase;
 use App\Modules\InventoryProcurement\Application\Services\DepartmentRequisitionScopeResolver;
 use App\Modules\InventoryProcurement\Application\UseCases\GetInventoryStockAlertCountsUseCase;
 use App\Modules\InventoryProcurement\Application\UseCases\ListInventoryItemAuditLogsUseCase;
@@ -36,6 +39,7 @@ use App\Modules\InventoryProcurement\Presentation\Http\Requests\ReceiveInventory
 use App\Modules\InventoryProcurement\Presentation\Http\Requests\ImportInventoryItemsRequest;
 use App\Modules\InventoryProcurement\Presentation\Http\Requests\StoreInventoryItemRequest;
 use App\Modules\InventoryProcurement\Presentation\Http\Requests\StoreInventoryProcurementRequestRequest;
+use App\Modules\InventoryProcurement\Presentation\Http\Requests\CorrectInventoryStockMovementRequest;
 use App\Modules\InventoryProcurement\Presentation\Http\Requests\StoreInventoryStockMovementRequest;
 use App\Modules\InventoryProcurement\Presentation\Http\Requests\UpdateInventoryItemRequest;
 use App\Modules\InventoryProcurement\Presentation\Http\Requests\UpdateInventoryItemStatusRequest;
@@ -359,6 +363,13 @@ class InventoryProcurementController extends Controller
         ]);
     }
 
+    public function openingStockReport(Request $request, GetOpeningStockReportUseCase $useCase): JsonResponse
+    {
+        $result = $useCase->execute($request->all());
+
+        return response()->json($result);
+    }
+
     public function stockMovements(Request $request, ListInventoryStockMovementsUseCase $useCase): JsonResponse
     {
         $result = $useCase->execute($request->all());
@@ -413,11 +424,35 @@ class InventoryProcurementController extends Controller
         );
     }
 
+    public function showStockMovement(
+        string $id,
+        ShowInventoryStockMovementUseCase $useCase
+    ): JsonResponse {
+        try {
+            $movement = $useCase->execute($id);
+        } catch (InventoryItemNotFoundException $exception) {
+            return $this->validationError('id', $exception->getMessage());
+        }
+
+        return response()->json([
+            'data' => InventoryStockMovementResponseTransformer::transform($movement),
+        ]);
+    }
+
     public function storeStockMovement(StoreInventoryStockMovementRequest $request, CreateInventoryStockMovementUseCase $useCase): JsonResponse
     {
+        $validated = $request->validated();
+
+        if (($validated['isOpeningStock'] ?? false) && ! $request->user()?->can('inventory.procurement.set-opening-stock')) {
+            return response()->json([
+                'code' => 'INSUFFICIENT_PERMISSIONS',
+                'message' => 'You do not have permission to set opening stock.',
+            ], 403);
+        }
+
         try {
             $movement = $useCase->execute(
-                payload: $this->toStockMovementPayload($request->validated()),
+                payload: $this->toStockMovementPayload($validated),
                 actorId: $request->user()?->id,
             );
         } catch (TenantScopeRequiredForIsolationException $exception) {
@@ -433,6 +468,28 @@ class InventoryProcurementController extends Controller
         return response()->json([
             'data' => InventoryStockMovementResponseTransformer::transform($movement),
         ], 201);
+    }
+
+    public function correctStockMovement(
+        string $id,
+        CorrectInventoryStockMovementRequest $request,
+        CorrectInventoryStockMovementUseCase $useCase
+    ): JsonResponse {
+        try {
+            $movement = $useCase->execute(
+                movementId: $id,
+                payload: $request->validated(),
+                actorId: $request->user()?->id,
+            );
+        } catch (InventoryItemNotFoundException $exception) {
+            return $this->validationError('id', $exception->getMessage());
+        } catch (InventoryStockOperationValidationException $exception) {
+            return $this->validationError($exception->field(), $exception->getMessage());
+        }
+
+        return response()->json([
+            'data' => InventoryStockMovementResponseTransformer::transform($movement),
+        ]);
     }
 
     public function reconcileStock(
@@ -722,6 +779,8 @@ class InventoryProcurementController extends Controller
             'destinationDepartmentId' => 'destination_department_id',
             'quantity' => 'quantity',
             'reason' => 'reason',
+            'reasonCode' => 'reason_code',
+            'isOpeningStock' => 'is_opening_stock',
             'notes' => 'notes',
             'metadata' => 'metadata',
             'occurredAt' => 'occurred_at',

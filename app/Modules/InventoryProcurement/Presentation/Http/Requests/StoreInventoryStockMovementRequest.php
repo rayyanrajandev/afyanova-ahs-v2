@@ -2,6 +2,7 @@
 
 namespace App\Modules\InventoryProcurement\Presentation\Http\Requests;
 
+use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryStockMovementReason;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryStockMovementType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -34,6 +35,8 @@ class StoreInventoryStockMovementRequest extends FormRequest
             'destinationDepartmentId' => ['nullable', 'uuid'],
             'quantity' => ['required', 'numeric', 'gt:0'],
             'reason' => ['nullable', 'string', 'max:500', 'required_if:movementType,adjust,issue,transfer'],
+            'reasonCode' => ['nullable', 'string', 'max:50', Rule::in(InventoryStockMovementReason::values())],
+            'isOpeningStock' => ['nullable', 'boolean'],
             'notes' => ['nullable', 'string', 'max:5000'],
             'occurredAt' => ['nullable', 'date'],
             'metadata' => ['nullable', 'array'],

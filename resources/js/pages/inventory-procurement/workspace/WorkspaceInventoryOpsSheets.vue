@@ -775,12 +775,26 @@ const ws = useInventoryWorkspace();
                                 <span v-if="ws.stockMovementReasonRequired" class="ml-1 text-xs text-destructive font-normal">* required</span>
                                 <span v-else class="ml-1 text-xs text-muted-foreground font-normal">optional</span>
                             </Label>
-                            <Input
-                                id="inv-movement-reason"
-                                v-model="ws.stockMovementForm.reason"
-                                :disabled="ws.stockMovementSubmitting"
-                                :placeholder="ws.stockMovementReasonPlaceholder"
-                            />
+                            <template v-if="ws.stockMovementOpeningBalanceMode">
+                                <Select v-model="ws.stockMovementForm.reasonCode" :disabled="ws.stockMovementSubmitting">
+                                    <SelectTrigger class="w-full">
+                                        <SelectValue placeholder="Select a reason" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem v-for="opt in ws.stockMovementReasonOptions" :key="opt.value" :value="opt.value">
+                                            {{ opt.label }}
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </template>
+                            <template v-else>
+                                <Input
+                                    id="inv-movement-reason"
+                                    v-model="ws.stockMovementForm.reason"
+                                    :disabled="ws.stockMovementSubmitting"
+                                    :placeholder="ws.stockMovementReasonPlaceholder"
+                                />
+                            </template>
                             <p v-if="ws.fieldError(ws.stockMovementErrors, 'reason')" class="text-xs text-destructive">{{ ws.fieldError(ws.stockMovementErrors, 'reason') }}</p>
                         </div>
                         <div class="grid gap-2">
@@ -820,6 +834,106 @@ const ws = useInventoryWorkspace();
             </SheetFooter>
         </SheetContent>
     </Sheet>
+
+<Sheet :open="ws.stockMovementCorrectionDialogOpen" @update:open="ws.stockMovementCorrectionDialogOpen = $event">
+    <SheetContent side="right" variant="form" size="2xl">
+        <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
+            <SheetTitle class="flex items-center gap-2">
+                <AppIcon name="pencil" class="size-5 text-muted-foreground" />
+                Correct Opening Stock
+            </SheetTitle>
+            <SheetDescription>Adjust the opening balance for this item. A reversal entry will be created and a new corrected movement will replace it.</SheetDescription>
+        </SheetHeader>
+        <ScrollArea class="min-h-0 flex-1">
+            <div class="px-6 py-5 grid gap-6">
+                <div v-if="ws.stockMovementCorrectionMovement" class="rounded-lg border bg-muted/20 p-4">
+                    <p class="text-sm font-semibold">
+                        {{ ws.stockMovementCorrectionItem?.itemName || ws.stockMovementCorrectionItem?.itemCode || 'Item' }}
+                    </p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Current opening stock quantity:
+                        <span class="font-semibold text-foreground">{{ ws.formatAmount(ws.stockMovementCorrectionMovement.quantity) }}</span>
+                        <template v-if="ws.stockMovementCorrectionItem?.unit">
+                            {{ ws.stockMovementCorrectionItem.unit }}
+                        </template>
+                    </p>
+                    <p v-if="ws.stockMovementCorrectionMovement.reason" class="mt-0.5 text-xs text-muted-foreground">
+                        Reason: {{ ws.stockMovementCorrectionMovement.reason }}
+                    </p>
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="inv-correction-quantity">
+                        Corrected Quantity *
+                    </Label>
+                    <div class="relative">
+                        <Input
+                            id="inv-correction-quantity"
+                            v-model="ws.stockMovementCorrectionForm.quantity"
+                            :disabled="ws.stockMovementCorrectionSubmitting"
+                            type="number"
+                            min="0.001"
+                            step="0.001"
+                            class="pr-14"
+                        />
+                        <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">
+                            {{ ws.stockMovementCorrectionItem?.unit || 'units' }}
+                        </span>
+                    </div>
+                    <p v-if="ws.fieldError(ws.stockMovementCorrectionErrors, 'quantity')" class="text-xs text-destructive">
+                        {{ ws.fieldError(ws.stockMovementCorrectionErrors, 'quantity') }}
+                    </p>
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="inv-correction-reason">
+                        Correction Reason *
+                    </Label>
+                    <Select v-model="ws.stockMovementCorrectionForm.reasonCode" :disabled="ws.stockMovementCorrectionSubmitting">
+                        <SelectTrigger class="w-full">
+                            <SelectValue placeholder="Select a reason" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem v-for="opt in ws.correctionReasonOptions" :key="opt.value" :value="opt.value">
+                                {{ opt.label }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Input
+                        id="inv-correction-reason"
+                        v-model="ws.stockMovementCorrectionForm.reason"
+                        :disabled="ws.stockMovementCorrectionSubmitting"
+                        placeholder="Optional additional detail"
+                        class="mt-2"
+                    />
+                    <p v-if="ws.fieldError(ws.stockMovementCorrectionErrors, 'reason')" class="text-xs text-destructive">
+                        {{ ws.fieldError(ws.stockMovementCorrectionErrors, 'reason') }}
+                    </p>
+                </div>
+
+                <Alert>
+                    <AlertTitle>Audit trail</AlertTitle>
+                    <AlertDescription>
+                        The current opening stock entry will be marked as superseded. A reversal adjustment
+                        will be created, followed by a new corrected opening stock entry. Both will appear
+                        in the stock ledger.
+                    </AlertDescription>
+                </Alert>
+            </div>
+        </ScrollArea>
+        <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
+            <Button variant="outline" @click="ws.stockMovementCorrectionDialogOpen = false">Cancel</Button>
+            <Button
+                :disabled="ws.stockMovementCorrectionSubmitting || !ws.stockMovementCorrectionForm.quantity"
+                class="gap-1.5"
+                @click="ws.submitStockMovementCorrection"
+            >
+                <AppIcon name="pencil" class="size-3.5" />
+                {{ ws.stockMovementCorrectionSubmitting ? 'Saving...' : 'Correct Opening Stock' }}
+            </Button>
+        </SheetFooter>
+    </SheetContent>
+</Sheet>
 
 <Sheet :open="ws.reconcileDialogOpen" @update:open="ws.reconcileDialogOpen = $event">
         <SheetContent side="right" variant="form" size="4xl">

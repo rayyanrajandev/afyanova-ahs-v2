@@ -1395,12 +1395,24 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('inventory-procurement/stock-movements/export', [InventoryProcurementController::class, 'exportStockMovementsCsv'])
         ->middleware('can:inventory.procurement.read')
         ->name('inventory-procurement.stock-movements.export');
+    Route::get('inventory-procurement/stock-movements/reasons', [\App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryStockMovementReasonController::class, 'index'])
+        ->middleware('can:inventory.procurement.read')
+        ->name('inventory-procurement.stock-movements.reasons');
+    Route::get('inventory-procurement/stock-movements/{id}', [InventoryProcurementController::class, 'showStockMovement'])
+        ->middleware('can:inventory.procurement.read')
+        ->name('inventory-procurement.stock-movements.show');
     Route::post('inventory-procurement/stock-movements', [InventoryProcurementController::class, 'storeStockMovement'])
         ->middleware('can:inventory.procurement.create-movement')
         ->name('inventory-procurement.stock-movements.store');
     Route::post('inventory-procurement/stock-movements/reconcile', [InventoryProcurementController::class, 'reconcileStock'])
         ->middleware('can:inventory.procurement.reconcile-stock')
         ->name('inventory-procurement.stock-movements.reconcile');
+    Route::get('inventory-procurement/reports/opening-stock', [InventoryProcurementController::class, 'openingStockReport'])
+        ->middleware('can:inventory.procurement.read')
+        ->name('inventory-procurement.reports.opening-stock');
+    Route::post('inventory-procurement/stock-movements/{id}/correct', [InventoryProcurementController::class, 'correctStockMovement'])
+        ->middleware('can:inventory.procurement.correct-movement')
+        ->name('inventory-procurement.stock-movements.correct');
     Route::get('inventory-procurement/procurement-requests', [InventoryProcurementController::class, 'procurementRequests'])
         ->middleware('can:inventory.procurement.read')
         ->name('inventory-procurement.procurement-requests.index');

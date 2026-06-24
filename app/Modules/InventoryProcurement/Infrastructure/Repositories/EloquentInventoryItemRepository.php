@@ -30,7 +30,9 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
 
     public function findById(string $id): ?array
     {
-        $query = InventoryItemModel::query();
+        $query = InventoryItemModel::query()
+            ->withCount('stockMovements')
+            ->withCount(['stockMovements as opening_stock_movements_count' => fn (Builder $q) => $q->where('is_opening_stock', true)]);
         $this->applyPlatformScopeIfEnabled($query);
         $item = $query->find($id);
 
@@ -135,7 +137,9 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
             ? $sortBy
             : 'item_name';
 
-        $queryBuilder = InventoryItemModel::query()->withCount('stockMovements');
+        $queryBuilder = InventoryItemModel::query()
+            ->withCount('stockMovements')
+            ->withCount(['stockMovements as opening_stock_movements_count' => fn (Builder $q) => $q->where('is_opening_stock', true)]);
         $this->applyPlatformScopeIfEnabled($queryBuilder);
 
         $queryBuilder

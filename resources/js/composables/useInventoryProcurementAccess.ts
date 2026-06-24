@@ -8,6 +8,7 @@ export function useInventoryProcurementAccess() {
     const canRead = ref(false);
     const canManageItems = ref(false);
     const canCreateMovement = ref(false);
+    const canSetOpeningStock = ref(false);
     const canReconcileStock = ref(false);
     const canCreateRequest = ref(false);
     const canUpdateRequestStatus = ref(false);
@@ -26,6 +27,7 @@ export function useInventoryProcurementAccess() {
         canRead.value = hasSuperAdmin || set.has('inventory.procurement.read');
         canManageItems.value = hasSuperAdmin || set.has('inventory.procurement.manage-items');
         canCreateMovement.value = hasSuperAdmin || set.has('inventory.procurement.create-movement');
+        canSetOpeningStock.value = hasSuperAdmin || set.has('inventory.procurement.set-opening-stock');
         canReconcileStock.value = hasSuperAdmin
             || set.has('inventory.procurement.reconcile-stock')
             || set.has('inventory.procurement.create-movement');
@@ -56,6 +58,7 @@ export function useInventoryProcurementAccess() {
         canRead,
         canManageItems,
         canCreateMovement,
+        canSetOpeningStock,
         canReconcileStock,
         canCreateRequest,
         canUpdateRequestStatus,

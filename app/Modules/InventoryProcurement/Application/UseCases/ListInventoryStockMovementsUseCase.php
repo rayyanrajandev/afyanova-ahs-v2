@@ -60,6 +60,10 @@ class ListInventoryStockMovementsUseCase
         $sortDirection = strtolower((string) ($filters['sortDir'] ?? 'desc'));
         $sortDirection = $sortDirection === 'asc' ? 'asc' : 'desc';
 
+        $isOpeningStock = isset($filters['isOpeningStock'])
+            ? filter_var($filters['isOpeningStock'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)
+            : null;
+
         return $this->inventoryStockMovementRepository->search(
             query: $query,
             itemId: $itemId,
@@ -73,6 +77,7 @@ class ListInventoryStockMovementsUseCase
             perPage: $perPage,
             sortBy: $sortBy,
             sortDirection: $sortDirection,
+            isOpeningStock: $isOpeningStock,
         );
     }
 }

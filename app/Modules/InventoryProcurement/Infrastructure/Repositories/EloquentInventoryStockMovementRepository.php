@@ -27,6 +27,16 @@ class EloquentInventoryStockMovementRepository implements InventoryStockMovement
         return $movement->toArray();
     }
 
+    public function findById(string $id): ?array
+    {
+        $movement = InventoryStockMovementModel::query()
+            ->with('item')
+            ->whereKey($id)
+            ->first();
+
+        return $movement?->toArray();
+    }
+
     public function search(
         ?string $query,
         ?string $itemId,
@@ -39,7 +49,8 @@ class EloquentInventoryStockMovementRepository implements InventoryStockMovement
         int $page,
         int $perPage,
         ?string $sortBy,
-        string $sortDirection
+        string $sortDirection,
+        ?bool $isOpeningStock = null,
     ): array {
         $sortBy = in_array($sortBy, ['occurred_at', 'created_at', 'movement_type', 'quantity', 'quantity_delta', 'stock_after'], true)
             ? $sortBy
@@ -57,6 +68,7 @@ class EloquentInventoryStockMovementRepository implements InventoryStockMovement
             actorId: $actorId,
             fromDateTime: $fromDateTime,
             toDateTime: $toDateTime,
+            isOpeningStock: $isOpeningStock,
         );
 
         $paginator = $queryBuilder
@@ -79,7 +91,8 @@ class EloquentInventoryStockMovementRepository implements InventoryStockMovement
         ?string $actorType,
         ?int $actorId,
         ?string $fromDateTime,
-        ?string $toDateTime
+        ?string $toDateTime,
+        ?bool $isOpeningStock = null,
     ): array {
         $queryBuilder = InventoryStockMovementModel::query();
         $this->applyPlatformScopeIfEnabled($queryBuilder);
@@ -93,6 +106,7 @@ class EloquentInventoryStockMovementRepository implements InventoryStockMovement
             actorId: $actorId,
             fromDateTime: $fromDateTime,
             toDateTime: $toDateTime,
+            isOpeningStock: $isOpeningStock,
         );
 
         return [
@@ -129,7 +143,8 @@ class EloquentInventoryStockMovementRepository implements InventoryStockMovement
         ?string $actorType,
         ?int $actorId,
         ?string $fromDateTime,
-        ?string $toDateTime
+        ?string $toDateTime,
+        ?bool $isOpeningStock = null,
     ): void {
         $queryBuilder
             ->when($query, function (Builder $builder, string $searchTerm): void {
@@ -163,7 +178,8 @@ class EloquentInventoryStockMovementRepository implements InventoryStockMovement
             ->when($actorType === 'user', fn (Builder $builder) => $builder->whereNotNull('actor_id'))
             ->when($actorId !== null, fn (Builder $builder) => $builder->where('actor_id', $actorId))
             ->when($fromDateTime, fn (Builder $builder, string $startDateTime) => $builder->where('occurred_at', '>=', $startDateTime))
-            ->when($toDateTime, fn (Builder $builder, string $endDateTime) => $builder->where('occurred_at', '<=', $endDateTime));
+            ->when($toDateTime, fn (Builder $builder, string $endDateTime) => $builder->where('occurred_at', '<=', $endDateTime))
+            ->when($isOpeningStock !== null, fn (Builder $builder) => $builder->where('is_opening_stock', $isOpeningStock));
     }
 
     private function applySourceFilter(Builder $queryBuilder, string $sourceKey): void

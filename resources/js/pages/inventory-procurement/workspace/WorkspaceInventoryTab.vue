@@ -235,15 +235,25 @@ const ws = useInventoryWorkspace();
                                     </template>
                                     <template #actions>
                                         <Button
-                                            v-if="ws.canCreateMovement"
+                                            v-if="ws.inventoryItemNeedsOpeningStock(item) ? ws.canSetOpeningStock : ws.canCreateMovement"
                                             size="sm"
                                             variant="outline"
                                             class="hidden h-8 gap-1.5 rounded-lg text-xs lg:inline-flex"
-                                            :disabled="!ws.canLaunchStockMovement"
+                                            :disabled="ws.inventoryItemNeedsOpeningStock(item) ? !ws.canLaunchOpeningStock : !ws.canLaunchStockMovement"
                                             @click="ws.openStockMovementDialog(item)"
                                         >
                                             <AppIcon name="activity" class="size-3.5" />
                                             {{ ws.inventoryItemStockActionLabel(item) }}
+                                        </Button>
+                                        <Button
+                                            v-if="ws.inventoryItemHasOpeningStock(item) && ws.canSetOpeningStock"
+                                            size="sm"
+                                            variant="outline"
+                                            class="hidden h-8 gap-1.5 rounded-lg text-xs lg:inline-flex"
+                                            @click="ws.openStockMovementCorrection(item)"
+                                        >
+                                            <AppIcon name="pencil" class="size-3.5" />
+                                            Correct
                                         </Button>
                                         <Button
                                             size="sm"
@@ -265,9 +275,13 @@ const ws = useInventoryWorkspace();
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end" class="w-44">
-                                                <DropdownMenuItem v-if="ws.canCreateMovement" class="lg:hidden" @click="ws.openStockMovementDialog(item)">
+                                                <DropdownMenuItem v-if="ws.inventoryItemNeedsOpeningStock(item) ? ws.canSetOpeningStock : ws.canCreateMovement" class="lg:hidden" @click="ws.openStockMovementDialog(item)">
                                                     <AppIcon name="activity" class="mr-2 size-3.5" />
                                                     {{ ws.inventoryItemStockActionLabel(item) }}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem v-if="ws.inventoryItemHasOpeningStock(item) && ws.canSetOpeningStock" @click="ws.openStockMovementCorrection(item)">
+                                                    <AppIcon name="pencil" class="mr-2 size-3.5" />
+                                                    Correct Opening Stock
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem @click="ws.openDepartmentStockForItem(item)">
                                                     <AppIcon name="building-2" class="mr-2 size-3.5" />
