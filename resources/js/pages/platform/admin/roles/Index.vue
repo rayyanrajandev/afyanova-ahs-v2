@@ -152,6 +152,7 @@ const rolesWorkspaceDescription = computed(() =>
         ? `Manage roles, permission mapping, and RBAC audit visibility for ${scopedFacilityLabel.value}.`
         : 'Manage platform roles, permission mapping, and RBAC audit visibility.',
 );
+const isFacilityScopedView = computed(() => Boolean(scopedFacilityLabel.value));
 const scopeUnresolved = computed(() => multiTenantIsolationEnabled.value && (scope.value?.resolvedFrom ?? 'none') === 'none');
 
 const pageLoading = ref(true);
@@ -252,6 +253,21 @@ const filterBadgeCount = computed(() => {
 });
 const canPrev = computed(() => (pagination.value?.currentPage ?? 1) > 1);
 const canNext = computed(() => (pagination.value ? pagination.value.currentPage < pagination.value.lastPage : false));
+const paginationPageNumbers = computed((): (number | '...')[] => {
+    const total = pagination.value?.lastPage ?? 1;
+    const current = pagination.value?.currentPage ?? 1;
+    if (total <= 7) {
+        return Array.from({ length: total }, (_, index) => index + 1);
+    }
+    const pages: (number | '...')[] = [1];
+    if (current > 3) pages.push('...');
+    for (let page = Math.max(2, current - 1); page <= Math.min(total - 1, current + 1); page += 1) {
+        pages.push(page);
+    }
+    if (current < total - 2) pages.push('...');
+    pages.push(total);
+    return pages;
+});
 
 const summary = computed(() => {
     const counts = {
@@ -619,6 +635,12 @@ function nextPage() {
     if (!canNext.value) return;
     clearSearchDebounce();
     searchForm.page += 1;
+    void loadRoles();
+}
+
+function goToPage(page: number) {
+    clearSearchDebounce();
+    searchForm.page = page;
     void loadRoles();
 }
 
@@ -1017,24 +1039,50 @@ onMounted(refreshPage);
 <template>
     <Head :title="rolesWorkspaceTitle" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
+        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto p-3 md:p-5 lg:p-6">
+
             <!-- Page header -->
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div class="min-w-0">
-                    <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <AppIcon name="shield-check" class="size-7 text-primary" />
-                        {{ rolesWorkspaceTitle }}
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        {{ rolesWorkspaceDescription }}
-                    </p>
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div
+                            class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20"
+                            aria-hidden="true"
+                        >
+                            <AppIcon name="shield-check" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <h1 class="text-base font-semibold tracking-tight md:text-lg">
+                                {{ rolesWorkspaceTitle }}
+                            </h1>
+                            <p class="truncate text-xs text-muted-foreground">
+                                {{ rolesWorkspaceDescription }}
+                            </p>
+                            <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
+                                <span class="inline-flex items-center gap-1">
+                                    <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
+                                    <span class="font-medium text-foreground">{{ scope?.facility?.name || scopedFacilityLabel || 'No facility' }}</span>
+                                </span>
+                                <span v-if="scopeUnresolved" class="text-border select-none" aria-hidden="true">·</span>
+                                <Badge v-if="scopeUnresolved" variant="destructive" class="text-[10px]">Scope Unresolved</Badge>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Badge v-if="isFacilityScopedView" variant="secondary" class="text-[10px]">
+                            {{ scopedFacilityLabel }}
+                        </Badge>
+                        <Button variant="outline" size="sm" :disabled="listLoading || permissionsLoading" class="h-8 gap-1.5" @click="refreshPage">
+                            <AppIcon name="activity" class="size-3.5" />
+                            {{ listLoading || permissionsLoading ? 'Refreshing...' : 'Refresh' }}
+                        </Button>
+                        <Button v-if="canManageRoles" size="sm" class="h-8 gap-1.5" @click="openCreateDialog">
+                            <AppIcon name="plus" class="size-3.5" />
+                            Create Role
+                        </Button>
+                    </div>
                 </div>
-                <div class="flex flex-shrink-0 items-center gap-2">
-                    <Badge :variant="scopeUnresolved ? 'destructive' : 'secondary'">
-                        {{ scopeUnresolved ? 'Scope Unresolved' : 'Scope Ready' }}
-                    </Badge>
-                </div>
-            </div>
+            </section>
 
             <!-- Alerts -->
             <Alert v-if="scopeUnresolved" variant="destructive">
@@ -1068,65 +1116,68 @@ onMounted(refreshPage);
                     <AlertDescription>{{ listErrors[0] }}</AlertDescription>
                 </Alert>
 
-                <div class="space-y-4">
-                    <div class="flex flex-col gap-3 rounded-lg border border-sidebar-border/70 bg-muted/20 p-3 md:flex-row md:items-center md:justify-between">
+                <Card class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70">
+                    <div class="flex flex-col gap-3 border-b px-4 py-3">
                         <div class="flex flex-wrap items-center gap-2">
-                            <Button size="sm" :variant="searchForm.status === '' ? 'default' : 'outline'" @click="searchForm.status = ''">
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': searchForm.status === '' }"
+                                @click="searchForm.status = ''"
+                            >
+                                <span class="inline-block h-2 w-2 rounded-full bg-slate-400" />
                                 <span class="font-medium">{{ pagination?.total ?? roles.length }}</span>
-                                All roles
-                            </Button>
-                            <Button size="sm" :variant="searchForm.status === 'active' ? 'default' : 'outline'" @click="searchForm.status = 'active'">
+                                <span class="text-muted-foreground">All</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': searchForm.status === 'active' }"
+                                @click="searchForm.status = 'active'"
+                            >
+                                <span class="inline-block h-2 w-2 rounded-full bg-emerald-500" />
                                 <span class="font-medium">{{ summary.active }}</span>
-                                Active
-                            </Button>
-                            <Button size="sm" :variant="searchForm.status === 'inactive' ? 'default' : 'outline'" @click="searchForm.status = 'inactive'">
+                                <span class="text-muted-foreground">Active</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': searchForm.status === 'inactive' }"
+                                @click="searchForm.status = 'inactive'"
+                            >
+                                <span class="inline-block h-2 w-2 rounded-full bg-rose-500" />
                                 <span class="font-medium">{{ summary.inactive }}</span>
-                                Inactive
-                            </Button>
+                                <span class="text-muted-foreground">Inactive</span>
+                            </button>
+                            <div class="ml-auto flex items-center gap-2">
+                                <Badge variant="secondary" class="hidden sm:inline-flex">
+                                    {{ pagination?.total ?? 0 }} roles
+                                </Badge>
+                                <Button v-if="hasAnyFilters" variant="ghost" size="sm" class="h-7 gap-1.5 text-xs" @click="resetFilters">
+                                    <AppIcon name="sliders-horizontal" class="size-3" />
+                                    Reset
+                                </Button>
+                            </div>
                         </div>
-                        <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                            <span>{{ pageLoading ? 'Loading roles...' : roleQueueSummaryText }}</span>
-                            <Button v-if="hasAnyFilters" variant="outline" size="sm" @click="resetFilters">Reset</Button>
-                            <Button variant="outline" size="sm" class="gap-1.5" :disabled="listLoading || permissionsLoading" @click="refreshPage">
-                                <AppIcon name="activity" class="size-3.5" />
-                                {{ listLoading || permissionsLoading ? 'Refreshing...' : 'Refresh' }}
-                            </Button>
-                            <Button v-if="canManageRoles" size="sm" class="gap-1.5" @click="openCreateDialog">
-                                <AppIcon name="plus" class="size-3.5" />
-                                Create Role
-                            </Button>
-                        </div>
-                    </div>
-
-                    <Card class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col">
-                        <CardHeader class="gap-3 border-b pb-3 pt-4">
-                            <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                                <div class="min-w-0 space-y-1">
-                                    <CardTitle class="flex items-center gap-2 text-base">
-                                        <AppIcon name="layout-list" class="size-4.5 text-muted-foreground" />
-                                        Roles
-                                    </CardTitle>
-                                    <CardDescription>Select a role to review detail, permissions, and RBAC audit history.</CardDescription>
-                                </div>
-                                <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center xl:max-w-2xl">
-                                    <div class="relative min-w-0 flex-1">
-                                        <AppIcon name="search" class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                                        <Input
-                                            id="rbac-search-q"
-                                            v-model="searchForm.q"
-                                            placeholder="Role code, name, or description"
-                                            class="h-9 pl-9"
-                                            @keyup.enter="submitSearch"
-                                        />
-                                    </div>
-                                    <Popover>
-                                        <PopoverTrigger as-child>
-                                            <Button variant="outline" size="sm" class="hidden gap-1.5 md:inline-flex">
-                                                <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                                Queue options
-                                                <Badge v-if="filterBadgeCount > 0" variant="secondary" class="ml-1 text-[10px]">{{ filterBadgeCount }}</Badge>
-                                            </Button>
-                                        </PopoverTrigger>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <div class="relative min-w-0 flex-1">
+                                <AppIcon name="search" class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    id="rbac-search-q"
+                                    v-model="searchForm.q"
+                                    placeholder="Role code, name, or description"
+                                    class="h-8 pl-9 text-sm"
+                                    @keyup.enter="submitSearch"
+                                />
+                            </div>
+                            <Popover>
+                                <PopoverTrigger as-child>
+                                    <Button variant="outline" size="sm" class="h-8 gap-1.5">
+                                        <AppIcon name="sliders-horizontal" class="size-3.5" />
+                                        Queue options
+                                        <Badge v-if="filterBadgeCount > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">{{ filterBadgeCount }}</Badge>
+                                    </Button>
+                                </PopoverTrigger>
                                         <PopoverContent align="end" class="flex max-h-[28rem] w-[20rem] flex-col overflow-hidden rounded-lg border bg-popover p-0 shadow-md">
                                             <div class="space-y-3 border-b px-4 py-3">
                                                 <p class="flex items-center gap-2 text-sm font-medium">
@@ -1214,9 +1265,8 @@ onMounted(refreshPage);
                                         <AppIcon name="sliders-horizontal" class="size-3.5" />
                                         Queue options
                                     </Button>
-                                </div>
                             </div>
-                        </CardHeader>
+                        </div>
                         <CardContent class="p-0">
                             <div v-if="pageLoading || roles.length > 0" class="hidden border-b bg-muted/30 px-4 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground md:grid md:grid-cols-[minmax(0,2.3fr)_minmax(0,0.85fr)_minmax(0,1fr)_minmax(0,auto)] md:items-center md:gap-2.5">
                                 <span>Role</span>
@@ -1312,21 +1362,35 @@ onMounted(refreshPage);
                                     </div>
                                 </div>
                             </div>
-                            <footer class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-4 py-3">
+                            <div class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
                                 <p class="text-xs text-muted-foreground">
-                                    Showing {{ roles.length }} of {{ pagination?.total ?? roles.length }} results | Page {{ pagination?.currentPage ?? 1 }} of {{ pagination?.lastPage ?? 1 }}
+                                    <template v-if="pagination">
+                                        Showing {{ roles.length }} of {{ pagination.total }} &middot; Page {{ pagination.currentPage }} of {{ pagination.lastPage }}
+                                    </template>
+                                    <template v-else>No pagination data</template>
                                 </p>
-                                <div v-if="(pagination?.lastPage ?? 1) > 1" class="flex items-center gap-2">
-                                    <Button variant="outline" size="sm" class="gap-1.5" :disabled="!canPrev || listLoading" @click="prevPage">
-                                        <AppIcon name="chevron-left" class="size-3.5" />
-                                        Previous
+                                <div class="flex items-center gap-1">
+                                    <Button variant="outline" size="icon" class="size-8" :disabled="!canPrev || listLoading" @click="prevPage">
+                                        <AppIcon name="chevron-left" class="size-4" />
                                     </Button>
-                                    <Button variant="outline" size="sm" class="gap-1.5" :disabled="!canNext || listLoading" @click="nextPage">
-                                        Next
-                                        <AppIcon name="chevron-right" class="size-3.5" />
+                                    <template v-for="page in paginationPageNumbers" :key="String(page)">
+                                        <span v-if="page === '...'" class="px-1 text-xs text-muted-foreground">&mldr;</span>
+                                        <Button
+                                            v-else
+                                            :variant="page === pagination?.currentPage ? 'default' : 'ghost'"
+                                            size="icon"
+                                            class="size-8 text-xs"
+                                            :disabled="listLoading"
+                                            @click="goToPage(page as number)"
+                                        >
+                                            {{ page }}
+                                        </Button>
+                                    </template>
+                                    <Button variant="outline" size="icon" class="size-8" :disabled="!canNext || listLoading" @click="nextPage">
+                                        <AppIcon name="chevron-right" class="size-4" />
                                     </Button>
                                 </div>
-                            </footer>
+                            </div>
                         </CardContent>
                     </Card>
 
@@ -1364,7 +1428,6 @@ onMounted(refreshPage);
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>
-                </div>
             </template>
             <Sheet :open="detailsOpen" @update:open="(open) => (open ? (detailsOpen = true) : closeDetails())">
                 <SheetContent side="right" variant="workspace" size="4xl">

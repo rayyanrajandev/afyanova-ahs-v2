@@ -200,6 +200,22 @@ const hasFilters = computed(() =>
 
 const canPrev = computed(() => (pagination.value?.currentPage ?? 1) > 1);
 const canNext = computed(() => (pagination.value ? pagination.value.currentPage < pagination.value.lastPage : false));
+const paginationPageNumbers = computed((): (number | '...')[] => {
+    const total = pagination.value?.lastPage ?? 1;
+    const current = pagination.value?.currentPage ?? 1;
+    if (total <= 7) {
+        return Array.from({ length: total }, (_, index) => index + 1);
+    }
+    const pages: (number | '...')[] = [1];
+    if (current > 3) pages.push('...');
+    for (let page = Math.max(2, current - 1); page <= Math.min(total - 1, current + 1); page += 1) {
+        pages.push(page);
+    }
+    if (current < total - 2) pages.push('...');
+    pages.push(total);
+    return pages;
+});
+
 const filterBadgeCount = computed(() => {
     let count = 0;
     if (filters.status) count += 1;
@@ -535,6 +551,11 @@ function nextPage(): void {
     void loadApprovalCases();
 }
 
+function goToPage(page: number): void {
+    filters.page = page;
+    void loadApprovalCases();
+}
+
 async function createApprovalCase(): Promise<void> {
     if (!canCreate.value || createLoading.value) return;
 
@@ -816,16 +837,49 @@ onMounted(async () => {
     <Head title="User Approval Cases" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
-            <div class="min-w-0">
-                <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                    <AppIcon name="clipboard-list" class="size-7 text-primary" />
-                    User Approval Cases
-                </h1>
-                <p class="mt-1 text-sm text-muted-foreground">
-                    Case queue, workflow decisions, comments, and audit evidence for privileged user changes.
-                </p>
-            </div>
+        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto p-3 md:p-5 lg:p-6">
+
+            <!-- Page header -->
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div
+                            class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20"
+                            aria-hidden="true"
+                        >
+                            <AppIcon name="clipboard-list" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <h1 class="text-base font-semibold tracking-tight md:text-lg">
+                                User Approval Cases
+                            </h1>
+                            <p class="truncate text-xs text-muted-foreground">
+                                Case queue, workflow decisions, comments, and audit evidence for privileged user changes.
+                            </p>
+                            <div v-if="scopeUnresolved" class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
+                                <span class="text-border select-none" aria-hidden="true">·</span>
+                                <Badge variant="destructive" class="text-[10px]">Scope Unresolved</Badge>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button variant="outline" size="sm" :disabled="listLoading" class="h-8 gap-1.5" @click="refreshPage">
+                            <AppIcon name="activity" class="size-3.5" />
+                            {{ listLoading ? 'Refreshing...' : 'Refresh' }}
+                        </Button>
+                        <Button v-if="canOpenPlatformUsersPage" variant="outline" size="sm" class="h-8 gap-1.5" as-child>
+                            <Link href="/platform/admin/users">
+                                <AppIcon name="users" class="size-3.5" />
+                                Open Users
+                            </Link>
+                        </Button>
+                        <Button v-if="canCreate" size="sm" class="h-8 gap-1.5" @click="openCreateDialog">
+                            <AppIcon name="plus" class="size-3.5" />
+                            Create Case
+                        </Button>
+                    </div>
+                </div>
+            </section>
 
             <Alert v-if="scopeUnresolved" variant="destructive">
                 <AlertTitle>Scope unresolved</AlertTitle>
@@ -849,81 +903,96 @@ onMounted(async () => {
             </Alert>
 
             <template v-else>
-                <div class="flex flex-col gap-3 rounded-lg border border-sidebar-border/70 bg-muted/20 p-3 md:flex-row md:items-center md:justify-between">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <Button size="sm" :variant="filters.status === '' ? 'default' : 'outline'" @click="applyStatusPreset('')">
-                            All cases
-                        </Button>
-                        <Button size="sm" :variant="filters.status === 'submitted' ? 'default' : 'outline'" @click="applyStatusPreset('submitted')">
-                            Submitted
-                        </Button>
-                        <Button size="sm" :variant="filters.status === 'draft' ? 'default' : 'outline'" @click="applyStatusPreset('draft')">
-                            Draft
-                        </Button>
-                        <Button size="sm" :variant="filters.status === 'approved' ? 'default' : 'outline'" @click="applyStatusPreset('approved')">
-                            Approved
-                        </Button>
-                        <Button size="sm" :variant="filters.status === 'rejected' ? 'default' : 'outline'" @click="applyStatusPreset('rejected')">
-                            Rejected
-                        </Button>
-                        <Button size="sm" :variant="filters.status === 'cancelled' ? 'default' : 'outline'" @click="applyStatusPreset('cancelled')">
-                            Cancelled
-                        </Button>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground md:justify-end">
-                        <span>{{ approvalCaseSummaryText }}</span>
-                        <span class="hidden xl:inline">{{ approvalCaseStatusBreakdownText }}</span>
-                        <Button v-if="hasFilters" variant="outline" size="sm" @click="resetFilters">Reset</Button>
-                        <Button variant="outline" size="sm" class="gap-1.5" :disabled="listLoading" @click="refreshPage">
-                            <AppIcon name="activity" class="size-3.5" />
-                            {{ listLoading ? 'Refreshing...' : 'Refresh' }}
-                        </Button>
-                        <Button v-if="canOpenPlatformUsersPage" variant="outline" size="sm" as-child>
-                            <Link href="/platform/admin/users">Open Users</Link>
-                        </Button>
-                        <Button v-if="canCreate" size="sm" class="gap-1.5" @click="openCreateDialog">
-                            <AppIcon name="plus" class="size-3.5" />
-                            Create Case
-                        </Button>
-                    </div>
-                </div>
-
                 <Alert v-if="listErrors.length" variant="destructive">
                     <AlertTitle>Request error</AlertTitle>
                     <AlertDescription>{{ listErrors[0] }}</AlertDescription>
                 </Alert>
 
-                <div class="flex min-w-0 flex-col gap-4">
-                    <Card class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col">
-                        <CardHeader class="shrink-0 gap-3 border-b pb-3 pt-4">
-                            <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                                <div class="min-w-0 space-y-1">
-                                    <CardTitle class="flex items-center gap-2 text-base">
-                                        <AppIcon name="layout-list" class="size-5 text-muted-foreground" />
-                                        Approval Case Queue
-                                    </CardTitle>
-                                    <CardDescription>Select a case to review workflow, comments, and audit evidence.</CardDescription>
-                                </div>
-                                <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center xl:max-w-2xl">
-                                    <div class="relative min-w-0 flex-1">
-                                        <AppIcon name="search" class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                                        <Input
-                                            v-model="filters.q"
-                                            placeholder="Search case reference, reason, or target user"
-                                            class="h-9 pl-9"
-                                            @keyup.enter="submitSearch"
-                                        />
-                                    </div>
-                                    <Popover>
-                                        <PopoverTrigger as-child>
-                                            <Button variant="outline" size="sm" class="gap-1.5">
-                                                <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                                Queue options
-                                                <Badge v-if="filterBadgeCount > 0" variant="secondary" class="ml-1 text-[10px]">
-                                                    {{ filterBadgeCount }}
-                                                </Badge>
-                                            </Button>
-                                        </PopoverTrigger>
+                <Card class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70">
+                    <div class="flex flex-col gap-3 border-b px-4 py-3">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': filters.status === '' }"
+                                @click="applyStatusPreset('')"
+                            >
+                                <span class="inline-block h-2 w-2 rounded-full bg-slate-400" />
+                                <span class="text-muted-foreground">All cases</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': filters.status === 'submitted' }"
+                                @click="applyStatusPreset('submitted')"
+                            >
+                                <span class="inline-block h-2 w-2 rounded-full bg-amber-500" />
+                                <span class="text-muted-foreground">Submitted</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': filters.status === 'draft' }"
+                                @click="applyStatusPreset('draft')"
+                            >
+                                <span class="inline-block h-2 w-2 rounded-full bg-sky-500" />
+                                <span class="text-muted-foreground">Draft</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': filters.status === 'approved' }"
+                                @click="applyStatusPreset('approved')"
+                            >
+                                <span class="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                                <span class="text-muted-foreground">Approved</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': filters.status === 'rejected' }"
+                                @click="applyStatusPreset('rejected')"
+                            >
+                                <span class="inline-block h-2 w-2 rounded-full bg-rose-500" />
+                                <span class="text-muted-foreground">Rejected</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
+                                :class="{ 'border-primary bg-primary/5': filters.status === 'cancelled' }"
+                                @click="applyStatusPreset('cancelled')"
+                            >
+                                <span class="inline-block h-2 w-2 rounded-full bg-gray-500" />
+                                <span class="text-muted-foreground">Cancelled</span>
+                            </button>
+                            <div class="ml-auto flex items-center gap-2">
+                                <Badge variant="secondary" class="hidden sm:inline-flex">
+                                    {{ pagination?.total ?? 0 }} cases
+                                </Badge>
+                                <Button v-if="hasFilters" variant="ghost" size="sm" class="h-7 gap-1.5 text-xs" @click="resetFilters">
+                                    <AppIcon name="sliders-horizontal" class="size-3" />
+                                    Reset
+                                </Button>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <div class="relative min-w-0 flex-1">
+                                <AppIcon name="search" class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    v-model="filters.q"
+                                    placeholder="Search case reference, reason, or target user"
+                                    class="h-8 pl-9 text-sm"
+                                    @keyup.enter="submitSearch"
+                                />
+                            </div>
+                            <Popover>
+                                <PopoverTrigger as-child>
+                                    <Button variant="outline" size="sm" class="h-8 gap-1.5">
+                                        <AppIcon name="sliders-horizontal" class="size-3.5" />
+                                        Queue options
+                                        <Badge v-if="filterBadgeCount > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">{{ filterBadgeCount }}</Badge>
+                                    </Button>
+                                </PopoverTrigger>
                                         <PopoverContent align="end" class="flex max-h-[30rem] w-[22rem] flex-col overflow-hidden rounded-lg border bg-popover p-0 shadow-md">
                                             <div class="space-y-3 border-b px-4 py-3">
                                                 <p class="flex items-center gap-2 text-sm font-medium">
@@ -1054,14 +1123,8 @@ onMounted(async () => {
                                     </Popover>
                                 </div>
                             </div>
-                            <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                <span>{{ approvalCases.length }} cases on this page</span>
-                                <span v-if="filterBadgeCount > 0">{{ filterBadgeCount }} queue filters active</span>
-                                <span>Row density: {{ compactQueueRows ? 'Compact' : 'Comfortable' }}</span>
-                            </div>
-                        </CardHeader>
-
-                        <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+                        </div>
+                        <CardContent class="p-0">
                             <ScrollArea class="min-h-0 flex-1">
                                 <div class="min-h-[12rem] p-4" :class="compactQueueRows ? 'space-y-2' : 'space-y-3'">
                                     <template v-if="listLoading || pageLoading">
@@ -1105,26 +1168,37 @@ onMounted(async () => {
                                 </div>
                             </ScrollArea>
 
-                            <footer class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-4 py-2">
+                            <div class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
                                 <p class="text-xs text-muted-foreground">
-                                    Showing {{ approvalCases.length }} of {{ pagination?.total ?? approvalCases.length }} results ·
-                                    Page {{ pagination?.currentPage ?? 1 }} of {{ pagination?.lastPage ?? 1 }}
+                                    <template v-if="pagination">
+                                        Showing {{ approvalCases.length }} of {{ pagination.total }} &middot; Page {{ pagination.currentPage }} of {{ pagination.lastPage }}
+                                    </template>
+                                    <template v-else>No pagination data</template>
                                 </p>
-                                <div class="flex items-center gap-2">
-                                    <Button variant="outline" size="sm" class="gap-1.5" :disabled="!canPrev || listLoading" @click="prevPage">
-                                        <AppIcon name="chevron-left" class="size-3.5" />
-                                        Previous
+                                <div class="flex items-center gap-1">
+                                    <Button variant="outline" size="icon" class="size-8" :disabled="!canPrev || listLoading" @click="prevPage">
+                                        <AppIcon name="chevron-left" class="size-4" />
                                     </Button>
-                                    <Button variant="outline" size="sm" class="gap-1.5" :disabled="!canNext || listLoading" @click="nextPage">
-                                        Next
-                                        <AppIcon name="chevron-right" class="size-3.5" />
+                                    <template v-for="page in paginationPageNumbers" :key="String(page)">
+                                        <span v-if="page === '...'" class="px-1 text-xs text-muted-foreground">&mldr;</span>
+                                        <Button
+                                            v-else
+                                            :variant="page === pagination?.currentPage ? 'default' : 'ghost'"
+                                            size="icon"
+                                            class="size-8 text-xs"
+                                            :disabled="listLoading"
+                                            @click="goToPage(page as number)"
+                                        >
+                                            {{ page }}
+                                        </Button>
+                                    </template>
+                                    <Button variant="outline" size="icon" class="size-8" :disabled="!canNext || listLoading" @click="nextPage">
+                                        <AppIcon name="chevron-right" class="size-4" />
                                     </Button>
                                 </div>
-                            </footer>
+                            </div>
                         </CardContent>
                     </Card>
-
-                </div>
 
                 <Dialog v-if="canCreate" :open="createDialogOpen" @update:open="(open) => (open ? (createDialogOpen = true) : closeCreateDialog())">
                     <DialogContent size="2xl">
