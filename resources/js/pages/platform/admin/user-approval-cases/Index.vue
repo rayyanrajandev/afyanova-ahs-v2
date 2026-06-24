@@ -1103,10 +1103,9 @@ onMounted(async () => {
                                                             <SelectTrigger>
                                                                 <SelectValue />
                                                             </SelectTrigger>
-                                                            <SelectContent> (compactQueueRows = value === 'compact')"
-                                                        >
-                                                            <SelectItem value="comfortable">Comfortable</SelectItem>
-                                                            <SelectItem value="compact">Compact</SelectItem>
+                                                            <SelectContent>
+                                                                <SelectItem value="comfortable">Comfortable</SelectItem>
+                                                                <SelectItem value="compact">Compact</SelectItem>
                                                             </SelectContent>
                                                         </Select>
                                                     </div>
@@ -1121,7 +1120,6 @@ onMounted(async () => {
                                             </div>
                                         </PopoverContent>
                                     </Popover>
-                                </div>
                             </div>
                         </div>
                         <CardContent class="p-0">
