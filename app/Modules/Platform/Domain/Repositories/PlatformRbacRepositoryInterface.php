@@ -16,7 +16,8 @@ interface PlatformRbacRepositoryInterface
         int $page,
         int $perPage,
         ?string $sortBy,
-        string $sortDirection
+        string $sortDirection,
+        ?string $facilityId = null,
     ): array;
 
     public function findRoleById(string $id): ?array;

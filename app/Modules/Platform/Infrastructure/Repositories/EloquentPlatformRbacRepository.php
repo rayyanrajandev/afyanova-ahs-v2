@@ -5,6 +5,7 @@ namespace App\Modules\Platform\Infrastructure\Repositories;
 use App\Models\Permission;
 use App\Models\User;
 use App\Modules\Platform\Domain\Repositories\PlatformRbacRepositoryInterface;
+use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\Platform\Infrastructure\Models\PlatformRbacAuditLogModel;
 use App\Modules\Platform\Infrastructure\Models\RoleModel;
@@ -15,8 +16,9 @@ use Illuminate\Database\Eloquent\Builder;
 class EloquentPlatformRbacRepository implements PlatformRbacRepositoryInterface
 {
     public function __construct(
-        private readonly PlatformScopeQueryApplier $platformScopeQueryApplier,
+        private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly FeatureFlagResolverInterface $featureFlagResolver,
+        private readonly PlatformScopeQueryApplier $platformScopeQueryApplier,
     ) {}
 
     public function searchPermissions(
@@ -48,7 +50,8 @@ class EloquentPlatformRbacRepository implements PlatformRbacRepositoryInterface
         int $page,
         int $perPage,
         ?string $sortBy,
-        string $sortDirection
+        string $sortDirection,
+        ?string $facilityId = null,
     ): array {
         $sortBy = in_array($sortBy, ['code', 'name', 'status', 'created_at', 'updated_at'], true)
             ? $sortBy
@@ -68,6 +71,7 @@ class EloquentPlatformRbacRepository implements PlatformRbacRepositoryInterface
                 });
             })
             ->when($status, fn (Builder $builder, string $value) => $builder->where('status', $value))
+            ->when($facilityId, fn (Builder $builder, string $value) => $builder->where('facility_id', $value))
             ->orderBy($sortBy, $sortDirection);
 
         $paginator = $queryBuilder->paginate(
@@ -368,7 +372,9 @@ class EloquentPlatformRbacRepository implements PlatformRbacRepositoryInterface
 
     private function isPlatformScopingEnabled(): bool
     {
-        return $this->featureFlagResolver->isEnabled('platform.multi_facility_scoping')
+        return $this->platformScopeContext->hasFacility()
+            || $this->platformScopeContext->hasTenant()
+            || $this->featureFlagResolver->isEnabled('platform.multi_facility_scoping')
             || $this->featureFlagResolver->isEnabled('platform.multi_tenant_isolation');
     }
 }

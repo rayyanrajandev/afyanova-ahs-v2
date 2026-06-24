@@ -704,6 +704,19 @@ function goToPage(page: number) {
     void loadItems();
 }
 
+watch(
+    () => [scope.value?.facility?.code ?? null, scope.value?.tenant?.code ?? null] as const,
+    async (next, prev) => {
+        if (prev === undefined) return;
+        const [nextFacility, nextTenant] = next;
+        const [prevFacility, prevTenant] = prev;
+        if (nextFacility === prevFacility && nextTenant === prevTenant) return;
+
+        filters.page = 1;
+        await Promise.all([loadDepartments(), refreshPage()]);
+    },
+);
+
 watch(detailsSheetTab, (tab) => {
     if (tab === 'audit' && detailsServicePoint.value && canAudit.value && auditLogs.value.length === 0 && !auditLoading.value) {
         void loadAudit(detailsServicePoint.value);

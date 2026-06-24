@@ -55,6 +55,7 @@ import { type BreadcrumbItem } from '@/types';
 
 type ScopeData = {
     resolvedFrom: string;
+    facility?: { id?: string | null; code?: string | null; name?: string | null } | null;
 };
 
 type PlatformRole = {
@@ -130,6 +131,27 @@ const canRead = computed(() => permissionState('platform.rbac.read') === 'allowe
 const canManageRoles = computed(() => permissionState('platform.rbac.manage-roles') === 'allowed');
 const canViewAudit = computed(() => permissionState('platform.rbac.view-audit-logs') === 'allowed');
 const scope = computed<ScopeData | null>(() => (sharedScope.value as ScopeData | null) ?? null);
+const scopedFacilityLabel = computed(() => {
+    const facility = scope.value?.facility;
+    const name = String(facility?.name ?? '').trim();
+    const code = String(facility?.code ?? '').trim();
+
+    if (name && code) return `${name} (${code})`;
+    if (name) return name;
+    if (code) return code;
+
+    return null;
+});
+const scopedFacilityId = computed<string | null>(() => {
+    const facility = scope.value?.facility;
+    return facility?.id ? String(facility.id) : null;
+});
+const rolesWorkspaceTitle = computed(() => (scopedFacilityLabel.value ? 'Facility RBAC' : 'Platform RBAC'));
+const rolesWorkspaceDescription = computed(() =>
+    scopedFacilityLabel.value
+        ? `Manage roles, permission mapping, and RBAC audit visibility for ${scopedFacilityLabel.value}.`
+        : 'Manage platform roles, permission mapping, and RBAC audit visibility.',
+);
 const scopeUnresolved = computed(() => multiTenantIsolationEnabled.value && (scope.value?.resolvedFrom ?? 'none') === 'none');
 
 const pageLoading = ref(true);
@@ -505,6 +527,7 @@ async function loadRoles() {
             query: {
                 q: searchForm.q.trim() || null,
                 status: searchForm.status || null,
+                facilityId: scopedFacilityId.value ?? null,
                 sortBy: searchForm.sortBy,
                 sortDir: searchForm.sortDir,
                 perPage: searchForm.perPage,
@@ -966,6 +989,19 @@ watch(
     },
 );
 
+watch(
+    () => [scope.value?.facility?.code ?? null, scope.value?.tenant?.code ?? null] as const,
+    async (next, prev) => {
+        if (prev === undefined) return;
+        const [nextFacility, nextTenant] = next;
+        const [prevFacility, prevTenant] = prev;
+        if (nextFacility === prevFacility && nextTenant === prevTenant) return;
+
+        searchForm.page = 1;
+        await refreshPage();
+    },
+);
+
 function openCreateDialog() {
     createErrors.value = {};
     createMessage.value = null;
@@ -979,7 +1015,7 @@ onBeforeUnmount(clearSearchDebounce);
 onMounted(refreshPage);
 </script>
 <template>
-    <Head title="Platform RBAC" />
+    <Head :title="rolesWorkspaceTitle" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
             <!-- Page header -->
@@ -987,10 +1023,10 @@ onMounted(refreshPage);
                 <div class="min-w-0">
                     <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
                         <AppIcon name="shield-check" class="size-7 text-primary" />
-                        Platform RBAC
+                        {{ rolesWorkspaceTitle }}
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        Manage platform roles, permission mapping, and RBAC audit visibility.
+                        {{ rolesWorkspaceDescription }}
                     </p>
                 </div>
                 <div class="flex flex-shrink-0 items-center gap-2">
@@ -1446,10 +1482,10 @@ onMounted(refreshPage);
                                                 </div>
                                             </CardHeader>
                                             <CardContent class="space-y-3 px-4 pt-0">
-                                                <Alert v-if="!canManageRoles" variant="destructive">
-                                                    <AlertTitle>Role editing restricted</AlertTitle>
-                                                    <AlertDescription>Request <code>platform.rbac.manage-roles</code> permission.</AlertDescription>
-                                                </Alert>
+<Alert v-if="!canManageRoles" variant="default">
+    <AlertTitle>Role editing restricted</AlertTitle>
+    <AlertDescription>Request <code>platform.rbac.manage-roles</code> permission.</AlertDescription>
+</Alert>
 
                                                 <div class="grid gap-3 sm:grid-cols-2">
                                                     <div class="grid gap-2">
@@ -1656,10 +1692,10 @@ onMounted(refreshPage);
                                     </div>
                                 </TabsContent>
                                 <TabsContent value="audit" class="mt-3 space-y-3">
-                                    <Alert v-if="!canViewAudit" variant="destructive">
-                                        <AlertTitle>Audit access restricted</AlertTitle>
-                                        <AlertDescription>Request <code>platform.rbac.view-audit-logs</code> permission.</AlertDescription>
-                                    </Alert>
+<Alert v-if="!canViewAudit" variant="default">
+    <AlertTitle>Audit access restricted</AlertTitle>
+    <AlertDescription>Request <code>platform.rbac.view-audit-logs</code> permission.</AlertDescription>
+</Alert>
 
                                     <Collapsible v-else v-model:open="detailsAuditFiltersOpen">
                                         <Card class="rounded-lg !gap-4 !py-4">

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
@@ -898,6 +898,20 @@ function goToPage(page: number) {
     filters.page = page;
     void loadItems();
 }
+
+watch(
+    () => [scope.value?.facility?.code ?? null, scope.value?.tenant?.code ?? null] as const,
+    async (next, prev) => {
+        if (prev === undefined) return;
+        const [nextFacility, nextTenant] = next;
+        const [prevFacility, prevTenant] = prev;
+        if (nextFacility === prevFacility && nextTenant === prevTenant) return;
+
+        filters.page = 1;
+        await refreshPage();
+        void loadManagerOptions();
+    },
+);
 
 onMounted(() => {
     void refreshPage();

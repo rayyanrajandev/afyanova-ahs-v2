@@ -54,12 +54,6 @@ import {
     normalizeInventoryWorkspaceSection,
 } from '@/lib/inventoryProcurement';
 import {
-    departmentRequisitionStripeClass,
-    procurementRequestStripeClass,
-    shortageReadinessStripeClass,
-    stockMovementStripeClass,
-} from '@/lib/listRows';
-import {
     canAccessInventoryWorkspaceSection,
     defaultInventoryWorkspaceSection,
     isInventoryDepartmentRequester,
@@ -67,6 +61,12 @@ import {
     type InventoryProcurementAccess,
 } from '@/lib/inventoryProcurementAccess';
 import { formatEnumLabel } from '@/lib/labels';
+import {
+    departmentRequisitionStripeClass,
+    procurementRequestStripeClass,
+    shortageReadinessStripeClass,
+    stockMovementStripeClass,
+} from '@/lib/listRows';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
 import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue } from '@/pages/inventory-procurement/workspace/constants';

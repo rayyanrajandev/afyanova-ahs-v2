@@ -104,11 +104,11 @@ const routeAccessRules: RouteAccessRule[] = [
     },
     {
         pathPrefix: '/platform/admin/roles',
-        requiredPermissions: ['platform.rbac.manage-roles'],
+        requiredPermissions: ['platform.rbac.read'],
     },
     {
         pathPrefix: '/platform/admin/permissions',
-        requiredPermissions: ['platform.rbac.manage-roles'],
+        requiredPermissions: ['platform.rbac.read'],
     },
     {
         pathPrefix: '/staff-credentialing',

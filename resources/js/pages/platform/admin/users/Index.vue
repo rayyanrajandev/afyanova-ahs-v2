@@ -203,6 +203,10 @@ const scopedFacilityLabel = computed(() => {
 
     return null;
 });
+const scopedFacilityId = computed<string | null>(() => {
+    const facility = scope.value?.facility;
+    return facility?.id ? String(facility.id) : null;
+});
 const usersWorkspaceTitle = computed(() => (scopedFacilityLabel.value ? 'Facility Users' : 'Platform Users'));
 const usersWorkspaceDescription = computed(() =>
     scopedFacilityLabel.value
@@ -1136,13 +1140,14 @@ async function loadUsers() {
     listLoading.value = true;
     listErrors.value = [];
     try {
+        const queryFacilityId = scopedFacilityId.value ?? (searchForm.facilityId || null);
         const response = await apiRequest<PlatformUserListResponse>('GET', '/platform/admin/users', {
             query: {
                 q: searchForm.q.trim() || null,
                 status: searchForm.status || null,
                 verification: searchForm.verification || null,
                 roleId: searchForm.roleId || null,
-                facilityId: searchForm.facilityId || null,
+                facilityId: queryFacilityId,
                 sortBy: searchForm.sortBy,
                 sortDir: searchForm.sortDir,
                 perPage: searchForm.perPage,
@@ -1172,7 +1177,14 @@ async function loadRoles() {
         const response = await apiRequest<PlatformRoleListResponse>('GET', '/platform/admin/roles', {
             query: { page: 1, perPage: 100, sortBy: 'name', sortDir: 'asc' },
         });
-        roles.value = (response.data ?? []).filter((entry) => entry.id !== null);
+        const allRoles = (response.data ?? []).filter((entry) => entry.id !== null);
+        if (scopedFacilityId.value) {
+            roles.value = allRoles.filter(
+                (role) => !role.facilityId || role.facilityId === scopedFacilityId.value,
+            );
+        } else {
+            roles.value = allRoles;
+        }
         roleAssignmentPolicy.value = response.meta?.roleAssignmentPolicy === 'hospital_operational' ? 'hospital_operational' : 'full';
     } catch {
         roles.value = [];
@@ -1903,6 +1915,20 @@ watch(pageUserIds, () => {
     const visible = new Set(pageUserIds.value);
     selectedUserIds.value = selectedUserIds.value.filter((id) => visible.has(id));
 });
+
+watch(
+    () => [scope.value?.facility?.code ?? null, scope.value?.tenant?.code ?? null] as const,
+    async (next, prev) => {
+        if (!queueReady.value || prev === undefined) return;
+        const [nextFacility, nextTenant] = next;
+        const [prevFacility, prevTenant] = prev;
+        if (nextFacility === prevFacility && nextTenant === prevTenant) return;
+
+        searchForm.page = 1;
+        await Promise.all([loadUsers(), loadStatusCounts()]);
+        void loadRoles();
+    },
+);
 
 watch(
     () => detailsSheetTab.value,

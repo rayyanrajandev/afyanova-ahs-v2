@@ -56,3 +56,5 @@ yarn-error.log
 /.vscode
 /.zed
 .aider*
+
+--cache-directory

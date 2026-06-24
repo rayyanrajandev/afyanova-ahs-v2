@@ -1,23 +1,23 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
+import { usePage } from '@inertiajs/vue3';
 import { onMounted, ref } from 'vue';
+import { computed } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import ApprovalDecisionSheet from '@/components/inventory/ApprovalDecisionSheet.vue';
 import SodWarningBanner from '@/components/inventory/SodWarningBanner.vue';
 import TimeoutCountdown from '@/components/inventory/TimeoutCountdown.vue';
+import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePageHeader.vue';
 import WorkflowQueueSkeleton from '@/components/list/WorkflowQueueSkeleton.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { SearchInput } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePageHeader.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { fetchPendingApprovals, type ApprovalInstance } from '@/lib/approvalApiClient';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError } from '@/lib/notify';
-import { usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
 
 const user = computed(() => (usePage().props.auth as any)?.user);
 

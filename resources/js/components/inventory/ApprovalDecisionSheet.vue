@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import SodWarningBanner from '@/components/inventory/SodWarningBanner.vue';
+import TimeoutCountdown from '@/components/inventory/TimeoutCountdown.vue';
+import WorkflowProgress from '@/components/inventory/WorkflowProgress.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -7,9 +10,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
-import SodWarningBanner from '@/components/inventory/SodWarningBanner.vue';
-import TimeoutCountdown from '@/components/inventory/TimeoutCountdown.vue';
-import WorkflowProgress from '@/components/inventory/WorkflowProgress.vue';
 import { approveRequisition, rejectRequisition, type ApprovalInstance } from '@/lib/approvalApiClient';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 

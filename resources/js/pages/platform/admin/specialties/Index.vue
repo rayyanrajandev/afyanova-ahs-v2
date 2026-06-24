@@ -884,6 +884,19 @@ const selectedSpecialty = computed(() => {
     return specialties.value.find((specialty) => specialtyKey(specialty) === key) ?? null;
 });
 
+watch(
+    () => [scope.value?.facility?.code ?? null, scope.value?.tenant?.code ?? null] as const,
+    async (next, prev) => {
+        if (prev === undefined) return;
+        const [nextFacility, nextTenant] = next;
+        const [prevFacility, prevTenant] = prev;
+        if (nextFacility === prevFacility && nextTenant === prevTenant) return;
+
+        filters.page = 1;
+        await refreshPage();
+    },
+);
+
 watch(assignmentSheetOpen, (open) => {
     if (open) {
         assignmentError.value = null;

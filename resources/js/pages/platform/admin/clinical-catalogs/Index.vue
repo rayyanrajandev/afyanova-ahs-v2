@@ -2126,6 +2126,19 @@ watch(catalogKey, (next) => {
 });
 
 watch(
+    () => [scope.value?.facility?.code ?? null, scope.value?.tenant?.code ?? null] as const,
+    async (next, prev) => {
+        if (prev === undefined) return;
+        const [nextFacility, nextTenant] = next;
+        const [prevFacility, prevTenant] = prev;
+        if (nextFacility === prevFacility && nextTenant === prevTenant) return;
+
+        filters.page = 1;
+        await Promise.all([loadItems(), loadDepartments()]);
+    },
+);
+
+watch(
     () => [detailsOpen.value, detailsSheetTab.value, selected.value?.id ?? null] as const,
     ([open, tab, itemId]) => {
         if (!open || !itemId || tab !== 'audit' || !canAudit.value) return;

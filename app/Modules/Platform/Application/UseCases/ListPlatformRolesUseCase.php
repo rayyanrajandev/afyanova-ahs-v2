@@ -34,6 +34,10 @@ class ListPlatformRolesUseCase
         $query = isset($filters['q']) ? trim((string) $filters['q']) : null;
         $query = $query === '' ? null : $query;
 
+        $facilityId = isset($filters['facilityId']) && is_string($filters['facilityId']) && $filters['facilityId'] !== ''
+            ? $filters['facilityId']
+            : null;
+
         return $this->platformRbacRepository->searchRoles(
             query: $query,
             status: $status,
@@ -41,6 +45,7 @@ class ListPlatformRolesUseCase
             perPage: $perPage,
             sortBy: $sortBy,
             sortDirection: $sortDirection,
+            facilityId: $facilityId,
         );
     }
 }
