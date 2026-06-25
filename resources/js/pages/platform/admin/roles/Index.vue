@@ -158,7 +158,7 @@ const scopeUnresolved = computed(() => multiTenantIsolationEnabled.value && (sco
 const pageLoading = ref(true);
 const listLoading = ref(false);
 const actionLoadingId = ref<string | null>(null);
-const actionMessage = ref<string | null>(null);
+
 const listErrors = ref<string[]>([]);
 const roles = ref<PlatformRole[]>([]);
 const pagination = ref<Pagination | null>(null);
@@ -190,7 +190,7 @@ const createForm = reactive({
 });
 const createLoading = ref(false);
 const createErrors = ref<Record<string, string[]>>({});
-const createMessage = ref<string | null>(null);
+
 
 const createDialogOpen = ref(false);
 const showAdvancedFilters = useLocalStorageBoolean('platform.rbac.filters.advanced', false);
@@ -649,8 +649,6 @@ async function createRole() {
 
     createLoading.value = true;
     createErrors.value = {};
-    createMessage.value = null;
-
     try {
         const response = await apiRequest<PlatformRoleResponse>('POST', '/platform/admin/roles', {
             body: {
@@ -660,9 +658,7 @@ async function createRole() {
             },
         });
         const createdRole = normalizeRolePayload(response.data as Partial<PlatformRole> & Record<string, unknown>);
-        createMessage.value = `Role ${createdRole.code ?? ''} created successfully.`.trim();
-        actionMessage.value = createMessage.value;
-        notifySuccess(createMessage.value);
+        notifySuccess(`Role ${createdRole.code ?? ''} created successfully.`);
         createForm.code = '';
         createForm.name = '';
         createForm.description = '';
@@ -697,8 +693,7 @@ async function quickToggleStatus(role: PlatformRole) {
             detailsRole.value = updatedRole;
             detailsForm.status = updatedRole.status ?? 'active';
         }
-        actionMessage.value = `Role ${updatedRole.code ?? roleId} updated to ${targetStatus}.`;
-        notifySuccess(actionMessage.value);
+        notifySuccess(`Role ${updatedRole.code ?? roleId} updated to ${targetStatus}.`);
     } catch (error) {
         notifyError(messageFromUnknown(error, 'Unable to update role status.'));
     } finally {
@@ -799,8 +794,7 @@ async function saveRoleMetadata() {
         permissionDraftNames.value = normalizePermissionNames(updatedRole.permissionNames ?? []);
         permissionDraftDirty.value = false;
         syncRoleInList(updatedRole);
-        actionMessage.value = `Role ${updatedRole.code ?? roleId} metadata updated.`;
-        notifySuccess(actionMessage.value);
+        notifySuccess(`Role ${updatedRole.code ?? roleId} metadata updated.`);
     } catch (error) {
         const apiError = error as Error & { status?: number; payload?: ValidationErrorResponse };
         if (apiError.status === 422 && apiError.payload?.errors) {
@@ -854,8 +848,7 @@ async function saveRolePermissions() {
         permissionDraftNames.value = normalizePermissionNames(updatedRole.permissionNames ?? []);
         permissionDraftDirty.value = false;
         syncRoleInList(updatedRole);
-        actionMessage.value = `Permissions synced for role ${updatedRole.code ?? roleId}.`;
-        notifySuccess(actionMessage.value);
+        notifySuccess(`Permissions synced for role ${updatedRole.code ?? roleId}.`);
     } catch (error) {
         notifyError(messageFromUnknown(error, 'Unable to sync role permissions.'));
     } finally {
@@ -882,8 +875,7 @@ async function deleteRoleFromDetails() {
     try {
         await apiRequest('DELETE', `/platform/admin/roles/${roleId}`);
         removeRoleFromList(roleId);
-        actionMessage.value = `Role ${detailsRole.value?.code ?? roleId} deleted.`;
-        notifySuccess(actionMessage.value);
+        notifySuccess(`Role ${detailsRole.value?.code ?? roleId} deleted.`);
         closeDeleteRoleDialog();
         closeDetails();
         await loadRoles();
@@ -1026,7 +1018,6 @@ watch(
 
 function openCreateDialog() {
     createErrors.value = {};
-    createMessage.value = null;
     createForm.code = '';
     createForm.name = '';
     createForm.description = '';
@@ -1088,11 +1079,6 @@ onMounted(refreshPage);
             <Alert v-if="scopeUnresolved" variant="destructive">
                 <AlertTitle>Scope warning</AlertTitle>
                 <AlertDescription>No tenant/facility scope is resolved. Role create/update may be blocked by tenant isolation controls.</AlertDescription>
-            </Alert>
-
-            <Alert v-if="actionMessage">
-                <AlertTitle>Action completed</AlertTitle>
-                <AlertDescription>{{ actionMessage }}</AlertDescription>
             </Alert>
 
             <template v-if="!permissionsResolved">

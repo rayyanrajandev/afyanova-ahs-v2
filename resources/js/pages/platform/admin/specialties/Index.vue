@@ -139,7 +139,6 @@ const workspaceSyncLoading = ref(false);
 const errors = ref<string[]>([]);
 const specialties = ref<ClinicalSpecialty[]>([]);
 const pagination = ref<Pagination | null>(null);
-const actionMessage = ref<string | null>(null);
 const createDialogOpen = ref(false);
 const assignmentSheetOpen = ref(false);
 const selectedSpecialtyId = ref<string | null>(null);
@@ -614,8 +613,7 @@ async function saveStatus() {
                 reason: statusTarget.value === 'inactive' ? statusReason.value.trim() : null,
             },
         });
-        actionMessage.value = `Updated ${specialtyLabel(response.data)} to ${statusTarget.value}.`;
-        notifySuccess(actionMessage.value);
+        notifySuccess(`Updated ${specialtyLabel(response.data)} to ${statusTarget.value}.`);
         closeStatusDialog();
         await refreshPage();
     } catch (error) {
@@ -992,11 +990,6 @@ onMounted(refreshPage);
                     </div>
                 </div>
             </section>
-
-            <Alert v-if="actionMessage">
-                <AlertTitle>Recent action</AlertTitle>
-                <AlertDescription>{{ actionMessage }}</AlertDescription>
-            </Alert>
 
             <Alert v-if="errors.length" variant="destructive">
                 <AlertTitle>Request error</AlertTitle>

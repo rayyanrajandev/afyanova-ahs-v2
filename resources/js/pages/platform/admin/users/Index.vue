@@ -219,8 +219,6 @@ const listLoading = ref(false);
 const queueReady = ref(false);
 const createLoading = ref(false);
 const actionLoadingId = ref<number | null>(null);
-const actionMessage = ref<string | null>(null);
-const actionCredentialPreviewUrl = ref<string | null>(null);
 const users = ref<PlatformUser[]>([]);
 const pagination = ref<Pagination | null>(null);
 const statusCounts = ref<PlatformUserStatusCounts>({ active: 0, inactive: 0, other: 0, total: 0 });
@@ -302,9 +300,6 @@ const saveRolesApprovalCaseReference = ref('');
 const saveFacilitiesApprovalCaseReference = ref('');
 const saveRolesError = ref<string | null>(null);
 const saveFacilitiesError = ref<string | null>(null);
-const detailsActionMessage = ref<string | null>(null);
-const detailsCredentialPreviewUrl = ref<string | null>(null);
-
 const detailsAuditLoading = ref(false);
 const detailsAuditError = ref<string | null>(null);
 const detailsAuditLogs = ref<PlatformUserAuditLog[]>([]);
@@ -635,21 +630,6 @@ function credentialLinkSuccessMessage(user: PlatformUser): string {
     return `${isInviteAction(user) ? 'Invite' : 'Password reset'} link sent for ${user.email ?? `User #${user.id ?? ''}`}.`;
 }
 
-function setActionMessage(message: string | null, previewUrl: string | null = null): void {
-    actionMessage.value = message;
-    actionCredentialPreviewUrl.value = previewUrl;
-}
-function setDetailsInlineMessage(message: string | null, previewUrl: string | null = null): void {
-    detailsActionMessage.value = message;
-    detailsCredentialPreviewUrl.value = previewUrl;
-}
-
-function setDetailsActionMessage(targetUserId: number | null, message: string, previewUrl: string | null = null): void {
-    if (Number.isFinite(targetUserId) && Number(detailsUser.value?.id) === targetUserId) {
-        setDetailsInlineMessage(message, previewUrl);
-    }
-}
-
 function userInitials(user: PlatformUser): string {
     const name = (user.name ?? '').trim();
     if (!name) return '?';
@@ -936,8 +916,7 @@ async function submitBulkStatusDialog(): Promise<void> {
 
         const skippedCount = (result.skippedUserIds ?? []).length;
         const targetLabel = bulkStatusDialogTarget.value === 'inactive' ? 'deactivated' : 'activated';
-        setActionMessage(`${result.updatedCount ?? 0} users ${targetLabel}${skippedCount > 0 ? `, ${skippedCount} skipped` : ''}.`);
-        notifySuccess(actionMessage.value);
+        notifySuccess(`${result.updatedCount ?? 0} users ${targetLabel}${skippedCount > 0 ? `, ${skippedCount} skipped` : ''}.`);
         clearSelectedUsers();
         closeBulkStatusDialog();
         await Promise.all([loadUsers(), loadStatusCounts()]);
@@ -968,16 +947,14 @@ async function dispatchBulkCredentialLinks(): Promise<void> {
         const failedUserIds = (result.failedUserIds ?? failedEntries.map((entry) => Number(entry.userId)))
             .filter((id) => Number.isInteger(id) && id > 0) as number[];
         const dispatchedCount = result.dispatchedCount ?? 0;
-        setActionMessage(
-            `${dispatchedCount} credential links sent (${result.inviteCount ?? 0} invites, ${result.resetCount ?? 0} resets)` +
+        const credentialMessage = `${dispatchedCount} credential links sent (${result.inviteCount ?? 0} invites, ${result.resetCount ?? 0} resets)` +
                 `${skippedCount > 0 ? `, ${skippedCount} skipped` : ''}` +
-                `${failedCount > 0 ? `, ${failedCount} failed` : ''}.`,
-        );
+                `${failedCount > 0 ? `, ${failedCount} failed` : ''}.`;
 
         if (dispatchedCount > 0) {
-            notifySuccess(actionMessage.value);
+            notifySuccess(credentialMessage);
         } else {
-            notifyError(actionMessage.value);
+            notifyError(credentialMessage);
         }
 
         if (failedCount > 0) {
@@ -1046,8 +1023,7 @@ async function submitBulkRolesDialog(): Promise<void> {
         }
 
         const skippedCount = (result.skippedUserIds ?? []).length;
-        setActionMessage(`${result.updatedCount ?? 0} users updated with selected roles${skippedCount > 0 ? `, ${skippedCount} skipped` : ''}.`);
-        notifySuccess(actionMessage.value);
+        notifySuccess(`${result.updatedCount ?? 0} users updated with selected roles${skippedCount > 0 ? `, ${skippedCount} skipped` : ''}.`);
 
         clearSelectedUsers();
         closeBulkRolesDialog();
@@ -1094,8 +1070,7 @@ async function submitBulkFacilitiesDialog(): Promise<void> {
         }
 
         const skippedCount = (result.skippedUserIds ?? []).length;
-        setActionMessage(`${result.updatedCount ?? 0} users updated with selected facilities${skippedCount > 0 ? `, ${skippedCount} skipped` : ''}.`);
-        notifySuccess(actionMessage.value);
+        notifySuccess(`${result.updatedCount ?? 0} users updated with selected facilities${skippedCount > 0 ? `, ${skippedCount} skipped` : ''}.`);
 
         clearSelectedUsers();
         closeBulkFacilitiesDialog();
@@ -1335,7 +1310,6 @@ async function createUser() {
             successMessage = `User ${response.data.email ?? createForm.email} created successfully.`;
         }
 
-        setActionMessage(successMessage, previewUrl);
         notifySuccess(successMessage);
         closeCreateUserDialog();
         searchForm.page = 1;
@@ -1384,9 +1358,6 @@ async function submitStatusDialog() {
 
     actionLoadingId.value = userId;
     statusDialogError.value = null;
-    if (Number(detailsUser.value?.id) === userId) {
-        setDetailsInlineMessage(null);
-    }
     try {
         const response = await apiRequest<PlatformUserResponse>('PATCH', `/platform/admin/users/${userId}/status`, {
             body: {
@@ -1397,9 +1368,7 @@ async function submitStatusDialog() {
         });
         syncUserInList(response.data);
         if (detailsUser.value?.id === response.data.id) detailsUser.value = response.data;
-        setActionMessage(`User ${response.data.email ?? `#${response.data.id ?? ''}`} updated to ${statusDialogTarget.value}.`);
-        setDetailsActionMessage(Number(response.data.id), actionMessage.value);
-        notifySuccess(actionMessage.value);
+        notifySuccess(`User ${response.data.email ?? `#${response.data.id ?? ''}`} updated to ${statusDialogTarget.value}.`);
         void loadStatusCounts();
         closeStatusDialog();
     } catch (error) {
@@ -1414,14 +1383,9 @@ async function sendCredentialLink(user: PlatformUser) {
     const inviteAction = isInviteAction(user);
     const endpoint = inviteAction ? 'invite-link' : 'password-reset-link';
     actionLoadingId.value = userId;
-    if (Number(detailsUser.value?.id) === userId) {
-        setDetailsInlineMessage(null);
-    }
     try {
         const response = await apiRequest<PlatformUserCredentialLinkResponse>('POST', `/platform/admin/users/${userId}/${endpoint}`);
-        setActionMessage(credentialLinkSuccessMessage(user), response.data.previewUrl ?? null);
-        setDetailsActionMessage(userId, actionMessage.value, response.data.previewUrl ?? null);
-        notifySuccess(actionMessage.value);
+        notifySuccess(credentialLinkSuccessMessage(user));
     } catch (error) {
         notifyError(messageFromUnknown(error, `Unable to send ${inviteAction ? 'invitation' : 'reset'} link.`));
     } finally {
@@ -1499,9 +1463,6 @@ async function submitEditDialog() {
     if (!Number.isFinite(userId) || !canUpdate.value || editDialogLoading.value) return;
 
     editDialogLoading.value = true;
-    if (Number(detailsUser.value?.id) === userId) {
-        setDetailsInlineMessage(null);
-    }
     editErrors.value = {};
     editDialogError.value = null;
     try {
@@ -1516,11 +1477,9 @@ async function submitEditDialog() {
         syncUserInList(response.data);
         if (detailsUser.value?.id === response.data.id) {
             detailsUser.value = response.data;
-            setDetailsInlineMessage(`User ${response.data.email ?? `#${response.data.id ?? ''}`} profile updated.`);
         }
 
-        setActionMessage(`User ${response.data.email ?? `#${response.data.id ?? ''}`} profile updated.`);
-        notifySuccess(actionMessage.value);
+        notifySuccess(`User ${response.data.email ?? `#${response.data.id ?? ''}`} profile updated.`);
         closeEditDialog();
         void Promise.all([loadUsers(), loadStatusCounts()]);
     } catch (error) {
@@ -1699,7 +1658,6 @@ function seedDetailsUserFromList(user: PlatformUser): void {
     facilityDrafts.value = toFacilityDrafts(user.facilityAssignments ?? []);
     ensureSinglePrimary();
     newFacilityDraftId.value = '';
-    setDetailsInlineMessage(null);
     saveRolesApprovalCaseReference.value = '';
     saveFacilitiesApprovalCaseReference.value = '';
     saveRolesError.value = null;
@@ -1770,7 +1728,6 @@ async function openDetailsById(userId: number) {
         facilityDrafts.value = toFacilityDrafts(response.data.facilityAssignments ?? []);
         ensureSinglePrimary();
         newFacilityDraftId.value = '';
-        setDetailsInlineMessage(null);
         saveRolesApprovalCaseReference.value = '';
         saveFacilitiesApprovalCaseReference.value = '';
         saveRolesError.value = null;
@@ -1799,7 +1756,6 @@ function closeDetails() {
     roleDraftIds.value = [];
     facilityDrafts.value = [];
     newFacilityDraftId.value = '';
-    setDetailsInlineMessage(null);
     saveRolesApprovalCaseReference.value = '';
     saveFacilitiesApprovalCaseReference.value = '';
     saveRolesError.value = null;
@@ -1825,7 +1781,6 @@ async function saveRoles() {
     const userId = Number(detailsUser.value?.id);
     if (!Number.isFinite(userId) || !canManageRoles.value || saveRolesLoading.value) return;
     saveRolesLoading.value = true;
-    setDetailsInlineMessage(null);
     saveRolesError.value = null;
     const approvalCaseReference = saveRolesApprovalCaseReference.value.trim();
     try {
@@ -1840,7 +1795,6 @@ async function saveRoles() {
             detailsUser.value.roles = response.data.roles ?? [];
             syncUserInList(detailsUser.value);
         }
-        setDetailsInlineMessage('Role assignments updated.');
         notifySuccess('Role assignments updated.');
     } catch (error) {
         saveRolesError.value = firstValidationError((error as Error & { payload?: ValidationErrorResponse }).payload, [
@@ -1858,7 +1812,6 @@ async function saveFacilities() {
     if (!Number.isFinite(userId) || !canManageFacilities.value || saveFacilitiesLoading.value) return;
     ensureSinglePrimary();
     saveFacilitiesLoading.value = true;
-    setDetailsInlineMessage(null);
     saveFacilitiesError.value = null;
     const approvalCaseReference = saveFacilitiesApprovalCaseReference.value.trim();
     try {
@@ -1877,7 +1830,6 @@ async function saveFacilities() {
         facilityDrafts.value = toFacilityDrafts(response.data.facilityAssignments ?? []);
         ensureSinglePrimary();
         syncUserInList(response.data);
-        setDetailsInlineMessage('Facility assignments updated.');
         notifySuccess('Facility assignments updated.');
     } catch (error) {
         saveFacilitiesError.value = firstValidationError((error as Error & { payload?: ValidationErrorResponse }).payload, [
@@ -2024,21 +1976,6 @@ onMounted(async () => {
                     {{ platformMailWarning }}
                     <span v-if="platformMail?.defaultMailer"> Current mailer: <code>{{ platformMail.defaultMailer }}</code>.</span>
                     <span v-if="platformMailSupportsCredentialLinkPreview"> Local credential-link preview is available after sending an invite or reset link.</span>
-                </AlertDescription>
-            </Alert>
-
-            <Alert v-if="actionMessage">
-                <AlertTitle>Action completed</AlertTitle>
-                <AlertDescription>
-                    <div>{{ actionMessage }}</div>
-                    <div v-if="actionCredentialPreviewUrl" class="mt-3">
-                        <Button as-child size="sm" variant="outline" class="gap-1.5">
-                            <a :href="actionCredentialPreviewUrl" target="_blank" rel="noopener noreferrer">
-                                <AppIcon name="arrow-up-right" class="size-3.5" />
-                                Open local credential link
-                            </a>
-                        </Button>
-                    </div>
                 </AlertDescription>
             </Alert>
 
@@ -2797,27 +2734,6 @@ onMounted(async () => {
                             </div>
                         </div>
                     </SheetHeader>
-
-                    <div
-                        v-if="detailsActionMessage"
-                        class="shrink-0 border-b border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100"
-                    >
-                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div class="flex min-w-0 items-start gap-2">
-                                <AppIcon name="check-circle" class="mt-0.5 size-4 shrink-0" />
-                                <div class="min-w-0">
-                                    <p class="text-sm font-semibold">Action completed</p>
-                                    <p class="text-xs leading-relaxed">{{ detailsActionMessage }}</p>
-                                </div>
-                            </div>
-                            <Button v-if="detailsCredentialPreviewUrl" as-child size="sm" variant="outline" class="shrink-0 gap-1.5 border-emerald-300 bg-white/80 text-emerald-950 hover:bg-white dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
-                                <a :href="detailsCredentialPreviewUrl" target="_blank" rel="noopener noreferrer">
-                                    <AppIcon name="arrow-up-right" class="size-3.5" />
-                                    {{ credentialLinkPreviewLabel(detailsUser) }}
-                                </a>
-                            </Button>
-                        </div>
-                    </div>
 
                     <div v-if="detailsLoading && !detailsUser" class="space-y-3 p-4">
                         <Skeleton class="h-20 w-full" />
