@@ -329,7 +329,7 @@ class RoleHierarchySeeder extends Seeder
                 $role = RoleModel::where('tenant_id', $tenant->id)
                     ->where('code', $code)->first();
                 $permissionIds = Permission::whereIn('name', $permissions)->pluck('id');
-                $role->permissions()->syncWithoutDetaching($permissionIds);
+            $role->permissions()->sync($permissionIds);
             }
         }
     }
