@@ -51,30 +51,24 @@ class PlatformRbacController extends Controller
         CurrentPlatformScopeContextInterface $scopeContext
     ): JsonResponse
     {
-        $result = $useCase->execute($request->all());
-        $roles = $result['data'];
+        $filters = $request->all();
         $restrictedToAssignableHospitalRoles = $this->shouldRestrictToAssignableHospitalRoles(
             $request->user(),
             $scopeContext,
         );
 
         if ($restrictedToAssignableHospitalRoles) {
-            $roles = array_values(array_filter(
-                $roles,
-                fn (array $role): bool => $this->isAssignableHospitalRoleCode($role['code'] ?? null),
-            ));
-
-            $result['meta']['total'] = count($roles);
-            $result['meta']['currentPage'] = 1;
-            $result['meta']['lastPage'] = 1;
+            $filters['assignableOnly'] = true;
         }
+
+        $result = $useCase->execute($filters);
 
         $result['meta']['roleAssignmentPolicy'] = $restrictedToAssignableHospitalRoles
             ? 'hospital_operational'
             : 'full';
 
         return response()->json([
-            'data' => array_map([PlatformRoleResponseTransformer::class, 'transform'], $roles),
+            'data' => array_map([PlatformRoleResponseTransformer::class, 'transform'], $result['data']),
             'meta' => $result['meta'],
         ]);
     }

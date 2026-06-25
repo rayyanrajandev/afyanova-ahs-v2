@@ -52,6 +52,7 @@ class EloquentPlatformRbacRepository implements PlatformRbacRepositoryInterface
         ?string $sortBy,
         string $sortDirection,
         ?string $facilityId = null,
+        ?bool $assignableOnly = false,
     ): array {
         $sortBy = in_array($sortBy, ['code', 'name', 'status', 'created_at', 'updated_at'], true)
             ? $sortBy
@@ -72,6 +73,24 @@ class EloquentPlatformRbacRepository implements PlatformRbacRepositoryInterface
             })
             ->when($status, fn (Builder $builder, string $value) => $builder->where('status', $value))
             ->when($facilityId, fn (Builder $builder, string $value) => $builder->where('facility_id', $value))
+            ->when($assignableOnly, function (Builder $builder): void {
+                $builder->where(function (Builder $q): void {
+                    $q->where('code', 'NOT LIKE', 'PLATFORM.%')
+                      ->where('code', 'NOT LIKE', '%SUPER.ADMIN%')
+                      ->where('code', '!=', 'ADMIN.FACILITY')
+                      ->where(function (Builder $prefixes): void {
+                          $prefixes->where('code', 'LIKE', 'ADMIN.%')
+                              ->orWhere('code', 'LIKE', 'CLINICAL.%')
+                              ->orWhere('code', 'LIKE', 'FINANCE.%')
+                              ->orWhere('code', 'LIKE', 'LAB.%')
+                              ->orWhere('code', 'LIKE', 'RADIOLOGY.%')
+                              ->orWhere('code', 'LIKE', 'PHARMACY.%')
+                              ->orWhere('code', 'LIKE', 'THEATRE.%')
+                              ->orWhere('code', 'LIKE', 'INVENTORY.%')
+                              ->orWhere('code', 'LIKE', 'HOSPITAL.%');
+                      });
+                });
+            })
             ->orderBy($sortBy, $sortDirection);
 
         $paginator = $queryBuilder->paginate(

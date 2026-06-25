@@ -38,6 +38,8 @@ class ListPlatformRolesUseCase
             ? $filters['facilityId']
             : null;
 
+        $assignableOnly = (bool) ($filters['assignableOnly'] ?? false);
+
         return $this->platformRbacRepository->searchRoles(
             query: $query,
             status: $status,
@@ -46,6 +48,7 @@ class ListPlatformRolesUseCase
             sortBy: $sortBy,
             sortDirection: $sortDirection,
             facilityId: $facilityId,
+            assignableOnly: $assignableOnly,
         );
     }
 }
