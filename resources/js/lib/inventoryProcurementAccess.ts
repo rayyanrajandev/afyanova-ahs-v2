@@ -50,7 +50,7 @@ export function visibleInventoryWorkspaceSections(
         sections.push('requisitions', 'procurement', 'msd-orders');
     }
 
-    sections.push('inventory', 'department-stock');
+    sections.push('department-stock');
 
     return sections;
 }
