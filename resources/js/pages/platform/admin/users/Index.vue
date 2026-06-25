@@ -2428,7 +2428,7 @@ onMounted(async () => {
                         </div>
                         <div class="space-y-2">
                             <Label class="text-xs font-medium">Roles</Label>
-                            <ScrollArea class="max-h-80">
+                            <div class="max-h-80 overflow-y-auto">
                                 <PlatformRoleAssignmentPicker
                                     v-model="createRoleIds"
                                     :roles="roles"
@@ -2436,7 +2436,7 @@ onMounted(async () => {
                                     :disabled="createLoading"
                                     id-prefix="create-role"
                                 />
-                            </ScrollArea>
+                            </div>
                             <p v-if="createErrors.roleIds?.length" class="text-xs text-destructive">{{ createErrors.roleIds[0] }}</p>
                         </div>
                         <div class="flex items-start gap-2 rounded-md border p-2.5 text-xs">
