@@ -2405,7 +2405,7 @@ onMounted(async () => {
             </template>
 
             <Dialog :open="createDialogOpen" @update:open="(open) => (open ? (createDialogOpen = true) : closeCreateUserDialog())">
-                <DialogContent size="lg">
+                <DialogContent size="5xl">
                     <DialogHeader>
                         <DialogTitle class="flex items-center gap-2">
                             <AppIcon name="plus" class="size-4 text-muted-foreground" />
@@ -2428,13 +2428,15 @@ onMounted(async () => {
                         </div>
                         <div class="space-y-2">
                             <Label class="text-xs font-medium">Roles</Label>
-                            <PlatformRoleAssignmentPicker
-                                v-model="createRoleIds"
-                                :roles="roles"
-                                :policy="roleAssignmentPolicy"
-                                :disabled="createLoading"
-                                id-prefix="create-role"
-                            />
+                            <ScrollArea class="max-h-80">
+                                <PlatformRoleAssignmentPicker
+                                    v-model="createRoleIds"
+                                    :roles="roles"
+                                    :policy="roleAssignmentPolicy"
+                                    :disabled="createLoading"
+                                    id-prefix="create-role"
+                                />
+                            </ScrollArea>
                             <p v-if="createErrors.roleIds?.length" class="text-xs text-destructive">{{ createErrors.roleIds[0] }}</p>
                         </div>
                         <div class="flex items-start gap-2 rounded-md border p-2.5 text-xs">
