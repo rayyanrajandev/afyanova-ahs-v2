@@ -96,7 +96,7 @@ const ws = useInventoryWorkspace();
                                 Refresh
                             </Button>
                               <Button
-                                  v-if="ws.canManageItems"
+                                  v-if="ws.canSyncFromCatalog"
                                   size="sm"
                                   variant="outline"
                                   class="h-8 gap-1.5 rounded-lg text-xs"

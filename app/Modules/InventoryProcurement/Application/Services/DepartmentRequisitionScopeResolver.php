@@ -29,7 +29,11 @@ class DepartmentRequisitionScopeResolver
      * @return array{
      *     canSelectAnyDepartment: bool,
      *     lockedDepartment: array{id:string,name:string,code:string|null}|null,
-     *     staffDepartmentName: string|null
+     *     staffDepartmentName: string|null,
+     *     staffDepartmentId: string|null,
+     *     preferredWarehouseId: string|null,
+     *     hasExplicitItemCatalog: bool,
+     *     departmentProfile: string|null
      * }
      */
     public function contextForUser(?User $user): array
@@ -51,6 +55,7 @@ class DepartmentRequisitionScopeResolver
             'hasExplicitItemCatalog' => $effectiveDepartmentId
                 ? $this->itemCatalogService->hasExplicitCatalog($effectiveDepartmentId)
                 : false,
+            'departmentProfile' => $this->departmentProfile($effectiveDepartmentId),
         ];
     }
 
@@ -147,6 +152,74 @@ class DepartmentRequisitionScopeResolver
         $query->whereIn('category', $allowedCategories);
     }
 
+    private function profileForDepartmentModel(DepartmentModel $department): string
+    {
+        return strtolower(trim(implode(' ', array_filter([
+            (string) $department->code,
+            (string) $department->name,
+            (string) $department->service_type,
+        ]))));
+    }
+
+    private function departmentProfileFromString(string $profile): ?string
+    {
+        if ($this->containsAny($profile, ['store', 'stores', 'procurement', 'supply', 'msd', 'warehouse'])) {
+            return 'store';
+        }
+
+        if ($this->containsAny($profile, ['laboratory', 'lab', 'pathology'])) {
+            return 'laboratory';
+        }
+
+        if ($this->containsAny($profile, ['pharmacy', 'dispensary'])) {
+            return 'pharmacy';
+        }
+
+        if ($this->containsAny($profile, ['radiology', 'imaging', 'x-ray', 'xray', 'ultrasound'])) {
+            return 'radiology';
+        }
+
+        if ($this->containsAny($profile, ['theatre', 'surgery', 'surgical', 'operating'])) {
+            return 'theatre';
+        }
+
+        if ($this->containsAny($profile, ['dental'])) {
+            return 'dental';
+        }
+
+        if ($this->containsAny($profile, ['kitchen', 'nutrition', 'food'])) {
+            return 'kitchen';
+        }
+
+        if ($this->containsAny($profile, ['cleaning', 'housekeeping', 'sanitation'])) {
+            return 'cleaning';
+        }
+
+        if ($this->containsAny($profile, ['billing', 'finance', 'records', 'front desk', 'admin'])) {
+            return 'admin';
+        }
+
+        return 'general';
+    }
+
+    public function departmentProfile(?string $departmentId): ?string
+    {
+        if ($departmentId === null || trim($departmentId) === '') {
+            return null;
+        }
+
+        $query = DepartmentModel::query()->where('status', 'active');
+        $this->applyDepartmentScopeIfEnabled($query);
+
+        $department = $query->find($departmentId);
+
+        if ($department === null) {
+            return null;
+        }
+
+        return $this->departmentProfileFromString($this->profileForDepartmentModel($department));
+    }
+
     /**
      * @return array<int, string>|null Null means unrestricted store/procurement scope.
      */
@@ -163,11 +236,7 @@ class DepartmentRequisitionScopeResolver
             return null;
         }
 
-        $profile = strtolower(trim(implode(' ', array_filter([
-            (string) $department->code,
-            (string) $department->name,
-            (string) $department->service_type,
-        ]))));
+        $profile = $this->profileForDepartmentModel($department);
 
         if ($this->containsAny($profile, ['store', 'stores', 'procurement', 'supply', 'msd', 'warehouse'])) {
             return null;

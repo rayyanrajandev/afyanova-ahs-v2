@@ -535,6 +535,11 @@ const canLaunchOpeningStock = computed(() => canSetOpeningStock.value && canCrea
 const canLaunchReconciliation = computed(() => canReconcileStock.value && !stockExecutionBlockedReason.value);
 const canLaunchProcurementRequest = computed(() => canCreateRequest.value && !procurementSetupBlockedReason.value);
 
+const canSyncFromCatalog = computed(() =>
+    canManageItems.value
+    && (requisitionContext.value?.canSelectAnyDepartment || isFacilitySuperAdmin.value || requisitionContext.value?.departmentProfile === 'pharmacy'),
+);
+
 const mobileProcurementDrawerOpen = ref(false);
 const mobileLedgerDrawerOpen = ref(false);
 
@@ -739,6 +744,7 @@ type DepartmentRequisitionContext = {
     staffDepartmentName: string | null;
     preferredWarehouseId: string | null;
     hasExplicitItemCatalog: boolean;
+    departmentProfile: string | null;
 };
 
 const suppliers = ref<LookupOption[]>([]);
@@ -4765,7 +4771,7 @@ async function loadSuppliersAndWarehouses() {
                     .catch(() => ({ data: [] }))
                 : Promise.resolve({ data: [] }),
             apiRequest<{ data: DepartmentRequisitionContext }>('GET', '/inventory-procurement/department-requisitions/context')
-                .catch(() => ({ data: { canSelectAnyDepartment: isFacilitySuperAdmin.value, lockedDepartment: null, staffDepartmentName: null, preferredWarehouseId: null, hasExplicitItemCatalog: false } })),
+                .catch(() => ({ data: { canSelectAnyDepartment: isFacilitySuperAdmin.value, lockedDepartment: null, staffDepartmentName: null, preferredWarehouseId: null, hasExplicitItemCatalog: false, departmentProfile: null } })),
         ]);
         suppliers.value = (suppliersRes.data ?? [])
             .map((supplier) => normalizeLookupOption(supplier, ['supplierName', 'name'], ['supplierCode', 'code']))
@@ -6641,6 +6647,7 @@ bindInventoryWorkspace({
     canLaunchStockMovement,
     canLaunchOpeningStock,
     canLaunchProcurementRequest,
+    canSyncFromCatalog,
     loading,
     deptReqSearch,
     deptReqLoading,
