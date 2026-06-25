@@ -256,6 +256,7 @@ const searchForm = reactive<SearchForm>({
 });
 
 const createForm = reactive({ name: '', email: '' });
+const createRoleIds = ref<string[]>([]);
 const createSendInvite = ref(true);
 const createErrors = ref<Record<string, string[]>>({});
 const createDialogOpen = ref(false);
@@ -329,6 +330,7 @@ let searchDebounceTimer: number | null = null;
 function resetCreateForm(): void {
     createForm.name = '';
     createForm.email = '';
+    createRoleIds.value = [];
     createSendInvite.value = true;
     createErrors.value = {};
 }
@@ -1286,7 +1288,11 @@ async function createUser() {
 
     try {
         const response = await apiRequest<PlatformUserResponse>('POST', '/platform/admin/users', {
-            body: { name: createForm.name.trim(), email: createForm.email.trim() },
+            body: {
+                name: createForm.name.trim(),
+                email: createForm.email.trim(),
+                roleIds: createRoleIds.value,
+            },
         });
         const createdUserId = Number(response.data.id);
         const canSendInviteNow =
@@ -2419,6 +2425,17 @@ onMounted(async () => {
                                 <Input id="create-user-email" v-model="createForm.email" type="email" placeholder="user@facility.org" />
                                 <p v-if="createErrors.email?.length" class="text-xs text-destructive">{{ createErrors.email[0] }}</p>
                             </div>
+                        </div>
+                        <div class="space-y-2">
+                            <Label class="text-xs font-medium">Roles</Label>
+                            <PlatformRoleAssignmentPicker
+                                v-model="createRoleIds"
+                                :roles="roles"
+                                :policy="roleAssignmentPolicy"
+                                :disabled="createLoading"
+                                id-prefix="create-role"
+                            />
+                            <p v-if="createErrors.roleIds?.length" class="text-xs text-destructive">{{ createErrors.roleIds[0] }}</p>
                         </div>
                         <div class="flex items-start gap-2 rounded-md border p-2.5 text-xs">
                             <Checkbox
