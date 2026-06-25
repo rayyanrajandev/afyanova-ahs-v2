@@ -810,6 +810,8 @@ class RoleHierarchySeeder extends Seeder
                 'inpatient.ward.update-care-plan-status',
                 'inpatient.ward.manage-discharge-checklist',
                 'inpatient.ward.view-audit-logs',
+                'inventory.procurement.read',
+                'inventory.procurement.create-request',
                 'staff.clinical-directory.read',
             ],
 
@@ -830,6 +832,8 @@ class RoleHierarchySeeder extends Seeder
                 'emergency.triage.view-audit-logs',
                 'emergency.triage.manage-transfers',
                 'emergency.triage.view-transfer-audit-logs',
+                'inventory.procurement.read',
+                'inventory.procurement.create-request',
                 'staff.clinical-directory.read',
             ],
 

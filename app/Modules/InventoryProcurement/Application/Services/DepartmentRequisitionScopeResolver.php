@@ -233,7 +233,16 @@ class DepartmentRequisitionScopeResolver
             : null;
 
         if ($department === null) {
-            return null;
+            // No department context — restrict to general clinical categories
+            // so clinical roles (Nurse, Emergency) see only clinically relevant
+            // items rather than unrestricted access (null = all categories).
+            return [
+                InventoryItemCategory::MEDICAL_CONSUMABLE->value,
+                InventoryItemCategory::PPE->value,
+                InventoryItemCategory::LINEN_TEXTILE->value,
+                InventoryItemCategory::PHARMACEUTICAL->value,
+                InventoryItemCategory::MEDICAL_EQUIPMENT->value,
+            ];
         }
 
         $profile = $this->profileForDepartmentModel($department);
