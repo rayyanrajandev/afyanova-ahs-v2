@@ -16,9 +16,7 @@ use Illuminate\Validation\ValidationException;
 class DepartmentRequisitionScopeResolver
 {
     private const CROSS_DEPARTMENT_PERMISSIONS = [
-        'inventory.procurement.manage-items',
         'inventory.procurement.manage-warehouses',
-        'inventory.procurement.update-request-status',
     ];
 
     public function __construct(
