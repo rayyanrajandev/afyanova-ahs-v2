@@ -38,6 +38,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->alias([
+            'agent.token' => App\Http\Middleware\EnsureValidAgentToken::class,
             'facility.entitlement' => EnsureFacilitySubscriptionEntitlement::class,
             'facility.entitlement.any' => EnsureFacilitySubscriptionEntitlementAny::class,
             'inventory.access' => InventoryAccessMiddleware::class,

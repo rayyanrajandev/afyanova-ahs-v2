@@ -61,12 +61,10 @@ type AttendanceDevice = {
 
 type PaginatedResponse = {
     data: AttendanceLog[];
-    meta: {
-        currentPage: number;
-        perPage: number;
-        total: number;
-        lastPage: number;
-    };
+    current_page: number;
+    per_page: number;
+    total: number;
+    last_page: number;
 };
 
 type DeviceListResponse = {
@@ -87,7 +85,8 @@ const canUpdateStaff = ref(permissionNames.has('staff.update'));
 
 const loading = ref(true);
 const logs = ref<AttendanceLog[]>([]);
-const pagination = ref<PaginatedResponse['meta'] | null>(null);
+type PaginationMeta = { currentPage: number; perPage: number; total: number; lastPage: number };
+const pagination = ref<PaginationMeta | null>(null);
 const devices = ref<AttendanceDevice[]>([]);
 const pulling = ref(false);
 const clearing = ref(false);
@@ -95,6 +94,18 @@ const deleting = ref(false);
 const printing = ref(false);
 const exporting = ref(false);
 const selectedIds = reactive(new Set<string>());
+
+const agentStatus = ref<{ mode: string; last_heartbeat_at: string | null; last_device_name: string | null } | null>(null);
+
+async function fetchAgentStatus() {
+    try {
+        agentStatus.value = await apiGet('/attendance/agent/status');
+    } catch {
+        agentStatus.value = null;
+    }
+}
+
+const isCloudMode = computed(() => agentStatus.value?.mode === 'cloud');
 
 const isAllSelected = computed(() => logs.value.length > 0 && selectedIds.size === logs.value.length);
 
@@ -224,11 +235,16 @@ async function loadLogs() {
             type: filters.type !== 'all' ? filters.type : null,
             date_from: filters.date_from || null,
             date_to: filters.date_to || null,
-            page: 1,
-            perPage: filters.perPage,
+            page: filters.page,
+            per_page: filters.perPage,
         });
         logs.value = response.data;
-        pagination.value = response.meta;
+        pagination.value = {
+            currentPage: response.current_page,
+            perPage: response.per_page,
+            total: response.total,
+            lastPage: response.last_page,
+        };
     } catch (error) {
         logs.value = [];
         pagination.value = null;
@@ -364,7 +380,7 @@ async function printLogs(): Promise<void> {
             type: filters.type !== 'all' ? filters.type : null,
             date_from: filters.date_from || null,
             date_to: filters.date_to || null,
-            perPage: 10000,
+            per_page: 10000,
             page: 1,
         });
 
@@ -406,7 +422,7 @@ async function printLogs(): Promise<void> {
             </style>
         </head><body>
             <h1>Attendance Logs</h1>
-            <div class="meta">${deviceLabel} &middot; ${dateLabel} &middot; ${all.meta.total} records</div>
+            <div class="meta">${deviceLabel} &middot; ${dateLabel} &middot; ${all.total} records</div>
             <table><thead><tr>
                 <th>Employee #</th><th>Name</th><th>Type</th><th>Date/Time</th><th>Device</th>
             </tr></thead><tbody>${rows}</tbody></table>
@@ -617,7 +633,7 @@ function closeDeviceDialog() {
 }
 
 onMounted(async () => {
-    await Promise.all([loadDevices(), loadLogs()]);
+    await Promise.all([loadDevices(), loadLogs(), fetchAgentStatus()]);
 });
 </script>
 
@@ -678,7 +694,7 @@ onMounted(async () => {
                             {{ exporting ? 'Exporting...' : 'Export CSV' }}
                         </Button>
                         <Button
-                            v-if="canUpdateStaff"
+                            v-if="canUpdateStaff && !isCloudMode"
                             size="sm"
                             class="h-8 gap-1.5"
                             :disabled="pulling"
@@ -687,6 +703,17 @@ onMounted(async () => {
                             <AppIcon name="refresh-cw" class="size-3.5" />
                             {{ pulling ? 'Pulling...' : 'Pull from devices' }}
                         </Button>
+                        <span
+                            v-else-if="canUpdateStaff && isCloudMode && agentStatus"
+                            class="flex items-center gap-1.5 text-xs text-muted-foreground"
+                            :title="agentStatus.last_heartbeat_at ? `Last agent heartbeat: ${formatDT(agentStatus.last_heartbeat_at)}` : 'Waiting for first agent heartbeat'"
+                        >
+                            <AppIcon name="radio" class="size-3 text-emerald-500" />
+                            Agent auto-sync
+                            <template v-if="agentStatus.last_heartbeat_at">
+                                · {{ formatDT(agentStatus.last_heartbeat_at) }}
+                            </template>
+                        </span>
                         <Button
                             v-if="canUpdateStaff && selectedIds.size > 0"
                             variant="destructive"
@@ -850,7 +877,7 @@ onMounted(async () => {
                                         </p>
                                     </div>
                                     <Button
-                                        v-if="canUpdateStaff"
+                                        v-if="canUpdateStaff && !isCloudMode"
                                         size="sm"
                                         class="h-8 gap-1.5"
                                         :disabled="pulling"
@@ -1118,6 +1145,7 @@ onMounted(async () => {
                             </div>
                             <div class="flex shrink-0 items-center gap-1">
                                 <Button
+                                    v-if="!isCloudMode"
                                     variant="outline"
                                     size="sm"
                                     class="h-7 gap-1 text-xs"

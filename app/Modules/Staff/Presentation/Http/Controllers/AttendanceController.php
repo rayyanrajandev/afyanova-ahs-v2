@@ -288,6 +288,124 @@ class AttendanceController extends Controller
         return response()->json(['results' => $results]);
     }
 
+    public function pushLogs(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'device_id' => 'required|string|max:255',
+            'device_name' => 'nullable|string|max:255',
+            'device_ip' => 'nullable|string|max:45',
+            'device_serial' => 'nullable|string|max:255',
+            'device_model' => 'nullable|string|max:255',
+            'pulled_at' => 'required|date_format:Y-m-d H:i:s',
+            'logs' => 'required|array',
+            'logs.*.uid' => 'required|integer',
+            'logs.*.user_id' => 'required|string',
+            'logs.*.device_user_name' => 'nullable|string|max:255',
+            'logs.*.state' => 'required|integer',
+            'logs.*.type' => 'nullable|integer',
+            'logs.*.record_time' => 'required|date_format:Y-m-d H:i:s',
+        ]);
+
+        $device = AttendanceDeviceModel::firstOrCreate(
+            ['serial' => $validated['device_serial'] ?? $validated['device_name']],
+            [
+                'name' => $validated['device_name'] ?? $validated['device_id'],
+                'ip' => $validated['device_ip'] ?? '0.0.0.0',
+                'port' => 4370,
+                'model' => $validated['device_model'] ?? null,
+                'is_active' => true,
+            ]
+        );
+
+        $pulledAt = $validated['pulled_at'];
+        $synced = 0;
+        $skipped = 0;
+        $lastRecordTime = null;
+
+        foreach ($validated['logs'] as $log) {
+            try {
+                AttendanceLogModel::create([
+                    'device_id' => $device->id,
+                    'uid' => $log['uid'],
+                    'user_id' => (string) $log['user_id'],
+                    'device_user_name' => $log['device_user_name'] ?? null,
+                    'state' => $log['state'],
+                    'type' => $log['type'] ?? null,
+                    'record_time' => $log['record_time'],
+                    'pulled_at' => $pulledAt,
+                ]);
+                $synced++;
+            } catch (\Illuminate\Database\QueryException $e) {
+                if (str_contains($e->getMessage(), 'duplicate')) {
+                    $skipped++;
+                } else {
+                    throw $e;
+                }
+            }
+
+            if (!$lastRecordTime || $log['record_time'] > $lastRecordTime) {
+                $lastRecordTime = $log['record_time'];
+            }
+        }
+
+        $device->update(['last_connected_at' => now()]);
+
+        return response()->json([
+            'message' => "Synced {$synced} records, {$skipped} duplicates skipped.",
+            'device_id' => $device->id,
+            'synced' => $synced,
+            'skipped' => $skipped,
+            'last_record_time' => $lastRecordTime,
+            'server_time' => now()->toDateTimeString(),
+        ]);
+    }
+
+    public function heartbeat(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'device_serial' => 'nullable|string|max:255',
+            'device_name' => 'nullable|string|max:255',
+            'last_sync_at' => 'nullable|date_format:Y-m-d H:i:s',
+            'pending_count' => 'nullable|integer|min:0',
+        ]);
+
+        $device = null;
+        if (!empty($validated['device_serial'])) {
+            $device = AttendanceDeviceModel::firstOrCreate(
+                ['serial' => $validated['device_serial']],
+                [
+                    'name' => $validated['device_name'] ?? $validated['device_serial'],
+                    'ip' => '0.0.0.0',
+                    'port' => 4370,
+                    'is_active' => true,
+                ]
+            );
+
+            $device->update(['last_connected_at' => now()]);
+        }
+
+        return response()->json([
+            'status' => 'ok',
+            'server_time' => now()->toDateTimeString(),
+            'device_id' => $device?->id,
+        ]);
+    }
+
+    public function agentStatus(): JsonResponse
+    {
+        $mode = config('attendance.agent_token') ? 'cloud' : 'local';
+
+        $lastActiveDevice = AttendanceDeviceModel::whereNotNull('last_connected_at')
+            ->orderBy('last_connected_at', 'desc')
+            ->first();
+
+        return response()->json([
+            'mode' => $mode,
+            'last_heartbeat_at' => $lastActiveDevice?->last_connected_at?->toDateTimeString(),
+            'last_device_name' => $lastActiveDevice?->name,
+        ]);
+    }
+
     public function testConnection(string $id, ZKService $zkService): JsonResponse
     {
         $device = AttendanceDeviceModel::findOrFail($id);

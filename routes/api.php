@@ -1865,6 +1865,8 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::post('attendance/clear', [AttendanceController::class, 'clear'])
         ->middleware('can:staff.update')
         ->name('attendance.clear');
+    Route::get('attendance/agent/status', [AttendanceController::class, 'agentStatus'])
+        ->name('attendance.agent.status');
     Route::delete('staff/attendance/logs', [AttendanceController::class, 'bulkDestroy'])
         ->middleware('can:staff.update')
         ->name('staff.attendance.logs.bulk-destroy');
@@ -2037,4 +2039,11 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('departments/{id}/audit-logs', [DepartmentController::class, 'auditLogs'])
         ->middleware('can:departments.view-audit-logs')
         ->name('departments.audit-logs');
+});
+
+Route::middleware('agent.token')->prefix('v1')->group(function (): void {
+    Route::post('attendance/agent/push-logs', [AttendanceController::class, 'pushLogs'])
+        ->name('attendance.agent.push-logs');
+    Route::post('attendance/agent/heartbeat', [AttendanceController::class, 'heartbeat'])
+        ->name('attendance.agent.heartbeat');
 });
