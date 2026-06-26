@@ -40,6 +40,12 @@ use App\Modules\Pos\Presentation\Http\Requests\UpdatePosCafeteriaMenuItemRequest
 use App\Modules\Pos\Presentation\Http\Requests\UpdatePosRegisterRequest;
 use App\Modules\Pos\Presentation\Http\Requests\VoidPosSaleRequest;
 use App\Modules\Pos\Presentation\Http\Transformers\PosCafeteriaMenuItemResponseTransformer;
+use App\Modules\Pos\Application\UseCases\CreateFrontdeskQuickPosSaleUseCase;
+use App\Modules\Pos\Application\UseCases\ListFrontdeskQuickCandidatesUseCase;
+use App\Modules\Pos\Application\UseCases\VerifyFrontdeskQuickPosPaymentUseCase;
+use App\Modules\Pos\Presentation\Http\Requests\StoreFrontdeskQuickPosSaleRequest;
+use App\Modules\Pos\Presentation\Http\Transformers\PosFrontdeskQuickCandidateResponseTransformer;
+use App\Modules\Pos\Presentation\Http\Transformers\PosFrontdeskQuickPaymentVerificationTransformer;
 use App\Modules\Pos\Presentation\Http\Transformers\PosLabQuickCandidateResponseTransformer;
 use App\Modules\Pos\Presentation\Http\Transformers\PosPharmacyOtcCatalogItemResponseTransformer;
 use App\Modules\Pos\Presentation\Http\Transformers\PosRegisterResponseTransformer;
@@ -325,6 +331,53 @@ class PosController extends Controller
         return response()->json([
             'data' => PosSaleResponseTransformer::transform($sale),
         ], 201);
+    }
+
+    public function frontdeskQuickCandidates(Request $request, ListFrontdeskQuickCandidatesUseCase $useCase): JsonResponse
+    {
+        $result = $useCase->execute($request->all());
+
+        return response()->json([
+            'data' => array_map(
+                [PosFrontdeskQuickCandidateResponseTransformer::class, 'transform'],
+                $result['data'],
+            ),
+            'meta' => $result['meta'],
+        ]);
+    }
+
+    public function storeFrontdeskQuickSale(
+        StoreFrontdeskQuickPosSaleRequest $request,
+        CreateFrontdeskQuickPosSaleUseCase $useCase
+    ): JsonResponse {
+        try {
+            $sale = $useCase->execute(
+                payload: $this->toFrontdeskQuickSalePayload($request->validated()),
+                actorId: $request->user()?->id,
+            );
+        } catch (TenantScopeRequiredForIsolationException $exception) {
+            return $this->tenantScopeRequiredError($exception->getMessage());
+        } catch (PosOperationException $exception) {
+            return $this->validationError($exception->field(), $exception->getMessage());
+        }
+
+        abort_if($sale === null, 404, 'POS register not found.');
+
+        return response()->json([
+            'data' => PosSaleResponseTransformer::transform($sale),
+        ], 201);
+    }
+
+    public function verifyFrontdeskQuickPayment(
+        string $sourceKind,
+        string $orderId,
+        VerifyFrontdeskQuickPosPaymentUseCase $useCase
+    ): JsonResponse {
+        $result = $useCase->execute($sourceKind, $orderId);
+
+        return response()->json([
+            'data' => PosFrontdeskQuickPaymentVerificationTransformer::transform($result),
+        ]);
     }
 
     public function storeCafeteriaSale(
@@ -619,6 +672,35 @@ class PosController extends Controller
             'metadata' => $validated['metadata'] ?? null,
             'items' => array_map(function (array $item): array {
                 return [
+                    'order_id' => $item['orderId'],
+                    'note' => $item['note'] ?? null,
+                ];
+            }, $validated['items']),
+            'payments' => array_map(function (array $payment): array {
+                return [
+                    'payment_method' => $payment['paymentMethod'],
+                    'amount' => $payment['amount'],
+                    'payment_reference' => $payment['paymentReference'] ?? null,
+                    'paid_at' => $payment['paidAt'] ?? null,
+                    'note' => $payment['note'] ?? null,
+                    'metadata' => $payment['metadata'] ?? null,
+                ];
+            }, $validated['payments']),
+        ];
+    }
+
+    private function toFrontdeskQuickSalePayload(array $validated): array
+    {
+        return [
+            'pos_register_id' => $validated['registerId'],
+            'currency_code' => $validated['currencyCode'] ?? null,
+            'sold_at' => $validated['soldAt'] ?? null,
+            'notes' => $validated['notes'] ?? null,
+            'metadata' => $validated['metadata'] ?? null,
+            'create_invoice' => $validated['createInvoice'] ?? false,
+            'items' => array_map(function (array $item): array {
+                return [
+                    'kind' => $item['kind'],
                     'order_id' => $item['orderId'],
                     'note' => $item['note'] ?? null,
                 ];

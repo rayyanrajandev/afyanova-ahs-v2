@@ -14,7 +14,9 @@ use App\Modules\Billing\Application\Exceptions\EncounterNotEligibleForBillingInv
 use App\Modules\Billing\Application\Exceptions\BillingInvoicePricingResolutionException;
 use App\Modules\Billing\Application\Exceptions\PatientNotEligibleForBillingInvoiceException;
 use App\Modules\Billing\Application\Support\BillingFinancePostingSnapshotService;
+use App\Modules\Billing\Application\UseCases\AddInvoiceAdjustmentUseCase;
 use App\Modules\Billing\Application\UseCases\CreateBillingInvoiceUseCase;
+use App\Modules\Billing\Application\UseCases\GetBillingAgingReportUseCase;
 use App\Modules\Billing\Application\UseCases\GetBillingFinancialControlSummaryUseCase;
 use App\Modules\Billing\Application\UseCases\GetBillingInvoiceFinancePostingSummaryUseCase;
 use App\Modules\Billing\Application\UseCases\GetBillingInvoiceUseCase;
@@ -22,6 +24,7 @@ use App\Modules\Billing\Application\UseCases\GetBillingRevenueRecognitionSummary
 use App\Modules\Billing\Application\UseCases\ListBillingChargeCaptureCandidatesUseCase;
 use App\Modules\Billing\Application\UseCases\ListBillingInvoiceAuditLogsUseCase;
 use App\Modules\Billing\Application\UseCases\ListBillingInvoicesUseCase;
+use App\Modules\Billing\Application\UseCases\ListInvoiceAdjustmentsUseCase;
 use App\Modules\Billing\Application\UseCases\ListBillingInvoiceStatusCountsUseCase;
 use App\Modules\Billing\Application\UseCases\ListBillingInvoicePaymentsUseCase;
 use App\Modules\Billing\Application\UseCases\PreviewBillingInvoiceUseCase;
@@ -30,11 +33,14 @@ use App\Modules\Billing\Application\UseCases\ReverseBillingInvoicePaymentUseCase
 use App\Modules\Billing\Application\UseCases\UpdateBillingInvoiceStatusUseCase;
 use App\Modules\Billing\Application\UseCases\UpdateBillingInvoiceUseCase;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceRepositoryInterface;
+use App\Modules\Billing\Presentation\Http\Requests\AddInvoiceAdjustmentRequest;
 use App\Modules\Billing\Presentation\Http\Requests\RecordBillingInvoicePaymentRequest;
 use App\Modules\Billing\Presentation\Http\Requests\ReverseBillingInvoicePaymentRequest;
 use App\Modules\Billing\Presentation\Http\Requests\StoreBillingInvoiceRequest;
 use App\Modules\Billing\Presentation\Http\Requests\UpdateBillingInvoiceRequest;
 use App\Modules\Billing\Presentation\Http\Requests\UpdateBillingInvoiceStatusRequest;
+use App\Modules\Billing\Presentation\Http\Transformers\BillingAgingReportResponseTransformer;
+use App\Modules\Billing\Presentation\Http\Transformers\BillingInvoiceAdjustmentResponseTransformer;
 use App\Modules\Billing\Presentation\Http\Transformers\BillingInvoiceAuditLogResponseTransformer;
 use App\Modules\Billing\Presentation\Http\Transformers\BillingInvoicePaymentResponseTransformer;
 use App\Modules\Billing\Presentation\Http\Transformers\BillingInvoiceResponseTransformer;
@@ -525,6 +531,56 @@ class BillingInvoiceController extends Controller
                 'payment' => BillingInvoicePaymentResponseTransformer::transform($result['payment']),
             ],
         ], 201);
+    }
+
+    public function addAdjustment(string $id, AddInvoiceAdjustmentRequest $request, AddInvoiceAdjustmentUseCase $useCase): JsonResponse
+    {
+        $result = $useCase->execute(
+            invoiceId: $id,
+            type: $request->string('type')->value(),
+            amount: (float) $request->input('amount'),
+            reason: $request->string('reason')->value(),
+            actorId: $request->user()?->id,
+        );
+
+        abort_if($result === null, 404, 'Billing invoice not found.');
+
+        return response()->json([
+            'data' => [
+                'invoice' => BillingInvoiceResponseTransformer::transform($result['invoice']),
+                'adjustment' => BillingInvoiceAdjustmentResponseTransformer::transform($result['adjustment']),
+            ],
+        ], 201);
+    }
+
+    public function listAdjustments(string $id, ListInvoiceAdjustmentsUseCase $useCase): JsonResponse
+    {
+        $result = $useCase->execute($id);
+
+        abort_if($result === null, 404, 'Billing invoice not found.');
+
+        return response()->json([
+            'data' => array_map([BillingInvoiceAdjustmentResponseTransformer::class, 'transform'], $result['data']),
+        ]);
+    }
+
+    public function agingReport(Request $request, GetBillingAgingReportUseCase $useCase): JsonResponse
+    {
+        $validated = $request->validate([
+            'currencyCode' => ['nullable', 'string', 'size:3'],
+            'asOfDate' => ['nullable', 'date'],
+            'departmentFilter' => ['nullable', 'string'],
+        ]);
+
+        $report = $useCase->execute(
+            currencyCode: $validated['currencyCode'] ?? null,
+            asOfDate: $validated['asOfDate'] ?? null,
+            departmentFilter: $validated['departmentFilter'] ?? null,
+        );
+
+        return response()->json([
+            'data' => BillingAgingReportResponseTransformer::transform($report),
+        ]);
     }
 
     public function reversePayment(

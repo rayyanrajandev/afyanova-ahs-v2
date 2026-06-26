@@ -128,6 +128,7 @@ class CreateBillingInvoiceUseCase
             admissionId: $this->normalizeNullableString($payload['admission_id'] ?? null),
             billingPayerContractId: $this->normalizeNullableString($payload['billing_payer_contract_id'] ?? null),
             currencyCode: $payload['currency_code'],
+            encounterId: $this->normalizeNullableString($payload['encounter_id'] ?? null),
         );
         $this->assertNoExistingSourceCharges(
             patientId: $patientId,

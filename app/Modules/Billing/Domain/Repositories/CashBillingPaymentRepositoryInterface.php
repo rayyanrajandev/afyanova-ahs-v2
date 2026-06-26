@@ -10,4 +10,11 @@ interface CashBillingPaymentRepositoryInterface
      * @return array<int, array<string, mixed>>
      */
     public function findByAccountId(string $accountId): array;
+
+    /**
+     * Find a payment by ID
+     *
+     * @return array<string, mixed>|null
+     */
+    public function findById(string $id): ?array;
 }

@@ -10,10 +10,19 @@
     $payerLabel = $payer['payerName'] ?? (!empty($payer['payerType']) ? F::enum($payer['payerType']) : 'Self pay / direct billing');
 @endphp
 
+@php
+    $tin = config('billing-integrations.tra_vfd.totalvfd.tin', '');
+    $vrn = config('billing-integrations.tra_vfd.totalvfd.vrn', '');
+    $businessName = config('billing-integrations.tra_vfd.totalvfd.business_name', '');
+    $businessMobile = config('billing-integrations.tra_vfd.totalvfd.business_mobile', '');
+    $taxOffice = config('billing-integrations.tra_vfd.totalvfd.tax_office', '');
+    $fiscalReceipt = $invoice['fiscalReceipt'] ?? null;
+@endphp
+
 <x-documents.pdf-layout
     :branding="$documentBranding"
     eyebrow="Billing Document"
-    title="Invoice"
+    title="Tax Invoice"
     :subtitle="$subtitle !== '' ? $subtitle : 'No linked encounter'"
     :document-number="$invoice['invoiceNumber'] ?? $invoice['id']"
     :status-label="F::enum($invoice['status'] ?? 'draft')"
@@ -39,7 +48,7 @@
                     <table class="kv">
                         <tr><td class="k">Subtotal</td><td class="v">{{ F::money($invoice['subtotalAmount'] ?? null, $currencyCode) }}</td></tr>
                         <tr><td class="k">Discount</td><td class="v">{{ F::money($invoice['discountAmount'] ?? null, $currencyCode) }}</td></tr>
-                        <tr><td class="k">Tax</td><td class="v">{{ F::money($invoice['taxAmount'] ?? null, $currencyCode) }}</td></tr>
+                        <tr><td class="k">Tax (VAT)</td><td class="v">{{ F::money($invoice['taxAmount'] ?? null, $currencyCode) }}</td></tr>
                         <tr><td class="k">Grand Total</td><td class="v">{{ F::money($invoice['totalAmount'] ?? null, $currencyCode) }}</td></tr>
                         <tr><td class="k">Collected</td><td class="v">{{ F::money($invoice['paidAmount'] ?? null, $currencyCode) }}</td></tr>
                         <tr><td class="k">Outstanding</td><td class="v">{{ F::money($invoice['balanceAmount'] ?? null, $currencyCode) }}</td></tr>
@@ -47,6 +56,15 @@
                 </td>
             </tr>
         </table>
+
+        @if($tin || $businessName)
+            <div style="margin-top: 8px; border-top: 1px solid #d8dee8; padding-top: 8px; font-size: 9px;">
+                @if($businessName)<span><strong>{{ $businessName }}</strong></span><br>@endif
+                @if($tin)<span>TIN: {{ $tin }}@if($vrn) | VRN: {{ $vrn }}@endif</span><br>@endif
+                @if($taxOffice)<span>Tax Office: {{ $taxOffice }}</span>@endif
+                @if($businessMobile)<span> | Mobile: {{ $businessMobile }}</span>@endif
+            </div>
+        @endif
 
         @if(!empty($invoice['statusReason']) || !empty($invoice['lastPaymentReference']))
             <div style="margin-top: 8px; border-top: 1px solid #d8dee8; padding-top: 8px;">
@@ -98,6 +116,9 @@
                                         @endif
                                     </div>
                                 @endif
+                                @if(!empty($lineItem['nhifCode']))
+                                    <div class="small muted">NHIF: {{ $lineItem['nhifCode'] }}</div>
+                                @endif
                             </td>
                             <td>{{ rtrim(rtrim(number_format($quantity, 2, '.', ''), '0'), '.') }}</td>
                             <td>{{ F::money($unitPrice, $currencyCode) }}</td>
@@ -110,4 +131,22 @@
             <div class="muted">No invoice line items were recorded.</div>
         @endif
     </div>
+
+    @if($fiscalReceipt)
+        <div class="section">
+            <p class="section-title">Fiscal Receipt (TRA)</p>
+            <p class="section-subtitle">Electronic Fiscal Device receipt details</p>
+            <table class="kv">
+                <tr><td class="k">Receipt No.</td><td class="v">{{ $fiscalReceipt['rctvnum'] ?? 'N/A' }}</td></tr>
+                <tr><td class="k">Z Number</td><td class="v">{{ $fiscalReceipt['zNumber'] ?? 'N/A' }}</td></tr>
+                <tr><td class="k">Date</td><td class="v">{{ $fiscalReceipt['localDate'] ?? '' }} {{ $fiscalReceipt['localTime'] ?? '' }}</td></tr>
+                <tr><td class="k">GC / DC</td><td class="v">{{ $fiscalReceipt['gc'] ?? '' }} / {{ $fiscalReceipt['dc'] ?? '' }}</td></tr>
+            </table>
+            @if(!empty($fiscalReceipt['verificationLink']))
+                <div style="margin-top: 8px; text-align: center;">
+                    <p class="small muted">Verify: {{ $fiscalReceipt['verificationLink'] }}</p>
+                </div>
+            @endif
+        </div>
+    @endif
 </x-documents.pdf-layout>

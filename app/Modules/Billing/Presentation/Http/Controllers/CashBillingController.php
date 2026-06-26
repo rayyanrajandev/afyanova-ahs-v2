@@ -2,18 +2,24 @@
 
 namespace App\Modules\Billing\Presentation\Http\Controllers;
 
+use App\Modules\Billing\Application\UseCases\ConvertCashBillingToInvoiceUseCase;
 use App\Modules\Billing\Application\UseCases\CreateCashBillingAccountUseCase;
 use App\Modules\Billing\Application\UseCases\ListCashBillingAccountsUseCase;
 use App\Modules\Billing\Application\UseCases\RecordCashChargeUseCase;
 use App\Modules\Billing\Application\UseCases\RecordCashPaymentUseCase;
+use App\Modules\Billing\Application\UseCases\RefundCashBillingPaymentUseCase;
+use App\Modules\Billing\Application\UseCases\VoidCashBillingAccountUseCase;
 use App\Modules\Billing\Domain\Repositories\CashBillingAccountRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\CashBillingChargeRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\CashBillingPaymentRepositoryInterface;
 use App\Modules\Billing\Presentation\Http\Concerns\RespondsWithBillingApi;
+use App\Modules\Billing\Presentation\Http\Requests\ConvertCashBillingToInvoiceRequest;
 use App\Modules\Billing\Presentation\Http\Requests\CreateCashBillingAccountRequest;
 use App\Modules\Billing\Presentation\Http\Requests\ListCashBillingAccountsRequest;
 use App\Modules\Billing\Presentation\Http\Requests\RecordCashBillingChargeRequest;
 use App\Modules\Billing\Presentation\Http\Requests\RecordCashBillingPaymentRequest;
+use App\Modules\Billing\Presentation\Http\Requests\RefundCashBillingPaymentRequest;
+use App\Modules\Billing\Presentation\Http\Requests\VoidCashBillingAccountRequest;
 use App\Modules\Billing\Presentation\Http\Transformers\CashBillingAccountResponseTransformer;
 use App\Modules\Billing\Presentation\Http\Transformers\CashBillingChargeResponseTransformer;
 use App\Modules\Billing\Presentation\Http\Transformers\CashBillingPaymentResponseTransformer;
@@ -28,6 +34,9 @@ class CashBillingController
         private readonly CreateCashBillingAccountUseCase $createAccountUseCase,
         private readonly RecordCashChargeUseCase $recordChargeUseCase,
         private readonly RecordCashPaymentUseCase $recordPaymentUseCase,
+        private readonly ConvertCashBillingToInvoiceUseCase $convertToInvoiceUseCase,
+        private readonly VoidCashBillingAccountUseCase $voidAccountUseCase,
+        private readonly RefundCashBillingPaymentUseCase $refundPaymentUseCase,
         private readonly CashBillingAccountRepositoryInterface $accountRepository,
         private readonly CashBillingChargeRepositoryInterface $chargeRepository,
         private readonly CashBillingPaymentRepositoryInterface $paymentRepository,
@@ -133,5 +142,71 @@ class CashBillingController
             data: CashBillingPaymentResponseTransformer::transform($payment),
             status: 201,
         );
+    }
+
+    /**
+     * Convert a legacy cash billing account to a billing invoice.
+     *
+     * This is the migration path for existing cash billing accounts.
+     * After conversion, the account is archived and all future charges
+     * should go through the Frontdesk Quick POS workflow.
+     */
+    public function convertToInvoice(string $accountId, ConvertCashBillingToInvoiceRequest $request): JsonResponse
+    {
+        $invoiceResult = $this->convertToInvoiceUseCase->execute([
+            'cash_billing_account_id' => $accountId,
+            'actor_id' => $request->user()?->id,
+        ]);
+
+        return $this->successResponse(
+            data: [
+                'invoice' => $invoiceResult['invoice'] ?? $invoiceResult,
+                'draft_reused' => $invoiceResult['draft_reused'] ?? false,
+                'message' => 'Cash billing account has been converted to invoice. The account is now archived and cannot be modified.',
+            ],
+            status: 201,
+        );
+    }
+
+    /**
+     * Void a legacy cash billing account
+     */
+    public function voidAccount(string $accountId, VoidCashBillingAccountRequest $request): JsonResponse
+    {
+        try {
+            $account = $this->voidAccountUseCase->execute([
+                'cash_billing_account_id' => $accountId,
+                'void_reason' => $request->input('void_reason'),
+            ]);
+
+            return $this->successResponse(
+                data: CashBillingAccountResponseTransformer::transform($account),
+            );
+        } catch (\RuntimeException $e) {
+            return $this->unprocessableResponse($e->getMessage(), 'CASH_BILLING_VOID_FAILED');
+        }
+    }
+
+    /**
+     * Refund a payment on a legacy cash billing account
+     */
+    public function refundPayment(string $accountId, RefundCashBillingPaymentRequest $request): JsonResponse
+    {
+        try {
+            $validated = $request->validated();
+            $validated['cash_billing_account_id'] = $accountId;
+            $validated['confirmed_by_user_id'] = $request->user()?->id;
+
+            $result = $this->refundPaymentUseCase->execute($validated);
+
+            return $this->successResponse(
+                data: [
+                    'payment' => CashBillingPaymentResponseTransformer::transform($result['payment']),
+                    'account' => CashBillingAccountResponseTransformer::transform($result['account']),
+                ],
+            );
+        } catch (\RuntimeException $e) {
+            return $this->unprocessableResponse($e->getMessage(), 'CASH_BILLING_REFUND_FAILED');
+        }
     }
 }

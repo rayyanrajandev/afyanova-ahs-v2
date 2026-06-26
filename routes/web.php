@@ -131,6 +131,10 @@ Route::get('pos', function () {
     return Inertia::render('pos/Index');
 })->middleware(['auth', 'verified', 'can:pos.registers.read', 'facility.entitlement:pos.registers_sessions'])->name('pos.page');
 
+Route::get('pos/frontdesk-quick', function () {
+    return Inertia::render('pos/frontdesk-quick/Index');
+})->middleware(['auth', 'verified', 'can:pos.frontdesk-quick.read', 'facility.entitlement:pos.registers_sessions'])->name('pos.frontdesk-quick.page');
+
 Route::get('pos/sales/{id}/print', [PosSaleDocumentController::class, 'show'])
     ->middleware(['auth', 'verified', 'can:pos.sales.read', 'facility.entitlement:pos.sales'])
     ->name('pos.sales.print.page');
@@ -154,6 +158,22 @@ Route::get('billing-refunds', function () {
 Route::get('billing-discounts', function () {
     return Inertia::render('billing-discounts/Index');
 })->middleware(['auth', 'verified', 'can:billing.discounts.read', 'facility.entitlement:billing.discounts_refunds'])->name('billing-discounts.page');
+
+Route::get('billing-adjustments', function () {
+    return Inertia::render('billing-adjustments/Index');
+})->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.invoices'])->name('billing-adjustments.page');
+
+Route::get('billing-write-offs', function () {
+    return Inertia::render('billing-write-offs/Index');
+})->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.invoices'])->name('billing-write-offs.page');
+
+Route::get('billing-aging-report', function () {
+    return Inertia::render('billing-aging-report/Index');
+})->middleware(['auth', 'verified', 'can:billing.financial-controls.read', 'facility.entitlement:billing.financial_controls'])->name('billing-aging-report.page');
+
+Route::get('billing-daily-close', function () {
+    return Inertia::render('billing-daily-close/Index');
+})->middleware(['auth', 'verified', 'can:billing.financial-controls.read', 'facility.entitlement:billing.financial_controls'])->name('billing-daily-close.page');
 
 Route::get('billing-financial-reports', function () {
     return Inertia::render('billing-financial-reports/Index');

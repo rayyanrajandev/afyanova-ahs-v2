@@ -16,4 +16,11 @@ class CashBillingPaymentRepository implements CashBillingPaymentRepositoryInterf
             ->get()
             ->toArray();
     }
+
+    public function findById(string $id): ?array
+    {
+        $payment = CashBillingPaymentModel::find($id);
+
+        return $payment?->toArray();
+    }
 }

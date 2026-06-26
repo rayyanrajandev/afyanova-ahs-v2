@@ -58,7 +58,8 @@ class EloquentBillingInvoiceRepository implements BillingInvoiceRepositoryInterf
         ?string $appointmentId,
         ?string $admissionId,
         ?string $billingPayerContractId,
-        string $currencyCode
+        string $currencyCode,
+        ?string $encounterId = null,
     ): ?array {
         $query = BillingInvoiceModel::query()
             ->where('patient_id', $patientId)
@@ -70,6 +71,7 @@ class EloquentBillingInvoiceRepository implements BillingInvoiceRepositoryInterf
         $this->applyNullableColumnMatch($query, 'appointment_id', $appointmentId);
         $this->applyNullableColumnMatch($query, 'admission_id', $admissionId);
         $this->applyNullableColumnMatch($query, 'billing_payer_contract_id', $billingPayerContractId);
+        $this->applyNullableColumnMatch($query, 'encounter_id', $encounterId);
 
         $invoice = $query
             ->orderByDesc('updated_at')

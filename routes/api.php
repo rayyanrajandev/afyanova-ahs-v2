@@ -1006,6 +1006,15 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::post('pos/lab-quick/sales', [PosController::class, 'storeLabQuickSale'])
         ->middleware('can:pos.lab-quick.create')
         ->name('pos.lab-quick.sales.store');
+    Route::get('pos/frontdesk-quick/candidates', [PosController::class, 'frontdeskQuickCandidates'])
+        ->middleware('can:pos.frontdesk-quick.read')
+        ->name('pos.frontdesk-quick.candidates.index');
+    Route::post('pos/frontdesk-quick/sales', [PosController::class, 'storeFrontdeskQuickSale'])
+        ->middleware('can:pos.frontdesk-quick.create')
+        ->name('pos.frontdesk-quick.sales.store');
+    Route::get('pos/frontdesk-quick/verify/{sourceKind}/{orderId}', [PosController::class, 'verifyFrontdeskQuickPayment'])
+        ->middleware('can:pos.frontdesk-quick.read')
+        ->name('pos.frontdesk-quick.verify');
     Route::post('pos/cafeteria/sales', [PosController::class, 'storeCafeteriaSale'])
         ->middleware('can:pos.cafeteria.create')
         ->name('pos.cafeteria.sales.store');

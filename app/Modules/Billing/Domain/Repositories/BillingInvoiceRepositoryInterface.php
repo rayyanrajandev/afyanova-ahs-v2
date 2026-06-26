@@ -15,7 +15,8 @@ interface BillingInvoiceRepositoryInterface
         ?string $appointmentId,
         ?string $admissionId,
         ?string $billingPayerContractId,
-        string $currencyCode
+        string $currencyCode,
+        ?string $encounterId = null,
     ): ?array;
 
     public function findByLineItemSource(

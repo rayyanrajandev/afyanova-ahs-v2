@@ -33,6 +33,10 @@ class CashBillingPaymentModel extends Model
         'confirmed_by_user_id',
         'receipt_number',
         'notes',
+        'refunded_amount',
+        'refunded_at',
+        'refunded_by_user_id',
+        'refund_reason',
     ];
 
     /**
@@ -42,7 +46,9 @@ class CashBillingPaymentModel extends Model
     {
         return [
             'amount_paid' => 'decimal:2',
+            'refunded_amount' => 'decimal:2',
             'paid_at' => 'datetime',
+            'refunded_at' => 'datetime',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
