@@ -87,7 +87,7 @@ def fetch_all_attendances(conn) -> list[dict]:
 def send_to_cloud(payload: dict, cfg: dict) -> dict | None:
     url = cfg["cloud_api_url"].rstrip("/") + "/v1/attendance/agent/push-logs"
     token = cfg["agent_token"]
-    timeout = cfg.get("api_timeout", 30)
+    timeout = cfg.get("api_timeout", 60)
 
     try:
         resp = requests.post(
@@ -163,52 +163,60 @@ def sync_device(cfg: dict, store: Store, device_serial: str, device_name: str, d
     if stored:
         log.info("Stored %d new records locally", stored)
 
-    pending = store.get_pending_logs(limit=1000)
-    if not pending:
-        conn.disconnect()
-        return {"synced": 0, "skipped": 0, "stored": stored, "status": "up_to_date"}
-
-    log.info("Sending %d pending records to cloud...", len(pending))
-    payload = {
-        "device_id": device_id,
-        "device_name": device_name,
-        "device_ip": cfg["device_ip"],
-        "device_serial": device_serial,
-        "device_model": None,
-        "pulled_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-        "logs": [
-            {
-                "uid": r["uid"],
-                "user_id": r["user_id"],
-                "device_user_name": None,
-                "state": r["state"],
-                "type": r["type"],
-                "record_time": r["record_time"],
-            }
-            for r in pending
-        ],
-    }
+    BATCH_SIZE = 100
 
     try:
         conn.disconnect()
     except Exception:
         pass
 
-    result = send_to_cloud(payload, cfg)
-    if result is None:
-        store.mark_failed([r["id"] for r in pending], "cloud_error")
-        return {"synced": 0, "stored": stored, "status": "send_failed"}
+    total_synced = 0
+    total_skipped = 0
 
-    sent_at = result.get("server_time") or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    store.mark_sent([r["id"] for r in pending], sent_at)
+    while True:
+        batch = store.get_pending_logs(limit=BATCH_SIZE)
+        if not batch:
+            break
 
-    synced = result.get("synced", len(pending))
-    skipped = result.get("skipped", 0)
-    log.info("Cloud synced %d, skipped %d duplicates", synced, skipped)
+        log.info("Sending %d records to cloud...", len(batch))
+        payload = {
+            "device_id": device_id,
+            "device_name": device_name,
+            "device_ip": cfg["device_ip"],
+            "device_serial": device_serial,
+            "device_model": None,
+            "pulled_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+            "logs": [
+                {
+                    "uid": r["uid"],
+                    "user_id": r["user_id"],
+                    "device_user_name": None,
+                    "state": r["state"],
+                    "type": r["type"],
+                    "record_time": r["record_time"],
+                }
+                for r in batch
+            ],
+        }
 
+        result = send_to_cloud(payload, cfg)
+        if result is None:
+            store.mark_failed([r["id"] for r in batch], "cloud_error")
+            return {"synced": total_synced, "stored": stored, "pending": store.count_pending(), "status": "send_failed"}
+
+        sent_at = result.get("server_time") or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        store.mark_sent([r["id"] for r in batch], sent_at)
+
+        synced = result.get("synced", len(batch))
+        skipped = result.get("skipped", 0)
+        total_synced += synced
+        total_skipped += skipped
+        log.info("Batch done: synced %d, skipped %d", synced, skipped)
+
+    log.info("All done: synced %d, skipped %d", total_synced, total_skipped)
     return {
-        "synced": synced,
-        "skipped": skipped,
+        "synced": total_synced,
+        "skipped": total_skipped,
         "stored": stored,
         "total_synced": store.get_total_synced(),
         "pending": store.count_pending(),
