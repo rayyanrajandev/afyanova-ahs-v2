@@ -4,7 +4,7 @@ import logging
 import random
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
@@ -67,6 +67,28 @@ def fetch_device_info(conn) -> tuple:
     return name, serial, model
 
 
+def detect_device_utc_offset(conn) -> int:
+    try:
+        device_time_str = conn.get_time()
+        if device_time_str:
+            device_dt = datetime.strptime(device_time_str, "%Y-%m-%d %H:%M:%S")
+            utc_dt = datetime.utcnow()
+            offset_minutes = int((device_dt - utc_dt).total_seconds() / 60)
+            if abs(offset_minutes) > 1:
+                log.info("Device UTC offset: %+d min", offset_minutes)
+                return offset_minutes
+    except ZKError:
+        pass
+    return 0
+
+
+def to_utc(record_time: str, offset_minutes: int) -> str:
+    if offset_minutes == 0:
+        return record_time
+    dt = datetime.strptime(record_time, "%Y-%m-%d %H:%M:%S") - timedelta(minutes=offset_minutes)
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
 def fetch_device_users(conn) -> dict:
     mapping = {}
     try:
@@ -81,7 +103,7 @@ def fetch_device_users(conn) -> dict:
     return mapping
 
 
-def fetch_all_attendances(conn, user_names: dict | None = None) -> list[dict]:
+def fetch_all_attendances(conn, user_names: dict | None = None, utc_offset: int = 0) -> list[dict]:
     logs = []
     attendances = conn.get_attendance()
     for a in attendances:
@@ -89,6 +111,7 @@ def fetch_all_attendances(conn, user_names: dict | None = None) -> list[dict]:
             continue
         uid = str(a.user_id)
         record_time = a.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        record_time = to_utc(record_time, utc_offset)
         logs.append({
             "uid": a.uid,
             "user_id": uid,
@@ -166,7 +189,7 @@ def send_heartbeat(cfg: dict, store: Store, device_serial: str, device_name: str
     return False
 
 
-def sync_device(cfg: dict, store: Store, device_serial: str, device_name: str, device_id: str, user_names: dict | None = None) -> dict:
+def sync_device(cfg: dict, store: Store, device_serial: str, device_name: str, device_id: str, user_names: dict | None = None, utc_offset: int = 0) -> dict:
     conn = connect_device(cfg)
 
     try:
@@ -174,7 +197,7 @@ def sync_device(cfg: dict, store: Store, device_serial: str, device_name: str, d
     except ZKError:
         pass
 
-    logs = fetch_all_attendances(conn, user_names)
+    logs = fetch_all_attendances(conn, user_names, utc_offset)
     log.info("Device has %d total records", len(logs))
 
     stored = store.store_logs(device_id, logs)
@@ -265,7 +288,9 @@ def run_cycle(cfg: dict, store: Store, device_serial: list, device_name: list, d
         if user_names:
             log.info("Fetched %d user names from device", len(user_names))
 
-        device_result = sync_device(cfg, store, device_serial[0], device_name[0], device_id[0], user_names)
+        utc_offset = detect_device_utc_offset(conn)
+
+        device_result = sync_device(cfg, store, device_serial[0], device_name[0], device_id[0], user_names, utc_offset)
         result.update(device_result)
 
     except ZKError as e:
