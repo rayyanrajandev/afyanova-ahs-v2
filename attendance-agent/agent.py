@@ -67,16 +67,32 @@ def fetch_device_info(conn) -> tuple:
     return name, serial, model
 
 
-def fetch_all_attendances(conn) -> list[dict]:
+def fetch_device_users(conn) -> dict:
+    mapping = {}
+    try:
+        users = conn.get_users()
+        for u in users:
+            uid = str(u.user_id)
+            name = (u.name or "").strip()
+            if name:
+                mapping[uid] = name
+    except ZKError:
+        log.warning("Failed to fetch device users")
+    return mapping
+
+
+def fetch_all_attendances(conn, user_names: dict | None = None) -> list[dict]:
     logs = []
     attendances = conn.get_attendance()
     for a in attendances:
         if not a.timestamp:
             continue
+        uid = str(a.user_id)
         record_time = a.timestamp.strftime("%Y-%m-%d %H:%M:%S")
         logs.append({
             "uid": a.uid,
-            "user_id": str(a.user_id),
+            "user_id": uid,
+            "device_user_name": (user_names or {}).get(uid),
             "state": a.status,
             "type": a.punch,
             "record_time": record_time,
@@ -156,7 +172,11 @@ def sync_device(cfg: dict, store: Store, device_serial: str, device_name: str, d
     except ZKError:
         pass
 
-    logs = fetch_all_attendances(conn)
+    user_names = fetch_device_users(conn)
+    if user_names:
+        log.info("Fetched %d user names from device", len(user_names))
+
+    logs = fetch_all_attendances(conn, user_names)
     log.info("Device has %d total records", len(logs))
 
     stored = store.store_logs(device_id, logs)
@@ -186,11 +206,12 @@ def sync_device(cfg: dict, store: Store, device_serial: str, device_name: str, d
             "device_serial": device_serial,
             "device_model": None,
             "pulled_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+            "users": {uid: name for uid, name in user_names.items()},
             "logs": [
                 {
                     "uid": r["uid"],
                     "user_id": r["user_id"],
-                    "device_user_name": None,
+                    "device_user_name": (user_names or {}).get(r["user_id"]),
                     "state": r["state"],
                     "type": r["type"],
                     "record_time": r["record_time"],

@@ -297,6 +297,8 @@ class AttendanceController extends Controller
             'device_serial' => 'nullable|string|max:255',
             'device_model' => 'nullable|string|max:255',
             'pulled_at' => 'required|date_format:Y-m-d H:i:s',
+            'users' => 'nullable|array',
+            'users.*' => 'nullable|string|max:255',
             'logs' => 'required|array',
             'logs.*.uid' => 'required|integer',
             'logs.*.user_id' => 'required|string',
@@ -316,6 +318,22 @@ class AttendanceController extends Controller
                 'is_active' => true,
             ]
         );
+
+        if (!empty($validated['users'])) {
+            $userInserts = [];
+            foreach ($validated['users'] as $deviceUserId => $name) {
+                if ($name) {
+                    $userInserts[] = [
+                        'device_id' => $device->id,
+                        'device_user_id' => (int) $deviceUserId,
+                        'name' => $name,
+                    ];
+                }
+            }
+            if ($userInserts) {
+                DeviceUserMapping::upsert($userInserts, ['device_id', 'device_user_id'], ['name']);
+            }
+        }
 
         $pulledAt = $validated['pulled_at'];
         $synced = 0;
