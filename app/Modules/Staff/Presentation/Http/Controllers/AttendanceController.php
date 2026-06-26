@@ -320,19 +320,7 @@ class AttendanceController extends Controller
         );
 
         if (!empty($validated['users'])) {
-            $userInserts = [];
-            foreach ($validated['users'] as $deviceUserId => $name) {
-                if ($name) {
-                    $userInserts[] = [
-                        'device_id' => $device->id,
-                        'device_user_id' => (int) $deviceUserId,
-                        'name' => $name,
-                    ];
-                }
-            }
-            if ($userInserts) {
-                DeviceUserMapping::upsert($userInserts, ['device_id', 'device_user_id'], ['name']);
-            }
+            $this->syncDeviceUsers($device, $validated['users']);
         }
 
         $pulledAt = $validated['pulled_at'];
@@ -385,6 +373,8 @@ class AttendanceController extends Controller
             'device_name' => 'nullable|string|max:255',
             'last_sync_at' => 'nullable|date_format:Y-m-d H:i:s',
             'pending_count' => 'nullable|integer|min:0',
+            'users' => 'nullable|array',
+            'users.*' => 'nullable|string|max:255',
         ]);
 
         $device = null;
@@ -400,6 +390,10 @@ class AttendanceController extends Controller
             );
 
             $device->update(['last_connected_at' => now()]);
+
+            if (!empty($validated['users'])) {
+                $this->syncDeviceUsers($device, $validated['users']);
+            }
         }
 
         return response()->json([
@@ -407,6 +401,35 @@ class AttendanceController extends Controller
             'server_time' => now()->toDateTimeString(),
             'device_id' => $device?->id,
         ]);
+    }
+
+    private function syncDeviceUsers($device, array $users): void
+    {
+        $userInserts = [];
+        foreach ($users as $deviceUserId => $name) {
+            if ($name) {
+                $userInserts[] = [
+                    'device_id' => $device->id,
+                    'device_user_id' => (int) $deviceUserId,
+                    'name' => $name,
+                ];
+            }
+        }
+        if ($userInserts) {
+            DeviceUserMapping::upsert($userInserts, ['device_id', 'device_user_id'], ['name']);
+        }
+
+        AttendanceLogModel::where('device_id', $device->id)
+            ->whereNull('device_user_name')
+            ->whereIn('user_id', array_keys($users))
+            ->chunkById(200, function ($logs) use ($users) {
+                foreach ($logs as $log) {
+                    $name = $users[$log->user_id] ?? null;
+                    if ($name) {
+                        $log->update(['device_user_name' => $name]);
+                    }
+                }
+            });
     }
 
     public function agentStatus(): JsonResponse

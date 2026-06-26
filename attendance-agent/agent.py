@@ -137,7 +137,7 @@ def send_to_cloud(payload: dict, cfg: dict) -> dict | None:
         return None
 
 
-def send_heartbeat(cfg: dict, store: Store, device_serial: str, device_name: str):
+def send_heartbeat(cfg: dict, store: Store, device_serial: str, device_name: str, user_names: dict | None = None):
     url = cfg["cloud_api_url"].rstrip("/") + "/v1/attendance/agent/heartbeat"
     token = cfg["agent_token"]
     timeout = cfg.get("api_timeout", 10)
@@ -148,6 +148,8 @@ def send_heartbeat(cfg: dict, store: Store, device_serial: str, device_name: str
         "last_sync_at": store.get_latest_record_time(device_serial or device_name),
         "pending_count": store.count_pending(),
     }
+    if user_names:
+        payload["users"] = user_names
 
     try:
         resp = requests.post(
@@ -164,17 +166,13 @@ def send_heartbeat(cfg: dict, store: Store, device_serial: str, device_name: str
     return False
 
 
-def sync_device(cfg: dict, store: Store, device_serial: str, device_name: str, device_id: str) -> dict:
+def sync_device(cfg: dict, store: Store, device_serial: str, device_name: str, device_id: str, user_names: dict | None = None) -> dict:
     conn = connect_device(cfg)
 
     try:
         conn.disable_device()
     except ZKError:
         pass
-
-    user_names = fetch_device_users(conn)
-    if user_names:
-        log.info("Fetched %d user names from device", len(user_names))
 
     logs = fetch_all_attendances(conn, user_names)
     log.info("Device has %d total records", len(logs))
@@ -254,6 +252,7 @@ def run_cycle(cfg: dict, store: Store, device_serial: list, device_name: list, d
         log.warning("Device connection failed: %s", e)
         return {"status": "device_unreachable"}
 
+    user_names = None
     try:
         name, serial, model = fetch_device_info(conn)
         if serial:
@@ -262,7 +261,11 @@ def run_cycle(cfg: dict, store: Store, device_serial: list, device_name: list, d
             device_name[0] = name
         device_id[0] = build_device_id(cfg, device_serial[0], device_name[0])
 
-        device_result = sync_device(cfg, store, device_serial[0], device_name[0], device_id[0])
+        user_names = fetch_device_users(conn)
+        if user_names:
+            log.info("Fetched %d user names from device", len(user_names))
+
+        device_result = sync_device(cfg, store, device_serial[0], device_name[0], device_id[0], user_names)
         result.update(device_result)
 
     except ZKError as e:
@@ -279,7 +282,7 @@ def run_cycle(cfg: dict, store: Store, device_serial: list, device_name: list, d
 
     cycle_count[0] += 1
     if cycle_count[0] % HEARTBEAT_EVERY == 0:
-        send_heartbeat(cfg, store, device_serial[0], device_name[0])
+        send_heartbeat(cfg, store, device_serial[0], device_name[0], user_names)
         result["heartbeat_sent"] = True
 
     return result
