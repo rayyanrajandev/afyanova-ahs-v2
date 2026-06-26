@@ -69,14 +69,18 @@ def fetch_device_info(conn) -> tuple:
 
 def detect_device_utc_offset(conn) -> int:
     try:
-        device_time_str = conn.get_time()
-        if device_time_str:
-            device_dt = datetime.strptime(device_time_str, "%Y-%m-%d %H:%M:%S")
-            utc_dt = datetime.utcnow()
-            offset_minutes = int((device_dt - utc_dt).total_seconds() / 60)
-            if abs(offset_minutes) > 1:
-                log.info("Device UTC offset: %+d min", offset_minutes)
-                return offset_minutes
+        device_time = conn.get_time()
+        if device_time is None:
+            return 0
+        if isinstance(device_time, datetime):
+            device_dt = device_time
+        else:
+            device_dt = datetime.strptime(str(device_time), "%Y-%m-%d %H:%M:%S")
+        utc_dt = datetime.utcnow()
+        offset_minutes = int((device_dt - utc_dt).total_seconds() / 60)
+        if abs(offset_minutes) > 1:
+            log.info("Device UTC offset: %+d min", offset_minutes)
+            return offset_minutes
     except ZKError:
         pass
     return 0
