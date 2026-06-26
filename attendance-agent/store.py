@@ -69,7 +69,7 @@ class Store:
             rows = self._conn.execute(
                 """SELECT id, device_id, uid, user_id, state, type, record_time
                    FROM attendance_logs
-                   WHERE status = 'pending'
+                   WHERE status IN ('pending', 'failed')
                    ORDER BY id ASC
                    LIMIT ?""",
                 (limit,),
@@ -79,7 +79,7 @@ class Store:
     def count_pending(self) -> int:
         with self._lock:
             row = self._conn.execute(
-                "SELECT COUNT(*) AS cnt FROM attendance_logs WHERE status = 'pending'"
+                "SELECT COUNT(*) AS cnt FROM attendance_logs WHERE status IN ('pending', 'failed')"
             ).fetchone()
         return row["cnt"] if row else 0
 
@@ -114,6 +114,13 @@ class Store:
                 (device_id,),
             ).fetchone()
         return row["record_time"] if row else None
+
+    def reset_failed(self):
+        with self._lock:
+            self._conn.execute(
+                "UPDATE attendance_logs SET status = 'pending', error = NULL WHERE status = 'failed'"
+            )
+            self._conn.commit()
 
     def get_total_synced(self) -> int:
         with self._lock:

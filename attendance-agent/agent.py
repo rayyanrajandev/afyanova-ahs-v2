@@ -273,6 +273,7 @@ def main():
     cfg = load_config(args.config)
     interval = cfg.get("interval", args.interval)
     store = Store(args.db)
+    store.reset_failed()
 
     device_serial = [store.get_state("device_serial") or ""]
     device_name = [store.get_state("device_name") or ""]
