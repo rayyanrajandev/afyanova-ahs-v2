@@ -361,6 +361,14 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Staff profiles and employment status',
     },
     {
+        title: 'Staff attendance',
+        href: '/staff-attendance',
+        iconName: 'clock',
+        section: 'people',
+        permissionPrefixes: ['staff.'],
+        helpNote: 'Biometric attendance logs from ZKTeco devices',
+    },
+    {
         title: 'Staff credentialing',
         href: '/staff-credentialing',
         iconName: 'shield-check',

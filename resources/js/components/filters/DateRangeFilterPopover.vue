@@ -23,6 +23,8 @@ type Props = {
     to: string;
     /** When true, render calendar + inputs inline (no popover). Use inside another popover/drawer to avoid nesting. */
     inline?: boolean;
+    /** When true, hide the top label. Useful when embedding in an inline filter bar. */
+    hideLabel?: boolean;
     /** Number of calendar months side by side. Default 1; override with 2 only when a wider layout is intentional. */
     numberOfMonths?: number;
     /** When false, hide native browser date inputs and rely on shadcn-vue calendar + presets only. */
@@ -35,6 +37,7 @@ const props = withDefaults(defineProps<Props>(), {
     fromLabel: 'From',
     toLabel: 'To',
     inline: false,
+    hideLabel: false,
     numberOfMonths: undefined,
     showManualInputs: true,
 });
@@ -167,7 +170,7 @@ function clearAll() {
 
 <template>
     <div class="grid gap-2">
-        <Label v-if="!inline" :for="`${inputBaseId}-from`">{{ title }}</Label>
+        <Label v-if="!inline && !hideLabel" :for="`${inputBaseId}-from`">{{ title }}</Label>
         <Popover v-if="!inline" v-model:open="open">
             <PopoverTrigger as-child>
                 <Button

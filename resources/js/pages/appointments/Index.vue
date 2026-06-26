@@ -331,6 +331,12 @@ type ApiError = Error & {
 
 type ApiItemResponse<T> = { data: T };
 
+type BillingCaptureResult = {
+    captured: boolean;
+    reason: string;
+    invoice?: Record<string, unknown> | null;
+};
+
 type ApiListResponse<T> = {
     data: T[];
     meta?: {
@@ -3323,7 +3329,7 @@ async function submitStatusUpdate(): Promise<void> {
         const endpoint = isProviderStatusDialog.value
             ? '/appointments/' + statusTargetAppointment.value.id + '/provider-workflow'
             : '/appointments/' + statusTargetAppointment.value.id + '/status';
-        const response = await apiRequest<ApiItemResponse<Appointment>>(
+        const response = await apiRequest<ApiItemResponse<Appointment> & { billing_capture?: BillingCaptureResult }>(
             'PATCH',
             endpoint,
             {
@@ -3342,7 +3348,11 @@ async function submitStatusUpdate(): Promise<void> {
                 message: 'Check-in was recorded successfully. This visit is now waiting for nurse triage.',
             };
         }
-        notifySuccess(isProviderStatusDialog.value ? 'Provider workflow updated.' : 'Appointment updated.');
+        if (nextStatus === 'completed' && response.billing_capture?.captured) {
+            notifySuccess('Visit completed. Consultation fee draft invoice created.');
+        } else {
+            notifySuccess(isProviderStatusDialog.value ? 'Provider workflow updated.' : 'Appointment updated.');
+        }
         await loadQueue();
     } catch (error) {
         const apiError = error as ApiError;

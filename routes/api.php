@@ -51,6 +51,7 @@ use App\Modules\Staff\Presentation\Http\Controllers\ClinicalPrivilegeCatalogCont
 use App\Modules\Staff\Presentation\Http\Controllers\ClinicalSpecialtyController;
 use App\Modules\Staff\Presentation\Http\Controllers\StaffCredentialingController;
 use App\Modules\Staff\Presentation\Http\Controllers\StaffDocumentController;
+use App\Modules\Staff\Presentation\Http\Controllers\AttendanceController;
 use App\Modules\Staff\Presentation\Http\Controllers\StaffPrivilegeGrantController;
 use App\Modules\Staff\Presentation\Http\Controllers\StaffProfileController;
 use App\Modules\Staff\Presentation\Http\Controllers\StaffProfileSpecialtyController;
@@ -1837,6 +1838,37 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('staff/department-options', [StaffProfileController::class, 'departmentOptions'])
         ->middleware('can:staff.read')
         ->name('staff.department-options');
+    Route::get('staff/attendance/logs', [AttendanceController::class, 'logs'])
+        ->middleware('can:staff.read')
+        ->name('staff.attendance.logs');
+    Route::get('staff/attendance/logs/export', [AttendanceController::class, 'exportCsv'])
+        ->middleware('can:staff.read')
+        ->name('staff.attendance.logs.export');
+    Route::get('staff/attendance/devices', [AttendanceController::class, 'devices'])
+        ->middleware('can:staff.read')
+        ->name('staff.attendance.devices');
+    Route::post('staff/attendance/devices', [AttendanceController::class, 'store'])
+        ->middleware('can:staff.update')
+        ->name('staff.attendance.devices.store');
+    Route::put('staff/attendance/devices/{id}', [AttendanceController::class, 'update'])
+        ->middleware('can:staff.update')
+        ->name('staff.attendance.devices.update');
+    Route::delete('staff/attendance/devices/{id}', [AttendanceController::class, 'destroy'])
+        ->middleware('can:staff.update')
+        ->name('staff.attendance.devices.destroy');
+    Route::post('staff/attendance/devices/{id}/test-connection', [AttendanceController::class, 'testConnection'])
+        ->middleware('can:staff.update')
+        ->name('staff.attendance.devices.test-connection');
+    Route::post('attendance/pull', [AttendanceController::class, 'pull'])
+        ->middleware('can:staff.update')
+        ->name('attendance.pull');
+    Route::post('attendance/clear', [AttendanceController::class, 'clear'])
+        ->middleware('can:staff.update')
+        ->name('attendance.clear');
+    Route::delete('staff/attendance/logs', [AttendanceController::class, 'bulkDestroy'])
+        ->middleware('can:staff.update')
+        ->name('staff.attendance.logs.bulk-destroy');
+
     Route::get('staff/privileges/coverage-board', [StaffPrivilegeGrantController::class, 'coverageBoard'])
         ->middleware('can:staff.read')
         ->middleware('can:staff.privileges.read')

@@ -53,6 +53,14 @@ function createTheatreCatalogItem(User $user, array $payload = []): array
         ->json('data');
 }
 
+function createFormularyCatalogItem(User $user, array $payload = []): array
+{
+    return test()->actingAs($user)
+        ->postJson('/api/v1/platform/admin/clinical-catalogs/formulary-items', clinicalCatalogPayload($payload))
+        ->assertCreated()
+        ->json('data');
+}
+
 function createBillingServiceCatalogRow(array $overrides = []): array
 {
     $row = array_merge([
@@ -176,6 +184,43 @@ it('lists and filters clinical catalog items', function (): void {
         ->assertJsonPath('data.0.code', 'LAB-GLU-001')
         ->assertJsonPath('data.0.billingLinkStatus', 'linked')
         ->assertJsonPath('data.0.billingLink.item.serviceName', 'Blood Glucose Price');
+});
+
+it('searches clinical catalog items case-insensitively with partial medicine names', function (): void {
+    $user = makeClinicalCatalogActor([
+        'platform.clinical-catalog.read',
+        'platform.clinical-catalog.manage-formulary',
+    ]);
+
+    createFormularyCatalogItem($user, [
+        'code' => 'MED-ALB-400',
+        'name' => 'Albendazole 400mg Tablet',
+        'category' => 'antiparasitic',
+        'unit' => 'tablet',
+    ]);
+    createFormularyCatalogItem($user, [
+        'code' => 'MED-ACET-500',
+        'name' => 'Paracetamol 500mg Tablet',
+        'category' => 'analgesic',
+        'unit' => 'tablet',
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/platform/admin/clinical-catalogs/formulary-items?q=albe')
+        ->assertOk()
+        ->assertJsonPath('meta.total', 1)
+        ->assertJsonPath('data.0.code', 'MED-ALB-400');
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/platform/admin/clinical-catalogs/formulary-items?q=ALBENDA')
+        ->assertOk()
+        ->assertJsonPath('meta.total', 1)
+        ->assertJsonPath('data.0.name', 'Albendazole 400mg Tablet');
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/platform/admin/clinical-catalogs/formulary-items?q=al')
+        ->assertOk()
+        ->assertJsonPath('meta.total', 2);
 });
 
 it('returns clinical catalog status counts', function (): void {

@@ -290,9 +290,12 @@ class AppointmentController extends Controller
 
         abort_if($appointment === null, 404, 'Appointment not found.');
 
-        return response()->json([
-            'data' => AppointmentResponseTransformer::transform($appointment),
-        ]);
+        $billingCapture = $useCase->getLastAutoCaptureResult();
+
+        return response()->json(array_merge(
+            ['data' => AppointmentResponseTransformer::transform($appointment)],
+            $billingCapture !== null ? ['billing_capture' => $billingCapture] : [],
+        ));
     }
 
     public function overrideConsultationType(
@@ -619,9 +622,12 @@ class AppointmentController extends Controller
 
         abort_if($appointment === null, 404, 'Appointment not found.');
 
-        return response()->json([
-            'data' => AppointmentResponseTransformer::transform($appointment),
-        ]);
+        $billingCapture = $updateStatus->getLastAutoCaptureResult();
+
+        return response()->json(array_merge(
+            ['data' => AppointmentResponseTransformer::transform($appointment)],
+            $billingCapture !== null ? ['billing_capture' => $billingCapture] : [],
+        ));
     }
 
     public function referrals(

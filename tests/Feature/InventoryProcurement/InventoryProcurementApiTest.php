@@ -260,6 +260,7 @@ it('filters inventory item lookup by category and subcategory together', functio
     $user = makeInventoryProcurementUser([
         'inventory.procurement.read',
         'inventory.procurement.manage-items',
+        'inventory.procurement.manage-warehouses',
     ]);
 
     $matched = createInventoryItem($user, [
@@ -331,6 +332,59 @@ it('exposes item movement counts so the frontend can distinguish opening stock s
         ->assertOk()
         ->assertJsonPath('data.0.id', $item['id'])
         ->assertJsonPath('data.0.movementCount', 1);
+});
+
+it('searches inventory items case-insensitively with partial names', function (): void {
+    $user = makeInventoryProcurementUser([
+        'inventory.procurement.read',
+        'inventory.procurement.manage-items',
+    ]);
+
+    $scope = seedInventoryProcurementPlatformScope($user);
+    $headers = inventoryProcurementScopeHeaders($scope);
+
+    $albendazole = test()->actingAs($user)
+        ->withHeaders($headers)
+        ->postJson('/api/v1/inventory-procurement/items', [
+            'itemCode' => 'MED-ALB-400',
+            'itemName' => 'Albendazole 400mg Tablet',
+            'category' => 'medical_consumable',
+            'unit' => 'box',
+            'reorderLevel' => 12,
+            'maxStockLevel' => 250,
+        ])
+        ->assertCreated()
+        ->json('data');
+
+    test()->actingAs($user)
+        ->withHeaders($headers)
+        ->postJson('/api/v1/inventory-procurement/items', [
+            'itemCode' => 'MED-PARA-500',
+            'itemName' => 'Paracetamol 500mg Tablet',
+            'category' => 'medical_consumable',
+            'unit' => 'box',
+            'reorderLevel' => 12,
+            'maxStockLevel' => 250,
+        ])
+        ->assertCreated();
+
+    $this->actingAs($user)
+        ->withHeaders($headers)
+        ->getJson('/api/v1/inventory-procurement/items?q=albe')
+        ->assertOk()
+        ->assertJsonPath('data.0.id', $albendazole['id']);
+
+    $this->actingAs($user)
+        ->withHeaders($headers)
+        ->getJson('/api/v1/inventory-procurement/items?q=ALBENDA')
+        ->assertOk()
+        ->assertJsonPath('data.0.itemName', 'Albendazole 400mg Tablet');
+
+    $this->actingAs($user)
+        ->withHeaders($headers)
+        ->getJson('/api/v1/inventory-procurement/items?q=al')
+        ->assertOk()
+        ->assertJsonPath('meta.total', 2);
 });
 
 /**

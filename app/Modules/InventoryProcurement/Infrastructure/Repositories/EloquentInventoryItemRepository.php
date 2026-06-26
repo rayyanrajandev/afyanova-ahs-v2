@@ -52,13 +52,15 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
             ->where('status', 'active');
         $this->applyPlatformScopeIfEnabled($query);
 
-        $query->where(function (Builder $builder) use ($itemCode, $itemName): void {
-            if ($itemCode !== null && trim($itemCode) !== '') {
-                $builder->orWhere('item_code', 'like', '%'.trim($itemCode).'%');
+        $query->where(function (Builder $builder) use ($normalizedCode, $normalizedName): void {
+            if ($normalizedCode !== '') {
+                $like = '%'.$normalizedCode.'%';
+                $builder->orWhereRaw('LOWER(item_code) LIKE ?', [$like]);
             }
 
-            if ($itemName !== null && trim($itemName) !== '') {
-                $builder->orWhere('item_name', 'like', '%'.trim($itemName).'%');
+            if ($normalizedName !== '') {
+                $like = '%'.$normalizedName.'%';
+                $builder->orWhereRaw('LOWER(item_name) LIKE ?', [$like]);
             }
         });
 
@@ -143,23 +145,7 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
         $this->applyPlatformScopeIfEnabled($queryBuilder);
 
         $queryBuilder
-            ->when($query, function (Builder $builder, string $searchTerm): void {
-                $like = '%'.$searchTerm.'%';
-                $builder->where(function (Builder $nestedQuery) use ($like): void {
-                    $nestedQuery
-                        ->where('item_code', 'like', $like)
-                        ->orWhere('item_name', 'like', $like)
-                        ->orWhere('generic_name', 'like', $like)
-                        ->orWhere('strength', 'like', $like)
-                        ->orWhere('dosage_form', 'like', $like)
-                        ->orWhere('category', 'like', $like)
-                        ->orWhere('subcategory', 'like', $like)
-                        ->orWhere('msd_code', 'like', $like)
-                        ->orWhere('nhif_code', 'like', $like)
-                        ->orWhere('barcode', 'like', $like)
-                        ->orWhere('manufacturer', 'like', $like);
-                });
-            })
+            ->when($query, fn (Builder $builder, string $searchTerm) => $this->applySearchFilter($builder, $searchTerm))
             ->when($category, fn (Builder $builder, string $requestedCategory) => $builder->where('category', $requestedCategory))
             ->when($subcategory, fn (Builder $builder, string $requestedSubcategory) => $builder->where('subcategory', $requestedSubcategory))
             ->when($stockState === 'out_of_stock', fn (Builder $builder) => $builder->where('current_stock', '<=', 0))
@@ -196,23 +182,7 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
         $this->applyPlatformScopeIfEnabled($queryBuilder);
 
         $queryBuilder
-            ->when($query, function (Builder $builder, string $searchTerm): void {
-                $like = '%'.$searchTerm.'%';
-                $builder->where(function (Builder $nestedQuery) use ($like): void {
-                    $nestedQuery
-                        ->where('item_code', 'like', $like)
-                        ->orWhere('item_name', 'like', $like)
-                        ->orWhere('generic_name', 'like', $like)
-                        ->orWhere('strength', 'like', $like)
-                        ->orWhere('dosage_form', 'like', $like)
-                        ->orWhere('category', 'like', $like)
-                        ->orWhere('subcategory', 'like', $like)
-                        ->orWhere('msd_code', 'like', $like)
-                        ->orWhere('nhif_code', 'like', $like)
-                        ->orWhere('barcode', 'like', $like)
-                        ->orWhere('manufacturer', 'like', $like);
-                });
-            })
+            ->when($query, fn (Builder $builder, string $searchTerm) => $this->applySearchFilter($builder, $searchTerm))
             ->when($category, fn (Builder $builder, string $requestedCategory) => $builder->where('category', $requestedCategory));
 
         $this->departmentRequisitionScopeResolver->applyItemScope($queryBuilder, $requestingDepartmentId);
@@ -237,6 +207,31 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
         }
 
         $this->platformScopeQueryApplier->apply($query);
+    }
+
+    private function applySearchFilter(Builder $query, string $searchTerm): void
+    {
+        $normalizedSearchTerm = $this->normalizeLookupText($searchTerm);
+        if ($normalizedSearchTerm === '') {
+            return;
+        }
+
+        $like = '%'.$normalizedSearchTerm.'%';
+
+        $query->where(function (Builder $nestedQuery) use ($like): void {
+            $nestedQuery
+                ->whereRaw('LOWER(item_code) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(item_name) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(generic_name) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(strength) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(dosage_form) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(category) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(subcategory) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(msd_code) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(nhif_code) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(barcode) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(manufacturer) LIKE ?', [$like]);
+        });
     }
 
     /**

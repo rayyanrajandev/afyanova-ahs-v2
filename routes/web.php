@@ -211,6 +211,10 @@ Route::get('staff', function () {
     return Inertia::render('staff/Index');
 })->middleware(['auth', 'verified', 'can:staff.read', 'facility.entitlement:staff.profiles'])->name('staff.page');
 
+Route::get('staff-attendance', function () {
+    return Inertia::render('staff-attendance/Index');
+})->middleware(['auth', 'verified', 'can:staff.read'])->name('staff-attendance.page');
+
 Route::get('staff-credentialing', function () {
     return Inertia::render('staff-credentialing/Index');
 })->middleware(['auth', 'verified', 'can:staff.credentialing.read', 'facility.entitlement:staff.credentialing'])->name('staff-credentialing.page');

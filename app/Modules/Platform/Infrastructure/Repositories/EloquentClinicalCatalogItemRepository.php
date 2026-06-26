@@ -136,17 +136,7 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
         );
 
         $queryBuilder
-            ->when($query, function (Builder $builder, string $searchTerm): void {
-                $like = '%'.$searchTerm.'%';
-                $builder->where(function (Builder $nestedQuery) use ($like): void {
-                    $nestedQuery
-                        ->where('code', 'like', $like)
-                        ->orWhere('name', 'like', $like)
-                        ->orWhere('category', 'like', $like)
-                        ->orWhere('unit', 'like', $like)
-                        ->orWhere('description', 'like', $like);
-                });
-            })
+            ->when($query, fn (Builder $builder, string $searchTerm) => $this->applySearchFilter($builder, $searchTerm))
             ->when($status, fn (Builder $builder, string $value) => $builder->where('status', $value))
             ->when($departmentId, fn (Builder $builder, string $value) => $builder->where('department_id', $value))
             ->when($category, fn (Builder $builder, string $value) => $builder->where('category', $value))
@@ -181,17 +171,7 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
         );
 
         $queryBuilder
-            ->when($query, function (Builder $builder, string $searchTerm): void {
-                $like = '%'.$searchTerm.'%';
-                $builder->where(function (Builder $nestedQuery) use ($like): void {
-                    $nestedQuery
-                        ->where('code', 'like', $like)
-                        ->orWhere('name', 'like', $like)
-                        ->orWhere('category', 'like', $like)
-                        ->orWhere('unit', 'like', $like)
-                        ->orWhere('description', 'like', $like);
-                });
-            })
+            ->when($query, fn (Builder $builder, string $searchTerm) => $this->applySearchFilter($builder, $searchTerm))
             ->when($departmentId, fn (Builder $builder, string $value) => $builder->where('department_id', $value))
             ->when($category, fn (Builder $builder, string $value) => $builder->where('category', $value))
             ->when($dosageForm, fn (Builder $builder, string $value) => $builder->where('metadata->dosageForm', $value));
@@ -232,6 +212,25 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
         }
 
         $this->platformScopeQueryApplier->apply($query);
+    }
+
+    private function applySearchFilter(Builder $query, string $searchTerm): void
+    {
+        $normalizedSearchTerm = mb_strtolower(trim($searchTerm));
+        if ($normalizedSearchTerm === '') {
+            return;
+        }
+
+        $like = '%'.$normalizedSearchTerm.'%';
+
+        $query->where(function (Builder $nestedQuery) use ($like): void {
+            $nestedQuery
+                ->whereRaw('LOWER(code) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(name) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(category) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(unit) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(description) LIKE ?', [$like]);
+        });
     }
 
     /**

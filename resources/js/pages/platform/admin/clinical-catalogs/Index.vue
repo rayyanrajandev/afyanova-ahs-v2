@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
 import ComboboxField from '@/components/forms/ComboboxField.vue';
@@ -507,6 +507,7 @@ const auditLogs = ref<AuditLog[]>([]);
 const auditPager = ref<Pager | null>(null);
 const auditFilters = reactive({ q: '', action: '', actorType: '', actorId: '', from: '', to: '', perPage: 20, page: 1 });
 const auditActorTypeSelectValue = computed(() => auditFilters.actorType || SELECT_ALL_VALUE);
+let searchDebounceTimer: number | null = null;
 
 // ── Overview consumables collapsible state ───────────────────────────────────
 
@@ -2139,6 +2140,22 @@ watch(
 );
 
 watch(
+    () => filters.q,
+    () => {
+        filters.page = 1;
+
+        if (searchDebounceTimer !== null) {
+            window.clearTimeout(searchDebounceTimer);
+        }
+
+        searchDebounceTimer = window.setTimeout(() => {
+            searchDebounceTimer = null;
+            void loadItems();
+        }, 250);
+    },
+);
+
+watch(
     () => [detailsOpen.value, detailsSheetTab.value, selected.value?.id ?? null] as const,
     ([open, tab, itemId]) => {
         if (!open || !itemId || tab !== 'audit' || !canAudit.value) return;
@@ -2149,6 +2166,13 @@ watch(
 
 onMounted(() => {
     void Promise.all([loadItems(), loadDepartments()]);
+});
+
+onBeforeUnmount(() => {
+    if (searchDebounceTimer !== null) {
+        window.clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = null;
+    }
 });
 </script>
 

@@ -5,15 +5,25 @@ namespace App\Modules\Appointment\Application\UseCases;
 use App\Modules\Appointment\Domain\Repositories\AppointmentAuditLogRepositoryInterface;
 use App\Modules\Appointment\Domain\Repositories\AppointmentRepositoryInterface;
 use App\Modules\Appointment\Domain\ValueObjects\AppointmentStatus;
+use App\Modules\Billing\Application\UseCases\AutoCaptureConsultationFeeUseCase;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
+use Illuminate\Support\Facades\Log;
 
 class UpdateAppointmentStatusUseCase
 {
+    private ?array $lastAutoCaptureResult = null;
+
     public function __construct(
         private readonly AppointmentRepositoryInterface $appointmentRepository,
         private readonly AppointmentAuditLogRepositoryInterface $auditLogRepository,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
+        private readonly AutoCaptureConsultationFeeUseCase $autoCaptureConsultationFeeUseCase,
     ) {}
+
+    public function getLastAutoCaptureResult(): ?array
+    {
+        return $this->lastAutoCaptureResult;
+    }
 
     public function execute(
         string $id,
@@ -42,6 +52,26 @@ class UpdateAppointmentStatusUseCase
 
         if (! $updated) {
             return null;
+        }
+
+        if ($status === AppointmentStatus::COMPLETED->value) {
+            try {
+                $this->lastAutoCaptureResult = $this->autoCaptureConsultationFeeUseCase->execute(
+                    appointmentId: $id,
+                    actorId: $actorId,
+                );
+            } catch (\Throwable $e) {
+                $this->lastAutoCaptureResult = [
+                    'captured' => false,
+                    'reason' => 'error',
+                    'invoice' => null,
+                    'error_message' => $e->getMessage(),
+                ];
+                Log::warning('Failed to auto-capture consultation fee on appointment completion', [
+                    'appointment_id' => $id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
 
         $reasonRequired = in_array($status, [
