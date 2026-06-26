@@ -89,6 +89,7 @@ type PaginationMeta = { currentPage: number; perPage: number; total: number; las
 const pagination = ref<PaginationMeta | null>(null);
 const devices = ref<AttendanceDevice[]>([]);
 const pulling = ref(false);
+const clearDialogOpen = ref(false);
 const clearing = ref(false);
 const deleting = ref(false);
 const printing = ref(false);
@@ -300,8 +301,12 @@ async function deleteSelected(): Promise<void> {
     }
 }
 
-async function clearAll(): Promise<void> {
-    if (!confirm('Clear ALL attendance logs from the database? Data on the device is not affected.')) return;
+function clearAll(): void {
+    clearDialogOpen.value = true;
+}
+
+async function confirmClear(): Promise<void> {
+    clearDialogOpen.value = false;
     clearing.value = true;
     try {
         await apiPost('/attendance/clear');
@@ -1179,6 +1184,21 @@ onMounted(async () => {
 
             <DialogFooter class="sticky bottom-0 z-10 shrink-0 border-t px-6 py-4">
                 <Button variant="outline" @click="closeDeviceDialog">Close</Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
+
+    <Dialog :open="clearDialogOpen" @update:open="clearDialogOpen = $event">
+        <DialogContent class="sm:max-w-md">
+            <DialogHeader>
+                <DialogTitle>Clear all attendance logs</DialogTitle>
+                <DialogDescription>
+                    Clear ALL attendance logs from the database? Data on the device is not affected.
+                </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+                <Button variant="outline" @click="clearDialogOpen = false">Cancel</Button>
+                <Button variant="destructive" @click="confirmClear">Clear all</Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>
