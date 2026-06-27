@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,29 +21,65 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import BillingOperationTabs from '@/pages/billing-invoices/components/BillingOperationTabs.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
+import { generateRequestKey } from '@/lib/idempotency';
+import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 
-const closes = ref<any[]>([]);
+type DailyCloseRecord = {
+    id: string;
+    closedAt: string;
+    totalRevenue: number;
+    netRevenue: number;
+    status: string;
+};
+
+type DailyCloseForm = {
+    openedAt: string;
+    closedAt: string;
+    totalCash: number;
+    totalCard: number;
+    totalMpesa: number;
+    totalOther: number;
+    totalRefunds: number;
+    notes: string;
+};
+
+const closes = ref<DailyCloseRecord[]>([]);
 const loading = ref(false);
 const showDialog = ref(false);
 const submitting = ref(false);
-const closedAt = ref(new Date().toISOString().slice(0, 16));
-const openedAt = ref(new Date(Date.now() - 28800000).toISOString().slice(0, 16));
-const totalCash = ref(0);
-const totalCard = ref(0);
-const totalMpesa = ref(0);
-const totalOther = ref(0);
-const totalRefunds = ref(0);
-const closeNotes = ref('');
+
+const form = ref<DailyCloseForm>({
+    openedAt: new Date(Date.now() - 28800000).toISOString().slice(0, 16),
+    closedAt: new Date().toISOString().slice(0, 16),
+    totalCash: 0,
+    totalCard: 0,
+    totalMpesa: 0,
+    totalOther: 0,
+    totalRefunds: 0,
+    notes: '',
+});
+
+const requestKey = ref(generateRequestKey('daily-close-create'));
+
 const error = ref<string | null>(null);
 const success = ref<string | null>(null);
 
-const statusColors: Record<string, string> = {
-    draft: 'secondary',
-    submitted: 'warning',
-    verified: 'success',
-};
+const netRevenue = computed(() => {
+    const net = form.value.totalCash + form.value.totalCard + form.value.totalMpesa + form.value.totalOther - form.value.totalRefunds;
+    return Math.max(0, net);
+});
+
+const validationError = computed(() => {
+    const opened = new Date(form.value.openedAt);
+    const closed = new Date(form.value.closedAt);
+    if (closed <= opened) return 'Close time must be after open time.';
+    const total = form.value.totalCash + form.value.totalCard + form.value.totalMpesa + form.value.totalOther;
+    if (total <= 0 && form.value.totalRefunds <= 0) return 'Enter at least one payment amount.';
+    return null;
+});
 
 async function fetchCloses() {
     loading.value = true;
@@ -58,16 +94,8 @@ async function fetchCloses() {
     }
 }
 
-function calcNet() {
-    const cash = Number(totalCash.value) || 0;
-    const card = Number(totalCard.value) || 0;
-    const mpesa = Number(totalMpesa.value) || 0;
-    const other = Number(totalOther.value) || 0;
-    const refunds = Number(totalRefunds.value) || 0;
-    return (cash + card + mpesa + other - refunds).toFixed(2);
-}
-
 async function submitClose() {
+    if (validationError.value) return;
     submitting.value = true;
     error.value = null;
     success.value = null;
@@ -75,21 +103,23 @@ async function submitClose() {
         await apiRequestJson('/api/v1/daily-closes', {
             method: 'POST',
             body: JSON.stringify({
-                closed_at: closedAt.value,
-                opened_at: openedAt.value,
-                total_cash_amount: Number(totalCash.value) || 0,
-                total_card_amount: Number(totalCard.value) || 0,
-                total_mpesa_amount: Number(totalMpesa.value) || 0,
-                total_other_amount: Number(totalOther.value) || 0,
-                total_refunds: Number(totalRefunds.value) || 0,
-                notes: closeNotes.value,
+                closed_at: form.value.closedAt,
+                opened_at: form.value.openedAt,
+                total_cash_amount: form.value.totalCash,
+                total_card_amount: form.value.totalCard,
+                total_mpesa_amount: form.value.totalMpesa,
+                total_other_amount: form.value.totalOther,
+                total_refunds: form.value.totalRefunds,
+                notes: form.value.notes,
+                idempotencyKey: requestKey.value,
             }),
         });
-        success.value = 'Daily close created successfully.';
+        notifySuccess('Daily close created successfully.');
         showDialog.value = false;
+        requestKey.value = generateRequestKey('daily-close-create');
         await fetchCloses();
     } catch (e: any) {
-        error.value = e?.payload?.message || 'Failed to create close.';
+        error.value = e?.payload?.message || messageFromUnknown(e);
     } finally {
         submitting.value = false;
     }
@@ -101,6 +131,9 @@ onMounted(fetchCloses);
 <template>
     <AppLayout>
         <Head title="Daily Revenue Close" />
+        <div class="px-6 pt-2">
+            <BillingOperationTabs />
+        </div>
         <div class="space-y-6 p-6">
             <div class="flex items-center justify-between">
                 <div>
@@ -111,7 +144,6 @@ onMounted(fetchCloses);
             </div>
 
             <div v-if="error" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ error }}</div>
-            <div v-if="success" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{{ success }}</div>
 
             <Card>
                 <CardHeader>
@@ -137,7 +169,9 @@ onMounted(fetchCloses);
                                     <div class="font-medium">{{ c.netRevenue?.toLocaleString() }}</div>
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <Badge :variant="statusColors[c.status] || 'default'">{{ c.status }}</Badge>
+                                    <Badge :variant="c.status === 'verified' ? 'success' : c.status === 'submitted' ? 'secondary' : c.status === 'draft' ? 'secondary' : 'default'">
+                                        {{ c.status }}
+                                    </Badge>
                                 </div>
                             </div>
                         </div>
@@ -151,47 +185,48 @@ onMounted(fetchCloses);
                         <DialogTitle>New Daily Close</DialogTitle>
                         <DialogDescription>Record cashier shift settlement</DialogDescription>
                     </DialogHeader>
+                    <div v-if="validationError" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ validationError }}</div>
                     <div class="grid grid-cols-2 gap-4">
                         <div class="space-y-2">
                             <Label>Opened At</Label>
-                            <Input v-model="openedAt" type="datetime-local" />
+                            <Input v-model="form.openedAt" type="datetime-local" />
                         </div>
                         <div class="space-y-2">
                             <Label>Closed At</Label>
-                            <Input v-model="closedAt" type="datetime-local" />
+                            <Input v-model="form.closedAt" type="datetime-local" />
                         </div>
                         <div class="space-y-2">
                             <Label>Cash Amount</Label>
-                            <Input v-model.number="totalCash" type="number" step="0.01" min="0" />
+                            <Input v-model.number="form.totalCash" type="number" step="0.01" min="0" />
                         </div>
                         <div class="space-y-2">
                             <Label>Card Amount</Label>
-                            <Input v-model.number="totalCard" type="number" step="0.01" min="0" />
+                            <Input v-model.number="form.totalCard" type="number" step="0.01" min="0" />
                         </div>
                         <div class="space-y-2">
                             <Label>M-Pesa Amount</Label>
-                            <Input v-model.number="totalMpesa" type="number" step="0.01" min="0" />
+                            <Input v-model.number="form.totalMpesa" type="number" step="0.01" min="0" />
                         </div>
                         <div class="space-y-2">
                             <Label>Other Amount</Label>
-                            <Input v-model.number="totalOther" type="number" step="0.01" min="0" />
+                            <Input v-model.number="form.totalOther" type="number" step="0.01" min="0" />
                         </div>
                         <div class="space-y-2">
                             <Label>Refunds</Label>
-                            <Input v-model.number="totalRefunds" type="number" step="0.01" min="0" />
+                            <Input v-model.number="form.totalRefunds" type="number" step="0.01" min="0" />
                         </div>
                         <div class="space-y-2">
                             <Label>Net Revenue</Label>
-                            <Input :model-value="calcNet()" disabled />
+                            <Input :model-value="netRevenue.toFixed(2)" disabled />
                         </div>
                         <div class="col-span-2 space-y-2">
                             <Label>Notes</Label>
-                            <Textarea v-model="closeNotes" />
+                            <Textarea v-model="form.notes" />
                         </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" @click="showDialog = false">Cancel</Button>
-                        <Button :disabled="submitting" @click="submitClose">
+                        <Button :disabled="submitting || !!validationError" @click="submitClose">
                             {{ submitting ? 'Submitting...' : 'Create Close' }}
                         </Button>
                     </DialogFooter>

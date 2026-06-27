@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,11 +25,23 @@ import { Textarea } from '@/components/ui/textarea';
 import BillingOperationTabs from '@/pages/billing-invoices/components/BillingOperationTabs.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
+import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 
-const invoices = ref<any[]>([]);
+type Invoice = {
+    id: string;
+    invoiceNumber: string | null;
+    patientId: string | null;
+    patientName: string | null;
+    totalAmount: number | null;
+    balanceAmount: number | null;
+    currencyCode: string | null;
+    status: string | null;
+};
+
+const invoices = ref<Invoice[]>([]);
 const loading = ref(false);
 const showDialog = ref(false);
-const selectedInvoiceId = ref('');
+const selectedInvoice = ref<Invoice | null>(null);
 const adjustmentType = ref('credit');
 const adjustmentAmount = ref(0);
 const adjustmentReason = ref('');
@@ -37,6 +49,8 @@ const submitting = ref(false);
 const searchQuery = ref('');
 const error = ref<string | null>(null);
 const success = ref<string | null>(null);
+
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function fetchInvoices() {
     loading.value = true;
@@ -54,13 +68,18 @@ async function fetchInvoices() {
     }
 }
 
+function onSearchInput() {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(fetchInvoices, 300);
+}
+
 async function submitAdjustment() {
-    if (!selectedInvoiceId.value || !adjustmentAmount.value || !adjustmentReason.value) return;
+    if (!selectedInvoice.value?.id || !adjustmentAmount.value || !adjustmentReason.value) return;
     submitting.value = true;
     error.value = null;
     success.value = null;
     try {
-        await apiRequestJson(`/api/v1/invoices/${selectedInvoiceId.value}/adjustments`, {
+        await apiRequestJson(`/api/v1/invoices/${selectedInvoice.value.id}/adjustments`, {
             method: 'POST',
             body: JSON.stringify({
                 type: adjustmentType.value,
@@ -68,51 +87,54 @@ async function submitAdjustment() {
                 reason: adjustmentReason.value,
             }),
         });
-        success.value = 'Adjustment added successfully.';
+        notifySuccess('Adjustment added successfully.');
         showDialog.value = false;
         resetForm();
         await fetchInvoices();
     } catch (e: any) {
-        error.value = e?.payload?.message || 'Failed to add adjustment.';
+        error.value = e?.payload?.message || messageFromUnknown(e);
     } finally {
         submitting.value = false;
     }
 }
 
 function resetForm() {
-    selectedInvoiceId.value = '';
+    selectedInvoice.value = null;
     adjustmentType.value = 'credit';
     adjustmentAmount.value = 0;
     adjustmentReason.value = '';
 }
 
-function openDialog(invoiceId: string) {
-    selectedInvoiceId.value = invoiceId;
+function openDialog(inv: Invoice) {
+    selectedInvoice.value = inv;
     showDialog.value = true;
 }
+
+watch(adjustmentAmount, () => {
+    error.value = null;
+});
 
 onMounted(fetchInvoices);
 </script>
 
 <template>
     <AppLayout>
-        <Head title="Credit & Debit Notes" />
+        <Head title="Invoice Adjustments" />
         <div class="px-6 pt-2">
             <BillingOperationTabs />
         </div>
         <div class="space-y-6 p-6">
             <div class="flex items-center justify-between">
                 <div>
-                    <h1 class="text-2xl font-bold tracking-tight">Credit & Debit Notes</h1>
-                    <p class="text-muted-foreground text-sm">Invoice adjustments, credit notes, and debit notes</p>
+                    <h1 class="text-2xl font-bold tracking-tight">Invoice Adjustments</h1>
+                    <p class="text-muted-foreground text-sm">Credit notes, debit notes, and balance corrections</p>
                 </div>
             </div>
 
             <div v-if="error" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ error }}</div>
-            <div v-if="success" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{{ success }}</div>
 
             <div class="flex items-center gap-4">
-                <Input v-model="searchQuery" placeholder="Search by invoice number or patient..." class="max-w-sm" @input="fetchInvoices" />
+                <Input v-model="searchQuery" placeholder="Search by invoice number or patient..." class="max-w-sm" @input="onSearchInput" />
             </div>
 
             <Card>
@@ -127,7 +149,7 @@ onMounted(fetchInvoices);
                         <div v-for="inv in invoices" :key="inv.id" class="flex items-center justify-between rounded-lg border p-4">
                             <div class="space-y-1">
                                 <div class="font-medium">{{ inv.invoiceNumber }}</div>
-                                <div class="text-muted-foreground text-sm">Patient: {{ inv.patientId }}</div>
+                                <div class="text-muted-foreground text-sm">{{ inv.patientName || inv.patientId }}</div>
                                 <div class="text-muted-foreground text-sm">
                                     Total: {{ inv.totalAmount }} {{ inv.currencyCode }}
                                     <span class="ml-2">Balance: <span class="font-semibold">{{ inv.balanceAmount }}</span></span>
@@ -137,7 +159,7 @@ onMounted(fetchInvoices);
                                 <Badge :variant="inv.status === 'paid' ? 'success' : inv.status === 'draft' ? 'secondary' : 'default'">
                                     {{ inv.status }}
                                 </Badge>
-                                <Button size="sm" @click="openDialog(inv.id)">Add Adjustment</Button>
+                                <Button size="sm" @click="openDialog(inv)">Add Adjustment</Button>
                             </div>
                         </div>
                     </div>
@@ -148,7 +170,9 @@ onMounted(fetchInvoices);
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Add Adjustment</DialogTitle>
-                        <DialogDescription>Add a credit or debit note to this invoice</DialogDescription>
+                        <DialogDescription>
+                            Invoice: {{ selectedInvoice?.invoiceNumber }} &mdash; Balance: {{ selectedInvoice?.balanceAmount }} {{ selectedInvoice?.currencyCode }}
+                        </DialogDescription>
                     </DialogHeader>
                     <div class="space-y-4">
                         <div class="space-y-2">
@@ -158,8 +182,8 @@ onMounted(fetchInvoices);
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="credit">Credit Note (Reduce Balance)</SelectItem>
-                                    <SelectItem value="debit">Debit Note (Increase Balance)</SelectItem>
+                                    <SelectItem value="credit">Credit Note &mdash; Reduce Balance</SelectItem>
+                                    <SelectItem value="debit">Debit Note &mdash; Increase Balance</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>

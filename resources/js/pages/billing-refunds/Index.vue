@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
@@ -900,7 +900,7 @@ onMounted(async () => {
                                     <Button
                                         variant="outline"
                                         class="gap-2"
-                                        @click="window.location.href = `/billing-invoices?search=${encodeURIComponent(selectedRefund.invoice?.invoice_number || '')}`"
+                                        @click="router.visit(`/billing-invoices?search=${encodeURIComponent(selectedRefund.invoice?.invoice_number || '')}`)"
                                     >
                                         <AppIcon name="receipt" class="size-4" />
                                         Open invoice queue
@@ -1182,7 +1182,7 @@ onMounted(async () => {
 
                 <DialogFooter>
                     <Button variant="outline" :disabled="actionLoading" @click="requestCreateDialogOpenChange(false)">Cancel</Button>
-                    <Button :disabled="actionLoading || !createForm.invoiceNumber.trim() || Number(createForm.refundAmount) <= 0" @click="submitCreateRefund">
+                    <Button :disabled="actionLoading || !createForm.invoiceNumber.trim() || Number(createForm.refundAmount) <= 0 || (createForm.refundMethod === 'mobile_money' && !createForm.mobileMoneyProvider)" @click="submitCreateRefund">
                         Create refund request
                     </Button>
                 </DialogFooter>
