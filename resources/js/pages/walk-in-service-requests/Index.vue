@@ -1169,12 +1169,6 @@ onMounted(() => {
                             <p class="truncate text-xs text-muted-foreground">
                                 Manage patients sent straight to laboratory, pharmacy, imaging, and procedure desks.
                             </p>
-                            <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
-                                <span class="inline-flex items-center gap-1">
-                                    <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
-                                    <span class="font-medium text-foreground">{{ scope?.facility?.name || 'No facility' }}</span>
-                                </span>
-                            </div>
                         </div>
                     </div>
                     <div class="flex flex-shrink-0 flex-wrap items-center gap-2">

@@ -5796,25 +5796,6 @@ onMounted(() => {
                                 Look up existing patients or register new ones
                                 with duplicate checks.
                             </p>
-                            <div
-                                class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground"
-                            >
-                                <span class="inline-flex items-center gap-1">
-                                    <AppIcon
-                                        name="building-2"
-                                        class="size-3 opacity-75"
-                                        aria-hidden="true"
-                                    />
-                                    <span class="font-medium text-foreground">{{
-                                        scope?.facility?.name || 'No facility'
-                                    }}</span>
-                                </span>
-                                <span
-                                    class="text-border select-none"
-                                    aria-hidden="true"
-                                    >·</span
-                                >
-                            </div>
                         </div>
                     </div>
 
@@ -11004,6 +10985,22 @@ onMounted(() => {
                         >
                             <AppIcon name="pencil" class="size-3.5" />
                             Edit Demographics
+                        </Button>
+                        <Button
+                            size="sm"
+                            class="shrink-0 gap-1.5"
+                            @click="
+                                openPatientVisitHandoff(
+                                    detailsSheetPatient,
+                                    'details',
+                                )
+                            "
+                        >
+                            <AppIcon
+                                name="clipboard-list"
+                                class="size-3.5"
+                            />
+                            Start handoff
                         </Button>
                         <Button
                             v-if="detailsSheetPatient"

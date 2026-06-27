@@ -5224,13 +5224,6 @@ watchDebounced(
                         <div class="min-w-0 space-y-0.5">
                             <h1 class="text-base font-semibold tracking-tight md:text-lg">Appointments</h1>
                             <p class="truncate text-xs text-muted-foreground">{{ workspaceIntroText }}</p>
-                            <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
-                                <span class="inline-flex items-center gap-1">
-                                    <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
-                                    <span class="font-medium text-foreground">{{ scope?.facility?.name || 'No facility' }}</span>
-                                </span>
-                                <span class="select-none text-border" aria-hidden="true">·</span>
-                            </div>
                         </div>
                     </div>
                     <!-- Right: actions -->

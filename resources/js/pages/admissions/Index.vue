@@ -5191,23 +5191,6 @@ onMounted(initialPageLoad);
                     </Link>
                 </div>
                 <div class="flex flex-shrink-0 items-center gap-2">
-                    <Popover>
-                        <PopoverTrigger as-child>
-                            <Button variant="outline" size="sm" class="h-8 px-2.5">
-                                <Badge :variant="scopeWarning ? 'destructive' : 'secondary'">
-                                    {{ scopeStatusLabel }}
-                                </Badge>
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent align="end" class="w-72 space-y-1 text-xs">
-                            <p v-if="scope?.facility">
-                                Facility: {{ scope.facility.name }} ({{ scope.facility.code }})
-                            </p>
-                            <p v-if="!scope" class="text-destructive">
-                                Scope could not be loaded.
-                            </p>
-                        </PopoverContent>
-                    </Popover>
                     <Button
                         variant="outline"
                         size="sm"
