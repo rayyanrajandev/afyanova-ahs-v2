@@ -30,6 +30,7 @@ import {
     ScissorIcon,
     SecurityCheckIcon,
     SlidersHorizontalIcon,
+    SpoonAndForkIcon,
     StethoscopeIcon,
     TestTube01Icon,
     TimeScheduleIcon,
@@ -104,6 +105,7 @@ import {
     User,
     UserX,
     Users,
+    UtensilsCrossed,
     Warehouse,
     X,
 } from 'lucide-vue-next';
@@ -175,6 +177,7 @@ export type AppIconName =
     | 'tag'
     | 'truck'
     | 'undo-2'
+    | 'utensils-crossed'
     | 'warehouse'
     | 'user'
     | 'user-x'
@@ -246,6 +249,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     tag: Tag,
     truck: Truck,
     'undo-2': Undo2,
+    'utensils-crossed': UtensilsCrossed,
     warehouse: Warehouse,
     user: User,
     'user-x': UserX,
@@ -318,6 +322,7 @@ const HUGE_ICON_MAP = {
     tag: Invoice01Icon,
     truck: PackageIcon,
     'undo-2': ArrowLeft01Icon,
+    'utensils-crossed': SpoonAndForkIcon,
     warehouse: Building01Icon,
     user: UserIcon,
     'user-x': UserRemove01Icon,
