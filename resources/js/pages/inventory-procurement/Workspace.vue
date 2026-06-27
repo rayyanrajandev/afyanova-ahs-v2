@@ -6008,12 +6008,13 @@ async function submitStockMovement() {
                 occurredAt: stockMovementForm.occurredAt || null,
             },
         });
+        const movementItemId = stockMovementForm.itemId.trim();
         notifySuccess(stockMovementSuccessMessage.value);
         stockMovementDialogOpen.value = false;
         resetStockMovementForm();
         await reloadAll();
-        if (itemDetailsOpen.value && itemDetails.value?.id === stockMovementForm.itemId.trim()) {
-            await loadItemDetails(stockMovementForm.itemId.trim());
+        if (itemDetailsOpen.value && itemDetails.value?.id === movementItemId) {
+            await loadItemDetails(movementItemId);
         }
     } catch (error) {
         stockMovementErrors.value = (error as ApiError).payload?.errors ?? {};
@@ -6040,12 +6041,13 @@ async function submitStockReconciliation() {
                 occurredAt: stockReconciliationForm.occurredAt || null,
             },
         });
+        const reconciliationItemId = stockReconciliationForm.itemId.trim();
         notifySuccess('Stock reconciliation recorded.');
         reconcileDialogOpen.value = false;
         resetStockReconciliationForm();
         await reloadAll();
-        if (itemDetailsOpen.value && itemDetails.value?.id === stockReconciliationForm.itemId.trim()) {
-            await loadItemDetails(stockReconciliationForm.itemId.trim());
+        if (itemDetailsOpen.value && itemDetails.value?.id === reconciliationItemId) {
+            await loadItemDetails(reconciliationItemId);
         }
     } catch (error) {
         stockReconciliationErrors.value = (error as ApiError).payload?.errors ?? {};
