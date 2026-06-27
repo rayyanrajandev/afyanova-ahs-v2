@@ -119,6 +119,10 @@ const routeAccessRules: RouteAccessRule[] = [
         requiredPermissions: ['staff.privileges.read'],
     },
     {
+        pathPrefix: '/staff-attendance',
+        requiredPermissions: ['staff.attendance.read'],
+    },
+    {
         pathPrefix: '/staff',
         requiredPermissions: ['staff.read'],
     },

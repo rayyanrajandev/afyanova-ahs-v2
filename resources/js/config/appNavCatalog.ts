@@ -365,7 +365,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         href: '/staff-attendance',
         iconName: 'clock',
         section: 'people',
-        permissionPrefixes: ['staff.'],
+        permissionPrefixes: ['staff.attendance.'],
         helpNote: 'Biometric attendance logs from ZKTeco devices',
     },
     {

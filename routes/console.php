@@ -254,6 +254,8 @@ if (! function_exists('defaultHospitalRolePermissionProfiles')) {
                 'inventory.procurement.manage-warehouses',
                 'inpatient.ward.read',
                 'staff.read',
+                'staff.attendance.read',
+                'staff.attendance.update',
                 'staff.clinical-directory.read',
                 'staff.view-audit-logs',
                 'staff.documents.read',
@@ -305,6 +307,8 @@ if (! function_exists('defaultHospitalRolePermissionProfiles')) {
             ],
             'ADMIN.HR' => [
                 'staff.read',
+                'staff.attendance.read',
+                'staff.attendance.update',
                 'staff.create',
                 'staff.update',
                 'staff.update-status',

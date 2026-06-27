@@ -80,8 +80,8 @@ const page = usePage<{ auth: Auth }>();
 const permissionNames = new Set(
     (Array.isArray(page.props.auth?.permissions) ? page.props.auth.permissions : []).map((p) => p.trim()).filter(Boolean),
 );
-const canReadStaff = ref(permissionNames.has('staff.read'));
-const canUpdateStaff = ref(permissionNames.has('staff.update'));
+const canReadStaff = ref(permissionNames.has('staff.attendance.read'));
+const canUpdateStaff = ref(permissionNames.has('staff.attendance.update'));
 
 const loading = ref(true);
 const logs = ref<AttendanceLog[]>([]);

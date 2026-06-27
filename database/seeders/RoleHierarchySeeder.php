@@ -665,6 +665,8 @@ class RoleHierarchySeeder extends Seeder
                 'inventory.procurement.manage-warehouses',
                 'inpatient.ward.read',
                 'staff.read',
+                'staff.attendance.read',
+                'staff.attendance.update',
                 'staff.clinical-directory.read',
                 'staff.view-audit-logs',
                 'staff.documents.read',
@@ -717,6 +719,8 @@ class RoleHierarchySeeder extends Seeder
 
             'ADMIN.HR' => [
                 'staff.read',
+                'staff.attendance.read',
+                'staff.attendance.update',
                 'staff.create',
                 'staff.update',
                 'staff.update-status',

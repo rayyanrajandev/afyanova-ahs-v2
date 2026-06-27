@@ -1839,36 +1839,36 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:staff.read')
         ->name('staff.department-options');
     Route::get('staff/attendance/logs', [AttendanceController::class, 'logs'])
-        ->middleware('can:staff.read')
+        ->middleware('can:staff.attendance.read')
         ->name('staff.attendance.logs');
     Route::get('staff/attendance/logs/export', [AttendanceController::class, 'exportCsv'])
-        ->middleware('can:staff.read')
+        ->middleware('can:staff.attendance.read')
         ->name('staff.attendance.logs.export');
     Route::get('staff/attendance/devices', [AttendanceController::class, 'devices'])
-        ->middleware('can:staff.read')
+        ->middleware('can:staff.attendance.read')
         ->name('staff.attendance.devices');
     Route::post('staff/attendance/devices', [AttendanceController::class, 'store'])
-        ->middleware('can:staff.update')
+        ->middleware('can:staff.attendance.update')
         ->name('staff.attendance.devices.store');
     Route::put('staff/attendance/devices/{id}', [AttendanceController::class, 'update'])
-        ->middleware('can:staff.update')
+        ->middleware('can:staff.attendance.update')
         ->name('staff.attendance.devices.update');
     Route::delete('staff/attendance/devices/{id}', [AttendanceController::class, 'destroy'])
-        ->middleware('can:staff.update')
+        ->middleware('can:staff.attendance.update')
         ->name('staff.attendance.devices.destroy');
     Route::post('staff/attendance/devices/{id}/test-connection', [AttendanceController::class, 'testConnection'])
-        ->middleware('can:staff.update')
+        ->middleware('can:staff.attendance.update')
         ->name('staff.attendance.devices.test-connection');
     Route::post('attendance/pull', [AttendanceController::class, 'pull'])
-        ->middleware('can:staff.update')
+        ->middleware('can:staff.attendance.update')
         ->name('attendance.pull');
     Route::post('attendance/clear', [AttendanceController::class, 'clear'])
-        ->middleware('can:staff.update')
+        ->middleware('can:staff.attendance.update')
         ->name('attendance.clear');
     Route::get('attendance/agent/status', [AttendanceController::class, 'agentStatus'])
         ->name('attendance.agent.status');
     Route::delete('staff/attendance/logs', [AttendanceController::class, 'bulkDestroy'])
-        ->middleware('can:staff.update')
+        ->middleware('can:staff.attendance.update')
         ->name('staff.attendance.logs.bulk-destroy');
 
     Route::get('staff/privileges/coverage-board', [StaffPrivilegeGrantController::class, 'coverageBoard'])

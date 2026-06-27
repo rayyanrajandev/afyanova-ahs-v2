@@ -213,7 +213,7 @@ Route::get('staff', function () {
 
 Route::get('staff-attendance', function () {
     return Inertia::render('staff-attendance/Index');
-})->middleware(['auth', 'verified', 'can:staff.read'])->name('staff-attendance.page');
+})->middleware(['auth', 'verified', 'can:staff.attendance.read'])->name('staff-attendance.page');
 
 Route::get('staff-credentialing', function () {
     return Inertia::render('staff-credentialing/Index');
