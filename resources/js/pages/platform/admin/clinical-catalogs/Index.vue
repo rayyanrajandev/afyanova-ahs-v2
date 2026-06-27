@@ -661,6 +661,13 @@ function formatMoney(value: string | null, currencyCode: string | null): string 
     }).format(amount);
 }
 
+function billingPriceText(item: Item): string {
+    if (item.billingLinkStatus !== 'linked') return '';
+    const linkedItem = item.billingLink?.item;
+    if (!linkedItem?.basePrice) return '';
+    return formatMoney(linkedItem.basePrice, linkedItem.currencyCode);
+}
+
 function billingLinkDetail(item: Item | null): string {
     const link = item?.billingLink;
     const linkedItem = link?.item;
@@ -2539,10 +2546,10 @@ onBeforeUnmount(() => {
                                             <p class="truncate text-sm font-medium">{{ item.name || 'Unnamed item' }}</p>
                                             <Badge variant="outline" class="h-5 px-1.5 text-[10px]">{{ item.code || 'NO-CODE' }}</Badge>
                                             <Badge
-                                                :variant="billingLinkVariant(item.billingLinkStatus)"
+                                                :variant="item.billingLinkStatus === 'linked' ? 'default' : billingLinkVariant(item.billingLinkStatus)"
                                                 class="hidden h-5 px-1.5 text-[10px] sm:inline-flex"
                                             >
-                                                {{ billingLinkLabel(item.billingLinkStatus) }}
+                                                {{ item.billingLinkStatus === 'linked' ? billingPriceText(item) : billingLinkLabel(item.billingLinkStatus) }}
                                             </Badge>
                                         </div>
                                     </template>

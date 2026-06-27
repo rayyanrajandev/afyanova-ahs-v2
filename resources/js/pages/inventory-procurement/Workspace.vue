@@ -910,6 +910,9 @@ async function submitStockMovementCorrection() {
         stockMovementCorrectionDialogOpen.value = false;
         resetStockMovementCorrectionForm();
         await reloadAll();
+        if (itemDetailsOpen.value && itemDetails.value?.id === movement.itemId) {
+            await loadItemDetails(movement.itemId);
+        }
     } catch (error) {
         stockMovementCorrectionErrors.value = (error as ApiError).payload?.errors ?? {};
         notifyError(messageFromUnknown(error, 'Unable to correct opening stock.'));
@@ -5994,6 +5997,9 @@ async function submitStockMovement() {
         stockMovementDialogOpen.value = false;
         resetStockMovementForm();
         await reloadAll();
+        if (itemDetailsOpen.value && itemDetails.value?.id === stockMovementForm.itemId.trim()) {
+            await loadItemDetails(stockMovementForm.itemId.trim());
+        }
     } catch (error) {
         stockMovementErrors.value = (error as ApiError).payload?.errors ?? {};
         notifyError(messageFromUnknown(error, 'Unable to record stock movement.'));
@@ -6023,6 +6029,9 @@ async function submitStockReconciliation() {
         reconcileDialogOpen.value = false;
         resetStockReconciliationForm();
         await reloadAll();
+        if (itemDetailsOpen.value && itemDetails.value?.id === stockReconciliationForm.itemId.trim()) {
+            await loadItemDetails(stockReconciliationForm.itemId.trim());
+        }
     } catch (error) {
         stockReconciliationErrors.value = (error as ApiError).payload?.errors ?? {};
         notifyError(messageFromUnknown(error, 'Unable to reconcile stock.'));
