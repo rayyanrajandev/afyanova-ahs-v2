@@ -371,13 +371,10 @@ if (! function_exists('defaultHospitalRolePermissionProfiles')) {
                 'radiology.orders.create',
                 'theatre.procedures.read',
                 'theatre.procedures.create',
-                'platform.clinical-catalog.read',
                 'inpatient.ward.read',
                 'inpatient.ward.create-round-note',
                 'inpatient.ward.view-audit-logs',
-                'inventory.procurement.read',
                 'inventory.procurement.create-request',
-                'staff.clinical-directory.read',
             ],
             'CLINICAL.NURSE' => [
                 'patients.read',
