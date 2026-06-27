@@ -36,6 +36,8 @@ export const FACILITY_WEB_PATH_RULES: readonly FacilityWebPathRule[] = [
     { pathPrefix: '/billing-service-catalog', requiredAll: ['billing.service_catalog'] },
     { pathPrefix: '/pos/sales', requiredAll: ['pos.sales'] },
     { pathPrefix: '/pos/sessions', requiredAll: ['pos.registers_sessions'] },
+    { pathPrefix: '/pos/cafeteria', requiredAll: ['pos.cafeteria'] },
+    { pathPrefix: '/pos/frontdesk-quick', requiredAll: ['pos.registers_sessions'] },
     { pathPrefix: '/pos', requiredAll: ['pos.registers_sessions'] },
     { pathPrefix: '/claims-insurance', requiredAll: ['claims.insurance'] },
     { pathPrefix: '/staff-credentialing', requiredAll: ['staff.credentialing'] },

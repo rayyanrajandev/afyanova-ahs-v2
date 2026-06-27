@@ -131,6 +131,10 @@ Route::get('pos', function () {
     return Inertia::render('pos/Index');
 })->middleware(['auth', 'verified', 'can:pos.registers.read', 'facility.entitlement:pos.registers_sessions'])->name('pos.page');
 
+Route::get('pos/cafeteria', function () {
+    return Inertia::render('pos/cafeteria/Index');
+})->middleware(['auth', 'verified', 'can:pos.cafeteria.read', 'facility.entitlement:pos.cafeteria'])->name('pos.cafeteria.page');
+
 Route::get('pos/frontdesk-quick', function () {
     return Inertia::render('pos/frontdesk-quick/Index');
 })->middleware(['auth', 'verified', 'can:pos.frontdesk-quick.read', 'facility.entitlement:pos.registers_sessions'])->name('pos.frontdesk-quick.page');
