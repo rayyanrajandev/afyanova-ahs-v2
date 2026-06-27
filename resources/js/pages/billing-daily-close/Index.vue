@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { computed, onMounted, ref } from 'vue';
+import AppIcon from '@/components/AppIcon.vue';
+import { type BreadcrumbItem } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -45,6 +47,10 @@ type DailyCloseForm = {
     totalRefunds: number;
     notes: string;
 };
+
+const breadcrumbs: BreadcrumbItem[] = [
+    { title: 'Daily Revenue Close', href: '/billing-daily-close' },
+];
 
 const closes = ref<DailyCloseRecord[]>([]);
 const loading = ref(false);
@@ -129,19 +135,31 @@ onMounted(fetchCloses);
 </script>
 
 <template>
-    <AppLayout>
+    <AppLayout :breadcrumbs="breadcrumbs">
         <Head title="Daily Revenue Close" />
-        <div class="px-6 pt-2">
-            <BillingOperationTabs />
-        </div>
-        <div class="space-y-6 p-6">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-2xl font-bold tracking-tight">Daily Revenue Close</h1>
-                    <p class="text-muted-foreground text-sm">Cashier settlement and revenue reconciliation</p>
+        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-hidden rounded-lg p-4 md:p-6">
+
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
+                            <AppIcon name="calendar-check" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <h1 class="text-base font-semibold tracking-tight md:text-lg">Daily Revenue Close</h1>
+                            <p class="text-xs text-muted-foreground">Cashier settlement and revenue reconciliation</p>
+                        </div>
+                    </div>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button @click="showDialog = true">
+                            <AppIcon name="plus" class="size-4" />
+                            New Close
+                        </Button>
+                    </div>
                 </div>
-                <Button @click="showDialog = true">New Close</Button>
-            </div>
+            </section>
+
+            <BillingOperationTabs />
 
             <div v-if="error" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ error }}</div>
 

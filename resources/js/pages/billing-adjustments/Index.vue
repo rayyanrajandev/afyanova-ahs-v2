@@ -2,6 +2,7 @@
 import { Head } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import { type BreadcrumbItem } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -37,6 +38,10 @@ type Invoice = {
     currencyCode: string | null;
     status: string | null;
 };
+
+const breadcrumbs: BreadcrumbItem[] = [
+    { title: 'Invoice Adjustments', href: '/billing-adjustments' },
+];
 
 const showCreateDialog = ref(false);
 const submitting = ref(false);
@@ -131,26 +136,33 @@ async function submitAdjustment() {
 </script>
 
 <template>
-    <AppLayout>
+    <AppLayout :breadcrumbs="breadcrumbs">
         <Head title="Invoice Adjustments" />
-        <div class="px-6 pt-2">
-            <BillingOperationTabs />
-        </div>
-        <div class="space-y-6 p-6">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-2xl font-bold tracking-tight">Invoice Adjustments</h1>
-                    <p class="text-muted-foreground text-sm">Credit notes, debit notes, and balance corrections</p>
-                </div>
-                <Button @click="openCreateDialog">
-                    <AppIcon name="plus" class="size-4" />
-                    New Adjustment
-                </Button>
-            </div>
+        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-hidden rounded-lg p-4 md:p-6">
 
-            <!-- No list of past adjustments — the API only supports creating/viewing
-                 adjustments per-invoice, not a global list. The "New Adjustment" dialog
-                 handles the full create flow with inline invoice search. -->
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
+                            <AppIcon name="receipt" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <h1 class="text-base font-semibold tracking-tight md:text-lg">Invoice Adjustments</h1>
+                            <p class="text-xs text-muted-foreground">Credit notes, debit notes, and balance corrections</p>
+                        </div>
+                    </div>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button @click="openCreateDialog">
+                            <AppIcon name="plus" class="size-4" />
+                            New Adjustment
+                        </Button>
+                    </div>
+                </div>
+            </section>
+
+            <BillingOperationTabs />
+
+            <div v-if="error" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ error }}</div>
 
             <Card>
                 <CardHeader>

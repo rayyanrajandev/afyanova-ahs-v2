@@ -135,6 +135,30 @@ const routeAccessRules: RouteAccessRule[] = [
         requiredPermissions: ['pos.registers.read'],
     },
     {
+        pathPrefix: '/pos/cafeteria',
+        requiredPermissions: ['pos.cafeteria.read'],
+    },
+    {
+        pathPrefix: '/pos/frontdesk-quick',
+        requiredPermissions: ['pos.frontdesk-quick.read'],
+    },
+    {
+        pathPrefix: '/billing-adjustments',
+        requiredPermissions: ['billing.invoices.read'],
+    },
+    {
+        pathPrefix: '/billing-write-offs',
+        requiredPermissions: ['billing.invoices.read'],
+    },
+    {
+        pathPrefix: '/billing-daily-close',
+        requiredPermissions: ['billing.financial-controls.read'],
+    },
+    {
+        pathPrefix: '/billing-aging-report',
+        requiredPermissions: ['billing.financial-controls.read'],
+    },
+    {
         pathPrefix: '/billing-refunds',
         requiredPermissions: ['billing.refunds.read'],
     },

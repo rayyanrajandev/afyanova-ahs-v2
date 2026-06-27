@@ -2,16 +2,23 @@
 import { Link, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { usePlatformAccess } from '@/composables/usePlatformAccess';
 
-const tabs = [
-    { value: 'queue', label: 'Invoice queue', href: '/billing-invoices' },
-    { value: 'board', label: 'Board', href: '/billing-invoices?tab=board' },
-    { value: 'create', label: 'Create invoice', href: '/billing-invoices?tab=new' },
-    { value: 'cash', label: 'Cash payments', href: '/billing-cash' },
-    { value: 'adjustments', label: 'Adjustments', href: '/billing-adjustments' },
-    { value: 'refunds', label: 'Refunds', href: '/billing-refunds' },
-    { value: 'writeoffs', label: 'Write-offs', href: '/billing-write-offs' },
+const allTabs = [
+    { value: 'queue', label: 'Invoice queue', href: '/billing-invoices', permission: 'billing.invoices.read' },
+    { value: 'board', label: 'Board', href: '/billing-invoices?tab=board', permission: 'billing.invoices.read' },
+    { value: 'create', label: 'Create invoice', href: '/billing-invoices?tab=new', permission: 'billing.invoices.create' },
+    { value: 'cash', label: 'Cash payments', href: '/billing-cash', permission: 'billing.cash-accounts.read' },
+    { value: 'adjustments', label: 'Adjustments', href: '/billing-adjustments', permission: 'billing.invoices.read' },
+    { value: 'refunds', label: 'Refunds', href: '/billing-refunds', permission: 'billing.refunds.read' },
+    { value: 'writeoffs', label: 'Write-offs', href: '/billing-write-offs', permission: 'billing.invoices.read' },
 ];
+
+const { hasPermission, hasUniversalAdminAccess } = usePlatformAccess();
+
+const tabs = computed(() =>
+    allTabs.filter((t) => hasUniversalAdminAccess.value || hasPermission(t.permission)),
+);
 
 const page = usePage();
 const url = computed(() => page.url);

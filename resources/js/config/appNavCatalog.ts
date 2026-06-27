@@ -166,7 +166,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         iconName: 'receipt',
         section: 'billing',
         subGroup: 'invoicing',
-        permissionPrefixes: ['billing.', 'billing-invoices.'],
+        permissionPrefixes: ['billing.invoices.', 'billing-invoices.'],
         helpNote: 'Invoice queue, board, and create invoices',
     },
     {

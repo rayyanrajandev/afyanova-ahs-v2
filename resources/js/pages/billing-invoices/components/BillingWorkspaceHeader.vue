@@ -1,17 +1,12 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import AppIcon from '@/components/AppIcon.vue';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 const props = defineProps({
     pageLoading: { type: Boolean, required: true },
     listLoading: { type: Boolean, required: true },
     pageDescription: { type: String, required: true },
-    scopeStatusLabel: { type: String, required: true },
-    facilityName: { type: String, default: '' },
-    tenantName: { type: String, default: '' },
-    scopeUnresolved: { type: Boolean, default: false },
     billingWorkspaceView: { type: String, required: true },
     canReadBillingFinancialControls: { type: Boolean, required: true },
     canReadBillingInvoices: { type: Boolean, required: true },
@@ -38,35 +33,10 @@ defineEmits<{
                     <AppIcon name="receipt" class="size-5" />
                 </div>
                 <div class="min-w-0 space-y-0.5">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <h1 class="text-base font-semibold tracking-tight md:text-lg">Billing invoices</h1>
-                        <Badge
-                            v-if="props.scopeUnresolved"
-                            variant="destructive"
-                            class="h-5 px-1.5 text-[10px] font-medium"
-                        >
-                            Scope unresolved
-                        </Badge>
-                        <Badge
-                            v-else-if="!props.pageLoading"
-                            variant="outline"
-                            class="h-5 px-1.5 text-[10px] font-medium"
-                        >
-                            {{ props.scopeStatusLabel }}
-                        </Badge>
-                    </div>
+                    <h1 class="text-base font-semibold tracking-tight md:text-lg">Billing invoices</h1>
                     <p class="text-xs text-muted-foreground">
                         {{ props.pageDescription }}
                     </p>
-                    <div
-                        v-if="props.facilityName"
-                        class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-0.5 text-xs text-muted-foreground"
-                    >
-                        <span v-if="props.facilityName" class="inline-flex items-center gap-1">
-                            <AppIcon name="building-2" class="size-3 opacity-75" aria-hidden="true" />
-                            <span class="font-medium text-foreground">{{ props.facilityName }}</span>
-                        </span>
-                    </div>
                 </div>
             </div>
             <div class="flex flex-shrink-0 flex-wrap items-center gap-2">

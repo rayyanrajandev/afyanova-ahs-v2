@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import { onMounted, ref } from 'vue';
-import { Badge } from '@/components/ui/badge';
+import { ref } from 'vue';
+import AppIcon from '@/components/AppIcon.vue';
+import { type BreadcrumbItem } from '@/types';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -20,24 +21,16 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import BillingOperationTabs from '@/pages/billing-invoices/components/BillingOperationTabs.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
-import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
+import { messageFromUnknown, notifySuccess } from '@/lib/notify';
 
-type WriteOff = {
-    id: string;
-    billingInvoiceId: string | null;
-    patientId: string | null;
-    amount: number | null;
-    reason: string | null;
-    status: string;
-};
+const breadcrumbs: BreadcrumbItem[] = [
+    { title: 'Write-Offs & Bad Debt', href: '/billing-write-offs' },
+];
 
-const writeOffs = ref<WriteOff[]>([]);
-const loading = ref(false);
 const showCreateDialog = ref(false);
 const invoiceId = ref('');
 const patientIdValue = ref('');
@@ -45,31 +38,12 @@ const amount = ref(0);
 const reason = ref('');
 const notes = ref('');
 const submitting = ref(false);
-const statusFilter = ref('all');
 const error = ref<string | null>(null);
-const success = ref<string | null>(null);
-
-async function fetchWriteOffs() {
-    loading.value = true;
-    error.value = null;
-    try {
-        const params = new URLSearchParams();
-        if (statusFilter.value !== 'all') params.set('status', statusFilter.value);
-        params.set('perPage', '20');
-        const res = await apiRequestJson(`/api/v1/write-offs?${params.toString()}`);
-        writeOffs.value = res.data ?? [];
-    } catch (e) {
-        error.value = 'Failed to load write-offs.';
-    } finally {
-        loading.value = false;
-    }
-}
 
 async function submitWriteOff() {
     if (!invoiceId.value || !patientIdValue.value || !amount.value || !reason.value) return;
     submitting.value = true;
     error.value = null;
-    success.value = null;
     try {
         await apiRequestJson('/api/v1/write-offs', {
             method: 'POST',
@@ -88,88 +62,50 @@ async function submitWriteOff() {
         amount.value = 0;
         reason.value = '';
         notes.value = '';
-        await fetchWriteOffs();
     } catch (e: any) {
         error.value = e?.payload?.message || messageFromUnknown(e);
     } finally {
         submitting.value = false;
     }
 }
-
-async function approveWriteOff(id: string, newStatus: string) {
-    error.value = null;
-    success.value = null;
-    try {
-        await apiRequestJson(`/api/v1/write-offs/${id}/approve`, {
-            method: 'POST',
-            body: JSON.stringify({ status: newStatus }),
-        });
-        notifySuccess(`Write-off ${newStatus}.`);
-        await fetchWriteOffs();
-    } catch (e: any) {
-        error.value = e?.payload?.message || messageFromUnknown(e);
-    }
-}
-
-onMounted(fetchWriteOffs);
 </script>
 
 <template>
-    <AppLayout>
+    <AppLayout :breadcrumbs="breadcrumbs">
         <Head title="Write-Offs & Bad Debt" />
-        <div class="px-6 pt-2">
-            <BillingOperationTabs />
-        </div>
-        <div class="space-y-6 p-6">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-2xl font-bold tracking-tight">Write-Offs & Bad Debt</h1>
-                    <p class="text-muted-foreground text-sm">Uncollectible balance write-off approvals</p>
+        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-hidden rounded-lg p-4 md:p-6">
+
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
+                            <AppIcon name="file-text" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <h1 class="text-base font-semibold tracking-tight md:text-lg">Write-Offs &amp; Bad Debt</h1>
+                            <p class="text-xs text-muted-foreground">Uncollectible balance write-off approvals</p>
+                        </div>
+                    </div>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button @click="showCreateDialog = true">
+                            <AppIcon name="plus" class="size-4" />
+                            New Write-Off
+                        </Button>
+                    </div>
                 </div>
-                <Button @click="showCreateDialog = true">New Write-Off</Button>
-            </div>
+            </section>
 
-            <div v-if="error" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ error }}</div>
-
-            <div class="flex items-center gap-4">
-                <Select v-model="statusFilter" @update:model-value="fetchWriteOffs">
-                    <SelectTrigger class="w-40">
-                        <SelectValue placeholder="Filter status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Statuses</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="approved">Approved</SelectItem>
-                        <SelectItem value="rejected">Rejected</SelectItem>
-                        <SelectItem value="processed">Processed</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
+            <BillingOperationTabs />
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Write-Offs</CardTitle>
-                    <CardDescription>Manage bad debt write-off requests</CardDescription>
+                    <CardTitle>Write-Offs &amp; Bad Debt</CardTitle>
+                    <CardDescription>Create a bad debt write-off request against an invoice</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div v-if="loading" class="text-muted-foreground py-8 text-center">Loading...</div>
-                    <div v-else-if="writeOffs.length === 0" class="text-muted-foreground py-8 text-center">No write-offs found</div>
-                    <div v-else class="space-y-2">
-                        <div v-for="wo in writeOffs" :key="wo.id" class="flex items-center justify-between rounded-lg border p-4">
-                            <div class="space-y-1">
-                                <div class="font-medium">Invoice: {{ wo.billingInvoiceId }}</div>
-                                <div class="text-muted-foreground text-sm">Patient: {{ wo.patientId }}</div>
-                                <div class="text-sm">Amount: <span class="font-semibold">{{ wo.amount }}</span></div>
-                                <div class="text-muted-foreground text-sm">Reason: {{ wo.reason }}</div>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <Badge :variant="wo.status === 'approved' ? 'success' : wo.status === 'rejected' ? 'destructive' : wo.status === 'processed' ? 'default' : 'secondary'">
-                                    {{ wo.status }}
-                                </Badge>
-                                <Button v-if="wo.status === 'pending'" size="sm" variant="outline" @click="approveWriteOff(wo.id, 'approved')">Approve</Button>
-                                <Button v-if="wo.status === 'pending'" size="sm" variant="destructive" @click="approveWriteOff(wo.id, 'rejected')">Reject</Button>
-                            </div>
-                        </div>
+                    <div class="flex flex-col items-center gap-3 py-8 text-center text-muted-foreground">
+                        <AppIcon name="file-text" class="size-10 opacity-40" />
+                        <p>Click <strong>New Write-Off</strong> to create a write-off request for an uncollectible balance.</p>
                     </div>
                 </CardContent>
             </Card>
