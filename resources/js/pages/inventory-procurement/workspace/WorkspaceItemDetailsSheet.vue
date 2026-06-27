@@ -121,7 +121,7 @@ const ws = useInventoryWorkspace();
                                 >
                                     <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{{ card.label }}</p>
                                     <div class="mt-0.5 space-y-0.5">
-                                        <p class="min-w-0 text-sm font-semibold leading-4">{{ card.value }}</p>
+                                        <p :class="['min-w-0 text-sm font-semibold leading-4', card.valueClass ?? '']">{{ card.value }}</p>
                                         <p
                                             class="min-w-0 text-xs leading-4 text-muted-foreground line-clamp-1"
                                             :title="card.helper"

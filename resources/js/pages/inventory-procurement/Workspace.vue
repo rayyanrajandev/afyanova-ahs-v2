@@ -2148,6 +2148,21 @@ const itemDetailsSummaryCards = computed(() => {
                 ? 'Correct from the action bar above'
                 : 'Use "Set Opening Stock" after creating the item',
         },
+        (() => {
+            const price = unitPrices.value?.[0];
+            const priceLabel = price
+                ? `${price.currencyCode} ${Number(price.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : null;
+            return {
+                key: 'billingPrice',
+                label: 'Billing price',
+                value: priceLabel ?? 'Not set',
+                helper: priceLabel
+                    ? `${price.priceType.replace('_', ' ')} · per ${unitLabel}`
+                    : 'No active unit price configured',
+                valueClass: priceLabel ? 'text-emerald-600 dark:text-emerald-400' : '',
+            };
+        })(),
         {
             key: 'classification',
             label: 'Inventory class',
