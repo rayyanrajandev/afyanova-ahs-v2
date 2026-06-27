@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import LeaveWorkflowDialog from '@/components/workflow/LeaveWorkflowDialog.vue';
 import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
+import BillingOperationTabs from '@/pages/billing-invoices/components/BillingOperationTabs.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiGet, apiPost } from '@/lib/apiClient';
 import { generateRequestKey } from '@/lib/idempotency';
@@ -667,6 +668,9 @@ onMounted(async () => {
     <Head title="Refund Operations" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
+        <div class="px-4 md:px-6 pt-2">
+            <BillingOperationTabs />
+        </div>
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-hidden p-4 md:p-6">
             <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div class="min-w-0">

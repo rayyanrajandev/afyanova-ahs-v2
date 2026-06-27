@@ -77,6 +77,7 @@ import BillingCreateLineItemsSidebar from './components/BillingCreateLineItemsSi
 import BillingCreateSelectedLineEditor from './components/BillingCreateSelectedLineEditor.vue';
 import BillingCreateStageActions from './components/BillingCreateStageActions.vue';
 import BillingCreateWorkspaceHeader from './components/BillingCreateWorkspaceHeader.vue';
+import BillingOperationTabs from './components/BillingOperationTabs.vue';
 import BillingQueueControlBar from './components/BillingQueueControlBar.vue';
 import BillingQueueFiltersPanels from './components/BillingQueueFiltersPanels.vue';
 import BillingQueueTable from './components/BillingQueueTable.vue';
@@ -14482,6 +14483,8 @@ onMounted(refreshPage);
                 @open-queue="setBillingWorkspaceView('queue', { focusSearch: true })"
                 @open-create="openCreateBillingWorkspace"
             />
+
+            <BillingOperationTabs />
 
             <template v-if="pageLoading">
                 <div

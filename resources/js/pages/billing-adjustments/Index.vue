@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import BillingOperationTabs from '@/pages/billing-invoices/components/BillingOperationTabs.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
 
@@ -96,6 +97,9 @@ onMounted(fetchInvoices);
 <template>
     <AppLayout>
         <Head title="Credit & Debit Notes" />
+        <div class="px-6 pt-2">
+            <BillingOperationTabs />
+        </div>
         <div class="space-y-6 p-6">
             <div class="flex items-center justify-between">
                 <div>
