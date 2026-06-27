@@ -378,6 +378,8 @@ class BillingServiceCatalogController extends Controller
             'departmentId' => 'department_id',
             'department' => 'department',
             'unit' => 'unit',
+            'priceUnit' => 'price_unit',
+            'unitsPerPack' => 'units_per_pack',
             'basePrice' => 'base_price',
             'currencyCode' => 'currency_code',
             'taxRatePercent' => 'tax_rate_percent',

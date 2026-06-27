@@ -3,10 +3,12 @@
 namespace App\Modules\Platform\Application\UseCases;
 
 use App\Modules\Platform\Application\Exceptions\DuplicateClinicalCatalogCodeException;
+use App\Modules\Platform\Application\Services\CatalogDownstreamSyncService;
 use App\Modules\Platform\Application\Support\ClinicalCatalogBillingLinkEnricher;
 use App\Modules\Platform\Domain\Repositories\ClinicalCatalogItemAuditLogRepositoryInterface;
 use App\Modules\Platform\Domain\Repositories\ClinicalCatalogItemRepositoryInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
+use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogType;
 use App\Support\CatalogGovernance\FacilityTierSupport;
 use App\Support\CatalogGovernance\StandardsCodeSupport;
 
@@ -19,6 +21,7 @@ class UpdateClinicalCatalogItemUseCase
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
         private readonly StandardsCodeSupport $standardsCodeSupport,
         private readonly FacilityTierSupport $facilityTierSupport,
+        private readonly CatalogDownstreamSyncService $downstreamSyncService,
     ) {}
 
     public function execute(string $id, string $catalogType, array $payload, ?int $actorId = null): ?array
@@ -106,6 +109,10 @@ class UpdateClinicalCatalogItemUseCase
                     'catalogType' => $catalogType,
                 ],
             );
+        }
+
+        if ($catalogType === ClinicalCatalogType::FORMULARY_ITEM->value) {
+            $this->downstreamSyncService->syncDownstream($id, $actorId);
         }
 
         return $this->billingLinkEnricher->enrich($updated);

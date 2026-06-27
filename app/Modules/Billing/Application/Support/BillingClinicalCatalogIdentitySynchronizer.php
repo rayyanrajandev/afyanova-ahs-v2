@@ -108,6 +108,18 @@ class BillingClinicalCatalogIdentitySynchronizer
             $payload['description'] = $catalogItem->description;
         }
 
+        $metadata = is_array($catalogItem->metadata) ? $catalogItem->metadata : [];
+        if (($payload['price_unit'] ?? null) === null) {
+            $priceUnit = $metadata['priceUnit'] ?? $metadata['price_unit'] ?? null;
+            if ($priceUnit !== null && is_string($priceUnit) && trim($priceUnit) !== '') {
+                $payload['price_unit'] = trim($priceUnit);
+            }
+        }
+
+        if (($payload['metadata'] ?? null) === null) {
+            $payload['metadata'] = $metadata;
+        }
+
         return $payload;
     }
 

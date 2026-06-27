@@ -144,6 +144,7 @@ type ClinicalCatalogLookupItem = {
     billingServiceCode: string | null;
     billingLinkStatus: string | null;
     billingLink: ClinicalCatalogLookupLink | null;
+    metadata: Record<string, unknown> | null;
     status: string | null;
 };
 type ClinicalCatalogLookupListResponse = { data: ClinicalCatalogLookupItem[]; meta: Pagination | null };
@@ -554,6 +555,12 @@ const createClinicalFallbackCodeMessage = computed(() => {
     if (!fallbackCode) return 'This clinical definition has no billing service code or clinical code yet. Set a code before saving a tariff.';
 
     return `This clinical definition does not have an explicit billing service code yet, so the tariff will use the clinical code ${fallbackCode}.`;
+});
+const createBasePriceHelperText = computed(() => {
+    if (createForm.serviceType === 'pharmacy') {
+        return 'For medicines, the actual price is determined by inventory unit prices. This base price is a fallback default.';
+    }
+    return null;
 });
 const createDepartmentHelperText = computed(() => {
     if (departmentsLoading.value) return 'Loading live department list...';
@@ -1832,6 +1839,16 @@ function applyCreateClinicalCatalogSelection(item: ClinicalCatalogLookupItem | n
         createForm.unit = unit;
     }
 
+    const meta = item.metadata ?? {};
+    const priceUnit = String(meta.priceUnit ?? meta.price_unit ?? '').trim();
+    if (priceUnit) {
+        createForm.priceUnit = priceUnit;
+    }
+
+    if (recommendedServiceType === 'pharmacy' && !createForm.basePrice.trim()) {
+        createForm.basePrice = '0';
+    }
+
     createForm.facilityTier = String(item.facilityTier ?? '').trim();
     applyStandardsCodesToForm(createForm, item.codes);
 
@@ -1847,6 +1864,7 @@ function clearCreateClinicalCatalogSelection(): void {
         createForm.serviceCode = '';
         createForm.serviceName = '';
         createForm.facilityTier = '';
+        createForm.priceUnit = '';
         applyStandardsCodesToForm(createForm, null);
     }
 }
@@ -3267,6 +3285,7 @@ watch(
                                                 label="Amount"
                                                 required
                                                 container-class="col-span-6 sm:col-span-3"
+                                                :helper-text="createBasePriceHelperText"
                                                 :error-message="firstError(createErrors, 'basePrice')"
                                             >
                                                 <Input
