@@ -50,6 +50,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useLocalStorageBoolean } from '@/composables/useLocalStorageBoolean';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/apiClient';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
 
@@ -393,55 +394,6 @@ function roleStatusVariant(status: string | null): 'outline' | 'secondary' | 'de
     return 'outline';
 }
 
-function csrfToken(): string | null {
-    const element = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]');
-    return element?.content ?? null;
-}
-
-async function apiRequest<T>(
-    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
-    path: string,
-    options?: { query?: Record<string, string | number | null>; body?: Record<string, unknown> },
-): Promise<T> {
-    const url = new URL(`/api/v1${path}`, window.location.origin);
-    Object.entries(options?.query ?? {}).forEach(([key, value]) => {
-        if (value === null || value === '') return;
-        url.searchParams.set(key, String(value));
-    });
-
-    const headers: Record<string, string> = { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
-    let body: string | undefined;
-
-    if (method !== 'GET') {
-        headers['Content-Type'] = 'application/json';
-        const token = csrfToken();
-        if (token) headers['X-CSRF-TOKEN'] = token;
-        body = options?.body ? JSON.stringify(options.body) : undefined;
-    }
-
-    const response = await fetch(url.toString(), {
-        method,
-        credentials: 'same-origin',
-        headers,
-        body,
-    });
-
-    if (response.status === 204) return {} as T;
-
-    const payload = (await response.json().catch(() => ({}))) as ValidationErrorResponse;
-    if (!response.ok) {
-        const error = new Error(payload.message ?? `${response.status} ${response.statusText}`) as Error & {
-            status?: number;
-            payload?: ValidationErrorResponse;
-        };
-        error.status = response.status;
-        error.payload = payload;
-        throw error;
-    }
-
-    return payload as T;
-}
-
 function formatDateTime(value: string | null): string {
     if (!value) return 'N/A';
     const date = new Date(value);
@@ -539,16 +491,14 @@ async function loadRoles() {
     listLoading.value = true;
     listErrors.value = [];
     try {
-        const response = await apiRequest<PlatformRoleListResponse>('GET', '/platform/admin/roles', {
-            query: {
-                q: searchForm.q.trim() || null,
-                status: searchForm.status || null,
-                facilityId: scopedFacilityId.value ?? null,
-                sortBy: searchForm.sortBy,
-                sortDir: searchForm.sortDir,
-                perPage: searchForm.perPage,
-                page: searchForm.page,
-            },
+        const response = await apiGet<PlatformRoleListResponse>('/platform/admin/roles', {
+            q: searchForm.q.trim() || null,
+            status: searchForm.status || null,
+            facilityId: scopedFacilityId.value ?? null,
+            sortBy: searchForm.sortBy,
+            sortDir: searchForm.sortDir,
+            perPage: searchForm.perPage,
+            page: searchForm.page,
         });
         roles.value = Array.isArray(response.data)
             ? response.data.map((role) => normalizeRolePayload(role as Partial<PlatformRole> & Record<string, unknown>))
@@ -575,11 +525,9 @@ async function loadPermissionsCatalog() {
     permissionsLoading.value = true;
     permissionsError.value = null;
     try {
-        const response = await apiRequest<PlatformPermissionListResponse>('GET', '/platform/admin/permissions', {
-            query: {
-                page: 1,
-                perPage: 200,
-            },
+        const response = await apiGet<PlatformPermissionListResponse>('/platform/admin/permissions', {
+            page: 1,
+            perPage: 200,
         });
         permissionsCatalog.value = response.data ?? [];
     } catch (error) {
@@ -650,7 +598,7 @@ async function createRole() {
     createLoading.value = true;
     createErrors.value = {};
     try {
-        const response = await apiRequest<PlatformRoleResponse>('POST', '/platform/admin/roles', {
+        const response = await apiPost<PlatformRoleResponse>('/platform/admin/roles', {
             body: {
                 code: createForm.code.trim(),
                 name: createForm.name.trim(),
@@ -684,7 +632,7 @@ async function quickToggleStatus(role: PlatformRole) {
 
     actionLoadingId.value = roleId;
     try {
-        const response = await apiRequest<PlatformRoleResponse>('PATCH', `/platform/admin/roles/${roleId}`, {
+        const response = await apiPatch<PlatformRoleResponse>(`/platform/admin/roles/${roleId}`, {
             body: { status: targetStatus },
         });
         const updatedRole = normalizeRolePayload(response.data as Partial<PlatformRole> & Record<string, unknown>);
@@ -733,7 +681,7 @@ async function openDetails(role: PlatformRole) {
     detailsAuditFiltersOpen.value = false;
 
     try {
-        const response = await apiRequest<PlatformRoleResponse>('GET', `/platform/admin/roles/${roleId}`);
+        const response = await apiGet<PlatformRoleResponse>(`/platform/admin/roles/${roleId}`);
         const resolvedRole = normalizeRolePayload(response.data as Partial<PlatformRole> & Record<string, unknown>);
         detailsRole.value = resolvedRole;
         detailsForm.code = resolvedRole.code ?? '';
@@ -777,7 +725,7 @@ async function saveRoleMetadata() {
     saveRoleLoading.value = true;
     detailsFormErrors.value = {};
     try {
-        const response = await apiRequest<PlatformRoleResponse>('PATCH', `/platform/admin/roles/${roleId}`, {
+        const response = await apiPatch<PlatformRoleResponse>(`/platform/admin/roles/${roleId}`, {
             body: {
                 code: detailsForm.code.trim(),
                 name: detailsForm.name.trim(),
@@ -838,7 +786,7 @@ async function saveRolePermissions() {
 
     savePermissionsLoading.value = true;
     try {
-        const response = await apiRequest<PlatformRoleResponse>('PATCH', `/platform/admin/roles/${roleId}/permissions`, {
+        const response = await apiPatch<PlatformRoleResponse>(`/platform/admin/roles/${roleId}/permissions`, {
             body: {
                 permissionNames: normalizePermissionNames(selectedPermissionNames.value),
             },
@@ -873,7 +821,7 @@ async function deleteRoleFromDetails() {
     deleteRoleLoading.value = true;
     deleteRoleError.value = null;
     try {
-        await apiRequest('DELETE', `/platform/admin/roles/${roleId}`);
+        await apiDelete(`/platform/admin/roles/${roleId}`);
         removeRoleFromList(roleId);
         notifySuccess(`Role ${detailsRole.value?.code ?? roleId} deleted.`);
         closeDeleteRoleDialog();
@@ -898,19 +846,17 @@ async function loadDetailsAudit(roleId: string) {
     detailsAuditLoading.value = true;
     detailsAuditError.value = null;
     try {
-        const response = await apiRequest<PlatformRbacAuditLogListResponse>('GET', '/platform/admin/rbac-audit-logs', {
-            query: {
-                q: detailsAuditFilters.q.trim() || null,
-                action: detailsAuditFilters.action.trim() || null,
-                targetType: 'role',
-                targetId: roleId,
-                actorType: detailsAuditFilters.actorType || null,
-                actorId: detailsAuditFilters.actorId.trim() || null,
-                from: detailsAuditFilters.from || null,
-                to: detailsAuditFilters.to || null,
-                page: detailsAuditFilters.page,
-                perPage: detailsAuditFilters.perPage,
-            },
+        const response = await apiGet<PlatformRbacAuditLogListResponse>('/platform/admin/rbac-audit-logs', {
+            q: detailsAuditFilters.q.trim() || null,
+            action: detailsAuditFilters.action.trim() || null,
+            targetType: 'role',
+            targetId: roleId,
+            actorType: detailsAuditFilters.actorType || null,
+            actorId: detailsAuditFilters.actorId.trim() || null,
+            from: detailsAuditFilters.from || null,
+            to: detailsAuditFilters.to || null,
+            page: detailsAuditFilters.page,
+            perPage: detailsAuditFilters.perPage,
         });
         detailsAuditLogs.value = response.data ?? [];
         detailsAuditMeta.value = response.meta ?? null;
