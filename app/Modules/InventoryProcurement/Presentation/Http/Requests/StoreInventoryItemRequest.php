@@ -41,7 +41,8 @@ class StoreInventoryItemRequest extends FormRequest
             'codes.CPT' => ['nullable', 'string', 'max:120'],
             'codes.ICD' => ['nullable', 'string', 'max:120'],
             'clinicalCatalogItemId' => ['nullable', 'uuid'],
-            'itemName' => ['required', 'string', 'max:180'],
+            // itemName and unit are nullable when catalog-linked; required otherwise (enforced in withValidator)
+            'itemName' => ['nullable', 'string', 'max:180'],
             'genericName' => ['nullable', 'string', 'max:180'],
             'dosageForm' => ['nullable', 'string', 'max:60'],
             'strength' => ['nullable', 'string', 'max:60'],
@@ -49,7 +50,7 @@ class StoreInventoryItemRequest extends FormRequest
             'subcategory' => ['nullable', 'string', 'max:120'],
             'venClassification' => ['nullable', Rule::in(InventoryVenClassification::values())],
             'abcClassification' => ['nullable', Rule::in(['A', 'B', 'C'])],
-            'unit' => ['required', 'string', 'max:40'],
+            'unit' => ['nullable', 'string', 'max:40'],
             'dispensingUnit' => ['nullable', 'string', 'max:40'],
             'conversionFactor' => ['nullable', 'numeric', 'gt:0'],
             'binLocation' => ['nullable', 'string', 'max:60'],
@@ -78,21 +79,42 @@ class StoreInventoryItemRequest extends FormRequest
             $isControlledSubstance = $this->boolean('isControlledSubstance');
             $schedule = trim((string) $this->input('controlledSubstanceSchedule', ''));
             $clinicalCatalogItemId = trim((string) $this->input('clinicalCatalogItemId', ''));
+            $hasCatalogLink = $clinicalCatalogItemId !== '';
 
             if (app(CatalogPlacementAuditor::class)->looksLikeClinicalTest($this->all())) {
                 $validator->errors()->add('itemName', 'This looks like a clinical test/procedure. Create CBC, urinalysis, blood culture, and similar services in Clinical Care Catalogs, not Inventory Items.');
             }
 
-            if ($category === InventoryItemCategory::PHARMACEUTICAL && $clinicalCatalogItemId === '') {
+            if ($category === InventoryItemCategory::PHARMACEUTICAL && ! $hasCatalogLink) {
                 $validator->errors()->add('clinicalCatalogItemId', 'Select the approved medicine from Clinical Care Catalogs before creating pharmaceutical stock.');
             }
 
-            if ($category !== InventoryItemCategory::PHARMACEUTICAL && $clinicalCatalogItemId !== '') {
+            if ($category !== InventoryItemCategory::PHARMACEUTICAL && $hasCatalogLink) {
                 $validator->errors()->add('clinicalCatalogItemId', 'Clinical catalog linking is only valid for pharmaceutical inventory. Laboratory reagents and supplies must be created as inventory supply items, not lab tests.');
             }
 
-            if ($clinicalCatalogItemId !== '' && ! $this->clinicalCatalogItemIsUsable($clinicalCatalogItemId)) {
+            if ($hasCatalogLink && ! $this->clinicalCatalogItemIsUsable($clinicalCatalogItemId)) {
                 $validator->errors()->add('clinicalCatalogItemId', 'The selected clinical medicine is not active or is outside the current facility scope.');
+            }
+
+            // When linked to a clinical catalog, identity fields are sourced from the catalog.
+            // When NOT linked, enforce required fields that the catalog would otherwise provide.
+            if ($hasCatalogLink) {
+                // Clear any validation errors for identity fields that the catalog provides
+                if ($this->has('itemName') && trim((string) $this->input('itemName', '')) === '') {
+                    $validator->errors()->forget('itemName');
+                }
+                if ($this->has('unit') && trim((string) $this->input('unit', '')) === '') {
+                    $validator->errors()->forget('unit');
+                }
+            } else {
+                // Enforce required identity fields when not catalog-linked
+                if (trim((string) $this->input('itemName', '')) === '') {
+                    $validator->errors()->add('itemName', 'The item name field is required when not linked to a clinical catalog.');
+                }
+                if (trim((string) $this->input('unit', '')) === '') {
+                    $validator->errors()->add('unit', 'The unit field is required when not linked to a clinical catalog.');
+                }
             }
 
             if ($category->requiresColdChain() && ! $requiresColdChain) {

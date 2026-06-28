@@ -249,12 +249,24 @@ class EloquentBillingServiceCatalogItemRepository implements BillingServiceCatal
         $queryBuilder
             ->when($query, function (Builder $builder, string $searchTerm): void {
                 $like = '%'.$searchTerm.'%';
+                // LEFT JOIN clinical catalog to enable search across linked catalog item names/codes
+                if ($this->supportsClinicalCatalogLink()) {
+                    $builder->leftJoin(
+                        'platform_clinical_catalog_items AS cci',
+                        'billing_service_catalog_items.clinical_catalog_item_id',
+                        '=',
+                        'cci.id',
+                    );
+                }
                 $builder->where(function (Builder $nestedQuery) use ($like): void {
                     $nestedQuery
                         ->where('service_code', 'like', $like)
                         ->orWhere('service_name', 'like', $like)
                         ->orWhere('service_type', 'like', $like)
-                        ->orWhere('department', 'like', $like);
+                        ->orWhere('department', 'like', $like)
+                        // Search linked clinical catalog item name and code
+                        ->orWhereRaw('LOWER(cci.name) LIKE ?', [mb_strtolower($like)])
+                        ->orWhereRaw('LOWER(cci.code) LIKE ?', [mb_strtolower($like)]);
                 });
             })
             ->when($serviceType, fn (Builder $builder, string $requestedServiceType) => $builder->where('service_type', $requestedServiceType))

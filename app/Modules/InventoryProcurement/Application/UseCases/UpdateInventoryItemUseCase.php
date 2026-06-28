@@ -6,6 +6,7 @@ use App\Modules\InventoryProcurement\Application\Exceptions\DuplicateInventoryIt
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemAuditLogRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemRepositoryInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
+use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Support\CatalogGovernance\InventoryClinicalLinkGuard;
 use App\Support\CatalogGovernance\StandardsCodeSupport;
 
@@ -28,6 +29,16 @@ class UpdateInventoryItemUseCase
             return null;
         }
 
+        // When linked to a clinical catalog, identity fields are owned by the catalog.
+        // Strip them from the update payload and read from the catalog item instead.
+        $effectiveCatalogId = $payload['clinical_catalog_item_id']
+            ?? $existing['clinical_catalog_item_id']
+            ?? null;
+
+        $catalogIdentity = $effectiveCatalogId !== null
+            ? $this->resolveCatalogIdentity((string) $effectiveCatalogId)
+            : null;
+
         $updatePayload = [];
 
         if (array_key_exists('item_code', $payload)) {
@@ -39,8 +50,28 @@ class UpdateInventoryItemUseCase
             $updatePayload['item_code'] = $itemCode;
         }
 
-        if (array_key_exists('item_name', $payload)) {
-            $updatePayload['item_name'] = trim((string) $payload['item_name']);
+        // Identity fields: when catalog-linked, always read from catalog; otherwise allow user input
+        if ($catalogIdentity !== null) {
+            $updatePayload['item_name'] = $catalogIdentity['item_name'];
+            $updatePayload['generic_name'] = $catalogIdentity['generic_name'];
+            $updatePayload['dosage_form'] = $catalogIdentity['dosage_form'];
+            $updatePayload['strength'] = $catalogIdentity['strength'];
+            $updatePayload['unit'] = $catalogIdentity['unit'];
+            $updatePayload['dispensing_unit'] = $catalogIdentity['dispensing_unit'];
+            $updatePayload['codes'] = $catalogIdentity['codes'];
+            $updatePayload['subcategory'] = $catalogIdentity['subcategory'];
+        } else {
+            if (array_key_exists('item_name', $payload)) {
+                $updatePayload['item_name'] = trim((string) $payload['item_name']);
+            }
+
+            if (array_key_exists('codes', $payload)) {
+                $updatePayload['codes'] = $this->standardsCodeSupport->normalize(is_array($payload['codes']) ? $payload['codes'] : null);
+            }
+
+            if (array_key_exists('unit', $payload)) {
+                $updatePayload['unit'] = trim((string) $payload['unit']);
+            }
         }
 
         if (array_key_exists('category', $payload)) {
@@ -49,19 +80,15 @@ class UpdateInventoryItemUseCase
 
         $nullableStringFields = [
             'clinical_catalog_item_id',
-            'msd_code', 'nhif_code', 'barcode', 'generic_name', 'dosage_form',
-            'strength', 'subcategory', 'ven_classification', 'abc_classification',
-            'dispensing_unit', 'bin_location', 'manufacturer', 'storage_conditions',
+            'msd_code', 'nhif_code', 'barcode',
+            'ven_classification', 'abc_classification',
+            'bin_location', 'manufacturer', 'storage_conditions',
             'controlled_substance_schedule', 'default_warehouse_id', 'default_supplier_id',
         ];
         foreach ($nullableStringFields as $field) {
             if (array_key_exists($field, $payload)) {
                 $updatePayload[$field] = $this->nullableTrimmedValue($payload[$field]);
             }
-        }
-
-        if (array_key_exists('codes', $payload)) {
-            $updatePayload['codes'] = $this->standardsCodeSupport->normalize(is_array($payload['codes']) ? $payload['codes'] : null);
         }
 
         $booleanFields = ['requires_cold_chain', 'is_controlled_substance'];
@@ -73,10 +100,6 @@ class UpdateInventoryItemUseCase
 
         if (array_key_exists('conversion_factor', $payload)) {
             $updatePayload['conversion_factor'] = $this->nullableNumericValue($payload['conversion_factor']);
-        }
-
-        if (array_key_exists('unit', $payload)) {
-            $updatePayload['unit'] = trim((string) $payload['unit']);
         }
 
         if (array_key_exists('reorder_level', $payload)) {
@@ -130,6 +153,34 @@ class UpdateInventoryItemUseCase
         }
 
         return (float) $value;
+    }
+
+    /**
+     * Read identity fields from the clinical catalog item to avoid duplicating data.
+     *
+     * @return array<string, mixed>
+     */
+    private function resolveCatalogIdentity(string $clinicalCatalogItemId): array
+    {
+        $catalogItem = ClinicalCatalogItemModel::query()->find($clinicalCatalogItemId);
+
+        if ($catalogItem === null) {
+            return [];
+        }
+
+        $metadata = is_array($catalogItem->metadata) ? $catalogItem->metadata : [];
+        $codes = is_array($catalogItem->codes) ? $catalogItem->codes : [];
+
+        return [
+            'item_name' => trim((string) $catalogItem->name),
+            'generic_name' => $metadata['genericName'] ?? $metadata['generic_name'] ?? null,
+            'dosage_form' => $metadata['dosageForm'] ?? $metadata['dosage_form'] ?? null,
+            'strength' => $metadata['strength'] ?? null,
+            'unit' => $metadata['stockUnit'] ?? $metadata['stock_unit'] ?? $catalogItem->unit ?? 'Each',
+            'dispensing_unit' => $metadata['dispensingUnit'] ?? $metadata['dispensing_unit'] ?? $catalogItem->unit ?? null,
+            'subcategory' => $catalogItem->category ?? null,
+            'codes' => $this->standardsCodeSupport->normalize($codes),
+        ];
     }
 
     /**

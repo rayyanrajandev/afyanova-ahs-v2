@@ -29,7 +29,7 @@ const props = withDefaults(
 );
 
 const normalizedError = computed(() => (props.errorMessage ?? '').trim());
-const normalizedHelper = computed(() => props.helperText.trim());
+const normalizedHelper = computed(() => (props.helperText ?? '').trim());
 const resolvedMessage = computed(() => normalizedError.value || normalizedHelper.value);
 const isErrorMessage = computed(() => normalizedError.value.length > 0);
 </script>

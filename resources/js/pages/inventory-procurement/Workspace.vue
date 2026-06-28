@@ -2078,6 +2078,28 @@ const updateSubcategoryOptions = computed(() => subcategoryOptionsForCategory(it
 const receiveTrackedCategory = computed(() => resolveCategoryOption(String(receiveRequest.value?.itemCategory ?? '')));
 const receiveRequiresBatchTracking = computed(() => Boolean(receiveTrackedCategory.value?.requiresExpiryTracking));
 
+const createIdentityLockedToCatalog = computed(() => Boolean(
+    itemCreateForm.clinicalCatalogItemId.trim()
+    && selectedCreateCategory.value?.supportsMedicineDetails,
+));
+
+const createSelectedCatalogItem = computed(() => {
+    const id = itemCreateForm.clinicalCatalogItemId.trim();
+    if (!id) return null;
+    return clinicalCatalogItems.value.find((entry) => entry.id === id) ?? null;
+});
+
+const updateIdentityLockedToCatalog = computed(() => Boolean(
+    itemUpdateForm.clinicalCatalogItemId.trim()
+    && selectedUpdateCategory.value?.supportsMedicineDetails,
+));
+
+const updateSelectedCatalogItem = computed(() => {
+    const id = itemUpdateForm.clinicalCatalogItemId.trim();
+    if (!id) return null;
+    return clinicalCatalogItems.value.find((entry) => entry.id === id) ?? null;
+});
+
 const createCategoryWorkflowBadges = computed(() => {
     const category = selectedCreateCategory.value;
     if (!category) return [];
@@ -6992,6 +7014,8 @@ bindInventoryWorkspace({
     createSubcategoryOptions,
     createClinicalCatalogOptions,
     createClinicalCatalogSelectionRequired,
+    createIdentityLockedToCatalog,
+    createSelectedCatalogItem,
     selectClinicalCatalogItem,
     createCategoryWorkflowBadges,
     DOSAGE_FORM_OPTIONS,
@@ -7129,6 +7153,8 @@ bindInventoryWorkspace({
     selectedUpdateCategory,
     updateSubcategoryOptions,
     updateClinicalCatalogOptions,
+    updateIdentityLockedToCatalog,
+    updateSelectedCatalogItem,
     updateCategoryWorkflowBadges,
     updateItemWarehouseOpen,
     updateItemSupplierOpen,
@@ -7221,6 +7247,18 @@ onMounted(async () => {
                 back-label="Supply chain home"
             >
                 <template #actions>
+                    <Button variant="outline" size="sm" as-child class="h-8 gap-1.5">
+                        <Link href="/platform/admin/clinical-catalogs">
+                            <AppIcon name="book-open" class="size-3.5" />
+                            Clinical catalog
+                        </Link>
+                    </Button>
+                    <Button variant="outline" size="sm" as-child class="h-8 gap-1.5">
+                        <Link href="/billing-service-catalog">
+                            <AppIcon name="receipt" class="size-3.5" />
+                            Tariffs & services
+                        </Link>
+                    </Button>
                     <Button v-if="canReconcileStock" size="sm" variant="outline" class="h-8 gap-1.5" :disabled="!canLaunchReconciliation" @click="openReconcileDialog">
                         <AppIcon name="shield-check" class="size-3.5" />
                         Reconcile stock

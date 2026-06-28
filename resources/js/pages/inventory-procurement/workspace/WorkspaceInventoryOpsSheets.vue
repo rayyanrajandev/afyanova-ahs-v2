@@ -6,6 +6,7 @@ import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vue';
 import InventoryItemLookupField from '@/components/inventory/InventoryItemLookupField.vue';
+import CatalogLinkBadge from '@/components/shared/CatalogLinkBadge.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -83,7 +84,16 @@ const ws = useInventoryWorkspace();
                 </fieldset>
                 <!-- Basic Information -->
                 <fieldset v-if="ws.selectedCreateCategory" class="grid gap-3 sm:grid-cols-2 rounded-lg border p-3">
-                    <legend class="px-2 text-sm font-medium text-muted-foreground">Basic Information</legend>
+                    <legend class="px-2 text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        Basic Information
+                        <CatalogLinkBadge
+                            v-if="ws.createIdentityLockedToCatalog && ws.createSelectedCatalogItem"
+                            source="clinical_catalog"
+                            :catalog-type="ws.createSelectedCatalogItem.catalogType"
+                            :catalog-name="ws.createSelectedCatalogItem.name"
+                            :catalog-code="ws.createSelectedCatalogItem.code"
+                        />
+                    </legend>
                     <div v-if="ws.selectedCreateCategory && ws.createClinicalCatalogOptions.length > 0" class="sm:col-span-2">
                         <SearchableSelectField
                             input-id="inv-item-clinical-catalog"
@@ -110,30 +120,37 @@ const ws = useInventoryWorkspace();
                             </Link>
                         </AlertDescription>
                     </Alert>
-                    <p v-if="ws.selectedCreateCategory?.supportsMedicineDetails && ws.createClinicalCatalogOptions.length > 0" class="sm:col-span-2 text-xs text-muted-foreground">
+                    <p v-if="ws.createIdentityLockedToCatalog" class="sm:col-span-2 text-xs text-muted-foreground">
+                        Identity fields are synced from the clinical catalog and cannot be edited here. To change name, code, or dosage details, update the linked clinical definition.
+                    </p>
+                    <p v-else-if="ws.selectedCreateCategory?.supportsMedicineDetails && ws.createClinicalCatalogOptions.length > 0" class="sm:col-span-2 text-xs text-muted-foreground">
                         Select the approved medicine first. Code, name, strength, dosage form, dispensing unit, and standards codes load from the catalog.
                     </p>
                     <div class="grid gap-2">
                         <Label for="inv-item-code">Item Code</Label>
-                        <Input id="inv-item-code" v-model="ws.itemCreateForm.itemCode" :disabled="ws.itemCreateSubmitting" />
-                        <p v-if="ws.fieldError(ws.itemCreateErrors, 'itemCode')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'itemCode') }}</p>
+                        <Input id="inv-item-code" v-model="ws.itemCreateForm.itemCode" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" />
+                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'itemCode')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'itemCode') }}</p>
                     </div>
                     <div class="grid gap-2">
                         <Label for="inv-item-name">Item Name</Label>
-                        <Input id="inv-item-name" v-model="ws.itemCreateForm.itemName" :disabled="ws.itemCreateSubmitting" />
-                        <p v-if="ws.fieldError(ws.itemCreateErrors, 'itemName')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'itemName') }}</p>
+                        <Input id="inv-item-name" v-model="ws.itemCreateForm.itemName" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" />
+                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'itemName')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'itemName') }}</p>
                     </div>
                     <FormFieldShell
                         input-id="inv-item-manufacturer"
                         label="Manufacturer"
+                        :error-message="ws.fieldError(ws.itemCreateErrors, 'manufacturer')"
                     >
-                        <Input id="inv-item-manufacturer" v-model="ws.itemCreateForm.manufacturer" :disabled="ws.itemCreateSubmitting" />
+                        <Input id="inv-item-manufacturer" v-model="ws.itemCreateForm.manufacturer" :disabled="ws.itemCreateSubmitting" placeholder="e.g. Pfizer, GSK" />
                     </FormFieldShell>
                     <FormFieldShell
                         input-id="inv-item-barcode"
                         label="Barcode"
+                        :error-message="ws.fieldError(ws.itemCreateErrors, 'barcode')"
                     >
-                        <Input id="inv-item-barcode" v-model="ws.itemCreateForm.barcode" :disabled="ws.itemCreateSubmitting" />
+                        <Input id="inv-item-barcode" v-model="ws.itemCreateForm.barcode" :disabled="ws.itemCreateSubmitting" placeholder="e.g. 6291234567890" />
                     </FormFieldShell>
                     <Alert v-if="ws.selectedCreateCategory" class="sm:col-span-2">
                         <AlertTitle class="flex flex-wrap items-center gap-2">
@@ -148,7 +165,9 @@ const ws = useInventoryWorkspace();
                     <legend class="px-2 text-sm font-medium text-muted-foreground">Medicine Profile</legend>
                     <div class="grid gap-2">
                         <Label for="inv-item-generic-name">Generic Name</Label>
-                        <Input id="inv-item-generic-name" v-model="ws.itemCreateForm.genericName" :disabled="ws.itemCreateSubmitting" placeholder="e.g. Paracetamol" />
+                        <Input id="inv-item-generic-name" v-model="ws.itemCreateForm.genericName" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="e.g. Paracetamol" />
+                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'genericName')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'genericName') }}</p>
                     </div>
                     <ComboboxField
                         input-id="inv-item-dosage-form"
@@ -158,21 +177,27 @@ const ws = useInventoryWorkspace();
                         placeholder="Select dosage form"
                         search-placeholder="Search tablet, capsule, syrup, injection..."
                         empty-text="No dosage form found."
-                        :disabled="ws.itemCreateSubmitting"
+                        :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog"
                         :error-message="ws.fieldError(ws.itemCreateErrors, 'dosageForm')"
                         :reserve-message-space="false"
                     />
                     <div class="grid gap-2">
                         <Label for="inv-item-strength">Strength</Label>
-                        <Input id="inv-item-strength" v-model="ws.itemCreateForm.strength" :disabled="ws.itemCreateSubmitting" placeholder="e.g. 500mg, 250mg/5ml" />
+                        <Input id="inv-item-strength" v-model="ws.itemCreateForm.strength" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="e.g. 500mg, 250mg/5ml" />
+                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'strength')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'strength') }}</p>
                     </div>
                     <div class="grid gap-2">
                         <Label for="inv-item-dispensing-unit">Dispensing Unit</Label>
-                        <Input id="inv-item-dispensing-unit" v-model="ws.itemCreateForm.dispensingUnit" :disabled="ws.itemCreateSubmitting" placeholder="e.g. Tablet, ml" />
+                        <Input id="inv-item-dispensing-unit" v-model="ws.itemCreateForm.dispensingUnit" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="e.g. Tablet, ml" />
+                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'dispensingUnit')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'dispensingUnit') }}</p>
                     </div>
                     <div class="grid gap-2 sm:col-span-2">
                         <Label for="inv-item-conversion-factor">Conversion Factor</Label>
-                        <Input id="inv-item-conversion-factor" v-model="ws.itemCreateForm.conversionFactor" :disabled="ws.itemCreateSubmitting" type="number" min="0" step="0.001" placeholder="Stock to dispensing conversion" />
+                        <Input id="inv-item-conversion-factor" v-model="ws.itemCreateForm.conversionFactor" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" type="number" min="0" step="0.001" placeholder="Stock to dispensing conversion" />
+                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'conversionFactor')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'conversionFactor') }}</p>
                     </div>
                 </fieldset>
 
@@ -238,6 +263,7 @@ const ws = useInventoryWorkspace();
                             <SelectItem v-for="v in ws.venClassificationOptions" :key="v.value" :value="v.value">{{ v.label }}</SelectItem>
                             </SelectContent>
                         </Select>
+                        <p v-if="ws.fieldError(ws.itemCreateErrors, 'venClassification')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'venClassification') }}</p>
                     </div>
                     <div v-if="!ws.selectedCreateCategory || ws.selectedCreateCategory.supportsClinicalClassification" class="grid gap-2">
                         <Label for="inv-item-abc">ABC Classification</Label>
@@ -249,14 +275,19 @@ const ws = useInventoryWorkspace();
                             <SelectItem v-for="a in ws.abcClassificationOptions" :key="a.value" :value="a.value">{{ a.label }}</SelectItem>
                             </SelectContent>
                         </Select>
+                        <p v-if="ws.fieldError(ws.itemCreateErrors, 'abcClassification')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'abcClassification') }}</p>
                     </div>
                     <div class="grid gap-2">
                         <Label for="inv-item-msd">MSD Code</Label>
-                        <Input id="inv-item-msd" v-model="ws.itemCreateForm.msdCode" :disabled="ws.itemCreateSubmitting" placeholder="Medical Stores Department code" />
+                        <Input id="inv-item-msd" v-model="ws.itemCreateForm.msdCode" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="Medical Stores Department code" />
+                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'msdCode')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'msdCode') }}</p>
                     </div>
                     <div v-if="!ws.selectedCreateCategory || ws.selectedCreateCategory.supportsClinicalClassification" class="grid gap-2">
                         <Label for="inv-item-nhif">NHIF Code</Label>
-                        <Input id="inv-item-nhif" v-model="ws.itemCreateForm.nhifCode" :disabled="ws.itemCreateSubmitting" />
+                        <Input id="inv-item-nhif" v-model="ws.itemCreateForm.nhifCode" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="NHIF tariff code" />
+                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'nhifCode')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'nhifCode') }}</p>
                     </div>
                     <p v-if="ws.selectedCreateCategory && !ws.selectedCreateCategory.supportsClinicalClassification" class="sm:col-span-2 text-xs text-muted-foreground">
                         This category uses operational coding only. Clinical classification and NHIF mapping stay hidden.
@@ -267,12 +298,14 @@ const ws = useInventoryWorkspace();
                     <legend class="px-2 text-sm font-medium text-muted-foreground">Stock Policy &amp; Defaults</legend>
                     <div class="grid gap-2">
                         <Label for="inv-item-unit">Stock Unit</Label>
-                        <Input id="inv-item-unit" v-model="ws.itemCreateForm.unit" :disabled="ws.itemCreateSubmitting" placeholder="e.g. Box, Bottle, Piece" />
-                        <p v-if="ws.fieldError(ws.itemCreateErrors, 'unit')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'unit') }}</p>
+                        <Input id="inv-item-unit" v-model="ws.itemCreateForm.unit" :disabled="ws.itemCreateSubmitting || ws.createIdentityLockedToCatalog" :class="ws.createIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="e.g. Box, Bottle, Piece" />
+                        <p v-if="ws.createIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                        <p v-else-if="ws.fieldError(ws.itemCreateErrors, 'unit')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'unit') }}</p>
                     </div>
                     <div class="grid gap-2">
                         <Label for="inv-item-bin-location">Bin Location</Label>
                         <Input id="inv-item-bin-location" v-model="ws.itemCreateForm.binLocation" :disabled="ws.itemCreateSubmitting" placeholder="e.g. A-03-12" />
+                        <p v-if="ws.fieldError(ws.itemCreateErrors, 'binLocation')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'binLocation') }}</p>
                     </div>
                     <div class="grid gap-2">
                         <Label>Default Warehouse</Label>
@@ -285,7 +318,7 @@ const ws = useInventoryWorkspace();
                                     class="w-full justify-between font-normal"
                                 >
                                     <span :class="ws.itemCreateForm.defaultWarehouseId ? '' : 'text-muted-foreground'">
-                                        {{ ws.itemCreateForm.defaultWarehouseId ? (warehouses.find(w => w.id === ws.itemCreateForm.defaultWarehouseId)?.name ?? ws.itemCreateForm.defaultWarehouseId) : '— Select warehouse —' }}
+                                        {{ ws.itemCreateForm.defaultWarehouseId ? (ws.warehouses.find(w => w.id === ws.itemCreateForm.defaultWarehouseId)?.name ?? ws.itemCreateForm.defaultWarehouseId) : '— Select warehouse —' }}
                                     </span>
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground shrink-0 opacity-50"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
                                 </Button>
@@ -333,7 +366,7 @@ const ws = useInventoryWorkspace();
                                     class="w-full justify-between font-normal"
                                 >
                                     <span :class="ws.itemCreateForm.defaultSupplierId ? '' : 'text-muted-foreground'">
-                                        {{ ws.itemCreateForm.defaultSupplierId ? (suppliers.find(s => s.id === ws.itemCreateForm.defaultSupplierId)?.name ?? ws.itemCreateForm.defaultSupplierId) : '— Select supplier —' }}
+                                        {{ ws.itemCreateForm.defaultSupplierId ? (ws.suppliers.find(s => s.id === ws.itemCreateForm.defaultSupplierId)?.name ?? ws.itemCreateForm.defaultSupplierId) : '— Select supplier —' }}
                                     </span>
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground shrink-0 opacity-50"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
                                 </Button>
@@ -372,11 +405,13 @@ const ws = useInventoryWorkspace();
                     </div>
                     <div class="grid gap-2">
                         <Label for="inv-item-reorder-level">Reorder Level</Label>
-                        <Input id="inv-item-reorder-level" v-model="ws.itemCreateForm.reorderLevel" :disabled="ws.itemCreateSubmitting" type="number" min="0" step="0.001" />
+                        <Input id="inv-item-reorder-level" v-model="ws.itemCreateForm.reorderLevel" :disabled="ws.itemCreateSubmitting" type="number" min="0" step="0.001" placeholder="e.g. 100" />
+                        <p v-if="ws.fieldError(ws.itemCreateErrors, 'reorderLevel')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'reorderLevel') }}</p>
                     </div>
                     <div class="grid gap-2">
                         <Label for="inv-item-max-stock-level">Max Stock Level</Label>
-                        <Input id="inv-item-max-stock-level" v-model="ws.itemCreateForm.maxStockLevel" :disabled="ws.itemCreateSubmitting" type="number" min="0" step="0.001" />
+                        <Input id="inv-item-max-stock-level" v-model="ws.itemCreateForm.maxStockLevel" :disabled="ws.itemCreateSubmitting" type="number" min="0" step="0.001" placeholder="e.g. 1000" />
+                        <p v-if="ws.fieldError(ws.itemCreateErrors, 'maxStockLevel')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemCreateErrors, 'maxStockLevel') }}</p>
                     </div>
                 </fieldset>
             </div>

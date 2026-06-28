@@ -8,26 +8,47 @@ class InventoryItemResponseTransformer
 {
     public static function transform(array $item): array
     {
+        // When linked to a clinical catalog, read identity fields from the catalog item
+        // to ensure the response always reflects the latest catalog data.
+        $catalog = is_array($item['clinical_catalog_item'] ?? null) ? $item['clinical_catalog_item'] : null;
+        $catalogMeta = is_array($catalog['metadata'] ?? null) ? $catalog['metadata'] : [];
+        $catalogCodes = is_array($catalog['codes'] ?? null) ? $catalog['codes'] : [];
+        $hasCatalogLink = ($item['clinical_catalog_item_id'] ?? null) !== null && $catalog !== null;
+
         return [
             'id' => $item['id'] ?? null,
             'itemCode' => $item['item_code'] ?? null,
             'msdCode' => $item['msd_code'] ?? null,
             'nhifCode' => $item['nhif_code'] ?? null,
             'barcode' => $item['barcode'] ?? null,
-            'codes' => is_array($item['codes'] ?? null) ? $item['codes'] : null,
+            'codes' => $hasCatalogLink && $catalogCodes !== [] ? $catalogCodes : (is_array($item['codes'] ?? null) ? $item['codes'] : null),
             'standardsWarnings' => app(StandardsCodeSupport::class)->warningsForInventoryItem($item),
             'clinicalCatalogItemId' => $item['clinical_catalog_item_id'] ?? null,
-            'itemName' => $item['item_name'] ?? null,
-            'genericName' => $item['generic_name'] ?? null,
-            'dosageForm' => $item['dosage_form'] ?? null,
-            'strength' => $item['strength'] ?? null,
+            'itemName' => $hasCatalogLink ? trim((string) ($catalog['name'] ?? '')) : ($item['item_name'] ?? null),
+            'genericName' => $hasCatalogLink
+                ? ($catalogMeta['genericName'] ?? $catalogMeta['generic_name'] ?? null)
+                : ($item['generic_name'] ?? null),
+            'dosageForm' => $hasCatalogLink
+                ? ($catalogMeta['dosageForm'] ?? $catalogMeta['dosage_form'] ?? null)
+                : ($item['dosage_form'] ?? null),
+            'strength' => $hasCatalogLink
+                ? ($catalogMeta['strength'] ?? null)
+                : ($item['strength'] ?? null),
             'category' => $item['category'] ?? null,
-            'subcategory' => $item['subcategory'] ?? null,
+            'subcategory' => $hasCatalogLink
+                ? ($catalog['category'] ?? $item['subcategory'] ?? null)
+                : ($item['subcategory'] ?? null),
             'venClassification' => $item['ven_classification'] ?? null,
             'abcClassification' => $item['abc_classification'] ?? null,
-            'unit' => $item['unit'] ?? null,
-            'dispensingUnit' => $item['dispensing_unit'] ?? null,
-            'conversionFactor' => $item['conversion_factor'] ?? null,
+            'unit' => $hasCatalogLink
+                ? ($catalogMeta['stockUnit'] ?? $catalogMeta['stock_unit'] ?? $catalog['unit'] ?? $item['unit'] ?? null)
+                : ($item['unit'] ?? null),
+            'dispensingUnit' => $hasCatalogLink
+                ? ($catalogMeta['dispensingUnit'] ?? $catalogMeta['dispensing_unit'] ?? $catalog['unit'] ?? $item['dispensing_unit'] ?? null)
+                : ($item['dispensing_unit'] ?? null),
+            'conversionFactor' => $hasCatalogLink
+                ? ($catalogMeta['conversionFactor'] ?? $catalogMeta['conversion_factor'] ?? $item['conversion_factor'] ?? null)
+                : ($item['conversion_factor'] ?? null),
             'binLocation' => $item['bin_location'] ?? null,
             'manufacturer' => $item['manufacturer'] ?? null,
             'storageConditions' => $item['storage_conditions'] ?? null,

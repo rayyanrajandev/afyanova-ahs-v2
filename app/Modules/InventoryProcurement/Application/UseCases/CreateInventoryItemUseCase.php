@@ -9,6 +9,7 @@ use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryItemStatus;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemUnitModel;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
+use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Support\CatalogGovernance\InventoryClinicalLinkGuard;
 use App\Support\CatalogGovernance\StandardsCodeSupport;
 
@@ -32,26 +33,34 @@ class CreateInventoryItemUseCase
             throw new DuplicateInventoryItemCodeException('Item code already exists.');
         }
 
+        $clinicalCatalogItemId = $this->nullableTrimmedValue($payload['clinical_catalog_item_id'] ?? null);
+
+        // When linked to a clinical catalog item, read identity fields from the catalog
+        // to avoid duplicating data. The catalog is the single source of truth.
+        $catalogIdentity = $clinicalCatalogItemId !== null
+            ? $this->resolveCatalogIdentity($clinicalCatalogItemId)
+            : null;
+
         $createPayload = [
             'tenant_id' => $this->platformScopeContext->tenantId(),
             'facility_id' => $this->platformScopeContext->facilityId(),
-            'clinical_catalog_item_id' => $this->nullableTrimmedValue($payload['clinical_catalog_item_id'] ?? null),
+            'clinical_catalog_item_id' => $clinicalCatalogItemId,
             'item_code' => $itemCode,
             'msd_code' => $this->nullableTrimmedValue($payload['msd_code'] ?? null),
             'nhif_code' => $this->nullableTrimmedValue($payload['nhif_code'] ?? null),
             'barcode' => $this->nullableTrimmedValue($payload['barcode'] ?? null),
-            'codes' => $this->standardsCodeSupport->normalize(is_array($payload['codes'] ?? null) ? $payload['codes'] : null),
-            'item_name' => trim((string) $payload['item_name']),
-            'generic_name' => $this->nullableTrimmedValue($payload['generic_name'] ?? null),
-            'dosage_form' => $this->nullableTrimmedValue($payload['dosage_form'] ?? null),
-            'strength' => $this->nullableTrimmedValue($payload['strength'] ?? null),
+            'codes' => $catalogIdentity['codes'] ?? $this->standardsCodeSupport->normalize(is_array($payload['codes'] ?? null) ? $payload['codes'] : null),
+            'item_name' => $catalogIdentity['item_name'] ?? $this->nullableTrimmedValue($payload['item_name'] ?? null) ?? '',
+            'generic_name' => $catalogIdentity['generic_name'] ?? $this->nullableTrimmedValue($payload['generic_name'] ?? null),
+            'dosage_form' => $catalogIdentity['dosage_form'] ?? $this->nullableTrimmedValue($payload['dosage_form'] ?? null),
+            'strength' => $catalogIdentity['strength'] ?? $this->nullableTrimmedValue($payload['strength'] ?? null),
             'category' => $this->nullableTrimmedValue($payload['category'] ?? null),
-            'subcategory' => $this->nullableTrimmedValue($payload['subcategory'] ?? null),
+            'subcategory' => $catalogIdentity['subcategory'] ?? $this->nullableTrimmedValue($payload['subcategory'] ?? null),
             'ven_classification' => $this->nullableTrimmedValue($payload['ven_classification'] ?? null),
             'abc_classification' => $this->nullableTrimmedValue($payload['abc_classification'] ?? null),
-            'unit' => trim((string) $payload['unit']),
-            'dispensing_unit' => $this->nullableTrimmedValue($payload['dispensing_unit'] ?? null),
-            'conversion_factor' => $this->nullableNumericValue($payload['conversion_factor'] ?? null),
+            'unit' => $catalogIdentity['unit'] ?? $this->nullableTrimmedValue($payload['unit'] ?? null) ?? '',
+            'dispensing_unit' => $catalogIdentity['dispensing_unit'] ?? $this->nullableTrimmedValue($payload['dispensing_unit'] ?? null),
+            'conversion_factor' => $catalogIdentity['conversion_factor'] ?? $this->nullableNumericValue($payload['conversion_factor'] ?? null),
             'bin_location' => $this->nullableTrimmedValue($payload['bin_location'] ?? null),
             'manufacturer' => $this->nullableTrimmedValue($payload['manufacturer'] ?? null),
             'storage_conditions' => $this->nullableTrimmedValue($payload['storage_conditions'] ?? null),
@@ -71,7 +80,7 @@ class CreateInventoryItemUseCase
         $created = $this->inventoryItemRepository->create($createPayload);
 
         // Auto-seed base unit from the stock unit field
-        $unitName = trim((string) ($payload['unit'] ?? ''));
+        $unitName = trim((string) ($catalogIdentity['unit'] ?? $payload['unit'] ?? ''));
         if ($unitName !== '') {
             InventoryItemUnitModel::query()->create([
                 'tenant_id' => $this->platformScopeContext->tenantId(),
@@ -87,8 +96,8 @@ class CreateInventoryItemUseCase
             ]);
 
             // Auto-seed dispensing unit when it differs from the stock unit
-            $dispensingUnit = strtolower(trim((string) ($payload['dispensing_unit'] ?? '')));
-            $conversionFactor = (float) ($payload['conversion_factor'] ?? 0);
+            $dispensingUnit = strtolower(trim((string) ($catalogIdentity['dispensing_unit'] ?? $payload['dispensing_unit'] ?? '')));
+            $conversionFactor = (float) ($catalogIdentity['conversion_factor'] ?? $payload['conversion_factor'] ?? 0);
             if ($dispensingUnit !== '' && $dispensingUnit !== strtolower($unitName) && $conversionFactor > 0) {
                 InventoryItemUnitModel::query()->create([
                     'tenant_id' => $this->platformScopeContext->tenantId(),
@@ -140,6 +149,35 @@ class CreateInventoryItemUseCase
         }
 
         return (float) $value;
+    }
+
+    /**
+     * Read identity fields from the clinical catalog item to avoid duplicating data.
+     *
+     * @return array<string, mixed>
+     */
+    private function resolveCatalogIdentity(string $clinicalCatalogItemId): array
+    {
+        $catalogItem = ClinicalCatalogItemModel::query()->find($clinicalCatalogItemId);
+
+        if ($catalogItem === null) {
+            return [];
+        }
+
+        $metadata = is_array($catalogItem->metadata) ? $catalogItem->metadata : [];
+        $codes = is_array($catalogItem->codes) ? $catalogItem->codes : [];
+
+        return [
+            'item_name' => trim((string) $catalogItem->name),
+            'generic_name' => $metadata['genericName'] ?? $metadata['generic_name'] ?? null,
+            'dosage_form' => $metadata['dosageForm'] ?? $metadata['dosage_form'] ?? null,
+            'strength' => $metadata['strength'] ?? null,
+            'unit' => $metadata['stockUnit'] ?? $metadata['stock_unit'] ?? $catalogItem->unit ?? 'Each',
+            'dispensing_unit' => $metadata['dispensingUnit'] ?? $metadata['dispensing_unit'] ?? $catalogItem->unit ?? null,
+            'conversion_factor' => $metadata['conversionFactor'] ?? $metadata['conversion_factor'] ?? null,
+            'subcategory' => $catalogItem->category ?? null,
+            'codes' => $this->standardsCodeSupport->normalize($codes),
+        ];
     }
 
     /**

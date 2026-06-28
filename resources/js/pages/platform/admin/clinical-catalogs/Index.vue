@@ -2256,6 +2256,12 @@ onBeforeUnmount(() => {
                                 Billable catalog
                             </Link>
                         </Button>
+                        <Button variant="outline" size="sm" as-child class="h-8 gap-1.5">
+                            <Link href="/inventory-procurement/workspace">
+                                <AppIcon name="package" class="size-3.5" />
+                                Inventory items
+                            </Link>
+                        </Button>
                     </div>
                 </div>
 

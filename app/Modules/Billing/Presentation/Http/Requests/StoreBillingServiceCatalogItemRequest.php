@@ -26,8 +26,10 @@ class StoreBillingServiceCatalogItemRequest extends FormRequest
         return [
             'clinicalCatalogItemId' => ['nullable', 'uuid', 'exists:platform_clinical_catalog_items,id'],
             'facilityTier' => ['nullable', 'string', 'in:dispensary,health_centre,district_hospital,regional_hospital,zonal_referral'],
-            'serviceCode' => ['required', 'string', 'max:100'],
-            'serviceName' => ['required', 'string', 'max:255'],
+            // serviceCode and serviceName are nullable when catalog-linked;
+            // required otherwise (enforced in withValidator)
+            'serviceCode' => ['nullable', 'string', 'max:100'],
+            'serviceName' => ['nullable', 'string', 'max:255'],
             'serviceType' => ['nullable', 'string', 'max:80'],
             'departmentId' => ['nullable', 'uuid'],
             'department' => ['nullable', 'string', 'max:120'],
@@ -51,5 +53,23 @@ class StoreBillingServiceCatalogItemRequest extends FormRequest
             'codes.CPT' => ['nullable', 'string', 'max:120'],
             'codes.ICD' => ['nullable', 'string', 'max:120'],
         ];
+    }
+
+    public function withValidator(\Illuminate\Validation\Validator $validator): void
+    {
+        $validator->after(function (\Illuminate\Validation\Validator $validator): void {
+            $clinicalCatalogItemId = trim((string) $this->input('clinicalCatalogItemId', ''));
+            $hasCatalogLink = $clinicalCatalogItemId !== '';
+
+            if (! $hasCatalogLink) {
+                // Enforce required identity fields when not catalog-linked
+                if (trim((string) $this->input('serviceCode', '')) === '') {
+                    $validator->errors()->add('serviceCode', 'The service code field is required when not linked to a clinical catalog.');
+                }
+                if (trim((string) $this->input('serviceName', '')) === '') {
+                    $validator->errors()->add('serviceName', 'The service name field is required when not linked to a clinical catalog.');
+                }
+            }
+        });
     }
 }

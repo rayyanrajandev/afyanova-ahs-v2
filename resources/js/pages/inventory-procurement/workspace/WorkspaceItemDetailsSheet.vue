@@ -17,6 +17,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatEnumLabel } from '@/lib/labels';
+import CatalogLinkBadge from '@/components/shared/CatalogLinkBadge.vue';
 import { useInventoryWorkspace } from './inventoryWorkspaceApi';
 
 function formatDate(value: string | null | undefined): string {
@@ -148,17 +149,29 @@ const ws = useInventoryWorkspace();
                             <TabsContent value="overview" class="mt-0 min-w-0 space-y-4">
                                 <Card class="min-w-0">
                                     <CardHeader class="pb-3">
-                                        <CardTitle class="text-base">Master Record</CardTitle>
+                                        <CardTitle class="flex items-center gap-2 text-base">
+                                            Master Record
+                                            <CatalogLinkBadge
+                                                v-if="ws.itemDetails?.clinicalCatalogItemId"
+                                                source="clinical_catalog"
+                                            />
+                                            <CatalogLinkBadge
+                                                v-else
+                                                source="local"
+                                            />
+                                        </CardTitle>
                                         <CardDescription>Core item identity and how this stock definition is classified in the system.</CardDescription>
                                     </CardHeader>
                                     <CardContent class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                         <div class="space-y-1">
                                             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Item code</p>
                                             <p class="break-words text-sm font-medium">{{ ws.itemDetails.itemCode || 'Not recorded' }}</p>
+                                            <p v-if="ws.itemDetails.clinicalCatalogItemId" class="text-[11px] text-muted-foreground">From clinical catalog</p>
                                         </div>
                                         <div class="space-y-1">
                                             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Item name</p>
                                             <p class="break-words text-sm font-medium">{{ ws.itemDetails.itemName || 'Not recorded' }}</p>
+                                            <p v-if="ws.itemDetails.clinicalCatalogItemId" class="text-[11px] text-muted-foreground">From clinical catalog</p>
                                         </div>
                                         <div class="space-y-1">
                                             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Category</p>
@@ -171,6 +184,7 @@ const ws = useInventoryWorkspace();
                                         <div class="space-y-1">
                                             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Stock unit</p>
                                             <p class="text-sm font-medium">{{ ws.itemDetails.unit || 'Not set' }}</p>
+                                            <p v-if="ws.itemDetails.clinicalCatalogItemId" class="text-[11px] text-muted-foreground">From clinical catalog</p>
                                         </div>
                                         <div class="space-y-1">
                                             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Clinical link</p>
@@ -229,10 +243,12 @@ const ws = useInventoryWorkspace();
                                         <div class="space-y-1">
                                             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">MSD code</p>
                                             <p class="break-words text-sm font-medium">{{ ws.itemDetails.msdCode || 'Not recorded' }}</p>
+                                            <p v-if="ws.itemDetails.clinicalCatalogItemId" class="text-[11px] text-muted-foreground">From clinical catalog</p>
                                         </div>
                                         <div class="space-y-1">
                                             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">NHIF code</p>
                                             <p class="break-words text-sm font-medium">{{ ws.itemDetails.nhifCode || 'Not recorded' }}</p>
+                                            <p v-if="ws.itemDetails.clinicalCatalogItemId" class="text-[11px] text-muted-foreground">From clinical catalog</p>
                                         </div>
                                         <div class="space-y-1">
                                             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Barcode</p>
@@ -251,25 +267,39 @@ const ws = useInventoryWorkspace();
 
                                 <Card v-if="ws.itemDetails.genericName || ws.itemDetails.dosageForm || ws.itemDetails.strength || ws.itemDetails.dispensingUnit || ws.itemDetails.conversionFactor != null" class="min-w-0">
                                     <CardHeader class="pb-3">
-                                        <CardTitle class="text-base">Medicine Profile</CardTitle>
+                                        <CardTitle class="flex items-center gap-2 text-base">
+                                            Medicine Profile
+                                            <CatalogLinkBadge
+                                                v-if="ws.itemDetails.clinicalCatalogItemId"
+                                                source="clinical_catalog"
+                                            />
+                                            <CatalogLinkBadge
+                                                v-else
+                                                source="local"
+                                            />
+                                        </CardTitle>
                                         <CardDescription>Only appears when the item carries medicine-specific formulary data.</CardDescription>
                                     </CardHeader>
                                     <CardContent class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                         <div class="space-y-1">
                                             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Generic name</p>
                                             <p class="break-words text-sm font-medium">{{ ws.itemDetails.genericName || 'Not recorded' }}</p>
+                                            <p v-if="ws.itemDetails.clinicalCatalogItemId" class="text-[11px] text-muted-foreground">From clinical catalog</p>
                                         </div>
                                         <div class="space-y-1">
                                             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Dosage form</p>
                                             <p class="text-sm font-medium">{{ ws.itemDetails.dosageForm || 'Not recorded' }}</p>
+                                            <p v-if="ws.itemDetails.clinicalCatalogItemId" class="text-[11px] text-muted-foreground">From clinical catalog</p>
                                         </div>
                                         <div class="space-y-1">
                                             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Strength</p>
                                             <p class="text-sm font-medium">{{ ws.itemDetails.strength || 'Not recorded' }}</p>
+                                            <p v-if="ws.itemDetails.clinicalCatalogItemId" class="text-[11px] text-muted-foreground">From clinical catalog</p>
                                         </div>
                                         <div class="space-y-1">
                                             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Dispensing unit</p>
                                             <p class="text-sm font-medium">{{ ws.itemDetails.dispensingUnit || 'Not recorded' }}</p>
+                                            <p v-if="ws.itemDetails.clinicalCatalogItemId" class="text-[11px] text-muted-foreground">From clinical catalog</p>
                                         </div>
                                         <div v-if="ws.itemDetails.conversionFactor != null" class="space-y-1 sm:col-span-2">
                                             <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Unit conversion</p>
@@ -309,7 +339,13 @@ const ws = useInventoryWorkspace();
 
                                             <div class="grid gap-4">
                                                 <fieldset class="grid gap-2 rounded-lg border p-2 sm:grid-cols-2">
-                                                    <legend class="px-2 text-xs font-medium text-muted-foreground">Basic Information</legend>
+                                                    <legend class="px-2 text-xs font-medium text-muted-foreground flex items-center gap-2">
+                                                        Basic Information
+                                                        <CatalogLinkBadge
+                                                            v-if="ws.updateIdentityLockedToCatalog && ws.updateSelectedCatalogItem"
+                                                            source="clinical_catalog"
+                                                        />
+                                                    </legend>
                                                     <FormFieldShell
                                                         input-id="inv-item-edit-category"
                                                         label="Category"
@@ -351,27 +387,34 @@ const ws = useInventoryWorkspace();
                                                             @update:model-value="ws.selectClinicalCatalogItem(ws.itemUpdateForm, String($event ?? ''))"
                                                         />
                                                     </div>
+                                                    <p v-if="ws.updateIdentityLockedToCatalog" class="sm:col-span-2 text-xs text-muted-foreground">
+                                                        Identity fields are synced from the clinical catalog. To change name, code, or dosage details, update the linked clinical definition.
+                                                    </p>
                                                     <div class="grid gap-1">
                                                         <Label for="inv-item-edit-code">Item Code</Label>
-                                                        <Input id="inv-item-edit-code" v-model="ws.itemUpdateForm.itemCode" :disabled="ws.itemUpdateSubmitting" />
-                                                        <p v-if="ws.fieldError(ws.itemUpdateErrors, 'itemCode')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'itemCode') }}</p>
+                                                        <Input id="inv-item-edit-code" v-model="ws.itemUpdateForm.itemCode" :disabled="ws.itemUpdateSubmitting || ws.updateIdentityLockedToCatalog" :class="ws.updateIdentityLockedToCatalog ? 'bg-muted/50' : ''" />
+                                                        <p v-if="ws.updateIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                                                        <p v-else-if="ws.fieldError(ws.itemUpdateErrors, 'itemCode')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'itemCode') }}</p>
                                                     </div>
                                                     <div class="grid gap-1">
                                                         <Label for="inv-item-edit-name">Item Name</Label>
-                                                        <Input id="inv-item-edit-name" v-model="ws.itemUpdateForm.itemName" :disabled="ws.itemUpdateSubmitting" />
-                                                        <p v-if="ws.fieldError(ws.itemUpdateErrors, 'itemName')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'itemName') }}</p>
+                                                        <Input id="inv-item-edit-name" v-model="ws.itemUpdateForm.itemName" :disabled="ws.itemUpdateSubmitting || ws.updateIdentityLockedToCatalog" :class="ws.updateIdentityLockedToCatalog ? 'bg-muted/50' : ''" />
+                                                        <p v-if="ws.updateIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                                                        <p v-else-if="ws.fieldError(ws.itemUpdateErrors, 'itemName')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'itemName') }}</p>
                                                     </div>
                                                     <FormFieldShell
                                                         input-id="inv-item-edit-manufacturer"
                                                         label="Manufacturer"
+                                                        :error-message="ws.fieldError(ws.itemUpdateErrors, 'manufacturer')"
                                                     >
-                                                        <Input id="inv-item-edit-manufacturer" v-model="ws.itemUpdateForm.manufacturer" :disabled="ws.itemUpdateSubmitting" />
+                                                        <Input id="inv-item-edit-manufacturer" v-model="ws.itemUpdateForm.manufacturer" :disabled="ws.itemUpdateSubmitting" placeholder="e.g. Pfizer, GSK" />
                                                     </FormFieldShell>
                                                     <FormFieldShell
                                                         input-id="inv-item-edit-barcode"
                                                         label="Barcode"
+                                                        :error-message="ws.fieldError(ws.itemUpdateErrors, 'barcode')"
                                                     >
-                                                        <Input id="inv-item-edit-barcode" v-model="ws.itemUpdateForm.barcode" :disabled="ws.itemUpdateSubmitting" />
+                                                        <Input id="inv-item-edit-barcode" v-model="ws.itemUpdateForm.barcode" :disabled="ws.itemUpdateSubmitting" placeholder="e.g. 6291234567890" />
                                                     </FormFieldShell>
                                                     <Alert v-if="ws.selectedUpdateCategory" class="sm:col-span-2">
                                                         <AlertTitle class="flex flex-wrap items-center gap-2">
@@ -383,27 +426,43 @@ const ws = useInventoryWorkspace();
                                                 </fieldset>
 
                                                 <fieldset v-if="ws.selectedUpdateCategory?.supportsMedicineDetails" class="grid gap-2 rounded-lg border p-2 sm:grid-cols-2">
-                                                    <legend class="px-2 text-xs font-medium text-muted-foreground">Medicine Profile</legend>
+                                                    <legend class="px-2 text-xs font-medium text-muted-foreground flex items-center gap-2">
+                                                        Medicine Profile
+                                                        <CatalogLinkBadge
+                                                            v-if="ws.updateIdentityLockedToCatalog"
+                                                            source="clinical_catalog"
+                                                        />
+                                                    </legend>
                                                     <div class="grid gap-1">
                                                         <Label for="inv-item-edit-generic">Generic Name</Label>
-                                                        <Input id="inv-item-edit-generic" v-model="ws.itemUpdateForm.genericName" :disabled="ws.itemUpdateSubmitting" />
+                                                        <Input id="inv-item-edit-generic" v-model="ws.itemUpdateForm.genericName" :disabled="ws.itemUpdateSubmitting || ws.updateIdentityLockedToCatalog" :class="ws.updateIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="e.g. Paracetamol" />
+                                                        <p v-if="ws.updateIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                                                        <p v-else-if="ws.fieldError(ws.itemUpdateErrors, 'genericName')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'genericName') }}</p>
                                                     </div>
                                                     <div class="grid gap-1">
                                                         <Label for="inv-item-edit-dosage">Dosage Form</Label>
-                                                        <Input id="inv-item-edit-dosage" v-model="ws.itemUpdateForm.dosageForm" :disabled="ws.itemUpdateSubmitting" />
+                                                        <Input id="inv-item-edit-dosage" v-model="ws.itemUpdateForm.dosageForm" :disabled="ws.itemUpdateSubmitting || ws.updateIdentityLockedToCatalog" :class="ws.updateIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="e.g. Tablet, Suspension" />
+                                                        <p v-if="ws.updateIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                                                        <p v-else-if="ws.fieldError(ws.itemUpdateErrors, 'dosageForm')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'dosageForm') }}</p>
                                                     </div>
                                                     <div class="grid gap-1">
                                                         <Label for="inv-item-edit-strength">Strength</Label>
-                                                        <Input id="inv-item-edit-strength" v-model="ws.itemUpdateForm.strength" :disabled="ws.itemUpdateSubmitting" />
+                                                        <Input id="inv-item-edit-strength" v-model="ws.itemUpdateForm.strength" :disabled="ws.itemUpdateSubmitting || ws.updateIdentityLockedToCatalog" :class="ws.updateIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="e.g. 500mg, 250mg/5ml" />
+                                                        <p v-if="ws.updateIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                                                        <p v-else-if="ws.fieldError(ws.itemUpdateErrors, 'strength')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'strength') }}</p>
                                                     </div>
                                                     <div class="grid gap-1">
                                                         <Label for="inv-item-edit-dispensing">Dispensing Unit</Label>
-                                                        <Input id="inv-item-edit-dispensing" v-model="ws.itemUpdateForm.dispensingUnit" :disabled="ws.itemUpdateSubmitting" />
+                                                        <Input id="inv-item-edit-dispensing" v-model="ws.itemUpdateForm.dispensingUnit" :disabled="ws.itemUpdateSubmitting || ws.updateIdentityLockedToCatalog" :class="ws.updateIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="e.g. Tablet, ml" />
+                                                        <p v-if="ws.updateIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                                                        <p v-else-if="ws.fieldError(ws.itemUpdateErrors, 'dispensingUnit')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'dispensingUnit') }}</p>
                                                     </div>
                                                     <div class="grid gap-1 sm:col-span-2">
                                                         <Label for="inv-item-edit-conversion">Conversion Factor</Label>
-                                                        <Input id="inv-item-edit-conversion" v-model="ws.itemUpdateForm.conversionFactor" :disabled="ws.itemUpdateSubmitting" type="number" min="0" step="0.001" placeholder="How many dispensing units = 1 stock unit" />
-                                                        <p class="text-xs text-muted-foreground">e.g. 100 if 1 bottle = 100 tablets</p>
+                                                        <Input id="inv-item-edit-conversion" v-model="ws.itemUpdateForm.conversionFactor" :disabled="ws.itemUpdateSubmitting || ws.updateIdentityLockedToCatalog" :class="ws.updateIdentityLockedToCatalog ? 'bg-muted/50' : ''" type="number" min="0" step="0.001" placeholder="How many dispensing units = 1 stock unit" />
+                                                        <p v-if="ws.updateIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                                                        <p v-else-if="ws.fieldError(ws.itemUpdateErrors, 'conversionFactor')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'conversionFactor') }}</p>
+                                                        <p v-else class="text-xs text-muted-foreground">e.g. 100 if 1 bottle = 100 tablets</p>
                                                     </div>
                                                 </fieldset>
 
@@ -469,6 +528,7 @@ const ws = useInventoryWorkspace();
                                                                 <SelectItem v-for="v in ws.venClassificationOptions" :key="v.value" :value="v.value">{{ v.label }}</SelectItem>
                                                             </SelectContent>
                                                         </Select>
+                                                        <p v-if="ws.fieldError(ws.itemUpdateErrors, 'venClassification')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'venClassification') }}</p>
                                                     </div>
                                                     <div v-if="!ws.selectedUpdateCategory || ws.selectedUpdateCategory.supportsClinicalClassification" class="grid gap-1">
                                                         <Label for="inv-item-edit-abc">ABC</Label>
@@ -480,14 +540,19 @@ const ws = useInventoryWorkspace();
                                                                 <SelectItem v-for="a in ws.abcClassificationOptions" :key="a.value" :value="a.value">{{ a.label }}</SelectItem>
                                                             </SelectContent>
                                                         </Select>
+                                                        <p v-if="ws.fieldError(ws.itemUpdateErrors, 'abcClassification')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'abcClassification') }}</p>
                                                     </div>
                                                     <div class="grid gap-1">
                                                         <Label for="inv-item-edit-msd">MSD Code</Label>
-                                                        <Input id="inv-item-edit-msd" v-model="ws.itemUpdateForm.msdCode" :disabled="ws.itemUpdateSubmitting" />
+                                                        <Input id="inv-item-edit-msd" v-model="ws.itemUpdateForm.msdCode" :disabled="ws.itemUpdateSubmitting || ws.updateIdentityLockedToCatalog" :class="ws.updateIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="Medical Stores Department code" />
+                                                        <p v-if="ws.updateIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                                                        <p v-else-if="ws.fieldError(ws.itemUpdateErrors, 'msdCode')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'msdCode') }}</p>
                                                     </div>
                                                     <div v-if="!ws.selectedUpdateCategory || ws.selectedUpdateCategory.supportsClinicalClassification" class="grid gap-1">
                                                         <Label for="inv-item-edit-nhif">NHIF Code</Label>
-                                                        <Input id="inv-item-edit-nhif" v-model="ws.itemUpdateForm.nhifCode" :disabled="ws.itemUpdateSubmitting" />
+                                                        <Input id="inv-item-edit-nhif" v-model="ws.itemUpdateForm.nhifCode" :disabled="ws.itemUpdateSubmitting || ws.updateIdentityLockedToCatalog" :class="ws.updateIdentityLockedToCatalog ? 'bg-muted/50' : ''" placeholder="NHIF tariff code" />
+                                                        <p v-if="ws.updateIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                                                        <p v-else-if="ws.fieldError(ws.itemUpdateErrors, 'nhifCode')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'nhifCode') }}</p>
                                                     </div>
                                                     <p v-if="ws.selectedUpdateCategory && !ws.selectedUpdateCategory.supportsClinicalClassification" class="text-xs text-muted-foreground sm:col-span-2">
                                                         This category uses operational coding only. Clinical classification and NHIF mapping stay hidden.
@@ -498,12 +563,14 @@ const ws = useInventoryWorkspace();
                                                     <legend class="px-2 text-xs font-medium text-muted-foreground">Stock Policy &amp; Defaults</legend>
                                                     <div class="grid gap-1">
                                                         <Label for="inv-item-edit-unit">Stock Unit</Label>
-                                                        <Input id="inv-item-edit-unit" v-model="ws.itemUpdateForm.unit" :disabled="ws.itemUpdateSubmitting" />
-                                                        <p v-if="ws.fieldError(ws.itemUpdateErrors, 'unit')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'unit') }}</p>
+                                                        <Input id="inv-item-edit-unit" v-model="ws.itemUpdateForm.unit" :disabled="ws.itemUpdateSubmitting || ws.updateIdentityLockedToCatalog" :class="ws.updateIdentityLockedToCatalog ? 'bg-muted/50' : ''" />
+                                                        <p v-if="ws.updateIdentityLockedToCatalog" class="text-[11px] text-muted-foreground">From clinical catalog</p>
+                                                        <p v-else-if="ws.fieldError(ws.itemUpdateErrors, 'unit')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'unit') }}</p>
                                                     </div>
                                                     <div class="grid gap-1">
                                                         <Label for="inv-item-edit-bin">Bin Location</Label>
-                                                        <Input id="inv-item-edit-bin" v-model="ws.itemUpdateForm.binLocation" :disabled="ws.itemUpdateSubmitting" />
+                                                        <Input id="inv-item-edit-bin" v-model="ws.itemUpdateForm.binLocation" :disabled="ws.itemUpdateSubmitting" placeholder="e.g. A-03-12" />
+                                                        <p v-if="ws.fieldError(ws.itemUpdateErrors, 'binLocation')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'binLocation') }}</p>
                                                     </div>
                                                     <div class="grid gap-1">
                                                         <Label>Default Warehouse</Label>
@@ -603,11 +670,13 @@ const ws = useInventoryWorkspace();
                                                     </div>
                                                     <div class="grid gap-1">
                                                         <Label for="inv-item-edit-reorder">Reorder Level</Label>
-                                                        <Input id="inv-item-edit-reorder" v-model="ws.itemUpdateForm.reorderLevel" :disabled="ws.itemUpdateSubmitting" type="number" min="0" step="0.001" />
+                                                        <Input id="inv-item-edit-reorder" v-model="ws.itemUpdateForm.reorderLevel" :disabled="ws.itemUpdateSubmitting" type="number" min="0" step="0.001" placeholder="e.g. 100" />
+                                                        <p v-if="ws.fieldError(ws.itemUpdateErrors, 'reorderLevel')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'reorderLevel') }}</p>
                                                     </div>
                                                     <div class="grid gap-1">
                                                         <Label for="inv-item-edit-max-stock">Max Stock Level</Label>
-                                                        <Input id="inv-item-edit-max-stock" v-model="ws.itemUpdateForm.maxStockLevel" :disabled="ws.itemUpdateSubmitting" type="number" min="0" step="0.001" />
+                                                        <Input id="inv-item-edit-max-stock" v-model="ws.itemUpdateForm.maxStockLevel" :disabled="ws.itemUpdateSubmitting" type="number" min="0" step="0.001" placeholder="e.g. 1000" />
+                                                        <p v-if="ws.fieldError(ws.itemUpdateErrors, 'maxStockLevel')" class="text-xs text-destructive">{{ ws.fieldError(ws.itemUpdateErrors, 'maxStockLevel') }}</p>
                                                     </div>
                                                 </fieldset>
                                             </div>

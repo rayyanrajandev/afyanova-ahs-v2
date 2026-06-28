@@ -25,6 +25,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import CatalogLinkBadge from '@/components/shared/CatalogLinkBadge.vue';
 import LeaveWorkflowDialog from '@/components/workflow/LeaveWorkflowDialog.vue';
 import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
@@ -1840,7 +1841,7 @@ function applyCreateClinicalCatalogSelection(item: ClinicalCatalogLookupItem | n
     }
 
     const meta = item.metadata ?? {};
-    const priceUnit = String(meta.priceUnit ?? meta.price_unit ?? '').trim();
+    const priceUnit = String(meta.priceUnit ?? meta.price_unit ?? item.unit ?? '').trim();
     if (priceUnit) {
         createForm.priceUnit = priceUnit;
     }
@@ -2312,6 +2313,7 @@ async function createItem(): Promise<void> {
 
     const basePrice = parseDecimalOrNull(createForm.basePrice);
     const taxRatePercent = parseDecimalOrNull(createForm.taxRatePercent);
+    const unitsPerPack = createForm.unitsPerPack.trim() ? Number.parseInt(createForm.unitsPerPack.trim(), 10) : null;
     const metadata = parseMetadata(createForm.metadataText);
 
     const localErrors: Record<string, string[]> = {};
@@ -2323,6 +2325,7 @@ async function createItem(): Promise<void> {
     if (basePrice === null || basePrice === 'invalid') localErrors.basePrice = ['Base price must be a valid non-negative number.'];
     if (!createForm.currencyCode.trim()) localErrors.currencyCode = ['Currency code is required.'];
     if (taxRatePercent === 'invalid') localErrors.taxRatePercent = ['Tax rate must be a valid non-negative number.'];
+    if (unitsPerPack !== null && (Number.isNaN(unitsPerPack) || unitsPerPack < 1)) localErrors.unitsPerPack = ['Units per pack must be a positive whole number.'];
     if (metadata === 'invalid') localErrors.metadata = ['System integration notes must be a valid JSON object.'];
     if (createFamilyAlreadyExists.value) localErrors.serviceCode = ['Service code already exists in the current scope. Open the existing tariff family and create a new version instead.'];
     if (createTariffWindowValidationMessage.value) localErrors.effectiveTo = [createTariffWindowValidationMessage.value];
@@ -2355,7 +2358,7 @@ async function createItem(): Promise<void> {
                 facilityTier: createForm.facilityTier.trim() || null,
                 codes: standardsCodesFromForm(createForm),
                 priceUnit: createForm.priceUnit.trim() || null,
-                unitsPerPack: createForm.unitsPerPack.trim() ? Number.parseInt(createForm.unitsPerPack.trim(), 10) : null,
+                unitsPerPack: unitsPerPack && !Number.isNaN(unitsPerPack) ? unitsPerPack : null,
                 metadata,
             },
             entitlementContext: 'Billing service catalog create',
@@ -2970,6 +2973,12 @@ watch(
                             </Link>
                         </Button>
                         <Button size="sm" variant="outline" as-child class="h-8 gap-1.5">
+                            <Link href="/inventory-procurement/workspace">
+                                <AppIcon name="package" class="size-3.5" />
+                                Inventory items
+                            </Link>
+                        </Button>
+                        <Button size="sm" variant="outline" as-child class="h-8 gap-1.5">
                             <Link href="/billing-payer-contracts">
                                 <AppIcon name="shield-check" class="size-3.5" />
                                 Payer contracts
@@ -3140,8 +3149,17 @@ watch(
                                 </Tabs>
 
                                 <div class="space-y-4 border-t border-border/60 pt-4">
-                                    <div class="space-y-3">
-                                        <p class="text-xs font-medium text-muted-foreground">Service</p>
+                                        <div class="space-y-3">
+                                            <div class="flex items-center gap-2">
+                                                <p class="text-xs font-medium text-muted-foreground">Service</p>
+                                                <CatalogLinkBadge
+                                                    v-if="createForm.identitySource === 'clinical' && createSelectedClinicalCatalogItem"
+                                                    source="clinical_catalog"
+                                                    :catalog-type="createSelectedClinicalCatalogItem.catalogType"
+                                                    :catalog-name="createSelectedClinicalCatalogItem.name"
+                                                    :catalog-code="createSelectedClinicalCatalogItem.code"
+                                                />
+                                            </div>
                                         <div class="grid grid-cols-6 gap-3">
                                             <FormFieldShell
                                                 input-id="create-price-service-code"
@@ -3242,6 +3260,7 @@ watch(
                                                 label="Units per pack"
                                                 v-if="createForm.serviceType === 'pharmacy'"
                                                 container-class="col-span-6 sm:col-span-3"
+                                                :error-message="firstError(createErrors, 'unitsPerPack')"
                                             >
                                                 <Input
                                                     id="create-price-units-per-pack"
@@ -3384,6 +3403,22 @@ watch(
                                                     placeholder="Registration or audit context"
                                                 />
                                             </FormFieldShell>
+                                            <div class="col-span-6">
+                                                <details class="group">
+                                                    <summary class="cursor-pointer text-sm font-medium">System integration notes (technical)</summary>
+                                                    <p class="mt-2 text-xs text-muted-foreground">
+                                                        For IT or integration teams only. Hospital billing staff can ignore this section.
+                                                    </p>
+                                                    <FormFieldShell
+                                                        input-id="create-price-metadata"
+                                                        label="Integration payload"
+                                                        container-class="mt-3"
+                                                        :error-message="firstError(createErrors, 'metadata')"
+                                                    >
+                                                        <Textarea id="create-price-metadata" v-model="createForm.metadataText" class="min-h-24 font-mono text-xs" placeholder='{"key": "value"}' />
+                                                    </FormFieldShell>
+                                                </details>
+                                            </div>
                                         </div>
                                         <p v-if="createTariffWindowValidationMessage" class="text-xs text-destructive">
                                             {{ createTariffWindowValidationMessage }}
@@ -3762,6 +3797,12 @@ watch(
                                         </p>
                                     </template>
                                     <template #badges>
+                                        <CatalogLinkBadge
+                                            :source="item.clinicalCatalogItemId ? 'clinical_catalog' : 'standalone'"
+                                            :catalog-type="item.clinicalCatalogItem?.catalogType"
+                                            :catalog-name="item.clinicalCatalogItem?.name"
+                                            :catalog-code="item.clinicalCatalogItem?.code"
+                                        />
                                         <Badge :variant="statusVariant(item.status)" class="capitalize">
                                             {{ formatEnumLabel(item.status) }}
                                         </Badge>

@@ -8,20 +8,39 @@ class BillingServiceCatalogItemResponseTransformer
 {
     public static function transform(array $item): array
     {
+        // When linked to a clinical catalog, read identity fields from the catalog item
+        // to ensure the response always reflects the latest catalog data.
+        $catalog = is_array($item['clinical_catalog_item'] ?? null) ? $item['clinical_catalog_item'] : null;
+        $catalogMeta = is_array($catalog['metadata'] ?? null) ? $catalog['metadata'] : [];
+        $catalogCodes = is_array($catalog['codes'] ?? null) ? $catalog['codes'] : [];
+        $hasCatalogLink = ($item['clinical_catalog_item_id'] ?? null) !== null && $catalog !== null;
+
         return [
             'id' => $item['id'] ?? null,
             'tenantId' => $item['tenant_id'] ?? null,
             'facilityId' => $item['facility_id'] ?? null,
-            'facilityTier' => $item['facility_tier'] ?? null,
+            'facilityTier' => $hasCatalogLink
+                ? ($catalog['facility_tier'] ?? $item['facility_tier'] ?? null)
+                : ($item['facility_tier'] ?? null),
             'clinicalCatalogItemId' => $item['clinical_catalog_item_id'] ?? null,
-            'serviceCode' => $item['service_code'] ?? null,
+            'serviceCode' => $hasCatalogLink
+                ? strtoupper(trim((string) ($catalog['code'] ?? '')))
+                : ($item['service_code'] ?? null),
             'versionNumber' => $item['tariff_version'] ?? 1,
-            'serviceName' => $item['service_name'] ?? null,
+            'serviceName' => $hasCatalogLink
+                ? trim((string) ($catalog['name'] ?? ''))
+                : ($item['service_name'] ?? null),
             'serviceType' => $item['service_type'] ?? null,
-            'departmentId' => $item['department_id'] ?? null,
+            'departmentId' => $hasCatalogLink
+                ? ($catalog['department_id'] ?? $item['department_id'] ?? null)
+                : ($item['department_id'] ?? null),
             'department' => $item['department'] ?? null,
-            'unit' => $item['unit'] ?? null,
-            'priceUnit' => $item['price_unit'] ?? null,
+            'unit' => $hasCatalogLink
+                ? ($catalog['unit'] ?? $item['unit'] ?? null)
+                : ($item['unit'] ?? null),
+            'priceUnit' => $hasCatalogLink && ($item['price_unit'] ?? null) === null
+                ? ($catalogMeta['priceUnit'] ?? $catalogMeta['price_unit'] ?? null)
+                : ($item['price_unit'] ?? null),
             'unitsPerPack' => $item['units_per_pack'] ?? null,
             'basePrice' => $item['base_price'] ?? null,
             'currencyCode' => $item['currency_code'] ?? null,
@@ -29,16 +48,18 @@ class BillingServiceCatalogItemResponseTransformer
             'isTaxable' => $item['is_taxable'] ?? null,
             'effectiveFrom' => $item['effective_from'] ?? null,
             'effectiveTo' => $item['effective_to'] ?? null,
-            'description' => $item['description'] ?? null,
-            'metadata' => $item['metadata'] ?? null,
-            'codes' => is_array($item['codes'] ?? null) ? $item['codes'] : null,
+            'description' => $hasCatalogLink && ($item['description'] ?? null) === null
+                ? ($catalog['description'] ?? null)
+                : ($item['description'] ?? null),
+            'metadata' => $hasCatalogLink && ($item['metadata'] ?? null) === null
+                ? $catalogMeta
+                : ($item['metadata'] ?? null),
+            'codes' => $hasCatalogLink && $catalogCodes !== [] ? $catalogCodes : (is_array($item['codes'] ?? null) ? $item['codes'] : null),
             'standardsWarnings' => app(StandardsCodeSupport::class)->warningsForBillingItem($item),
             'status' => $item['status'] ?? null,
             'statusReason' => $item['status_reason'] ?? null,
             'supersedesBillingServiceCatalogItemId' => $item['supersedes_billing_service_catalog_item_id'] ?? null,
-            'clinicalCatalogItem' => self::transformClinicalCatalogItem(
-                is_array($item['clinical_catalog_item'] ?? null) ? $item['clinical_catalog_item'] : null,
-            ),
+            'clinicalCatalogItem' => self::transformClinicalCatalogItem($catalog),
             'linkWarning' => self::linkWarning($item),
             'createdAt' => $item['created_at'] ?? null,
             'updatedAt' => $item['updated_at'] ?? null,

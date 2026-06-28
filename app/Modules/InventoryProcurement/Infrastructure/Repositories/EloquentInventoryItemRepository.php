@@ -31,6 +31,7 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
     public function findById(string $id): ?array
     {
         $query = InventoryItemModel::query()
+            ->with('clinicalCatalogItem')
             ->withCount('stockMovements')
             ->withCount(['stockMovements as opening_stock_movements_count' => fn (Builder $q) => $q->where('is_opening_stock', true)]);
         $this->applyPlatformScopeIfEnabled($query);
@@ -140,6 +141,7 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
             : 'item_name';
 
         $queryBuilder = InventoryItemModel::query()
+            ->with('clinicalCatalogItem')
             ->withCount('stockMovements')
             ->withCount(['stockMovements as opening_stock_movements_count' => fn (Builder $q) => $q->where('is_opening_stock', true)]);
         $this->applyPlatformScopeIfEnabled($queryBuilder);
@@ -218,19 +220,30 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
 
         $like = '%'.$normalizedSearchTerm.'%';
 
+        // LEFT JOIN clinical catalog to enable search across linked catalog item names/codes
+        $query->leftJoin(
+            'platform_clinical_catalog_items AS cci',
+            'inventory_items.clinical_catalog_item_id',
+            '=',
+            'cci.id',
+        );
+
         $query->where(function (Builder $nestedQuery) use ($like): void {
             $nestedQuery
-                ->whereRaw('LOWER(item_code) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(item_name) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(generic_name) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(strength) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(dosage_form) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(category) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(subcategory) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(msd_code) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(nhif_code) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(barcode) LIKE ?', [$like])
-                ->orWhereRaw('LOWER(manufacturer) LIKE ?', [$like]);
+                ->whereRaw('LOWER(inventory_items.item_code) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(inventory_items.item_name) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(inventory_items.generic_name) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(inventory_items.strength) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(inventory_items.dosage_form) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(inventory_items.category) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(inventory_items.subcategory) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(inventory_items.msd_code) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(inventory_items.nhif_code) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(inventory_items.barcode) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(inventory_items.manufacturer) LIKE ?', [$like])
+                // Search linked clinical catalog item name and code
+                ->orWhereRaw('LOWER(cci.name) LIKE ?', [$like])
+                ->orWhereRaw('LOWER(cci.code) LIKE ?', [$like]);
         });
     }
 
