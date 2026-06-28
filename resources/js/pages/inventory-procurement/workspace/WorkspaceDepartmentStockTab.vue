@@ -65,10 +65,30 @@ const ws = useInventoryWorkspace();
                             </h3>
                             <p class="mt-1 text-xs text-muted-foreground">Stock issued out of the store and held by departments for local use.</p>
                         </div>
-                        <Button size="sm" variant="outline" class="h-9 shrink-0 gap-1.5 text-xs" :disabled="ws.departmentStockLoading" @click="ws.departmentStockFiltersOpen = !ws.departmentStockFiltersOpen">
-                            <AppIcon name="sliders-horizontal" class="size-3.5" />
-                            {{ ws.departmentStockFiltersOpen ? 'Hide filters' : 'Filters' }}
-                        </Button>
+                        <div class="flex shrink-0 items-center gap-2">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                class="h-8 gap-1.5 text-xs"
+                                @click="ws.exportDepartmentStockCsv"
+                            >
+                                <AppIcon name="file-text" class="size-3.5" />
+                                Export
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                class="h-8 gap-1.5 text-xs"
+                                @click="ws.printCurrentView"
+                            >
+                                <AppIcon name="printer" class="size-3.5" />
+                                Print
+                            </Button>
+                            <Button size="sm" variant="outline" class="h-9 shrink-0 gap-1.5 text-xs" :disabled="ws.departmentStockLoading" @click="ws.departmentStockFiltersOpen = !ws.departmentStockFiltersOpen">
+                                <AppIcon name="sliders-horizontal" class="size-3.5" />
+                                {{ ws.departmentStockFiltersOpen ? 'Hide filters' : 'Filters' }}
+                            </Button>
+                        </div>
                     </div>
 
                     <div

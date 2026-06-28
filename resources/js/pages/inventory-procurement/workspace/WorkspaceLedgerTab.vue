@@ -71,21 +71,30 @@ const ws = useInventoryWorkspace();
                             </div>
                             <div class="flex shrink-0 items-center gap-2">
                                 <Button
+                                    size="sm"
+                                    variant="outline"
+                                    class="h-8 gap-1.5 text-xs"
+                                    @click="ws.exportStockLedgerCsv"
+                                >
+                                    <AppIcon name="file-text" class="size-3.5" />
+                                    Export
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    class="h-8 gap-1.5 text-xs"
+                                    @click="ws.printCurrentView"
+                                >
+                                    <AppIcon name="printer" class="size-3.5" />
+                                    Print
+                                </Button>
+                                <Button
                                     variant="outline" size="sm"
                                     class="h-9 gap-1.5 rounded-lg text-xs md:hidden"
                                     @click="ws.mobileLedgerDrawerOpen = true"
                                 >
                                     <AppIcon name="sliders-horizontal" class="size-3.5" />
                                     Filters
-                                </Button>
-                                <Button
-                                    variant="outline" size="sm"
-                                    class="h-9 gap-1.5 rounded-lg text-xs"
-                                    :disabled="ws.stockLedgerLoading"
-                                    @click="ws.exportStockLedgerCsv"
-                                >
-                                    <AppIcon name="file-text" class="size-3.5" />
-                                    Export CSV
                                 </Button>
                                 <Button
                                     :variant="ws.stockLedgerFiltersOpen ? 'default' : 'outline'" size="sm"

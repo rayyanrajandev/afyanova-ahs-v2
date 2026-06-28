@@ -67,66 +67,36 @@ const ws = useInventoryWorkspace();
                             </h3>
                             <p class="mt-1 text-xs text-muted-foreground">Physical stock master with category, reorder policy, opening stock, and warehouse operations.</p>
                         </div>
-                        <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                            <Select v-model="ws.inventoryAutoRefreshInterval">
-                                <SelectTrigger
-                                    class="h-8 w-[8rem] rounded-lg text-xs data-[size=default]:h-8"
-                                    :title="ws.inventoryAutoRefreshInterval !== 'off' ? `Auto-refresh every ${ws.inventoryAutoRefreshInterval}` : 'Auto-refresh off'"
-                                >
-                                    <SelectValue placeholder="Auto" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem
-                                        v-for="key in (['off', '30s', '1m', '5m'] as const)"
-                                        :key="key"
-                                        :value="key"
-                                    >
-                                        {{ ws.INVENTORY_AUTO_REFRESH_LABEL[key] }}
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
+                        <div class="flex shrink-0 items-center gap-2">
                             <Button
-                                variant="outline"
+                                v-if="ws.canManageItems"
                                 size="sm"
-                                class="h-8 gap-1.5 rounded-lg text-xs"
-                                :disabled="ws.loading"
-                                @click="ws.refreshInventoryItems"
+                                variant="outline"
+                                class="h-8 gap-1.5 text-xs"
+                                :disabled="!ws.canLaunchCreateItem"
+                                @click="ws.openImportItemsCsvDialog"
                             >
-                                <AppIcon name="refresh-cw" class="size-3.5" :class="{ 'animate-spin': ws.loading }" />
-                                Refresh
+                                <AppIcon name="upload" class="size-3.5" />
+                                Import
                             </Button>
-                              <Button
-                                  v-if="ws.canSyncFromCatalog"
-                                  size="sm"
-                                  variant="outline"
-                                  class="h-8 gap-1.5 rounded-lg text-xs"
-                                  :disabled="!ws.canLaunchCreateItem"
-                                  @click="ws.openCatalogSyncDialog"
-                              >
-                                  <AppIcon name="book-open" class="size-3.5" />
-                                  Sync from Catalog
-                              </Button>
-                              <Button
-                                  v-if="ws.canManageItems"
-                                  size="sm"
-                                  variant="outline"
-                                  class="h-8 gap-1.5 rounded-lg text-xs"
-                                  :disabled="!ws.canLaunchCreateItem"
-                                  @click="ws.openImportItemsCsvDialog"
-                              >
-                                  <AppIcon name="upload" class="size-3.5" />
-                                  Import CSV
-                              </Button>
-                             <Button
-                                 v-if="ws.canManageItems"
-                                 size="sm"
-                                 class="h-8 gap-1.5 rounded-lg text-xs"
-                                 :disabled="!ws.canLaunchCreateItem"
-                                 @click="ws.openCreateItemDialog"
-                             >
-                                 <AppIcon name="plus" class="size-3.5" />
-                                 Create Item
-                             </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                class="h-8 gap-1.5 text-xs"
+                                @click="ws.exportInventoryItemsCsv"
+                            >
+                                <AppIcon name="file-text" class="size-3.5" />
+                                Export
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                class="h-8 gap-1.5 text-xs"
+                                @click="ws.printCurrentView"
+                            >
+                                <AppIcon name="printer" class="size-3.5" />
+                                Print
+                            </Button>
                         </div>
                     </div>
 

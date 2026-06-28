@@ -26,9 +26,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input, SearchInput } from '@/components/ui/input';
-import { Kbd, KbdGroup } from '@/components/ui/kbd';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
@@ -415,6 +413,19 @@ const itemSearch = reactive({
     perPage: 20,
 });
 
+function itemQuery() {
+    return {
+        q: itemSearch.q.trim() || null,
+        category: itemSearch.category.trim() || null,
+        stockState: itemSearch.stockState || null,
+        sortBy: itemSearch.sortBy || null,
+        sortDir: itemSearch.sortDir || null,
+        requestingDepartmentId: inventoryItemRequestingDepartmentId.value || null,
+        page: itemSearch.page,
+        perPage: itemSearch.perPage,
+    };
+}
+
 const procurementRequests = ref<any[]>([]);
 const procurementPagination = ref<{ currentPage: number; lastPage: number; total?: number } | null>(null);
 const procurementSearch = reactive({
@@ -539,6 +550,131 @@ const canSyncFromCatalog = computed(() =>
     canManageItems.value
     && (requisitionContext.value?.canSelectAnyDepartment || isFacilitySuperAdmin.value || requisitionContext.value?.departmentProfile === 'pharmacy'),
 );
+
+interface HeaderAction {
+    key: string;
+    label: string;
+    icon: string;
+    variant?: 'default' | 'outline' | 'ghost' | 'destructive' | 'secondary';
+    show: boolean;
+    disabled?: boolean;
+    loading?: boolean;
+    iconOnly?: boolean;
+    onClick?: () => void;
+    class?: string;
+    isDropdown?: boolean;
+    dropdownOptions?: Array<{ value: string; label: string }>;
+    dropdownValue?: string;
+    onDropdownChange?: (value: string) => void;
+    isMenuDropdown?: boolean;
+    menuItems?: Array<{ key: string; label: string; icon: string; onClick: () => void; disabled?: boolean }>;
+}
+
+const headerActions = computed<HeaderAction[]>(() => {
+    const actions: HeaderAction[] = [];
+
+    if (activeTab.value === 'inventory') {
+        actions.push({
+            key: 'refresh',
+            label: '',
+            icon: 'refresh-cw',
+            variant: 'ghost',
+            show: true,
+            iconOnly: true,
+            loading: loading.value,
+            onClick: () => refreshInventoryItems(),
+        });
+        actions.push({
+            key: 'auto-refresh',
+            label: 'Auto',
+            icon: 'clock',
+            variant: 'outline',
+            show: true,
+            isDropdown: true,
+            dropdownValue: inventoryAutoRefreshInterval.value,
+            dropdownOptions: [
+                { value: 'off', label: INVENTORY_AUTO_REFRESH_LABEL.off },
+                { value: '30s', label: INVENTORY_AUTO_REFRESH_LABEL['30s'] },
+                { value: '1m', label: INVENTORY_AUTO_REFRESH_LABEL['1m'] },
+                { value: '5m', label: INVENTORY_AUTO_REFRESH_LABEL['5m'] },
+            ],
+            onDropdownChange: (value) => {
+                inventoryAutoRefreshInterval.value = value;
+            },
+        });
+        actions.push({
+            key: 'create-item',
+            label: 'New Item',
+            icon: 'plus',
+            variant: 'default',
+            show: canManageItems.value,
+            disabled: !canLaunchCreateItem.value,
+            onClick: () => openCreateItemDialog(),
+        });
+        actions.push({
+            key: 'sync-catalog',
+            label: 'Sync from Catalog',
+            icon: 'book-open',
+            variant: 'outline',
+            show: canSyncFromCatalog.value,
+            disabled: !canLaunchCreateItem.value,
+            onClick: () => openCatalogSyncDialog(),
+        });
+    }
+
+    if (activeTab.value === 'ledger') {
+        actions.push({
+            key: 'stock-adjustment',
+            label: 'Stock Adjustment',
+            icon: 'sliders-horizontal',
+            variant: 'default',
+            show: canCreateMovement.value,
+            disabled: !canLaunchStockMovement.value,
+            onClick: () => openStockMovementDialog(null, 'adjust'),
+        });
+        actions.push({
+            key: 'stock-transfer',
+            label: 'Stock Transfer',
+            icon: 'arrow-right',
+            variant: 'outline',
+            show: canCreateMovement.value,
+            disabled: !canLaunchStockMovement.value,
+            onClick: () => openStockMovementDialog(null, 'transfer'),
+        });
+    }
+
+    if (activeTab.value === 'department-stock') {
+        actions.push({
+            key: 'issue-stock',
+            label: 'Issue Stock',
+            icon: 'package',
+            variant: 'default',
+            show: canCreateMovement.value,
+            disabled: !canLaunchStockMovement.value,
+            onClick: () => openStockMovementDialog(null, 'issue'),
+        });
+        actions.push({
+            key: 'receive-stock',
+            label: 'Receive Stock',
+            icon: 'arrow-right',
+            variant: 'outline',
+            show: canCreateMovement.value,
+            disabled: !canLaunchStockMovement.value,
+            onClick: () => openStockMovementDialog(null, 'receive'),
+        });
+        actions.push({
+            key: 'transfer-stock',
+            label: 'Transfer Stock',
+            icon: 'arrow-up-down',
+            variant: 'outline',
+            show: canCreateMovement.value,
+            disabled: !canLaunchStockMovement.value,
+            onClick: () => openStockMovementDialog(null, 'transfer'),
+        });
+    }
+
+    return actions.filter(action => action.show);
+});
 
 const mobileProcurementDrawerOpen = ref(false);
 const mobileLedgerDrawerOpen = ref(false);
@@ -921,7 +1057,7 @@ async function submitStockMovementCorrection() {
     }
 }
 
-function openStockMovementDialog(item: StockMovementLookupItem | null = null) {
+function openStockMovementDialog(item: StockMovementLookupItem | null = null, movementType?: 'receive' | 'issue' | 'adjust' | 'transfer') {
     if (stockExecutionBlockedReason.value) {
         notifyError(stockExecutionBlockedReason.value);
         return;
@@ -939,6 +1075,9 @@ function openStockMovementDialog(item: StockMovementLookupItem | null = null) {
 
     stockMovementErrors.value = {};
     resetStockMovementForm(item);
+    if (movementType) {
+        stockMovementForm.movementType = movementType;
+    }
     stockMovementDialogOpen.value = true;
 }
 
@@ -3104,6 +3243,30 @@ async function exportStockLedgerCsv() {
         url.searchParams.set(key, String(value));
     });
     window.open(url.toString(), '_blank', 'noopener');
+}
+
+function exportInventoryItemsCsv() {
+    const url = new URL('/api/v1/inventory-procurement/items/export', window.location.origin);
+    Object.entries(itemQuery()).forEach(([key, value]) => {
+        if (value === null || value === '') return;
+        if (key === 'page' || key === 'perPage') return;
+        url.searchParams.set(key, String(value));
+    });
+    window.open(url.toString(), '_blank', 'noopener');
+}
+
+function exportDepartmentStockCsv() {
+    const url = new URL('/api/v1/inventory-procurement/department-stock/export', window.location.origin);
+    Object.entries(departmentStockQuery()).forEach(([key, value]) => {
+        if (value === null || value === '') return;
+        if (key === 'page' || key === 'perPage') return;
+        url.searchParams.set(key, String(value));
+    });
+    window.open(url.toString(), '_blank', 'noopener');
+}
+
+function printCurrentView() {
+    window.print();
 }
 
 // --- Batch Management ---
@@ -6696,6 +6859,7 @@ bindInventoryWorkspace({
     canLaunchOpeningStock,
     canLaunchProcurementRequest,
     canSyncFromCatalog,
+    headerActions,
     loading,
     deptReqSearch,
     deptReqLoading,
@@ -6870,6 +7034,9 @@ bindInventoryWorkspace({
     stockLedgerLoading,
     stockLedgerFiltersOpen,
     exportStockLedgerCsv,
+    exportInventoryItemsCsv,
+    exportDepartmentStockCsv,
+    printCurrentView,
     stockLedgerFilters,
     movementTypeOptions,
     stockLedgerSourceOptions,
@@ -7243,50 +7410,104 @@ onMounted(async () => {
                 icon="package"
                 :department-name="showDepartmentInWorkspaceHeader ? workspaceDepartmentName : null"
                 :department-loading="workspaceDepartmentHeaderLoading"
-                :back-href="INVENTORY_PROCUREMENT_HOME_PATH"
-                back-label="Supply chain home"
+                :back-href="null"
             >
                 <template #actions>
-                    <Button variant="outline" size="sm" as-child class="h-8 gap-1.5">
-                        <Link href="/platform/admin/clinical-catalogs">
-                            <AppIcon name="book-open" class="size-3.5" />
-                            Clinical catalog
-                        </Link>
-                    </Button>
-                    <Button variant="outline" size="sm" as-child class="h-8 gap-1.5">
-                        <Link href="/billing-service-catalog">
-                            <AppIcon name="receipt" class="size-3.5" />
-                            Tariffs & services
-                        </Link>
-                    </Button>
-                    <Button v-if="canReconcileStock" size="sm" variant="outline" class="h-8 gap-1.5" :disabled="!canLaunchReconciliation" @click="openReconcileDialog">
-                        <AppIcon name="shield-check" class="size-3.5" />
-                        Reconcile stock
-                    </Button>
-                    <Button v-if="isStoreOperations" size="sm" variant="outline" class="h-8 gap-1.5" @click="barcodeScannerOpen = true">
-                        <AppIcon name="search" class="size-3.5" />
-                        Barcode
-                    </Button>
-                    <Popover>
-                        <PopoverTrigger as-child>
-                            <Button variant="outline" size="sm" class="h-8 gap-1.5">
-                                <Kbd class="text-[10px]">?</Kbd>
-                                <span class="hidden sm:inline">Shortcuts</span>
+                    <template v-if="activeWorkspaceArea.id === 'stock-control'">
+                        <template v-for="action in headerActions" :key="action.key">
+                            <Select v-if="action.isDropdown" :model-value="action.dropdownValue" @update:model-value="action.onDropdownChange">
+                                <SelectTrigger
+                                    class="h-8 w-[8rem] rounded-lg text-xs data-[size=default]:h-8"
+                                    :title="action.dropdownValue !== 'off' ? `Auto-refresh every ${action.dropdownValue}` : 'Auto-refresh off'"
+                                >
+                                    <SelectValue placeholder="Auto" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem
+                                        v-for="opt in action.dropdownOptions"
+                                        :key="opt.value"
+                                        :value="opt.value"
+                                    >
+                                        {{ opt.label }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <DropdownMenu v-else-if="action.isMenuDropdown">
+                                <DropdownMenuTrigger as-child>
+                                    <Button
+                                        :size="'sm'"
+                                        :variant="action.variant ?? 'outline'"
+                                        :class="[action.class ?? '', 'h-8', action.iconOnly ? 'w-8 p-0' : 'gap-1.5']"
+                                        :disabled="action.disabled || action.loading"
+                                    >
+                                        <AppIcon :name="action.icon" class="size-3.5" :class="{ 'animate-spin': action.loading }" />
+                                        <span v-if="!action.iconOnly">{{ action.label }}</span>
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                        v-for="item in action.menuItems"
+                                        :key="item.key"
+                                        :disabled="item.disabled"
+                                        @click="item.onClick"
+                                    >
+                                        <AppIcon :name="item.icon" class="mr-2 size-3.5" />
+                                        {{ item.label }}
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            <Button
+                                v-else
+                                :size="'sm'"
+                                :variant="action.variant ?? 'outline'"
+                                :class="[action.class ?? '', 'h-8', action.iconOnly ? 'w-8 p-0' : 'gap-1.5']"
+                                :disabled="action.disabled || action.loading"
+                                @click="action?.onClick"
+                            >
+                                <AppIcon :name="action.icon" class="size-3.5" :class="{ 'animate-spin': action.loading }" />
+                                <span v-if="!action.iconOnly">{{ action.label }}</span>
                             </Button>
-                        </PopoverTrigger>
-                        <PopoverContent align="end" class="w-64 p-3">
-                            <p class="mb-2 text-sm font-medium">Keyboard shortcuts</p>
-                            <div class="space-y-1.5 text-xs text-muted-foreground">
-                                <div class="flex items-center justify-between"><span>Focus search</span><KbdGroup><Kbd>/</Kbd></KbdGroup></div>
-                                <div class="flex items-center justify-between"><span>Refresh</span><KbdGroup><Kbd>R</Kbd></KbdGroup></div>
-                                <div class="flex items-center justify-between"><span>New item</span><KbdGroup><Kbd>N</Kbd></KbdGroup></div>
-                                <div class="flex items-center justify-between"><span>Stock movement</span><KbdGroup><Kbd>M</Kbd></KbdGroup></div>
-                                <div class="flex items-center justify-between"><span>Procurement request</span><KbdGroup><Kbd>P</Kbd></KbdGroup></div>
-                                <div class="flex items-center justify-between"><span>Stock ledger</span><KbdGroup><Kbd>L</Kbd></KbdGroup></div>
-                                <div class="flex items-center justify-between"><span>Barcode lookup</span><KbdGroup><Kbd>B</Kbd></KbdGroup></div>
-                            </div>
-                        </PopoverContent>
-                    </Popover>
+                        </template>
+                    </template>
+                    <template v-else>
+                        <Button v-if="canReconcileStock" size="sm" variant="outline" class="h-8 gap-1.5" :disabled="!canLaunchReconciliation" @click="openReconcileDialog">
+                            <AppIcon name="shield-check" class="size-3.5" />
+                            Reconcile stock
+                        </Button>
+                        <Button v-if="isStoreOperations" size="sm" variant="outline" class="h-8 gap-1.5" @click="barcodeScannerOpen = true">
+                            <AppIcon name="search" class="size-3.5" />
+                            Barcode
+                        </Button>
+                    </template>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger as-child>
+                            <Button variant="ghost" size="sm" class="h-8 w-8 p-0">
+                                <AppIcon name="ellipsis-vertical" class="size-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" class="w-48">
+                            <DropdownMenuItem as-child>
+                                <Link href="/platform/admin/clinical-catalogs" class="gap-2">
+                                    <AppIcon name="book-open" class="size-4" />
+                                    Clinical catalog
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem as-child>
+                                <Link href="/billing-service-catalog" class="gap-2">
+                                    <AppIcon name="receipt" class="size-4" />
+                                    Tariffs & services
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem @click="barcodeScannerOpen = true">
+                                <AppIcon name="search" class="size-4" />
+                                Barcode lookup
+                            </DropdownMenuItem>
+                            <DropdownMenuItem @click="openReconcileDialog" :disabled="!canLaunchReconciliation">
+                                <AppIcon name="shield-check" class="size-4" />
+                                Reconcile stock
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </template>
             </FacilityWorkspacePageHeader>
 
