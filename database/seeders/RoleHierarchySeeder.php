@@ -318,7 +318,7 @@ class RoleHierarchySeeder extends Seeder
                     'name' => self::DISPLAY_NAMES[$code] ?? $code,
                     'status' => 'active',
                     'description' => null,
-                    'is_system' => false,
+                    'is_system' => true,
                     'access_level' => $meta['access_level'] ?? 'manage',
                     'scope_type' => $meta['scope_type'] ?? 'cross_facility',
                 ]

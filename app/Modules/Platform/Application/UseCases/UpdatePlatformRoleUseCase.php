@@ -9,6 +9,15 @@ use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 
 class UpdatePlatformRoleUseCase
 {
+    private const RESTRICTED_ROLE_CODE_PATTERNS = [
+        'SUPER.ADMIN',
+    ];
+
+    private const RESTRICTED_ROLE_CODE_EXACT = [
+        'PLATFORM.SUPER.ADMIN',
+        'SYSTEM.SUPER.ADMIN',
+    ];
+
     public function __construct(
         private readonly PlatformRbacRepositoryInterface $platformRbacRepository,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
@@ -31,6 +40,8 @@ class UpdatePlatformRoleUseCase
 
         if (array_key_exists('code', $payload)) {
             $normalizedCode = $this->normalizeCode((string) $payload['code']);
+
+            $this->assertNotRestrictedCode($normalizedCode);
 
             if ($this->platformRbacRepository->existsRoleCodeInScope(
                 code: $normalizedCode,
@@ -129,5 +140,22 @@ class UpdatePlatformRoleUseCase
         }
 
         return $changes;
+    }
+
+    private function assertNotRestrictedCode(string $code): void
+    {
+        if (in_array($code, self::RESTRICTED_ROLE_CODE_EXACT, true)) {
+            throw new PlatformRoleProtectedException(
+                'This role code is restricted and cannot be used through the admin interface.',
+            );
+        }
+
+        foreach (self::RESTRICTED_ROLE_CODE_PATTERNS as $pattern) {
+            if (str_contains($code, $pattern)) {
+                throw new PlatformRoleProtectedException(
+                    'Role codes containing "'.$pattern.'" are restricted and cannot be used through the admin interface.',
+                );
+            }
+        }
     }
 }

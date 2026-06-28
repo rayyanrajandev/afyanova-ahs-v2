@@ -5,6 +5,7 @@ import WorkflowQueueSkeleton from '@/components/list/WorkflowQueueSkeleton.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { SearchInput } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatEnumLabel } from '@/lib/labels';
@@ -63,31 +64,34 @@ const ws = useInventoryWorkspace();
                     </h3>
                     <p class="mt-1 text-xs text-muted-foreground">Create, submit, synchronize, and monitor Medical Stores Department supply orders.</p>
                 </div>
-                <div class="flex shrink-0 flex-wrap items-center gap-2">
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        class="h-9 gap-1.5 rounded-lg text-xs"
-                        :disabled="ws.shortageMsdDraftLines.length === 0"
-                        @click="ws.openMsdOrderFromDraft(ws.shortageMsdDraftLines, 'shortage queue')"
-                    >
-                        <AppIcon name="alert-triangle" class="size-3.5" />
-                        Draft shortages
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        class="h-9 gap-1.5 rounded-lg text-xs"
-                        :disabled="ws.lowStockMsdDraftLines.length === 0"
-                        @click="ws.openMsdOrderFromDraft(ws.lowStockMsdDraftLines, 'low-stock reorder policy')"
-                    >
-                        <AppIcon name="package" class="size-3.5" />
-                        Draft low stock
-                    </Button>
+                <div class="flex shrink-0 items-center gap-2">
                     <Button size="sm" class="h-9 gap-1.5 rounded-lg text-xs" @click="ws.openBlankMsdOrder">
                         <AppIcon name="plus" class="size-3.5" />
                         Blank order
                     </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger as-child>
+                            <Button variant="ghost" size="sm" class="h-8 w-8 p-0">
+                                <AppIcon name="ellipsis-vertical" class="size-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" class="w-48">
+                            <DropdownMenuItem
+                                :disabled="ws.shortageMsdDraftLines.length === 0"
+                                @click="ws.openMsdOrderFromDraft(ws.shortageMsdDraftLines, 'shortage queue')"
+                            >
+                                <AppIcon name="alert-triangle" class="size-4" />
+                                Draft shortages
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                :disabled="ws.lowStockMsdDraftLines.length === 0"
+                                @click="ws.openMsdOrderFromDraft(ws.lowStockMsdDraftLines, 'low-stock reorder policy')"
+                            >
+                                <AppIcon name="package" class="size-4" />
+                                Draft low stock
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </div>
 

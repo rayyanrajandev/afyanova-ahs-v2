@@ -2,6 +2,7 @@
 import AppIcon from '@/components/AppIcon.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -270,7 +271,7 @@ const ws = useInventoryWorkspace();
                                     Packing will re-check live stock and recreate the FEFO hold against current availability.
                                 </p>
                                 <label class="mt-3 flex items-start gap-2 rounded-md border border-amber-200/80 bg-background/80 px-3 py-2 text-sm text-foreground dark:border-amber-900/60 dark:bg-background/30">
-                                    <input v-model="ws.transferStatusForm.revalidateReservation" type="checkbox" class="mt-0.5 accent-primary" />
+                                    <Checkbox :model-value="ws.transferStatusForm.revalidateReservation" class="mt-0.5" @update:model-value="(v: boolean) => ws.transferStatusForm.revalidateReservation = v" />
                                     <span>Refresh the expired stock hold and continue with packing.</span>
                                 </label>
                                 <p v-if="ws.fieldError(ws.transferStatusErrors, 'revalidateReservation')" class="mt-2 text-xs text-destructive">
@@ -359,7 +360,7 @@ const ws = useInventoryWorkspace();
                                     </span>
                                 </p>
                                 <label class="mt-3 flex items-start gap-2 rounded-md border border-amber-200/80 bg-background/80 px-3 py-2 text-sm text-foreground dark:border-amber-900/60 dark:bg-background/30">
-                                    <input v-model="ws.transferStatusForm.revalidateReservation" type="checkbox" class="mt-0.5 accent-primary" />
+                                    <Checkbox :model-value="ws.transferStatusForm.revalidateReservation" class="mt-0.5" @update:model-value="(v: boolean) => ws.transferStatusForm.revalidateReservation = v" />
                                     <span>Refresh the expired stock hold and continue with dispatch.</span>
                                 </label>
                                 <p v-if="ws.fieldError(ws.transferStatusErrors, 'revalidateReservation')" class="mt-2 text-xs text-destructive">

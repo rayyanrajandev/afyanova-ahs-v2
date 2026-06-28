@@ -2,6 +2,7 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import type { AppIconName } from '@/lib/icons';
 import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
 import ComboboxField from '@/components/forms/ComboboxField.vue';
 import RegistryListRow from '@/components/list/RegistryListRow.vue';
@@ -14,6 +15,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -2225,16 +2232,16 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
                     </div>
-                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                    <div class="flex flex-shrink-0 items-center gap-2">
                         <Button
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
-                            class="h-8 gap-1.5"
+                            class="h-8 w-8 p-0"
                             :disabled="listLoading"
+                            title="Refresh"
                             @click="loadItems()"
                         >
-                            <AppIcon name="refresh-cw" class="size-3.5" />
-                            {{ listLoading ? 'Refreshing...' : 'Refresh' }}
+                            <AppIcon :name="(listLoading ? 'loader-circle' : 'refresh-cw') as AppIconName" class="size-3.5" :class="listLoading ? 'animate-spin' : ''" />
                         </Button>
                         <Button v-if="canManage" size="sm" class="h-8 gap-1.5" @click="openCreateSheet">
                             <AppIcon name="plus" class="size-3.5" />
@@ -2250,18 +2257,27 @@ onBeforeUnmount(() => {
                             <AppIcon name="layout-grid" class="size-3.5" />
                             Bulk workspace
                         </Button>
-                        <Button variant="outline" size="sm" as-child class="h-8 gap-1.5">
-                            <Link href="/billing-service-catalog">
-                                <AppIcon name="receipt" class="size-3.5" />
-                                Billable catalog
-                            </Link>
-                        </Button>
-                        <Button variant="outline" size="sm" as-child class="h-8 gap-1.5">
-                            <Link href="/inventory-procurement/workspace">
-                                <AppIcon name="package" class="size-3.5" />
-                                Inventory items
-                            </Link>
-                        </Button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                                <Button variant="ghost" size="sm" class="h-8 w-8 p-0">
+                                    <AppIcon name="ellipsis-vertical" class="size-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" class="w-48">
+                                <DropdownMenuItem as-child>
+                                    <Link href="/billing-service-catalog" class="gap-2">
+                                        <AppIcon name="receipt" class="size-4" />
+                                        Billable catalog
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem as-child>
+                                    <Link href="/inventory-procurement/workspace" class="gap-2">
+                                        <AppIcon name="package" class="size-4" />
+                                        Inventory items
+                                    </Link>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </div>
 

@@ -47,8 +47,16 @@ class SyncPlatformUserRolesUseCase
             $roleIds,
         ))));
 
-        if (! $this->actorCanAssignAnyRole($actorId)) {
-            $this->assertAssignableHospitalRoleIds($normalizedRoleIds);
+        $isSelfAssignment = $actorId !== null && $actorId === $userId;
+
+        if (! $this->actorCanAssignAnyRole($actorId) || $isSelfAssignment) {
+            $currentRoleIds = DB::table('role_user')
+                ->where('user_id', $userId)
+                ->pluck('role_id')
+                ->map(static fn ($id): string => (string) $id)
+                ->all();
+            $newlyAddedRoleIds = array_values(array_diff($normalizedRoleIds, $currentRoleIds));
+            $this->assertAssignableHospitalRoleIds($newlyAddedRoleIds);
         }
 
         $resolvedRoleIds = $this->platformRbacRepository->resolveExistingRoleIdsInScope($normalizedRoleIds);
@@ -73,9 +81,12 @@ class SyncPlatformUserRolesUseCase
                     'after' => $result['role_ids'] ?? [],
                 ],
             ],
-            metadata: $this->privilegedPlatformUserChangePolicy->buildAuditMetadata(
-                privilegedContext: $privilegedContext,
-                approvalCaseReference: $normalizedApprovalCaseReference,
+            metadata: array_merge(
+                $this->privilegedPlatformUserChangePolicy->buildAuditMetadata(
+                    privilegedContext: $privilegedContext,
+                    approvalCaseReference: $normalizedApprovalCaseReference,
+                ),
+                $isSelfAssignment ? ['self_assignment' => true] : [],
             ),
         );
 

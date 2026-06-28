@@ -4,18 +4,26 @@ import { Head, Link } from '@inertiajs/vue3';
 import type { AcceptableValue } from 'reka-ui';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import type { AppIconName } from '@/lib/icons';
 import ComboboxField from '@/components/forms/ComboboxField.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vue';
 import TimePopoverField from '@/components/forms/TimePopoverField.vue';
 import RegistryListRow from '@/components/list/RegistryListRow.vue';
 import RegistryListSkeleton from '@/components/list/RegistryListSkeleton.vue';
+import CatalogLinkBadge from '@/components/shared/CatalogLinkBadge.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -25,7 +33,6 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import CatalogLinkBadge from '@/components/shared/CatalogLinkBadge.vue';
 import LeaveWorkflowDialog from '@/components/workflow/LeaveWorkflowDialog.vue';
 import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
@@ -36,6 +43,7 @@ import { generateRequestKey } from '@/lib/idempotency';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
+import BillingServiceCatalogSyncDialog from '@/pages/billing-service-catalog/BillingServiceCatalogSyncDialog.vue';
 import { type BreadcrumbItem } from '@/types';
 
 type CatalogStatus = 'active' | 'inactive' | 'retired';
@@ -255,6 +263,7 @@ const filters = reactive({
 
 const filtersSheetOpen = ref(false);
 const createSheetOpen = ref(false);
+const billingSyncDialogOpen = ref(false);
 
 const createLoading = ref(false);
 const createErrors = ref<Record<string, string[]>>({});
@@ -2951,39 +2960,52 @@ watch(
                             </div>
                         </div>
                     </div>
-                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                    <div class="flex flex-shrink-0 items-center gap-2">
                         <Button
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
-                            class="h-8 gap-1.5"
+                            class="h-8 w-8 p-0"
                             :disabled="listLoading"
+                            title="Refresh"
                             @click="loadItems()"
                         >
-                            <AppIcon name="refresh-cw" class="size-3.5" />
-                            {{ listLoading ? 'Refreshing...' : 'Refresh' }}
+                            <AppIcon :name="(listLoading ? 'loader-circle' : 'refresh-cw') as AppIconName" class="size-3.5" :class="listLoading ? 'animate-spin' : ''" />
                         </Button>
                         <Button v-if="canManagePricing" size="sm" class="h-8 gap-1.5" @click="openCreateSheet">
                             <AppIcon name="plus" class="size-3.5" />
                             Add service price
                         </Button>
-                        <Button size="sm" variant="outline" as-child class="h-8 gap-1.5">
-                            <Link href="/platform/admin/clinical-catalogs">
-                                <AppIcon name="book-open" class="size-3.5" />
-                                Clinical catalogs
-                            </Link>
+                        <Button v-if="canManagePricing" size="sm" variant="outline" class="h-8 gap-1.5" @click="billingSyncDialogOpen = true">
+                            <AppIcon name="book-open" class="size-3.5" />
+                            Sync from catalog
                         </Button>
-                        <Button size="sm" variant="outline" as-child class="h-8 gap-1.5">
-                            <Link href="/inventory-procurement/workspace">
-                                <AppIcon name="package" class="size-3.5" />
-                                Inventory items
-                            </Link>
-                        </Button>
-                        <Button size="sm" variant="outline" as-child class="h-8 gap-1.5">
-                            <Link href="/billing-payer-contracts">
-                                <AppIcon name="shield-check" class="size-3.5" />
-                                Payer contracts
-                            </Link>
-                        </Button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                                <Button variant="ghost" size="sm" class="h-8 w-8 p-0">
+                                    <AppIcon name="ellipsis-vertical" class="size-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" class="w-48">
+                                <DropdownMenuItem as-child>
+                                    <Link href="/platform/admin/clinical-catalogs" class="gap-2">
+                                        <AppIcon name="book-open" class="size-4" />
+                                        Clinical catalogs
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem as-child>
+                                    <Link href="/inventory-procurement/workspace" class="gap-2">
+                                        <AppIcon name="package" class="size-4" />
+                                        Inventory items
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem as-child>
+                                    <Link href="/billing-payer-contracts" class="gap-2">
+                                        <AppIcon name="shield-check" class="size-4" />
+                                        Payer contracts
+                                    </Link>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </div>
             </section>
@@ -3747,6 +3769,10 @@ watch(
                                     <Button v-if="canManagePricing" size="sm" class="h-8 gap-1.5" @click="openCreateSheet">
                                         <AppIcon name="plus" class="size-3.5" />
                                         Add service price
+                                    </Button>
+                                    <Button v-if="canManagePricing" size="sm" variant="outline" class="h-8 gap-1.5" @click="billingSyncDialogOpen = true">
+                                        <AppIcon name="book-open" class="size-3.5" />
+                                        Sync from catalog
                                     </Button>
                                 </div>
                             </div>
@@ -4786,5 +4812,11 @@ watch(
                 @confirm="confirmDetailsDiscard"
             />
         </div>
+
+        <BillingServiceCatalogSyncDialog
+            :open="billingSyncDialogOpen"
+            @update:open="billingSyncDialogOpen = $event"
+            @synced="loadItems()"
+        />
     </AppLayout>
 </template>

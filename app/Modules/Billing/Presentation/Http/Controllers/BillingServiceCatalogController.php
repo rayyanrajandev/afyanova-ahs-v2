@@ -3,6 +3,7 @@
 namespace App\Modules\Billing\Presentation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Billing\Application\UseCases\BulkCreateBillingServiceCatalogItemsFromCatalogUseCase;
 use App\Modules\Billing\Application\UseCases\BulkUpdateBillingServiceCatalogItemStatusUseCase;
 use App\Modules\Billing\Application\Exceptions\DuplicateBillingServiceCatalogCodeException;
 use App\Modules\Billing\Application\Exceptions\InvalidBillingServiceCatalogClinicalLinkException;
@@ -249,6 +250,29 @@ class BillingServiceCatalogController extends Controller
                 'notFound' => $result['notFound'],
             ],
         ]);
+    }
+
+    public function bulkSyncFromCatalog(
+        Request $request,
+        BulkCreateBillingServiceCatalogItemsFromCatalogUseCase $useCase
+    ): JsonResponse {
+        $validated = $request->validate([
+            'catalogItemIds' => ['nullable', 'array'],
+            'catalogItemIds.*' => ['uuid'],
+            'defaultCurrencyCode' => ['nullable', 'string', 'max:3'],
+        ]);
+
+        try {
+            $result = $useCase->execute(
+                catalogItemIds: $validated['catalogItemIds'] ?? null,
+                defaultCurrencyCode: $validated['defaultCurrencyCode'] ?? null,
+                actorId: $request->user()?->id,
+            );
+        } catch (TenantScopeRequiredForIsolationException $exception) {
+            return $this->tenantScopeRequiredError($exception->getMessage());
+        }
+
+        return response()->json($result, count($result['errors']) > 0 ? 422 : 200);
     }
 
     public function auditLogs(

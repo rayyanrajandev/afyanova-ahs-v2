@@ -1047,6 +1047,8 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->name('billing-service-catalog.items.store-revision');
     Route::patch('billing-service-catalog/items/bulk-status', [BillingServiceCatalogController::class, 'bulkUpdateStatus'])
         ->name('billing-service-catalog.items.bulk-status');
+    Route::post('billing-service-catalog/items/bulk-sync-from-catalog', [BillingServiceCatalogController::class, 'bulkSyncFromCatalog'])
+        ->name('billing-service-catalog.items.bulk-sync-from-catalog');
     Route::get('billing-service-catalog/items/{id}', [BillingServiceCatalogController::class, 'show'])
         ->middleware('can:billing.service-catalog.read')
         ->name('billing-service-catalog.items.show');

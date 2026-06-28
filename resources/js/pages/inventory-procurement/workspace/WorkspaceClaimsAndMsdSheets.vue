@@ -6,6 +6,7 @@ import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vu
 import InventoryItemLookupField from '@/components/inventory/InventoryItemLookupField.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -247,7 +248,7 @@ const ws = useInventoryWorkspace();
                     <Textarea id="msd-notes" v-model="ws.msdOrderForm.notes" rows="2" />
                 </div>
                 <div class="flex items-center gap-2">
-                    <input id="msd-submit-now" v-model="ws.msdOrderForm.submitImmediately" type="checkbox" class="rounded border" />
+                    <Checkbox id="msd-submit-now" :model-value="ws.msdOrderForm.submitImmediately" @update:model-value="(v: boolean) => ws.msdOrderForm.submitImmediately = v" />
                     <Label for="msd-submit-now" class="text-sm">Submit to MSD immediately</Label>
                 </div>
             </div>

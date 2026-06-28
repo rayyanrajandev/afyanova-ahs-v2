@@ -37,7 +37,17 @@ export function resolvePlatformRoleRiskTier(code: string | null | undefined): Pl
         return 'platform';
     }
 
-    if (normalized.startsWith('HOSPITAL.')) {
+    if (
+        normalized.startsWith('HOSPITAL.')
+        || normalized.startsWith('ADMIN.')
+        || normalized.startsWith('CLINICAL.')
+        || normalized.startsWith('FINANCE.')
+        || normalized.startsWith('LAB.')
+        || normalized.startsWith('RADIOLOGY.')
+        || normalized.startsWith('PHARMACY.')
+        || normalized.startsWith('THEATRE.')
+        || normalized.startsWith('INVENTORY.')
+    ) {
         return 'hospital';
     }
 
