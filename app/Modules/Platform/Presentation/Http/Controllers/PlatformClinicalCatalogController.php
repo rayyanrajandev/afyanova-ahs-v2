@@ -7,6 +7,7 @@ use App\Modules\Platform\Application\Exceptions\DuplicateClinicalCatalogCodeExce
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
 use App\Modules\Platform\Application\Services\ClinicalCatalogConsumptionRecipeService;
 use App\Modules\Platform\Application\UseCases\CreateClinicalCatalogItemUseCase;
+use App\Modules\Platform\Domain\Repositories\ClinicalCatalogItemRepositoryInterface;
 use App\Modules\Platform\Application\UseCases\GetClinicalCatalogItemUseCase;
 use App\Modules\Platform\Application\UseCases\ListClinicalCatalogItemAuditLogsUseCase;
 use App\Modules\Platform\Application\UseCases\ListClinicalCatalogItemsUseCase;
@@ -32,6 +33,22 @@ class PlatformClinicalCatalogController extends Controller
     private const AUDIT_CSV_SCHEMA_VERSION = 'audit-log-csv.v1';
 
     private const AUDIT_CSV_COLUMNS = ['createdAt', 'action', 'actorType', 'actorId', 'changes', 'metadata'];
+
+    public function syncCandidates(ClinicalCatalogItemRepositoryInterface $repository): JsonResponse
+    {
+        $types = [
+            ClinicalCatalogType::LAB_TEST->value,
+            ClinicalCatalogType::RADIOLOGY_PROCEDURE->value,
+            ClinicalCatalogType::THEATRE_PROCEDURE->value,
+            ClinicalCatalogType::FORMULARY_ITEM->value,
+        ];
+
+        $items = $repository->searchActiveForSync($types);
+
+        return response()->json([
+            'data' => array_map([ClinicalCatalogItemResponseTransformer::class, 'transform'], $items),
+        ]);
+    }
 
     public function labTests(Request $request, ListClinicalCatalogItemsUseCase $useCase): JsonResponse
     {

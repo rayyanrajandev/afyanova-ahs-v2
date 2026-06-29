@@ -214,37 +214,17 @@ async function loadCatalogItems() {
     catalogLoading.value = true;
     catalogLoadError.value = null;
     try {
-        const types = ['lab-tests', 'radiology-procedures', 'theatre-procedures', 'formulary-items'] as const;
-        const typeMap: Record<string, string> = {
-            'lab-tests': 'lab_test',
-            'radiology-procedures': 'radiology_procedure',
-            'theatre-procedures': 'theatre_procedure',
-            'formulary-items': 'formulary_item',
-        };
-
-        const requests = types.map(async (typePath) => {
-            try {
-                const typeResponse = await apiRequestJson<any>('GET', `/platform/admin/clinical-catalogs/${typePath}`, {
-                    query: { perPage: 2000, status: 'active' },
-                });
-                const items = Array.isArray(typeResponse?.data) ? typeResponse.data : [];
-                return items.map((item: any) => ({
-                    id: String(item.id ?? ''),
-                    code: item.code ?? '',
-                    name: item.name ?? '',
-                    catalogType: typeMap[typePath] ?? 'formulary_item',
-                    category: item.category ?? null,
-                    unit: item.unit ?? null,
-                    description: item.description ?? null,
-                }));
-            } catch {
-                // Skip types that fail - user may not have access
-                return [];
-            }
-        });
-
-        const results = await Promise.all(requests);
-        catalogItems.value = results.flat();
+        const response = await apiRequestJson<any>('GET', '/platform/admin/clinical-catalogs/sync-candidates');
+        const items = Array.isArray(response?.data) ? response.data : [];
+        catalogItems.value = items.map((item: any) => ({
+            id: String(item.id ?? ''),
+            code: item.code ?? '',
+            name: item.name ?? '',
+            catalogType: item.catalogType ?? 'formulary_item',
+            category: item.category ?? null,
+            unit: item.unit ?? null,
+            description: item.description ?? null,
+        }));
     } catch (err: any) {
         catalogLoadError.value = err?.message ?? 'Unable to load clinical catalog items.';
         catalogItems.value = [];

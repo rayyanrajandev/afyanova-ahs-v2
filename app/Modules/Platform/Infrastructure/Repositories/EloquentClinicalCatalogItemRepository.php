@@ -154,6 +154,21 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
         return $this->toSearchResult($paginator);
     }
 
+    public function searchActiveForSync(array $catalogTypes): array
+    {
+        $queryBuilder = ClinicalCatalogItemModel::query()
+            ->whereIn('catalog_type', $catalogTypes)
+            ->where('status', 'active');
+        $this->applyPlatformScopeIfEnabled($queryBuilder);
+        app(FacilityTierSupport::class)->applyAvailabilityFilter(
+            $queryBuilder,
+            'platform_clinical_catalog_items',
+            app(CurrentPlatformScopeContextInterface::class)->facilityId(),
+        );
+
+        return $queryBuilder->orderBy('name')->get()->toArray();
+    }
+
     public function statusCounts(
         string $catalogType,
         ?string $query,

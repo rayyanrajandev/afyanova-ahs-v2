@@ -39,6 +39,12 @@ interface ClinicalCatalogItemRepositoryInterface
         ?string $facilityId,
     ): ?string;
 
+    /**
+     * @param  list<string>  $catalogTypes
+     * @return array<int, array<string, mixed>>
+     */
+    public function searchActiveForSync(array $catalogTypes): array;
+
     public function statusCounts(
         string $catalogType,
         ?string $query,
