@@ -11,7 +11,7 @@ use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
 use App\Support\CatalogGovernance\StandardsCodeSupport;
-use App\Support\TenantIsolation\TenantIsolationWriteGuardInterface;
+use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 
 class BulkCreateBillingServiceCatalogItemsFromCatalogUseCase
 {
