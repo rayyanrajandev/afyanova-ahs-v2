@@ -222,17 +222,20 @@ class InventoryProcurementController extends Controller
     public function bulkSyncFromCatalog(Request $request, BulkCreateInventoryItemsFromCatalogUseCase $useCase): JsonResponse
     {
         $validated = $request->validate([
-            'catalogItemIds' => ['required', 'array', 'min:1'],
+            'catalogItemIds' => ['nullable', 'array'],
             'catalogItemIds.*' => ['uuid'],
+            'catalogTypes' => ['nullable', 'array'],
+            'catalogTypes.*' => ['string', 'in:lab_test,radiology_procedure,theatre_procedure,formulary_item'],
             'defaultWarehouseId' => ['nullable', 'uuid'],
             'defaultSupplierId' => ['nullable', 'uuid'],
         ]);
 
         $result = $useCase->execute(
-            catalogItemIds: $validated['catalogItemIds'],
+            catalogItemIds: $validated['catalogItemIds'] ?? null,
             defaultWarehouseId: $validated['defaultWarehouseId'] ?? null,
             defaultSupplierId: $validated['defaultSupplierId'] ?? null,
             actorId: $request->user()?->id,
+            catalogTypes: $validated['catalogTypes'] ?? null,
         );
 
         return response()->json($result, count($result['errors']) > 0 ? 422 : 200);

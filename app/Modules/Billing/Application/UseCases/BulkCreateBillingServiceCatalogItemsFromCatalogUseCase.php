@@ -31,17 +31,18 @@ class BulkCreateBillingServiceCatalogItemsFromCatalogUseCase
      * Bulk-create or update billing service catalog items from active clinical catalog definitions.
      *
      * Supports all 4 clinical catalog types: lab_test, radiology_procedure, theatre_procedure, formulary_item.
-     * When $catalogItemIds is null, syncs ALL active eligible items.
      *
      * @param  list<string>|null  $catalogItemIds  Optional subset of catalog item UUIDs; null = all eligible
      * @param  string|null  $defaultCurrencyCode  Currency code for new items (defaults to TZS)
      * @param  int|null  $actorId  Staff user performing the sync
+     * @param  list<string>|null  $catalogTypes  Optional subset of catalog types to sync; null = all eligible
      * @return array{created: int, updated: int, errors: list<array{catalogItemId: string, code: string, name: string, error: string}>}
      */
     public function execute(
         ?array $catalogItemIds = null,
         ?string $defaultCurrencyCode = null,
         ?int $actorId = null,
+        ?array $catalogTypes = null,
     ): array {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
 
@@ -50,7 +51,9 @@ class BulkCreateBillingServiceCatalogItemsFromCatalogUseCase
 
         $defaultCurrencyCode = strtoupper(trim((string) ($defaultCurrencyCode ?: ''))) ?: 'TZS';
 
-        $eligibleTypes = ['lab_test', 'radiology_procedure', 'theatre_procedure', 'formulary_item'];
+        $eligibleTypes = (is_array($catalogTypes) && $catalogTypes !== [])
+            ? $catalogTypes
+            : ['lab_test', 'radiology_procedure', 'theatre_procedure', 'formulary_item'];
 
         $catalogQuery = ClinicalCatalogItemModel::query()
             ->whereIn('catalog_type', $eligibleTypes)

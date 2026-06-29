@@ -44,6 +44,7 @@ class BulkCreateInventoryItemsFromCatalogUseCase
      * @param string|null $defaultWarehouseId   Default warehouse UUID for all created items.
      * @param string|null $defaultSupplierId    Default supplier UUID for all created items.
      * @param int|null $actorId
+     * @param list<string>|null $catalogTypes   Optional subset of catalog types; null = formulary_item only
      * @return array{created: positive-int, updated: positive-int, errors: list<array{catalogItemId: string, code: string, name: string, error: string}>}
      */
     public function execute(
@@ -51,16 +52,21 @@ class BulkCreateInventoryItemsFromCatalogUseCase
         ?string $defaultWarehouseId = null,
         ?string $defaultSupplierId = null,
         ?int $actorId = null,
+        ?array $catalogTypes = null,
     ): array {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
 
         $tenantId = $this->platformScopeContext->tenantId();
         $facilityId = $this->platformScopeContext->facilityId();
 
+        $catalogTypeFilter = (is_array($catalogTypes) && $catalogTypes !== [])
+            ? $catalogTypes
+            : [ClinicalCatalogType::FORMULARY_ITEM->value];
+
         // 1. Fetch eligible active formulary items from the clinical catalog
         $catalogQuery = ClinicalCatalogItemModel::query()
             ->select(['id', 'catalog_type', 'code', 'name', 'category', 'unit', 'description', 'metadata', 'codes', 'status'])
-            ->where('catalog_type', ClinicalCatalogType::FORMULARY_ITEM->value)
+            ->whereIn('catalog_type', $catalogTypeFilter)
             ->where('status', ClinicalCatalogItemStatus::ACTIVE->value)
             ->orderBy('name');
 
