@@ -225,7 +225,7 @@ async function loadCatalogItems() {
         const requests = types.map(async (typePath) => {
             try {
                 const typeResponse = await apiRequestJson<any>('GET', `/platform/admin/clinical-catalogs/${typePath}`, {
-                    query: { perPage: 500, status: 'active' },
+                    query: { perPage: 2000, status: 'active' },
                 });
                 const items = Array.isArray(typeResponse?.data) ? typeResponse.data : [];
                 return items.map((item: any) => ({
