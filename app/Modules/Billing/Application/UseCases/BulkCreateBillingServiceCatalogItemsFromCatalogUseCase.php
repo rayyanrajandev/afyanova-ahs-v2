@@ -89,7 +89,7 @@ class BulkCreateBillingServiceCatalogItemsFromCatalogUseCase
                     'catalogItemId' => $catalogItemId ?? '',
                     'code' => (string) ($catalogItem->code ?? ''),
                     'name' => (string) ($catalogItem->name ?? ''),
-                    'error' => $e->getMessage(),
+                    'error' => $e->getMessage() ?: sprintf('[%s] (no message)', get_class($e)),
                 ];
             }
         }

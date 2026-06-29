@@ -271,7 +271,11 @@ async function executeSync() {
         syncResult.value = response ?? { created: 0, updated: 0, errors: [] };
         emit('synced');
     } catch (err: any) {
-        syncResult.value = { created: 0, updated: 0, errors: [{ catalogItemId: '', code: '', name: '', error: err.message }] };
+        if (err?.status === 422 && err?.payload && Array.isArray(err.payload?.errors)) {
+            syncResult.value = err.payload as SyncResult;
+        } else {
+            syncResult.value = { created: 0, updated: 0, errors: [{ catalogItemId: '', code: '', name: '', error: err.message }] };
+        }
     } finally {
         syncing.value = false;
     }
