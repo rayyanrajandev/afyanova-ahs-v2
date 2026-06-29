@@ -230,8 +230,7 @@ watch(selectedCategory, () => {
                 <!-- Select all -->
                 <div class="flex cursor-pointer items-center gap-3 border-b px-4 py-2.5 hover:bg-muted/30" @click="toggleSelectAll">
                     <Checkbox
-                        :checked="allSelected"
-                        :model-value="someSelected ? 'indeterminate' : allSelected"
+                        :checked="(allSelected ? true : someSelected ? 'indeterminate' : false) as boolean | 'indeterminate'"
                         class="shrink-0"
                         @update:checked="toggleSelectAll"
                         @click.stop
