@@ -29,7 +29,7 @@ class ListClinicalCatalogItemsUseCase
         }
 
         $page = max((int) ($filters['page'] ?? 1), 1);
-        $perPage = min(max((int) ($filters['perPage'] ?? 10), 1), 100);
+        $perPage = min(max((int) ($filters['perPage'] ?? 10), 1), 2000);
 
         $sortMap = [
             'code' => 'code',
