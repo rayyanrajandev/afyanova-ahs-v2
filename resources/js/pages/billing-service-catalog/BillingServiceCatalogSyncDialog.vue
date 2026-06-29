@@ -214,7 +214,6 @@ async function loadCatalogItems() {
     catalogLoading.value = true;
     catalogLoadError.value = null;
     try {
-        const allItems: CatalogItem[] = [];
         const types = ['lab-tests', 'radiology-procedures', 'theatre-procedures', 'formulary-items'] as const;
         const typeMap: Record<string, string> = {
             'lab-tests': 'lab_test',
@@ -223,29 +222,29 @@ async function loadCatalogItems() {
             'formulary-items': 'formulary_item',
         };
 
-        for (const typePath of types) {
+        const requests = types.map(async (typePath) => {
             try {
                 const typeResponse = await apiRequestJson<any>('GET', `/platform/admin/clinical-catalogs/${typePath}`, {
                     query: { perPage: 500, status: 'active' },
                 });
                 const items = Array.isArray(typeResponse?.data) ? typeResponse.data : [];
-                for (const item of items) {
-                    allItems.push({
-                        id: String(item.id ?? ''),
-                        code: item.code ?? '',
-                        name: item.name ?? '',
-                        catalogType: typeMap[typePath] ?? 'formulary_item',
-                        category: item.category ?? null,
-                        unit: item.unit ?? null,
-                        description: item.description ?? null,
-                    });
-                }
+                return items.map((item: any) => ({
+                    id: String(item.id ?? ''),
+                    code: item.code ?? '',
+                    name: item.name ?? '',
+                    catalogType: typeMap[typePath] ?? 'formulary_item',
+                    category: item.category ?? null,
+                    unit: item.unit ?? null,
+                    description: item.description ?? null,
+                }));
             } catch {
                 // Skip types that fail - user may not have access
+                return [];
             }
-        }
+        });
 
-        catalogItems.value = allItems;
+        const results = await Promise.all(requests);
+        catalogItems.value = results.flat();
     } catch (err: any) {
         catalogLoadError.value = err?.message ?? 'Unable to load clinical catalog items.';
         catalogItems.value = [];
