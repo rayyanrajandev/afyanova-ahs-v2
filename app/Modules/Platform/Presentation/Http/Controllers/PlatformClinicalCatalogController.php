@@ -34,9 +34,14 @@ class PlatformClinicalCatalogController extends Controller
 
     private const AUDIT_CSV_COLUMNS = ['createdAt', 'action', 'actorType', 'actorId', 'changes', 'metadata'];
 
-    public function syncCandidates(ClinicalCatalogItemRepositoryInterface $repository): JsonResponse
+    public function syncCandidates(Request $request, ClinicalCatalogItemRepositoryInterface $repository): JsonResponse
     {
-        $types = [
+        $validated = $request->validate([
+            'catalogTypes' => ['nullable', 'array'],
+            'catalogTypes.*' => ['string', 'in:lab_test,radiology_procedure,theatre_procedure,formulary_item'],
+        ]);
+
+        $types = $validated['catalogTypes'] ?? [
             ClinicalCatalogType::LAB_TEST->value,
             ClinicalCatalogType::RADIOLOGY_PROCEDURE->value,
             ClinicalCatalogType::THEATRE_PROCEDURE->value,
