@@ -153,7 +153,7 @@ watch(selectedCategory, () => {
 
 <template>
 <Sheet :open="(ws as any).catalogSyncDialogOpen ?? false" @update:open="closeDialog">
-    <SheetContent side="right" variant="form" size="md">
+    <SheetContent side="right" variant="form" size="4xl">
         <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
             <SheetTitle class="flex items-center gap-2">
                 <AppIcon name="book-open" class="size-5 text-muted-foreground" />
