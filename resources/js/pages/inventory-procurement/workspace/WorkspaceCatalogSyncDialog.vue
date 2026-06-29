@@ -298,3 +298,4 @@ watch(selectedCategory, () => {
         </SheetFooter>
     </SheetContent>
 </Sheet>
+</template>
