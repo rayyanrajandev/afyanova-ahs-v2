@@ -12,6 +12,13 @@ class BillingCatalogDepartmentResolver
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
     ) {}
 
+    public function resolveDepartmentName(string $departmentId): ?string
+    {
+        $result = $this->resolve(['department_id' => $departmentId]);
+
+        return $result['department'] ?? null;
+    }
+
     /**
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
