@@ -42,4 +42,17 @@ interface InventoryItemRepositoryInterface
      * @return list<string>
      */
     public function findLinkedClinicalCatalogItemIds(array $catalogItemIds): array;
+
+    /**
+     * Bulk-load linked inventory items keyed by clinical_catalog_item_id.
+     *
+     * @param  list<string>  $catalogItemIds
+     * @return array<string, array<string, mixed>>  Map of clinical_catalog_item_id => inventory item
+     */
+    public function listLinkedByClinicalCatalogIds(array $catalogItemIds): array;
+
+    /**
+     * @return list<string> All item codes currently in scope (for bulk uniqueness checks).
+     */
+    public function listExistingItemCodes(): array;
 }

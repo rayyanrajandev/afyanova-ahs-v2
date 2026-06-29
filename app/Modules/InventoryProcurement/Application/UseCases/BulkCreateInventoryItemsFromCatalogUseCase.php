@@ -2,22 +2,20 @@
 
 namespace App\Modules\InventoryProcurement\Application\UseCases;
 
-use App\Modules\InventoryProcurement\Application\Exceptions\DuplicateInventoryItemCodeException;
+use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemAuditLogRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\ValueObjects\InventoryItemCategory;
-use App\Modules\Platform\Domain\Repositories\ClinicalCatalogItemRepositoryInterface;
+use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
+use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemUnitModel;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
+use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogItemStatus;
 use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogType;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
-use App\Support\CatalogGovernance\StandardsCodeSupport;
-use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
-use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemUnitModel;
-use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemAuditLogRepositoryInterface;
 use App\Support\CatalogGovernance\InventoryClinicalLinkGuard;
-use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
+use App\Support\CatalogGovernance\StandardsCodeSupport;
 use Illuminate\Support\Facades\DB;
 
 class BulkCreateInventoryItemsFromCatalogUseCase
@@ -39,12 +37,11 @@ class BulkCreateInventoryItemsFromCatalogUseCase
      * Creates items for formulary entries that do NOT already have
      * a corresponding inventory item. Updates items that already have one.
      *
-     * @param list<string>|null $catalogItemIds  Optional subset of catalog item IDs to sync.
-     *                                           If null, syncs all eligible active formulary items.
-     * @param string|null $defaultWarehouseId   Default warehouse UUID for all created items.
-     * @param string|null $defaultSupplierId    Default supplier UUID for all created items.
-     * @param int|null $actorId
-     * @param list<string>|null $catalogTypes   Optional subset of catalog types; null = formulary_item only
+     * @param  list<string>|null  $catalogItemIds  Optional subset of catalog item IDs to sync.
+     *                                             If null, syncs all eligible active formulary items.
+     * @param  string|null  $defaultWarehouseId  Default warehouse UUID for all created items.
+     * @param  string|null  $defaultSupplierId  Default supplier UUID for all created items.
+     * @param  list<string>|null  $catalogTypes  Optional subset of catalog types; null = formulary_item only
      * @return array{created: positive-int, updated: positive-int, errors: list<array{catalogItemId: string, code: string, name: string, error: string}>}
      */
     public function execute(
@@ -88,14 +85,14 @@ class BulkCreateInventoryItemsFromCatalogUseCase
             ];
         }
 
-        // 2. Determine which catalog items already have an inventory item linked
-        $existingLinkedIds = $this->inventoryItemRepository->findLinkedClinicalCatalogItemIds(
-            $catalogItems->pluck('id')->map(fn ($id): string => (string) $id)->values()->all(),
-        );
+        // 2. Bulk preload: linked inventory items (1 query instead of N)
+        $catalogItemIdsAll = $catalogItems->pluck('id')->map(fn ($id): string => (string) $id)->values()->all();
+        $existingLinkedMap = $this->inventoryItemRepository->listLinkedByClinicalCatalogIds($catalogItemIdsAll);
 
-        $existingLinkedSet = array_flip($existingLinkedIds);
+        // 3. Bulk preload: existing item codes for uniqueness checks (1 query instead of N×while)
+        $existingItemCodes = array_flip($this->inventoryItemRepository->listExistingItemCodes());
 
-        // 3. Build inventory item payloads for unlinked catalog items
+        // 4. Process each catalog item
         $created = 0;
         $updated = 0;
         $errors = [];
@@ -114,16 +111,10 @@ class BulkCreateInventoryItemsFromCatalogUseCase
             $conversionFactor = $metadata['conversionFactor'] ?? $metadata['conversion_factor'] ?? null;
 
             try {
-                if (isset($existingLinkedSet[$catalogId])) {
+                if (isset($existingLinkedMap[$catalogId])) {
                     // Update existing linked inventory item
-                    $invQuery = InventoryItemModel::query()
-                        ->where('clinical_catalog_item_id', $catalogId);
-
-                    if ($this->isPlatformScopingEnabled()) {
-                        app(PlatformScopeQueryApplier::class)->apply($invQuery);
-                    }
-
-                    $inventoryItem = $invQuery->first();
+                    $existingItem = $existingLinkedMap[$catalogId];
+                    $inventoryItem = InventoryItemModel::query()->find($existingItem['id']);
 
                     if ($inventoryItem === null) {
                         $errors[] = [
@@ -132,6 +123,7 @@ class BulkCreateInventoryItemsFromCatalogUseCase
                             'name' => $catalogItem->name,
                             'error' => 'Linked inventory item not found by clinical_catalog_item_id.',
                         ];
+
                         continue;
                     }
 
@@ -169,15 +161,14 @@ class BulkCreateInventoryItemsFromCatalogUseCase
                     // Create new inventory item
                     $itemCode = $this->generateItemCode($catalogItem->code, $catalogItem->name);
 
-                    // Check for duplicate item code
-                    if ($this->inventoryItemRepository->existsByItemCode($itemCode)) {
-                        $suffix = 1;
-                        $baseCode = $itemCode;
-                        while ($this->inventoryItemRepository->existsByItemCode($itemCode)) {
-                            $itemCode = $baseCode . '-' . $suffix;
-                            $suffix++;
-                        }
+                    // Resolve unique code using preloaded set (no DB queries)
+                    $originalCode = $itemCode;
+                    $suffix = 1;
+                    while (isset($existingItemCodes[$itemCode])) {
+                        $itemCode = $originalCode.'-'.$suffix;
+                        $suffix++;
                     }
+                    $existingItemCodes[$itemCode] = true;
 
                     $createPayload = [
                         'tenant_id' => $tenantId,
@@ -298,7 +289,7 @@ class BulkCreateInventoryItemsFromCatalogUseCase
     }
 
     /**
-     * @param array<string, mixed> $item
+     * @param  array<string, mixed>  $item
      * @return array<string, mixed>
      */
     private function extractTrackedFields(array $item): array

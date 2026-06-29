@@ -2,16 +2,16 @@
 
 namespace App\Modules\Billing\Application\UseCases;
 
-use App\Modules\Billing\Application\Support\BillingClinicalCatalogIdentitySynchronizer;
 use App\Modules\Billing\Application\Support\BillingCatalogDepartmentResolver;
+use App\Modules\Billing\Application\Support\BillingClinicalCatalogIdentitySynchronizer;
 use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemAuditLogRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
+use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
 use App\Support\CatalogGovernance\StandardsCodeSupport;
-use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 
 class BulkCreateBillingServiceCatalogItemsFromCatalogUseCase
 {
@@ -70,7 +70,25 @@ class BulkCreateBillingServiceCatalogItemsFromCatalogUseCase
 
         $catalogItems = $catalogQuery->get();
 
-        $existingLinkedMap = $this->buildExistingLinkedMap($catalogItems, $tenantId, $facilityId);
+        // Bulk preload: existing linked billing items (1 query instead of N)
+        $catalogItemIdsAll = $catalogItems->pluck('id')->filter()->values()->all();
+        $existingLinkedMap = $this->repository->listLatestByClinicalCatalogItemIds(
+            $catalogItemIdsAll,
+            $tenantId,
+            $facilityId,
+        );
+
+        // Bulk preload: existing service codes for uniqueness checks (1 query instead of N×while)
+        $existingServiceCodes = array_flip($this->repository->listExistingServiceCodesForScope(
+            $tenantId,
+            $facilityId,
+        ));
+
+        // Bulk preload: catalog items by ID for passing to synchronizer (avoids redundant finds)
+        $catalogItemModels = [];
+        foreach ($catalogItems as $ci) {
+            $catalogItemModels[(string) $ci->id] = $ci;
+        }
 
         $created = 0;
         $updated = 0;
@@ -84,7 +102,14 @@ class BulkCreateBillingServiceCatalogItemsFromCatalogUseCase
                     $this->syncExistingItem($existingLinkedMap[$catalogItemId], $catalogItem, $actorId);
                     $updated++;
                 } else {
-                    $this->createNewItem($catalogItem, $tenantId, $facilityId, $defaultCurrencyCode, $actorId);
+                    $this->createNewItem(
+                        $catalogItem,
+                        $tenantId,
+                        $facilityId,
+                        $defaultCurrencyCode,
+                        $actorId,
+                        $existingServiceCodes,
+                    );
                     $created++;
                 }
             } catch (\Throwable $e) {
@@ -102,35 +127,6 @@ class BulkCreateBillingServiceCatalogItemsFromCatalogUseCase
             'updated' => $updated,
             'errors' => $errors,
         ];
-    }
-
-    /**
-     * Build a map of catalog_item_id => existing billing item for already-linked items.
-     *
-     * @return array<string, array<string, mixed>>
-     */
-    private function buildExistingLinkedMap($catalogItems, ?string $tenantId, ?string $facilityId): array
-    {
-        $map = [];
-        $catalogItemIds = $catalogItems->pluck('id')->filter()->values()->all();
-
-        if (count($catalogItemIds) === 0) {
-            return $map;
-        }
-
-        foreach ($catalogItemIds as $catalogItemId) {
-            $versions = $this->repository->listVersionsByClinicalCatalogItemId(
-                $catalogItemId,
-                $tenantId,
-                $facilityId,
-            );
-
-            if (!empty($versions)) {
-                $map[$catalogItemId] = $versions[0];
-            }
-        }
-
-        return $map;
     }
 
     /**
@@ -209,6 +205,8 @@ class BulkCreateBillingServiceCatalogItemsFromCatalogUseCase
 
     /**
      * Create a new billing service catalog item from a clinical catalog definition.
+     *
+     * @param  array<string, bool>  $existingServiceCodes  Flipped map of codes already in scope
      */
     private function createNewItem(
         ClinicalCatalogItemModel $catalogItem,
@@ -216,20 +214,23 @@ class BulkCreateBillingServiceCatalogItemsFromCatalogUseCase
         ?string $facilityId,
         string $defaultCurrencyCode,
         ?int $actorId,
+        array $existingServiceCodes,
     ): void {
         $catalogItemId = (string) $catalogItem->id;
 
         $serviceCode = strtoupper(trim((string) ($catalogItem->code ?? '')));
         if ($serviceCode === '') {
-            $serviceCode = 'CAT-' . strtoupper(substr(md5($catalogItemId), 0, 8));
+            $serviceCode = 'CAT-'.strtoupper(substr(md5($catalogItemId), 0, 8));
         }
 
-        $duplicateSuffix = 1;
+        // Resolve unique code using preloaded set (no DB queries)
         $originalCode = $serviceCode;
-        while ($this->repository->existsByServiceCode($serviceCode, $tenantId, $facilityId)) {
+        $duplicateSuffix = 1;
+        while (isset($existingServiceCodes[$serviceCode])) {
             $duplicateSuffix++;
-            $serviceCode = $originalCode . '-' . $duplicateSuffix;
+            $serviceCode = $originalCode.'-'.$duplicateSuffix;
         }
+        $existingServiceCodes[$serviceCode] = true;
 
         $payload = $this->clinicalCatalogIdentitySynchronizer->forCreate(
             payload: [
@@ -238,6 +239,7 @@ class BulkCreateBillingServiceCatalogItemsFromCatalogUseCase
             ],
             tenantId: $tenantId,
             facilityId: $facilityId,
+            preloadedCatalogItem: $catalogItem,
         );
 
         $departmentId = $payload['department_id'] ?? $catalogItem->department_id ?? null;

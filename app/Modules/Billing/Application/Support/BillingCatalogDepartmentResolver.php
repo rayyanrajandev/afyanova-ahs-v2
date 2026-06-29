@@ -8,6 +8,9 @@ use Illuminate\Database\Eloquent\Builder;
 
 class BillingCatalogDepartmentResolver
 {
+    /** @var array<string, array<string, mixed>> */
+    private array $departmentCache = [];
+
     public function __construct(
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
     ) {}
@@ -81,10 +84,17 @@ class BillingCatalogDepartmentResolver
      */
     private function findByIdInScope(string $departmentId): ?array
     {
+        if (isset($this->departmentCache[$departmentId])) {
+            return $this->departmentCache[$departmentId];
+        }
+
         $query = DepartmentModel::query()->where('id', $departmentId);
         $this->applyScope($query);
 
-        return $query->first()?->toArray();
+        $result = $query->first()?->toArray();
+        $this->departmentCache[$departmentId] = $result;
+
+        return $result;
     }
 
     /**

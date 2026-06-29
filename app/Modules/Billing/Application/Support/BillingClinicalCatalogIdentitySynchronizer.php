@@ -13,9 +13,10 @@ class BillingClinicalCatalogIdentitySynchronizer
 
     /**
      * @param  array<string, mixed>  $payload
+     * @param  ClinicalCatalogItemModel|null  $preloadedCatalogItem  Pre-loaded model to skip DB query
      * @return array<string, mixed>
      */
-    public function forCreate(array $payload, ?string $tenantId, ?string $facilityId): array
+    public function forCreate(array $payload, ?string $tenantId, ?string $facilityId, ?ClinicalCatalogItemModel $preloadedCatalogItem = null): array
     {
         $serviceCode = $this->normalizeCode($payload['service_code'] ?? null);
         $clinicalCatalogItemId = $this->clinicalCatalogLinkResolver->resolve(
@@ -34,7 +35,7 @@ class BillingClinicalCatalogIdentitySynchronizer
             ];
         }
 
-        return $this->applyCatalogIdentity($payload, $clinicalCatalogItemId);
+        return $this->applyCatalogIdentity($payload, $clinicalCatalogItemId, $preloadedCatalogItem);
     }
 
     /**
@@ -74,11 +75,12 @@ class BillingClinicalCatalogIdentitySynchronizer
 
     /**
      * @param  array<string, mixed>  $payload
+     * @param  ClinicalCatalogItemModel|null  $preloadedCatalogItem  Pre-loaded model to skip DB query
      * @return array<string, mixed>
      */
-    private function applyCatalogIdentity(array $payload, string $clinicalCatalogItemId): array
+    private function applyCatalogIdentity(array $payload, string $clinicalCatalogItemId, ?ClinicalCatalogItemModel $preloadedCatalogItem = null): array
     {
-        $catalogItem = ClinicalCatalogItemModel::query()->find($clinicalCatalogItemId);
+        $catalogItem = $preloadedCatalogItem ?? ClinicalCatalogItemModel::query()->find($clinicalCatalogItemId);
         if ($catalogItem === null) {
             return [
                 ...$payload,

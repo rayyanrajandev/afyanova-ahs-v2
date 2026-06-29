@@ -2,9 +2,9 @@
 
 namespace App\Modules\InventoryProcurement\Infrastructure\Repositories;
 
+use App\Modules\InventoryProcurement\Application\Services\DepartmentRequisitionScopeResolver;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemRepositoryInterface;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
-use App\Modules\InventoryProcurement\Application\Services\DepartmentRequisitionScopeResolver;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -21,7 +21,7 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
 
     public function create(array $attributes): array
     {
-        $item = new InventoryItemModel();
+        $item = new InventoryItemModel;
         $item->fill($this->filterAttributesForCurrentSchema($attributes));
         $item->save();
 
@@ -174,6 +174,41 @@ class EloquentInventoryItemRepository implements InventoryItemRepositoryInterfac
             ->whereNotNull('clinical_catalog_item_id')
             ->pluck('clinical_catalog_item_id')
             ->map(fn ($id): string => (string) $id)
+            ->values()
+            ->all();
+    }
+
+    public function listLinkedByClinicalCatalogIds(array $catalogItemIds): array
+    {
+        if ($catalogItemIds === []) {
+            return [];
+        }
+
+        $rows = InventoryItemModel::query()
+            ->whereIn('clinical_catalog_item_id', $catalogItemIds)
+            ->whereNotNull('clinical_catalog_item_id')
+            ->get()
+            ->map(fn (InventoryItemModel $item): array => $item->toArray())
+            ->all();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $cciId = (string) ($row['clinical_catalog_item_id'] ?? '');
+            if ($cciId !== '' && ! isset($map[$cciId])) {
+                $map[$cciId] = $row;
+            }
+        }
+
+        return $map;
+    }
+
+    public function listExistingItemCodes(): array
+    {
+        return InventoryItemModel::query()
+            ->select('item_code')
+            ->get()
+            ->pluck('item_code')
+            ->filter()
             ->values()
             ->all();
     }

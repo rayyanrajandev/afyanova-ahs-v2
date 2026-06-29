@@ -47,6 +47,24 @@ interface BillingServiceCatalogItemRepositoryInterface
         ?string $facilityId = null,
     ): array;
 
+    /**
+     * @param  list<string>  $clinicalCatalogItemIds
+     * @return array<string, array<string, mixed>>  Map of clinical_catalog_item_id => latest billing item.
+     */
+    public function listLatestByClinicalCatalogItemIds(
+        array $clinicalCatalogItemIds,
+        ?string $tenantId = null,
+        ?string $facilityId = null,
+    ): array;
+
+    /**
+     * @return list<string> All service codes currently in scope (for bulk uniqueness checks).
+     */
+    public function listExistingServiceCodesForScope(
+        ?string $tenantId = null,
+        ?string $facilityId = null,
+    ): array;
+
     public function search(
         ?string $query,
         ?string $serviceType,

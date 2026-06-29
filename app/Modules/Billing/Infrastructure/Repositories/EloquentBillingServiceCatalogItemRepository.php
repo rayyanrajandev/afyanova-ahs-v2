@@ -21,7 +21,7 @@ class EloquentBillingServiceCatalogItemRepository implements BillingServiceCatal
 
     public function create(array $attributes): array
     {
-        $item = new BillingServiceCatalogItemModel();
+        $item = new BillingServiceCatalogItemModel;
         $item->fill($this->filterAttributesForCurrentSchema($attributes));
         $item->save();
         if ($this->supportsClinicalCatalogLink()) {
@@ -207,6 +207,75 @@ class EloquentBillingServiceCatalogItemRepository implements BillingServiceCatal
             ->orderByDesc('updated_at')
             ->get()
             ->map(static fn (BillingServiceCatalogItemModel $item): array => $item->toArray())
+            ->all();
+    }
+
+    public function listLatestByClinicalCatalogItemIds(
+        array $clinicalCatalogItemIds,
+        ?string $tenantId = null,
+        ?string $facilityId = null,
+    ): array {
+        if (! $this->supportsClinicalCatalogLink() || $clinicalCatalogItemIds === []) {
+            return [];
+        }
+
+        $query = BillingServiceCatalogItemModel::query()
+            ->whereIn('clinical_catalog_item_id', $clinicalCatalogItemIds)
+            ->when(
+                $tenantId !== null,
+                fn (Builder $builder) => $builder->where('tenant_id', $tenantId),
+            )
+            ->when(
+                $facilityId !== null,
+                fn (Builder $builder) => $builder->where('facility_id', $facilityId),
+            );
+
+        if ($this->supportsTariffVersioning()) {
+            $query->orderByDesc('tariff_version');
+        }
+
+        $query->with('clinicalCatalogItem');
+        $this->applyFacilityTierAvailability($query);
+
+        $rows = $query
+            ->orderByDesc('effective_from')
+            ->orderByDesc('updated_at')
+            ->get()
+            ->map(static fn (BillingServiceCatalogItemModel $item): array => $item->toArray())
+            ->all();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $cciId = $row['clinical_catalog_item_id'] ?? null;
+            if ($cciId !== null && ! isset($map[$cciId])) {
+                $map[$cciId] = $row;
+            }
+        }
+
+        return $map;
+    }
+
+    public function listExistingServiceCodesForScope(
+        ?string $tenantId = null,
+        ?string $facilityId = null,
+    ): array {
+        $query = BillingServiceCatalogItemModel::query()
+            ->select('service_code')
+            ->when(
+                $tenantId !== null,
+                fn (Builder $builder) => $builder->where('tenant_id', $tenantId),
+            )
+            ->when(
+                $facilityId !== null,
+                fn (Builder $builder) => $builder->where('facility_id', $facilityId),
+            );
+
+        return $query
+            ->get()
+            ->pluck('service_code')
+            ->map(fn ($code) => strtoupper(trim((string) $code)))
+            ->filter()
+            ->values()
             ->all();
     }
 

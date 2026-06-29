@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import type { AppIconName } from '@/lib/icons';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -42,7 +42,7 @@ const catalogTypeOptions = [
     { value: 'formulary_item', label: 'Formulary (Medicines)', icon: 'pill' as AppIconName },
 ];
 
-const selectedCategory = ref<string>('');
+const selectedCategory = ref('');
 const catalogItems = ref<CatalogItem[]>([]);
 const loadingItems = ref(false);
 const loadError = ref<string | null>(null);
@@ -50,23 +50,26 @@ const selectedItemIds = ref<Set<string>>(new Set());
 const syncing = ref(false);
 const syncResult = ref<SyncResult | null>(null);
 
-const allSelected = ref(false);
-const someSelected = ref(false);
+const selectAllChecked = computed<boolean | 'indeterminate'>({
+    get() {
+        const total = catalogItems.value.length;
+        const count = selectedItemIds.value.size;
+        if (total === 0) return false;
+        if (count === total) return true;
+        if (count > 0) return 'indeterminate';
+        return false;
+    },
+    set(value: boolean) {
+        if (value) {
+            selectedItemIds.value = new Set(catalogItems.value.map((item) => item.id));
+        } else {
+            selectedItemIds.value = new Set();
+        }
+    },
+});
 
-function updateSelectAllState() {
-    const total = catalogItems.value.length;
-    const count = selectedItemIds.value.size;
-    allSelected.value = total > 0 && count === total;
-    someSelected.value = count > 0 && count < total;
-}
-
-function toggleSelectAll() {
-    if (allSelected.value) {
-        selectedItemIds.value = new Set();
-    } else {
-        selectedItemIds.value = new Set(catalogItems.value.map((item) => item.id));
-    }
-    updateSelectAllState();
+function isItemSelected(id: string): boolean {
+    return selectedItemIds.value.has(id);
 }
 
 function toggleItem(id: string) {
@@ -77,7 +80,6 @@ function toggleItem(id: string) {
         next.add(id);
     }
     selectedItemIds.value = next;
-    updateSelectAllState();
 }
 
 async function loadItems() {
@@ -143,8 +145,6 @@ function closeDialog() {
     selectedItemIds.value = new Set();
     syncResult.value = null;
     loadError.value = null;
-    allSelected.value = false;
-    someSelected.value = false;
 }
 
 watch(selectedCategory, () => {
@@ -152,8 +152,6 @@ watch(selectedCategory, () => {
     selectedItemIds.value = new Set();
     syncResult.value = null;
     loadError.value = null;
-    allSelected.value = false;
-    someSelected.value = false;
 });
 </script>
 
@@ -234,15 +232,14 @@ watch(selectedCategory, () => {
             <!-- Item list -->
             <template v-else-if="catalogItems.length > 0">
                 <!-- Select all -->
-                <div class="flex cursor-pointer items-center gap-3 border-b px-4 py-2.5 hover:bg-muted/30" @click="toggleSelectAll">
+                <div class="flex cursor-pointer items-center gap-3 border-b px-4 py-2.5 hover:bg-muted/30" @click="selectAllChecked = !selectAllChecked || selectAllChecked === 'indeterminate'">
                     <Checkbox
-                        :checked="(allSelected ? true : someSelected ? 'indeterminate' : false) as boolean | 'indeterminate'"
+                        v-model="selectAllChecked"
                         class="shrink-0"
-                        @update:checked="toggleSelectAll"
                         @click.stop
                     />
                     <span class="text-xs font-medium text-muted-foreground">
-                        {{ allSelected ? 'Deselect all' : 'Select all' }} ({{ catalogItems.length }})
+                        {{ selectAllChecked === true ? 'Deselect all' : 'Select all' }} ({{ catalogItems.length }})
                     </span>
                     <Badge variant="secondary" class="ml-auto h-5 px-1.5 text-[10px]">
                         {{ selectedItemIds.size }} selected
@@ -259,9 +256,9 @@ watch(selectedCategory, () => {
                             @click="toggleItem(item.id)"
                         >
                             <Checkbox
-                                :checked="selectedItemIds.has(item.id)"
+                                :model-value="isItemSelected(item.id)"
                                 class="shrink-0"
-                                @update:checked="toggleItem(item.id)"
+                                @update:model-value="toggleItem(item.id)"
                                 @click.stop
                             />
                             <div class="min-w-0 flex-1">
@@ -286,7 +283,7 @@ watch(selectedCategory, () => {
         </div>
 
         <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
-            <Button variant="outline" @click="syncResult ? closeDialog() : closeDialog()">
+            <Button variant="outline" @click="closeDialog()">
                 {{ syncResult ? 'Done' : 'Cancel' }}
             </Button>
             <Button
