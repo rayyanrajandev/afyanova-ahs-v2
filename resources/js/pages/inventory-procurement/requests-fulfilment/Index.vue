@@ -203,6 +203,34 @@ const pageHeaderDescription = computed(() => {
     return base;
 });
 
+const tabContentTitle = computed(() => {
+    const titles: Record<string, string> = {
+        overview: 'Request Priorities',
+        requisitions: 'Stock Requests',
+        'shortage-queue': 'Stock Shortages',
+        transfers: 'Transfers',
+    };
+    return titles[activeTab.value] ?? 'Requests & Fulfilment';
+});
+const tabContentIcon = computed(() => {
+    const icons: Record<string, string> = {
+        overview: 'alert-triangle',
+        requisitions: 'clipboard-list',
+        'shortage-queue': 'alert-triangle',
+        transfers: 'activity',
+    };
+    return icons[activeTab.value] ?? 'activity';
+});
+const tabContentDescription = computed(() => {
+    const descs: Record<string, string> = {
+        overview: 'Priority view of pending requests requiring attention and action.',
+        requisitions: 'Department stock requests from submission through fulfilment.',
+        'shortage-queue': 'Items on backorder or short supply awaiting procurement.',
+        transfers: 'Warehouse-to-warehouse stock transfers and variance review.',
+    };
+    return descs[activeTab.value] ?? '';
+});
+
 const { requestPipelineCounts, loadRequestPipelineCounts } = useRequestPipelineCounts(apiRequest);
 
 const requisitionsReadyCount = computed(() => shortageQueueMeta.value?.readyLineCount ?? 0);
@@ -2044,49 +2072,48 @@ onMounted(async () => {
                             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                                 <div class="min-w-0 shrink-0">
                                     <h3 class="flex items-center gap-2 text-sm font-semibold leading-none whitespace-nowrap">
-                                        <AppIcon name="activity" class="size-4 text-primary" />
-                                        Requests &amp; Fulfilment
+                                        <AppIcon :name="tabContentIcon as AppIconName" class="size-4 text-primary" />
+                                        {{ tabContentTitle }}
                                     </h3>
-                                    <p class="mt-1 text-xs text-muted-foreground">Priorities, department requests, shortages, and warehouse transfers</p>
+                                    <p class="mt-1 text-xs text-muted-foreground">{{ tabContentDescription }}</p>
                                 </div>
-                            </div>
 
-                            <!-- Toolbar row: search + filters (hidden on overview tab) -->
-                            <div v-if="activeTab !== 'overview'" class="flex items-center gap-2">
-                                <template v-if="activeTab === 'requisitions'">
-                                    <div class="relative min-w-0 flex-1 lg:flex-none">
-                                        <AppIcon name="search" class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                                        <input
-                                            v-model="deptReqSearch.q"
-                                            class="h-8 w-full rounded-lg border border-input bg-transparent pl-9 pr-3 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:w-72"
-                                            placeholder="Req # or department…"
-                                            @keydown.enter="deptReqSearch.page = 1; loadDeptRequisitions()"
-                                        />
-                                    </div>
-                                </template>
-                                <template v-else-if="activeTab === 'shortage-queue'">
-                                    <div class="relative min-w-0 flex-1 lg:flex-none">
-                                        <AppIcon name="search" class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                                        <input
-                                            v-model="shortageQueueFilters.q"
-                                            class="h-8 w-full rounded-lg border border-input bg-transparent pl-9 pr-3 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:w-72"
-                                            placeholder="Search requisition or department…"
-                                            @keydown.enter="shortageQueueFilters.page = 1; loadShortageQueue()"
-                                        />
-                                    </div>
-                                </template>
-                                <template v-else-if="activeTab === 'transfers'">
-                                    <div class="relative min-w-0 flex-1 lg:flex-none">
-                                        <AppIcon name="search" class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                                        <input
-                                            v-model="transferSearch.q"
-                                            class="h-8 w-full rounded-lg border border-input bg-transparent pl-9 pr-3 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:w-72"
-                                            placeholder="Search transfer number…"
-                                            @keydown.enter="transferSearch.page = 1; loadWarehouseTransfers()"
-                                        />
-                                    </div>
-                                </template>
-                                <SupplyChainFilterPopover :filter-count="filterCount" @apply="applyFilters" @reset="resetAllFilters">
+                                <!-- Search + Filters - right side, hidden on overview tab -->
+                                <div v-if="activeTab !== 'overview'" class="flex items-center gap-2">
+                                    <template v-if="activeTab === 'requisitions'">
+                                        <div class="relative min-w-0 flex-1 lg:flex-none">
+                                            <AppIcon name="search" class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                                            <input
+                                                v-model="deptReqSearch.q"
+                                                class="h-8 w-full rounded-lg border border-input bg-transparent pl-9 pr-3 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:w-72"
+                                                placeholder="Req # or department…"
+                                                @keydown.enter="deptReqSearch.page = 1; loadDeptRequisitions()"
+                                            />
+                                        </div>
+                                    </template>
+                                    <template v-else-if="activeTab === 'shortage-queue'">
+                                        <div class="relative min-w-0 flex-1 lg:flex-none">
+                                            <AppIcon name="search" class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                                            <input
+                                                v-model="shortageQueueFilters.q"
+                                                class="h-8 w-full rounded-lg border border-input bg-transparent pl-9 pr-3 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:w-72"
+                                                placeholder="Search requisition or department…"
+                                                @keydown.enter="shortageQueueFilters.page = 1; loadShortageQueue()"
+                                            />
+                                        </div>
+                                    </template>
+                                    <template v-else-if="activeTab === 'transfers'">
+                                        <div class="relative min-w-0 flex-1 lg:flex-none">
+                                            <AppIcon name="search" class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                                            <input
+                                                v-model="transferSearch.q"
+                                                class="h-8 w-full rounded-lg border border-input bg-transparent pl-9 pr-3 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:w-72"
+                                                placeholder="Search transfer number…"
+                                                @keydown.enter="transferSearch.page = 1; loadWarehouseTransfers()"
+                                            />
+                                        </div>
+                                    </template>
+                                    <SupplyChainFilterPopover :filter-count="filterCount" @apply="applyFilters" @reset="resetAllFilters">
                                     <template v-if="activeTab === 'requisitions'">
                                         <div class="grid gap-2">
                                             <Label>Status</Label>
@@ -2183,6 +2210,7 @@ onMounted(async () => {
                                     </span>
                                 </TabsTrigger>
                             </TabsList>
+                            </div>
                         </div>
 
                         <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
