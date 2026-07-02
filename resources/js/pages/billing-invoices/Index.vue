@@ -80,9 +80,8 @@ import BillingCreateStageActions from './components/BillingCreateStageActions.vu
 import BillingCreateWorkspaceHeader from './components/BillingCreateWorkspaceHeader.vue';
 import BillingModuleNav from './components/BillingModuleNav.vue';
 import BillingInvoiceViewTabs from './components/BillingInvoiceViewTabs.vue';
-import BillingQueueControlBar from './components/BillingQueueControlBar.vue';
-import BillingQueueFiltersPanels from './components/BillingQueueFiltersPanels.vue';
 import BillingQueueTable from './components/BillingQueueTable.vue';
+
 import BillingQueueToolbar from './components/BillingQueueToolbar.vue';
 import BillingWorkspaceAlerts from './components/BillingWorkspaceAlerts.vue';
 import BillingWorkspaceHeader from './components/BillingWorkspaceHeader.vue';
@@ -14693,8 +14692,10 @@ onMounted(refreshPage);
                         :invoice-date-filter-active="searchForm.from !== today || Boolean(searchForm.to)"
                         :payment-activity-filter-active="Boolean(searchForm.paymentActivityFrom || searchForm.paymentActivityTo)"
                         :register-search-input="registerBillingQueueSearchInput"
+                        :queue-lane-filter="billingQueueLaneFilter"
                         @update:search-query="searchForm.q = $event"
                         @update:status-value="updateBillingQueueStatusValue"
+                        @set-lane-filter="setBillingQueueLaneFilter"
                         @submit-search="submitSearch"
                         @open-advanced-filters="advancedFiltersSheetOpen = true"
                         @set-results-per-page="setBillingResultsPerPage"
@@ -14702,12 +14703,6 @@ onMounted(refreshPage);
                         @reset-filters="resetFilters"
                         @open-full-queue="openFullBillingQueue"
                         @refocus-patient="refocusBillingPatientQueue"
-                    />
-                    <BillingQueueControlBar
-                        :state="billingQueueControlBarState"
-                        :view="billingQueueControlBarView"
-                        :actions="billingQueueControlBarActions"
-                        :helpers="billingQueueControlBarHelpers"
                     />
                     <BillingQueueTable
                         :page-loading="pageLoading"

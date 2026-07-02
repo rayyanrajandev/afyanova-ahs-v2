@@ -47,12 +47,14 @@ const props = defineProps<{
     currencyCode: string;
     invoiceDateFilterActive: boolean;
     paymentActivityFilterActive: boolean;
+    queueLaneFilter: string;
     registerSearchInput?: (value: unknown) => void;
 }>();
 
 const emit = defineEmits<{
     (e: 'update:searchQuery', value: string): void;
     (e: 'update:statusValue', value: string): void;
+    (e: 'set-lane-filter', value: string): void;
     (e: 'submit-search'): void;
     (e: 'open-advanced-filters'): void;
     (e: 'set-results-per-page', value: number): void;
@@ -178,6 +180,28 @@ function bindSearchInputRef(value: unknown) {
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
+            </div>
+
+            <div class="flex items-center gap-1">
+                <span class="mr-1 text-[11px] text-muted-foreground">Lane:</span>
+                <button
+                    type="button"
+                    class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+                    :class="queueLaneFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground'"
+                    @click="emit('set-lane-filter', 'all')"
+                >All</button>
+                <button
+                    type="button"
+                    class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+                    :class="queueLaneFilter === 'cashier_collection' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground'"
+                    @click="emit('set-lane-filter', 'cashier_collection')"
+                >Cashier</button>
+                <button
+                    type="button"
+                    class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
+                    :class="queueLaneFilter === 'third_party_settlement' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground'"
+                    @click="emit('set-lane-filter', 'third_party_settlement')"
+                >Third-party</button>
             </div>
 
             <div
