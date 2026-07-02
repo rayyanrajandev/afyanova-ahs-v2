@@ -610,7 +610,7 @@ const ws = useSupplyChainPageApi();
                             <Input id="inv-movement-occurred-at" v-model="ws.stockMovementForm.occurredAt" :disabled="ws.stockMovementSubmitting" type="datetime-local" />
                             <p v-if="ws.fieldError(ws.stockMovementErrors, 'occurredAt')" class="text-xs text-destructive">{{ ws.fieldError(ws.stockMovementErrors, 'occurredAt') }}</p>
                         </div>
-                        <div v-if="ws.requiresAdjustmentDirection()" class="grid gap-2 sm:col-span-2">
+                        <div v-if="ws.requiresAdjustmentDirection" class="grid gap-2 sm:col-span-2">
                             <Label>Adjustment Direction</Label>
                             <div class="grid grid-cols-2 gap-2">
                                 <button
