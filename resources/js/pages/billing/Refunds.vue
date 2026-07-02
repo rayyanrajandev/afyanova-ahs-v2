@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import BillingModuleNav from '@/pages/billing/components/BillingModuleNav.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
-import { messageFromUnknown } from '@/lib/notify';
+import { messageFromUnknown, notifySuccess } from '@/lib/notify';
 import type { BreadcrumbItem } from '@/types';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -37,6 +40,13 @@ const perPage = ref(25);
 const totalPages = ref(1);
 const total = ref(0);
 
+const sheetOpen = ref(false);
+const newInvoiceId = ref('');
+const newAmount = ref<number | null>(null);
+const newReason = ref('');
+const submitting = ref(false);
+const sheetError = ref<string | null>(null);
+
 async function load() {
     loading.value = true;
     error.value = null;
@@ -54,6 +64,34 @@ async function load() {
         error.value = messageFromUnknown(err, 'Unable to load refunds.');
     } finally {
         loading.value = false;
+    }
+}
+
+async function createRefund() {
+    if (!newInvoiceId.value.trim() || !newAmount.value || !newReason.value.trim()) return;
+
+    submitting.value = true;
+    sheetError.value = null;
+
+    try {
+        await apiRequestJson('/billing-refunds', {
+            method: 'POST',
+            body: JSON.stringify({
+                invoiceId: newInvoiceId.value.trim(),
+                amount: newAmount.value,
+                reason: newReason.value.trim(),
+            }),
+        });
+        notifySuccess('Refund request submitted.');
+        sheetOpen.value = false;
+        newInvoiceId.value = '';
+        newAmount.value = null;
+        newReason.value = '';
+        await load();
+    } catch (err) {
+        sheetError.value = messageFromUnknown(err, 'Unable to create refund.');
+    } finally {
+        submitting.value = false;
     }
 }
 
@@ -90,7 +128,7 @@ const statusVariant = (s: string) => {
                         </div>
                     </div>
                     <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
-                        <Button size="sm" class="h-8 gap-1.5" @click="/* create dialog */">
+                        <Button size="sm" class="h-8 gap-1.5" @click="sheetOpen = true">
                             <AppIcon name="plus" class="size-3.5" />
                             New refund
                         </Button>
@@ -130,7 +168,7 @@ const statusVariant = (s: string) => {
                         <div v-for="refund in refunds" :key="refund.id" class="flex items-center justify-between gap-4 py-3">
                             <div class="min-w-0">
                                 <p class="text-sm font-medium">{{ refund.invoice_number || refund.invoice_id }}</p>
-                                <p class="text-xs text-muted-foreground">{{ refund.reason }} Â· {{ refund.created_at }}</p>
+                                <p class="text-xs text-muted-foreground">{{ refund.reason }} · {{ refund.created_at }}</p>
                             </div>
                             <div class="flex items-center gap-3">
                                 <Badge :variant="statusVariant(refund.status)">{{ refund.status }}</Badge>
@@ -146,6 +184,47 @@ const statusVariant = (s: string) => {
                     </div>
                 </CardContent>
             </Card>
+
+            <Sheet v-model:open="sheetOpen">
+                <SheetContent side="right" variant="form" size="2xl">
+                    <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
+                        <SheetTitle class="flex items-center gap-2">
+                            <AppIcon name="undo-2" class="size-5 text-muted-foreground" />
+                            New refund
+                        </SheetTitle>
+                        <SheetDescription>Create a refund request against an invoice.</SheetDescription>
+                    </SheetHeader>
+
+                    <div class="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+                        <div v-if="sheetError" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                            {{ sheetError }}
+                        </div>
+
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <div class="space-y-2">
+                                <Label for="rf-invoice-id">Invoice ID</Label>
+                                <Input id="rf-invoice-id" v-model="newInvoiceId" placeholder="Enter invoice ID" />
+                            </div>
+                            <div class="space-y-2">
+                                <Label for="rf-amount">Amount</Label>
+                                <Input id="rf-amount" v-model.number="newAmount" type="number" placeholder="0.00" min="0" step="0.01" />
+                            </div>
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="rf-reason">Reason</Label>
+                            <Textarea id="rf-reason" v-model="newReason" placeholder="Why is this refund being requested?" rows="3" />
+                        </div>
+                    </div>
+
+                    <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
+                        <Button variant="outline" @click="sheetOpen = false">Cancel</Button>
+                        <Button :disabled="submitting" @click="createRefund">
+                            {{ submitting ? 'Submitting...' : 'Submit refund' }}
+                        </Button>
+                    </SheetFooter>
+                </SheetContent>
+            </Sheet>
         </div>
     </AppLayout>
 </template>

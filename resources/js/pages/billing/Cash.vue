@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import BillingModuleNav from '@/pages/billing/components/BillingModuleNav.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
-import { messageFromUnknown } from '@/lib/notify';
+import { messageFromUnknown, notifySuccess } from '@/lib/notify';
 import type { BreadcrumbItem } from '@/types';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -33,9 +35,16 @@ const error = ref<string | null>(null);
 const search = ref('');
 const page = ref(1);
 const perPage = ref(25);
-
 const totalPages = ref(1);
 const total = ref(0);
+
+const sheetOpen = ref(false);
+const newPatientId = ref('');
+const newPatientNumber = ref('');
+const newPatientName = ref('');
+const newPhone = ref('');
+const submitting = ref(false);
+const sheetError = ref<string | null>(null);
 
 async function loadAccounts() {
     loading.value = true;
@@ -54,6 +63,36 @@ async function loadAccounts() {
         error.value = messageFromUnknown(err, 'Unable to load cash accounts.');
     } finally {
         loading.value = false;
+    }
+}
+
+async function createAccount() {
+    if (!newPatientId.value.trim()) return;
+
+    submitting.value = true;
+    sheetError.value = null;
+
+    try {
+        await apiRequestJson('/cash-patients', {
+            method: 'POST',
+            body: JSON.stringify({
+                patientId: newPatientId.value.trim(),
+                patientNumber: newPatientNumber.value.trim() || null,
+                displayName: newPatientName.value.trim() || null,
+                phone: newPhone.value.trim() || null,
+            }),
+        });
+        notifySuccess('Cash account created.');
+        sheetOpen.value = false;
+        newPatientId.value = '';
+        newPatientNumber.value = '';
+        newPatientName.value = '';
+        newPhone.value = '';
+        await loadAccounts();
+    } catch (err) {
+        sheetError.value = messageFromUnknown(err, 'Unable to create cash account.');
+    } finally {
+        submitting.value = false;
     }
 }
 
@@ -89,6 +128,10 @@ const statusVariant = (s: string) => {
                         </div>
                     </div>
                     <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button size="sm" class="h-8 gap-1.5" @click="sheetOpen = true">
+                            <AppIcon name="plus" class="size-3.5" />
+                            New cash account
+                        </Button>
                         <Button variant="outline" size="sm" class="h-8 gap-1.5" :disabled="loading" @click="loadAccounts">
                             <AppIcon name="refresh-cw" class="size-3.5" />
                             Refresh
@@ -125,7 +168,7 @@ const statusVariant = (s: string) => {
                         <div v-for="account in accounts" :key="account.id" class="flex items-center justify-between gap-4 py-3">
                             <div class="min-w-0">
                                 <p class="text-sm font-medium">{{ account.display_name || 'Unnamed patient' }}</p>
-                                <p class="text-xs text-muted-foreground">MRN {{ account.patient_number }} Â· Created {{ account.created_at }}</p>
+                                <p class="text-xs text-muted-foreground">MRN {{ account.patient_number }} · Created {{ account.created_at }}</p>
                             </div>
                             <div class="flex items-center gap-3">
                                 <Badge :variant="statusVariant(account.status)">{{ account.status }}</Badge>
@@ -141,6 +184,52 @@ const statusVariant = (s: string) => {
                     </div>
                 </CardContent>
             </Card>
+
+            <Sheet v-model:open="sheetOpen">
+                <SheetContent side="right" variant="form" size="2xl">
+                    <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
+                        <SheetTitle class="flex items-center gap-2">
+                            <AppIcon name="banknote" class="size-5 text-muted-foreground" />
+                            New cash account
+                        </SheetTitle>
+                        <SheetDescription>Open a walk-in patient cash account.</SheetDescription>
+                    </SheetHeader>
+
+                    <div class="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+                        <div v-if="sheetError" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                            {{ sheetError }}
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="ca-patient-id">Patient ID</Label>
+                            <Input id="ca-patient-id" v-model="newPatientId" placeholder="Enter patient ID" />
+                        </div>
+
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <div class="space-y-2">
+                                <Label for="ca-patient-number">Patient Number (MRN)</Label>
+                                <Input id="ca-patient-number" v-model="newPatientNumber" placeholder="Optional" />
+                            </div>
+                            <div class="space-y-2">
+                                <Label for="ca-phone">Phone</Label>
+                                <Input id="ca-phone" v-model="newPhone" placeholder="Optional" />
+                            </div>
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="ca-name">Display Name</Label>
+                            <Input id="ca-name" v-model="newPatientName" placeholder="Optional" />
+                        </div>
+                    </div>
+
+                    <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
+                        <Button variant="outline" @click="sheetOpen = false">Cancel</Button>
+                        <Button :disabled="submitting" @click="createAccount">
+                            {{ submitting ? 'Creating...' : 'Create account' }}
+                        </Button>
+                    </SheetFooter>
+                </SheetContent>
+            </Sheet>
         </div>
     </AppLayout>
 </template>
