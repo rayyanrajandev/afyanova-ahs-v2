@@ -52,4 +52,11 @@ interface ClinicalCatalogItemRepositoryInterface
         ?string $category,
         ?string $dosageForm = null,
     ): array;
+
+    public function typeCounts(
+        ?string $query,
+        ?string $departmentId,
+        ?string $category,
+        ?string $dosageForm = null,
+    ): array;
 }

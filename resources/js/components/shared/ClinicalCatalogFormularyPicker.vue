@@ -73,7 +73,7 @@ const catalogSources = [
     { type: 'lab_test' as const, path: '/platform/admin/clinical-catalogs/lab-tests', label: 'Lab Tests' },
     { type: 'radiology_procedure' as const, path: '/platform/admin/clinical-catalogs/radiology-procedures', label: 'Radiology' },
     { type: 'theatre_procedure' as const, path: '/platform/admin/clinical-catalogs/theatre-procedures', label: 'Theatre' },
-    { type: 'formulary_item' as const, path: '/platform/admin/clinical-catalogs/formulary-items', label: 'Formulary' },
+    { type: 'formulary_item' as const, path: '/platform/admin/clinical-catalogs/formulary-items', label: 'Medicines' },
 ];
 
 const filteredSources = computed(() =>

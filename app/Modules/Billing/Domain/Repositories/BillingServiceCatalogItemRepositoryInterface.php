@@ -85,4 +85,11 @@ interface BillingServiceCatalogItemRepositoryInterface
         ?string $currencyCode,
         ?string $lifecycle
     ): array;
+
+    public function serviceTypeCounts(
+        ?string $query,
+        ?string $department,
+        ?string $currencyCode,
+        ?string $lifecycle
+    ): array;
 }

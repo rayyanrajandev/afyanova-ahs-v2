@@ -34,6 +34,17 @@ class UpdateBillingServiceCatalogItemUseCase
             return null;
         }
 
+        if (! empty($existing['clinical_catalog_item_id'])) {
+            $identityFields = ['service_code', 'service_name', 'service_type', 'department_id', 'department', 'unit', 'facility_tier', 'description', 'codes'];
+            $changedIdentityFields = array_intersect($identityFields, array_keys($payload));
+            if ($changedIdentityFields !== []) {
+                throw new \InvalidArgumentException(
+                    'Identity fields cannot be modified when the item is linked to a Clinical Catalog entry. '
+                    .'Update the source Clinical Catalog item instead.'
+                );
+            }
+        }
+
         $tenantId = $this->platformScopeContext->tenantId();
         $facilityId = $this->platformScopeContext->facilityId();
         $payload = $this->clinicalCatalogIdentitySynchronizer->forUpdate($payload, $existing, $tenantId, $facilityId);

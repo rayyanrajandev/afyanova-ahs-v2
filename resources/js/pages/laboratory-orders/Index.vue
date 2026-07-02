@@ -8837,7 +8837,7 @@ onMounted(async () => {
                                                             variant="secondary"
                                                             class="text-[10px]"
                                                         >
-                                                            Synced from catalog
+                                                            Synced from Clinical Catalog
                                                         </Badge>
                                                         <span>{{
                                                             createSpecimenHelperText

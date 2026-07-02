@@ -2,6 +2,7 @@
 
 namespace App\Modules\Billing\Infrastructure\Models;
 
+use App\Modules\Department\Infrastructure\Models\DepartmentModel;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -70,5 +71,10 @@ class BillingServiceCatalogItemModel extends Model
     public function clinicalCatalogItem(): BelongsTo
     {
         return $this->belongsTo(ClinicalCatalogItemModel::class, 'clinical_catalog_item_id');
+    }
+
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(DepartmentModel::class, 'department_id');
     }
 }

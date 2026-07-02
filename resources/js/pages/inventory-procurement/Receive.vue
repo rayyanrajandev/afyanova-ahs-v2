@@ -21,7 +21,7 @@ import { useInventoryMasterLookups } from '@/composables/useInventoryMasterLooku
 import { useInventoryProcurementAccess } from '@/composables/useInventoryProcurementAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
-import { INVENTORY_PROCUREMENT_HOME_PATH, inventoryWorkspaceHref, procurementGrnPrintHref } from '@/lib/inventoryProcurement';
+import { INVENTORY_PROCUREMENT_HOME_PATH, supplyChainHref, procurementGrnPrintHref } from '@/lib/inventoryProcurement';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { BreadcrumbItem } from '@/types';
@@ -353,7 +353,7 @@ onMounted(async () => {
                                 <div v-else-if="orderedRequests.length === 0" class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
                                     No orders waiting for receipt.
                                     <Button variant="link" class="h-auto p-0 text-primary" as-child>
-                                        <Link :href="inventoryWorkspaceHref({ section: 'procurement' })">Open procurement workspace</Link>
+                                        <Link :href="supplyChainHref({ section: 'procurement' })">Open procurement page</Link>
                                     </Button>
                                 </div>
                                 <div v-else class="space-y-2">

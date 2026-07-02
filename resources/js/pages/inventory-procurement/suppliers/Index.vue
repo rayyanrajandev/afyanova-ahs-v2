@@ -388,7 +388,7 @@ onMounted(() => {
             <FacilityWorkspacePageHeader
                 title="Supplier registry"
                 description="Manage vendor master data, contacts, activation status, and audit trail."
-                icon="package"
+                icon="truck"
                 :back-href="INVENTORY_PROCUREMENT_HOME_PATH"
                 back-label="Supply chain home"
             >
@@ -562,7 +562,7 @@ onMounted(() => {
                                                     :variant="(item.status ?? '').toLowerCase() === 'active' ? 'destructive' : 'secondary'"
                                                     @click="openStatus(item, (item.status ?? '').toLowerCase() === 'active' ? 'inactive' : 'active')"
                                                 >
-                                                    <AppIcon :name="(item.status ?? '').toLowerCase() === 'active' ? 'ban' : 'circle-check'" class="size-3.5" />
+                                                    <AppIcon :name="(item.status ?? '').toLowerCase() === 'active' ? 'circle-x' : 'circle-check-big'" class="size-3.5" />
                                                     {{ (item.status ?? '').toLowerCase() === 'active' ? 'Deactivate' : 'Activate' }}
                                                 </Button>
                                                 <Button v-if="canAudit" size="sm" variant="outline" class="gap-1.5" @click="loadAudit(item)">
@@ -853,7 +853,7 @@ onMounted(() => {
                     <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
                         <Button type="button" variant="outline" :disabled="editLoading" @click="editOpen = false">Cancel</Button>
                         <Button type="button" :disabled="editLoading" class="gap-1.5" @click="saveEdit">
-                            <AppIcon name="save" class="size-3.5" />
+                            <AppIcon name="check" class="size-3.5" />
                             {{ editLoading ? 'Saving...' : 'Save Changes' }}
                         </Button>
                     </SheetFooter>

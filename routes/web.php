@@ -211,6 +211,12 @@ Route::get('billing-service-catalog', function () {
     return Inertia::render('billing-service-catalog/Index');
 })->middleware(['auth', 'verified', 'can:billing.service-catalog.read', 'facility.entitlement:billing.service_catalog'])->name('billing-service-catalog.page');
 
+Route::get('billing-service-catalog/{id}/prices', function (string $id) {
+    return Inertia::render('billing-service-catalog/ServicePriceWorkspace', [
+        'itemId' => $id,
+    ]);
+})->middleware(['auth', 'verified', 'can:billing.service-catalog.read', 'facility.entitlement:billing.service_catalog'])->name('billing-service-catalog.prices.page');
+
 Route::get('staff', function () {
     return Inertia::render('staff/Index');
 })->middleware(['auth', 'verified', 'can:staff.read', 'facility.entitlement:staff.profiles'])->name('staff.page');
@@ -331,20 +337,32 @@ Route::get('claims-insurance', function () {
 })->middleware(['auth', 'verified', 'can:claims.insurance.read', 'facility.entitlement:claims.insurance'])->name('claims-insurance.page');
 
 Route::get('inventory-procurement', function (Request $request) {
-    if (
-        $request->filled('section')
-        || $request->filled('itemId')
-        || $request->filled('movementType')
-    ) {
-        return Inertia::render('inventory-procurement/Workspace');
-    }
-
     return Inertia::render('inventory-procurement/Home');
 })->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])->name('inventory-procurement.page');
 
 Route::get('inventory-procurement/workspace', function () {
-    return Inertia::render('inventory-procurement/Workspace');
+    return redirect('inventory-procurement/stock-control');
 })->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])->name('inventory-procurement-workspace.page');
+
+Route::get('inventory-procurement/stock-control', function () {
+    return Inertia::render('inventory-procurement/stock-control/Index');
+})->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])->name('inventory-procurement-stock-control.page');
+
+Route::get('inventory-procurement/items/{id}', function (string $id) {
+    return Inertia::render('inventory-procurement/items/Show', ['itemId' => $id]);
+})->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])->name('inventory-procurement-items.show.page');
+
+Route::get('inventory-procurement/procurement', function () {
+    return Inertia::render('inventory-procurement/procurement/Index');
+})->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])->name('inventory-procurement-procurement.page');
+
+Route::get('inventory-procurement/requests-fulfilment', function () {
+    return Inertia::render('inventory-procurement/requests-fulfilment/Index');
+})->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])->name('inventory-procurement-requests-fulfilment.page');
+
+Route::get('inventory-procurement/review', function () {
+    return Inertia::render('inventory-procurement/review/Index');
+})->middleware(['auth', 'verified', 'can:inventory.procurement.read', 'facility.entitlement:inventory.procurement'])->name('inventory-procurement-review.page');
 
 Route::get('inventory-procurement/pending-approvals', function () {
     return Inertia::render('inventory-procurement/PendingApprovals');

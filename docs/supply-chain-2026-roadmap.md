@@ -22,7 +22,10 @@ Staff complete store work in minutes with full traceability: receipt → storage
 | Route | Purpose |
 |-------|---------|
 | `/inventory-procurement` | Supply chain home — KPIs and task cards |
-| `/inventory-procurement/workspace?section=` | Full operational workspace |
+| `/inventory-procurement/stock-control` | Stock control lane — item master, ledger, department stock |
+| `/inventory-procurement/procurement` | Procurement lane — purchase requests, MSD orders, lead times |
+| `/inventory-procurement/requests-fulfilment` | Requests & fulfilment lane — requisitions, shortages, transfers |
+| `/inventory-procurement/review` | Review lane — claims and analytics |
 | `/inventory-procurement/receive` | Receive wizard (PO + direct receipt) |
 | `/inventory-procurement/issue` | Issue-to-department wizard |
 | `/inventory-procurement/count` | Cycle count / reconciliation wizard |
@@ -30,7 +33,7 @@ Staff complete store work in minutes with full traceability: receipt → storage
 | `/inventory-procurement/suppliers` | Supplier registry |
 | `/inventory-procurement/warehouses` | Warehouse registry |
 
-Backward compatible: `/inventory-procurement?section=` opens the workspace.
+Backward compatible: `/inventory-procurement/workspace` redirects to `/inventory-procurement/stock-control`, and section-based helpers map old workspace sections to the dedicated lane pages.
 
 Shared helpers: `resources/js/lib/inventoryProcurement.ts`  
 Access / lookups: `useInventoryProcurementAccess`, `useInventoryMasterLookups`

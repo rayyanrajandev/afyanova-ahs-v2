@@ -1,10 +1,16 @@
 /**
- * Hospital supply chain navigation — one domain, task-focused workspaces.
+ * Hospital supply chain navigation — one domain, task-focused pages.
  */
 
 export const INVENTORY_PROCUREMENT_HOME_PATH = '/inventory-procurement';
 
-export const INVENTORY_PROCUREMENT_WORKSPACE_PATH = '/inventory-procurement/workspace';
+export const INVENTORY_PROCUREMENT_STOCK_CONTROL_PATH = '/inventory-procurement/stock-control';
+
+export const INVENTORY_PROCUREMENT_PROCUREMENT_PATH = '/inventory-procurement/procurement';
+
+export const INVENTORY_PROCUREMENT_REQUESTS_FULFILMENT_PATH = '/inventory-procurement/requests-fulfilment';
+
+export const INVENTORY_PROCUREMENT_REVIEW_PATH = '/inventory-procurement/review';
 
 export const INVENTORY_PROCUREMENT_RECEIVE_PATH = '/inventory-procurement/receive';
 
@@ -20,7 +26,7 @@ export function procurementGrnPdfHref(procurementRequestId: string): string {
     return `/inventory-procurement/procurement-requests/${encodeURIComponent(procurementRequestId)}/grn.pdf`;
 }
 
-export const inventoryWorkspaceSections = [
+export const supplyChainSections = [
     'overview',
     'requisitions',
     'shortage-queue',
@@ -35,58 +41,50 @@ export const inventoryWorkspaceSections = [
     'analytics',
 ] as const;
 
-export type InventoryWorkspaceSection = (typeof inventoryWorkspaceSections)[number];
+export type SupplyChainSection = (typeof supplyChainSections)[number];
 
-export function normalizeInventoryWorkspaceSection(value: string): InventoryWorkspaceSection {
-    return inventoryWorkspaceSections.includes(value as InventoryWorkspaceSection)
-        ? (value as InventoryWorkspaceSection)
+export function normalizeSupplyChainSection(value: string): SupplyChainSection {
+    return supplyChainSections.includes(value as SupplyChainSection)
+        ? (value as SupplyChainSection)
         : 'overview';
 }
 
-export type InventoryWorkspaceQuery = {
-    section?: InventoryWorkspaceSection | string;
+export type SupplyChainRouteQuery = {
+    section?: SupplyChainSection | string;
     itemId?: string;
     movementType?: string;
     q?: string;
     status?: string;
 };
 
-export function inventoryWorkspaceHref(query: InventoryWorkspaceQuery = {}): string {
-    const url = new URL(INVENTORY_PROCUREMENT_WORKSPACE_PATH, 'http://local');
+export function supplyChainSectionHref(section: SupplyChainSection): string {
+    const pageMap: Record<SupplyChainSection, string> = {
+        overview: INVENTORY_PROCUREMENT_REQUESTS_FULFILMENT_PATH,
+        requisitions: INVENTORY_PROCUREMENT_REQUESTS_FULFILMENT_PATH,
+        'shortage-queue': INVENTORY_PROCUREMENT_REQUESTS_FULFILMENT_PATH,
+        transfers: INVENTORY_PROCUREMENT_REQUESTS_FULFILMENT_PATH,
+        inventory: INVENTORY_PROCUREMENT_STOCK_CONTROL_PATH,
+        ledger: INVENTORY_PROCUREMENT_STOCK_CONTROL_PATH,
+        'department-stock': INVENTORY_PROCUREMENT_STOCK_CONTROL_PATH,
+        procurement: INVENTORY_PROCUREMENT_PROCUREMENT_PATH,
+        'msd-orders': INVENTORY_PROCUREMENT_PROCUREMENT_PATH,
+        'lead-times': INVENTORY_PROCUREMENT_PROCUREMENT_PATH,
+        claims: INVENTORY_PROCUREMENT_REVIEW_PATH,
+        analytics: INVENTORY_PROCUREMENT_REVIEW_PATH,
+    };
+    return pageMap[section] ?? INVENTORY_PROCUREMENT_STOCK_CONTROL_PATH;
+}
 
+/** Maps legacy section-based URLs to the dedicated supply chain pages. */
+export function supplyChainHref(query: SupplyChainRouteQuery = {}): string {
     if (query.section) {
-        url.searchParams.set('section', normalizeInventoryWorkspaceSection(String(query.section)));
+        const section = normalizeSupplyChainSection(String(query.section));
+        return supplyChainSectionHref(section);
     }
-
-    for (const [key, value] of Object.entries(query)) {
-        if (key === 'section' || value == null || String(value).trim() === '') {
-            continue;
-        }
-
-        url.searchParams.set(key, String(value).trim());
-    }
-
-    const built = url.pathname + url.search;
-
-    return built === INVENTORY_PROCUREMENT_WORKSPACE_PATH ? built : built;
+    return INVENTORY_PROCUREMENT_STOCK_CONTROL_PATH;
 }
 
-/** Deep links with section/filters still land on the full workspace (backward compatible). */
-export function shouldOpenInventoryWorkspace(search: string): boolean {
-    const params = new URLSearchParams(search.startsWith('?') ? search : `?${search}`);
-
-    if (params.has('section')) {
-        return true;
-    }
-
-    if (params.has('itemId') || params.has('movementType')) {
-        return true;
-    }
-
-    return false;
-}
-
-export const inventoryWorkspaceSectionLabels: Record<InventoryWorkspaceSection, string> = {
+export const supplyChainSectionLabels: Record<SupplyChainSection, string> = {
     overview: 'Overview',
     requisitions: 'Department requests',
     'shortage-queue': 'Shortages',

@@ -411,6 +411,56 @@ class EloquentBillingServiceCatalogItemRepository implements BillingServiceCatal
         return $counts;
     }
 
+    public function serviceTypeCounts(
+        ?string $query,
+        ?string $department,
+        ?string $currencyCode,
+        ?string $lifecycle
+    ): array {
+        $queryBuilder = BillingServiceCatalogItemModel::query();
+        $this->applyPlatformScopeIfEnabled($queryBuilder);
+        $this->applyFacilityTierAvailability($queryBuilder);
+
+        $queryBuilder
+            ->when($query, function (Builder $builder, string $searchTerm): void {
+                $like = '%'.$searchTerm.'%';
+                $builder->where(function (Builder $nestedQuery) use ($like): void {
+                    $nestedQuery
+                        ->where('service_code', 'like', $like)
+                        ->orWhere('service_name', 'like', $like)
+                        ->orWhere('service_type', 'like', $like)
+                        ->orWhere('department', 'like', $like);
+                });
+            })
+            ->when($department, fn (Builder $builder, string $requestedDepartment) => $this->applyDepartmentFilter($builder, $requestedDepartment))
+            ->when($currencyCode, fn (Builder $builder, string $requestedCurrencyCode) => $builder->where('currency_code', $requestedCurrencyCode))
+            ->when($lifecycle, fn (Builder $builder, string $requestedLifecycle) => $this->applyLifecycleFilter($builder, $requestedLifecycle));
+
+        $rows = $queryBuilder
+            ->selectRaw('service_type, COUNT(*) as aggregate')
+            ->groupBy('service_type')
+            ->get();
+
+        $counts = [];
+        $total = 0;
+
+        foreach ($rows as $row) {
+            $type = strtolower(trim((string) $row->service_type));
+            $aggregate = (int) $row->aggregate;
+
+            if ($type === '' || $type === 'null') {
+                $type = 'other';
+            }
+
+            $counts[$type] = ($counts[$type] ?? 0) + $aggregate;
+            $total += $aggregate;
+        }
+
+        $counts['total'] = $total;
+
+        return $counts;
+    }
+
     private function applyPlatformScopeIfEnabled(Builder $query): void
     {
         if (! $this->isPlatformScopingEnabled()) {

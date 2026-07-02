@@ -186,7 +186,14 @@ onMounted(async () => {
                     icon="check-circle"
                     :back-href="INVENTORY_PROCUREMENT_HOME_PATH"
                     back-label="Supply chain home"
-                />
+                >
+                    <template #actions>
+                        <Button variant="outline" size="sm" class="h-8 gap-1.5" @click="loadLookups">
+                            <AppIcon name="refresh-cw" class="size-3.5" />
+                            Refresh
+                        </Button>
+                    </template>
+                </FacilityWorkspacePageHeader>
 
                 <Card class="w-full rounded-lg shadow-sm">
                     <CardContent class="space-y-4 pt-6">

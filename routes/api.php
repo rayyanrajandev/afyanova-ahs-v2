@@ -296,6 +296,10 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:emergency.triage.update-status')
         ->name('platform.operational-flags.deactivate');
 
+    Route::get('platform/admin/clinical-catalogs/type-counts', [PlatformClinicalCatalogController::class, 'typeCounts'])
+        ->middleware('can:platform.clinical-catalog.read')
+        ->name('platform.admin.clinical-catalogs.type-counts');
+
     Route::get('platform/admin/clinical-catalogs/lab-tests', [PlatformClinicalCatalogController::class, 'labTests'])
         ->middleware('can:platform.clinical-catalog.read')
         ->name('platform.admin.clinical-catalogs.lab-tests.index');
@@ -1042,6 +1046,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('billing-service-catalog/items/status-counts', [BillingServiceCatalogController::class, 'statusCounts'])
         ->middleware('can:billing.service-catalog.read')
         ->name('billing-service-catalog.items.status-counts');
+    Route::get('billing-service-catalog/items/service-type-counts', [BillingServiceCatalogController::class, 'serviceTypeCounts'])
+        ->middleware('can:billing.service-catalog.read')
+        ->name('billing-service-catalog.items.service-type-counts');
     Route::get('billing-service-catalog/items/export', [BillingServiceCatalogController::class, 'exportItemsCsv'])
         ->middleware('can:billing.service-catalog.read')
         ->name('billing-service-catalog.items.export');

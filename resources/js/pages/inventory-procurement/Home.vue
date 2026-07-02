@@ -21,16 +21,17 @@ import {
     INVENTORY_PROCUREMENT_COUNT_PATH,
     INVENTORY_PROCUREMENT_HOME_PATH,
     INVENTORY_PROCUREMENT_ISSUE_PATH,
+    INVENTORY_PROCUREMENT_PROCUREMENT_PATH,
     INVENTORY_PROCUREMENT_RECEIVE_PATH,
-    INVENTORY_PROCUREMENT_WORKSPACE_PATH,
-    inventoryWorkspaceHref,
-    inventoryWorkspaceSectionLabels,
-    type InventoryWorkspaceSection,
+    INVENTORY_PROCUREMENT_REQUESTS_FULFILMENT_PATH,
+    INVENTORY_PROCUREMENT_REVIEW_PATH,
+    INVENTORY_PROCUREMENT_STOCK_CONTROL_PATH,
+    supplyChainHref,
+    type SupplyChainSection,
 } from '@/lib/inventoryProcurement';
 import {
     isInventoryDepartmentRequester,
     isInventoryStoreOperations,
-    visibleInventoryWorkspaceSections,
     type InventoryProcurementAccess,
 } from '@/lib/inventoryProcurementAccess';
 import { messageFromUnknown } from '@/lib/notify';
@@ -193,8 +194,8 @@ async function loadDashboard(): Promise<void> {
     loading.value = false;
 }
 
-function workspaceSection(section: InventoryWorkspaceSection, extra: Record<string, string> = {}): string {
-    return inventoryWorkspaceHref({ section, ...extra });
+function supplyChainSectionLink(section: SupplyChainSection, extra: Record<string, string> = {}): string {
+    return supplyChainHref({ section, ...extra });
 }
 
 const storeTasks = computed<TaskCard[]>(() => [
@@ -237,7 +238,7 @@ const storeTasks = computed<TaskCard[]>(() => [
         title: 'Shortage queue',
         description: 'Prioritise VEN-sensitive lines waiting for replenishment or procurement.',
         icon: 'alert-triangle',
-        href: workspaceSection('shortage-queue'),
+        href: supplyChainSectionLink('shortage-queue'),
         badge: shortageMeta.value?.readyLineCount ?? null,
         badgeVariant: 'destructive',
         permission: canRead.value,
@@ -247,7 +248,7 @@ const storeTasks = computed<TaskCard[]>(() => [
         title: 'Stock ledger',
         description: 'Full movement history, exports, and clinical consumption trace.',
         icon: 'activity',
-        href: workspaceSection('ledger'),
+        href: supplyChainSectionLink('ledger'),
         permission: canRead.value,
     },
 ]);
@@ -259,6 +260,7 @@ const inventoryAccess = computed<InventoryProcurementAccess>(() => ({
     canReconcileStock: canReconcileStock.value,
     canCreateRequest: canCreateRequest.value,
     canUpdateRequestStatus: canUpdateRequestStatus.value,
+    canApproveRequisitions: canUpdateRequestStatus.value,
     canViewAudit: canViewAudit.value,
     canManageSuppliers: canManageSuppliers.value,
     canManageWarehouses: canManageWarehouses.value,
@@ -273,7 +275,7 @@ const departmentTasks = computed<TaskCard[]>(() => [
         title: 'Department requisitions',
         description: 'Request lab consumables and supplies for your unit.',
         icon: 'clipboard-list',
-        href: workspaceSection('requisitions'),
+        href: supplyChainSectionLink('requisitions'),
         permission: canCreateRequest.value,
     },
     {
@@ -281,7 +283,7 @@ const departmentTasks = computed<TaskCard[]>(() => [
         title: 'Procurement requests',
         description: 'Raise purchase requests when central store approval is required.',
         icon: 'package',
-        href: workspaceSection('procurement'),
+        href: supplyChainSectionLink('procurement'),
         permission: canCreateRequest.value,
     },
     {
@@ -289,7 +291,7 @@ const departmentTasks = computed<TaskCard[]>(() => [
         title: 'Department stock',
         description: 'See on-hand balances allocated to your department.',
         icon: 'building-2',
-        href: workspaceSection('department-stock'),
+        href: supplyChainSectionLink('department-stock'),
         permission: canRead.value,
     },
     {
@@ -297,7 +299,7 @@ const departmentTasks = computed<TaskCard[]>(() => [
         title: 'Find items',
         description: 'Search the item catalog to pick the right product code.',
         icon: 'package',
-        href: workspaceSection('inventory'),
+        href: supplyChainSectionLink('inventory'),
         permission: canRead.value,
     },
 ]);
@@ -308,14 +310,14 @@ const masterDataTasks = computed<TaskCard[]>(() => [
         title: 'Item master',
         description: 'Create consumables, medicines, lab reagents, and set reorder defaults.',
         icon: 'package',
-        href: workspaceSection('inventory'),
+        href: supplyChainSectionLink('inventory'),
         permission: canRead.value && (canManageItems.value || isStoreOperations.value),
     },
     {
         id: 'suppliers',
         title: 'Suppliers',
         description: 'Vendor registry, contacts, and supplier performance.',
-        icon: 'building-2',
+        icon: 'truck',
         href: '/inventory-procurement/suppliers',
         permission: canManageSuppliers.value,
     },
@@ -335,7 +337,7 @@ const planningTasks = computed<TaskCard[]>(() => [
         title: 'MSD orders',
         description: 'National Medical Store e-ordering and delivery sync.',
         icon: 'clipboard-list',
-        href: workspaceSection('msd-orders'),
+        href: supplyChainSectionLink('msd-orders'),
         permission: canCreateRequest.value,
     },
     {
@@ -343,7 +345,7 @@ const planningTasks = computed<TaskCard[]>(() => [
         title: 'Analytics',
         description: 'ABC/VEN matrix, expiry wastage, turnover, and consumption trends.',
         icon: 'activity',
-        href: workspaceSection('analytics'),
+        href: supplyChainSectionLink('analytics'),
         permission: isStoreOperations.value,
     },
     {
@@ -351,18 +353,20 @@ const planningTasks = computed<TaskCard[]>(() => [
         title: 'Transfers',
         description: 'Move stock between warehouses with pick slips and variance review.',
         icon: 'package',
-        href: workspaceSection('transfers'),
+        href: supplyChainSectionLink('transfers'),
         permission: canCreateMovement.value,
     },
 ]);
 
-const sectionQuickLinks = computed(() =>
-    visibleInventoryWorkspaceSections(inventoryAccess.value).map((section) => ({
-        section,
-        label: inventoryWorkspaceSectionLabels[section],
-        href: workspaceSection(section),
-    })),
-);
+const lanePageLinks = computed(() => {
+    if (!canRead.value) return [];
+    return [
+        { id: 'stock-control', label: 'Stock Control', href: INVENTORY_PROCUREMENT_STOCK_CONTROL_PATH, icon: 'package' },
+        { id: 'procurement', label: 'Procurement', href: INVENTORY_PROCUREMENT_PROCUREMENT_PATH, icon: 'clipboard-list' },
+        { id: 'requests-fulfilment', label: 'Requests & Fulfilment', href: INVENTORY_PROCUREMENT_REQUESTS_FULFILMENT_PATH, icon: 'activity' },
+        { id: 'review', label: 'Review', href: INVENTORY_PROCUREMENT_REVIEW_PATH, icon: 'shield-check' },
+    ];
+});
 
 const visibleStoreTasks = computed(() => storeTasks.value.filter((entry) => entry.permission));
 
@@ -477,11 +481,11 @@ onMounted(async () => {
                     </Button>
                     <Button v-if="canRead" size="sm" class="h-8 min-w-0 gap-1.5 max-md:flex-1" as-child>
                         <Link
-                            :href="INVENTORY_PROCUREMENT_WORKSPACE_PATH"
+                            :href="INVENTORY_PROCUREMENT_STOCK_CONTROL_PATH"
                             class="inline-flex min-w-0 items-center justify-center gap-1.5 max-md:w-full"
                         >
                             <AppIcon name="layout-grid" class="size-3.5" />
-                            Full workspace
+                            Stock control
                         </Link>
                     </Button>
                 </template>
@@ -633,9 +637,9 @@ onMounted(async () => {
                                 </Badge>
                             </div>
                             <Button v-if="canCreateRequest" size="sm" variant="outline" class="mt-1 w-full gap-1.5" as-child>
-                                <Link :href="workspaceSection('procurement')">
+                                <Link :href="supplyChainSectionLink('procurement')">
                                     <AppIcon name="plus" class="size-3.5" />
-                                    Procurement workspace
+                                    Procurement page
                                 </Link>
                             </Button>
                             <Button v-if="canCreateMovement" size="sm" variant="outline" class="w-full gap-1.5" as-child>
@@ -689,12 +693,12 @@ onMounted(async () => {
                 </div>
 
                 <div
-                    v-if="sectionQuickLinks.length > 0"
+                    v-if="lanePageLinks.length > 0"
                     class="grid w-full gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,9.5rem),1fr))]"
                 >
                     <Button
-                        v-for="link in sectionQuickLinks"
-                        :key="link.section"
+                        v-for="link in lanePageLinks"
+                        :key="link.id"
                         variant="outline"
                         size="sm"
                         class="h-8 w-full min-w-0 justify-center px-2"

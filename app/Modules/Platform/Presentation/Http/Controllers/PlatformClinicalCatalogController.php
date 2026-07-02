@@ -12,6 +12,7 @@ use App\Modules\Platform\Application\UseCases\GetClinicalCatalogItemUseCase;
 use App\Modules\Platform\Application\UseCases\ListClinicalCatalogItemAuditLogsUseCase;
 use App\Modules\Platform\Application\UseCases\ListClinicalCatalogItemsUseCase;
 use App\Modules\Platform\Application\UseCases\ListClinicalCatalogItemStatusCountsUseCase;
+use App\Modules\Platform\Application\UseCases\ListClinicalCatalogItemTypeCountsUseCase;
 use App\Modules\Platform\Application\UseCases\UpdateClinicalCatalogItemStatusUseCase;
 use App\Modules\Platform\Application\UseCases\UpdateClinicalCatalogItemUseCase;
 use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogType;
@@ -52,6 +53,17 @@ class PlatformClinicalCatalogController extends Controller
 
         return response()->json([
             'data' => array_map([ClinicalCatalogItemResponseTransformer::class, 'transform'], $items),
+        ]);
+    }
+
+    public function typeCounts(
+        Request $request,
+        ListClinicalCatalogItemTypeCountsUseCase $useCase
+    ): JsonResponse {
+        $counts = $useCase->execute($request->all());
+
+        return response()->json([
+            'data' => $counts,
         ]);
     }
 

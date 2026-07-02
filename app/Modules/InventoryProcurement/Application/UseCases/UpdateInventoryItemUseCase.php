@@ -29,6 +29,17 @@ class UpdateInventoryItemUseCase
             return null;
         }
 
+        if (! empty($existing['clinical_catalog_item_id'])) {
+            $identityFields = ['item_name', 'generic_name', 'dosage_form', 'strength', 'unit', 'dispensing_unit', 'codes', 'subcategory'];
+            $changedIdentityFields = array_intersect($identityFields, array_keys($payload));
+            if ($changedIdentityFields !== []) {
+                throw new \InvalidArgumentException(
+                    'Identity fields cannot be modified when the item is linked to a Clinical Catalog entry. '
+                    .'Update the source Clinical Catalog item instead.'
+                );
+            }
+        }
+
         // When linked to a clinical catalog, identity fields are owned by the catalog.
         // Strip them from the update payload and read from the catalog item instead.
         $effectiveCatalogId = $payload['clinical_catalog_item_id']

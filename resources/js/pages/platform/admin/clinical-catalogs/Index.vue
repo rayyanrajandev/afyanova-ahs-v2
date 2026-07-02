@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -33,7 +34,7 @@ import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiGetBlob } from '@/lib/apiClient';
 import { CLINICAL_CATALOG_BULK_MAX_STATUS_IDS } from '@/lib/clinicalCatalogBulk';
-import { inventoryWorkspaceHref } from '@/lib/inventoryProcurement';
+import { supplyChainHref } from '@/lib/inventoryProcurement';
 import { formatEnumLabel } from '@/lib/labels';
 import { catalogTriStateStatusDotClass } from '@/lib/listRows';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
@@ -144,7 +145,7 @@ type AuditLog = {
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Facility setup', href: '/platform/admin/facility-config' },
-    { title: 'Clinical Care Catalogs', href: '/platform/admin/clinical-catalogs' },
+    { title: 'Clinical Catalog', href: '/platform/admin/clinical-catalogs' },
 ];
 
 const domains = {
@@ -255,6 +256,8 @@ const catalogPrinting = ref(false);
 const items = ref<Item[]>([]);
 const pager = ref<Pager | null>(null);
 const counts = ref<Counts>({ active: 0, inactive: 0, retired: 0, other: 0, total: 0 });
+type TypeCounts = { lab_test: number; radiology_procedure: number; theatre_procedure: number; formulary_item: number; total: number };
+const typeCounts = ref<TypeCounts>({ lab_test: 0, radiology_procedure: 0, theatre_procedure: 0, formulary_item: 0, total: 0 });
 const departments = ref<Department[]>([]);
 const departmentsLoading = ref(false);
 const SELECT_ALL_VALUE = '__all__';
@@ -353,7 +356,7 @@ const labTurnaroundHourOptions: SearchableSelectOption[] = [
     { value: '168', label: '7 days', group: 'Culture / referral' },
 ];
 
-const inventoryStoreItemsHref = inventoryWorkspaceHref({ section: 'inventory' });
+const inventoryItemsPageHref = supplyChainHref({ section: 'inventory' });
 
 const consumptionStageOptions = [
     { value: 'per_order', label: 'When service is ordered' },
@@ -460,7 +463,7 @@ const routeOfAdministrationOptions: SearchableSelectOption[] = [
     { value: 'intrathecal', label: 'Intrathecal', group: 'Other routes' },
 ];
 
-const filters = reactive({ q: '', status: '', category: '', dosageForm: '', perPage: 10, page: 1 });
+const filters = reactive({ q: '', status: '', category: '', dosageForm: '', perPage: 50, page: 1 });
 
 const createSheetOpen = ref(false);
 
@@ -691,7 +694,7 @@ function billingLinkDetail(item: Item | null): string {
         return `Billing code ${link?.serviceCode || item?.billingServiceCode || 'not set'} exists, but the tariff is inactive, expired, or not yet live.`;
     }
 
-    return 'No hospital price is linked yet. Add one in Tariffs & services by selecting this clinical item when you create a service price.';
+    return 'No hospital price is linked yet. Add one in Billing Service Catalog by selecting this clinical item when you create a service price.';
 }
 
 function clinicalCatalogExportQuery(): Record<string, string | null> {
@@ -1213,7 +1216,7 @@ const filterCount = computed(() => {
     if (filters.status) count += 1;
     if (filters.category.trim()) count += 1;
     if (filters.dosageForm) count += 1;
-    if (filters.perPage !== 10) count += 1;
+    if (filters.perPage !== 50) count += 1;
     return count;
 });
 const filterChips = computed(() => {
@@ -1265,12 +1268,12 @@ const filterChips = computed(() => {
             },
         });
     }
-    if (filters.perPage !== 10) {
+    if (filters.perPage !== 50) {
         chips.push({
             key: 'perPage',
             label: `${filters.perPage} per page`,
             clear: () => {
-                filters.perPage = 10;
+                filters.perPage = 50;
                 filters.page = 1;
                 void loadItems();
             },
@@ -1340,6 +1343,16 @@ const allVisibleSelected = computed(
     () => pageItemIds.value.length > 0 && pageItemIds.value.every((id) => selectedItemIds.value.includes(id)),
 );
 const canUseBulkSelection = computed(() => canRead.value && canManage.value);
+const catalogTypeCountMap: Record<string, keyof TypeCounts> = {
+    'lab-tests': 'lab_test',
+    'radiology-procedures': 'radiology_procedure',
+    'theatre-procedures': 'theatre_procedure',
+    'formulary-items': 'formulary_item',
+};
+function getTabCount(tabKey: string): number {
+    const countKey = catalogTypeCountMap[tabKey];
+    return countKey ? (typeCounts.value[countKey] ?? 0) : 0;
+}
 const bulkStatusDialogTitle = computed(() => {
     if (bulkStatusTarget.value === 'retired') return 'Retire selected definitions';
     if (bulkStatusTarget.value === 'inactive') return 'Deactivate selected definitions';
@@ -1395,12 +1408,6 @@ const consumptionRecipeValidationMessage = computed(() => {
 
     return firstError(errors, 'recipeForm') || firstError(errors, 'items') || Object.values(errors)[0]?.[0] || null;
 });
-
-function setStatus(status: '' | CatalogStatus): void {
-    filters.status = status;
-    filters.page = 1;
-    void loadItems();
-}
 
 function openCreateSheet(): void {
     resetCreateForm();
@@ -1631,6 +1638,17 @@ async function loadCounts(): Promise<void> {
     }
 }
 
+async function loadTypeCounts(): Promise<void> {
+    try {
+        const response = await apiRequest<{ data: TypeCounts }>('GET', '/platform/admin/clinical-catalogs/type-counts', {
+            query: { q: filters.q.trim() || null, category: filters.category.trim() || null },
+        });
+        typeCounts.value = response.data ?? { lab_test: 0, radiology_procedure: 0, theatre_procedure: 0, formulary_item: 0, total: 0 };
+    } catch {
+        typeCounts.value = { lab_test: 0, radiology_procedure: 0, theatre_procedure: 0, formulary_item: 0, total: 0 };
+    }
+}
+
 async function loadDepartments(): Promise<void> {
     departmentsLoading.value = true;
 
@@ -1677,6 +1695,7 @@ async function loadItems(): Promise<void> {
                 },
             }),
             loadCounts(),
+            loadTypeCounts(),
         ]);
 
         items.value = response.data ?? [];
@@ -1701,7 +1720,7 @@ function resetFilters(): void {
     filters.status = '';
     filters.category = '';
     filters.dosageForm = '';
-    filters.perPage = 10;
+    filters.perPage = 50;
     filters.page = 1;
     void loadItems();
 }
@@ -1926,7 +1945,7 @@ async function saveItem(): Promise<void> {
         syncItem(response.data);
         editSheetOpen.value = false;
         notifySuccess('Item updated.');
-        await loadCounts();
+        await Promise.all([loadCounts(), loadTypeCounts()]);
     } catch (error) {
         const apiError = error as ApiError;
         if (apiError.status === 422 && apiError.payload?.errors) editErrors.value = apiError.payload.errors;
@@ -1956,7 +1975,7 @@ async function saveStatus(): Promise<void> {
         syncItem(response.data);
         statusSheetOpen.value = false;
         notifySuccess('Status updated.');
-        await loadCounts();
+        await Promise.all([loadCounts(), loadTypeCounts()]);
     } catch (error) {
         const apiError = error as ApiError;
         if (apiError.status === 422 && apiError.payload?.errors) statusErrors.value = apiError.payload.errors;
@@ -2119,7 +2138,7 @@ async function submitBulkStatusDialog(): Promise<void> {
         );
         bulkStatusDialogOpen.value = false;
         clearSelectedItems();
-        await Promise.all([loadItems(), loadStatusCounts()]);
+        await Promise.all([loadItems(), loadCounts(), loadTypeCounts()]);
     } catch (error) {
         bulkStatusError.value = messageFromUnknown(error, 'Unable to apply bulk status change.');
         notifyError(bulkStatusError.value);
@@ -2191,7 +2210,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <Head :title="`Clinical Care Catalogs · ${catalog.label}`" />
+    <Head :title="`Clinical Catalog · ${catalog.label}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-hidden rounded-lg p-4 md:p-6">
@@ -2208,7 +2227,7 @@ onBeforeUnmount(() => {
                         <div class="min-w-0 space-y-0.5">
                             <div class="flex flex-wrap items-center gap-2">
                                 <h1 class="text-base font-semibold tracking-tight md:text-lg">
-                                    Clinical Care Catalogs
+                                    Clinical Catalog
                                 </h1>
                                 <Badge
                                     v-if="clinicalCatalogReadOnly"
@@ -2267,11 +2286,11 @@ onBeforeUnmount(() => {
                                 <DropdownMenuItem as-child>
                                     <Link href="/billing-service-catalog" class="gap-2">
                                         <AppIcon name="receipt" class="size-4" />
-                                        Billable catalog
+                                        Billing Service Catalog
                                     </Link>
                                 </DropdownMenuItem>
                                 <DropdownMenuItem as-child>
-                                    <Link href="/inventory-procurement/workspace" class="gap-2">
+                                    <Link :href="inventoryStoreItemsHref" class="gap-2">
                                         <AppIcon name="package" class="size-4" />
                                         Inventory items
                                     </Link>
@@ -2279,28 +2298,6 @@ onBeforeUnmount(() => {
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>
-                </div>
-
-                <div v-if="canRead" class="border-t px-4 pb-4 pt-4 md:px-4">
-                    <Tabs
-                        :model-value="catalogKey"
-                        class="w-full"
-                        @update:model-value="setCatalogTab"
-                    >
-                        <TabsList
-                            class="grid h-auto w-full grid-cols-2 gap-1 bg-muted/40 p-1 sm:grid-cols-4"
-                        >
-                            <TabsTrigger
-                                v-for="tab in clinicalCatalogTabs"
-                                :key="tab.key"
-                                :value="tab.key"
-                                class="h-8 min-w-0 gap-1.5 rounded-md border border-transparent px-2.5 text-muted-foreground data-[state=active]:border-primary/40 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-sm dark:data-[state=active]:border-primary/60 dark:data-[state=active]:bg-primary/25 dark:data-[state=active]:text-primary-foreground"
-                            >
-                                <AppIcon :name="tab.icon" class="size-3.5 shrink-0 text-current" />
-                                <span class="truncate text-xs font-medium">{{ tab.label }}</span>
-                            </TabsTrigger>
-                        </TabsList>
-                    </Tabs>
                 </div>
             </section>
 
@@ -2318,183 +2315,199 @@ onBeforeUnmount(() => {
 
             <Card v-if="canRead" class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70 shadow-sm">
                 <div class="flex flex-col gap-3 border-b px-4 py-3">
-                    <div class="flex items-center justify-between gap-4">
-                        <div class="min-w-0">
-                            <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
-                                <AppIcon :name="activeCatalogTab.icon" class="size-4 text-primary" />
-                                {{ catalog.label }}
-                            </h3>
+                    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div class="min-w-0 shrink-0">
+                            <div class="flex items-center gap-2">
+                                <h3 class="flex items-center gap-2 text-sm font-semibold leading-none whitespace-nowrap">
+                                    <AppIcon :name="activeCatalogTab.icon" class="size-4 text-primary" />
+                                    {{ catalog.label }}
+                                </h3>
+                                <Badge variant="secondary" class="h-5 px-1.5 text-[10px] tabular-nums">
+                                    {{ pagination?.total ?? items.length }}
+                                </Badge>
+                            </div>
                             <p class="mt-1 text-xs text-muted-foreground">
                                 {{ catalogScopeText }} · {{ listFilterHintText }}
                             </p>
                         </div>
-                        <div class="flex shrink-0 flex-wrap items-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                class="h-8 gap-1.5 rounded-lg text-xs"
-                                :disabled="catalogExporting"
-                                @click="exportClinicalCatalogCsv"
-                            >
-                                <AppIcon :name="catalogExporting ? 'loader-circle' : 'download'" class="size-3.5" :class="{ 'animate-spin': catalogExporting }" />
-                                Export
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                class="h-8 gap-1.5 rounded-lg text-xs"
-                                :disabled="catalogPrinting || loading || listLoading"
-                                @click="printClinicalCatalogItems"
-                            >
-                                <AppIcon :name="catalogPrinting ? 'loader-circle' : 'printer'" class="size-3.5" :class="{ 'animate-spin': catalogPrinting }" />
-                                Print
-                            </Button>
+                        <div class="flex min-w-0 items-center gap-2">
+                            <SearchInput
+                                v-model="filters.q"
+                                :placeholder="`Search code, name, or ${catalog.categoryLabel.toLowerCase()}`"
+                                class="w-80 min-w-0 text-xs [&_input]:h-8"
+                                @keyup.enter="search"
+                            />
+                            <div class="flex shrink-0 items-center gap-1.5">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    class="h-8 gap-1.5 rounded-lg text-xs"
+                                    :disabled="catalogExporting"
+                                    @click="exportClinicalCatalogCsv"
+                                >
+                                    <AppIcon :name="catalogExporting ? 'loader-circle' : 'download'" class="size-3.5" :class="{ 'animate-spin': catalogExporting }" />
+                                    Export
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    class="h-8 gap-1.5 rounded-lg text-xs"
+                                    :disabled="catalogPrinting || loading || listLoading"
+                                    @click="printClinicalCatalogItems"
+                                >
+                                    <AppIcon :name="catalogPrinting ? 'loader-circle' : 'printer'" class="size-3.5" :class="{ 'animate-spin': catalogPrinting }" />
+                                    Print
+                                </Button>
+                                <Popover>
+                                    <PopoverTrigger as-child>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            class="h-8 gap-1.5 rounded-lg text-xs"
+                                        >
+                                            <AppIcon name="sliders-horizontal" class="size-3.5" />
+                                            Filters
+                                            <Badge v-if="filterCount > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">
+                                                {{ filterCount }}
+                                            </Badge>
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent align="end" class="z-50 w-80 space-y-3">
+                                        <div class="grid gap-3">
+                                            <div class="grid gap-2">
+                                                <Label for="clinical-filter-category">{{ catalog.categoryLabel }}</Label>
+                                                <Select :model-value="filters.category || SELECT_ALL_VALUE" @update:model-value="filters.category = $event === SELECT_ALL_VALUE ? '' : $event; search()">
+                                                    <SelectTrigger id="clinical-filter-category" class="w-full">
+                                                        <SelectValue :placeholder="`All ${catalog.categoryLabel.toLowerCase()}s`" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem :value="SELECT_ALL_VALUE">All {{ catalog.categoryLabel.toLowerCase() }}s</SelectItem>
+                                                        <SelectItem v-for="opt in categoryOptions" :key="opt.value" :value="opt.value">
+                                                            {{ opt.label }}
+                                                        </SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div v-if="catalogKey === 'formulary-items'" class="grid gap-2">
+                                                <Label for="clinical-filter-dosage">Dosage form</Label>
+                                                <Select :model-value="filters.dosageForm || SELECT_ALL_VALUE" @update:model-value="filters.dosageForm = $event === SELECT_ALL_VALUE ? '' : $event; search()">
+                                                    <SelectTrigger id="clinical-filter-dosage" class="w-full">
+                                                        <SelectValue placeholder="All dosage forms" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem :value="SELECT_ALL_VALUE">All dosage forms</SelectItem>
+                                                        <SelectItem v-for="opt in dosageFormOptions" :key="opt.value" :value="opt.value">
+                                                            {{ opt.label }}
+                                                        </SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div class="grid gap-2">
+                                                <Label for="clinical-filter-per-page">Per page</Label>
+                                                <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event); search()">
+                                                    <SelectTrigger id="clinical-filter-per-page" class="w-full">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="50">50</SelectItem>
+                                                        <SelectItem value="100">100</SelectItem>
+                                                        <SelectItem value="150">150</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div class="flex gap-2">
+                                                <Button size="sm" variant="outline" class="flex-1 gap-1.5" :disabled="listLoading" @click="resetFilters">
+                                                    Reset
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
                         </div>
                     </div>
-                    <div class="flex flex-wrap items-center gap-2">
-                        <SearchInput
-                            v-model="filters.q"
-                            :placeholder="`Search code, name, or ${catalog.categoryLabel.toLowerCase()}`"
-                            class="min-w-0 flex-1 text-xs [&_input]:h-8"
-                            @keyup.enter="search"
-                        />
-                        <Select :model-value="filters.category || SELECT_ALL_VALUE" @update:model-value="filters.category = $event === SELECT_ALL_VALUE ? '' : $event; search()">
-                            <SelectTrigger class="h-8 w-44 gap-1 text-xs">
-                                <SelectValue :placeholder="catalog.categoryLabel" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem :value="SELECT_ALL_VALUE">All {{ catalog.categoryLabel.toLowerCase() }}s</SelectItem>
-                                <SelectItem v-for="opt in categoryOptions" :key="opt.value" :value="opt.value">
-                                    {{ opt.label }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Select
-                            v-if="catalogKey === 'formulary-items'"
-                            :model-value="filters.dosageForm || SELECT_ALL_VALUE"
-                            @update:model-value="filters.dosageForm = $event === SELECT_ALL_VALUE ? '' : $event; search()"
+                    <div v-if="canRead">
+                        <Tabs
+                            :model-value="catalogKey"
+                            class="w-full"
+                            @update:model-value="setCatalogTab"
                         >
-                            <SelectTrigger class="h-8 w-36 gap-1 text-xs">
-                                <SelectValue placeholder="Dosage form" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem :value="SELECT_ALL_VALUE">All dosage forms</SelectItem>
-                                <SelectItem v-for="opt in dosageFormOptions" :key="opt.value" :value="opt.value">
-                                    {{ opt.label }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event); search()">
-                            <SelectTrigger class="h-8 w-20 gap-1 text-xs">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="10">10</SelectItem>
-                                <SelectItem value="15">15</SelectItem>
-                                <SelectItem value="20">20</SelectItem>
-                                <SelectItem value="25">25</SelectItem>
-                                <SelectItem value="50">50</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Button v-if="filterChips.length" variant="ghost" size="sm" class="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground" @click="resetFilters">
-                            <AppIcon name="x" class="size-3" />
-                            Clear
-                        </Button>
+                            <TabsList
+                                class="grid h-9 w-full grid-cols-2 gap-1 bg-muted/40 p-1 sm:grid-cols-4"
+                            >
+                                <TabsTrigger
+                                    v-for="tab in clinicalCatalogTabs"
+                                    :key="tab.key"
+                                    :value="tab.key"
+                                    class="gap-1.5 rounded-md border border-transparent px-2 text-muted-foreground data-[state=active]:border-primary/40 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-sm dark:data-[state=active]:border-primary/60 dark:data-[state=active]:bg-primary/25 dark:data-[state=active]:text-primary-foreground"
+                                >
+                                    <span class="flex items-center gap-1 leading-none">
+                                        <AppIcon :name="tab.icon" class="size-3" />
+                                        {{ tab.label }}
+                                    </span>
+                                    <Badge variant="secondary" class="h-5 min-w-5 justify-center px-1 text-[10px] tabular-nums">
+                                        {{ getTabCount(tab.key) }}
+                                    </Badge>
+                                </TabsTrigger>
+                            </TabsList>
+                        </Tabs>
                     </div>
                     <div
-                        v-if="canUseBulkSelection"
-                        class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed bg-muted/20 px-3 py-2"
+                        v-if="canUseBulkSelection && selectedCount > 0"
+                        class="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2"
                     >
-                        <label class="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Checkbox
-                                id="clinical-catalog-select-page"
-                                :model-value="allVisibleSelected"
-                                :disabled="pageItemIds.length === 0 || bulkStatusBusy"
-                                @update:model-value="toggleSelectAllVisible"
-                            />
-                            Select page
-                        </label>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <span class="text-xs text-muted-foreground">{{ selectedCount }} selected</span>
+                        <div class="flex items-center gap-2">
+                            <label class="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Checkbox
+                                    id="clinical-catalog-select-page"
+                                    :checked="allVisibleSelected"
+                                    :disabled="pageItemIds.length === 0 || bulkStatusBusy"
+                                    @update:checked="toggleSelectAllVisible"
+                                />
+                                <span class="font-medium text-foreground">{{ selectedCount }} selected</span>
+                            </label>
                             <Button
                                 size="sm"
-                                variant="secondary"
-                                class="h-8"
-                                :disabled="selectedCount === 0 || bulkStatusBusy"
-                                @click="openBulkStatusDialog('active')"
-                            >
-                                Activate
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                class="h-8"
-                                :disabled="selectedCount === 0 || bulkStatusBusy"
-                                @click="openBulkStatusDialog('inactive')"
-                            >
-                                Deactivate
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="destructive"
-                                class="h-8"
-                                :disabled="selectedCount === 0 || bulkStatusBusy"
-                                @click="openBulkStatusDialog('retired')"
-                            >
-                                Retire
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                class="h-8"
-                                :disabled="selectedCount === 0 || bulkStatusBusy"
+                                variant="ghost"
+                                class="h-6 px-2 text-xs"
+                                :disabled="bulkStatusBusy"
                                 @click="clearSelectedItems"
                             >
                                 Clear
                             </Button>
                         </div>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-2">
-                        <button
-                            type="button"
-                            class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                            :class="{ 'border-primary bg-primary/5': filters.status === '' }"
-                            @click="setStatus('')"
-                        >
-                            <span class="inline-block h-2 w-2 rounded-full bg-slate-400" />
-                            <span class="font-medium tabular-nums">{{ counts.total }}</span>
-                            <span class="text-muted-foreground">All</span>
-                        </button>
-                        <button
-                            type="button"
-                            class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                            :class="{ 'border-primary bg-primary/5': filters.status === 'active' }"
-                            @click="setStatus('active')"
-                        >
-                            <span class="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-                            <span class="font-medium tabular-nums">{{ counts.active }}</span>
-                            <span class="text-muted-foreground">Active</span>
-                        </button>
-                        <button
-                            type="button"
-                            class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                            :class="{ 'border-primary bg-primary/5': filters.status === 'inactive' }"
-                            @click="setStatus('inactive')"
-                        >
-                            <span class="inline-block h-2 w-2 rounded-full bg-amber-500" />
-                            <span class="font-medium tabular-nums">{{ counts.inactive }}</span>
-                            <span class="text-muted-foreground">Inactive</span>
-                        </button>
-                        <button
-                            type="button"
-                            class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                            :class="{ 'border-primary bg-primary/5': filters.status === 'retired' }"
-                            @click="setStatus('retired')"
-                        >
-                            <span class="inline-block h-2 w-2 rounded-full bg-rose-500" />
-                            <span class="font-medium tabular-nums">{{ counts.retired }}</span>
-                            <span class="text-muted-foreground">Retired</span>
-                        </button>
+                        <div class="flex items-center gap-1.5">
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                class="h-7 gap-1 text-xs"
+                                :disabled="bulkStatusBusy"
+                                @click="openBulkStatusDialog('active')"
+                            >
+                                <AppIcon name="check-circle" class="size-3" />
+                                Activate
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                class="h-7 gap-1 text-xs"
+                                :disabled="bulkStatusBusy"
+                                @click="openBulkStatusDialog('inactive')"
+                            >
+                                <AppIcon name="pause" class="size-3" />
+                                Deactivate
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="destructive"
+                                class="h-7 gap-1 text-xs"
+                                :disabled="bulkStatusBusy"
+                                @click="openBulkStatusDialog('retired')"
+                            >
+                                <AppIcon name="trash-2" class="size-3" />
+                                Retire
+                            </Button>
+                        </div>
                     </div>
                 </div>
                 <div v-if="filterChips.length" class="flex flex-wrap items-center gap-1.5 border-b px-4 py-2">
@@ -2513,14 +2526,17 @@ onBeforeUnmount(() => {
                         Clear all
                     </button>
                 </div>
-                <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
-                    <ScrollArea class="min-h-0 flex-1">
-                        <div class="min-h-[12rem]">
-                            <Alert v-if="listError" variant="destructive" class="m-4">
-                                <AlertTitle>List load issue</AlertTitle>
-                                <AlertDescription>{{ listError }}</AlertDescription>
-                            </Alert>
-                            <RegistryListSkeleton v-else-if="loading || listLoading" :count="6" />
+                <CardContent class="flex flex-col overflow-hidden p-0">
+                    <div v-if="listError" class="p-4">
+                        <Alert variant="destructive">
+                            <AlertTitle>List load issue</AlertTitle>
+                            <AlertDescription>{{ listError }}</AlertDescription>
+                        </Alert>
+                    </div>
+
+                    <ScrollArea v-else class="max-h-[min(70vh,42rem)]">
+                        <div>
+                            <RegistryListSkeleton v-if="loading || listLoading" :count="6" />
                             <div v-else-if="items.length === 0" class="flex flex-col items-center gap-3 px-4 py-10 text-center">
                                 <div class="flex size-10 items-center justify-center rounded-lg bg-muted">
                                     <AppIcon :name="activeCatalogTab.icon" class="size-4 text-muted-foreground" />
@@ -2531,7 +2547,7 @@ onBeforeUnmount(() => {
                                         {{
                                             filterCount > 0
                                                 ? 'Adjust or clear filters to widen the catalog.'
-                                                : `Create the first ${catalog.singular.toLowerCase()} before linking prices in the billable catalog.`
+                                                : `Create the first ${catalog.singular.toLowerCase()} before linking prices in the Billing Service Catalog.`
                                         }}
                                     </p>
                                 </div>
@@ -2632,7 +2648,7 @@ onBeforeUnmount(() => {
                 <CardHeader>
                     <CardTitle class="flex items-center gap-2">
                         <AppIcon name="book-open" class="size-5 text-muted-foreground" />
-                        Clinical Care Catalogs
+                        Clinical Catalog
                     </CardTitle>
                     <CardDescription>Clinical catalog access is permission restricted.</CardDescription>
                 </CardHeader>
@@ -2645,14 +2661,14 @@ onBeforeUnmount(() => {
             </Card>
 
             <Sheet v-if="canManage" :open="createSheetOpen" @update:open="closeCreateSheet">
-                <SheetContent side="right" variant="workspace" size="4xl" class="flex h-full min-h-0 flex-col">
+                <SheetContent side="right" variant="workspace" size="3xl" class="flex h-full min-h-0 flex-col">
                     <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
                         <SheetTitle class="flex items-center gap-2">
                             <AppIcon name="plus" class="size-5 text-muted-foreground" />
                             {{ createButtonLabel }}
                         </SheetTitle>
                         <SheetDescription>
-                            Register what care teams order. Hospital prices are added separately in Tariffs & services.
+                            Register what care teams order. Hospital prices are added separately in Billing Service Catalog.
                         </SheetDescription>
                     </SheetHeader>
                     <ScrollArea class="min-h-0 flex-1">
@@ -2895,24 +2911,43 @@ onBeforeUnmount(() => {
             </Sheet>
 
             <Sheet :open="detailsOpen" @update:open="(open) => (open ? (detailsOpen = true) : closeDetails())">
-                <SheetContent side="right" variant="workspace" size="5xl" class="flex h-full min-h-0 flex-col">
+                <SheetContent side="right" variant="workspace" size="3xl">
                     <SheetHeader
                         v-if="selected"
-                        class="shrink-0 border-b bg-background/95 px-4 py-3 pr-12 text-left sm:px-5"
+                        class="shrink-0 border-b px-6 py-4 text-left pr-12"
                     >
-                        <SheetTitle class="flex min-w-0 flex-wrap items-center gap-2 text-base">
-                            <AppIcon :name="activeCatalogTab.icon" class="size-5 text-muted-foreground" />
-                            <span class="min-w-0 truncate">{{ selected.name || 'Unnamed item' }}</span>
-                            <Badge v-if="selected.code" variant="outline" class="shrink-0 font-normal">{{ selected.code }}</Badge>
-                            <Badge :variant="statusVariant(selected.status)" class="shrink-0 capitalize">
-                                {{ formatEnumLabel(selected.status) }}
-                            </Badge>
-                        </SheetTitle>
-                        <SheetDescription class="text-xs">
-                            {{ billingLinkLabel(selected.billingLinkStatus) }}
-                            · {{ selected.category || 'No category' }}
-                            · {{ selected.unit || 'No unit' }}
-                        </SheetDescription>
+                        <div class="flex flex-col gap-3">
+                            <div class="space-y-1">
+                                <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Clinical definition summary</p>
+                                <SheetTitle class="flex min-w-0 flex-wrap items-center gap-2 text-base">
+                                    <AppIcon :name="activeCatalogTab.icon" class="size-5 text-muted-foreground" />
+                                    <span class="min-w-0 truncate">{{ selected.name || 'Unnamed item' }}</span>
+                                </SheetTitle>
+                                <SheetDescription class="flex items-center gap-2 text-xs">
+                                    <span>{{ selected.code || 'No code' }}</span>
+                                    <span>·</span>
+                                    <span>{{ selected.category || 'No category' }}</span>
+                                    <span>·</span>
+                                    <span>{{ selected.unit || 'No unit' }}</span>
+                                </SheetDescription>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <Badge v-if="detailsLoading" variant="secondary" class="gap-1.5">
+                                    <AppIcon name="loader-circle" class="size-3 animate-spin" />
+                                    Loading
+                                </Badge>
+                                <Badge :variant="statusVariant(selected.status)" class="capitalize">
+                                    {{ formatEnumLabel(selected.status) }}
+                                </Badge>
+                                <Badge :variant="billingLinkVariant(selected.billingLinkStatus)">
+                                    {{ billingLinkLabel(selected.billingLinkStatus) }}
+                                </Badge>
+                                <Badge v-if="selected.catalogType === 'formulary_item'" variant="secondary">Medicines</Badge>
+                                <Badge v-else-if="selected.catalogType === 'lab_test'" variant="secondary">Lab Tests</Badge>
+                                <Badge v-else-if="selected.catalogType === 'radiology_procedure'" variant="secondary">Radiology</Badge>
+                                <Badge v-else-if="selected.catalogType === 'theatre_procedure'" variant="secondary">Theatre</Badge>
+                            </div>
+                        </div>
                     </SheetHeader>
                     <div class="min-h-0 flex-1 overflow-hidden">
                         <div v-if="detailsLoading && !selected" class="space-y-2 p-4">
@@ -2924,7 +2959,7 @@ onBeforeUnmount(() => {
                             <AlertDescription>{{ detailsError }}</AlertDescription>
                         </Alert>
                         <Tabs v-else-if="selected" v-model="detailsSheetTab" class="flex h-full min-h-0 flex-col">
-                            <div class="shrink-0 border-b bg-background px-4 py-2 sm:px-5">
+                            <div class="shrink-0 border-b bg-background px-4 py-2 sm:px-6">
                                 <TabsList
                                     class="grid h-auto w-full gap-1 rounded-md bg-muted p-1"
                                     :class="detailsSheetTabGridClass"
@@ -2948,140 +2983,117 @@ onBeforeUnmount(() => {
                             </div>
 
                             <ScrollArea class="min-h-0 flex-1" viewport-class="pb-6">
-                                <TabsContent value="overview" class="m-0 space-y-3 px-4 py-3 sm:px-5">
+                                <TabsContent value="overview" class="m-0 space-y-5 p-5">
+                                    <!-- Status reason warning banner -->
                                     <div
                                         v-if="
                                             selected.status &&
                                             selected.status.toLowerCase() !== 'active' &&
                                             selected.statusReason
                                         "
-                                        class="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2.5 text-xs"
+                                        class="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-800 dark:text-amber-200"
                                     >
-                                        <AppIcon name="alert-triangle" class="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                                        <span class="text-amber-700 dark:text-amber-300">
-                                            <span class="font-semibold capitalize">{{ formatEnumLabel(selected.status) }}</span>:
-                                            {{ selected.statusReason }}
-                                        </span>
+                                        <AppIcon name="alert-triangle" class="mr-1 inline size-3.5 align-text-top" />
+                                        <span class="font-semibold capitalize">{{ formatEnumLabel(selected.status) }}</span>:
+                                        {{ selected.statusReason }}
                                     </div>
-                                    <div class="grid gap-3 sm:grid-cols-2">
-                                        <Card class="!gap-0 overflow-hidden rounded-md border-border/50 !py-0 shadow-none">
-                                            <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
-                                                <CardTitle class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                                                    Identity
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent class="divide-y divide-border/50 px-3 py-1.5 text-sm">
-                                                <div class="flex justify-between gap-4 py-2">
-                                                    <span class="text-muted-foreground">Code</span>
-                                                    <span class="font-medium">{{ selected.code || '—' }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-4 py-2">
-                                                    <span class="text-muted-foreground">Name</span>
-                                                    <span class="max-w-[14rem] truncate text-right font-medium">{{ selected.name || '—' }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-4 py-2">
-                                                    <span class="text-muted-foreground">Department</span>
-                                                    <span class="max-w-[14rem] truncate text-right font-medium">{{ selectedDepartmentLabel }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-4 py-2">
-                                                    <span class="text-muted-foreground">{{ catalog.categoryLabel }}</span>
-                                                    <span class="max-w-[14rem] truncate text-right font-medium">{{ selected.category || '—' }}</span>
-                                                </div>
-                                                <div class="flex justify-between gap-4 py-2">
-                                                    <span class="text-muted-foreground">{{ catalog.unitLabel }}</span>
-                                                    <span class="font-medium">{{ selected.unit || '—' }}</span>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                        <Card class="!gap-0 overflow-hidden rounded-md border-border/50 !py-0 shadow-none">
-                                            <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
-                                                <CardTitle class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                                                    Billing
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent class="divide-y divide-border/50 px-3 py-1.5 text-sm">
-                                                <div class="flex justify-between gap-4 py-2">
-                                                    <span class="text-muted-foreground">Linkage</span>
-                                                    <Badge :variant="billingLinkVariant(selected.billingLinkStatus)" class="shrink-0">
-                                                        {{ billingLinkLabel(selected.billingLinkStatus) }}
-                                                    </Badge>
-                                                </div>
-                                                <div class="flex justify-between gap-4 py-2">
-                                                    <span class="text-muted-foreground">Service</span>
-                                                    <span class="max-w-[14rem] truncate text-right font-medium">
-                                                        {{ selected.billingLink?.item?.serviceName || selected.billingServiceCode || '—' }}
-                                                    </span>
-                                                </div>
-                                                <div class="py-2 text-xs text-muted-foreground">{{ billingLinkDetail(selected) }}</div>
-                                            </CardContent>
-                                        </Card>
+
+                                    <!-- Identity + Department row -->
+                                    <div class="grid gap-4 sm:grid-cols-2">
+                                        <div class="rounded-lg border bg-background/70 px-3 py-2.5">
+                                            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Identity</p>
+                                            <p class="mt-1 text-sm font-semibold truncate">{{ selected.name || 'Unnamed item' }}</p>
+                                            <p class="text-xs text-muted-foreground">{{ selected.code || 'No code' }}</p>
+                                        </div>
+                                        <div class="rounded-lg border bg-background/70 px-3 py-2.5">
+                                            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Department</p>
+                                            <p class="mt-1 text-sm font-semibold truncate">{{ selectedDepartmentLabel }}</p>
+                                            <p class="text-xs text-muted-foreground">{{ selected.category || 'No category' }}</p>
+                                        </div>
                                     </div>
-                                    <Card class="!gap-0 overflow-hidden rounded-md border-border/50 !py-0 shadow-none">
-                                        <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
-                                            <CardTitle class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                                                {{ selected.catalogType === 'formulary_item' ? 'Medicine workflow details' : 'Workflow' }}
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent v-if="selected.catalogType === 'formulary_item'" class="divide-y divide-border/50 px-3 py-1.5 text-sm">
-                                            <div v-if="metadataStringValue(selected.metadata, 'strength')" class="flex justify-between gap-4 py-2">
+
+                                    <!-- Unit + Category row -->
+                                    <div class="grid gap-4 sm:grid-cols-2">
+                                        <div class="rounded-lg border bg-background/70 px-3 py-2.5">
+                                            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{{ catalog.unitLabel }}</p>
+                                            <p class="mt-1 text-sm font-semibold">{{ selected.unit || '—' }}</p>
+                                        </div>
+                                        <div class="rounded-lg border bg-background/70 px-3 py-2.5">
+                                            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{{ catalog.categoryLabel }}</p>
+                                            <p class="mt-1 text-sm font-semibold truncate">{{ selected.category || '—' }}</p>
+                                        </div>
+                                    </div>
+
+                                    <!-- Billing linkage row -->
+                                    <div class="grid gap-4 sm:grid-cols-2">
+                                        <div class="rounded-lg border bg-background/70 px-3 py-2.5">
+                                            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Billing linkage</p>
+                                            <p class="mt-1 text-sm font-semibold">{{ billingLinkLabel(selected.billingLinkStatus) }}</p>
+                                            <p class="text-xs text-muted-foreground truncate">{{ billingLinkDetail(selected) }}</p>
+                                        </div>
+                                        <div class="rounded-lg border bg-background/70 px-3 py-2.5">
+                                            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Linked service</p>
+                                            <p class="mt-1 text-sm font-semibold truncate">
+                                                {{ selected.billingLink?.item?.serviceName || selected.billingServiceCode || '—' }}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <!-- Workflow / Medicine workflow details -->
+                                    <div class="rounded-lg border bg-background/70 px-3 py-2.5">
+                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                                            {{ selected.catalogType === 'formulary_item' ? 'Medicine workflow details' : 'Workflow' }}
+                                        </p>
+                                        <div v-if="selected.catalogType === 'formulary_item'" class="mt-2 space-y-1.5 text-sm">
+                                            <div v-if="metadataStringValue(selected.metadata, 'strength')" class="flex justify-between gap-4 py-1">
                                                 <span class="text-muted-foreground">Strength</span>
                                                 <span class="font-medium">{{ metadataStringValue(selected.metadata, 'strength') }}</span>
                                             </div>
-                                            <div v-if="metadataStringValue(selected.metadata, 'dosageForm')" class="flex justify-between gap-4 py-2">
+                                            <div v-if="metadataStringValue(selected.metadata, 'dosageForm')" class="flex justify-between gap-4 py-1">
                                                 <span class="text-muted-foreground">Dosage form</span>
                                                 <span class="font-medium capitalize">{{ metadataStringValue(selected.metadata, 'dosageForm') }}</span>
                                             </div>
-                                            <div v-if="metadataStringValue(selected.metadata, 'route')" class="flex justify-between gap-4 py-2">
+                                            <div v-if="metadataStringValue(selected.metadata, 'route')" class="flex justify-between gap-4 py-1">
                                                 <span class="text-muted-foreground">Route</span>
                                                 <span class="font-medium capitalize">{{ metadataStringValue(selected.metadata, 'route') }}</span>
                                             </div>
-                                            <div class="flex justify-between gap-4 py-2">
+                                            <div class="flex justify-between gap-4 py-1">
                                                 <span class="text-muted-foreground">Prescription type</span>
                                                 <span class="font-medium">{{ metadataBooleanSelectValue(selected.metadata, 'otcAllowed') === 'yes' ? 'OTC' : 'Rx' }}</span>
                                             </div>
-                                            <div v-if="metadataStringValue(selected.metadata, 'stockUnit')" class="flex justify-between gap-4 py-2">
+                                            <div v-if="metadataStringValue(selected.metadata, 'stockUnit')" class="flex justify-between gap-4 py-1">
                                                 <span class="text-muted-foreground">Stock unit</span>
                                                 <span class="font-medium capitalize">{{ metadataStringValue(selected.metadata, 'stockUnit') }}</span>
                                             </div>
-                                            <div v-if="metadataStringValue(selected.metadata, 'packSize')" class="flex justify-between gap-4 py-2">
+                                            <div v-if="metadataStringValue(selected.metadata, 'packSize')" class="flex justify-between gap-4 py-1">
                                                 <span class="text-muted-foreground">Pack size</span>
                                                 <span class="font-medium">{{ metadataStringValue(selected.metadata, 'packSize') }} {{ pn(metadataStringValue(selected.metadata, 'packSize'), selected.unit?.toLowerCase() || 'unit') }}</span>
                                             </div>
-                                            <div v-if="metadataStringValue(selected.metadata, 'purchaseUnit')" class="flex justify-between gap-4 py-2">
+                                            <div v-if="metadataStringValue(selected.metadata, 'purchaseUnit')" class="flex justify-between gap-4 py-1">
                                                 <span class="text-muted-foreground">Purchase unit</span>
                                                 <span class="font-medium capitalize">{{ metadataStringValue(selected.metadata, 'purchaseUnit') }}</span>
                                             </div>
-                                            <div v-if="metadataStringValue(selected.metadata, 'conversionFactor') || metadataStringValue(selected.metadata, 'purchaseUnit')" class="flex justify-between gap-4 py-2">
+                                            <div v-if="metadataStringValue(selected.metadata, 'conversionFactor') || metadataStringValue(selected.metadata, 'purchaseUnit')" class="flex justify-between gap-4 py-1">
                                                 <span class="text-muted-foreground">Conversion</span>
                                                 <span class="text-right font-medium" v-html="conversionLabel"></span>
                                             </div>
-                                        </CardContent>
-                                        <CardContent v-else class="px-3 py-3 text-sm text-muted-foreground">
-                                            {{ domainMetadataSummary(selected) }}
-                                        </CardContent>
-                                    </Card>
-                                    <Card
-                                        v-if="selected.description"
-                                        class="!gap-0 overflow-hidden rounded-md border-border/50 !py-0 shadow-none"
-                                    >
-                                        <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
-                                            <CardTitle class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                                                Description
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent class="px-3 py-3 text-sm whitespace-pre-wrap">{{ selected.description }}</CardContent>
-                                    </Card>
-                                    <Card v-if="supportsConsumptionRecipe" class="!gap-0 overflow-hidden rounded-md border-border/50 !py-0 shadow-none">
-                                        <CardHeader class="border-b border-border/40 bg-muted/15 px-3 py-2">
-                                            <div class="flex items-center justify-between gap-2">
-                                                <CardTitle class="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                                                    Store consumables
-                                                </CardTitle>
-                                                <Badge variant="outline">{{ consumptionRecipeSummary }}</Badge>
-                                            </div>
-                                        </CardHeader>
-                                        <CardContent class="space-y-3 px-3 py-3">
-                                            <!-- Inline consumables list (always visible when items exist) -->
+                                        </div>
+                                        <p v-else class="mt-1 text-sm text-muted-foreground">{{ domainMetadataSummary(selected) }}</p>
+                                    </div>
+
+                                    <!-- Description -->
+                                    <div v-if="selected.description" class="rounded-lg border bg-background/70 px-3 py-2.5">
+                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Description</p>
+                                        <p class="mt-1 text-sm whitespace-pre-wrap">{{ selected.description }}</p>
+                                    </div>
+
+                                    <!-- Store Consumables -->
+                                    <div v-if="supportsConsumptionRecipe" class="rounded-lg border bg-background/70 px-3 py-2.5">
+                                        <div class="flex items-center justify-between gap-2">
+                                            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Store consumables</p>
+                                            <Badge variant="outline">{{ consumptionRecipeSummary }}</Badge>
+                                        </div>
+                                        <div class="mt-2 space-y-3">
                                             <div v-if="consumptionRecipeItems.length > 0 && !consumptionRecipeLoading" class="space-y-1.5">
                                                 <div
                                                     v-for="line in consumptionRecipeItems"
@@ -3104,7 +3116,7 @@ onBeforeUnmount(() => {
                                             <p v-else class="text-sm text-muted-foreground">
                                                 Map store items (tubes, reagents, gloves, etc.) and quantities deducted when this
                                                 {{ domains[selectedCatalogKey].singular.toLowerCase() }} is completed. Create items in
-                                                Inventory & Procurement first.
+                                                Inventory &amp; Procurement first.
                                             </p>
                                             <div class="flex flex-wrap items-center gap-2">
                                                 <Button size="sm" variant="outline" class="gap-1.5" as-child>
@@ -3124,11 +3136,12 @@ onBeforeUnmount(() => {
                                                     Set consumables
                                                 </Button>
                                             </div>
-                                        </CardContent>
-                                    </Card>
+                                        </div>
+                                    </div>
                                 </TabsContent>
 
-                                <TabsContent v-if="canAudit" value="audit" class="m-0 space-y-3 px-4 py-3 sm:px-5">
+                                <!-- Audit Tab -->
+                                <TabsContent v-if="canAudit" value="audit" class="m-0 space-y-3 px-5 py-5">
                                     <div class="flex flex-wrap items-center justify-between gap-2">
                                         <p class="text-sm text-muted-foreground">Lifecycle trail for this definition.</p>
                                         <Button variant="outline" size="sm" :disabled="auditExportBusy" @click="exportAudit">
@@ -3156,28 +3169,23 @@ onBeforeUnmount(() => {
                     </div>
 
                     <SheetFooter
-                        class="shrink-0 flex-col-reverse gap-2 border-t bg-background px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-5"
+                        class="shrink-0 gap-2 border-t px-4 py-3 sm:px-6"
                     >
-                        <Button variant="outline" size="sm" class="gap-1.5" @click="closeDetails">
-                            <AppIcon name="circle-x" class="size-3.5" />
-                            Close
+                        <Button v-if="selected && canManage" size="sm" class="gap-1.5" @click="openEditSheet">
+                            <AppIcon name="pencil" class="size-3.5" />
+                            {{ editSheetTitle }}
                         </Button>
-                        <div v-if="selected" class="flex flex-col-reverse gap-2 sm:flex-row">
-                            <Button
-                                v-if="canManage"
-                                size="sm"
-                                variant="outline"
-                                class="gap-1.5"
-                                @click="openStatusSheet()"
-                            >
-                                <AppIcon name="activity" class="size-3.5" />
-                                Change status
-                            </Button>
-                            <Button v-if="canManage" size="sm" class="gap-1.5" @click="openEditSheet">
-                                <AppIcon name="pencil" class="size-3.5" />
-                                {{ editSheetTitle }}
-                            </Button>
-                        </div>
+                        <Button
+                            v-if="selected && canManage"
+                            size="sm"
+                            variant="outline"
+                            class="gap-1.5"
+                            @click="openStatusSheet()"
+                        >
+                            <AppIcon name="activity" class="size-3.5" />
+                            Change status
+                        </Button>
+                        <Button variant="outline" @click="closeDetails">Close</Button>
                     </SheetFooter>
                 </SheetContent>
             </Sheet>
@@ -3192,7 +3200,7 @@ onBeforeUnmount(() => {
                             {{ editSheetTitle }}
                         </SheetTitle>
                         <SheetDescription v-if="selected">
-                            Update clinical details here. Change hospital prices in Tariffs & services.
+                            Update clinical details here. Change hospital prices in Billing Service Catalog.
                         </SheetDescription>
                     </SheetHeader>
                     <ScrollArea class="min-h-0 flex-1">
@@ -3282,14 +3290,14 @@ onBeforeUnmount(() => {
                                     <Button size="sm" variant="outline" class="mt-2 h-8 gap-1.5" as-child>
                                         <Link href="/billing-service-catalog">
                                             <AppIcon name="receipt" class="size-3.5" />
-                                            Open tariffs & services
+                                            Open Billing Service Catalog
                                         </Link>
                                     </Button>
                                 </div>
                                 <details class="md:col-span-3 rounded-lg border bg-muted/10 p-3">
                                     <summary class="cursor-pointer text-sm font-medium text-muted-foreground">Billing service code (optional)</summary>
                                     <p class="mt-2 text-xs text-muted-foreground">
-                                        Use this when the billing/tariff code should differ from the clinical definition code. Tariffs & services will use it when creating prices from this definition.
+                                        Use this when the billing/tariff code should differ from the clinical definition code. Billing Service Catalog will use it when creating prices from this definition.
                                     </p>
                                     <div class="mt-3 grid gap-1.5">
                                         <Label>Billing service code</Label>
@@ -3630,7 +3638,7 @@ onBeforeUnmount(() => {
                 :can-manage="canManage"
                 :list-filters="{ q: filters.q, status: filters.status, category: filters.category }"
                 :selected-item-ids="selectedItemIds"
-                @completed="void Promise.all([loadItems(), loadStatusCounts()])"
+                @completed="void Promise.all([loadItems(), loadCounts(), loadTypeCounts()])"
             />
 
             <Dialog v-model:open="bulkStatusDialogOpen">

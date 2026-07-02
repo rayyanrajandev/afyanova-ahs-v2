@@ -251,7 +251,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'End-of-day cashier settlement and revenue reconciliation',
     },
     {
-        title: 'Tariffs & services',
+        title: 'Billing Service Catalog',
         href: '/billing-service-catalog',
         iconName: 'file-text',
         section: 'billing',
@@ -344,14 +344,44 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Count physical stock and post governed variances',
     },
     {
-        title: 'Workspace',
-        href: '/inventory-procurement/workspace',
-        iconName: 'layout-grid',
+        title: 'Stock Control',
+        href: '/inventory-procurement/stock-control',
+        iconName: 'package',
         section: 'stores',
         subGroup: 'admin',
         permissionPrefixes: ['inventory.procurement.'],
         helpNote:
-            'Supervisor workspace for item master, procurement, ledger, requisitions, MSD, and analytics',
+            'Item master, stock ledger, and department stock levels',
+    },
+    {
+        title: 'Procurement',
+        href: '/inventory-procurement/procurement',
+        iconName: 'clipboard-list',
+        section: 'stores',
+        subGroup: 'admin',
+        permissionPrefixes: ['inventory.procurement.'],
+        helpNote:
+            'Purchase requests, MSD orders, and supplier lead times',
+    },
+    {
+        title: 'Requests & Fulfilment',
+        href: '/inventory-procurement/requests-fulfilment',
+        iconName: 'activity',
+        section: 'stores',
+        subGroup: 'admin',
+        permissionPrefixes: ['inventory.procurement.'],
+        helpNote:
+            'Requisitions, shortage queue, transfers, and request priorities',
+    },
+    {
+        title: 'Review',
+        href: '/inventory-procurement/review',
+        iconName: 'shield-check',
+        section: 'stores',
+        subGroup: 'admin',
+        permissionPrefixes: ['inventory.procurement.'],
+        helpNote:
+            'Dispensing claim links and inventory analytics',
     },
     {
         title: 'Warehouses',
@@ -480,7 +510,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Specialty registry and staff assignments',
     },
     {
-        title: 'Clinical service catalog',
+        title: 'Clinical Catalog',
         href: '/platform/admin/clinical-catalogs',
         iconName: 'book-open',
         section: 'facility_setup',
@@ -557,7 +587,7 @@ export const helpTipsBySection: Record<NavSectionKey, string[]> = {
         'The POS counter handles cash and card receipts for walk-in payments and OTC sales.',
         'Use the billing queue preset on the dashboard for invoices awaiting settlement.',
         'NHIF and insurance workspace tracks pre-authorisation, submission, and adjudication status.',
-        'Tariffs and services is the master price list — changes affect new invoices and quotes.',
+        'Billing Service Catalog is the master price list — changes affect new invoices and quotes.',
     ],
     stores: [
         'Stores and procurement covers stock levels, requisitions, and goods receipt.',
@@ -574,7 +604,7 @@ export const helpTipsBySection: Record<NavSectionKey, string[]> = {
         'Facility setup links tenants, facilities, owners, and active subscription plans.',
         'Subscription plan entitlements control which sidebar modules appear for the facility.',
         'Service points, wards, beds, and departments should be configured before go-live scheduling.',
-        'Clinical service catalog feeds orderables used across lab, imaging, pharmacy, and billing.',
+        'Clinical Catalog feeds orderables used across lab, imaging, pharmacy, and billing.',
     ],
     system_access: [
         'Users and access manages identity lifecycle, facility assignments, and role mapping.',

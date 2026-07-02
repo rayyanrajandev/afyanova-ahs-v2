@@ -220,6 +220,53 @@ class EloquentClinicalCatalogItemRepository implements ClinicalCatalogItemReposi
         return $counts;
     }
 
+    public function typeCounts(
+        ?string $query,
+        ?string $departmentId,
+        ?string $category,
+        ?string $dosageForm = null,
+    ): array {
+        $queryBuilder = ClinicalCatalogItemModel::query();
+        $this->applyPlatformScopeIfEnabled($queryBuilder);
+        app(FacilityTierSupport::class)->applyAvailabilityFilter(
+            $queryBuilder,
+            'platform_clinical_catalog_items',
+            app(CurrentPlatformScopeContextInterface::class)->facilityId(),
+        );
+
+        $queryBuilder
+            ->when($query, fn (Builder $builder, string $searchTerm) => $this->applySearchFilter($builder, $searchTerm))
+            ->when($departmentId, fn (Builder $builder, string $value) => $builder->where('department_id', $value))
+            ->when($category, fn (Builder $builder, string $value) => $builder->where('category', $value))
+            ->when($dosageForm, fn (Builder $builder, string $value) => $builder->where('metadata->dosageForm', $value));
+
+        $rows = $queryBuilder
+            ->selectRaw('catalog_type, COUNT(*) as aggregate')
+            ->groupBy('catalog_type')
+            ->get();
+
+        $counts = [
+            'lab_test' => 0,
+            'radiology_procedure' => 0,
+            'theatre_procedure' => 0,
+            'formulary_item' => 0,
+            'total' => 0,
+        ];
+
+        foreach ($rows as $row) {
+            $type = strtolower((string) $row->catalog_type);
+            $aggregate = (int) $row->aggregate;
+
+            if (array_key_exists($type, $counts) && $type !== 'total') {
+                $counts[$type] += $aggregate;
+            }
+
+            $counts['total'] += $aggregate;
+        }
+
+        return $counts;
+    }
+
     private function applyPlatformScopeIfEnabled(Builder $query): void
     {
         if (! $this->isPlatformScopingEnabled()) {

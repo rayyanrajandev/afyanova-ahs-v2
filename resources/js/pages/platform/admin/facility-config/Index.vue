@@ -117,14 +117,14 @@ const setupHubItems: SetupHubItem[] = [
         permissionPrefixes: ['platform.resources.'],
     },
     {
-        title: 'Clinical Care Catalogs',
+        title: 'Clinical Catalog',
         description: 'Govern lab tests, radiology procedures, theatre procedures, formulary items, and consumables.',
         href: '/platform/admin/clinical-catalogs',
         icon: 'book-open',
         permissionPrefixes: ['platform.clinical-catalog.', 'laboratory.orders.', 'radiology.orders.', 'pharmacy.orders.'],
     },
     {
-        title: 'Tariffs & services',
+        title: 'Billing Service Catalog',
         description: 'Connect clinical definitions to billable service codes, prices, and billing behavior.',
         href: '/billing-service-catalog',
         icon: 'receipt',

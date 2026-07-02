@@ -136,6 +136,10 @@ function labelOf(item: Warehouse | null): string {
     return item.warehouseName || item.warehouseCode || item.id || 'Unknown warehouse';
 }
 
+function warehouseRowKey(item: Warehouse, index: number): string {
+    return item.id || item.warehouseCode || item.warehouseName || `warehouse-row-${index}`;
+}
+
 function statusVariant(status: string | null): 'outline' | 'secondary' | 'destructive' {
     const normalized = (status ?? '').toLowerCase();
     if (normalized === 'active') return 'secondary';
@@ -450,8 +454,8 @@ onMounted(() => {
                                 </div>
                                 <div v-else class="space-y-2">
                                     <div
-                                        v-for="item in items"
-                                        :key="item.id || item.warehouseCode || item.warehouseName"
+                                        v-for="(item, index) in items"
+                                        :key="warehouseRowKey(item, index)"
                                         class="rounded-lg border p-3 transition-colors"
                                     >
                                         <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -477,7 +481,7 @@ onMounted(() => {
                                                     :variant="(item.status ?? '').toLowerCase() === 'active' ? 'destructive' : 'secondary'"
                                                     @click="openStatus(item, (item.status ?? '').toLowerCase() === 'active' ? 'inactive' : 'active')"
                                                 >
-                                                    <AppIcon :name="(item.status ?? '').toLowerCase() === 'active' ? 'ban' : 'circle-check'" class="size-3.5" />
+                                                    <AppIcon :name="(item.status ?? '').toLowerCase() === 'active' ? 'circle-x' : 'circle-check-big'" class="size-3.5" />
                                                     {{ (item.status ?? '').toLowerCase() === 'active' ? 'Deactivate' : 'Activate' }}
                                                 </Button>
                                                 <Button v-if="canAudit" size="sm" variant="outline" class="gap-1.5" @click="loadAudit(item)">
@@ -701,7 +705,7 @@ onMounted(() => {
                     <SheetFooter class="shrink-0 border-t bg-background px-4 py-3">
                         <Button variant="outline" :disabled="editLoading" @click="editOpen = false">Cancel</Button>
                         <Button :disabled="editLoading" class="gap-1.5" @click="saveEdit">
-                            <AppIcon name="save" class="size-3.5" />
+                            <AppIcon name="check" class="size-3.5" />
                             {{ editLoading ? 'Saving...' : 'Save Changes' }}
                         </Button>
                     </SheetFooter>

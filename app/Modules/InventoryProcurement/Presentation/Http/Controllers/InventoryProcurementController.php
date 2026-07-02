@@ -266,6 +266,8 @@ class InventoryProcurementController extends Controller
             return $this->tenantScopeRequiredError($exception->getMessage());
         } catch (DuplicateInventoryItemCodeException $exception) {
             return $this->validationError('itemCode', $exception->getMessage());
+        } catch (\InvalidArgumentException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
         }
 
         abort_if($item === null, 404, 'Inventory item not found.');

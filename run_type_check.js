@@ -1,29 +1,40 @@
-const { execSync } = require('child_process');
-const fs = require('fs');
+import { execSync } from 'node:child_process';
+
+const focusArg = (process.argv[2] ?? '').trim().toLowerCase();
 
 try {
-  const output = execSync('node node_modules/.bin/vue-tsc --noEmit', {
-    cwd: 'C:\\Portfolio\\afyanova-ahs-v2',
+  execSync('node node_modules/vue-tsc/bin/vue-tsc.js --noEmit', {
+    cwd: process.cwd(),
     encoding: 'utf8',
-    stdio: ['pipe', 'pipe', 'pipe']
-  }).toString();
-  
-  console.log('No errors found');
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+
+  if (focusArg) {
+    console.log(`No errors found for filter: ${focusArg}`);
+  } else {
+    console.log('No TypeScript errors found');
+  }
   process.exit(0);
 } catch (error) {
-  const output = error.stdout ? error.stdout.toString() : '';
-  const stderr = error.stderr ? error.stderr.toString() : '';
-  const fullOutput = output + stderr;
-  
-  const lines = fullOutput.split('\n');
-  const filteredLines = lines.filter(line => line.includes('walk-in-service'));
-  
-  if (filteredLines.length > 0) {
-    console.log('Errors found in walk-in-service file:');
-    console.log(filteredLines.join('\n'));
-  } else {
-    console.log('No errors in walk-in-service file');
+  const stdout = error?.stdout ? String(error.stdout) : '';
+  const stderr = error?.stderr ? String(error.stderr) : '';
+  const fullOutput = `${stdout}${stderr}`;
+
+  if (focusArg) {
+    const filteredLines = fullOutput
+      .split('\n')
+      .filter((line) => line.toLowerCase().includes(focusArg));
+
+    if (filteredLines.length > 0) {
+      console.log(`Errors found for filter: ${focusArg}`);
+      console.log(filteredLines.join('\n'));
+      process.exit(1);
+    }
+
+    console.log(`No errors found for filter: ${focusArg}`);
+    process.exit(0);
   }
-  
-  process.exit(0);
+
+  console.log(fullOutput.trim() || 'Type check failed with no output');
+  process.exit(1);
 }

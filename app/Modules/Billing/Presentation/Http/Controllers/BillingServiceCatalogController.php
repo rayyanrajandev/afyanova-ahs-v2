@@ -13,12 +13,14 @@ use App\Modules\Billing\Application\UseCases\GetBillingServiceCatalogItemPayerIm
 use App\Modules\Billing\Application\UseCases\GetBillingServiceCatalogItemUseCase;
 use App\Modules\Billing\Application\UseCases\ListBillingServiceCatalogItemAuditLogsUseCase;
 use App\Modules\Billing\Application\UseCases\ListBillingServiceCatalogItemsUseCase;
+use App\Modules\Billing\Application\UseCases\ListBillingServiceCatalogItemServiceTypeCountsUseCase;
 use App\Modules\Billing\Application\UseCases\ListBillingServiceCatalogItemStatusCountsUseCase;
 use App\Modules\Billing\Application\UseCases\ListBillingServiceCatalogItemVersionsUseCase;
 use App\Modules\Billing\Application\UseCases\UpdateBillingServiceCatalogItemStatusUseCase;
 use App\Modules\Billing\Application\UseCases\UpdateBillingServiceCatalogItemUseCase;
 use App\Modules\Billing\Presentation\Http\Requests\StoreBillingServiceCatalogItemRequest;
 use App\Modules\Billing\Presentation\Http\Requests\StoreBillingServiceCatalogItemRevisionRequest;
+use App\Modules\Billing\Presentation\Http\Requests\BulkSyncFromClinicalCatalogRequest;
 use App\Modules\Billing\Presentation\Http\Requests\BulkUpdateBillingServiceCatalogItemStatusRequest;
 use App\Modules\Billing\Presentation\Http\Requests\UpdateBillingServiceCatalogItemRequest;
 use App\Modules\Billing\Presentation\Http\Requests\UpdateBillingServiceCatalogItemStatusRequest;
@@ -70,6 +72,17 @@ class BillingServiceCatalogController extends Controller
     public function statusCounts(
         Request $request,
         ListBillingServiceCatalogItemStatusCountsUseCase $useCase
+    ): JsonResponse {
+        $counts = $useCase->execute($request->all());
+
+        return response()->json([
+            'data' => $counts,
+        ]);
+    }
+
+    public function serviceTypeCounts(
+        Request $request,
+        ListBillingServiceCatalogItemServiceTypeCountsUseCase $useCase
     ): JsonResponse {
         $counts = $useCase->execute($request->all());
 
@@ -253,16 +266,10 @@ class BillingServiceCatalogController extends Controller
     }
 
     public function bulkSyncFromCatalog(
-        Request $request,
+        BulkSyncFromClinicalCatalogRequest $request,
         BulkCreateBillingServiceCatalogItemsFromCatalogUseCase $useCase
     ): JsonResponse {
-        $validated = $request->validate([
-            'catalogItemIds' => ['nullable', 'array'],
-            'catalogItemIds.*' => ['uuid'],
-            'catalogTypes' => ['nullable', 'array'],
-            'catalogTypes.*' => ['string', 'in:lab_test,radiology_procedure,theatre_procedure,formulary_item'],
-            'defaultCurrencyCode' => ['nullable', 'string', 'max:3'],
-        ]);
+        $validated = $request->validated();
 
         try {
             $result = $useCase->execute(

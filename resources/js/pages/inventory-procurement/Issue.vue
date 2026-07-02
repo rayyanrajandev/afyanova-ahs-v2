@@ -19,7 +19,7 @@ import { useInventoryMasterLookups } from '@/composables/useInventoryMasterLooku
 import { useInventoryProcurementAccess } from '@/composables/useInventoryProcurementAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
-import { INVENTORY_PROCUREMENT_HOME_PATH, inventoryWorkspaceHref } from '@/lib/inventoryProcurement';
+import { INVENTORY_PROCUREMENT_HOME_PATH, supplyChainHref } from '@/lib/inventoryProcurement';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { BreadcrumbItem } from '@/types';
@@ -184,7 +184,14 @@ onMounted(async () => {
                     icon="package"
                     :back-href="INVENTORY_PROCUREMENT_HOME_PATH"
                     back-label="Supply chain home"
-                />
+                >
+                    <template #actions>
+                        <Button variant="outline" size="sm" class="h-8 gap-1.5" @click="loadPendingRequisitions">
+                            <AppIcon name="refresh-cw" class="size-3.5" />
+                            Refresh
+                        </Button>
+                    </template>
+                </FacilityWorkspacePageHeader>
 
                 <div class="grid gap-4 lg:grid-cols-2 lg:items-stretch">
                 <Card class="flex h-full min-h-0 flex-col rounded-lg shadow-sm">
@@ -215,7 +222,7 @@ onMounted(async () => {
                             </div>
                         </div>
                         <Button size="sm" class="mt-auto w-full shrink-0 gap-1.5" as-child>
-                            <Link :href="inventoryWorkspaceHref({ section: 'requisitions' })">
+                            <Link :href="supplyChainHref({ section: 'requisitions' })">
                                 <AppIcon name="clipboard-list" class="size-3.5" />
                                 Open requisitions
                             </Link>

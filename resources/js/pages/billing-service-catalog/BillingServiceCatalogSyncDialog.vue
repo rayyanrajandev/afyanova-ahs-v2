@@ -39,7 +39,7 @@ const catalogTypeOptions = [
     { value: 'lab_test', label: 'Lab Tests', icon: 'flask-conical' as AppIconName },
     { value: 'radiology_procedure', label: 'Radiology', icon: 'layers' as AppIconName },
     { value: 'theatre_procedure', label: 'Theatre Procedures', icon: 'scissors' as AppIconName },
-    { value: 'formulary_item', label: 'Formulary (Medicines)', icon: 'pill' as AppIconName },
+    { value: 'formulary_item', label: 'Medicines', icon: 'pill' as AppIconName },
 ];
 
 const selectedCategory = ref('');
@@ -157,14 +157,14 @@ watch(selectedCategory, () => {
 
 <template>
 <Sheet :open="open" @update:open="closeDialog">
-    <SheetContent side="right" variant="form" size="4xl">
+    <SheetContent side="right" variant="form" size="3xl">
         <SheetHeader class="shrink-0 border-b px-4 py-3 text-left pr-12">
             <SheetTitle class="flex items-center gap-2">
                 <AppIcon name="book-open" class="size-5 text-muted-foreground" />
-                Sync from Clinical Care Catalog
+                Sync from Clinical Catalog
             </SheetTitle>
             <SheetDescription>
-                Select a category, review the loaded items, then sync to create billable service prices.
+                Pull definitions from Clinical Catalog to create or update billing service prices.
             </SheetDescription>
         </SheetHeader>
 
@@ -195,10 +195,10 @@ watch(selectedCategory, () => {
         <div v-if="!syncResult" class="flex min-h-0 flex-1 flex-col">
             <!-- Category dropdown -->
             <div class="border-b px-4 py-3">
-                <label class="mb-1.5 block text-xs font-medium text-muted-foreground">Category</label>
+                <label class="mb-1.5 block text-xs font-medium text-muted-foreground">Step 1 — Choose a category</label>
                 <Select v-model="selectedCategory" @update:model-value="loadItems">
                     <SelectTrigger class="w-full">
-                        <SelectValue placeholder="Choose a category..." />
+                        <SelectValue placeholder="Select a catalog category to load items..." />
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem
@@ -215,8 +215,19 @@ watch(selectedCategory, () => {
                 </Select>
             </div>
 
+            <!-- No category selected — guidance -->
+            <div v-if="!selectedCategory" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+                <div class="rounded-full bg-muted/50 p-4">
+                    <AppIcon name="book-open" class="size-8 text-muted-foreground/50" />
+                </div>
+                <p class="text-sm font-medium text-muted-foreground">Select a category above to begin</p>
+                <p class="max-w-xs text-xs text-muted-foreground/60">
+                    Items from the Clinical Catalog will appear here. Pick the ones you want to sync as billing service prices.
+                </p>
+            </div>
+
             <!-- Loading -->
-            <div v-if="loadingItems" class="flex flex-col items-center gap-2 px-4 py-12 text-center">
+            <div v-else-if="loadingItems" class="flex flex-col items-center gap-2 px-4 py-12 text-center">
                 <AppIcon name="refresh-cw" class="size-6 animate-spin text-muted-foreground/40" />
                 <p class="text-sm text-muted-foreground">Loading items...</p>
             </div>
@@ -278,7 +289,7 @@ watch(selectedCategory, () => {
             <div v-else-if="selectedCategory && !loadingItems && !loadError" class="flex flex-col items-center gap-2 px-4 py-12 text-center">
                 <AppIcon name="book-open" class="size-10 text-muted-foreground/40" />
                 <p class="text-sm font-medium text-muted-foreground">No active items found</p>
-                <p class="text-xs text-muted-foreground/60">Add definitions in Clinical Care Catalogs first.</p>
+                <p class="text-xs text-muted-foreground/60">Add definitions in Clinical Catalog first.</p>
             </div>
         </div>
 

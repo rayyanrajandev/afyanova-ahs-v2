@@ -236,7 +236,7 @@ const routes: CommandRoute[] = [
         shortcut: 'G $',
     },
     {
-        label: 'Clinical Care Catalogs',
+        label: 'Clinical Catalog',
         href: '/platform/admin/clinical-catalogs',
         icon: 'book-open',
         shortcut: 'G 8',
@@ -425,7 +425,7 @@ const createWorkflowRoutes: CommandRoute[] = [
         shortcut: 'C 6',
     },
     {
-        label: 'Manage Clinical Care Catalogs',
+        label: 'Manage Clinical Catalog',
         href: '/platform/admin/clinical-catalogs',
         icon: 'book-open',
         shortcut: 'C 8',
@@ -633,7 +633,7 @@ const queuePresets = computed<CommandPreset[]>(() => {
             icon: 'clipboard-list',
         },
         {
-            label: 'Clinical Care Catalogs - Workspace',
+            label: 'Clinical Catalog - Workspace',
             href: '/platform/admin/clinical-catalogs',
             icon: 'book-open',
         },
@@ -835,7 +835,7 @@ const workflowActions = computed<WorkflowActionCommand[]>(() => {
             icon: 'building-2',
         },
         {
-            label: 'Open Clinical Care Catalogs Workspace',
+            label: 'Open Clinical Catalog Workspace',
             href: '/platform/admin/clinical-catalogs',
             icon: 'book-open',
         },

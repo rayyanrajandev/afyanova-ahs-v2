@@ -16,15 +16,15 @@ import { SearchInput } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { fetchPendingApprovals, type ApprovalInstance } from '@/lib/approvalApiClient';
+import { INVENTORY_PROCUREMENT_HOME_PATH } from '@/lib/inventoryProcurement';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError } from '@/lib/notify';
 
 const user = computed(() => (usePage().props.auth as any)?.user);
 
 const breadcrumbs = [
-    { title: 'Home', href: '/' },
-    { title: 'Inventory', href: '/inventory-procurement' },
-    { title: 'Pending Approvals' },
+    { title: 'Supply chain', href: INVENTORY_PROCUREMENT_HOME_PATH },
+    { title: 'Pending Approvals', href: '/inventory-procurement/pending-approvals' },
 ];
 
 const approvals = ref<ApprovalInstance[]>([]);
@@ -82,14 +82,15 @@ function statusBadgeClass(status: string): string {
     <Head title="Pending Approvals" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
+        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-lg p-4 md:p-6">
             <FacilityWorkspacePageHeader
                 title="Pending Approvals"
                 description="Review and act on requisitions awaiting your approval."
+                icon="shield-check"
             >
                 <template #actions>
-                    <Button variant="outline" size="sm" class="gap-1.5" @click="loadApprovals">
-                        <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    <Button variant="outline" size="sm" class="h-8 gap-1.5" @click="loadApprovals">
+                        <AppIcon name="refresh-cw" class="size-3.5" />
                         Refresh
                     </Button>
                 </template>

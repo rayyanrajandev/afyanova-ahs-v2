@@ -81,7 +81,7 @@ export const buildSupplySurface: WorkflowSurfaceBuilder = ({ counts, lists, help
                 label: Number(outOfStock ?? 0) > 0 ? 'Open stock alerts' : 'Open procurement',
                 href: '/inventory-procurement',
             },
-            secondaryAction: { label: 'Supply chain workspace', href: '/inventory-procurement/workspace' },
+            secondaryAction: { label: 'Supply chain hub', href: '/inventory-procurement' },
             chips: [
                 { label: 'Low stock', value: lowStock },
                 { label: 'Out of stock', value: outOfStock },

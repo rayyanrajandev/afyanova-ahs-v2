@@ -21,7 +21,7 @@ const badgeConfig = {
         variant: 'default' as const,
         icon: 'check-circle' as const,
         label: 'Catalog',
-        tooltip: 'Identity synced from Clinical Care Catalog',
+        tooltip: 'Identity synced from Clinical Catalog',
     },
     local: {
         variant: 'secondary' as const,

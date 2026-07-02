@@ -1,10 +1,8 @@
 
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import type { AcceptableValue } from 'reka-ui';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import type { AppIconName } from '@/lib/icons';
 import ComboboxField from '@/components/forms/ComboboxField.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SingleDatePopoverField from '@/components/forms/SingleDatePopoverField.vue';
@@ -15,7 +13,7 @@ import CatalogLinkBadge from '@/components/shared/CatalogLinkBadge.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
@@ -26,11 +24,11 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import LeaveWorkflowDialog from '@/components/workflow/LeaveWorkflowDialog.vue';
@@ -39,6 +37,60 @@ import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { usePlatformCountryProfile } from '@/composables/usePlatformCountryProfile';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiGetBlob, apiRequestJson } from '@/lib/apiClient';
+import { INVENTORY_PROCUREMENT_STOCK_CONTROL_PATH } from '@/lib/inventoryProcurement';
+import {
+    type CatalogStatus,
+    type CatalogItem,
+    type CatalogStatusCounts,
+    type Pagination,
+    type CatalogListResponse,
+    type CatalogResponse,
+    type CatalogVersionsResponse,
+    type CatalogPayerImpactSummary,
+    type CatalogPayerImpactResponse,
+    type StatusCountResponse,
+    type Department,
+    type DepartmentListResponse,
+    type ClinicalCatalogType,
+    type CreateIdentitySource,
+    type ClinicalCatalogLookupItem,
+    type ClinicalCatalogLookupListResponse,
+    type CatalogAuditLog,
+    type CatalogAuditLogListResponse,
+    type ValidationErrorResponse,
+    type ServiceTypeCountResponse,
+    type ServiceTypeCounts,
+    type StandardsCodes,
+    type ScopeData,
+    SERVICE_TYPE_OPTIONS,
+    SERVICE_TYPE_TABS,
+    UNIT_OPTIONS,
+    PHARMACY_UNIT_OPTIONS,
+    FACILITY_TIER_OPTIONS,
+    CLINICAL_CATALOG_SOURCES,
+    buildDepartmentOptions as buildDepartmentOptionsFromList,
+    findDepartmentOption,
+    clinicalCatalogGroupLabel,
+    billingServiceTypeFromClinicalCatalogType,
+    normalizeServiceCode,
+    formatDateTime,
+    formatMoney,
+    tariffWindowLabel,
+    tariffLifecycleLabel,
+    windowRangeValidationMessage,
+    toDateTimeInput,
+    datePartFromDateTimeInput,
+    timePartFromDateTimeInput,
+    mergeDateAndTimeInput,
+    toApiDateTime,
+    parseDecimalOrNull,
+    statusVariant,
+    catalogStatusDotClass as catalogStatusDotClassFn,
+    metadataObject,
+    metadataToFormText,
+    parseMetadata,
+} from '@/lib/billingServiceCatalog';
+import type { AppIconName } from '@/lib/icons';
 import { generateRequestKey } from '@/lib/idempotency';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
@@ -46,167 +98,15 @@ import type { SearchableSelectOption } from '@/lib/patientLocations';
 import BillingServiceCatalogSyncDialog from '@/pages/billing-service-catalog/BillingServiceCatalogSyncDialog.vue';
 import { type BreadcrumbItem } from '@/types';
 
-type CatalogStatus = 'active' | 'inactive' | 'retired';
-type CheckboxCheckedState = boolean | 'indeterminate';
-type StandardsCodes = Partial<Record<'LOCAL' | 'LOINC' | 'SNOMED_CT' | 'NHIF' | 'MSD' | 'CPT' | 'ICD', string>>;
-type ClinicalCatalogLink = {
-    id: string | null;
-    catalogType: string | null;
-    code: string | null;
-    name: string | null;
-    status: string | null;
-};
-type CatalogItem = {
-    id: string | null;
-    tenantId: string | null;
-    facilityId: string | null;
-    clinicalCatalogItemId: string | null;
-    serviceCode: string | null;
-    versionNumber: number | null;
-    serviceName: string | null;
-    serviceType: string | null;
-    departmentId: string | null;
-    department: string | null;
-    unit: string | null;
-    priceUnit: string | null;
-    unitsPerPack: number | null;
-    basePrice: string | null;
-    currencyCode: string | null;
-    taxRatePercent: string | null;
-    isTaxable: boolean | null;
-    effectiveFrom: string | null;
-    effectiveTo: string | null;
-    description: string | null;
-    metadata: Record<string, unknown> | null;
-    codes: StandardsCodes | null;
-    facilityTier: string | null;
-    linkWarning: string | null;
-    standardsWarnings: string[] | null;
-    status: CatalogStatus | null;
-    statusReason: string | null;
-    supersedesBillingServiceCatalogItemId: string | null;
-    clinicalCatalogItem: ClinicalCatalogLink | null;
-    createdAt: string | null;
-    updatedAt: string | null;
-};
-type CatalogStatusCounts = { active: number; inactive: number; retired: number; other: number; total: number };
-type Pagination = { currentPage: number; perPage: number; total: number; lastPage: number };
-type CatalogListResponse = { data: CatalogItem[]; meta: Pagination };
-type CatalogResponse = { data: CatalogItem };
-type CatalogVersionsResponse = { data: CatalogItem[] };
-type CatalogPayerImpactSummary = {
-    serviceCode: string | null;
-    serviceType: string | null;
-    department: string | null;
-    currencyCode: string | null;
-    activeContractCount: number;
-    preAuthorizationContractCount: number;
-    contractsWithMatchingRulesCount: number;
-    matchingRuleCount: number;
-    authorizationRequiredRuleCount: number;
-    autoApproveRuleCount: number;
-    serviceSpecificRuleCount: number;
-    serviceTypeRuleCount: number;
-    departmentRuleCount: number;
-    coveragePercentMin: number | null;
-    coveragePercentMax: number | null;
-};
-type CatalogPayerImpactResponse = { data: CatalogPayerImpactSummary };
-type StatusCountResponse = { data: CatalogStatusCounts };
-type Department = {
-    id: string | null;
-    code: string | null;
-    name: string | null;
-    serviceType: string | null;
-};
-type DepartmentListResponse = { data: Department[]; meta: Pagination };
-type ClinicalCatalogType = 'lab_test' | 'radiology_procedure' | 'theatre_procedure' | 'formulary_item';
-type CreateIdentitySource = 'clinical' | 'standalone';
-type ClinicalCatalogLookupBillingItem = {
-    id: string | null;
-    clinicalCatalogItemId: string | null;
-    serviceCode: string | null;
-    serviceName: string | null;
-    status: string | null;
-    versionNumber: number | null;
-    basePrice: string | null;
-    currencyCode: string | null;
-    effectiveFrom: string | null;
-    effectiveTo: string | null;
-};
-type ClinicalCatalogLookupLink = {
-    status: string | null;
-    serviceCode: string | null;
-    item: ClinicalCatalogLookupBillingItem | null;
-};
-type ClinicalCatalogLookupItem = {
-    id: string | null;
-    catalogType: ClinicalCatalogType | null;
-    code: string | null;
-    name: string | null;
-    departmentId: string | null;
-    category: string | null;
-    unit: string | null;
-    description: string | null;
-    codes: StandardsCodes | null;
-    facilityTier: string | null;
-    billingServiceCode: string | null;
-    billingLinkStatus: string | null;
-    billingLink: ClinicalCatalogLookupLink | null;
-    metadata: Record<string, unknown> | null;
-    status: string | null;
-};
-type ClinicalCatalogLookupListResponse = { data: ClinicalCatalogLookupItem[]; meta: Pagination | null };
-type CatalogAuditLog = {
-    id: string;
-    billingServiceCatalogItemId: string | null;
-    actorId: number | null;
-    action: string | null;
-    changes: Record<string, unknown> | null;
-    metadata: Record<string, unknown> | null;
-    createdAt: string | null;
-};
-type CatalogAuditLogListResponse = { data: CatalogAuditLog[]; meta: Pagination };
-type ValidationErrorResponse = { message?: string; errors?: Record<string, string[]> };
-
-type ScopeData = {
-    resolvedFrom: string;
-    facility?: { name?: string | null; code?: string | null } | null;
-    tenant?: { name?: string | null; code?: string | null } | null;
-};
-
-const serviceTypeOptions = [
-    'consultation',
-    'laboratory',
-    'radiology',
-    'pharmacy',
-    'procedure',
-    'admission',
-    'theatre',
-    'imaging',
-    'consumable',
-    'other',
-];
-
-const unitOptions = ['service', 'study', 'test', 'item', 'session', 'day', 'procedure', 'dose', 'package'];
-const pharmacyUnitOptions = ['tablet', 'capsule', 'vial', 'ampoule', 'sachet', 'bottle', 'inhaler', 'pack', 'box', 'strip', 'dose', 'ml', 'mg', 'g', 'iu'];
-const facilityTierOptions = [
-    { value: 'dispensary', label: 'Dispensary' },
-    { value: 'health_centre', label: 'Health centre' },
-    { value: 'district_hospital', label: 'District hospital' },
-    { value: 'regional_hospital', label: 'Regional hospital' },
-    { value: 'zonal_referral', label: 'Zonal referral' },
-] as const;
-const clinicalCatalogSources = [
-    { type: 'lab_test', path: '/platform/admin/clinical-catalogs/lab-tests', label: 'Lab Tests', defaultServiceType: 'laboratory' },
-    { type: 'radiology_procedure', path: '/platform/admin/clinical-catalogs/radiology-procedures', label: 'Radiology', defaultServiceType: 'radiology' },
-    { type: 'theatre_procedure', path: '/platform/admin/clinical-catalogs/theatre-procedures', label: 'Theatre Procedures', defaultServiceType: 'theatre' },
-    { type: 'formulary_item', path: '/platform/admin/clinical-catalogs/formulary-items', label: 'Formulary', defaultServiceType: 'pharmacy' },
-] as const satisfies ReadonlyArray<{ type: ClinicalCatalogType; path: string; label: string; defaultServiceType: string }>;
+const serviceTypeOptions = SERVICE_TYPE_OPTIONS;
+const unitOptions = UNIT_OPTIONS;
+const pharmacyUnitOptions = PHARMACY_UNIT_OPTIONS;
+const facilityTierOptions = FACILITY_TIER_OPTIONS;
+const clinicalCatalogSources = CLINICAL_CATALOG_SOURCES;
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Billing', href: '/billing-invoices' },
-    { title: 'Tariffs & services', href: '/billing-service-catalog' },
+    { title: 'Billing Service Catalog', href: '/billing-service-catalog' },
 ];
 
 const { permissionNames, permissionState, scope: platformScope, multiTenantIsolationEnabled } = usePlatformAccess();
@@ -215,7 +115,6 @@ const { activeCurrencyCode, loadCountryProfile } = usePlatformCountryProfile();
 const permissionsResolved = computed(() => permissionNames.value !== null);
 const canRead = computed(() => permissionState('billing.service-catalog.read') === 'allowed');
 const canManageLegacy = computed(() => permissionState('billing.service-catalog.manage') === 'allowed');
-const canManageIdentity = computed(() => canManageLegacy.value || permissionState('billing.service-catalog.manage-identity') === 'allowed');
 const canManagePricing = computed(() => canManageLegacy.value || permissionState('billing.service-catalog.manage-pricing') === 'allowed');
 const canViewAudit = computed(() => permissionState('billing.service-catalog.view-audit-logs') === 'allowed');
 const canReadPayerContracts = computed(() => permissionState('billing.payer-contracts.read') === 'allowed');
@@ -239,6 +138,7 @@ const listError = ref<string | null>(null);
 const items = ref<CatalogItem[]>([]);
 const pagination = ref<Pagination | null>(null);
 const statusCounts = ref<CatalogStatusCounts>({ active: 0, inactive: 0, retired: 0, other: 0, total: 0 });
+const serviceTypeCounts = ref<ServiceTypeCounts>({ total: 0 });
 const catalogExporting = ref(false);
 const catalogPrinting = ref(false);
 const bulkStatusDialogOpen = ref(false);
@@ -257,11 +157,10 @@ const filters = reactive({
     lifecycle: '',
     sortBy: 'serviceName',
     sortDir: 'asc' as 'asc' | 'desc',
-    perPage: 10,
+    perPage: 50,
     page: 1,
 });
 
-const filtersSheetOpen = ref(false);
 const createSheetOpen = ref(false);
 const billingSyncDialogOpen = ref(false);
 
@@ -339,7 +238,7 @@ const catalogActiveFilterChips = computed(() => {
     }
     if (filters.sortBy !== 'serviceName') chips.push(`Sort: ${formatEnumLabel(filters.sortBy)}`);
     if (filters.sortDir !== 'asc') chips.push('Descending');
-    if (filters.perPage !== 10) chips.push(`${filters.perPage} per page`);
+    if (filters.perPage !== 50) chips.push(`${filters.perPage} per page`);
 
     return chips;
 });
@@ -413,54 +312,13 @@ const createTariffChecklist = computed(() => {
 });
 
 function buildDepartmentOptions(preferredServiceType = ''): SearchableSelectOption[] {
-    const normalizedServiceType = preferredServiceType.trim().toLowerCase();
-    const source = normalizedServiceType
-        ? departments.value.filter((department) => String(department.serviceType ?? '').trim().toLowerCase() === normalizedServiceType)
-        : departments.value;
-
-    return (source.length > 0 ? source : departments.value)
-        .map((department) => {
-            const id = String(department.id ?? '').trim();
-            const name = String(department.name ?? '').trim();
-            if (!id || !name) return null;
-
-            const code = String(department.code ?? '').trim();
-            const serviceType = String(department.serviceType ?? '').trim();
-
-            return {
-                value: id,
-                label: code ? `${code} - ${name}` : name,
-                description: serviceType ? `${formatEnumLabel(serviceType)} department` : 'Hospital department',
-                keywords: [name, code, serviceType].filter((entry) => entry.trim().length > 0),
-                group: serviceType ? formatEnumLabel(serviceType) : 'Other',
-            } as SearchableSelectOption;
-        })
-        .filter((option): option is SearchableSelectOption => option !== null);
-}
-
-function clinicalCatalogSourceConfig(catalogType: string | null | undefined) {
-    return clinicalCatalogSources.find((source) => source.type === catalogType) ?? null;
-}
-
-function clinicalCatalogGroupLabel(catalogType: string | null | undefined): string {
-    return clinicalCatalogSourceConfig(catalogType)?.label ?? 'Clinical Catalogs';
-}
-
-function billingServiceTypeFromClinicalCatalogType(catalogType: string | null | undefined): string {
-    return clinicalCatalogSourceConfig(catalogType)?.defaultServiceType ?? '';
+    return buildDepartmentOptionsFromList(departments.value, preferredServiceType);
 }
 
 function resolvedClinicalCatalogServiceCode(item: ClinicalCatalogLookupItem | null): string {
     if (!item) return '';
 
     return normalizeServiceCode(item.billingServiceCode ?? '') || normalizeServiceCode(item.code ?? '');
-}
-
-function findDepartmentOption(options: SearchableSelectOption[], value: string): SearchableSelectOption | null {
-    const normalizedValue = value.trim().toLowerCase();
-    if (!normalizedValue) return null;
-
-    return options.find((option) => option.value.trim().toLowerCase() === normalizedValue) ?? null;
 }
 
 function findClinicalCatalogLookupItem(value: string): ClinicalCatalogLookupItem | null {
@@ -472,13 +330,8 @@ function findClinicalCatalogLookupItem(value: string): ClinicalCatalogLookupItem
 
 const allDepartmentOptions = computed<SearchableSelectOption[]>(() => buildDepartmentOptions());
 const createDepartmentOptions = computed<SearchableSelectOption[]>(() => buildDepartmentOptions(createForm.serviceType));
-const editDepartmentOptions = computed<SearchableSelectOption[]>(() => buildDepartmentOptions(editForm.serviceType));
 const filterDepartmentOptions = computed<SearchableSelectOption[]>(() => allDepartmentOptions.value);
 
-const editSelectedDepartmentOption = computed(
-    () => findDepartmentOption(editDepartmentOptions.value, editForm.departmentId)
-        ?? findDepartmentOption(allDepartmentOptions.value, editForm.departmentId),
-);
 const filterSelectedDepartmentOption = computed(() => findDepartmentOption(filterDepartmentOptions.value, filters.departmentId));
 
 const createIdentitySourceTabsValue = computed({
@@ -541,7 +394,7 @@ const createClinicalCatalogItemOptions = computed<SearchableSelectOption[]>(() =
 const createClinicalCatalogHelperText = computed(() => {
     if (clinicalCatalogLookupLoading.value) return 'Loading active clinical definitions across lab, radiology, theatre, and formulary catalogs...';
     if (clinicalCatalogLookupError.value) return 'Clinical catalog lookup is unavailable right now. Use standalone mode only for true billing-only services.';
-    if (!clinicalCatalogLookupItems.value.length) return 'No active clinical definitions are available yet. Add them in Clinical Care Catalogs first.';
+    if (!clinicalCatalogLookupItems.value.length) return 'No active clinical definitions are available yet. Add them in Clinical Catalog first.';
     if (!createFilteredClinicalCatalogItems.value.length) return `No active ${clinicalCatalogGroupLabel(createClinicalCatalogTypeFilter.value).toLowerCase()} definitions are available yet.`;
     return 'Select the existing clinical definition first. Service code and service name will be filled automatically from that record.';
 });
@@ -588,33 +441,9 @@ const createDepartmentEmptyText = computed(() => {
     return 'No departments matched this search.';
 });
 
-const editDepartmentSummary = computed(() => editSelectedDepartmentOption.value?.label ?? selectedItem.value?.department ?? '');
-const editDepartmentHelperText = computed(() => {
-    if (departmentsLoading.value) return 'Loading live department list...';
-    if (!departments.value.length) return 'Department directory is currently unavailable for this record.';
-
-    const legacyDepartment = String(selectedItem.value?.department ?? '').trim();
-    if (!editForm.departmentId.trim() && legacyDepartment) {
-        return `Legacy department label: ${legacyDepartment}. Choose a department from the live list to normalize this record.`;
-    }
-
-    if (editForm.serviceType.trim()) {
-        return `Showing departments matched to ${formatEnumLabel(editForm.serviceType)} first.`;
-    }
-
-    return 'Search the hospital department list by code or name.';
-});
-const editDepartmentEmptyText = computed(() => {
-    if (departmentsLoading.value) return 'Loading departments...';
-    if (!departments.value.length) return 'No departments are available from the hospital directory.';
-    return 'No departments matched this search.';
-});
 const filterDepartmentSummary = computed(() => filterSelectedDepartmentOption.value?.label ?? '');
 const catalogShowInitialSkeleton = computed(() => pageLoading.value);
 const catalogListRefreshing = computed(() => listLoading.value && !pageLoading.value);
-const detailsClinicalLinkagePending = computed(
-    () => detailsLoading.value && Boolean(selectedItem.value?.clinicalCatalogItemId) && !selectedItem.value?.clinicalCatalogItem,
-);
 
 const createServiceTypeSelectValue = computed({
     get: () => createForm.serviceType || '__none__',
@@ -646,7 +475,13 @@ const createPriceUnitSelectValue = computed({
     },
 });
 
-const filterServiceTypeSelectValue = computed(() => filters.serviceType || '__none__');
+const activeServiceTypeTab = computed(() => filters.serviceType || '__all__');
+
+function setActiveServiceTypeTab(value: string): void {
+    filters.serviceType = value === '__all__' ? '' : value;
+    filters.page = 1;
+    void loadItems();
+}
 
 const filterSortBySelectValue = computed(() => filters.sortBy);
 
@@ -654,64 +489,6 @@ const filterSortDirSelectValue = computed(() => filters.sortDir);
 
 const filterPerPageSelectValue = computed(() => String(filters.perPage));
 
-const editServiceTypeSelectValue = computed({
-    get: () => editForm.serviceType || '__none__',
-    set: (value: string) => {
-        editForm.serviceType = value === '__none__' ? '' : value;
-    },
-});
-
-const editUnitSelectValue = computed({
-    get: () => editForm.unit || '__none__',
-    set: (value: string) => {
-        editForm.unit = value === '__none__' ? '' : value;
-    },
-});
-
-const editUnitOptions = computed(() => unitOptions);
-
-const editPriceUnitSelectValue = computed({
-    get: () => editForm.priceUnit || '__none__',
-    set: (value: string) => {
-        editForm.priceUnit = value === '__none__' ? '' : value;
-    },
-});
-
-const editTaxableSelectValue = computed({
-    get: () => editForm.isTaxable || '__none__',
-    set: (value: string) => {
-        editForm.isTaxable = value === '__none__' ? '' : value;
-    },
-});
-
-const revisionTaxableSelectValue = computed({
-    get: () => revisionForm.isTaxable || '__none__',
-    set: (value: string) => {
-        revisionForm.isTaxable = value === '__none__' ? '' : value;
-    },
-});
-
-const statusSelectValue = computed({
-    get: () => statusForm.status,
-    set: (value: string) => {
-        statusForm.status = (value === 'inactive' || value === 'retired' ? value : 'active') as CatalogStatus;
-    },
-});
-
-const auditActorTypeSelectValue = computed({
-    get: () => auditFilters.actorType || '__all__',
-    set: (value: string) => {
-        auditFilters.actorType = value === '__all__' ? '' : value;
-    },
-});
-
-const auditPerPageSelectValue = computed({
-    get: () => String(auditFilters.perPage),
-    set: (value: string) => {
-        const parsed = Number.parseInt(value, 10);
-        auditFilters.perPage = Number.isFinite(parsed) ? parsed : 20;
-    },
-});
 
 const createTariffReady = computed(() => (
     createTariffChecklist.value.every((step) => step.complete)
@@ -739,8 +516,6 @@ const createTariffIdentitySummary = computed(() => {
 });
 
 const createTariffWindowValidationMessage = computed(() => windowRangeValidationMessage(createForm.effectiveFrom, createForm.effectiveTo));
-const editTariffWindowValidationMessage = computed(() => windowRangeValidationMessage(editForm.effectiveFrom, editForm.effectiveTo));
-const revisionWindowValidationMessage = computed(() => windowRangeValidationMessage(revisionForm.effectiveFrom, revisionForm.effectiveTo));
 
 const createTariffBlockers = computed(() => {
     const blockers: string[] = [];
@@ -790,18 +565,6 @@ const hasPendingCreateCatalogWorkflow = computed(() => Boolean(
     || createForm.metadataText.trim() !== ''
 ));
 
-const revisionGovernanceMessage = computed(() => {
-    if (revisionWindowValidationMessage.value) {
-        return revisionWindowValidationMessage.value;
-    }
-
-    const startAt = toApiDateTime(revisionForm.effectiveFrom);
-    if (!startAt) {
-        return 'Choose when the new price version starts. The current version will close automatically one second before that time.';
-    }
-
-    return `The current price version will close automatically one second before ${formatDateTime(startAt)}. Use this only for a real pricing, tax, or lifecycle change.`;
-});
 
 function clinicalCatalogLinkLabel(item: CatalogItem | null): string {
     return item?.clinicalCatalogItemId ? 'Linked clinical definition' : 'Standalone billing price';
@@ -825,170 +588,8 @@ function clinicalCatalogLinkDetail(item: CatalogItem | null): string {
     return linkedItem.name ? `${linkedItem.name} | ${summary}` : summary;
 }
 
-const detailsWorkspaceSummaryCards = computed(() => {
-    if (!selectedItem.value) return [];
 
-    return [
-        {
-            key: 'clinical-link',
-            label: 'Clinical linkage',
-            value: clinicalCatalogLinkLabel(selectedItem.value),
-            helper: clinicalCatalogLinkDetail(selectedItem.value),
-        },
-        {
-            key: 'tariff',
-            label: 'Current price',
-            value: formatMoney(selectedItem.value.basePrice, selectedItem.value.currencyCode),
-            helper: `Version ${selectedItem.value.versionNumber || 1}`,
-        },
-        {
-            key: 'lifecycle',
-            label: 'Price window',
-            value: tariffLifecycleLabel(selectedItem.value.effectiveFrom, selectedItem.value.effectiveTo),
-            helper: tariffWindowLabel(selectedItem.value.effectiveFrom, selectedItem.value.effectiveTo),
-        },
-        {
-            key: 'impact',
-            label: 'Payer impact',
-            value: payerImpactSummary.value
-                ? `${payerImpactSummary.value.activeContractCount} active contracts`
-                : 'Contract context pending',
-            helper: payerImpactSummary.value
-                ? `${payerImpactSummary.value.matchingRuleCount} matching rules in ${payerImpactSummary.value.currencyCode || selectedItem.value.currencyCode || defaultCurrencyCode.value}`
-                : 'Open History for contract reach and authorization pressure.',
-        },
-    ];
-});
 
-const itemWorkspacePostureCards = computed(() => {
-    if (!selectedItem.value) return [];
-
-    return [
-        {
-            key: 'version',
-            label: 'Current version',
-            value: `v${selectedItem.value.versionNumber || 1}`,
-            helper: formatMoney(selectedItem.value.basePrice, selectedItem.value.currencyCode),
-        },
-        {
-            key: 'clinical-link',
-            label: 'Clinical linkage',
-            value: clinicalCatalogLinkLabel(selectedItem.value),
-            helper: clinicalCatalogLinkDetail(selectedItem.value),
-        },
-        {
-            key: 'lifecycle',
-            label: 'Price window',
-            value: tariffLifecycleLabel(selectedItem.value.effectiveFrom, selectedItem.value.effectiveTo),
-            helper: tariffWindowLabel(selectedItem.value.effectiveFrom, selectedItem.value.effectiveTo),
-        },
-        {
-            key: 'governance',
-            label: 'Status',
-            value: formatEnumLabel(selectedItem.value.status),
-            helper: selectedItem.value.statusReason || 'No status reason recorded',
-        },
-        {
-            key: 'impact',
-            label: 'Contract reach',
-            value: payerImpactSummary.value
-                ? `${payerImpactSummary.value.activeContractCount} active contracts`
-                : 'Contract context pending',
-            helper: payerImpactSummary.value
-                ? `${payerImpactSummary.value.matchingRuleCount} matching rules and ${payerImpactSummary.value.preAuthorizationContractCount} pre-auth defaults`
-                : 'Price History loads contract reach and authorization pressure.',
-        },
-    ];
-});
-
-const revisionDraftReady = computed(() => revisionForm.basePrice.trim() !== '' && revisionForm.effectiveFrom.trim() !== '');
-
-const revisionDraftSummary = computed(() => {
-    const basePrice = revisionForm.basePrice.trim();
-    const effectiveFrom = toApiDateTime(revisionForm.effectiveFrom);
-    const effectiveTo = toApiDateTime(revisionForm.effectiveTo);
-
-    if (!basePrice && !effectiveFrom && !effectiveTo) {
-        return 'No new price version drafted';
-    }
-
-    return `${formatMoney(basePrice || null, selectedItem.value?.currencyCode || editForm.currencyCode || defaultCurrencyCode.value)} | ${tariffWindowLabel(effectiveFrom, effectiveTo)}`;
-});
-
-const statusSummaryCards = computed(() => {
-    if (!selectedItem.value) return [];
-
-    return [
-        {
-            key: 'current',
-            label: 'Current status',
-            value: formatEnumLabel(selectedItem.value.status),
-            helper: selectedItem.value.statusReason || 'No status reason recorded',
-        },
-        {
-            key: 'window',
-            label: 'Active window',
-            value: tariffLifecycleLabel(selectedItem.value.effectiveFrom, selectedItem.value.effectiveTo),
-            helper: tariffWindowLabel(selectedItem.value.effectiveFrom, selectedItem.value.effectiveTo),
-        },
-        {
-            key: 'next',
-            label: 'Change target',
-            value: formatEnumLabel(statusForm.status || selectedItem.value.status || 'active'),
-            helper: statusForm.reason.trim() || 'Add a reason when pausing or retiring a price.',
-        },
-    ];
-});
-
-const versionHistoryImpactSummary = computed(() => {
-    const versions = [...versionHistory.value];
-    const live = versions.find((version) => {
-        return (version.status ?? '').toLowerCase() === 'active'
-            && tariffLifecycleLabel(version.effectiveFrom, version.effectiveTo) === 'Effective window active';
-    }) ?? null;
-
-    const scheduled = versions
-        .filter((version) => tariffLifecycleLabel(version.effectiveFrom, version.effectiveTo) === 'Scheduled')
-        .sort((left, right) => {
-            const leftTime = left.effectiveFrom ? new Date(left.effectiveFrom).getTime() : Number.POSITIVE_INFINITY;
-            const rightTime = right.effectiveFrom ? new Date(right.effectiveFrom).getTime() : Number.POSITIVE_INFINITY;
-
-            return leftTime - rightTime;
-        })[0] ?? null;
-
-    const historical = versions
-        .filter((version) => tariffLifecycleLabel(version.effectiveFrom, version.effectiveTo) === 'Expired window')
-        .sort((left, right) => {
-            const leftTime = left.effectiveTo ? new Date(left.effectiveTo).getTime() : 0;
-            const rightTime = right.effectiveTo ? new Date(right.effectiveTo).getTime() : 0;
-
-            return rightTime - leftTime;
-        })[0] ?? null;
-
-    return [
-        {
-            key: 'live',
-            label: 'Current price',
-            emptyLabel: 'No active price window',
-            description: 'Price currently used by billing.',
-            item: live,
-        },
-        {
-            key: 'scheduled',
-            label: 'Next scheduled price',
-            emptyLabel: 'No scheduled revision',
-            description: 'Next price that will take over this service code.',
-            item: scheduled,
-        },
-        {
-            key: 'historical',
-            label: 'Latest previous price',
-            emptyLabel: 'No historical version',
-            description: 'Most recent replaced price in this service family.',
-            item: historical,
-        },
-    ];
-});
 
 const identityLoading = ref(false);
 const identityErrors = ref<Record<string, string[]>>({});
@@ -1076,7 +677,6 @@ const statusRequestKey = ref(generateRequestKey('billing-service-catalog-status'
 const statusForm = reactive({ status: 'active' as CatalogStatus, reason: '' });
 
 const auditLoading = ref(false);
-const auditExporting = ref(false);
 const auditError = ref<string | null>(null);
 const auditLogs = ref<CatalogAuditLog[]>([]);
 const auditMeta = ref<Pagination | null>(null);
@@ -1084,59 +684,6 @@ const auditFilters = reactive({ q: '', action: '', actorType: '', actorId: '', f
 
 function firstError(errors: Record<string, string[]> | null | undefined, key: string): string | null {
     return errors?.[key]?.[0] ?? null;
-}
-
-function toDateTimeInput(value: string | null): string {
-    if (!value) return '';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-    return local.toISOString().slice(0, 16);
-}
-
-function datePartFromDateTimeInput(value: string): string {
-    const normalized = value.trim();
-    if (!normalized) return '';
-    const splitIndex = normalized.indexOf('T');
-    return splitIndex >= 0 ? normalized.slice(0, splitIndex) : normalized.slice(0, 10);
-}
-
-function timePartFromDateTimeInput(value: string): string {
-    const normalized = value.trim();
-    if (!normalized) return '';
-    const splitIndex = normalized.indexOf('T');
-    if (splitIndex < 0) return '';
-    return normalized.slice(splitIndex + 1, splitIndex + 6);
-}
-
-function mergeDateAndTimeInput(datePart: string, timePart: string, fallbackTime: string): string {
-    const normalizedDate = datePart.trim();
-    if (!normalizedDate) return '';
-
-    const normalizedTime = timePart.trim() || fallbackTime;
-    return `${normalizedDate}T${normalizedTime}`;
-}
-
-function toApiDateTime(value: string): string | null {
-    const normalized = value.trim();
-    if (!normalized) return null;
-    const date = new Date(normalized);
-    if (Number.isNaN(date.getTime())) return null;
-    return date.toISOString();
-}
-
-function formatDateTime(value: string | null): string {
-    if (!value) return 'N/A';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-    });
 }
 
 function formatMoney(value: string | null, currencyCode: string | null): string {
@@ -1151,43 +698,6 @@ function formatMoney(value: string | null, currencyCode: string | null): string 
     })} ${currencyCode || defaultCurrencyCode.value}`;
 }
 
-function tariffWindowLabel(effectiveFrom: string | null, effectiveTo: string | null): string {
-    if (!effectiveFrom && !effectiveTo) return 'No effective window configured';
-    if (effectiveFrom && !effectiveTo) return `Effective from ${formatDateTime(effectiveFrom)}`;
-    if (!effectiveFrom && effectiveTo) return `Valid until ${formatDateTime(effectiveTo)}`;
-
-    return `${formatDateTime(effectiveFrom)} to ${formatDateTime(effectiveTo)}`;
-}
-
-function windowRangeValidationMessage(effectiveFromInput: string, effectiveToInput: string): string | null {
-    const effectiveFrom = toApiDateTime(effectiveFromInput);
-    const effectiveTo = toApiDateTime(effectiveToInput);
-
-    if (!effectiveFrom || !effectiveTo) return null;
-
-    const fromTime = new Date(effectiveFrom).getTime();
-    const toTime = new Date(effectiveTo).getTime();
-    if (!Number.isFinite(fromTime) || !Number.isFinite(toTime)) return null;
-
-    if (toTime <= fromTime) {
-        return 'Effective to must be later than effective from.';
-    }
-
-    return null;
-}
-
-function tariffLifecycleLabel(effectiveFrom: string | null, effectiveTo: string | null): string {
-    const now = new Date();
-    const from = effectiveFrom ? new Date(effectiveFrom) : null;
-    const to = effectiveTo ? new Date(effectiveTo) : null;
-
-    if (from && !Number.isNaN(from.getTime()) && from > now) return 'Scheduled';
-    if (to && !Number.isNaN(to.getTime()) && to < now) return 'Expired window';
-    if (from || to) return 'Effective window active';
-
-    return 'No window';
-}
-
 function tariffLifecycleVariant(effectiveFrom: string | null, effectiveTo: string | null): 'outline' | 'secondary' | 'destructive' {
     const label = tariffLifecycleLabel(effectiveFrom, effectiveTo);
     if (label === 'Scheduled') return 'outline';
@@ -1196,82 +706,6 @@ function tariffLifecycleVariant(effectiveFrom: string | null, effectiveTo: strin
     return 'secondary';
 }
 
-function versionFamilyRole(version: CatalogItem, selectedVersionId: string | null): string {
-    if (String(version.id ?? '') === selectedVersionId) {
-        return 'Current view';
-    }
-
-    const lifecycle = tariffLifecycleLabel(version.effectiveFrom, version.effectiveTo);
-    if (lifecycle === 'Scheduled') return 'Scheduled revision';
-    if (version.supersedesBillingServiceCatalogItemId) return 'Revision';
-    if (lifecycle === 'Expired window') return 'Historical price';
-
-    return 'Base version';
-}
-
-function versionFamilyRoleVariant(version: CatalogItem, selectedVersionId: string | null): 'secondary' | 'outline' | 'destructive' {
-    const role = versionFamilyRole(version, selectedVersionId);
-    if (role === 'Current view') return 'secondary';
-    if (role === 'Historical price') return 'destructive';
-
-    return 'outline';
-}
-
-function findSupersededVersionLabel(version: CatalogItem, history: CatalogItem[]): string | null {
-    const supersededId = String(version.supersedesBillingServiceCatalogItemId ?? '').trim();
-    if (!supersededId) return null;
-
-    const matched = history.find((candidate) => String(candidate.id ?? '') === supersededId);
-    if (!matched) return null;
-
-    return `Supersedes v${matched.versionNumber || 1}`;
-}
-
-function compareVersionToPrevious(version: CatalogItem, history: CatalogItem[]): string | null {
-    const currentVersion = version.versionNumber ?? 1;
-    const previous = history.find((candidate) => (candidate.versionNumber ?? 0) === currentVersion - 1);
-    if (!previous) return null;
-
-    const currentPrice = Number.parseFloat(version.basePrice ?? '');
-    const previousPrice = Number.parseFloat(previous.basePrice ?? '');
-    if (!Number.isFinite(currentPrice) || !Number.isFinite(previousPrice)) {
-        return `Based on v${previous.versionNumber || 1}`;
-    }
-
-    const delta = currentPrice - previousPrice;
-    if (delta === 0) {
-        return `No price change vs v${previous.versionNumber || 1}`;
-    }
-
-    const deltaLabel = Math.abs(delta).toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    });
-
-    return `${delta > 0 ? '+' : '-'}${deltaLabel} vs v${previous.versionNumber || 1}`;
-}
-
-function versionSummaryBadgeText(version: CatalogItem | null): string {
-    if (!version) return 'Unavailable';
-
-    return `v${version.versionNumber || 1}`;
-}
-
-function normalizeServiceCode(value: string): string {
-    return value.trim().toUpperCase();
-}
-
-function formatCoverageRange(min: number | null, max: number | null): string {
-    if (min === null || max === null) {
-        return 'No contract coverage defaults';
-    }
-
-    if (min === max) {
-        return `${min.toFixed(0)}% default coverage`;
-    }
-
-    return `${min.toFixed(0)}%-${max.toFixed(0)}% default coverage`;
-}
 
 function resetCreateCatalogForm(): void {
     createForm.identitySource = 'clinical';
@@ -1355,71 +789,8 @@ function confirmCreateCatalogDiscard(): void {
     closeCreateSheet();
 }
 
-function applyFiltersFromSheet(): void {
-    filtersSheetOpen.value = false;
-    search();
-}
-
-function resetFiltersFromSheet(): void {
-    filtersSheetOpen.value = false;
-    resetFilters();
-}
-
-function applyCatalogListModePreset(
-    mode: 'all' | 'active' | 'scheduled' | 'review' | 'retired',
-): void {
-    if (mode === 'all') {
-        filters.status = '';
-        filters.lifecycle = '';
-    } else if (mode === 'active') {
-        filters.status = 'active';
-        filters.lifecycle = '';
-    } else if (mode === 'scheduled') {
-        filters.status = '';
-        filters.lifecycle = 'scheduled';
-    } else if (mode === 'review') {
-        filters.status = 'inactive';
-        filters.lifecycle = '';
-    } else {
-        filters.status = 'retired';
-        filters.lifecycle = '';
-    }
-
-    filters.page = 1;
-    void loadItems();
-}
-
-function catalogListModeIsActive(
-    mode: 'all' | 'active' | 'scheduled' | 'review' | 'retired',
-): boolean {
-    if (mode === 'all') {
-        return filters.status === '' && filters.lifecycle === '';
-    }
-
-    if (mode === 'active') {
-        return filters.status === 'active' && filters.lifecycle === '';
-    }
-
-    if (mode === 'scheduled') {
-        return filters.status === '' && filters.lifecycle === 'scheduled';
-    }
-
-    if (mode === 'review') {
-        return filters.status === 'inactive' && filters.lifecycle === '';
-    }
-
-    return filters.status === 'retired' && filters.lifecycle === '';
-}
-
 function catalogStatusDotClass(item: CatalogItem): string {
-    const lifecycle = tariffLifecycleLabel(item.effectiveFrom, item.effectiveTo);
-    if (lifecycle === 'Scheduled') return 'bg-blue-500';
-
-    const status = String(item.status ?? '').toLowerCase();
-    if (status === 'active') return 'bg-emerald-500';
-    if (status === 'inactive') return 'bg-amber-500';
-    if (status === 'retired') return 'bg-rose-500';
-    return 'bg-slate-400';
+    return catalogStatusDotClassFn(item);
 }
 
 function goToPage(page: number): void {
@@ -1427,50 +798,11 @@ function goToPage(page: number): void {
     void loadItems();
 }
 
-function statusVariant(status: string | null): 'outline' | 'secondary' | 'destructive' {
-    const normalized = (status ?? '').toLowerCase();
-    if (normalized === 'active') return 'secondary';
-    if (normalized === 'inactive' || normalized === 'retired') return 'destructive';
-    return 'outline';
-}
-
-function boolLabel(value: boolean | null): string {
-    if (value === null) return 'N/A';
-    return value ? 'Yes' : 'No';
-}
 
 function parseBoolean(value: string): boolean | null {
     if (value === 'true') return true;
     if (value === 'false') return false;
     return null;
-}
-
-function parseDecimalOrNull(value: string): number | null | 'invalid' {
-    const normalized = value.trim();
-    if (!normalized) return null;
-    const parsed = Number.parseFloat(normalized);
-    if (!Number.isFinite(parsed) || parsed < 0) return 'invalid';
-    return parsed;
-}
-
-function metadataObject(value: unknown): Record<string, unknown> | null {
-    if (value === null || value === undefined) return null;
-    if (Array.isArray(value)) return null;
-    if (typeof value !== 'object') return null;
-    if (Object.keys(value as Record<string, unknown>).length === 0) return null;
-
-    return value as Record<string, unknown>;
-}
-
-function metadataHasContent(value: unknown): boolean {
-    return metadataObject(value) !== null;
-}
-
-function metadataToFormText(value: unknown): string {
-    const object = metadataObject(value);
-    if (!object) return '';
-
-    return JSON.stringify(object, null, 2);
 }
 
 function metadataValuesEqual(stored: unknown, formText: string): boolean {
@@ -1480,18 +812,6 @@ function metadataValuesEqual(stored: unknown, formText: string): boolean {
     return JSON.stringify(metadataObject(stored)) === JSON.stringify(parsed);
 }
 
-function parseMetadata(value: string): Record<string, unknown> | null | 'invalid' {
-    const normalized = value.trim();
-    if (!normalized) return null;
-
-    try {
-        const parsed = JSON.parse(normalized) as unknown;
-        if (parsed === null || Array.isArray(parsed) || typeof parsed !== 'object') return 'invalid';
-        return parsed as Record<string, unknown>;
-    } catch {
-        return 'invalid';
-    }
-}
 function applyCurrencyDefaults(): void {
     const currencyCode = defaultCurrencyCode.value;
 
@@ -1532,89 +852,6 @@ const createEffectiveToTime = computed({
     },
 });
 
-const editEffectiveFromDate = computed({
-    get: () => datePartFromDateTimeInput(editForm.effectiveFrom),
-    set: (value: string) => {
-        editForm.effectiveFrom = mergeDateAndTimeInput(value, timePartFromDateTimeInput(editForm.effectiveFrom), '00:00');
-    },
-});
-
-const editEffectiveFromTime = computed({
-    get: () => timePartFromDateTimeInput(editForm.effectiveFrom),
-    set: (value: string) => {
-        editForm.effectiveFrom = mergeDateAndTimeInput(datePartFromDateTimeInput(editForm.effectiveFrom), value, '00:00');
-    },
-});
-
-const editEffectiveToDate = computed({
-    get: () => datePartFromDateTimeInput(editForm.effectiveTo),
-    set: (value: string) => {
-        editForm.effectiveTo = mergeDateAndTimeInput(value, timePartFromDateTimeInput(editForm.effectiveTo), '23:59');
-    },
-});
-
-const editEffectiveToTime = computed({
-    get: () => timePartFromDateTimeInput(editForm.effectiveTo),
-    set: (value: string) => {
-        editForm.effectiveTo = mergeDateAndTimeInput(datePartFromDateTimeInput(editForm.effectiveTo), value, '23:59');
-    },
-});
-
-const revisionEffectiveFromDate = computed({
-    get: () => datePartFromDateTimeInput(revisionForm.effectiveFrom),
-    set: (value: string) => {
-        revisionForm.effectiveFrom = mergeDateAndTimeInput(value, timePartFromDateTimeInput(revisionForm.effectiveFrom), '00:00');
-    },
-});
-
-const revisionEffectiveFromTime = computed({
-    get: () => timePartFromDateTimeInput(revisionForm.effectiveFrom),
-    set: (value: string) => {
-        revisionForm.effectiveFrom = mergeDateAndTimeInput(datePartFromDateTimeInput(revisionForm.effectiveFrom), value, '00:00');
-    },
-});
-
-const revisionEffectiveToDate = computed({
-    get: () => datePartFromDateTimeInput(revisionForm.effectiveTo),
-    set: (value: string) => {
-        revisionForm.effectiveTo = mergeDateAndTimeInput(value, timePartFromDateTimeInput(revisionForm.effectiveTo), '23:59');
-    },
-});
-
-const revisionEffectiveToTime = computed({
-    get: () => timePartFromDateTimeInput(revisionForm.effectiveTo),
-    set: (value: string) => {
-        revisionForm.effectiveTo = mergeDateAndTimeInput(datePartFromDateTimeInput(revisionForm.effectiveTo), value, '23:59');
-    },
-});
-
-const auditFromDate = computed({
-    get: () => datePartFromDateTimeInput(auditFilters.from),
-    set: (value: string) => {
-        auditFilters.from = mergeDateAndTimeInput(value, timePartFromDateTimeInput(auditFilters.from), '00:00');
-    },
-});
-
-const auditFromTime = computed({
-    get: () => timePartFromDateTimeInput(auditFilters.from),
-    set: (value: string) => {
-        auditFilters.from = mergeDateAndTimeInput(datePartFromDateTimeInput(auditFilters.from), value, '00:00');
-    },
-});
-
-const auditToDate = computed({
-    get: () => datePartFromDateTimeInput(auditFilters.to),
-    set: (value: string) => {
-        auditFilters.to = mergeDateAndTimeInput(value, timePartFromDateTimeInput(auditFilters.to), '23:59');
-    },
-});
-
-const auditToTime = computed({
-    get: () => timePartFromDateTimeInput(auditFilters.to),
-    set: (value: string) => {
-        auditFilters.to = mergeDateAndTimeInput(datePartFromDateTimeInput(auditFilters.to), value, '23:59');
-    },
-});
 
 const hasPendingIdentityWorkflow = computed(() => {
     const item = selectedItem.value;
@@ -1655,13 +892,6 @@ const hasPendingPricingWorkflow = computed(() => {
     );
 });
 
-const showEditTechnicalMetadata = computed(() => (
-    metadataHasContent(selectedItem.value?.metadata) || editForm.metadataText.trim() !== ''
-));
-
-const showRevisionTechnicalMetadata = computed(() => (
-    metadataHasContent(selectedItem.value?.metadata) || revisionForm.metadataText.trim() !== ''
-));
 
 const hasPendingRevisionWorkflow = computed(() => {
     const item = selectedItem.value;
@@ -1764,11 +994,6 @@ function resetDetailsSecondaryData(): void {
     auditLogs.value = [];
     auditMeta.value = null;
     Object.assign(auditFilters, { q: '', action: '', actorType: '', actorId: '', from: '', to: '', perPage: 20, page: 1 });
-}
-
-function syncItemInList(updated: CatalogItem): void {
-    const index = items.value.findIndex((entry) => entry.id === updated.id);
-    if (index >= 0) items.value[index] = updated;
 }
 
 let createFamilyPreviewRequestSequence = 0;
@@ -1966,6 +1191,23 @@ async function loadStatusCounts(): Promise<void> {
     }
 }
 
+async function loadServiceTypeCounts(): Promise<void> {
+    try {
+        const response = await apiRequest<ServiceTypeCountResponse>('GET', '/billing-service-catalog/items/service-type-counts', {
+            query: {
+                q: filters.q.trim() || null,
+                departmentId: filters.departmentId.trim() || null,
+                currencyCode: filters.currencyCode.trim().toUpperCase() || null,
+                lifecycle: filters.lifecycle || null,
+            },
+        });
+
+        serviceTypeCounts.value = response.data ?? { total: 0 };
+    } catch {
+        serviceTypeCounts.value = { total: 0 };
+    }
+}
+
 async function loadDepartments(): Promise<void> {
     departmentsLoading.value = true;
 
@@ -2016,6 +1258,7 @@ async function loadItems(): Promise<void> {
                 },
             }),
             loadStatusCounts(),
+            loadServiceTypeCounts(),
         ]);
 
         items.value = listResponse.data ?? [];
@@ -2030,16 +1273,6 @@ async function loadItems(): Promise<void> {
     }
 }
 
-function search(): void {
-    filters.page = 1;
-    void loadItems();
-}
-
-function updateCatalogServiceTypeFilter(value: string): void {
-    filters.serviceType = value === '__none__' ? '' : value;
-    filters.page = 1;
-    void loadItems();
-}
 
 function updateCatalogDepartmentFilter(value: string): void {
     filters.departmentId = value.trim();
@@ -2061,7 +1294,7 @@ function updateCatalogSortDirFilter(value: string): void {
 
 function updateCatalogPerPageFilter(value: string): void {
     const parsed = Number.parseInt(value, 10);
-    filters.perPage = Number.isFinite(parsed) ? parsed : 10;
+    filters.perPage = Number.isFinite(parsed) ? parsed : 50;
     filters.page = 1;
     void loadItems();
 }
@@ -2278,7 +1511,7 @@ async function submitBulkStatusDialog(): Promise<void> {
         notifySuccess(`Updated ${response.meta.updated} billable service${response.meta.updated === 1 ? '' : 's'}.`);
         selectedItemIds.value = [];
         bulkStatusDialogOpen.value = false;
-        await Promise.all([loadItems(), loadStatusCounts()]);
+        await Promise.all([loadItems(), loadStatusCounts(), loadServiceTypeCounts()]);
     } catch (error) {
         bulkStatusError.value = messageFromUnknown(error, 'Unable to apply bulk status change.');
         notifyError(bulkStatusError.value);
@@ -2296,9 +1529,8 @@ function resetFilters(): void {
     filters.lifecycle = '';
     filters.sortBy = 'serviceName';
     filters.sortDir = 'asc';
-    filters.perPage = 10;
+    filters.perPage = 50;
     filters.page = 1;
-    filtersSheetOpen.value = false;
     void loadItems();
 }
 
@@ -2466,235 +1698,6 @@ function confirmDetailsDiscard(): void {
     closeDetails();
 }
 
-async function saveIdentity(): Promise<void> {
-    const itemId = String(selectedItem.value?.id ?? '').trim();
-    if (!itemId || !canManageIdentity.value || identityLoading.value) return;
-
-    identityLoading.value = true;
-    identityErrors.value = {};
-
-    const localErrors: Record<string, string[]> = {};
-    if (!editForm.serviceCode.trim()) localErrors.serviceCode = ['Service code is required.'];
-    if (!editForm.serviceName.trim()) localErrors.serviceName = ['Service name is required.'];
-
-    if (Object.keys(localErrors).length > 0) {
-        identityErrors.value = localErrors;
-        identityLoading.value = false;
-        return;
-    }
-
-    try {
-        const body: Record<string, unknown> = {
-            serviceCode: editForm.serviceCode.trim(),
-            serviceName: editForm.serviceName.trim(),
-            serviceType: editForm.serviceType.trim() || null,
-            unit: editForm.unit.trim() || null,
-            facilityTier: editForm.facilityTier.trim() || null,
-            codes: standardsCodesFromForm(editForm),
-        };
-
-        if (editForm.departmentId.trim()) {
-            body.departmentId = editForm.departmentId.trim();
-        } else if ((selectedItem.value?.departmentId ?? '').trim() !== '') {
-            body.departmentId = null;
-        }
-
-        const requestKey = identityRequestKey.value;
-        const response = await apiRequest<CatalogResponse>('PATCH', `/billing-service-catalog/items/${itemId}`, {
-            body,
-            entitlementContext: 'Billing service catalog identity update',
-            idempotencyKey: requestKey,
-            requestId: requestKey,
-        });
-
-        selectedItem.value = response.data;
-        hydrateEditForm(response.data);
-        syncItemInList(response.data);
-        rotateIdentityRequestKey();
-        await loadPayerImpact(String(response.data.id ?? itemId));
-        notifySuccess('Service details updated.');
-        await loadStatusCounts();
-    } catch (error) {
-        const apiError = error as Error & { status?: number; payload?: ValidationErrorResponse };
-        if (apiError.status === 422 && apiError.payload?.errors) {
-            identityErrors.value = apiError.payload.errors;
-        } else {
-            notifyError(messageFromUnknown(error, 'Unable to update service details.'));
-        }
-    } finally {
-        identityLoading.value = false;
-    }
-}
-
-async function savePricing(): Promise<void> {
-    const itemId = String(selectedItem.value?.id ?? '').trim();
-    if (!itemId || !canManagePricing.value || pricingLoading.value) return;
-
-    pricingLoading.value = true;
-    pricingErrors.value = {};
-
-    const basePrice = parseDecimalOrNull(editForm.basePrice);
-    const taxRatePercent = parseDecimalOrNull(editForm.taxRatePercent);
-    const metadata = parseMetadata(editForm.metadataText);
-
-    const localErrors: Record<string, string[]> = {};
-    if (basePrice === null || basePrice === 'invalid') localErrors.basePrice = ['Base price must be a valid non-negative number.'];
-    if (!editForm.currencyCode.trim()) localErrors.currencyCode = ['Currency code is required.'];
-    if (taxRatePercent === 'invalid') localErrors.taxRatePercent = ['Tax rate must be a valid non-negative number.'];
-    if (metadata === 'invalid') localErrors.metadata = ['System integration notes must be a valid JSON object.'];
-    if (editTariffWindowValidationMessage.value) localErrors.effectiveTo = [editTariffWindowValidationMessage.value];
-
-    if (Object.keys(localErrors).length > 0) {
-        pricingErrors.value = localErrors;
-        pricingLoading.value = false;
-        return;
-    }
-
-    try {
-        const requestKey = pricingRequestKey.value;
-        const response = await apiRequest<CatalogResponse>('PATCH', `/billing-service-catalog/items/${itemId}`, {
-            body: {
-                basePrice,
-                currencyCode: editForm.currencyCode.trim().toUpperCase(),
-                taxRatePercent,
-                isTaxable: parseBoolean(editForm.isTaxable),
-                effectiveFrom: toApiDateTime(editForm.effectiveFrom),
-                effectiveTo: toApiDateTime(editForm.effectiveTo),
-                description: editForm.description.trim() || null,
-                priceUnit: editForm.priceUnit.trim() || null,
-                unitsPerPack: editForm.unitsPerPack.trim() ? Number.parseInt(editForm.unitsPerPack.trim(), 10) : null,
-                metadata,
-            },
-            entitlementContext: 'Billing service catalog pricing update',
-            idempotencyKey: requestKey,
-            requestId: requestKey,
-        });
-
-        selectedItem.value = response.data;
-        hydrateEditForm(response.data);
-        syncItemInList(response.data);
-        rotatePricingRequestKey();
-        await loadPayerImpact(String(response.data.id ?? itemId));
-        notifySuccess('Service pricing updated.');
-        await loadStatusCounts();
-    } catch (error) {
-        const apiError = error as Error & { status?: number; payload?: ValidationErrorResponse };
-        if (apiError.status === 422 && apiError.payload?.errors) {
-            pricingErrors.value = apiError.payload.errors;
-        } else {
-            notifyError(messageFromUnknown(error, 'Unable to update service pricing.'));
-        }
-    } finally {
-        pricingLoading.value = false;
-    }
-}
-
-async function saveStatus(): Promise<void> {
-    const itemId = String(selectedItem.value?.id ?? '').trim();
-    if (!itemId || !canManagePricing.value || statusLoading.value) return;
-
-    statusLoading.value = true;
-    statusErrors.value = {};
-
-    const reason = statusForm.reason.trim();
-    if ((statusForm.status === 'inactive' || statusForm.status === 'retired') && !reason) {
-        statusErrors.value = { reason: ['Reason is required when status is inactive or retired.'] };
-        statusLoading.value = false;
-        return;
-    }
-
-    try {
-        const requestKey = statusRequestKey.value;
-        const response = await apiRequest<CatalogResponse>('PATCH', `/billing-service-catalog/items/${itemId}/status`, {
-            body: {
-                status: statusForm.status,
-                reason: reason || null,
-            },
-            entitlementContext: 'Billing service catalog status update',
-            idempotencyKey: requestKey,
-            requestId: requestKey,
-        });
-
-        selectedItem.value = response.data;
-        hydrateEditForm(response.data);
-        syncItemInList(response.data);
-        rotateStatusRequestKey();
-        await loadPayerImpact(String(response.data.id ?? itemId));
-        notifySuccess('Service catalog item status updated.');
-        await loadStatusCounts();
-    } catch (error) {
-        const apiError = error as Error & { status?: number; payload?: ValidationErrorResponse };
-        if (apiError.status === 422 && apiError.payload?.errors) {
-            statusErrors.value = apiError.payload.errors;
-        } else {
-            notifyError(messageFromUnknown(error, 'Unable to update service catalog item status.'));
-        }
-    } finally {
-        statusLoading.value = false;
-    }
-}
-
-async function createRevision(): Promise<void> {
-    const itemId = String(selectedItem.value?.id ?? '').trim();
-    if (!itemId || !canManagePricing.value || revisionLoading.value) return;
-
-    revisionLoading.value = true;
-    revisionErrors.value = {};
-
-    const basePrice = parseDecimalOrNull(revisionForm.basePrice);
-    const taxRatePercent = parseDecimalOrNull(revisionForm.taxRatePercent);
-    const metadata = parseMetadata(revisionForm.metadataText);
-
-    const localErrors: Record<string, string[]> = {};
-    if (basePrice === null || basePrice === 'invalid') localErrors.basePrice = ['Revision base price must be a valid non-negative number.'];
-    if (!revisionForm.effectiveFrom.trim()) localErrors.effectiveFrom = ['Revision effective from is required.'];
-    if (taxRatePercent === 'invalid') localErrors.taxRatePercent = ['Tax rate must be a valid non-negative number.'];
-    if (metadata === 'invalid') localErrors.metadata = ['System integration notes must be a valid JSON object.'];
-    if (revisionWindowValidationMessage.value) localErrors.effectiveTo = [revisionWindowValidationMessage.value];
-
-    if (Object.keys(localErrors).length > 0) {
-        revisionErrors.value = localErrors;
-        revisionLoading.value = false;
-        return;
-    }
-
-    try {
-        const requestKey = revisionRequestKey.value;
-        const response = await apiRequest<CatalogResponse>('POST', `/billing-service-catalog/items/${itemId}/revisions`, {
-            body: {
-                basePrice,
-                taxRatePercent: taxRatePercent === null ? null : taxRatePercent,
-                isTaxable: parseBoolean(revisionForm.isTaxable),
-                effectiveFrom: toApiDateTime(revisionForm.effectiveFrom),
-                effectiveTo: toApiDateTime(revisionForm.effectiveTo),
-                description: revisionForm.description.trim() || null,
-                metadata,
-            },
-            entitlementContext: 'Billing service catalog revision create',
-            idempotencyKey: requestKey,
-            requestId: requestKey,
-        });
-
-        selectedItem.value = response.data;
-        hydrateEditForm(response.data);
-        hydrateRevisionForm(response.data);
-        rotateRevisionRequestKey();
-        await loadVersionHistory(String(response.data.id ?? itemId));
-        await loadPayerImpact(String(response.data.id ?? itemId));
-        notifySuccess('Price version created.');
-        await loadItems();
-        await loadStatusCounts();
-    } catch (error) {
-        const apiError = error as Error & { status?: number; payload?: ValidationErrorResponse };
-        if (apiError.status === 422 && apiError.payload?.errors) {
-            revisionErrors.value = apiError.payload.errors;
-        } else {
-            notifyError(messageFromUnknown(error, 'Unable to create the new price version.'));
-        }
-    } finally {
-        revisionLoading.value = false;
-    }
-}
 
 async function loadVersionHistory(itemId: string): Promise<void> {
     versionHistoryLoading.value = true;
@@ -2732,18 +1735,6 @@ async function loadPayerImpact(itemId: string): Promise<void> {
     }
 }
 
-function openVersionFromHistory(version: CatalogItem): void {
-    const itemId = String(version.id ?? '').trim();
-    if (!itemId || itemId === String(selectedItem.value?.id ?? '').trim()) {
-        return;
-    }
-
-    detailsTab.value = 'overview';
-    detailsError.value = null;
-    resetDetailsSecondaryData();
-    seedDetailsWorkspace(version);
-    void loadDetails(itemId);
-}
 
 async function loadAuditLogs(page = 1): Promise<void> {
     if (!canViewAudit.value) return;
@@ -2780,49 +1771,6 @@ async function loadAuditLogs(page = 1): Promise<void> {
     }
 }
 
-function resetAuditFilters(): void {
-    Object.assign(auditFilters, { q: '', action: '', actorType: '', actorId: '', from: '', to: '', perPage: 20, page: 1 });
-    void loadAuditLogs(1);
-}
-
-async function exportAuditLogs(): Promise<void> {
-    if (!canViewAudit.value || auditExporting.value) return;
-
-    const itemId = String(selectedItem.value?.id ?? '').trim();
-    if (!itemId) return;
-
-    auditExporting.value = true;
-
-    try {
-        const { blob, filename } = await apiGetBlob(`/billing-service-catalog/items/${itemId}/audit-logs/export`, {
-            query: {
-                q: auditFilters.q.trim() || null,
-                action: auditFilters.action.trim() || null,
-                actorType: auditFilters.actorType || null,
-                actorId: auditFilters.actorId.trim() || null,
-                from: toApiDateTime(auditFilters.from),
-                to: toApiDateTime(auditFilters.to),
-            },
-            entitlementContext: 'Billing service catalog audit export',
-        });
-
-        const downloadName = filename ?? `billing-service-catalog-audit-${itemId}.csv`;
-        const objectUrl = window.URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = objectUrl;
-        anchor.download = downloadName;
-        document.body.append(anchor);
-        anchor.click();
-        anchor.remove();
-        window.URL.revokeObjectURL(objectUrl);
-
-        notifySuccess('Audit CSV prepared.');
-    } catch (error) {
-        notifyError(messageFromUnknown(error, 'Unable to export audit CSV.'));
-    } finally {
-        auditExporting.value = false;
-    }
-}
 
 onMounted(async () => {
     await loadCountryProfile();
@@ -2925,9 +1873,24 @@ watch(
         }
     },
 );
+
+let searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+    () => filters.q,
+    () => {
+        if (searchDebounceHandle !== null) {
+            clearTimeout(searchDebounceHandle);
+        }
+        searchDebounceHandle = setTimeout(() => {
+            filters.page = 1;
+            void loadItems();
+        }, 300);
+    },
+);
 </script>
 <template>
-    <Head title="Tariffs & services" />
+    <Head title="Billing Service Catalog" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-hidden rounded-lg p-4 md:p-6">
@@ -2942,7 +1905,7 @@ watch(
                         </div>
                         <div class="min-w-0 space-y-0.5">
                             <div class="flex flex-wrap items-center gap-2">
-                                <h1 class="text-base font-semibold tracking-tight md:text-lg">Tariffs &amp; services</h1>
+                                <h1 class="text-base font-semibold tracking-tight md:text-lg">Billing Service Catalog</h1>
                                 <Badge
                                     v-if="catalogReadOnly"
                                     variant="outline"
@@ -2977,7 +1940,7 @@ watch(
                         </Button>
                         <Button v-if="canManagePricing" size="sm" variant="outline" class="h-8 gap-1.5" @click="billingSyncDialogOpen = true">
                             <AppIcon name="book-open" class="size-3.5" />
-                            Sync from catalog
+                            Sync from Clinical Catalog
                         </Button>
                         <DropdownMenu>
                             <DropdownMenuTrigger as-child>
@@ -2993,7 +1956,7 @@ watch(
                                     </Link>
                                 </DropdownMenuItem>
                                 <DropdownMenuItem as-child>
-                                    <Link href="/inventory-procurement/workspace" class="gap-2">
+                                    <Link :href="INVENTORY_PROCUREMENT_STOCK_CONTROL_PATH" class="gap-2">
                                         <AppIcon name="package" class="size-4" />
                                         Inventory items
                                     </Link>
@@ -3084,7 +2047,7 @@ watch(
                             >
                                 <AlertTitle class="text-amber-900 dark:text-amber-200">Clinical catalog unavailable</AlertTitle>
                                 <AlertDescription class="text-xs text-amber-800 dark:text-amber-300">
-                                    Add care definitions in Clinical Care Catalogs first, or switch to standalone for billing-only services.
+                                    Add care definitions in Clinical Catalog first, or switch to standalone for billing-only services.
                                 </AlertDescription>
                             </Alert>
 
@@ -3541,183 +2504,239 @@ watch(
                 <Card class="flex flex-col rounded-lg border-sidebar-border/70 shadow-sm">
                     <div class="flex flex-col gap-3 border-b px-4 py-3">
                         <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                            <div class="min-w-0">
-                                <h3 class="flex items-center gap-2 text-sm font-semibold leading-none">
-                                    <AppIcon name="receipt" class="size-4 text-primary" />
-                                    Billable services
-                                </h3>
+                            <div class="min-w-0 shrink-0">
+                                <div class="flex items-center gap-2">
+                                    <h3 class="flex items-center gap-2 text-sm font-semibtold leading-none whitespace-nowrap">
+                                        <AppIcon name="receipt" class="size-4 text-primary" />
+                                        Billable services
+                                    </h3>
+                                    <Badge variant="secondary" class="h-5 px-1.5 text-[10px] tabular-nums">
+                                        {{ pagination?.total ?? items.length }}
+                                    </Badge>
+                                </div>
                                 <p class="mt-1 text-xs text-muted-foreground">
-                                    {{ pagination?.total ?? items.length }} in scope · {{ listFilterHintText }}
+                                    {{ listFilterHintText }}
                                 </p>
                             </div>
-                            <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
-                                <SearchInput
+                            <div class="flex min-w-0 items-center gap-2">
+                                 <SearchInput
                                     v-model="filters.q"
                                     placeholder="Search code, name, type, or department"
-                                    class="min-w-0 flex-1 text-xs [&_input]:h-8"
-                                    @keyup.enter="search"
+                                    class="w-80 min-w-0 text-xs [&_input]:h-8"
                                 />
-                                                        <Select
-                                                            :model-value="filterServiceTypeSelectValue"
-                                                            @update:model-value="(value: AcceptableValue) => updateCatalogServiceTypeFilter(String(value as string))"
-                                                        >
-                                    <SelectTrigger class="h-8 w-full min-w-[10rem] text-xs sm:w-[11rem]">
-                                        <SelectValue placeholder="All types" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="__none__">All types</SelectItem>
-                                        <SelectItem v-for="option in serviceTypeOptions" :key="option" :value="option">
-                                            {{ formatEnumLabel(option) }}
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    class="h-8 gap-1.5 rounded-lg text-xs"
-                                    :disabled="catalogExporting"
-                                    @click="exportCatalogItemsCsv"
-                                >
-                                    <AppIcon :name="catalogExporting ? 'loader-circle' : 'download'" :class="catalogExporting ? 'size-3.5 animate-spin' : 'size-3.5'" />
-                                    Export
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    class="h-8 gap-1.5 rounded-lg text-xs"
-                                    :disabled="catalogPrinting || catalogShowInitialSkeleton || listLoading"
-                                    @click="printCatalogItems"
-                                >
-                                    <AppIcon :name="catalogPrinting ? 'loader-circle' : 'printer'" :class="catalogPrinting ? 'size-3.5 animate-spin' : 'size-3.5'" />
-                                    Print
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    class="h-8 gap-1.5 rounded-lg text-xs"
-                                    @click="filtersSheetOpen = true"
-                                >
-                                    <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                    Filters
-                                    <Badge v-if="catalogActiveFilterCount > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">
-                                        {{ catalogActiveFilterCount }}
-                                    </Badge>
-                                </Button>
+                                <div class="flex shrink-0 items-center gap-1.5">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        class="h-8 gap-1.5 rounded-lg text-xs"
+                                        :disabled="catalogExporting"
+                                        @click="exportCatalogItemsCsv"
+                                    >
+                                        <AppIcon :name="catalogExporting ? 'loader-circle' : 'download'" :class="catalogExporting ? 'size-3.5 animate-spin' : 'size-3.5'" />
+                                        Export
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        class="h-8 gap-1.5 rounded-lg text-xs"
+                                        :disabled="catalogPrinting || catalogShowInitialSkeleton || listLoading"
+                                        @click="printCatalogItems"
+                                    >
+                                        <AppIcon :name="catalogPrinting ? 'loader-circle' : 'printer'" :class="catalogPrinting ? 'size-3.5 animate-spin' : 'size-3.5'" />
+                                        Print
+                                    </Button>
+                                    <Popover>
+                                        <PopoverTrigger as-child>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                class="h-8 gap-1.5 rounded-lg text-xs"
+                                            >
+                                                <AppIcon name="sliders-horizontal" class="size-3.5" />
+                                                Filters
+                                                <Badge v-if="catalogActiveFilterCount > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">
+                                                    {{ catalogActiveFilterCount }}
+                                                </Badge>
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent align="end" class="z-50 w-80 space-y-3">
+                                            <div class="grid gap-3">
+                                                <div class="grid gap-2">
+                                                    <Label for="catalog-filter-q">Search</Label>
+                                                    <Input
+                                                        id="catalog-filter-q"
+                                                        v-model="filters.q"
+                                                        placeholder="Code, name, type, department"
+                                                    />
+                                                </div>
+                                                <ComboboxField
+                                                    input-id="catalog-filter-department"
+                                                    label="Department"
+                                                    :model-value="filters.departmentId"
+                                                    @update:model-value="updateCatalogDepartmentFilter"
+                                                    :options="filterDepartmentOptions"
+                                                    placeholder="All departments"
+                                                    search-placeholder="Search department code or name"
+                                                    :empty-text="createDepartmentEmptyText"
+                                                />
+                                                <div class="grid gap-2">
+                                                    <Label for="catalog-filter-currency">Currency</Label>
+                                                    <Input
+                                                        id="catalog-filter-currency"
+                                                        v-model="filters.currencyCode"
+                                                        maxlength="3"
+                                                        :placeholder="defaultCurrencyCode"
+                                                    />
+                                                </div>
+                                                <Separator />
+                                                <div class="grid gap-2">
+                                                    <Label for="catalog-filter-sort-by">Sort by</Label>
+                                                    <Select :model-value="filterSortBySelectValue" @update:model-value="updateCatalogSortByFilter">
+                                                        <SelectTrigger id="catalog-filter-sort-by" class="w-full">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="serviceName">Service name</SelectItem>
+                                                            <SelectItem value="serviceCode">Service code</SelectItem>
+                                                            <SelectItem value="serviceType">Service type</SelectItem>
+                                                            <SelectItem value="department">Department</SelectItem>
+                                                            <SelectItem value="basePrice">Base price</SelectItem>
+                                                            <SelectItem value="currencyCode">Currency</SelectItem>
+                                                            <SelectItem value="status">Status</SelectItem>
+                                                            <SelectItem value="effectiveFrom">Effective from</SelectItem>
+                                                            <SelectItem value="updatedAt">Updated</SelectItem>
+                                                            <SelectItem value="createdAt">Created</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div class="grid gap-2">
+                                                    <Label for="catalog-filter-sort-dir">Direction</Label>
+                                                    <Select :model-value="filterSortDirSelectValue" @update:model-value="updateCatalogSortDirFilter">
+                                                        <SelectTrigger id="catalog-filter-sort-dir" class="w-full">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="asc">Ascending</SelectItem>
+                                                            <SelectItem value="desc">Descending</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div class="grid gap-2">
+                                                    <Label for="catalog-filter-per-page">Per page</Label>
+                                                    <Select :model-value="filterPerPageSelectValue" @update:model-value="updateCatalogPerPageFilter">
+                                                        <SelectTrigger id="catalog-filter-per-page" class="w-full">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                             <SelectItem value="50">50</SelectItem>
+                                                             <SelectItem value="100">100</SelectItem>
+                                                             <SelectItem value="150">150</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div class="flex gap-2">
+                                                    <Button size="sm" variant="outline" class="flex-1 gap-1.5" :disabled="listLoading" @click="resetFilters">
+                                                        Reset
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
                             </div>
                         </div>
                         <div
-                            v-if="canUseBulkSelection"
-                            class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed bg-muted/20 px-3 py-2"
+                            v-if="canUseBulkSelection && selectedCount > 0"
+                            class="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2"
                         >
-                            <label class="flex items-center gap-2 text-xs text-muted-foreground">
-                                <Checkbox
-                                    id="billing-service-catalog-select-page"
-                                    :checked="allVisibleSelected as boolean"
-                                    :disabled="pageItemIds.length === 0 || bulkStatusBusy"
-                                    @update:checked="toggleSelectAllVisible"
-                                />
-                                Select page
-                            </label>
-                            <div class="flex flex-wrap items-center gap-2">
-                                <span class="text-xs text-muted-foreground">{{ selectedCount }} selected</span>
+                            <div class="flex items-center gap-2">
+                                <label class="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <Checkbox
+                                        id="billing-service-catalog-select-page"
+                                        :checked="allVisibleSelected as boolean"
+                                        :disabled="pageItemIds.length === 0 || bulkStatusBusy"
+                                        @update:checked="toggleSelectAllVisible"
+                                    />
+                                    <span class="font-medium text-foreground">{{ selectedCount }} selected</span>
+                                </label>
                                 <Button
                                     size="sm"
-                                    variant="secondary"
-                                    class="h-8"
-                                    :disabled="selectedCount === 0 || bulkStatusBusy"
-                                    @click="openBulkStatusDialog('active')"
-                                >
-                                    Activate
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    class="h-8"
-                                    :disabled="selectedCount === 0 || bulkStatusBusy"
-                                    @click="openBulkStatusDialog('inactive')"
-                                >
-                                    Deactivate
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    class="h-8"
-                                    :disabled="selectedCount === 0 || bulkStatusBusy"
-                                    @click="openBulkStatusDialog('retired')"
-                                >
-                                    Retire
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    class="h-8"
-                                    :disabled="selectedCount === 0 || bulkStatusBusy"
+                                    variant="ghost"
+                                    class="h-6 px-2 text-xs"
+                                    :disabled="bulkStatusBusy"
                                     @click="clearSelectedItems"
                                 >
                                     Clear
                                 </Button>
                             </div>
+                            <div class="flex items-center gap-1.5">
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    class="h-7 gap-1 text-xs"
+                                    :disabled="bulkStatusBusy"
+                                    @click="openBulkStatusDialog('active')"
+                                >
+                                    <AppIcon name="check-circle" class="size-3" />
+                                    Activate
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    class="h-7 gap-1 text-xs"
+                                    :disabled="bulkStatusBusy"
+                                    @click="openBulkStatusDialog('inactive')"
+                                >
+                                    <AppIcon name="pause" class="size-3" />
+                                    Deactivate
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    class="h-7 gap-1 text-xs"
+                                    :disabled="bulkStatusBusy"
+                                    @click="openBulkStatusDialog('retired')"
+                                >
+                                    <AppIcon name="trash-2" class="size-3" />
+                                    Retire
+                                </Button>
+                            </div>
                         </div>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <button
-                                type="button"
-                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                                :class="{ 'border-primary bg-primary/5': catalogListModeIsActive('all') }"
-                                @click="applyCatalogListModePreset('all')"
+                        <div>
+                            <Tabs
+                                :model-value="activeServiceTypeTab"
+                                class="w-full"
+                                @update:model-value="setActiveServiceTypeTab"
                             >
-                                <span class="inline-block h-2 w-2 rounded-full bg-slate-400" />
-                                <span class="font-medium tabular-nums">{{ statusCounts.total }}</span>
-                                <span class="text-muted-foreground">All</span>
-                            </button>
-                            <button
-                                type="button"
-                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                                :class="{ 'border-primary bg-primary/5': catalogListModeIsActive('active') }"
-                                @click="applyCatalogListModePreset('active')"
-                            >
-                                <span class="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-                                <span class="font-medium tabular-nums">{{ statusCounts.active }}</span>
-                                <span class="text-muted-foreground">Active</span>
-                            </button>
-                            <button
-                                type="button"
-                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                                :class="{ 'border-primary bg-primary/5': catalogListModeIsActive('scheduled') }"
-                                @click="applyCatalogListModePreset('scheduled')"
-                            >
-                                <span class="inline-block h-2 w-2 rounded-full bg-blue-500" />
-                                <span class="text-muted-foreground">Scheduled</span>
-                            </button>
-                            <button
-                                type="button"
-                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                                :class="{ 'border-primary bg-primary/5': catalogListModeIsActive('review') }"
-                                @click="applyCatalogListModePreset('review')"
-                            >
-                                <span class="inline-block h-2 w-2 rounded-full bg-amber-500" />
-                                <span class="font-medium tabular-nums">{{ statusCounts.inactive }}</span>
-                                <span class="text-muted-foreground">Review</span>
-                            </button>
-                            <button
-                                type="button"
-                                class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                                :class="{ 'border-primary bg-primary/5': catalogListModeIsActive('retired') }"
-                                @click="applyCatalogListModePreset('retired')"
-                            >
-                                <span class="inline-block h-2 w-2 rounded-full bg-rose-500" />
-                                <span class="font-medium tabular-nums">{{ statusCounts.retired }}</span>
-                                <span class="text-muted-foreground">Retired</span>
+                                <TabsList
+                                    class="grid h-9 w-full grid-cols-6 gap-1 bg-muted/40 p-1 sm:grid-cols-11"
+                                >
+                                    <TabsTrigger
+                                        v-for="tab in SERVICE_TYPE_TABS"
+                                        :key="tab.value"
+                                        :value="tab.value"
+                                        class="gap-1.5 rounded-md border border-transparent px-2 text-muted-foreground data-[state=active]:border-primary/40 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-sm dark:data-[state=active]:border-primary/60 dark:data-[state=active]:bg-primary/25 dark:data-[state=active]:text-primary-foreground"
+                                    >
+                                        <span class="flex items-center gap-1 leading-none">
+                                            <AppIcon :name="tab.icon" class="size-3" />
+                                            {{ tab.label }}
+                                        </span>
+                                        <Badge variant="secondary" class="h-5 min-w-5 justify-center px-1 text-[10px] tabular-nums">
+                                            {{ serviceTypeCounts[tab.value === '__all__' ? 'all' : tab.value] ?? 0 }}
+                                        </Badge>
+                                    </TabsTrigger>
+                                </TabsList>
+                            </Tabs>
+                        </div>
+                        <div v-if="catalogActiveFilterChips.length > 0" class="flex flex-wrap items-center gap-1.5 px-4 py-2">
+                            <span class="text-[11px] text-muted-foreground">Filters:</span>
+                            <Badge v-for="chip in catalogActiveFilterChips" :key="`catalog-filter-${chip}`" variant="outline" class="text-[11px]">
+                                {{ chip }}
+                            </Badge>
+                            <button class="ml-1 text-[11px] text-muted-foreground underline-offset-2 hover:underline" @click="resetFilters">
+                                Clear all
                             </button>
                         </div>
-                    </div>
-                    <div v-if="catalogActiveFilterChips.length > 0" class="flex flex-wrap items-center gap-1.5 border-b px-4 py-2">
-                        <span class="text-[11px] text-muted-foreground">Filters:</span>
-                        <Badge v-for="chip in catalogActiveFilterChips" :key="`catalog-filter-${chip}`" variant="outline" class="text-[11px]">
-                            {{ chip }}
-                        </Badge>
-                        <button class="ml-1 text-[11px] text-muted-foreground underline-offset-2 hover:underline" @click="resetFilters">
-                            Clear all
-                        </button>
                     </div>
                     <CardContent class="flex flex-col overflow-hidden p-0">
                     <div v-if="listError" class="p-4">
@@ -3748,7 +2767,7 @@ watch(
                                             Updating the list with your current filters.
                                         </template>
                                         <template v-else-if="catalogActiveFilterCount === 0 && (pagination?.total ?? 0) === 0">
-                                            Start from Clinical Care Catalog, then register linked tariffs here so finance does not duplicate service codes.
+                                            Start from Clinical Catalog, then register linked tariffs here so finance does not duplicate service codes.
                                         </template>
                                         <template v-else>
                                             Adjust or clear filters to widen the catalog.
@@ -3772,7 +2791,7 @@ watch(
                                     </Button>
                                     <Button v-if="canManagePricing" size="sm" variant="outline" class="h-8 gap-1.5" @click="billingSyncDialogOpen = true">
                                         <AppIcon name="book-open" class="size-3.5" />
-                                        Sync from catalog
+                                        Sync from Clinical Catalog
                                     </Button>
                                 </div>
                             </div>
@@ -3803,24 +2822,26 @@ watch(
                                             <span class="truncate text-sm font-medium transition-colors hover:text-primary">
                                                 {{ item.serviceName || 'Unnamed service' }}
                                             </span>
-                                            <span class="shrink-0 text-xs text-muted-foreground">{{ item.serviceCode || 'No code' }}</span>
-                                            <span class="shrink-0 text-xs font-medium tabular-nums text-foreground">
-                                                {{ formatMoney(item.basePrice, item.currencyCode) }}
+                                            <span class="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                                {{ item.serviceCode || '—' }}
+                                            </span>
+                                            <span v-if="item.serviceType && item.department !== formatEnumLabel(item.serviceType)" class="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                                                {{ formatEnumLabel(item.serviceType) }}
                                             </span>
                                         </div>
                                     </template>
                                     <template #meta>
-                                        <p class="truncate text-xs text-muted-foreground">
-                                            {{ item.serviceType ? formatEnumLabel(item.serviceType) : 'Type not set' }}
-                                            <span class="text-border"> · </span>
-                                            {{ item.department || 'No department' }}
-                                            <span class="text-border"> · </span>
-                                            v{{ item.versionNumber || 1 }}
-                                            <span class="text-border"> · </span>
-                                            {{ tariffLifecycleLabel(item.effectiveFrom, item.effectiveTo) }}
-                                            <span class="text-border"> · </span>
-                                            {{ clinicalCatalogLinkLabel(item) }}
-                                        </p>
+                                        <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                                            <span class="font-medium tabular-nums text-foreground">
+                                                {{ formatMoney(item.basePrice, item.currencyCode) }}
+                                            </span>
+                                            <span class="text-border">·</span>
+                                            <span>{{ item.department || 'No department' }}</span>
+                                            <span class="text-border">·</span>
+                                            <span class="text-muted-foreground/70">v{{ item.versionNumber || 1 }}</span>
+                                            <span class="text-border">·</span>
+                                            <span>{{ tariffLifecycleLabel(item.effectiveFrom, item.effectiveTo) }}</span>
+                                        </div>
                                     </template>
                                     <template #badges>
                                         <CatalogLinkBadge
@@ -3881,142 +2902,12 @@ watch(
                 </CardContent>
             </Card>
 
-            <Sheet :open="filtersSheetOpen" @update:open="filtersSheetOpen = $event">
-                <SheetContent side="right" variant="form" size="2xl" class="flex h-full min-h-0 flex-col">
-                    <SheetHeader>
-                        <SheetTitle class="flex items-center gap-2">
-                            <AppIcon name="sliders-horizontal" class="size-4 text-muted-foreground" />
-                            Catalog filters
-                        </SheetTitle>
-                        <SheetDescription>Narrow the price list without crowding the registry.</SheetDescription>
-                    </SheetHeader>
-                    <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-                        <div class="rounded-lg border p-3">
-                            <div class="grid gap-3">
-                                <div class="grid gap-2">
-                                    <Label for="catalog-filter-q">Search</Label>
-                                    <Input
-                                        id="catalog-filter-q"
-                                        v-model="filters.q"
-                                        placeholder="Code, name, type, department"
-                                        @keyup.enter="applyFiltersFromSheet"
-                                    />
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="catalog-filter-type">Service type</Label>
-                                    <Select
-                                        :model-value="filterServiceTypeSelectValue"
-                                        @update:model-value="updateCatalogServiceTypeFilter"
-                                    >
-                                        <SelectTrigger id="catalog-filter-type" class="w-full">
-                                            <SelectValue placeholder="All types" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="__none__">All types</SelectItem>
-                                            <SelectItem v-for="option in serviceTypeOptions" :key="option" :value="option">
-                                                {{ formatEnumLabel(option) }}
-                                            </SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <ComboboxField
-                                    input-id="catalog-filter-department"
-                                    label="Department"
-                                    :model-value="filters.departmentId"
-                                    @update:model-value="updateCatalogDepartmentFilter"
-                                    :options="filterDepartmentOptions"
-                                    placeholder="All departments"
-                                    search-placeholder="Search department code or name"
-                                    helper-text="Limit results to one hospital department."
-                                    :empty-text="createDepartmentEmptyText"
-                                />
-                                <div class="grid gap-2">
-                                    <Label for="catalog-filter-currency">Currency</Label>
-                                    <Input
-                                        id="catalog-filter-currency"
-                                        v-model="filters.currencyCode"
-                                        maxlength="3"
-                                        :placeholder="defaultCurrencyCode"
-                                        @keyup.enter="applyFiltersFromSheet"
-                                    />
-                                </div>
-                                <Separator />
-                                <div class="grid gap-2">
-                                    <Label for="catalog-filter-sort-by">Sort by</Label>
-                                    <Select
-                                        :model-value="filterSortBySelectValue"
-                                        @update:model-value="updateCatalogSortByFilter"
-                                    >
-                                        <SelectTrigger id="catalog-filter-sort-by" class="w-full">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="serviceName">Service name</SelectItem>
-                                            <SelectItem value="serviceCode">Service code</SelectItem>
-                                            <SelectItem value="serviceType">Service type</SelectItem>
-                                            <SelectItem value="department">Department</SelectItem>
-                                            <SelectItem value="basePrice">Base price</SelectItem>
-                                            <SelectItem value="currencyCode">Currency</SelectItem>
-                                            <SelectItem value="status">Status</SelectItem>
-                                            <SelectItem value="effectiveFrom">Effective from</SelectItem>
-                                            <SelectItem value="updatedAt">Updated</SelectItem>
-                                            <SelectItem value="createdAt">Created</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="catalog-filter-sort-dir">Direction</Label>
-                                    <Select
-                                        :model-value="filterSortDirSelectValue"
-                                        @update:model-value="updateCatalogSortDirFilter"
-                                    >
-                                        <SelectTrigger id="catalog-filter-sort-dir" class="w-full">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="asc">Ascending</SelectItem>
-                                            <SelectItem value="desc">Descending</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div class="grid gap-2">
-                                    <Label for="catalog-filter-per-page">Results per page</Label>
-                                    <Select
-                                        :model-value="filterPerPageSelectValue"
-                                        @update:model-value="updateCatalogPerPageFilter"
-                                    >
-                                        <SelectTrigger id="catalog-filter-per-page" class="w-full">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="10">10</SelectItem>
-                                            <SelectItem value="15">15</SelectItem>
-                                            <SelectItem value="25">25</SelectItem>
-                                            <SelectItem value="50">50</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <SheetFooter class="gap-2 border-t px-4 py-3">
-                        <Button :disabled="listLoading" class="gap-1.5" @click="applyFiltersFromSheet">
-                            <AppIcon name="search" class="size-3.5" />
-                            Apply filters
-                        </Button>
-                        <Button variant="outline" :disabled="listLoading && catalogActiveFilterCount === 0" @click="resetFiltersFromSheet">
-                            Reset filters
-                        </Button>
-                    </SheetFooter>
-                </SheetContent>
-            </Sheet>
-
             <Sheet :open="detailsOpen" @update:open="requestDetailsOpenChange">
-                <SheetContent side="right" variant="workspace" size="6xl">
+                <SheetContent side="right" variant="workspace" size="3xl">
                     <SheetHeader class="shrink-0 border-b px-6 py-4 text-left pr-12">
-                        <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                        <div class="flex flex-col gap-3">
                             <div class="space-y-1">
-                                <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Service price</p>
+                                <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Service price summary</p>
                                 <SheetTitle>{{ selectedItem?.serviceName || 'Service price details' }}</SheetTitle>
                                 <SheetDescription>
                                     {{ selectedItem?.serviceCode || selectedItem?.id || 'Service code pending' }} | {{ clinicalCatalogLinkLabel(selectedItem) }}
@@ -4035,722 +2926,98 @@ watch(
                                 <Badge v-if="selectedItem" :variant="selectedItem.clinicalCatalogItemId ? 'secondary' : 'outline'">
                                     {{ clinicalCatalogLinkLabel(selectedItem) }}
                                 </Badge>
-                                <Button size="sm" variant="outline" as-child class="gap-1.5">
-                                    <Link href="/billing-payer-contracts">
-                                        <AppIcon name="shield-check" class="size-3.5" />
-                                        Payer contracts
-                                    </Link>
-                                </Button>
                             </div>
-                        </div>
-                        <div v-if="selectedItem?.supersedesBillingServiceCatalogItemId" class="mt-2 text-xs text-muted-foreground">
-                            This version replaces an earlier price version in the same service family.
-                        </div>
-                        <div v-if="selectedItem" class="mt-3 flex flex-wrap items-stretch gap-2">
-                            <div
-                                v-for="card in detailsWorkspaceSummaryCards"
-                                :key="card.key"
-                                class="min-w-[180px] flex-1 rounded-lg border bg-background/70 px-3 py-2.5"
-                            >
-                                <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{{ card.label }}</p>
-                                <p class="mt-1 text-sm font-semibold">{{ card.value }}</p>
-                                <p class="mt-1 text-xs text-muted-foreground">{{ card.helper }}</p>
+                            <div v-if="selectedItem?.supersedesBillingServiceCatalogItemId" class="text-xs text-muted-foreground">
+                                This version replaces an earlier price version in the same service family.
                             </div>
                         </div>
                     </SheetHeader>
 
-                    <div class="min-h-0 flex-1 overflow-hidden">
-                        <Tabs v-if="selectedItem" v-model="detailsTab" class="flex h-full min-h-0 flex-col">
-                            <div class="border-b bg-muted/5 px-4 py-2.5">
-                                <TabsList class="flex h-auto w-full flex-wrap justify-start gap-2 bg-transparent p-0">
-                                    <TabsTrigger value="overview" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Overview</TabsTrigger>
-                                    <TabsTrigger value="current" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Current Price</TabsTrigger>
-                                    <TabsTrigger v-if="canManagePricing" value="version" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">New Version</TabsTrigger>
-                                    <TabsTrigger value="history" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Price History</TabsTrigger>
-                                    <TabsTrigger value="status" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Status</TabsTrigger>
-                                    <TabsTrigger v-if="canViewAudit" value="audit" class="rounded-md border px-3 py-1.5 data-[state=active]:border-primary/40 data-[state=active]:bg-background">Audit</TabsTrigger>
-                                </TabsList>
+                    <ScrollArea class="min-h-0 flex-1">
+                        <div v-if="selectedItem" class="space-y-5 p-5">
+                            <!-- Price highlight -->
+                            <div class="rounded-lg border bg-primary/5 px-4 py-3.5">
+                                <div class="flex items-baseline justify-between gap-4">
+                                    <div class="min-w-0">
+                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Current base price</p>
+                                        <p class="mt-0.5 text-2xl font-bold tracking-tight text-primary">{{ formatMoney(selectedItem.basePrice, selectedItem.currencyCode) }}</p>
+                                    </div>
+                                    <div class="shrink-0 text-right">
+                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Version</p>
+                                        <p class="mt-0.5 text-lg font-semibold">v{{ selectedItem.versionNumber || 1 }}</p>
+                                    </div>
+                                </div>
+                                <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                    <span>{{ tariffWindowLabel(selectedItem.effectiveFrom, selectedItem.effectiveTo) }}</span>
+                                    <span>·</span>
+                                    <span>{{ tariffLifecycleLabel(selectedItem.effectiveFrom, selectedItem.effectiveTo) }}</span>
+                                    <span v-if="selectedItem.taxRatePercent">·</span>
+                                    <span v-if="selectedItem.taxRatePercent">{{ selectedItem.taxRatePercent }}% tax</span>
+                                </div>
                             </div>
 
-                            <ScrollArea class="min-h-0 flex-1">
-                                <div class="space-y-4 p-4">
-                                    <Alert v-if="detailsError" variant="destructive">
-                                        <AlertTitle>Details sync issue</AlertTitle>
-                                        <AlertDescription>{{ detailsError }}</AlertDescription>
-                                    </Alert>
-
-                                    <TabsContent value="overview" class="space-y-3">
-                                        <div class="space-y-3">
-                                            <div class="rounded-lg border border-dashed bg-muted/10 p-3">
-                                                <div class="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-                                                    <div>
-                                                        <p class="text-sm font-medium">Clinical linkage</p>
-                                                        <p class="text-xs text-muted-foreground">This shows whether the billing price is linked to a clinical care definition or remains billing-only.</p>
-                                                    </div>
-                                                    <Badge :variant="selectedItem?.clinicalCatalogItemId ? 'secondary' : 'outline'">
-                                                        {{ clinicalCatalogLinkLabel(selectedItem) }}
-                                                    </Badge>
-                                                </div>
-                                                <div v-if="detailsClinicalLinkagePending" class="mt-3 space-y-2">
-                                                    <Skeleton class="h-4 w-56" />
-                                                    <Skeleton class="h-3 w-full max-w-md" />
-                                                </div>
-                                                <template v-else>
-                                                    <p class="mt-3 text-sm font-medium">{{ selectedItem?.clinicalCatalogItem?.name || 'No linked clinical definition' }}</p>
-                                                    <p class="mt-1 text-xs text-muted-foreground">{{ clinicalCatalogLinkDetail(selectedItem) }}</p>
-                                                </template>
-                                            </div>
-
-                                            <Alert v-if="!detailsLoading && (selectedItem?.linkWarning || (selectedItem?.standardsWarnings?.length ?? 0) > 0)">
-                                                <AlertTitle>Governance review</AlertTitle>
-                                                <AlertDescription class="space-y-1">
-                                                    <p v-if="selectedItem?.linkWarning">{{ selectedItem.linkWarning }}</p>
-                                                    <p v-for="warning in selectedItem?.standardsWarnings ?? []" :key="warning">{{ warning }}</p>
-                                                </AlertDescription>
-                                            </Alert>
-
-                                            <div class="rounded-lg border p-3">
-                                                <div class="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-                                                    <div>
-                                                        <p class="text-sm font-medium">Service identity</p>
-                                                        <p class="text-xs text-muted-foreground">Keep this record stable for pricing, payer rules, and any linked clinical care definition.</p>
-                                                    </div>
-                                                    <div class="rounded-lg border bg-muted/10 px-3 py-2 text-sm">
-                                                        <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                                            <span>{{ editForm.serviceCode || 'Code not set' }}</span>
-                                                            <span class="text-muted-foreground">|</span>
-                                                            <span>{{ editForm.serviceType ? formatEnumLabel(editForm.serviceType) : 'Type not set' }}</span>
-                                                            <span class="text-muted-foreground">|</span>
-                                                            <span>{{ editDepartmentSummary || 'Department not set' }}</span>
-                                                            <span class="text-muted-foreground">|</span>
-                                                            <span>{{ editForm.unit ? formatEnumLabel(editForm.unit) : 'Unit not set' }}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div class="mt-3 grid gap-3 md:grid-cols-3">
-                                                    <FormFieldShell input-id="edit-price-service-code" label="Service code" :error-message="firstError(identityErrors, 'serviceCode')">
-                                                        <Input id="edit-price-service-code" v-model="editForm.serviceCode" :disabled="!canManageIdentity" />
-                                                    </FormFieldShell>
-                                                    <FormFieldShell input-id="edit-price-service-name" label="Service name" container-class="md:col-span-2" :error-message="firstError(identityErrors, 'serviceName')">
-                                                        <Input id="edit-price-service-name" v-model="editForm.serviceName" :disabled="!canManageIdentity" />
-                                                    </FormFieldShell>
-                                                    <FormFieldShell input-id="edit-price-service-type" label="Service type">
-                                                        <Select v-model="editServiceTypeSelectValue" @update:model-value="(value: AcceptableValue) => updateCatalogServiceTypeFilter(String(value as string))">
-                                                            <SelectTrigger id="edit-price-service-type" class="w-full" :disabled="!canManageIdentity">
-                                                                <SelectValue placeholder="Select type" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="__none__">Select type</SelectItem>
-                                                                <SelectItem v-for="option in serviceTypeOptions" :key="option" :value="option">{{ formatEnumLabel(option) }}</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </FormFieldShell>
-                                                    <ComboboxField
-                                                        input-id="edit-price-department"
-                                                        label="Department"
-                                                        v-model="editForm.departmentId"
-                                                        :options="editDepartmentOptions"
-                                                        placeholder="Select department"
-                                                        search-placeholder="Search department code or name"
-                                                        :helper-text="editDepartmentHelperText"
-                                                        :error-message="firstError(identityErrors, 'departmentId')"
-                                                        :empty-text="editDepartmentEmptyText"
-                                                        :disabled="!canManageIdentity"
-                                                    />
-                                                    <FormFieldShell input-id="edit-price-unit" label="Billing unit">
-                                                        <Select v-model="editUnitSelectValue">
-                                                            <SelectTrigger id="edit-price-unit" class="w-full" :disabled="!canManageIdentity">
-                                                                <SelectValue placeholder="Select unit" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="__none__">Select unit</SelectItem>
-                                                                <SelectItem v-for="option in editUnitOptions" :key="option" :value="option">{{ formatEnumLabel(option) }}</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </FormFieldShell>
-                                                    <FormFieldShell input-id="edit-price-pharmacy-unit" label="Pharmacy unit" v-if="editForm.serviceType === 'pharmacy'">
-                                                        <Select v-model="editPriceUnitSelectValue">
-                                                            <SelectTrigger id="edit-price-pharmacy-unit" class="w-full" :disabled="!canManageIdentity">
-                                                                <SelectValue placeholder="Select unit" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="__none__">No pharmacy unit</SelectItem>
-                                                                <SelectItem v-for="option in pharmacyUnitOptions" :key="option" :value="option">{{ formatEnumLabel(option) }}</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </FormFieldShell>
-                                                    <FormFieldShell input-id="edit-price-units-per-pack" label="Units per pack" v-if="editForm.serviceType === 'pharmacy'">
-                                                        <Input id="edit-price-units-per-pack" v-model="editForm.unitsPerPack" inputmode="numeric" :disabled="!canManageIdentity" placeholder="e.g. 30" />
-                                                    </FormFieldShell>
-                                                </div>
-                                                <details class="mt-3 rounded-lg border bg-muted/10 p-3">
-                                                    <summary class="cursor-pointer text-sm font-medium">Advanced / Standards</summary>
-                                                    <div class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                                        <FormFieldShell input-id="edit-price-facility-tier" label="Minimum facility tier">
-                                                                <Select
-                                                                    :disabled="!canManageIdentity"
-                                                                    :model-value="editForm.facilityTier || '__none__'"
-                                                                    @update:model-value="(value: AcceptableValue) => { editForm.facilityTier = value === '__none__' ? '' : String(value as string); }"
-                                                                >
-                                                                <SelectTrigger id="edit-price-facility-tier" class="w-full">
-                                                                    <SelectValue placeholder="All tiers" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    <SelectItem value="__none__">All tiers</SelectItem>
-                                                                    <SelectItem v-for="tier in facilityTierOptions" :key="tier.value" :value="tier.value">{{ tier.label }}</SelectItem>
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </FormFieldShell>
-                                                        <FormFieldShell input-id="edit-price-local-code" label="Local code"><Input id="edit-price-local-code" v-model="editForm.standardsLocal" :disabled="!canManageIdentity" placeholder="Internal code" /></FormFieldShell>
-                                                        <FormFieldShell input-id="edit-price-nhif-code" label="NHIF code"><Input id="edit-price-nhif-code" v-model="editForm.standardsNhif" :disabled="!canManageIdentity" placeholder="NHIF tariff code" /></FormFieldShell>
-                                                        <FormFieldShell input-id="edit-price-msd-code" label="MSD code"><Input id="edit-price-msd-code" v-model="editForm.standardsMsd" :disabled="!canManageIdentity" placeholder="MSD reference" /></FormFieldShell>
-                                                        <FormFieldShell input-id="edit-price-loinc-code" label="LOINC"><Input id="edit-price-loinc-code" v-model="editForm.standardsLoinc" :disabled="!canManageIdentity" placeholder="Lab standard" /></FormFieldShell>
-                                                        <FormFieldShell input-id="edit-price-snomed-code" label="SNOMED CT"><Input id="edit-price-snomed-code" v-model="editForm.standardsSnomedCt" :disabled="!canManageIdentity" placeholder="Clinical concept" /></FormFieldShell>
-                                                        <FormFieldShell input-id="edit-price-cpt-code" label="CPT"><Input id="edit-price-cpt-code" v-model="editForm.standardsCpt" :disabled="!canManageIdentity" placeholder="Optional procedure code" /></FormFieldShell>
-                                                        <FormFieldShell input-id="edit-price-icd-code" label="ICD"><Input id="edit-price-icd-code" v-model="editForm.standardsIcd" :disabled="!canManageIdentity" placeholder="Optional diagnosis link" /></FormFieldShell>
-                                                    </div>
-                                                </details>
-                                            </div>
-
-                                            <div class="rounded-lg border p-3">
-                                                <div class="mb-3 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-                                                    <div>
-                                                        <p class="text-sm font-medium">Price overview</p>
-                                                        <p class="text-xs text-muted-foreground">Review the current price state before editing.</p>
-                                                    </div>
-                                                    <Button size="sm" variant="outline" @click="detailsTab = 'history'">Open history</Button>
-                                                </div>
-                                                <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                                                    <div
-                                                        v-for="card in itemWorkspacePostureCards"
-                                                        :key="card.key"
-                                                        class="rounded-lg border bg-muted/10 px-3 py-2"
-                                                    >
-                                                        <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{{ card.label }}</p>
-                                                        <p class="mt-1 text-sm font-semibold">{{ card.value }}</p>
-                                                        <p class="mt-1 text-xs text-muted-foreground">{{ card.helper }}</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                            <p class="text-xs text-muted-foreground">Updated {{ formatDateTime(selectedItem.updatedAt) }}</p>
-                                            <div class="flex items-center gap-2">
-                                                <Button v-if="canManagePricing" size="sm" variant="outline" @click="detailsTab = 'version'">Open new version</Button>
-                                                <Button v-if="canManageIdentity" :disabled="identityLoading" @click="saveIdentity">{{ identityLoading ? 'Saving...' : 'Save service details' }}</Button>
-                                            </div>
-                                        </div>
-                                    </TabsContent>
-                                    <TabsContent value="current" class="space-y-3">
-                                        <div class="rounded-lg border p-3">
-                                            <div class="mb-3 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-                                                <div>
-                                                    <p class="text-sm font-medium">Current price setup</p>
-                                                    <p class="text-xs text-muted-foreground">Manage the live base price, tax posture, active window, and notes.</p>
-                                                </div>
-                                                <Button v-if="canManagePricing" size="sm" variant="outline" @click="detailsTab = 'version'">Open new version</Button>
-                                            </div>
-                                            <div class="rounded-lg border bg-muted/10 px-3 py-2 text-sm">
-                                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                                    <span>{{ formatMoney(editForm.basePrice || null, editForm.currencyCode || null) }}</span>
-                                                    <span class="text-muted-foreground">|</span>
-                                                    <span>{{ editForm.taxRatePercent?.trim() ? `${editForm.taxRatePercent}%` : 'No tax rate' }} / {{ boolLabel(parseBoolean(editForm.isTaxable)) }}</span>
-                                                    <span class="text-muted-foreground">|</span>
-                                                    <span>{{ tariffWindowLabel(toApiDateTime(editForm.effectiveFrom), toApiDateTime(editForm.effectiveTo)) }}</span>
-                                                </div>
-                                            </div>
-                                            <div v-if="editTariffWindowValidationMessage" class="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                                                {{ editTariffWindowValidationMessage }}
-                                            </div>
-                                            <div class="mt-3 grid gap-3 md:grid-cols-4">
-                                                <FormFieldShell input-id="edit-price-base-price" label="Base price" :error-message="firstError(pricingErrors, 'basePrice')">
-                                                    <Input id="edit-price-base-price" v-model="editForm.basePrice" inputmode="decimal" :disabled="!canManagePricing" />
-                                                </FormFieldShell>
-                                                <FormFieldShell input-id="edit-price-currency" label="Currency" :error-message="firstError(pricingErrors, 'currencyCode')">
-                                                    <Input id="edit-price-currency" v-model="editForm.currencyCode" maxlength="3" :disabled="!canManagePricing" />
-                                                </FormFieldShell>
-                                                <FormFieldShell input-id="edit-price-tax-rate" label="Tax rate %" :error-message="firstError(pricingErrors, 'taxRatePercent')">
-                                                    <Input id="edit-price-tax-rate" v-model="editForm.taxRatePercent" inputmode="decimal" :disabled="!canManagePricing" />
-                                                </FormFieldShell>
-                                                <FormFieldShell input-id="edit-price-taxable" label="Taxable">
-                                                    <Select v-model="editTaxableSelectValue" @update:model-value="(value: AcceptableValue) => updateCatalogServiceTypeFilter(String(value as string))">
-                                                        <SelectTrigger id="edit-price-taxable" class="w-full" :disabled="!canManagePricing">
-                                                            <SelectValue placeholder="N/A" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="__none__">N/A</SelectItem>
-                                                            <SelectItem value="true">Yes</SelectItem>
-                                                            <SelectItem value="false">No</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </FormFieldShell>
-                                                <SingleDatePopoverField
-                                                    input-id="edit-price-effective-from-date"
-                                                    label="Effective from"
-                                                    v-model="editEffectiveFromDate"
-                                                    :disabled="!canManagePricing"
-                                                />
-                                                <TimePopoverField
-                                                    input-id="edit-price-effective-from-time"
-                                                    label="Start time"
-                                                    v-model="editEffectiveFromTime"
-                                                    :disabled="!canManagePricing"
-                                                />
-                                                <SingleDatePopoverField
-                                                    input-id="edit-price-effective-to-date"
-                                                    label="Effective to"
-                                                    v-model="editEffectiveToDate"
-                                                    :disabled="!canManagePricing"
-                                                />
-                                                <TimePopoverField
-                                                    input-id="edit-price-effective-to-time"
-                                                    label="End time"
-                                                    v-model="editEffectiveToTime"
-                                                    :disabled="!canManagePricing"
-                                                />
-                                                <div class="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground md:col-span-4">
-                                                    This tab manages the live base price only. Use payer contracts for insurer-specific pricing and use New Price Version whenever the amount or active window changes.
-                                                </div>
-                                                <FormFieldShell input-id="edit-price-description" label="Description" container-class="md:col-span-4">
-                                                    <Textarea id="edit-price-description" v-model="editForm.description" class="min-h-20" :disabled="!canManagePricing" />
-                                                </FormFieldShell>
-                                                <details
-                                                    v-if="showEditTechnicalMetadata"
-                                                    class="rounded-lg border border-dashed bg-muted/10 p-3 md:col-span-4"
-                                                >
-                                                    <summary class="cursor-pointer text-sm font-medium">System integration notes (technical)</summary>
-                                                    <p class="mt-2 text-xs text-muted-foreground">
-                                                        For IT or integration teams only. Hospital billing staff can ignore this section.
-                                                    </p>
-                                                    <FormFieldShell
-                                                        input-id="edit-price-metadata"
-                                                        label="Integration payload"
-                                                        container-class="mt-3"
-                                                        :error-message="firstError(pricingErrors, 'metadata')"
-                                                    >
-                                                        <Textarea id="edit-price-metadata" v-model="editForm.metadataText" class="min-h-24 font-mono text-xs" :disabled="!canManagePricing" />
-                                                    </FormFieldShell>
-                                                </details>
-                                            </div>
-                                        </div>
-                                        <div class="flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                            <p class="text-xs text-muted-foreground">Updated {{ formatDateTime(selectedItem.updatedAt) }}</p>
-                                            <div class="flex items-center gap-2">
-                                                <Button size="sm" variant="outline" @click="detailsTab = 'status'">Open status</Button>
-                                                <Button v-if="canManagePricing" :disabled="pricingLoading || Boolean(editTariffWindowValidationMessage)" @click="savePricing">{{ pricingLoading ? 'Saving...' : 'Save current price' }}</Button>
-                                            </div>
-                                        </div>
-                                    </TabsContent>
-                                    <TabsContent v-if="canManagePricing" value="version" class="space-y-3">
-                                        <div class="rounded-lg border p-3">
-                                            <div class="mb-3 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-                                                <div>
-                                                    <p class="text-sm font-medium">New price version</p>
-                                                    <p class="text-xs text-muted-foreground">Create the next price window without overwriting the current live version.</p>
-                                                </div>
-                                                <Badge :variant="revisionDraftReady ? 'secondary' : 'outline'">
-                                                    {{ revisionDraftReady ? 'Ready to create' : 'Setup in progress' }}
-                                                </Badge>
-                                            </div>
-                                            <div class="mb-3 rounded-lg border bg-muted/10 px-3 py-2.5">
-                                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                                                    <span><span class="font-medium text-muted-foreground">Current:</span> {{ formatMoney(selectedItem.basePrice, selectedItem.currencyCode) }}</span>
-                                                    <span class="text-muted-foreground">|</span>
-                                                    <span><span class="font-medium text-muted-foreground">Window:</span> {{ tariffWindowLabel(selectedItem.effectiveFrom, selectedItem.effectiveTo) }}</span>
-                                                    <span class="text-muted-foreground">|</span>
-                                                    <span><span class="font-medium text-muted-foreground">Draft:</span> {{ revisionDraftSummary }}</span>
-                                                </div>
-                                            </div>
-                                            <div class="grid gap-3 md:grid-cols-2">
-                                                <FormFieldShell input-id="revision-base-price" label="New base price" :error-message="firstError(revisionErrors, 'basePrice')">
-                                                    <Input id="revision-base-price" v-model="revisionForm.basePrice" inputmode="decimal" />
-                                                </FormFieldShell>
-                                                <div class="grid gap-3 sm:grid-cols-2">
-                                                    <SingleDatePopoverField
-                                                        input-id="revision-effective-from-date"
-                                                        label="New price starts"
-                                                        v-model="revisionEffectiveFromDate"
-                                                        :error-message="firstError(revisionErrors, 'effectiveFrom')"
-                                                    />
-                                                    <TimePopoverField
-                                                        input-id="revision-effective-from-time"
-                                                        label="Start time"
-                                                        v-model="revisionEffectiveFromTime"
-                                                    />
-                                                </div>
-                                                <FormFieldShell input-id="revision-tax-rate" label="Tax rate %" :error-message="firstError(revisionErrors, 'taxRatePercent')">
-                                                    <Input id="revision-tax-rate" v-model="revisionForm.taxRatePercent" inputmode="decimal" />
-                                                </FormFieldShell>
-                                                <div class="grid gap-3 sm:grid-cols-2">
-                                                    <SingleDatePopoverField
-                                                        input-id="revision-effective-to-date"
-                                                        label="New price ends"
-                                                        v-model="revisionEffectiveToDate"
-                                                        :error-message="firstError(revisionErrors, 'effectiveTo')"
-                                                    />
-                                                    <TimePopoverField
-                                                        input-id="revision-effective-to-time"
-                                                        label="End time"
-                                                        v-model="revisionEffectiveToTime"
-                                                    />
-                                                </div>
-                                                <FormFieldShell input-id="revision-taxable" label="Taxable">
-                                                    <Select v-model="revisionTaxableSelectValue">
-                                                        <SelectTrigger id="revision-taxable" class="w-full">
-                                                            <SelectValue placeholder="N/A" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="__none__">N/A</SelectItem>
-                                                            <SelectItem value="true">Yes</SelectItem>
-                                                            <SelectItem value="false">No</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </FormFieldShell>
-                                                <div class="rounded-lg border bg-muted/10 px-3 py-2 text-xs text-muted-foreground md:col-span-2">
-                                                    {{ revisionGovernanceMessage }}
-                                                </div>
-                                                <div v-if="revisionWindowValidationMessage" class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive md:col-span-2">
-                                                    {{ revisionWindowValidationMessage }}
-                                                </div>
-                                                <FormFieldShell input-id="revision-description" label="Change notes" container-class="md:col-span-2">
-                                                    <Textarea id="revision-description" v-model="revisionForm.description" class="min-h-16" />
-                                                </FormFieldShell>
-                                            </div>
-                                            <details
-                                                v-if="showRevisionTechnicalMetadata"
-                                                class="mt-3 rounded-lg border border-dashed bg-muted/10 p-3"
-                                            >
-                                                <summary class="cursor-pointer text-sm font-medium">System integration notes (technical)</summary>
-                                                <p class="mt-2 text-xs text-muted-foreground">
-                                                    Leave blank unless IT needs to carry integration data into the new price version.
-                                                </p>
-                                                <FormFieldShell
-                                                    input-id="revision-metadata"
-                                                    label="Integration payload"
-                                                    container-class="mt-3"
-                                                    :error-message="firstError(revisionErrors, 'metadata')"
-                                                >
-                                                    <Textarea id="revision-metadata" v-model="revisionForm.metadataText" class="min-h-20 font-mono text-xs" />
-                                                </FormFieldShell>
-                                            </details>
-                                            <div class="mt-3 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                                <p class="text-xs text-muted-foreground">This keeps the current price auditable while preparing the next billing window.</p>
-                                                <Button :disabled="revisionLoading || Boolean(revisionWindowValidationMessage)" @click="createRevision">{{ revisionLoading ? 'Creating version...' : 'Create new version' }}</Button>
-                                            </div>
-                                        </div>
-                                    </TabsContent>
-                                    <TabsContent value="history" class="space-y-3">
-                                        <div class="rounded-lg border p-3">
-                                            <div class="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                                <div>
-                                                    <p class="text-sm font-medium">Price history</p>
-                                                    <p class="text-xs text-muted-foreground">Current, replaced, and scheduled price versions for this service code.</p>
-                                                </div>
-                                                <div class="flex items-center gap-2">
-                                                    <Button size="sm" variant="outline" @click="detailsTab = 'current'">Open current price</Button>
-                                                    <Button v-if="canManagePricing" size="sm" variant="outline" @click="detailsTab = 'version'">Open new version</Button>
-                                                </div>
-                                            </div>
-                                            <div
-                                                v-if="!versionHistoryError && !versionHistoryLoading && versionHistory.length > 0"
-                                                class="mb-3 grid gap-2 lg:grid-cols-3"
-                                            >
-                                                <div
-                                                    v-for="summary in versionHistoryImpactSummary"
-                                                    :key="summary.key"
-                                                    class="rounded-lg border bg-muted/10 px-3 py-2.5"
-                                                >
-                                                    <div class="flex items-start justify-between gap-3">
-                                                        <div class="min-w-0 space-y-1">
-                                                            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{{ summary.label }}</p>
-                                                            <p class="text-xs text-muted-foreground">{{ summary.description }}</p>
-                                                        </div>
-                                                        <Badge :variant="summary.item ? 'outline' : 'secondary'">
-                                                            {{ versionSummaryBadgeText(summary.item) }}
-                                                        </Badge>
-                                                    </div>
-                                                    <div class="mt-2">
-                                                        <template v-if="summary.item">
-                                                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                                                                <span class="font-semibold">{{ formatMoney(summary.item.basePrice, summary.item.currencyCode) }}</span>
-                                                                <span class="text-muted-foreground">{{ tariffWindowLabel(summary.item.effectiveFrom, summary.item.effectiveTo) }}</span>
-                                                            </div>
-                                                            <p class="mt-1 text-xs text-muted-foreground">
-                                                                {{ compareVersionToPrevious(summary.item, versionHistory) || versionFamilyRole(summary.item, String(selectedItem?.id ?? '')) }}
-                                                            </p>
-                                                        </template>
-                                                        <template v-else>
-                                                            <p class="text-sm font-medium text-muted-foreground">{{ summary.emptyLabel }}</p>
-                                                        </template>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div v-if="canReadPayerContracts" class="mb-3 rounded-lg border p-3">
-                                                <div class="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                                    <div>
-                                                        <p class="text-sm font-medium">Contract impact</p>
-                                                        <p class="text-xs text-muted-foreground">
-                                                            Active contracts and authorization rules currently aligned to this service price.
-                                                        </p>
-                                                    </div>
-                                                    <div class="flex items-center gap-2">
-                                                        <Badge variant="outline">{{ selectedItem?.currencyCode || payerImpactSummary?.currencyCode || defaultCurrencyCode }}</Badge>
-                                                        <Button as-child variant="outline" size="sm">
-                                                            <Link href="/billing-payer-contracts">Open contracts</Link>
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                                <div v-if="payerImpactError" class="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                                                    {{ payerImpactError }}
-                                                </div>
-                                                <div v-else-if="payerImpactLoading" class="grid gap-3 md:grid-cols-3">
-                                                    <Skeleton class="h-24 w-full" />
-                                                    <Skeleton class="h-24 w-full" />
-                                                    <Skeleton class="h-24 w-full" />
-                                                </div>
-                                                <div v-else-if="payerImpactSummary" class="space-y-2">
-                                                    <div class="grid gap-2 md:grid-cols-3">
-                                                        <div class="rounded-lg border bg-muted/10 px-3 py-2.5">
-                                                            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Contract Reach</p>
-                                                            <p class="mt-1 text-lg font-semibold">{{ payerImpactSummary.activeContractCount }}</p>
-                                                            <p class="mt-1 text-xs text-muted-foreground">
-                                                                active contracts pricing in {{ payerImpactSummary.currencyCode || selectedItem?.currencyCode || defaultCurrencyCode }}
-                                                            </p>
-                                                            <p class="mt-1 text-xs text-muted-foreground">
-                                                                {{ payerImpactSummary.contractsWithMatchingRulesCount }} contract{{ payerImpactSummary.contractsWithMatchingRulesCount === 1 ? '' : 's' }} already carry matching authorization logic
-                                                            </p>
-                                                        </div>
-                                                        <div class="rounded-lg border bg-muted/10 px-3 py-2.5">
-                                                            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Coverage Defaults</p>
-                                                            <p class="mt-1 text-lg font-semibold">
-                                                                {{ formatCoverageRange(payerImpactSummary.coveragePercentMin, payerImpactSummary.coveragePercentMax) }}
-                                                            </p>
-                                                            <p class="mt-1 text-xs text-muted-foreground">
-                                                                The base price remains the default source; contracts currently affect coverage and claim workflow rather than replacing the service price itself.
-                                                            </p>
-                                                        </div>
-                                                        <div class="rounded-lg border bg-muted/10 px-3 py-2.5">
-                                                            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Authorization Pressure</p>
-                                                            <p class="mt-1 text-lg font-semibold">{{ payerImpactSummary.matchingRuleCount }} matching rules</p>
-                                                            <p class="mt-1 text-xs text-muted-foreground">
-                                                                {{ payerImpactSummary.authorizationRequiredRuleCount }} require authorization, {{ payerImpactSummary.autoApproveRuleCount }} auto-approve, {{ payerImpactSummary.preAuthorizationContractCount }} contracts require pre-auth by default
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                                        <Badge variant="outline">Service code rules {{ payerImpactSummary.serviceSpecificRuleCount }}</Badge>
-                                                        <Badge variant="outline">Service type rules {{ payerImpactSummary.serviceTypeRuleCount }}</Badge>
-                                                        <Badge variant="outline">Department rules {{ payerImpactSummary.departmentRuleCount }}</Badge>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div v-if="versionHistoryError" class="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                                                {{ versionHistoryError }}
-                                            </div>
-                                            <div v-else-if="versionHistoryLoading" class="space-y-2">
-                                                <Skeleton class="h-16 w-full" />
-                                                <Skeleton class="h-16 w-full" />
-                                            </div>
-                                            <div v-else-if="versionHistory.length === 0" class="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-                                                No price versions found for this service code.
-                                            </div>
-                                            <div v-else class="space-y-2">
-                                                <div class="rounded-lg border bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
-                                                    The most recent live, scheduled, and previous prices appear above. Use the timeline below when you need the full version trail.
-                                                </div>
-                                                <div v-for="version in versionHistory" :key="String(version.id)" class="rounded-lg border bg-background/70 p-3">
-                                                    <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                                        <div class="min-w-0 space-y-2">
-                                                            <div class="flex flex-wrap items-center gap-2">
-                                                                <Badge variant="outline">v{{ version.versionNumber || 1 }}</Badge>
-                                                                <Badge :variant="versionFamilyRoleVariant(version, String(selectedItem?.id ?? ''))">
-                                                                    {{ versionFamilyRole(version, String(selectedItem?.id ?? '')) }}
-                                                                </Badge>
-                                                                <Badge :variant="statusVariant(version.status)">{{ formatEnumLabel(version.status) }}</Badge>
-                                                                <Badge :variant="tariffLifecycleVariant(version.effectiveFrom, version.effectiveTo)">{{ tariffLifecycleLabel(version.effectiveFrom, version.effectiveTo) }}</Badge>
-                                                            </div>
-                                                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                                                <p class="text-sm font-medium">{{ formatMoney(version.basePrice, version.currencyCode) }}</p>
-                                                                <p class="text-xs text-muted-foreground">{{ tariffWindowLabel(version.effectiveFrom, version.effectiveTo) }}</p>
-                                                                <p class="text-xs text-muted-foreground">Updated {{ formatDateTime(version.updatedAt) }}</p>
-                                                            </div>
-                                                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                                                                <span v-if="findSupersededVersionLabel(version, versionHistory)">{{ findSupersededVersionLabel(version, versionHistory) }}</span>
-                                                                <span v-if="compareVersionToPrevious(version, versionHistory)">{{ compareVersionToPrevious(version, versionHistory) }}</span>
-                                                            </div>
-                                                        </div>
-                                                        <div class="flex shrink-0 items-center gap-2">
-                                                            <Button
-                                                                v-if="version.id !== selectedItem?.id"
-                                                                variant="outline"
-                                                                size="sm"
-                                                                @click="openVersionFromHistory(version)"
-                                                            >
-                                                                View this version
-                                                            </Button>
-                                                            <Badge v-else variant="secondary">Viewing</Badge>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </TabsContent>
-                                    <TabsContent value="status" class="space-y-3">
-                                        <div class="rounded-lg border p-3">
-                                            <div class="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                                <div>
-                                                    <p class="text-sm font-medium">Status</p>
-                                                    <p class="text-xs text-muted-foreground">Pause, reactivate, or retire this service price with the right reason trail.</p>
-                                                </div>
-                                                <Button size="sm" variant="outline" @click="detailsTab = 'history'">Open history</Button>
-                                            </div>
-                                            <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                                                <div
-                                                    v-for="card in statusSummaryCards"
-                                                    :key="card.key"
-                                                    class="rounded-lg border bg-muted/10 px-3 py-2.5"
-                                                >
-                                                    <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{{ card.label }}</p>
-                                                    <p class="mt-1 text-sm font-semibold">{{ card.value }}</p>
-                                                    <p class="mt-1 text-xs text-muted-foreground">{{ card.helper }}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="rounded-lg border p-3">
-                                            <div class="mb-3">
-                                                <p class="text-sm font-medium">Change status</p>
-                                                <p class="text-xs text-muted-foreground">Use `Inactive` for temporary hold and `Retired` when this price should no longer be used.</p>
-                                            </div>
-                                            <div class="grid gap-3 md:grid-cols-2">
-                                                <FormFieldShell input-id="status-target" label="New status">
-                                                    <Select v-model="statusSelectValue">
-                                                        <SelectTrigger id="status-target" class="w-full" :disabled="!canManagePricing">
-                                                            <SelectValue />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="active">Active</SelectItem>
-                                                            <SelectItem value="inactive">Inactive</SelectItem>
-                                                            <SelectItem value="retired">Retired</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </FormFieldShell>
-                                                <div class="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-                                                    A reason is required when the price is being paused or retired. Keep it short and operational so billing staff can understand the change quickly.
-                                                </div>
-                                                <FormFieldShell input-id="status-reason" label="Reason" container-class="md:col-span-2" :error-message="firstError(statusErrors, 'reason')">
-                                                    <Textarea id="status-reason" v-model="statusForm.reason" class="min-h-24" :disabled="!canManagePricing" placeholder="Required for inactive or retired prices" />
-                                                </FormFieldShell>
-                                            </div>
-                                        </div>
-
-                                        <div class="flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                            <p class="text-xs text-muted-foreground">Use status changes for operational control, not for price edits.</p>
-                                            <Button v-if="canManagePricing" :disabled="statusLoading" @click="saveStatus">{{ statusLoading ? 'Saving...' : 'Save status change' }}</Button>
-                                        </div>
-                                    </TabsContent>
-
-                                    <TabsContent v-if="canViewAudit" value="audit" class="space-y-3">
-                                        <Card class="rounded-lg border">
-                                            <CardHeader class="pb-3">
-                                                <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                                    <div>
-                                                        <CardTitle class="text-base">Audit timeline</CardTitle>
-                                                        <CardDescription>Search lifecycle logs, then narrow only when you need deeper trace details.</CardDescription>
-                                                    </div>
-                                                    <Button variant="outline" size="sm" :disabled="auditExporting" @click="exportAuditLogs">
-                                                        {{ auditExporting ? 'Preparing...' : 'Export CSV' }}
-                                                    </Button>
-                                                </div>
-                                            </CardHeader>
-                                            <CardContent class="space-y-3">
-                                                <div class="grid gap-3">
-                                                    <FormFieldShell input-id="audit-search" label="Text search">
-                                                        <Input id="audit-search" v-model="auditFilters.q" placeholder="created, updated, status.updated..." />
-                                                    </FormFieldShell>
-                                                    <div class="grid gap-3 rounded-lg border bg-muted/10 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                                                        <FormFieldShell input-id="audit-action" label="Action">
-                                                            <Input id="audit-action" v-model="auditFilters.action" />
-                                                        </FormFieldShell>
-                                                        <FormFieldShell input-id="audit-actor-type" label="Actor type">
-                                                            <Select v-model="auditActorTypeSelectValue">
-                                                                <SelectTrigger id="audit-actor-type" class="w-full">
-                                                                    <SelectValue />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    <SelectItem value="__all__">All</SelectItem>
-                                                                    <SelectItem value="user">User</SelectItem>
-                                                                    <SelectItem value="system">System</SelectItem>
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </FormFieldShell>
-                                                        <FormFieldShell input-id="audit-actor-id" label="Actor ID">
-                                                            <Input id="audit-actor-id" v-model="auditFilters.actorId" inputmode="numeric" />
-                                                        </FormFieldShell>
-                                                        <SingleDatePopoverField input-id="audit-from-date" label="From date" v-model="auditFromDate" />
-                                                        <TimePopoverField input-id="audit-from-time" label="From time" v-model="auditFromTime" />
-                                                        <SingleDatePopoverField input-id="audit-to-date" label="To date" v-model="auditToDate" />
-                                                        <TimePopoverField input-id="audit-to-time" label="To time" v-model="auditToTime" />
-                                                        <FormFieldShell input-id="audit-per-page" label="Per page">
-                                                            <Select v-model="auditPerPageSelectValue">
-                                                                <SelectTrigger id="audit-per-page" class="w-full">
-                                                                    <SelectValue />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    <SelectItem value="10">10</SelectItem>
-                                                                    <SelectItem value="20">20</SelectItem>
-                                                                    <SelectItem value="50">50</SelectItem>
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </FormFieldShell>
-                                                    </div>
-                                                </div>
-                                                <div class="flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-                                                    <p class="text-xs text-muted-foreground">Export respects the current audit filters.</p>
-                                                    <div class="flex flex-wrap items-center gap-2">
-                                                    <Button variant="outline" size="sm" :disabled="auditLoading" @click="resetAuditFilters">Reset</Button>
-                                                    <Button size="sm" :disabled="auditLoading" @click="loadAuditLogs(1)">{{ auditLoading ? 'Applying...' : 'Apply filters' }}</Button>
-                                                    </div>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-
-                                        <Alert v-if="auditError" variant="destructive"><AlertTitle>Audit load issue</AlertTitle><AlertDescription>{{ auditError }}</AlertDescription></Alert>
-                                        <div v-else-if="auditLoading" class="space-y-2"><Skeleton class="h-10 w-full" /><Skeleton class="h-10 w-full" /><Skeleton class="h-10 w-full" /></div>
-                                        <div v-else-if="auditLogs.length === 0" class="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">No audit logs found.</div>
-                                        <div v-else class="space-y-2">
-                                            <div v-for="log in auditLogs" :key="log.id" class="rounded-lg border p-3 text-sm">
-                                                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                                    <div class="space-y-1">
-                                                        <p class="font-medium">{{ log.action || 'event' }}</p>
-                                                        <p class="text-xs text-muted-foreground">{{ formatDateTime(log.createdAt) }} | {{ log.actorId === null ? 'System' : `User #${log.actorId}` }}</p>
-                                                    </div>
-                                                    <Badge variant="outline">{{ log.actorId === null ? 'System' : 'User' }}</Badge>
-                                                </div>
-                                                <p v-if="log.billingServiceCatalogItemId" class="mt-2 text-xs text-muted-foreground">
-                                                    Price record {{ log.billingServiceCatalogItemId }}
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <div class="flex items-center justify-between border-t pt-2">
-                                            <Button variant="outline" size="sm" :disabled="auditLoading || (auditMeta?.currentPage ?? 1) <= 1" @click="loadAuditLogs((auditMeta?.currentPage ?? 1) - 1)">Previous</Button>
-                                            <p class="text-xs text-muted-foreground">Page {{ auditMeta?.currentPage ?? 1 }} of {{ auditMeta?.lastPage ?? 1 }}</p>
-                                            <Button variant="outline" size="sm" :disabled="auditLoading || !auditMeta || auditMeta.currentPage >= auditMeta.lastPage" @click="loadAuditLogs((auditMeta?.currentPage ?? 1) + 1)">Next</Button>
-                                        </div>
-                                    </TabsContent>
+                            <!-- Identity & department row -->
+                            <div class="grid gap-4 sm:grid-cols-2">
+                                <div class="rounded-lg border bg-background/70 px-3 py-2.5">
+                                    <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Service identity</p>
+                                    <p class="mt-1 text-sm font-semibold truncate">{{ selectedItem.serviceName }}</p>
+                                    <p class="text-xs text-muted-foreground truncate">{{ selectedItem.serviceCode || 'Code pending' }}</p>
                                 </div>
-                            </ScrollArea>
-                        </Tabs>
-                    </div>
+                                <div class="rounded-lg border bg-background/70 px-3 py-2.5">
+                                    <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Department</p>
+                                    <p class="mt-1 text-sm font-semibold truncate">{{ selectedItem.department || selectedItem.departmentId || 'Unassigned' }}</p>
+                                    <p class="text-xs text-muted-foreground">{{ formatEnumLabel(selectedItem.serviceType) }}</p>
+                                </div>
+                            </div>
 
-                    <SheetFooter class="border-t px-4 py-3">
+                            <!-- Clinical linkage + payer impact -->
+                            <div class="grid gap-4 sm:grid-cols-2">
+                                <div class="rounded-lg border bg-background/70 px-3 py-2.5">
+                                    <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Clinical linkage</p>
+                                    <p class="mt-1 text-sm font-semibold truncate">{{ clinicalCatalogLinkLabel(selectedItem) }}</p>
+                                    <p class="text-xs text-muted-foreground truncate">{{ clinicalCatalogLinkDetail(selectedItem) }}</p>
+                                </div>
+                                <div class="rounded-lg border bg-background/70 px-3 py-2.5">
+                                    <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Payer impact</p>
+                                    <p class="mt-1 text-sm font-semibold">{{ payerImpactSummary ? `${payerImpactSummary.activeContractCount} active contracts` : 'Loading...' }}</p>
+                                    <p class="text-xs text-muted-foreground truncate">{{ payerImpactSummary ? `${payerImpactSummary.matchingRuleCount} matching rules` : 'Contract reach & auth pressure' }}</p>
+                                </div>
+                            </div>
+
+                            <!-- Status & metadata row -->
+                            <div class="grid gap-4 sm:grid-cols-2">
+                                <div class="rounded-lg border bg-background/70 px-3 py-2.5">
+                                    <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Status</p>
+                                    <div class="mt-1 flex items-center gap-2">
+                                        <Badge :variant="statusVariant(selectedItem.status)">{{ formatEnumLabel(selectedItem.status) }}</Badge>
+                                        <span class="text-xs text-muted-foreground truncate">{{ selectedItem.statusReason || 'No reason recorded' }}</span>
+                                    </div>
+                                </div>
+                                <div class="rounded-lg border bg-background/70 px-3 py-2.5">
+                                    <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Last updated</p>
+                                    <p class="mt-1 text-sm font-semibold">{{ formatDateTime(selectedItem.updatedAt) }}</p>
+                                    <p class="text-xs text-muted-foreground">Created {{ formatDateTime(selectedItem.createdAt) }}</p>
+                                </div>
+                            </div>
+
+                            <div v-if="selectedItem.supersedesBillingServiceCatalogItemId" class="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+                                <AppIcon name="info" class="mr-1 inline size-3.5 align-text-top" />
+                                This version replaces an earlier price version in the same service family.
+                            </div>
+                        </div>
+                    </ScrollArea>
+
+                    <SheetFooter class="shrink-0 gap-2 border-t px-4 py-3 sm:px-6">
+                        <Button v-if="selectedItem" as-child class="gap-1.5">
+                            <Link :href="`/billing-service-catalog/${selectedItem.id}/prices`">
+                                <AppIcon name="receipt" class="size-3.5" />
+                                Manage Prices
+                            </Link>
+                        </Button>
                         <Button variant="outline" @click="requestDetailsOpenChange(false)">Close</Button>
                     </SheetFooter>
                 </SheetContent>
             </Sheet>
-            </div>
 
             <LeaveWorkflowDialog
                 :open="leaveConfirmOpen"
@@ -4811,6 +3078,7 @@ watch(
                 @update:open="detailsDiscardConfirmOpen = false"
                 @confirm="confirmDetailsDiscard"
             />
+        </div>
         </div>
 
         <BillingServiceCatalogSyncDialog
