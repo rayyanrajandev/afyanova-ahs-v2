@@ -668,8 +668,7 @@ onMounted(async () => {
     <Head title="Refund Operations" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <BillingModuleNav />
-        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-hidden p-4 md:p-6">
+        <div class="flex h-full flex-1 flex-col gap-4 overflow-x-hidden rounded-lg p-4 md:p-6">
             <section class="rounded-lg border border-border bg-card shadow-sm">
                 <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
                     <div class="flex min-w-0 items-center gap-3">
@@ -693,6 +692,7 @@ onMounted(async () => {
                     </div>
                 </div>
             </section>
+            <BillingModuleNav />
 
             <Alert v-if="!canRead" variant="destructive" class="rounded-lg">
                 <AppIcon name="shield-alert" class="size-4" />
