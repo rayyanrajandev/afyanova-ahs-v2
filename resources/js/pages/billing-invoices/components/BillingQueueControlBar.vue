@@ -32,182 +32,155 @@ const setBillingQueueThirdPartyPhaseFilter = actions.setBillingQueueThirdPartyPh
 
 const isBillingSummaryFilterActive = helpers.isBillingSummaryFilterActive;
 const isBillingSummaryStatusSetFilterActive = helpers.isBillingSummaryStatusSetFilterActive;
+
+function chipClass(active: boolean): string {
+    return `inline-flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs transition-colors ${active ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-foreground'}`;
+}
 </script>
 
 <template>
-    <details class="group border-b bg-muted/10 px-4 py-2 open:pb-3">
-        <summary class="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium [&::-webkit-details-marker]:hidden">
-            <span class="inline-flex items-center gap-2">
-                <AppIcon name="layout-grid" class="size-4 text-muted-foreground" />
-                Workboards &amp; lanes
-            </span>
-            <span class="flex items-center gap-2 text-xs font-normal text-muted-foreground">
-                <Badge variant="outline" class="font-normal">{{ billingQueueStateLabel }}</Badge>
-                <span class="group-open:rotate-180 transition-transform" aria-hidden="true">▾</span>
-            </span>
-        </summary>
-
-        <div class="mt-3 space-y-3">
-            <div class="flex flex-wrap gap-1.5">
-                <span class="w-full text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Operations</span>
-                <button
-                    type="button"
-                    class="inline-flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                    :class="{ 'border-primary bg-primary/5': billingOperationalPresetState.cashierDaybook }"
-                    @click="applyBillingQueueOperationalPreset('cashier_daybook', { focusSearch: true })"
-                >
-                    <span class="font-medium tabular-nums">{{ billingOperationalQueueCounts.cashierDaybook }}</span>
-                    <span class="text-muted-foreground">Cashier daybook</span>
-                </button>
-                <button
-                    type="button"
-                    class="inline-flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                    :class="{ 'border-primary bg-primary/5': billingOperationalPresetState.claimPrep }"
-                    @click="applyBillingQueueOperationalPreset('claim_prep', { focusSearch: true })"
-                >
-                    <span class="font-medium tabular-nums">{{ billingOperationalQueueCounts.claimPrep }}</span>
-                    <span class="text-muted-foreground">Claim prep</span>
-                </button>
-                <button
-                    type="button"
-                    class="inline-flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                    :class="{ 'border-primary bg-primary/5': billingOperationalPresetState.reconciliation }"
-                    @click="applyBillingQueueOperationalPreset('reconciliation', { focusSearch: true })"
-                >
-                    <span class="font-medium tabular-nums">{{ billingOperationalQueueCounts.reconciliation }}</span>
-                    <span class="text-muted-foreground">Reconciliation</span>
-                </button>
-                <button
-                    type="button"
-                    class="inline-flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                    :class="{
-                        'border-primary bg-primary/5':
-                            billingQueuePresetState.outstanding
-                            && !billingOperationalPresetState.claimPrep
-                            && !billingOperationalPresetState.reconciliation,
-                    }"
-                    @click="applyBillingQueuePreset('outstanding', { focusSearch: true })"
-                >
-                    <span class="text-muted-foreground">Outstanding</span>
-                </button>
-            </div>
-
-            <div class="flex flex-wrap gap-1.5">
-                <span class="w-full text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Status on this page</span>
-                <button
-                    type="button"
-                    class="inline-flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                    :class="{ 'border-primary bg-primary/5': isBillingSummaryFilterActive('draft') }"
-                    @click="applyBillingSummaryFilter('draft')"
-                >
-                    <span class="font-medium tabular-nums">{{ summaryQueueCounts.draft }}</span>
-                    <span class="text-muted-foreground">Draft</span>
-                </button>
-                <button
-                    type="button"
-                    class="inline-flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                    :class="{ 'border-primary bg-primary/5': isBillingSummaryFilterActive('issued') }"
-                    @click="applyBillingSummaryFilter('issued')"
-                >
-                    <span class="font-medium tabular-nums">{{ summaryQueueCounts.issued }}</span>
-                    <span class="text-muted-foreground">Issued</span>
-                </button>
-                <button
-                    type="button"
-                    class="inline-flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                    :class="{ 'border-primary bg-primary/5': isBillingSummaryFilterActive('partially_paid') }"
-                    @click="applyBillingSummaryFilter('partially_paid')"
-                >
-                    <span class="font-medium tabular-nums">{{ summaryQueueCounts.partiallyPaid }}</span>
-                    <span class="text-muted-foreground">Partial</span>
-                </button>
-                <button
-                    type="button"
-                    class="inline-flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                    :class="{ 'border-primary bg-primary/5': isBillingSummaryFilterActive('paid') }"
-                    @click="applyBillingSummaryFilter('paid')"
-                >
-                    <span class="font-medium tabular-nums">{{ summaryQueueCounts.paid }}</span>
-                    <span class="text-muted-foreground">Paid</span>
-                </button>
-                <button
-                    type="button"
-                    class="inline-flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                    :class="{
-                        'border-primary bg-primary/5': isBillingSummaryStatusSetFilterActive(['cancelled', 'voided']),
-                    }"
-                    @click="applyBillingSummaryStatusSetFilter(['cancelled', 'voided'])"
-                >
-                    <span class="font-medium tabular-nums">{{ summaryQueueCounts.exceptions }}</span>
-                    <span class="text-muted-foreground">Exceptions</span>
-                </button>
-            </div>
-
-            <div class="flex flex-wrap items-center gap-1.5">
-                <span class="w-full text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Lane</span>
-                <Button
-                    size="sm"
-                    class="h-7 gap-1.5 rounded-md px-2.5"
-                    :variant="state.billingQueueLaneFilter === 'all' ? 'default' : 'outline'"
-                    @click="setBillingQueueLaneFilter('all')"
-                >
-                    <span class="font-medium tabular-nums">{{ billingQueueLaneCounts.all }}</span>
-                    All
-                </Button>
-                <Button
-                    size="sm"
-                    class="h-7 gap-1.5 rounded-md px-2.5"
-                    :variant="state.billingQueueLaneFilter === 'cashier_collection' ? 'default' : 'outline'"
-                    @click="setBillingQueueLaneFilter('cashier_collection')"
-                >
-                    <span class="font-medium tabular-nums">{{ billingQueueLaneCounts.cashierCollection }}</span>
-                    Cashier
-                </Button>
-                <Button
-                    size="sm"
-                    class="h-7 gap-1.5 rounded-md px-2.5"
-                    :variant="state.billingQueueLaneFilter === 'third_party_settlement' ? 'default' : 'outline'"
-                    @click="setBillingQueueLaneFilter('third_party_settlement')"
-                >
-                    <span class="font-medium tabular-nums">{{ billingQueueLaneCounts.thirdPartySettlement }}</span>
-                    Third-party
-                </Button>
-                <template v-if="state.billingQueueLaneFilter === 'third_party_settlement'">
-                    <Button
-                        size="sm"
-                        class="h-7 gap-1.5 rounded-md px-2.5"
-                        :variant="state.billingQueueThirdPartyPhaseFilter === 'all' ? 'default' : 'outline'"
-                        @click="setBillingQueueThirdPartyPhaseFilter('all')"
-                    >
-                        <span class="font-medium tabular-nums">{{ billingQueueThirdPartyPhaseCounts.all }}</span>
-                        All phases
-                    </Button>
-                    <Button
-                        size="sm"
-                        class="h-7 gap-1.5 rounded-md px-2.5"
-                        :variant="state.billingQueueThirdPartyPhaseFilter === 'claim_submission' ? 'default' : 'outline'"
-                        @click="setBillingQueueThirdPartyPhaseFilter('claim_submission')"
-                    >
-                        <span class="font-medium tabular-nums">{{ billingQueueThirdPartyPhaseCounts.claimSubmission }}</span>
-                        Claim prep
-                    </Button>
-                    <Button
-                        size="sm"
-                        class="h-7 gap-1.5 rounded-md px-2.5"
-                        :variant="
-                            state.billingQueueThirdPartyPhaseFilter === 'remittance_reconciliation'
-                                ? 'default'
-                                : 'outline'
-                        "
-                        @click="setBillingQueueThirdPartyPhaseFilter('remittance_reconciliation')"
-                    >
-                        <span class="font-medium tabular-nums">
-                            {{ billingQueueThirdPartyPhaseCounts.remittanceReconciliation }}
-                        </span>
-                        Reconciliation
-                    </Button>
-                </template>
-            </div>
+    <aside class="flex w-52 shrink-0 flex-col gap-4 overflow-y-auto border-r bg-muted/10 p-3" aria-label="Queue filters">
+        <div class="space-y-1.5">
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Lane</p>
+            <button
+                type="button"
+                :class="chipClass(state.billingQueueLaneFilter === 'all')"
+                @click="setBillingQueueLaneFilter('all')"
+            >
+                All
+                <span class="tabular-nums text-[11px] text-muted-foreground">{{ billingQueueLaneCounts.all }}</span>
+            </button>
+            <button
+                type="button"
+                :class="chipClass(state.billingQueueLaneFilter === 'cashier_collection')"
+                @click="setBillingQueueLaneFilter('cashier_collection')"
+            >
+                Cashier
+                <span class="tabular-nums text-[11px] text-muted-foreground">{{ billingQueueLaneCounts.cashierCollection }}</span>
+            </button>
+            <button
+                type="button"
+                :class="chipClass(state.billingQueueLaneFilter === 'third_party_settlement')"
+                @click="setBillingQueueLaneFilter('third_party_settlement')"
+            >
+                Third-party
+                <span class="tabular-nums text-[11px] text-muted-foreground">{{ billingQueueLaneCounts.thirdPartySettlement }}</span>
+            </button>
         </div>
-    </details>
+
+        <template v-if="state.billingQueueLaneFilter === 'third_party_settlement'">
+            <div class="space-y-1.5">
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">TP phase</p>
+                <button
+                    type="button"
+                    :class="chipClass(state.billingQueueThirdPartyPhaseFilter === 'all')"
+                    @click="setBillingQueueThirdPartyPhaseFilter('all')"
+                >
+                    All phases
+                    <span class="tabular-nums text-[11px] text-muted-foreground">{{ billingQueueThirdPartyPhaseCounts.all }}</span>
+                </button>
+                <button
+                    type="button"
+                    :class="chipClass(state.billingQueueThirdPartyPhaseFilter === 'claim_submission')"
+                    @click="setBillingQueueThirdPartyPhaseFilter('claim_submission')"
+                >
+                    Claim prep
+                    <span class="tabular-nums text-[11px] text-muted-foreground">{{ billingQueueThirdPartyPhaseCounts.claimSubmission }}</span>
+                </button>
+                <button
+                    type="button"
+                    :class="chipClass(state.billingQueueThirdPartyPhaseFilter === 'remittance_reconciliation')"
+                    @click="setBillingQueueThirdPartyPhaseFilter('remittance_reconciliation')"
+                >
+                    Reconciliation
+                    <span class="tabular-nums text-[11px] text-muted-foreground">{{ billingQueueThirdPartyPhaseCounts.remittanceReconciliation }}</span>
+                </button>
+            </div>
+        </template>
+
+        <div class="space-y-1.5">
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Operations</p>
+            <button
+                type="button"
+                :class="chipClass(billingOperationalPresetState.cashierDaybook)"
+                @click="applyBillingQueueOperationalPreset('cashier_daybook', { focusSearch: true })"
+            >
+                Cashier daybook
+                <span class="tabular-nums text-[11px] text-muted-foreground">{{ billingOperationalQueueCounts.cashierDaybook }}</span>
+            </button>
+            <button
+                type="button"
+                :class="chipClass(billingOperationalPresetState.claimPrep)"
+                @click="applyBillingQueueOperationalPreset('claim_prep', { focusSearch: true })"
+            >
+                Claim prep
+                <span class="tabular-nums text-[11px] text-muted-foreground">{{ billingOperationalQueueCounts.claimPrep }}</span>
+            </button>
+            <button
+                type="button"
+                :class="chipClass(billingOperationalPresetState.reconciliation)"
+                @click="applyBillingQueueOperationalPreset('reconciliation', { focusSearch: true })"
+            >
+                Reconciliation
+                <span class="tabular-nums text-[11px] text-muted-foreground">{{ billingOperationalQueueCounts.reconciliation }}</span>
+            </button>
+            <button
+                type="button"
+                :class="chipClass(billingQueuePresetState.outstanding && !billingOperationalPresetState.claimPrep && !billingOperationalPresetState.reconciliation)"
+                @click="applyBillingQueuePreset('outstanding', { focusSearch: true })"
+            >
+                Outstanding
+            </button>
+        </div>
+
+        <div class="space-y-1.5">
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Status</p>
+            <button
+                type="button"
+                :class="chipClass(isBillingSummaryFilterActive('draft'))"
+                @click="applyBillingSummaryFilter('draft')"
+            >
+                Draft
+                <span class="tabular-nums text-[11px] text-muted-foreground">{{ summaryQueueCounts.draft }}</span>
+            </button>
+            <button
+                type="button"
+                :class="chipClass(isBillingSummaryFilterActive('issued'))"
+                @click="applyBillingSummaryFilter('issued')"
+            >
+                Issued
+                <span class="tabular-nums text-[11px] text-muted-foreground">{{ summaryQueueCounts.issued }}</span>
+            </button>
+            <button
+                type="button"
+                :class="chipClass(isBillingSummaryFilterActive('partially_paid'))"
+                @click="applyBillingSummaryFilter('partially_paid')"
+            >
+                Partial
+                <span class="tabular-nums text-[11px] text-muted-foreground">{{ summaryQueueCounts.partiallyPaid }}</span>
+            </button>
+            <button
+                type="button"
+                :class="chipClass(isBillingSummaryFilterActive('paid'))"
+                @click="applyBillingSummaryFilter('paid')"
+            >
+                Paid
+                <span class="tabular-nums text-[11px] text-muted-foreground">{{ summaryQueueCounts.paid }}</span>
+            </button>
+            <button
+                type="button"
+                :class="chipClass(isBillingSummaryStatusSetFilterActive(['cancelled', 'voided']))"
+                @click="applyBillingSummaryStatusSetFilter(['cancelled', 'voided'])"
+            >
+                Exceptions
+                <span class="tabular-nums text-[11px] text-muted-foreground">{{ summaryQueueCounts.exceptions }}</span>
+            </button>
+        </div>
+
+        <div class="mt-auto border-t pt-2">
+            <Badge variant="outline" class="w-full justify-center font-normal text-[11px]">
+                {{ billingQueueStateLabel }}
+            </Badge>
+        </div>
+    </aside>
 </template>

@@ -14703,13 +14703,15 @@ onMounted(refreshPage);
                         @open-full-queue="openFullBillingQueue"
                         @refocus-patient="refocusBillingPatientQueue"
                     />
-                    <BillingQueueControlBar
-                        :state="billingQueueControlBarState"
-                        :view="billingQueueControlBarView"
-                        :actions="billingQueueControlBarActions"
-                        :helpers="billingQueueControlBarHelpers"
-                    />
-                    <BillingQueueTable
+                    <div class="flex min-h-0 flex-1">
+                        <BillingQueueControlBar
+                            :state="billingQueueControlBarState"
+                            :view="billingQueueControlBarView"
+                            :actions="billingQueueControlBarActions"
+                            :helpers="billingQueueControlBarHelpers"
+                        />
+                        <div class="flex min-h-0 flex-1 flex-col">
+                            <BillingQueueTable
                         :page-loading="pageLoading"
                         :list-loading="listLoading"
                         :compact-queue-rows="compactQueueRows"
@@ -14745,6 +14747,8 @@ onMounted(refreshPage);
                         @prev-page="prevPage"
                         @next-page="nextPage"
                     />
+                        </div>
+                    </div>
                 </Card>
 
                 <Card
