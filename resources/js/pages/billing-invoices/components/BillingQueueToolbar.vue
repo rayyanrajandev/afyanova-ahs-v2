@@ -112,7 +112,6 @@ function bindSearchInputRef(value: unknown) {
                         </Button>
                     </div>
                 </div>
-            </div>
             <Badge variant="secondary" class="w-fit shrink-0 font-normal">
                 {{ queueStateLabel }}
             </Badge>
