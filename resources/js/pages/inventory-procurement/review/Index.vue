@@ -250,6 +250,28 @@ const claimLinkContextStatusVariant = computed<'default' | 'secondary' | 'outlin
     return 'outline';
 });
 
+const tabContentTitle = computed(() => {
+    const titles: Record<string, string> = {
+        claims: 'Dispensing Claim Links',
+        analytics: 'Inventory Analytics',
+    };
+    return titles[activeTab.value] ?? '';
+});
+const tabContentIcon = computed<AppIconName>(() => {
+    const icons: Record<string, AppIconName> = {
+        claims: 'receipt',
+        analytics: 'chart-bar-big',
+    };
+    return icons[activeTab.value] ?? 'receipt';
+});
+const tabContentDescription = computed(() => {
+    const descs: Record<string, string> = {
+        claims: 'Connect dispensed stock to payer claims, NHIF references, and reimbursement.',
+        analytics: 'Consumption trends, ABC/VEN matrix, expiry risk, and stock turnover.',
+    };
+    return descs[activeTab.value] ?? '';
+});
+
 const reviewFilterCount = computed(() => {
     if (activeTab.value === 'claims') {
         let count = 0;
@@ -780,12 +802,10 @@ onMounted(async () => {
                             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                                 <div class="min-w-0 shrink-0">
                                     <h3 class="flex items-center gap-2 text-sm font-semibold leading-none whitespace-nowrap">
-                                        <AppIcon :name="activeTab === 'claims' ? 'receipt' : 'bar-chart-3'" class="size-4 text-primary" />
-                                        {{ activeTab === 'claims' ? 'Dispensing Claim Links' : 'Inventory Analytics' }}
+                                        <AppIcon :name="tabContentIcon" class="size-4 text-primary" />
+                                        {{ tabContentTitle }}
                                     </h3>
-                                    <p class="mt-1 text-xs text-muted-foreground">
-                                        {{ activeTab === 'claims' ? 'Connect dispensed stock to payer claims, NHIF references, and reimbursement.' : 'Consumption trends, ABC/VEN matrix, expiry risk, and stock turnover.' }}
-                                    </p>
+                                    <p class="mt-1 text-xs text-muted-foreground">{{ tabContentDescription }}</p>
                                 </div>
                                 <div class="flex min-w-0 items-center gap-2">
                                     <template v-if="activeTab === 'claims'">

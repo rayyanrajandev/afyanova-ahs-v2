@@ -54,6 +54,7 @@ import {
     Calendar,
     CalendarClock,
     Check,
+    ChartBarBig,
     Clock,
     ChevronDown,
     ChevronLeft,
@@ -126,6 +127,7 @@ export type AppIconName =
     | 'calendar'
     | 'calendar-plus-2'
     | 'calendar-clock'
+    | 'chart-bar-big'
     | 'check'
     | 'check-circle'
     | 'clock'
@@ -198,6 +200,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     calendar: Calendar,
     'calendar-plus-2': Calendar,
     'calendar-clock': CalendarClock,
+    'chart-bar-big': ChartBarBig,
     check: Check,
     'check-circle': CircleCheck,
     clock: Clock,
@@ -271,6 +274,7 @@ const HUGE_ICON_MAP = {
     calendar: Calendar01Icon,
     'calendar-plus-2': Calendar01Icon,
     'calendar-clock': TimeScheduleIcon,
+    'chart-bar-big': LayoutGridIcon,
     check: CheckmarkCircle01Icon,
     'check-circle': CheckmarkCircle01Icon,
     clock: TimeScheduleIcon,
