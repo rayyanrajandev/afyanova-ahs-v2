@@ -36,7 +36,7 @@ import type {
     BillingQueueThirdPartyPhaseFilter,
 } from './types';
 
-// ── Claim Reference Policy Parsing ──────────────────────────────────────────
+// â”€â”€ Claim Reference Policy Parsing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function parseClaimReferencePolicyPositiveInt(
     value: unknown,
@@ -282,7 +282,7 @@ export function parseClaimReferencePolicyOverridesEnv(
     }
 }
 
-// ── Audit / Parsing ─────────────────────────────────────────────────────────
+// â”€â”€ Audit / Parsing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function parseAuditExportStatusGroup(value: string): AuditExportStatusGroup {
     const normalized = value.toLowerCase();
@@ -315,7 +315,7 @@ export function parseOptionalNumber(
     return Number.isFinite(parsed) ? parsed : null;
 }
 
-// ── Claim Reference Template / Validation ───────────────────────────────────
+// â”€â”€ Claim Reference Template / Validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function buildClaimReferenceTemplateCandidates(payerType?: string | null): string[] {
     const normalizedPayer = (payerType ?? '').trim().toLowerCase();
@@ -372,7 +372,7 @@ export function isTemplateLikeClaimReference(
     return false;
 }
 
-// ── Claim Reference Label Functions ─────────────────────────────────────────
+// â”€â”€ Claim Reference Label Functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function claimReferenceFailureReasonLabel(
     reason: BillingClaimReferenceValidationFailureReason | null,
@@ -465,7 +465,7 @@ export function claimReferencePolicyOverridesQualityDiagnosticMessage(
     return `Ignored unknown override field "${diagnostic.field}" under profile "${diagnostic.profileKey}".`;
 }
 
-// ── Date / Time Helpers ─────────────────────────────────────────────────────
+// â”€â”€ Date / Time Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function formatDate(value: string | null): string {
     if (!value) return 'N/A';
@@ -535,7 +535,7 @@ export function normalizeLocalDateTimeForApi(value: string | null): string | nul
     return normalized.length === 16 ? `${normalized}:00` : normalized;
 }
 
-// ── Number / Money Helpers ──────────────────────────────────────────────────
+// â”€â”€ Number / Money Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function amountToNumber(value: string | number | null): number | null {
     if (value === null || value === undefined || value === '') return null;
@@ -550,7 +550,7 @@ export function formatPercent(value: number | null | undefined): string {
     return `${Number(value).toFixed(2)}%`;
 }
 
-// ── Status / Display Helpers ────────────────────────────────────────────────
+// â”€â”€ Status / Display Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function statusVariant(status: string | null) {
     const normalized = (status ?? '').toLowerCase();
@@ -565,7 +565,7 @@ export function invoiceQueueDetailsLabel(): string {
     return 'Invoice details';
 }
 
-// ── Payment Label / Display Functions ───────────────────────────────────────
+// â”€â”€ Payment Label / Display Functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function billingPaymentPayerTypeLabel(value: string | null | undefined): string {
     const normalized = (value ?? '').trim().toLowerCase();
@@ -669,7 +669,7 @@ export function billingPaymentRecordedAt(payment: BillingInvoicePayment): string
     return payment.paymentAt || payment.createdAt || null;
 }
 
-// ── Invoice Settlement / Coverage Functions ─────────────────────────────────
+// â”€â”€ Invoice Settlement / Coverage Functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function billingInvoiceSettlementFinancialClass(
     invoice: BillingInvoice | null | undefined,
@@ -1011,7 +1011,7 @@ export function billingLineItemCoverageDecisionVariant(
     return 'outline';
 }
 
-// ── Invoice Queue Display / Filter Functions ────────────────────────────────
+// â”€â”€ Invoice Queue Display / Filter Functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function billingInvoicePreferredPaymentPayerType(
     invoice: BillingInvoice | null | undefined,
@@ -1433,7 +1433,7 @@ export function billingInvoiceQueueActionLeadDetails(
     ];
 }
 
-// ── Claim Href / Claims Action Functions ────────────────────────────────────
+// â”€â”€ Claim Href / Claims Action Functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function invoiceContextHref(
     invoice: BillingInvoice,
@@ -1591,7 +1591,7 @@ export function billingInvoiceQueueClaimsActionCue(
     };
 }
 
-// ── Issue Handoff / Draft Preview ───────────────────────────────────────────
+// â”€â”€ Issue Handoff / Draft Preview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function billingInvoiceIssueHandoff(
     invoice: BillingInvoice | null | undefined,
@@ -1760,7 +1760,7 @@ export function buildBillingDraftExecutionPreview(options: {
     };
 }
 
-// ── Navigation Helpers ──────────────────────────────────────────────────────
+// â”€â”€ Navigation Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function invoiceBackToAppointmentsHref(invoice: BillingInvoice): string {
     const params = new URLSearchParams();
@@ -1772,7 +1772,7 @@ export function invoiceBackToAppointmentsHref(invoice: BillingInvoice): string {
     return queryString ? `/appointments?${queryString}` : '/appointments';
 }
 
-// ── Line Item Helpers ───────────────────────────────────────────────────────
+// â”€â”€ Line Item Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function invoiceLineItems(invoice: BillingInvoice): BillingInvoiceLineItem[] {
     return Array.isArray(invoice.lineItems) ? invoice.lineItems : [];
@@ -1782,7 +1782,7 @@ export function invoiceLineItemCount(invoice: BillingInvoice): number {
     return invoiceLineItems(invoice).length;
 }
 
-// ── Shell Escape Helpers ────────────────────────────────────────────────────
+// â”€â”€ Shell Escape Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function escapeForPowerShellSingleQuotedString(value: string): string {
     return value.replace(/'/g, "''");
@@ -1792,7 +1792,7 @@ export function escapeForBashSingleQuotedString(value: string): string {
     return value.replace(/'/g, `'"'"'`);
 }
 
-// ── Claim Reference Payload / Chunk Helpers ─────────────────────────────────
+// â”€â”€ Claim Reference Payload / Chunk Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const billingClaimReferenceMergePreviewPayloadWarningThresholdBytes = 12000;
 export const billingClaimReferenceMergePreviewPayloadHighWarningThresholdBytes = 32000;

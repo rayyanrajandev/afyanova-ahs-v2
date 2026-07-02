@@ -125,7 +125,7 @@ const statusVariant = (s: string) => {
                         <div v-for="account in accounts" :key="account.id" class="flex items-center justify-between gap-4 py-3">
                             <div class="min-w-0">
                                 <p class="text-sm font-medium">{{ account.display_name || 'Unnamed patient' }}</p>
-                                <p class="text-xs text-muted-foreground">MRN {{ account.patient_number }} · Created {{ account.created_at }}</p>
+                                <p class="text-xs text-muted-foreground">MRN {{ account.patient_number }} Â· Created {{ account.created_at }}</p>
                             </div>
                             <div class="flex items-center gap-3">
                                 <Badge :variant="statusVariant(account.status)">{{ account.status }}</Badge>

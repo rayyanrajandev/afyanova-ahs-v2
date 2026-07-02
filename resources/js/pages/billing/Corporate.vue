@@ -682,7 +682,7 @@ onMounted(async () => {
             <DialogContent class="max-w-lg">
                 <DialogHeader>
                     <DialogTitle>Record corporate settlement</DialogTitle>
-                    <DialogDescription>Allocate the settlement payment across the included invoices and update each invoice’s payer ledger.</DialogDescription>
+                    <DialogDescription>Allocate the settlement payment across the included invoices and update each invoiceâ€™s payer ledger.</DialogDescription>
                 </DialogHeader>
                 <div class="grid gap-4">
                     <div class="grid gap-2 sm:grid-cols-2">

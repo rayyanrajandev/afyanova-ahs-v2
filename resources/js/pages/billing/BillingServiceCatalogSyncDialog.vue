@@ -195,7 +195,7 @@ watch(selectedCategory, () => {
         <div v-if="!syncResult" class="flex min-h-0 flex-1 flex-col">
             <!-- Category dropdown -->
             <div class="border-b px-4 py-3">
-                <label class="mb-1.5 block text-xs font-medium text-muted-foreground">Step 1 GÇö Choose a category</label>
+                <label class="mb-1.5 block text-xs font-medium text-muted-foreground">Step 1 GÃ‡Ã¶ Choose a category</label>
                 <Select v-model="selectedCategory" @update:model-value="loadItems">
                     <SelectTrigger class="w-full">
                         <SelectValue placeholder="Select a catalog category to load items..." />
@@ -215,7 +215,7 @@ watch(selectedCategory, () => {
                 </Select>
             </div>
 
-            <!-- No category selected GÇö guidance -->
+            <!-- No category selected GÃ‡Ã¶ guidance -->
             <div v-if="!selectedCategory" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
                 <div class="rounded-full bg-muted/50 p-4">
                     <AppIcon name="book-open" class="size-8 text-muted-foreground/50" />

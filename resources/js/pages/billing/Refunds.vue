@@ -130,7 +130,7 @@ const statusVariant = (s: string) => {
                         <div v-for="refund in refunds" :key="refund.id" class="flex items-center justify-between gap-4 py-3">
                             <div class="min-w-0">
                                 <p class="text-sm font-medium">{{ refund.invoice_number || refund.invoice_id }}</p>
-                                <p class="text-xs text-muted-foreground">{{ refund.reason }} · {{ refund.created_at }}</p>
+                                <p class="text-xs text-muted-foreground">{{ refund.reason }} Â· {{ refund.created_at }}</p>
                             </div>
                             <div class="flex items-center gap-3">
                                 <Badge :variant="statusVariant(refund.status)">{{ refund.status }}</Badge>

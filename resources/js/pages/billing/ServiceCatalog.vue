@@ -128,8 +128,8 @@ const workspaceIntroText = computed(() => {
     const base = `${total} billable service${total === 1 ? '' : 's'} in facility scope`;
 
     return catalogReadOnly.value
-        ? `${base} · browse tariffs linked to clinical services and payer contracts`
-        : `${base} · manage base prices, effective windows, and catalog versions`;
+        ? `${base} Â· browse tariffs linked to clinical services and payer contracts`
+        : `${base} Â· manage base prices, effective windows, and catalog versions`;
 });
 
 const pageLoading = ref(true);
@@ -2109,10 +2109,10 @@ watch(
                                                 </p>
                                                 <p class="text-xs text-muted-foreground">
                                                     {{ createSelectedClinicalCatalogItem.code || 'No code' }}
-                                                    <span class="text-border"> · </span>
+                                                    <span class="text-border"> Â· </span>
                                                     {{ clinicalCatalogGroupLabel(createSelectedClinicalCatalogItem.catalogType) }}
                                                     <span v-if="resolvedClinicalCatalogServiceCode(createSelectedClinicalCatalogItem)">
-                                                        <span class="text-border"> · </span>
+                                                        <span class="text-border"> Â· </span>
                                                         Billing {{ resolvedClinicalCatalogServiceCode(createSelectedClinicalCatalogItem) }}
                                                     </span>
                                                 </p>
@@ -2264,7 +2264,7 @@ watch(
                                             class="flex items-center gap-2 text-xs text-muted-foreground"
                                         >
                                             <AppIcon name="loader-circle" class="size-3.5 animate-spin" />
-                                            Checking whether this service code already has a tariff family…
+                                            Checking whether this service code already has a tariff familyâ€¦
                                         </div>
                                         <Alert v-else-if="createFamilyAlreadyExists" variant="destructive">
                                             <AlertTitle>Service code already in use</AlertTitle>
@@ -2760,7 +2760,7 @@ watch(
                                 </div>
                                 <div class="space-y-1">
                                     <p class="text-sm font-medium">
-                                        {{ catalogListRefreshing ? 'Refreshing prices…' : 'No service prices found' }}
+                                        {{ catalogListRefreshing ? 'Refreshing pricesâ€¦' : 'No service prices found' }}
                                     </p>
                                     <p class="text-xs text-muted-foreground">
                                         <template v-if="catalogListRefreshing">
@@ -2805,7 +2805,7 @@ watch(
                                     v-for="item in items"
                                     :key="String(item.id)"
                                     :status-dot-class="catalogStatusDotClass(item)"
-                                    :status-title="`${formatEnumLabel(item.status)} · ${tariffLifecycleLabel(item.effectiveFrom, item.effectiveTo)}`"
+                                    :status-title="`${formatEnumLabel(item.status)} Â· ${tariffLifecycleLabel(item.effectiveFrom, item.effectiveTo)}`"
                                     @select="openDetails(item)"
                                 >
                                     <template v-if="canUseBulkSelection" #leading>
@@ -2823,7 +2823,7 @@ watch(
                                                 {{ item.serviceName || 'Unnamed service' }}
                                             </span>
                                             <span class="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                                                {{ item.serviceCode || '—' }}
+                                                {{ item.serviceCode || 'â€”' }}
                                             </span>
                                             <span v-if="item.serviceType && item.department !== formatEnumLabel(item.serviceType)" class="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
                                                 {{ formatEnumLabel(item.serviceType) }}
@@ -2835,11 +2835,11 @@ watch(
                                             <span class="font-medium tabular-nums text-foreground">
                                                 {{ formatMoney(item.basePrice, item.currencyCode) }}
                                             </span>
-                                            <span class="text-border">·</span>
+                                            <span class="text-border">Â·</span>
                                             <span>{{ item.department || 'No department' }}</span>
-                                            <span class="text-border">·</span>
+                                            <span class="text-border">Â·</span>
                                             <span class="text-muted-foreground/70">v{{ item.versionNumber || 1 }}</span>
-                                            <span class="text-border">·</span>
+                                            <span class="text-border">Â·</span>
                                             <span>{{ tariffLifecycleLabel(item.effectiveFrom, item.effectiveTo) }}</span>
                                         </div>
                                     </template>
@@ -2872,7 +2872,7 @@ watch(
                     <footer class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
                         <p class="text-xs text-muted-foreground">
                             <template v-if="pagination">
-                                Showing {{ items.length }} of {{ pagination.total }} · Page {{ pagination.currentPage }} of
+                                Showing {{ items.length }} of {{ pagination.total }} Â· Page {{ pagination.currentPage }} of
                                 {{ pagination.lastPage }}
                             </template>
                             <template v-else>No pagination data</template>
@@ -2882,7 +2882,7 @@ watch(
                                 <AppIcon name="chevron-left" class="size-4" />
                             </Button>
                             <template v-for="page in paginationPageNumbers" :key="`catalog-page-${String(page)}`">
-                                <span v-if="page === '...'" class="px-1 text-xs text-muted-foreground">…</span>
+                                <span v-if="page === '...'" class="px-1 text-xs text-muted-foreground">â€¦</span>
                                 <Button
                                     v-else
                                     :variant="page === pagination?.currentPage ? 'default' : 'ghost'"
@@ -2949,9 +2949,9 @@ watch(
                                 </div>
                                 <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                                     <span>{{ tariffWindowLabel(selectedItem.effectiveFrom, selectedItem.effectiveTo) }}</span>
-                                    <span>·</span>
+                                    <span>Â·</span>
                                     <span>{{ tariffLifecycleLabel(selectedItem.effectiveFrom, selectedItem.effectiveTo) }}</span>
-                                    <span v-if="selectedItem.taxRatePercent">·</span>
+                                    <span v-if="selectedItem.taxRatePercent">Â·</span>
                                     <span v-if="selectedItem.taxRatePercent">{{ selectedItem.taxRatePercent }}% tax</span>
                                 </div>
                             </div>

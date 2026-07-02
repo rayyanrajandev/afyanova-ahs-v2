@@ -204,14 +204,14 @@ function requestStatusAction(invoice: BillingInvoice, action: BillingInvoiceStat
                         <template #meta>
                             <p class="truncate text-xs text-muted-foreground">
                                 <span>{{ formatEnumLabel(invoice.status) }}</span>
-                                <span class="text-border"> · </span>
+                                <span class="text-border"> Â· </span>
                                 <span>{{ billingInvoiceQueueLaneLabel(invoice) }}</span>
                                 <span v-if="amountToNumber(invoice.balanceAmount) !== null">
-                                    <span class="text-border"> · </span>
+                                    <span class="text-border"> Â· </span>
                                     Balance {{ formatMoney(invoice.balanceAmount, invoice.currencyCode) }}
                                 </span>
                                 <span v-if="billingInvoiceQueueNextStep(invoice)">
-                                    <span class="text-border"> · </span>
+                                    <span class="text-border"> Â· </span>
                                     {{ billingInvoiceQueueNextStep(invoice)?.title }}
                                 </span>
                             </p>

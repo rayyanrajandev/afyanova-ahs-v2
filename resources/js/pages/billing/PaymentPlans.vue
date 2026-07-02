@@ -160,7 +160,7 @@ const createPlanPatientMeta = computed(() => {
             patient.phone?.trim() || null,
         ].filter(Boolean);
 
-        return parts.length > 0 ? parts.join(' · ') : null;
+        return parts.length > 0 ? parts.join(' Â· ') : null;
     }
 
     const patientId = String(createSelectedInvoice.value?.patientId ?? '').trim();
@@ -184,7 +184,7 @@ const createPlanWorkflowContextMeta = computed(() => {
                 formatCurrency(Number(invoice.balanceAmount ?? 0), invoice.currencyCode || 'TZS'),
             ]
                 .filter(Boolean)
-                .join(' · ');
+                .join(' Â· ');
         }
 
         return 'Search issued or partially paid invoices and attach the plan to the open balance.';
@@ -200,7 +200,7 @@ const createPlanWorkflowContextMeta = computed(() => {
             formatCurrency(Number(account.account_balance ?? 0), account.currency_code || 'TZS'),
         ]
             .filter(Boolean)
-            .join(' · ');
+            .join(' Â· ');
     }
 
     return 'Search the cashier workboard and attach the plan to the selected walk-in account balance.';

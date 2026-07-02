@@ -73,8 +73,8 @@ function bindSearchInputRef(value: unknown) {
     <div class="flex flex-col gap-3">
         <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <p class="text-[11px] text-muted-foreground">
-                    {{ visibleCount }} on this page · Page {{ currentPage }} of {{ lastPage }}
-                    <span v-if="patientFiltered"> · Patient filtered</span>
+                    {{ visibleCount }} on this page Â· Page {{ currentPage }} of {{ lastPage }}
+                    <span v-if="patientFiltered"> Â· Patient filtered</span>
                 </p>
                 <div
                     v-if="activePatientFocus"
