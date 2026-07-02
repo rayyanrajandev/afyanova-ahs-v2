@@ -13,15 +13,14 @@ const ws = useSupplyChainPageApi();
 </script>
 
 <template>
-<!-- Inventory Items card -->
                 <div
                     v-if="ws.canRead"
                     class="flex min-h-0 flex-1 flex-col"
                 >
                     <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
                         <ScrollArea class="max-h-[min(70vh,42rem)]">
-                            <RegistryListSkeleton v-if="ws.loading" />
-                            <div v-else-if="ws.items.length === 0" class="p-4">
+                            <RegistryListSkeleton v-if="!ws.items.length && ws.loading" />
+                            <div v-else-if="!ws.items.length && !ws.loading" class="p-4">
                                 <InventoryEmptyState
                                     icon="package"
                                     title="No inventory items found"
@@ -40,7 +39,7 @@ const ws = useSupplyChainPageApi();
                                     </template>
                                 </InventoryEmptyState>
                             </div>
-                            <div v-else class="divide-y px-4">
+                            <div v-show="ws.items.length > 0" class="divide-y px-4" :class="{ 'opacity-40 pointer-events-none transition-opacity duration-200': ws.loading }">
                                 <RegistryListRow
                                     v-for="item in ws.items"
                                     :key="item.id"

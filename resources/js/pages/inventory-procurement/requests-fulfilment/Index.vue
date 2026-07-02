@@ -25,7 +25,6 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
@@ -53,11 +52,11 @@ import { clearSupplyChainPageApi } from '@/pages/inventory-procurement/supplyCha
 import { bindSupplyChainPageApi } from '@/pages/inventory-procurement/registerSupplyChainPageApi';
 import { useRequestPipelineCounts } from '@/pages/inventory-procurement/composables/useRequestPipelineCounts';
 import { type RequestPipelineStage, type SupplyChainNextAction } from '@/pages/inventory-procurement/supplyChainOverview';
-import SupplyChainPageBootstrapSkeleton from '@/pages/inventory-procurement/components/SupplyChainPageBootstrapSkeleton.vue';
 import SupplyChainProcurementLifecycleSheets from '@/pages/inventory-procurement/components/SupplyChainProcurementLifecycleSheets.vue';
 import SupplyChainRequisitionDetailsSheet from '@/pages/inventory-procurement/components/SupplyChainRequisitionDetailsSheet.vue';
 import SupplyChainRequestEntrySheets from '@/pages/inventory-procurement/components/SupplyChainRequestEntrySheets.vue';
 import SupplyChainTransferSheets from '@/pages/inventory-procurement/components/SupplyChainTransferSheets.vue';
+import SupplyChainFilterPopover from '@/pages/inventory-procurement/components/SupplyChainFilterPopover.vue';
 import {
     SupplyChainOverviewTab,
     SupplyChainRequisitionsTab,
@@ -79,7 +78,6 @@ const rfTabs: RFTab[] = ['overview', 'requisitions', 'shortage-queue', 'transfer
 const { permissionNames: sharedPermissionNames, isFacilitySuperAdmin, hasPermission, permissionState, scope: platformScope } = usePlatformAccess();
 const permissionsResolved = computed(() => sharedPermissionNames.value !== null);
 const canReadDepartments = computed(() => isFacilitySuperAdmin.value || hasPermission('departments.read'));
-const showBootstrapSkeleton = computed(() => !permissionsResolved.value || (canRead.value && loading.value));
 
 const canRead = ref(false);
 const canManageItems = ref(false);
@@ -1576,20 +1574,26 @@ function formatAmount(value: string | number | null | undefined): string {
 const filterCount = computed(() => {
     if (activeTab.value === 'requisitions') {
         let count = 0;
+        if (deptReqSearch.q) count++;
         if (deptReqSearch.status) count++;
         if (deptReqSearch.departmentId) count++;
+        if (deptReqSearch.perPage !== 50) count++;
         return count;
     }
     if (activeTab.value === 'shortage-queue') {
         let count = 0;
+        if (shortageQueueFilters.q) count++;
         if (shortageQueueFilters.readiness !== 'all') count++;
         if (shortageQueueFilters.departmentId) count++;
+        if (shortageQueueFilters.perPage !== 50) count++;
         return count;
     }
     if (activeTab.value === 'transfers') {
         let count = 0;
+        if (transferSearch.q) count++;
         if (transferSearch.status) count++;
         if (transferSearch.varianceReview) count++;
+        if (transferSearch.perPage !== 50) count++;
         return count;
     }
     return 0;
@@ -1875,8 +1879,50 @@ bindSupplyChainPageApi({
     itemCreateRequestError: ref(null), itemCreateSubmitReason: computed(() => null),
     itemCreateSubmitDisabled: computed(() => true),
 });
+let deptReqSearchTimer: ReturnType<typeof setTimeout> | null = null;
+let shortageQueueSearchTimer: ReturnType<typeof setTimeout> | null = null;
+let transferSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
-onBeforeUnmount(() => { clearSupplyChainPageApi(); });
+onBeforeUnmount(() => {
+    if (deptReqSearchTimer) clearTimeout(deptReqSearchTimer);
+    if (shortageQueueSearchTimer) clearTimeout(shortageQueueSearchTimer);
+    if (transferSearchTimer) clearTimeout(transferSearchTimer);
+    clearSupplyChainPageApi();
+});
+
+watch(() => deptReqSearch.q, () => {
+    if (deptReqSearchTimer) clearTimeout(deptReqSearchTimer);
+    deptReqSearchTimer = setTimeout(() => {
+        deptReqSearchTimer = null;
+        if (!canRead.value) return;
+        deptReqSearch.page = 1;
+        void loadDeptRequisitions();
+    }, 180);
+});
+watch(() => deptReqSearch.status, () => { deptReqSearch.page = 1; void loadDeptRequisitions(); });
+watch(() => deptReqSearch.departmentId, () => { deptReqSearch.page = 1; void loadDeptRequisitions(); });
+watch(() => shortageQueueFilters.q, () => {
+    if (shortageQueueSearchTimer) clearTimeout(shortageQueueSearchTimer);
+    shortageQueueSearchTimer = setTimeout(() => {
+        shortageQueueSearchTimer = null;
+        if (!canRead.value) return;
+        shortageQueueFilters.page = 1;
+        void loadShortageQueue();
+    }, 180);
+});
+watch(() => shortageQueueFilters.readiness, () => { shortageQueueFilters.page = 1; void loadShortageQueue(); });
+watch(() => shortageQueueFilters.departmentId, () => { shortageQueueFilters.page = 1; void loadShortageQueue(); });
+watch(() => transferSearch.q, () => {
+    if (transferSearchTimer) clearTimeout(transferSearchTimer);
+    transferSearchTimer = setTimeout(() => {
+        transferSearchTimer = null;
+        if (!canRead.value) return;
+        transferSearch.page = 1;
+        void loadWarehouseTransfers();
+    }, 180);
+});
+watch(() => transferSearch.status, () => { transferSearch.page = 1; void loadWarehouseTransfers(); });
+watch(() => transferSearch.varianceReview, () => { transferSearch.page = 1; void loadWarehouseTransfers(); });
 
 watch(() => activeTab.value, () => { syncRfStateToUrl(); });
 watch(() => [deptReqSearch.q, deptReqSearch.status, deptReqSearch.departmentId, deptReqSearch.page, deptReqSearch.perPage], () => {
@@ -1974,15 +2020,15 @@ onMounted(async () => {
                 </div>
             </section>
 
-            <SupplyChainPageBootstrapSkeleton v-if="showBootstrapSkeleton" :tab-count="4" :summary-count="4" :row-count="4" />
-
-            <Alert v-else-if="!canRead" variant="destructive">
-                <AlertTitle class="flex items-center gap-2">
-                    <AppIcon name="alert-triangle" class="size-4" />
-                    Access denied
-                </AlertTitle>
-                <AlertDescription>You do not have `inventory-procurement.read` permission, so this page cannot load the requests data.</AlertDescription>
-            </Alert>
+            <template v-if="!canRead && permissionsResolved">
+                <Alert variant="destructive">
+                    <AlertTitle class="flex items-center gap-2">
+                        <AppIcon name="alert-triangle" class="size-4" />
+                        Access denied
+                    </AlertTitle>
+                    <AlertDescription>You do not have `inventory-procurement.read` permission, so this page cannot load the requests data.</AlertDescription>
+                </Alert>
+            </template>
 
             <template v-else>
                 <Alert v-if="isDepartmentRequester" class="border-primary/30 bg-primary/5">
@@ -2040,87 +2086,74 @@ onMounted(async () => {
                                         />
                                     </div>
                                 </template>
-                                <Popover>
-                                    <PopoverTrigger as-child>
-                                        <Button variant="outline" size="sm" class="h-8 gap-1.5 rounded-lg text-xs shrink-0">
-                                            <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                            Filters
-                                            <Badge v-if="filterCount > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">{{ filterCount }}</Badge>
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent align="end" class="z-50 w-80 space-y-3">
-                                        <template v-if="activeTab === 'requisitions'">
-                                            <div class="grid gap-2">
-                                                <Label>Status</Label>
-                                                <Select :model-value="toSelectValue(deptReqSearch.status)" @update:model-value="deptReqSearch.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
-                                                    <SelectTrigger class="w-full"><SelectValue placeholder="All statuses" /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
-                                                        <SelectItem v-for="s in REQUISITION_STATUSES" :key="s" :value="s">{{ formatEnumLabel(s) }}</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div v-if="canSelectAnyRequisitionDepartment" class="grid gap-2">
-                                                <Label>Department</Label>
-                                                <Select :model-value="toSelectValue(deptReqSearch.departmentId)" @update:model-value="setDeptReqDepartmentFilter(String($event ?? EMPTY_SELECT_VALUE))">
-                                                    <SelectTrigger class="w-full"><SelectValue placeholder="All departments" /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem :value="EMPTY_SELECT_VALUE">All departments</SelectItem>
-                                                        <SelectItem v-for="dept in departmentFilterOptions" :key="dept.id" :value="dept.id">{{ lookupOptionText(dept) }}</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        </template>
-                                        <template v-else-if="activeTab === 'shortage-queue'">
-                                            <div class="grid gap-2">
-                                                <Label>Readiness</Label>
-                                                <Select :model-value="toSelectValue(shortageQueueFilters.readiness)" @update:model-value="shortageQueueFilters.readiness = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE)); shortageQueueFilters.page = 1; loadShortageQueue()">
-                                                    <SelectTrigger class="w-full"><SelectValue placeholder="All" /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem :value="EMPTY_SELECT_VALUE">All</SelectItem>
-                                                        <SelectItem value="ready">Ready</SelectItem>
-                                                        <SelectItem value="waiting">Waiting</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div v-if="canSelectAnyRequisitionDepartment" class="grid gap-2">
-                                                <Label>Department</Label>
-                                                <Select :model-value="toSelectValue(shortageQueueFilters.departmentId)" @update:model-value="(v) => { setShortageQueueDepartmentFilter(String(v ?? EMPTY_SELECT_VALUE)); shortageQueueFilters.page = 1; loadShortageQueue() }">
-                                                    <SelectTrigger class="w-full"><SelectValue placeholder="All departments" /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem :value="EMPTY_SELECT_VALUE">All departments</SelectItem>
-                                                        <SelectItem v-for="dept in departmentFilterOptions" :key="dept.id" :value="dept.id">{{ lookupOptionText(dept) }}</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        </template>
-                                        <template v-else-if="activeTab === 'transfers'">
-                                            <div class="grid gap-2">
-                                                <Label>Status</Label>
-                                                <Select :model-value="toSelectValue(transferSearch.status)" @update:model-value="transferSearch.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE)); transferSearch.page = 1; loadWarehouseTransfers()">
-                                                    <SelectTrigger class="w-full"><SelectValue placeholder="All statuses" /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
-                                                        <SelectItem v-for="s in TRANSFER_STATUSES" :key="s.value" :value="s.value">{{ s.label }}</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div class="grid gap-2">
-                                                <Label>Review queue</Label>
-                                                <Select :model-value="toSelectValue(transferSearch.varianceReview)" @update:model-value="transferSearch.varianceReview = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE)); transferSearch.page = 1; loadWarehouseTransfers()">
-                                                    <SelectTrigger class="w-full"><SelectValue placeholder="All reviews" /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem v-for="option in TRANSFER_VARIANCE_REVIEW_FILTER_OPTIONS" :key="`trf-vr-${option.value || 'all'}`" :value="option.value || EMPTY_SELECT_VALUE">{{ option.label }}</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        </template>
-                                        <div class="flex gap-2 pt-1">
-                                            <Button size="sm" variant="outline" class="flex-1 gap-1.5" @click="resetAllFilters">Reset</Button>
-                                            <Button size="sm" class="flex-1 gap-1.5" @click="applyFilters">Apply</Button>
+                                <SupplyChainFilterPopover :filter-count="filterCount" @apply="applyFilters" @reset="resetAllFilters">
+                                    <template v-if="activeTab === 'requisitions'">
+                                        <div class="grid gap-2">
+                                            <Label>Status</Label>
+                                            <Select :model-value="toSelectValue(deptReqSearch.status)" @update:model-value="deptReqSearch.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
+                                                <SelectTrigger class="w-full"><SelectValue placeholder="All statuses" /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
+                                                    <SelectItem v-for="s in REQUISITION_STATUSES" :key="s" :value="s">{{ formatEnumLabel(s) }}</SelectItem>
+                                                </SelectContent>
+                                            </Select>
                                         </div>
-                                    </PopoverContent>
-                                </Popover>
+                                        <div v-if="canSelectAnyRequisitionDepartment" class="grid gap-2">
+                                            <Label>Department</Label>
+                                            <Select :model-value="toSelectValue(deptReqSearch.departmentId)" @update:model-value="setDeptReqDepartmentFilter(String($event ?? EMPTY_SELECT_VALUE))">
+                                                <SelectTrigger class="w-full"><SelectValue placeholder="All departments" /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem :value="EMPTY_SELECT_VALUE">All departments</SelectItem>
+                                                    <SelectItem v-for="dept in departmentFilterOptions" :key="dept.id" :value="dept.id">{{ lookupOptionText(dept) }}</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </template>
+                                    <template v-else-if="activeTab === 'shortage-queue'">
+                                        <div class="grid gap-2">
+                                            <Label>Readiness</Label>
+                                            <Select :model-value="toSelectValue(shortageQueueFilters.readiness)" @update:model-value="shortageQueueFilters.readiness = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE)); shortageQueueFilters.page = 1; loadShortageQueue()">
+                                                <SelectTrigger class="w-full"><SelectValue placeholder="All" /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem :value="EMPTY_SELECT_VALUE">All</SelectItem>
+                                                    <SelectItem value="ready">Ready</SelectItem>
+                                                    <SelectItem value="waiting">Waiting</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div v-if="canSelectAnyRequisitionDepartment" class="grid gap-2">
+                                            <Label>Department</Label>
+                                            <Select :model-value="toSelectValue(shortageQueueFilters.departmentId)" @update:model-value="(v) => { setShortageQueueDepartmentFilter(String(v ?? EMPTY_SELECT_VALUE)); shortageQueueFilters.page = 1; loadShortageQueue() }">
+                                                <SelectTrigger class="w-full"><SelectValue placeholder="All departments" /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem :value="EMPTY_SELECT_VALUE">All departments</SelectItem>
+                                                    <SelectItem v-for="dept in departmentFilterOptions" :key="dept.id" :value="dept.id">{{ lookupOptionText(dept) }}</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </template>
+                                    <template v-else-if="activeTab === 'transfers'">
+                                        <div class="grid gap-2">
+                                            <Label>Status</Label>
+                                            <Select :model-value="toSelectValue(transferSearch.status)" @update:model-value="transferSearch.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE)); transferSearch.page = 1; loadWarehouseTransfers()">
+                                                <SelectTrigger class="w-full"><SelectValue placeholder="All statuses" /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
+                                                    <SelectItem v-for="s in TRANSFER_STATUSES" :key="s.value" :value="s.value">{{ s.label }}</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div class="grid gap-2">
+                                            <Label>Review queue</Label>
+                                            <Select :model-value="toSelectValue(transferSearch.varianceReview)" @update:model-value="transferSearch.varianceReview = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE)); transferSearch.page = 1; loadWarehouseTransfers()">
+                                                <SelectTrigger class="w-full"><SelectValue placeholder="All reviews" /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem v-for="option in TRANSFER_VARIANCE_REVIEW_FILTER_OPTIONS" :key="`trf-vr-${option.value || 'all'}`" :value="option.value || EMPTY_SELECT_VALUE">{{ option.label }}</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </template>
+                                </SupplyChainFilterPopover>
                             </div>
 
                             <TabsList class="grid h-9 w-full grid-cols-4 gap-1 bg-muted/40 p-1">

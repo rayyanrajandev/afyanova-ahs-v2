@@ -19,8 +19,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -48,10 +46,10 @@ import { bindSupplyChainPageApi } from '@/pages/inventory-procurement/registerSu
 import SupplyChainAuxiliarySheets from '@/pages/inventory-procurement/components/SupplyChainAuxiliarySheets.vue';
 import SupplyChainCatalogSyncDialog from '@/pages/inventory-procurement/components/SupplyChainCatalogSyncDialog.vue';
 import SupplyChainFilterOverlays from '@/pages/inventory-procurement/components/SupplyChainFilterOverlays.vue';
+import SupplyChainFilterPopover from '@/pages/inventory-procurement/components/SupplyChainFilterPopover.vue';
 import SupplyChainInventoryImportCsvDialog from '@/pages/inventory-procurement/components/SupplyChainInventoryImportCsvDialog.vue';
 import SupplyChainInventoryOpsSheets from '@/pages/inventory-procurement/components/SupplyChainInventoryOpsSheets.vue';
 import SupplyChainItemDetailsSheet from '@/pages/inventory-procurement/components/SupplyChainItemDetailsSheet.vue';
-import SupplyChainPageBootstrapSkeleton from '@/pages/inventory-procurement/components/SupplyChainPageBootstrapSkeleton.vue';
 import {
     SupplyChainDepartmentStockTab,
     SupplyChainInventoryTab,
@@ -95,7 +93,7 @@ const { permissionNames: sharedPermissionNames, isFacilitySuperAdmin, hasPermiss
 
 const permissionsResolved = computed(() => sharedPermissionNames.value !== null);
 const canReadDepartments = computed(() => isFacilitySuperAdmin.value || hasPermission('departments.read'));
-const showBootstrapSkeleton = computed(() => !permissionsResolved.value || (canRead.value && loading.value));
+
 
 const canRead = ref(false);
 const canManageItems = ref(false);
@@ -127,7 +125,10 @@ const tabHeader = computed(() => {
 });
 const filterCount = computed(() => {
     let count = 0;
-    if (itemSearch.perPage !== 50) count++;
+    const tab = activeTab.value;
+    if (tab === 'inventory' && itemSearch.perPage !== 50) count++;
+    else if (tab === 'ledger' && stockLedgerFilters.perPage !== 50) count++;
+    else if (tab === 'department-stock' && departmentStockFilters.perPage !== 50) count++;
     if (itemSearch.category) count++;
     if (itemSearch.stockState) count++;
     if (itemSearch.sortBy !== 'itemName') count++;
@@ -142,6 +143,8 @@ const canSelectAnyRequisitionDepartment = computed(() => false);
 const departmentFilterOptions = computed<Array<{ id: string; name: string; code?: string | null }>>(() => []);
 function setDepartmentStockDepartmentFilter(value: string): void {
     departmentStockFilters.departmentId = fromSelectValue(value);
+    departmentStockFilters.page = 1;
+    void loadDepartmentStock();
 }
 
 const searchPlaceholder = computed(() => {
@@ -169,17 +172,37 @@ function resetAllFilters() {
     stockLedgerFilters.sourceKey = '';
     stockLedgerFilters.from = '';
     stockLedgerFilters.to = '';
+    stockLedgerFilters.perPage = 50;
     stockLedgerFilters.page = 1;
     departmentStockFilters.q = '';
     departmentStockFilters.departmentId = '';
+    departmentStockFilters.perPage = 50;
     departmentStockFilters.page = 1;
-    refreshInventoryItems();
+    if (activeTab.value === 'inventory') refreshInventoryItems();
+    else if (activeTab.value === 'ledger') loadStockLedger();
+    else loadDepartmentStock();
 }
 
 function applyFilters() {
     if (activeTab.value === 'inventory') { itemSearch.page = 1; refreshInventoryItems(); }
     else if (activeTab.value === 'ledger') applyStockLedgerFilters();
     else applyDepartmentStockFilters();
+}
+function handlePerPageChange(value: string) {
+    const perPage = Number(value);
+    if (activeTab.value === 'inventory') {
+        itemSearch.perPage = perPage;
+        itemSearch.page = 1;
+        refreshInventoryItems();
+    } else if (activeTab.value === 'ledger') {
+        stockLedgerFilters.perPage = perPage;
+        stockLedgerFilters.page = 1;
+        loadStockLedger();
+    } else {
+        departmentStockFilters.perPage = perPage;
+        departmentStockFilters.page = 1;
+        loadDepartmentStock();
+    }
 }
 const loading = ref(true);
 const catalogExporting = ref(false);
@@ -532,6 +555,8 @@ let flashedItemTimer: ReturnType<typeof setTimeout> | null = null;
 let flashedRequestTimer: ReturnType<typeof setTimeout> | null = null;
 let pollingTimer: ReturnType<typeof setInterval> | null = null;
 let inventorySearchTimer: ReturnType<typeof setTimeout> | null = null;
+let stockLedgerSearchTimer: ReturnType<typeof setTimeout> | null = null;
+let departmentStockSearchTimer: ReturnType<typeof setTimeout> | null = null;
 let stockMovementSelectionResetLocked = false;
 
 const inventoryItemRequestingDepartmentId = ref<string | null>(null);
@@ -2147,6 +2172,27 @@ watch(() => itemSearch.category, () => { itemSearch.page = 1; void refreshInvent
 watch(() => itemSearch.stockState, () => { itemSearch.page = 1; void refreshInventoryItems(); });
 watch(() => itemSearch.sortBy, () => { itemSearch.page = 1; void refreshInventoryItems(); });
 watch(() => itemSearch.sortDir, () => { itemSearch.page = 1; void refreshInventoryItems(); });
+watch(() => stockLedgerFilters.q, () => {
+    if (stockLedgerSearchTimer) clearTimeout(stockLedgerSearchTimer);
+    stockLedgerSearchTimer = setTimeout(() => {
+        stockLedgerSearchTimer = null;
+        if (!canRead.value) return;
+        stockLedgerFilters.page = 1;
+        void loadStockLedger();
+    }, 180);
+});
+watch(() => stockLedgerFilters.movementType, () => { stockLedgerFilters.page = 1; void loadStockLedger(); });
+watch(() => stockLedgerFilters.sourceKey, () => { stockLedgerFilters.page = 1; void loadStockLedger(); });
+watch(() => departmentStockFilters.q, () => {
+    if (departmentStockSearchTimer) clearTimeout(departmentStockSearchTimer);
+    departmentStockSearchTimer = setTimeout(() => {
+        departmentStockSearchTimer = null;
+        if (!canRead.value) return;
+        departmentStockFilters.page = 1;
+        void loadDepartmentStock();
+    }, 180);
+});
+watch(() => departmentStockFilters.departmentId, () => { departmentStockFilters.page = 1; void loadDepartmentStock(); });
 watch(() => activeTab.value, () => { syncStockControlStateToUrl(); });
 watch(() => [itemSearch.q, itemSearch.category, itemSearch.stockState, itemSearch.sortBy, itemSearch.sortDir, itemSearch.page, itemSearch.perPage], () => {
     syncStockControlStateToUrl();
@@ -2162,6 +2208,8 @@ onBeforeUnmount(() => {
     if (pollingTimer) clearInterval(pollingTimer);
     if (flashedItemTimer) clearTimeout(flashedItemTimer);
     if (inventorySearchTimer) clearTimeout(inventorySearchTimer);
+    if (stockLedgerSearchTimer) clearTimeout(stockLedgerSearchTimer);
+    if (departmentStockSearchTimer) clearTimeout(departmentStockSearchTimer);
     clearSupplyChainPageApi();
 });
 
@@ -2266,15 +2314,15 @@ onMounted(async () => {
                 </div>
             </section>
 
-            <SupplyChainPageBootstrapSkeleton v-if="showBootstrapSkeleton" :tab-count="3" :summary-count="3" :row-count="4" />
-
-            <Alert v-else-if="!canRead" variant="destructive">
-                <AlertTitle class="flex items-center gap-2">
-                    <AppIcon name="alert-triangle" class="size-4" />
-                    Access denied
-                </AlertTitle>
-                <AlertDescription>You do not have `inventory-procurement.read` permission, so this page cannot load the stock control data.</AlertDescription>
-            </Alert>
+            <template v-if="!canRead && permissionsResolved">
+                <Alert variant="destructive">
+                    <AlertTitle class="flex items-center gap-2">
+                        <AppIcon name="alert-triangle" class="size-4" />
+                        Access denied
+                    </AlertTitle>
+                    <AlertDescription>You do not have `inventory-procurement.read` permission, so this page cannot load the stock control data.</AlertDescription>
+                </Alert>
+            </template>
 
             <template v-else>
                 <Card class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70 shadow-sm">
@@ -2313,128 +2361,99 @@ onMounted(async () => {
                                             @keydown.enter="handleSearch"
                                         />
                                     </div>
-                                    <Popover>
-                                        <PopoverTrigger as-child>
-                                            <Button variant="outline" size="sm" class="h-8 gap-1.5 rounded-lg text-xs shrink-0">
-                                                <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                                Filters
-                                                <Badge v-if="filterCount > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">{{ filterCount }}</Badge>
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent align="end" class="z-50 w-80 space-y-3">
-                                            <template v-if="activeTab === 'inventory'">
-                                                <div class="grid gap-2">
-                                                    <Label>Category</Label>
-                                                    <Select :model-value="toSelectValue(itemSearch.category)" @update:model-value="itemSearch.category = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE)); itemSearch.page = 1; refreshInventoryItems()">
-                                                        <SelectTrigger class="w-full">
-                                                            <SelectValue placeholder="All Categories" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem :value="EMPTY_SELECT_VALUE">All Categories</SelectItem>
-                                                            <SelectItem v-for="cat in itemCategoryOptions" :key="cat.value" :value="cat.value">{{ cat.label }}</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                                <div class="grid gap-2">
-                                                    <Label>Stock state</Label>
-                                                    <Select :model-value="toSelectValue(itemSearch.stockState)" @update:model-value="itemSearch.stockState = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE)); itemSearch.page = 1; refreshInventoryItems()">
-                                                        <SelectTrigger class="w-full">
-                                                            <SelectValue placeholder="All stock states" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem :value="EMPTY_SELECT_VALUE">All stock states</SelectItem>
-                                                            <SelectItem v-for="opt in stockStateOptions" :key="opt" :value="opt">{{ stockStateLabel(opt) }}</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                                <div class="grid gap-2">
-                                                    <Label>Sort by</Label>
-                                                    <Select :model-value="toSelectValue(itemSearch.sortBy)" @update:model-value="itemSearch.sortBy = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE)); itemSearch.page = 1; refreshInventoryItems()">
-                                                        <SelectTrigger class="w-full">
-                                                            <SelectValue placeholder="Sort by" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="itemName">Name</SelectItem>
-                                                            <SelectItem value="itemCode">Code</SelectItem>
-                                                            <SelectItem value="currentStock">Store Stock</SelectItem>
-                                                            <SelectItem value="category">Category</SelectItem>
-                                                            <SelectItem value="createdAt">Created</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                            </template>
-                                            <template v-else-if="activeTab === 'ledger'">
-                                                <div class="grid gap-2">
-                                                    <Label>Movement type</Label>
-                                                    <Select :model-value="toSelectValue(stockLedgerFilters.movementType)" @update:model-value="stockLedgerFilters.movementType = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
-                                                        <SelectTrigger class="w-full">
-                                                            <SelectValue placeholder="All types" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem :value="EMPTY_SELECT_VALUE">All types</SelectItem>
-                                                            <SelectItem v-for="opt in movementTypeOptions" :key="`ft-${opt}`" :value="opt">{{ formatEnumLabel(opt) }}</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                                <div class="grid gap-2">
-                                                    <Label>Source</Label>
-                                                    <Select :model-value="toSelectValue(stockLedgerFilters.sourceKey)" @update:model-value="stockLedgerFilters.sourceKey = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
-                                                        <SelectTrigger class="w-full">
-                                                            <SelectValue placeholder="All sources" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem v-for="option in stockLedgerSourceOptions" :key="`fs-${option.value || 'all'}`" :value="toSelectValue(option.value)">{{ option.label }}</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                                <div class="grid gap-2">
-                                                    <Label>From</Label>
-                                                    <input v-model="stockLedgerFilters.from" type="datetime-local" class="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-                                                </div>
-                                                <div class="grid gap-2">
-                                                    <Label>To</Label>
-                                                    <input v-model="stockLedgerFilters.to" type="datetime-local" class="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-                                                </div>
-                                            </template>
-                                            <template v-else-if="activeTab === 'department-stock'">
-                                                <div class="grid gap-2">
-                                                    <Label for="stock-popover-department">Department</Label>
-                                                    <Select :model-value="toSelectValue(departmentStockFilters.departmentId)" @update:model-value="setDepartmentStockDepartmentFilter(String($event ?? EMPTY_SELECT_VALUE))">
-                                                        <SelectTrigger id="stock-popover-department" class="w-full" :disabled="!canSelectAnyRequisitionDepartment">
-                                                            <SelectValue :placeholder="canSelectAnyRequisitionDepartment ? 'All departments' : 'Your department'" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem v-if="canSelectAnyRequisitionDepartment" :value="EMPTY_SELECT_VALUE">All departments</SelectItem>
-                                                            <SelectItem v-for="dept in departmentFilterOptions" :key="`popover-ds-${dept.id}`" :value="dept.id" :text-value="dept.name">
-                                                                {{ dept.name }}<span v-if="dept.code" class="text-muted-foreground"> ({{ dept.code }})</span>
-                                                            </SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                            </template>
+                                    <SupplyChainFilterPopover :filter-count="filterCount" @apply="applyFilters" @reset="resetAllFilters">
+                                        <template v-if="activeTab === 'inventory'">
                                             <div class="grid gap-2">
-                                                <Label>Per page</Label>
-                                                <Select :model-value="String(itemSearch.perPage)" @update:model-value="itemSearch.perPage = Number($event); itemSearch.page = 1; refreshInventoryItems()">
-                                                    <SelectTrigger class="w-full">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
+                                                <Label>Category</Label>
+                                                <Select :model-value="toSelectValue(itemSearch.category)" @update:model-value="itemSearch.category = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE)); itemSearch.page = 1; refreshInventoryItems()">
+                                                    <SelectTrigger class="w-full"><SelectValue placeholder="All Categories" /></SelectTrigger>
                                                     <SelectContent>
-                                                        <SelectItem value="50">50</SelectItem>
-                                                        <SelectItem value="100">100</SelectItem>
-                                                        <SelectItem value="150">150</SelectItem>
+                                                        <SelectItem :value="EMPTY_SELECT_VALUE">All Categories</SelectItem>
+                                                        <SelectItem v-for="cat in itemCategoryOptions" :key="cat.value" :value="cat.value">{{ cat.label }}</SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                             </div>
-                                            <div class="flex gap-2 pt-1">
-                                                <Button size="sm" variant="outline" class="flex-1 gap-1.5" @click="resetAllFilters">
-                                                    Reset
-                                                </Button>
-                                                <Button size="sm" class="flex-1 gap-1.5" @click="applyFilters">
-                                                    Apply
-                                                </Button>
+                                            <div class="grid gap-2">
+                                                <Label>Stock state</Label>
+                                                <Select :model-value="toSelectValue(itemSearch.stockState)" @update:model-value="itemSearch.stockState = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE)); itemSearch.page = 1; refreshInventoryItems()">
+                                                    <SelectTrigger class="w-full"><SelectValue placeholder="All stock states" /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem :value="EMPTY_SELECT_VALUE">All stock states</SelectItem>
+                                                        <SelectItem v-for="opt in stockStateOptions" :key="opt" :value="opt">{{ stockStateLabel(opt) }}</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
                                             </div>
-                                        </PopoverContent>
-                                    </Popover>
+                                            <div class="grid gap-2">
+                                                <Label>Sort by</Label>
+                                                <Select :model-value="toSelectValue(itemSearch.sortBy)" @update:model-value="itemSearch.sortBy = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE)); itemSearch.page = 1; refreshInventoryItems()">
+                                                    <SelectTrigger class="w-full"><SelectValue placeholder="Sort by" /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="itemName">Name</SelectItem>
+                                                        <SelectItem value="itemCode">Code</SelectItem>
+                                                        <SelectItem value="currentStock">Store Stock</SelectItem>
+                                                        <SelectItem value="category">Category</SelectItem>
+                                                        <SelectItem value="createdAt">Created</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </template>
+                                        <template v-else-if="activeTab === 'ledger'">
+                                            <div class="grid gap-2">
+                                                <Label>Movement type</Label>
+                                                <Select :model-value="toSelectValue(stockLedgerFilters.movementType)" @update:model-value="stockLedgerFilters.movementType = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
+                                                    <SelectTrigger class="w-full"><SelectValue placeholder="All types" /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem :value="EMPTY_SELECT_VALUE">All types</SelectItem>
+                                                        <SelectItem v-for="opt in movementTypeOptions" :key="`ft-${opt}`" :value="opt">{{ formatEnumLabel(opt) }}</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div class="grid gap-2">
+                                                <Label>Source</Label>
+                                                <Select :model-value="toSelectValue(stockLedgerFilters.sourceKey)" @update:model-value="stockLedgerFilters.sourceKey = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
+                                                    <SelectTrigger class="w-full"><SelectValue placeholder="All sources" /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem v-for="option in stockLedgerSourceOptions" :key="`fs-${option.value || 'all'}`" :value="toSelectValue(option.value)">{{ option.label }}</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div class="grid gap-2">
+                                                <Label>From</Label>
+                                                <input v-model="stockLedgerFilters.from" type="datetime-local" class="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                                            </div>
+                                            <div class="grid gap-2">
+                                                <Label>To</Label>
+                                                <input v-model="stockLedgerFilters.to" type="datetime-local" class="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                                            </div>
+                                        </template>
+                                        <template v-else-if="activeTab === 'department-stock'">
+                                            <div class="grid gap-2">
+                                                <Label for="stock-popover-department">Department</Label>
+                                                <Select :model-value="toSelectValue(departmentStockFilters.departmentId)" @update:model-value="setDepartmentStockDepartmentFilter(String($event ?? EMPTY_SELECT_VALUE))">
+                                                    <SelectTrigger id="stock-popover-department" class="w-full" :disabled="!canSelectAnyRequisitionDepartment">
+                                                        <SelectValue :placeholder="canSelectAnyRequisitionDepartment ? 'All departments' : 'Your department'" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem v-if="canSelectAnyRequisitionDepartment" :value="EMPTY_SELECT_VALUE">All departments</SelectItem>
+                                                        <SelectItem v-for="dept in departmentFilterOptions" :key="`popover-ds-${dept.id}`" :value="dept.id" :text-value="dept.name">
+                                                            {{ dept.name }}<span v-if="dept.code" class="text-muted-foreground"> ({{ dept.code }})</span>
+                                                        </SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </template>
+                                        <div class="grid gap-2">
+                                            <Label>Per page</Label>
+                                            <Select :model-value="String(activeTab === 'inventory' ? itemSearch.perPage : activeTab === 'ledger' ? stockLedgerFilters.perPage : departmentStockFilters.perPage)" @update:model-value="handlePerPageChange(String($event))">
+                                                <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="50">50</SelectItem>
+                                                    <SelectItem value="100">100</SelectItem>
+                                                    <SelectItem value="150">150</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </SupplyChainFilterPopover>
                                 </div>
                             </div>
 

@@ -22,8 +22,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -35,7 +33,6 @@ import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useUrlQueryState } from '@/composables/useUrlQueryState';
 const { permissionNames: sharedPermissionNames, isFacilitySuperAdmin, permissionState, scope: platformScope } = usePlatformAccess();
 const permissionsResolved = computed(() => sharedPermissionNames.value !== null);
-const showBootstrapSkeleton = computed(() => !permissionsResolved.value || (canRead.value && loading.value));
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
 import { generateRequestKey } from '@/lib/idempotency';
@@ -47,7 +44,7 @@ import { EMPTY_SELECT_VALUE, toSelectValue, fromSelectValue, formatDateTime, for
 import { clearSupplyChainPageApi } from '@/pages/inventory-procurement/supplyChainPageApi';
 import { bindSupplyChainPageApi } from '@/pages/inventory-procurement/registerSupplyChainPageApi';
 import SupplyChainClaimsAndMsdSheets from '@/pages/inventory-procurement/components/SupplyChainClaimsAndMsdSheets.vue';
-import SupplyChainPageBootstrapSkeleton from '@/pages/inventory-procurement/components/SupplyChainPageBootstrapSkeleton.vue';
+import SupplyChainFilterPopover from '@/pages/inventory-procurement/components/SupplyChainFilterPopover.vue';
 import {
     SupplyChainAnalyticsTab,
     SupplyChainClaimsTab,
@@ -256,7 +253,9 @@ const claimLinkContextStatusVariant = computed<'default' | 'secondary' | 'outlin
 const reviewFilterCount = computed(() => {
     if (activeTab.value === 'claims') {
         let count = 0;
+        if (claimLinkSearch.q) count++;
         if (claimLinkSearch.claimStatus) count++;
+        if (claimLinkSearch.perPage !== 15) count++;
         return count;
     }
 
@@ -655,8 +654,25 @@ bindSupplyChainPageApi({
     supplierLabel: (id: string | null | undefined) => id ?? null,
     lookupOptionText: (option: any) => option ? (option.code ? `${option.name} (${option.code})` : option.name) : '',
 });
+let claimSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
-onBeforeUnmount(() => { clearSupplyChainPageApi(); });
+onBeforeUnmount(() => {
+    if (claimSearchTimer) clearTimeout(claimSearchTimer);
+    clearSupplyChainPageApi();
+});
+
+watch(() => claimLinkSearch.q, () => {
+    if (claimSearchTimer) clearTimeout(claimSearchTimer);
+    claimSearchTimer = setTimeout(() => {
+        claimSearchTimer = null;
+        if (!canRead.value) return;
+        claimLinkSearch.page = 1;
+        void loadClaimLinks();
+    }, 180);
+});
+watch(() => claimLinkSearch.claimStatus, () => { claimLinkSearch.page = 1; void loadClaimLinks(); });
+watch(consumptionGranularity, () => { void loadConsumptionTrends(); });
+watch(consumptionDays, () => { void loadConsumptionTrends(); });
 
 watch(() => activeTab.value, () => { syncReviewStateToUrl(); });
 watch(() => [claimLinkSearch.q, claimLinkSearch.claimStatus, claimLinkSearch.page, claimLinkSearch.perPage], () => {
@@ -747,15 +763,15 @@ onMounted(async () => {
                 </div>
             </section>
 
-            <SupplyChainPageBootstrapSkeleton v-if="showBootstrapSkeleton" :tab-count="2" :summary-count="3" :row-count="3" />
-
-            <Alert v-else-if="!canRead" variant="destructive">
-                <AlertTitle class="flex items-center gap-2">
-                    <AppIcon name="alert-triangle" class="size-4" />
-                    Access denied
-                </AlertTitle>
-                <AlertDescription>You do not have `inventory-procurement.read` permission, so this page cannot load the review data.</AlertDescription>
-            </Alert>
+            <template v-if="!canRead && permissionsResolved">
+                <Alert variant="destructive">
+                    <AlertTitle class="flex items-center gap-2">
+                        <AppIcon name="alert-triangle" class="size-4" />
+                        Access denied
+                    </AlertTitle>
+                    <AlertDescription>You do not have `inventory-procurement.read` permission, so this page cannot load the review data.</AlertDescription>
+                </Alert>
+            </template>
 
             <template v-else>
                 <Card class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70 shadow-sm">
@@ -783,57 +799,44 @@ onMounted(async () => {
                                             />
                                         </div>
                                     </template>
-                                    <Popover>
-                                        <PopoverTrigger as-child>
-                                            <Button variant="outline" size="sm" class="h-8 gap-1.5 rounded-lg text-xs shrink-0">
-                                                <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                                Filters
-                                                <Badge v-if="reviewFilterCount > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">{{ reviewFilterCount }}</Badge>
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent align="end" class="z-50 w-80 space-y-3">
-                                            <template v-if="activeTab === 'claims'">
-                                                <div class="grid gap-2">
-                                                    <Label>Status</Label>
-                                                    <Select :model-value="toSelectValue(claimLinkSearch.claimStatus)" @update:model-value="claimLinkSearch.claimStatus = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
-                                                        <SelectTrigger class="w-full"><SelectValue placeholder="All statuses" /></SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
-                                                            <SelectItem v-for="option in CLAIM_STATUSES" :key="option.value" :value="option.value">{{ option.label }}</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                            </template>
-                                            <template v-else>
-                                                <div class="grid gap-2">
-                                                    <Label>Granularity</Label>
-                                                    <Select :model-value="consumptionGranularity" @update:model-value="consumptionGranularity = String($event)">
-                                                        <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="daily">Daily</SelectItem>
-                                                            <SelectItem value="weekly">Weekly</SelectItem>
-                                                            <SelectItem value="monthly">Monthly</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                                <div class="grid gap-2">
-                                                    <Label>Period</Label>
-                                                    <Select :model-value="String(consumptionDays)" @update:model-value="consumptionDays = Number($event)">
-                                                        <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="7">7 days</SelectItem>
-                                                            <SelectItem value="30">30 days</SelectItem>
-                                                            <SelectItem value="90">90 days</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                            </template>
-                                            <div class="flex gap-2 pt-1">
-                                                <Button size="sm" variant="outline" class="flex-1 gap-1.5" @click="resetReviewFilters">Reset</Button>
-                                                <Button size="sm" class="flex-1 gap-1.5" @click="applyReviewFilters">Apply</Button>
+                                    <SupplyChainFilterPopover :filter-count="reviewFilterCount" label="Filters" @apply="applyReviewFilters" @reset="resetReviewFilters">
+                                        <template v-if="activeTab === 'claims'">
+                                            <div class="grid gap-2">
+                                                <Label>Status</Label>
+                                                <Select :model-value="toSelectValue(claimLinkSearch.claimStatus)" @update:model-value="claimLinkSearch.claimStatus = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
+                                                    <SelectTrigger class="w-full"><SelectValue placeholder="All statuses" /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
+                                                        <SelectItem v-for="option in CLAIM_STATUSES" :key="option.value" :value="option.value">{{ option.label }}</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
                                             </div>
-                                        </PopoverContent>
-                                    </Popover>
+                                        </template>
+                                        <template v-else>
+                                            <div class="grid gap-2">
+                                                <Label>Granularity</Label>
+                                                <Select :model-value="consumptionGranularity" @update:model-value="consumptionGranularity = String($event)">
+                                                    <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="daily">Daily</SelectItem>
+                                                        <SelectItem value="weekly">Weekly</SelectItem>
+                                                        <SelectItem value="monthly">Monthly</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div class="grid gap-2">
+                                                <Label>Period</Label>
+                                                <Select :model-value="String(consumptionDays)" @update:model-value="consumptionDays = Number($event)">
+                                                    <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="7">7 days</SelectItem>
+                                                        <SelectItem value="30">30 days</SelectItem>
+                                                        <SelectItem value="90">90 days</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </template>
+                                    </SupplyChainFilterPopover>
                                 </div>
                             </div>
 

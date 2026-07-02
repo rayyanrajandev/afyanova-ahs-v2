@@ -36,12 +36,9 @@ const ws = useSupplyChainPageApi();
                     </div>
 
                     <ScrollArea class="max-h-[min(70vh,42rem)]">
+                        <RegistryListSkeleton v-if="!ws.departmentStock.length && ws.departmentStockLoading" :count="5" />
 
-                        <!-- Skeleton -->
-                        <RegistryListSkeleton v-if="ws.departmentStockLoading" :count="5" />
-
-                        <!-- Empty -->
-                        <div v-else-if="ws.departmentStock.length === 0" class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center">
+                        <div v-else-if="!ws.departmentStock.length && !ws.departmentStockLoading" class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center">
                             <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
                                 <AppIcon name="package" class="size-5 text-muted-foreground/40" />
                             </div>
@@ -51,8 +48,7 @@ const ws = useSupplyChainPageApi();
                             </div>
                         </div>
 
-                        <!-- Stock rows -->
-                        <div v-else class="divide-y px-4">
+                        <div v-show="ws.departmentStock.length > 0" class="divide-y px-4" :class="{ 'opacity-40 pointer-events-none transition-opacity duration-200': ws.departmentStockLoading }">
                             <RegistryListRow
                                 v-for="row in ws.departmentStock"
                                 :key="row.id"

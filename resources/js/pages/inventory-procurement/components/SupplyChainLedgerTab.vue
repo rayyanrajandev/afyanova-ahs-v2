@@ -14,27 +14,25 @@ const ws = useSupplyChainPageApi();
 <template>
                 <div v-if="ws.canRead" class="flex min-h-0 flex-1 flex-col overflow-hidden">
 
-                        <!-- Skeleton loader -->
-                        <WorkflowQueueSkeleton v-if="ws.stockLedgerLoading" :count="5" />
-
-                        <!-- Empty state -->
-                        <div
-                            v-else-if="ws.stockMovements.length === 0"
-                            class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center"
-                        >
-                            <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                <AppIcon name="activity" class="size-5 text-muted-foreground/40" />
-                            </div>
-                            <div>
-                                <p class="text-sm font-medium text-muted-foreground">No stock movements found</p>
-                                <p class="mt-0.5 text-xs text-muted-foreground/70">Movements appear after receipts, issues, adjustments, ws.transfers, or reconciliations.</p>
-                            </div>
-                            <button class="text-xs text-muted-foreground underline-offset-2 hover:underline" @click="ws.resetStockLedgerFilters">Clear filters</button>
-                        </div>
-
                         <!-- Movement rows -->
-                        <ScrollArea v-else class="max-h-[min(70vh,42rem)]">
-                            <div class="divide-y">
+                        <ScrollArea class="max-h-[min(70vh,42rem)]">
+                            <WorkflowQueueSkeleton v-if="!ws.stockMovements.length && ws.stockLedgerLoading" :count="5" />
+
+                            <div
+                                v-else-if="!ws.stockMovements.length && !ws.stockLedgerLoading"
+                                class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center"
+                            >
+                                <div class="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                    <AppIcon name="activity" class="size-5 text-muted-foreground/40" />
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-muted-foreground">No stock movements found</p>
+                                    <p class="mt-0.5 text-xs text-muted-foreground/70">Movements appear after receipts, issues, adjustments, ws.transfers, or reconciliations.</p>
+                                </div>
+                                <button class="text-xs text-muted-foreground underline-offset-2 hover:underline" @click="ws.resetStockLedgerFilters">Clear filters</button>
+                            </div>
+
+                            <div v-show="ws.stockMovements.length > 0" class="divide-y" :class="{ 'opacity-40 pointer-events-none transition-opacity duration-200': ws.stockLedgerLoading }">
                                 <WorkflowQueueRow
                                 v-for="movement in ws.stockMovements"
                                 :key="movement.id"

@@ -21,8 +21,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -48,7 +46,7 @@ import { bindSupplyChainPageApi } from '@/pages/inventory-procurement/registerSu
 import SupplyChainAuxiliarySheets from '@/pages/inventory-procurement/components/SupplyChainAuxiliarySheets.vue';
 import SupplyChainClaimsAndMsdSheets from '@/pages/inventory-procurement/components/SupplyChainClaimsAndMsdSheets.vue';
 import SupplyChainFilterOverlays from '@/pages/inventory-procurement/components/SupplyChainFilterOverlays.vue';
-import SupplyChainPageBootstrapSkeleton from '@/pages/inventory-procurement/components/SupplyChainPageBootstrapSkeleton.vue';
+import SupplyChainFilterPopover from '@/pages/inventory-procurement/components/SupplyChainFilterPopover.vue';
 import SupplyChainProcurementLifecycleSheets from '@/pages/inventory-procurement/components/SupplyChainProcurementLifecycleSheets.vue';
 import {
     SupplyChainLeadTimesTab,
@@ -91,7 +89,6 @@ const inventoryAccess = computed<InventoryProcurementAccess>(() => ({
 
 const isStoreOperations = computed(() => isInventoryStoreOperations(inventoryAccess.value));
 const canReadDepartments = computed(() => isFacilitySuperAdmin.value || hasPermission('departments.read'));
-const showBootstrapSkeleton = computed(() => !permissionsResolved.value || (canRead.value && loading.value));
 const activeTab = ref<ProcurementTab>('procurement');
 const loading = ref(true);
 
@@ -577,6 +574,8 @@ const flashedItemId = ref<string | null>(null);
 const flashedRequestId = ref<string | null>(null);
 let flashedItemTimer: ReturnType<typeof setTimeout> | null = null;
 let flashedRequestTimer: ReturnType<typeof setTimeout> | null = null;
+let procurementSearchTimer: ReturnType<typeof setTimeout> | null = null;
+let msdOrderSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
 function flashRequest(requestId: string) { flashedRequestId.value = requestId; if (flashedRequestTimer) clearTimeout(flashedRequestTimer); flashedRequestTimer = setTimeout(() => { flashedRequestId.value = null; flashedRequestTimer = null; }, 1500); }
 
@@ -733,13 +732,16 @@ const procurementFilterHelperText = computed(() => procurementSearch.q || procur
 const filterCount = computed(() => {
     if (activeTab.value === 'procurement') {
         let count = 0;
+        if (procurementSearch.q) count++;
         if (procurementSearch.status) count++;
         if (procurementSearch.sortBy !== 'createdAt') count++;
+        if (procurementSearch.sortDir !== 'desc') count++;
         if (procurementSearch.perPage !== 50) count++;
         return count;
     }
     if (activeTab.value === 'msd-orders') {
         let count = 0;
+        if (msdOrderSearch.q) count++;
         if (msdOrderSearch.status) count++;
         if (msdOrderSearch.perPage !== 50) count++;
         return count;
@@ -749,6 +751,7 @@ const filterCount = computed(() => {
 
 function resetAllFilters() {
     if (activeTab.value === 'procurement') {
+        procurementSearch.q = '';
         procurementSearch.status = '';
         procurementSearch.sortBy = 'createdAt';
         procurementSearch.sortDir = 'desc';
@@ -756,6 +759,7 @@ function resetAllFilters() {
         procurementSearch.page = 1;
         loadProcurementRequests();
     } else if (activeTab.value === 'msd-orders') {
+        msdOrderSearch.q = '';
         msdOrderSearch.status = '';
         msdOrderSearch.perPage = 50;
         msdOrderSearch.page = 1;
@@ -956,8 +960,33 @@ bindSupplyChainPageApi({
 onBeforeUnmount(() => {
     if (flashedItemTimer) clearTimeout(flashedItemTimer);
     if (flashedRequestTimer) clearTimeout(flashedRequestTimer);
+    if (procurementSearchTimer) clearTimeout(procurementSearchTimer);
+    if (msdOrderSearchTimer) clearTimeout(msdOrderSearchTimer);
     clearSupplyChainPageApi();
 });
+
+watch(() => procurementSearch.q, () => {
+    if (procurementSearchTimer) clearTimeout(procurementSearchTimer);
+    procurementSearchTimer = setTimeout(() => {
+        procurementSearchTimer = null;
+        if (!canRead.value) return;
+        procurementSearch.page = 1;
+        void loadProcurementRequests();
+    }, 180);
+});
+watch(() => procurementSearch.status, () => { procurementSearch.page = 1; void loadProcurementRequests(); });
+watch(() => procurementSearch.sortBy, () => { procurementSearch.page = 1; void loadProcurementRequests(); });
+watch(() => procurementSearch.sortDir, () => { procurementSearch.page = 1; void loadProcurementRequests(); });
+watch(() => msdOrderSearch.q, () => {
+    if (msdOrderSearchTimer) clearTimeout(msdOrderSearchTimer);
+    msdOrderSearchTimer = setTimeout(() => {
+        msdOrderSearchTimer = null;
+        if (!canRead.value) return;
+        msdOrderSearch.page = 1;
+        void loadMsdOrders();
+    }, 180);
+});
+watch(() => msdOrderSearch.status, () => { msdOrderSearch.page = 1; void loadMsdOrders(); });
 
 watch(() => activeTab.value, () => { syncProcurementStateToUrl(); });
 watch(() => [procurementSearch.q, procurementSearch.status, procurementSearch.sortBy, procurementSearch.sortDir, procurementSearch.page, procurementSearch.perPage], () => {
@@ -1051,15 +1080,15 @@ onMounted(async () => {
                 </div>
             </section>
 
-            <SupplyChainPageBootstrapSkeleton v-if="showBootstrapSkeleton" :tab-count="3" :summary-count="3" :row-count="4" />
-
-            <Alert v-else-if="!canRead" variant="destructive">
-                <AlertTitle class="flex items-center gap-2">
-                    <AppIcon name="alert-triangle" class="size-4" />
-                    Access denied
-                </AlertTitle>
-                <AlertDescription>You do not have `inventory-procurement.read` permission, so this page cannot load the procurement data.</AlertDescription>
-            </Alert>
+            <template v-if="!canRead && permissionsResolved">
+                <Alert variant="destructive">
+                    <AlertTitle class="flex items-center gap-2">
+                        <AppIcon name="alert-triangle" class="size-4" />
+                        Access denied
+                    </AlertTitle>
+                    <AlertDescription>You do not have `inventory-procurement.read` permission, so this page cannot load the procurement data.</AlertDescription>
+                </Alert>
+            </template>
 
             <template v-else>
                 <Card class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70 shadow-sm">
@@ -1107,81 +1136,56 @@ onMounted(async () => {
                                             </SelectContent>
                                         </Select>
                                     </template>
-                                    <Popover>
-                                        <PopoverTrigger as-child>
-                                            <Button variant="outline" size="sm" class="h-8 gap-1.5 rounded-lg text-xs shrink-0">
-                                                <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                                Filters
-                                                <Badge v-if="filterCount > 0" variant="secondary" class="ml-1 h-5 px-1.5 text-[10px]">{{ filterCount }}</Badge>
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent align="end" class="z-50 w-80 space-y-3">
-                                            <template v-if="activeTab === 'procurement'">
-                                                <div class="grid gap-2">
-                                                    <Label>Status</Label>
-                                                    <Select :model-value="toSelectValue(procurementSearch.status)" @update:model-value="procurementSearch.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
-                                                        <SelectTrigger class="w-full">
-                                                            <SelectValue placeholder="All statuses" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
-                                                            <SelectItem v-for="opt in procurementStatusOptions" :key="`ps-${opt}`" :value="opt">{{ formatEnumLabel(opt) }}</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                                <div class="grid gap-2">
-                                                    <Label>Sort by</Label>
-                                                    <Select :model-value="toSelectValue(procurementSearch.sortBy)" @update:model-value="procurementSearch.sortBy = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
-                                                        <SelectTrigger class="w-full">
-                                                            <SelectValue placeholder="Sort by" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="createdAt">Created</SelectItem>
-                                                            <SelectItem value="neededBy">Needed By</SelectItem>
-                                                            <SelectItem value="requestedQuantity">Quantity</SelectItem>
-                                                            <SelectItem value="status">Status</SelectItem>
-                                                            <SelectItem value="supplierName">Supplier</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                            </template>
-                                            <template v-else-if="activeTab === 'msd-orders'">
-                                                <div class="grid gap-2">
-                                                    <Label>Status</Label>
-                                                    <Select :model-value="toSelectValue(msdOrderSearch.status)" @update:model-value="msdOrderSearch.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE)); msdOrderSearch.page = 1; loadMsdOrders()">
-                                                        <SelectTrigger class="w-full">
-                                                            <SelectValue placeholder="All statuses" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
-                                                            <SelectItem v-for="s in MSD_ORDER_STATUSES" :key="s.value" :value="s.value">{{ s.label }}</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                            </template>
+                                    <SupplyChainFilterPopover :filter-count="filterCount" @apply="applyFilters" @reset="resetAllFilters">
+                                        <template v-if="activeTab === 'procurement'">
                                             <div class="grid gap-2">
-                                                <Label>Per page</Label>
-                                                <Select :model-value="String(activeTab === 'msd-orders' ? msdOrderSearch.perPage : procurementSearch.perPage)" @update:model-value="(v) => { const val = Number(v); if (activeTab === 'msd-orders') { msdOrderSearch.perPage = val; msdOrderSearch.page = 1; loadMsdOrders(); } else { procurementSearch.perPage = val; procurementSearch.page = 1; loadProcurementRequests(); } }">
-                                                    <SelectTrigger class="w-full">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
+                                                <Label>Status</Label>
+                                                <Select :model-value="toSelectValue(procurementSearch.status)" @update:model-value="procurementSearch.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
+                                                    <SelectTrigger class="w-full"><SelectValue placeholder="All statuses" /></SelectTrigger>
                                                     <SelectContent>
-                                                        <SelectItem value="50">50</SelectItem>
-                                                        <SelectItem value="100">100</SelectItem>
-                                                        <SelectItem value="150">150</SelectItem>
+                                                        <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
+                                                        <SelectItem v-for="opt in procurementStatusOptions" :key="`ps-${opt}`" :value="opt">{{ formatEnumLabel(opt) }}</SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                             </div>
-                                            <div class="flex gap-2 pt-1">
-                                                <Button size="sm" variant="outline" class="flex-1 gap-1.5" @click="resetAllFilters">
-                                                    Reset
-                                                </Button>
-                                                <Button size="sm" class="flex-1 gap-1.5" @click="applyFilters">
-                                                    Apply
-                                                </Button>
+                                            <div class="grid gap-2">
+                                                <Label>Sort by</Label>
+                                                <Select :model-value="toSelectValue(procurementSearch.sortBy)" @update:model-value="procurementSearch.sortBy = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
+                                                    <SelectTrigger class="w-full"><SelectValue placeholder="Sort by" /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="createdAt">Created</SelectItem>
+                                                        <SelectItem value="neededBy">Needed By</SelectItem>
+                                                        <SelectItem value="requestedQuantity">Quantity</SelectItem>
+                                                        <SelectItem value="status">Status</SelectItem>
+                                                        <SelectItem value="supplierName">Supplier</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
                                             </div>
-                                        </PopoverContent>
-                                    </Popover>
+                                        </template>
+                                        <template v-else-if="activeTab === 'msd-orders'">
+                                            <div class="grid gap-2">
+                                                <Label>Status</Label>
+                                                <Select :model-value="toSelectValue(msdOrderSearch.status)" @update:model-value="msdOrderSearch.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE)); msdOrderSearch.page = 1; loadMsdOrders()">
+                                                    <SelectTrigger class="w-full"><SelectValue placeholder="All statuses" /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
+                                                        <SelectItem v-for="s in MSD_ORDER_STATUSES" :key="s.value" :value="s.value">{{ s.label }}</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </template>
+                                        <div class="grid gap-2">
+                                            <Label>Per page</Label>
+                                            <Select :model-value="String(activeTab === 'msd-orders' ? msdOrderSearch.perPage : procurementSearch.perPage)" @update:model-value="(v) => { const val = Number(v); if (activeTab === 'msd-orders') { msdOrderSearch.perPage = val; msdOrderSearch.page = 1; loadMsdOrders(); } else { procurementSearch.perPage = val; procurementSearch.page = 1; loadProcurementRequests(); } }">
+                                                <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="50">50</SelectItem>
+                                                    <SelectItem value="100">100</SelectItem>
+                                                    <SelectItem value="150">150</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </SupplyChainFilterPopover>
                                 </div>
                             </div>
 

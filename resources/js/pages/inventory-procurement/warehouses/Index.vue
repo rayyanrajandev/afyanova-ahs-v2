@@ -6,11 +6,12 @@ import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePa
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import SupplyChainFilterPopover from '@/pages/inventory-procurement/components/SupplyChainFilterPopover.vue';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
@@ -82,6 +83,12 @@ const pagination = ref<Pagination | null>(null);
 const counts = ref<StatusCounts>({ active: 0, inactive: 0, other: 0, total: 0 });
 const filters = reactive({ q: '', status: '', warehouseType: '', page: 1, perPage: 20 });
 const hasActiveFilters = computed(() => filters.q.trim() !== '' || filters.status !== '' || filters.warehouseType.trim() !== '');
+const filterCountForBadge = computed(() => {
+    let c = 0;
+    if (filters.status) c++;
+    if (filters.warehouseType) c++;
+    return c;
+});
 
 const createOpen = ref(false);
 const createLoading = ref(false);
@@ -379,60 +386,41 @@ onMounted(() => {
                                     class="min-w-0 flex-1"
                                     @keyup.enter="search"
                                 />
-                                <!-- Options popover -->
-                                <Popover>
-                                    <PopoverTrigger as-child>
-                                        <Button variant="outline" size="sm" class="gap-1.5">
-                                            <AppIcon name="sliders-horizontal" class="size-3.5" />
-                                            Options
+                                <SupplyChainFilterPopover :filter-count="filterCountForBadge" label="Options">
+                                    <div class="grid gap-2">
+                                        <Label for="wh-status-popover">Status</Label>
+                                        <Select :model-value="toSelectValue(filters.status)" @update:model-value="filters.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
+                                            <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                            <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
+                                            <SelectItem value="active">Active</SelectItem>
+                                            <SelectItem value="inactive">Inactive</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div class="grid gap-2">
+                                        <Label for="wh-type-popover">Warehouse Type</Label>
+                                        <Input id="wh-type-popover" v-model="filters.warehouseType" placeholder="e.g. Main, Pharmacy..." />
+                                    </div>
+                                    <div class="grid gap-2">
+                                        <Label for="wh-per-page-popover">Per page</Label>
+                                        <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event)">
+                                            <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                            <SelectItem value="20">20</SelectItem>
+                                            <SelectItem value="50">50</SelectItem>
+                                            <SelectItem value="100">100</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <template #footer>
+                                        <Button size="sm" variant="outline" class="flex-1 gap-1.5" @click="reset">Reset</Button>
+                                        <Button size="sm" class="flex-1 gap-1.5" :disabled="listLoading" @click="search">
+                                            <AppIcon name="search" class="size-3.5" />
+                                            Search
                                         </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent align="end" class="flex max-h-[28rem] w-[20rem] flex-col overflow-hidden rounded-md border bg-popover p-0 shadow-md">
-                                        <div class="space-y-3 border-b px-4 py-3">
-                                            <p class="flex items-center gap-2 text-sm font-medium">
-                                                <AppIcon name="sliders-horizontal" class="size-4 text-muted-foreground" />
-                                                Filters
-                                            </p>
-                                            <div class="grid gap-2">
-                                                <Label for="wh-status-popover">Status</Label>
-                                                <Select :model-value="toSelectValue(filters.status)" @update:model-value="filters.status = fromSelectValue(String($event ?? EMPTY_SELECT_VALUE))">
-                                                    <SelectTrigger class="w-full">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                    <SelectItem :value="EMPTY_SELECT_VALUE">All statuses</SelectItem>
-                                                    <SelectItem value="active">Active</SelectItem>
-                                                    <SelectItem value="inactive">Inactive</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div class="grid gap-2">
-                                                <Label for="wh-type-popover">Warehouse Type</Label>
-                                                <Input id="wh-type-popover" v-model="filters.warehouseType" placeholder="e.g. Main, Pharmacy..." />
-                                            </div>
-                                            <div class="grid gap-2">
-                                                <Label for="wh-per-page-popover">Per page</Label>
-                                                <Select :model-value="String(filters.perPage)" @update:model-value="filters.perPage = Number($event)">
-                                                    <SelectTrigger class="w-full">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                    <SelectItem value="20">20</SelectItem>
-                                                    <SelectItem value="50">50</SelectItem>
-                                                    <SelectItem value="100">100</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        </div>
-                                        <div class="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-4 py-3">
-                                            <Button variant="outline" size="sm" class="gap-1.5" @click="reset">Reset</Button>
-                                            <Button size="sm" class="gap-1.5" :disabled="listLoading" @click="search">
-                                                <AppIcon name="search" class="size-3.5" />
-                                                Search
-                                            </Button>
-                                        </div>
-                                    </PopoverContent>
-                                </Popover>
+                                    </template>
+                                </SupplyChainFilterPopover>
                             </div>
                         </div>
                     </CardHeader>
