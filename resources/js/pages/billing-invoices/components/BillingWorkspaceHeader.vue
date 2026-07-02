@@ -7,18 +7,13 @@ const props = defineProps({
     pageLoading: { type: Boolean, required: true },
     listLoading: { type: Boolean, required: true },
     pageDescription: { type: String, required: true },
-    billingWorkspaceView: { type: String, required: true },
     canReadBillingFinancialControls: { type: Boolean, required: true },
     canReadBillingInvoices: { type: Boolean, required: true },
     canReadBillingPayerContracts: { type: Boolean, required: true },
-    canCreateBillingInvoices: { type: Boolean, required: true },
 });
 
 defineEmits<{
     (event: 'refresh'): void;
-    (event: 'open-board'): void;
-    (event: 'open-queue'): void;
-    (event: 'open-create'): void;
 }>();
 </script>
 
@@ -72,57 +67,6 @@ defineEmits<{
                 >
                     <AppIcon name="refresh-cw" class="size-3.5" />
                     {{ props.listLoading ? 'Refreshing...' : 'Refresh' }}
-                </Button>
-                <Button
-                    v-if="
-                        props.canReadBillingFinancialControls &&
-                        props.billingWorkspaceView !== 'board'
-                    "
-                    variant="outline"
-                    size="sm"
-                    class="h-8 gap-1.5"
-                    @click="$emit('open-board')"
-                >
-                    <AppIcon name="layout-dashboard" class="size-3.5" />
-                    Billing board
-                </Button>
-                <Button
-                    v-else-if="
-                        props.billingWorkspaceView === 'board' &&
-                        props.canReadBillingInvoices
-                    "
-                    variant="outline"
-                    size="sm"
-                    class="h-8 gap-1.5"
-                    @click="$emit('open-queue')"
-                >
-                    <AppIcon name="list" class="size-3.5" />
-                    Invoice queue
-                </Button>
-                <Button
-                    v-if="
-                        props.canCreateBillingInvoices &&
-                        props.billingWorkspaceView !== 'create'
-                    "
-                    size="sm"
-                    class="h-8 gap-1.5"
-                    @click="$emit('open-create')"
-                >
-                    <AppIcon name="plus" class="size-3.5" />
-                    Create invoice
-                </Button>
-                <Button
-                    v-else-if="
-                        props.billingWorkspaceView === 'create' &&
-                        props.canReadBillingInvoices
-                    "
-                    variant="outline"
-                    size="sm"
-                    class="h-8 gap-1.5"
-                    @click="$emit('open-queue')"
-                >
-                    <AppIcon name="arrow-left" class="size-3.5" />
-                    Back to queue
                 </Button>
             </div>
         </div>

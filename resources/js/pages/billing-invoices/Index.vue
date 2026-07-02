@@ -77,7 +77,8 @@ import BillingCreateLineItemsSidebar from './components/BillingCreateLineItemsSi
 import BillingCreateSelectedLineEditor from './components/BillingCreateSelectedLineEditor.vue';
 import BillingCreateStageActions from './components/BillingCreateStageActions.vue';
 import BillingCreateWorkspaceHeader from './components/BillingCreateWorkspaceHeader.vue';
-import BillingOperationTabs from './components/BillingOperationTabs.vue';
+import BillingModuleNav from './components/BillingModuleNav.vue';
+import BillingInvoiceViewTabs from './components/BillingInvoiceViewTabs.vue';
 import BillingQueueControlBar from './components/BillingQueueControlBar.vue';
 import BillingQueueFiltersPanels from './components/BillingQueueFiltersPanels.vue';
 import BillingQueueTable from './components/BillingQueueTable.vue';
@@ -14469,18 +14470,14 @@ onMounted(refreshPage);
                 :page-loading="pageLoading"
                 :list-loading="listLoading"
                 :page-description="billingWorkspaceHeaderDescription"
-                :billing-workspace-view="billingWorkspaceView"
                 :can-read-billing-financial-controls="canReadBillingFinancialControls"
                 :can-read-billing-invoices="canReadBillingInvoices"
                 :can-read-billing-payer-contracts="canReadBillingPayerContracts"
-                :can-create-billing-invoices="canCreateBillingInvoices"
                 @refresh="refreshPage"
-                @open-board="openBillingBoardWorkspace"
-                @open-queue="setBillingWorkspaceView('queue', { focusSearch: true })"
-                @open-create="openCreateBillingWorkspace"
             />
 
-            <BillingOperationTabs />
+            <BillingModuleNav />
+            <BillingInvoiceViewTabs />
 
             <template v-if="pageLoading">
                 <div

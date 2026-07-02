@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
-import BillingOperationTabs from '@/pages/billing-invoices/components/BillingOperationTabs.vue';
+import BillingModuleNav from '@/pages/billing-invoices/components/BillingModuleNav.vue';
 import { csrfRequestHeaders, refreshCsrfToken } from '@/lib/csrf';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
@@ -515,9 +515,7 @@ onMounted(async () => {
     <Head title="Cash Billing" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="px-4 md:px-6 pt-2">
-            <BillingOperationTabs />
-        </div>
+        <BillingModuleNav />
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-hidden p-4 md:p-6">
             <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div class="min-w-0">

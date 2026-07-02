@@ -48,6 +48,7 @@ import {
     ArrowRight,
     ArrowUpDown,
     ArrowUpRight,
+    Banknote,
     BedDouble,
     Building2,
     BookOpen,
@@ -92,6 +93,7 @@ import {
     Receipt,
     RefreshCw,
     RotateCcw,
+    Scale,
     Scissors,
     Search,
     ShieldCheck,
@@ -102,6 +104,7 @@ import {
     Star,
     Truck,
     Tag,
+    Trash2,
     Undo2,
     User,
     UserX,
@@ -121,6 +124,7 @@ export type AppIconName =
     | 'arrow-right'
     | 'arrow-up-down'
     | 'arrow-up-right'
+    | 'banknote'
     | 'bed-double'
     | 'book-open'
     | 'building-2'
@@ -169,6 +173,7 @@ export type AppIconName =
     | 'receipt'
     | 'refresh-cw'
     | 'rotate-ccw'
+    | 'scale'
     | 'scissors'
     | 'search'
     | 'shield-check'
@@ -177,6 +182,7 @@ export type AppIconName =
     | 'stethoscope'
     | 'star'
     | 'tag'
+    | 'trash-2'
     | 'truck'
     | 'undo-2'
     | 'utensils-crossed'
@@ -194,6 +200,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     'arrow-right': ArrowRight,
     'arrow-up-down': ArrowUpDown,
     'arrow-up-right': ArrowUpRight,
+    banknote: Banknote,
     'bed-double': BedDouble,
     'book-open': BookOpen,
     'building-2': Building2,
@@ -242,6 +249,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     receipt: Receipt,
     'refresh-cw': RefreshCw,
     'rotate-ccw': RotateCcw,
+    scale: Scale,
     scissors: Scissors,
     search: Search,
     'shield-check': ShieldCheck,
@@ -250,6 +258,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     stethoscope: Stethoscope,
     star: Star,
     tag: Tag,
+    'trash-2': Trash2,
     truck: Truck,
     'undo-2': Undo2,
     'utensils-crossed': UtensilsCrossed,
@@ -268,6 +277,7 @@ const HUGE_ICON_MAP = {
     'arrow-right': ArrowRight01Icon,
     'arrow-up-down': SlidersHorizontalIcon,
     'arrow-up-right': ArrowRight01Icon,
+    banknote: Invoice01Icon,
     'bed-double': BedDoubleIcon,
     'book-open': BookOpen01Icon,
     'building-2': Building01Icon,
@@ -316,6 +326,7 @@ const HUGE_ICON_MAP = {
     receipt: Invoice01Icon,
     'refresh-cw': ActivityIcon,
     'rotate-ccw': ArrowLeft01Icon,
+    scale: SlidersHorizontalIcon,
     scissors: ScissorIcon,
     search: ListViewIcon,
     'shield-check': SecurityCheckIcon,
@@ -324,6 +335,7 @@ const HUGE_ICON_MAP = {
     stethoscope: StethoscopeIcon,
     star: CheckmarkCircle01Icon,
     tag: Invoice01Icon,
+    'trash-2': CancelCircleIcon,
     truck: PackageIcon,
     'undo-2': ArrowLeft01Icon,
     'utensils-crossed': SpoonAndForkIcon,

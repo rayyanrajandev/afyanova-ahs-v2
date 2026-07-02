@@ -24,7 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import BillingOperationTabs from '@/pages/billing-invoices/components/BillingOperationTabs.vue';
+import BillingModuleNav from '@/pages/billing-invoices/components/BillingModuleNav.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
 import { messageFromUnknown, notifySuccess } from '@/lib/notify';
@@ -160,7 +160,7 @@ async function submitAdjustment() {
                 </div>
             </section>
 
-            <BillingOperationTabs />
+            <BillingModuleNav />
 
             <div v-if="error" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ error }}</div>
 

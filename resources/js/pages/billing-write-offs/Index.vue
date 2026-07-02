@@ -22,7 +22,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import BillingOperationTabs from '@/pages/billing-invoices/components/BillingOperationTabs.vue';
+import BillingModuleNav from '@/pages/billing-invoices/components/BillingModuleNav.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
 import { messageFromUnknown, notifySuccess } from '@/lib/notify';
@@ -95,7 +95,7 @@ async function submitWriteOff() {
                 </div>
             </section>
 
-            <BillingOperationTabs />
+            <BillingModuleNav />
 
             <Card>
                 <CardHeader>
