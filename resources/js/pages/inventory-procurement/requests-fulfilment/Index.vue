@@ -2182,6 +2182,7 @@ onMounted(async () => {
                                     </template>
                                 </SupplyChainFilterPopover>
                             </div>
+                        </div>
 
                             <TabsList class="grid h-9 w-full grid-cols-4 gap-1 bg-muted/40 p-1">
                                 <TabsTrigger value="overview" class="gap-1.5 rounded-md border border-transparent px-2 text-muted-foreground data-[state=active]:border-primary/40 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-sm">
@@ -2210,7 +2211,6 @@ onMounted(async () => {
                                     </span>
                                 </TabsTrigger>
                             </TabsList>
-                            </div>
                         </div>
 
                         <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
