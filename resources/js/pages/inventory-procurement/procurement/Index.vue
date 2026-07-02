@@ -729,6 +729,31 @@ function goToProcurementPage(page: number): void { procurementSearch.page = Math
 
 const procurementFilterHelperText = computed(() => procurementSearch.q || procurementSearch.status ? 'Filters applied' : 'Search by request number, supplier, or item');
 
+const tabContentTitle = computed(() => {
+    const titles: Record<string, string> = {
+        procurement: 'Procurement Requests',
+        'msd-orders': 'MSD Orders',
+        'lead-times': 'Supplier Lead Times',
+    };
+    return titles[activeTab.value] ?? 'Procurement';
+});
+const tabContentIcon = computed(() => {
+    const icons: Record<string, string> = {
+        procurement: 'clipboard-list',
+        'msd-orders': 'package',
+        'lead-times': 'clock',
+    };
+    return icons[activeTab.value] ?? 'clipboard-list';
+});
+const tabContentDescription = computed(() => {
+    const descs: Record<string, string> = {
+        procurement: 'Purchase requests from submission through ordering and receipt.',
+        'msd-orders': 'Orders placed against the MSD standing contract.',
+        'lead-times': 'Supplier lead time tracking and management.',
+    };
+    return descs[activeTab.value] ?? '';
+});
+
 const filterCount = computed(() => {
     if (activeTab.value === 'procurement') {
         let count = 0;
@@ -1097,10 +1122,10 @@ onMounted(async () => {
                             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                                 <div class="min-w-0 shrink-0">
                                     <h3 class="flex items-center gap-2 text-sm font-semibold leading-none whitespace-nowrap">
-                                        <AppIcon name="clipboard-list" class="size-4 text-primary" />
-                                        Procurement
+                                        <AppIcon :name="tabContentIcon as AppIconName" class="size-4 text-primary" />
+                                        {{ tabContentTitle }}
                                     </h3>
-                                    <p class="mt-1 text-xs text-muted-foreground">Purchase requests, MSD orders, and supplier lead times</p>
+                                    <p class="mt-1 text-xs text-muted-foreground">{{ tabContentDescription }}</p>
                                 </div>
                                 <div class="flex min-w-0 items-center gap-2">
                                     <template v-if="activeTab === 'procurement'">
