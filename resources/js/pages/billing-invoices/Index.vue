@@ -14518,28 +14518,11 @@ onMounted(refreshPage);
                 </div>
 
             <template v-if="pageLoading">
-                <div
+                <Card
                     v-if="billingWorkspaceView === 'create'"
-                    class="space-y-4"
+                    id="create-billing-invoice-loading"
+                    class="rounded-lg border-sidebar-border/70"
                 >
-                    <Card
-                        id="create-billing-invoice-loading"
-                        class="rounded-lg border-sidebar-border/70"
-                    >
-                        <CardHeader class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                            <div class="space-y-1.5">
-                                <CardTitle class="flex items-center gap-2">
-                                    <AppIcon name="plus" class="size-5 text-muted-foreground" />
-                                    {{ createWorkspaceTitle }}
-                                </CardTitle>
-                                <CardDescription>
-                                    {{ createWorkspaceDescription }}
-                                </CardDescription>
-                            </div>
-                            <div class="flex flex-wrap items-center gap-2 lg:justify-end">
-                                <Skeleton class="h-8 w-36 rounded-lg" />
-                            </div>
-                        </CardHeader>
                         <CardContent class="space-y-4">
                             <div class="rounded-lg border bg-muted/20 p-2">
                                 <div class="grid gap-2 md:grid-cols-3">
@@ -14583,7 +14566,6 @@ onMounted(refreshPage);
                             <Skeleton class="h-48 rounded-lg" />
                         </CardContent>
                     </Card>
-                </div>
                 <div v-else class="space-y-3">
                     <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                         <Skeleton class="h-9 rounded-lg" />
@@ -14682,8 +14664,7 @@ onMounted(refreshPage);
                 @dismiss-completed-message="auditExportRetryHandoffCompletedMessage = null"
             />
 
-            <div class="flex min-w-0 flex-col gap-4">
-                <Card
+            <Card
                     v-if="canReadBillingInvoices && billingWorkspaceView === 'queue'"
                     id="billing-invoices-queue"
                     class="rounded-lg border-sidebar-border/70 flex min-h-0 flex-1 flex-col"
@@ -14770,15 +14751,14 @@ onMounted(refreshPage);
                     v-else-if="!pageLoading && billingWorkspaceView === 'queue'"
                     class="rounded-lg border-sidebar-border/70"
                 >
-                    <CardHeader>
-                        <CardTitle class="flex items-center gap-2">
-                            <AppIcon name="shield-check" class="size-4 text-muted-foreground" />
-                            Billing Invoices
-                        </CardTitle>
-                        <CardDescription>
-                            You do not have permission to view billing invoices.
-                        </CardDescription>
-                    </CardHeader>
+                    <CardContent>
+                        <Alert variant="destructive">
+                            <AlertTitle>Access restricted</AlertTitle>
+                            <AlertDescription>
+                                You do not have permission to view billing invoices.
+                            </AlertDescription>
+                        </Alert>
+                    </CardContent>
                 </Card>
 
                 <Card
@@ -15072,7 +15052,6 @@ onMounted(refreshPage);
                         billingWorkspaceView === 'create'
                     "
                 />
-            </div>
 
             <BillingCreateContextDialog
                 :state="createContextDialogState"

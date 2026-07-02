@@ -4,7 +4,6 @@ import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 type BillingCreateStage = 'context' | 'charges' | 'finalize';
 
@@ -45,17 +44,8 @@ function selectStage(stage: BillingCreateStage): void {
 </script>
 
 <template>
-    <CardHeader class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div class="space-y-1.5">
-            <CardTitle class="flex items-center gap-2">
-                <AppIcon name="plus" class="size-5 text-muted-foreground" />
-                {{ createWorkspaceTitle }}
-            </CardTitle>
-            <CardDescription>
-                {{ createWorkspaceDescription }}
-            </CardDescription>
-        </div>
-        <div class="flex flex-wrap items-center gap-2 lg:justify-end">
+    <div class="flex flex-wrap items-center justify-between gap-2 pb-3">
+        <div class="flex flex-wrap items-center gap-2">
             <Button
                 v-if="showPatientChartReturn"
                 variant="outline"
@@ -63,6 +53,7 @@ function selectStage(stage: BillingCreateStage): void {
                 as-child
             >
                 <Link :href="createPatientChartHref">
+                    <AppIcon name="arrow-left" class="size-3.5" />
                     Back to Patient Chart
                 </Link>
             </Button>
@@ -73,11 +64,24 @@ function selectStage(stage: BillingCreateStage): void {
                 as-child
             >
                 <Link :href="consultationContextHref">
+                    <AppIcon name="arrow-left" class="size-3.5" />
                     {{ consultationReturnLabel }}
                 </Link>
             </Button>
         </div>
-    </CardHeader>
+        <div class="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" class="rounded-lg">
+                {{ createWorkspaceModeBadgeLabel }}
+            </Badge>
+            <Badge
+                v-if="createWorkspaceIsEditingDraft"
+                variant="secondary"
+                class="rounded-lg"
+            >
+                {{ createWorkspaceDraftInvoiceLabel || 'Draft invoice' }}
+            </Badge>
+        </div>
+    </div>
     <div class="space-y-4">
         <div class="rounded-lg border bg-muted/20 p-2">
             <div class="grid gap-2 md:grid-cols-3">
@@ -132,18 +136,6 @@ function selectStage(stage: BillingCreateStage): void {
                     </p>
                 </button>
             </div>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" class="rounded-lg">
-                {{ createWorkspaceModeBadgeLabel }}
-            </Badge>
-            <Badge
-                v-if="createWorkspaceIsEditingDraft"
-                variant="secondary"
-                class="rounded-lg"
-            >
-                {{ createWorkspaceDraftInvoiceLabel || 'Draft invoice' }}
-            </Badge>
         </div>
         <Alert
             v-if="hasActiveDraft"

@@ -553,15 +553,6 @@ const financialSummaryTopDenialReasons = computed(
         id="billing-invoices-board"
         class="rounded-lg border-sidebar-border/70"
     >
-        <CardHeader>
-            <CardTitle class="flex items-center gap-2">
-                <AppIcon name="layout-dashboard" class="size-4 text-muted-foreground" />
-                Billing Board
-            </CardTitle>
-            <CardDescription>
-                Financial operations summaries require billing reporting access.
-            </CardDescription>
-        </CardHeader>
         <CardContent>
             <Alert variant="destructive">
                 <AlertTitle>Board access restricted</AlertTitle>

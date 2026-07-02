@@ -5,11 +5,6 @@ import AppIcon from '@/components/AppIcon.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
-import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -73,16 +68,8 @@ function bindSearchInputRef(value: unknown) {
 </script>
 
 <template>
-    <CardHeader class="shrink-0 gap-3 border-b pb-3">
+    <div class="flex flex-col gap-3">
         <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div class="min-w-0 space-y-1">
-                <CardTitle class="flex items-center gap-2 text-base">
-                    <AppIcon name="layout-list" class="size-5 text-muted-foreground" />
-                    Invoice queue
-                </CardTitle>
-                <CardDescription class="text-xs leading-relaxed">
-                    {{ queueScopeSummary }}
-                </CardDescription>
                 <p class="text-[11px] text-muted-foreground">
                     {{ visibleCount }} on this page · Page {{ currentPage }} of {{ lastPage }}
                     <span v-if="patientFiltered"> · Patient filtered</span>
@@ -251,5 +238,5 @@ function bindSearchInputRef(value: unknown) {
                 </button>
             </div>
         </div>
-    </CardHeader>
+    </div>
 </template>
