@@ -517,39 +517,35 @@ onMounted(async () => {
     <AppLayout :breadcrumbs="breadcrumbs">
         <BillingModuleNav />
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-hidden p-4 md:p-6">
-            <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                <div class="min-w-0">
-                    <div class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <AppIcon name="receipt" class="size-6 text-muted-foreground" />
-                        <span>Cash Billing</span>
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20" aria-hidden="true">
+                            <AppIcon name="banknote" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <h1 class="text-base font-semibold tracking-tight md:text-lg">Cash payments</h1>
+                            <p class="text-xs text-muted-foreground">Walk-in cashier workboard for Tanzania private hospitals: open accounts, post services, and collect payment without jumping across modules.</p>
+                        </div>
                     </div>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Walk-in cashier workboard for Tanzania private hospitals: open accounts, post services, and collect payment without jumping across modules.
-                    </p>
-                    <div class="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                        <Badge variant="outline">Cash path</Badge>
-                        <Badge variant="outline">Mobile money ready</Badge>
-                        <Badge variant="outline">Receipt discipline</Badge>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button variant="outline" size="sm" class="h-8 gap-1.5" as-child>
+                            <a href="/billing-payment-plans">
+                                <AppIcon name="calendar" class="size-3.5" />
+                                Payment plans
+                            </a>
+                        </Button>
+                        <Button v-if="canManage" size="sm" class="h-8 gap-1.5" @click="createDialogOpen = true">
+                            <AppIcon name="plus" class="size-3.5" />
+                            New cash account
+                        </Button>
+                        <Button variant="outline" size="sm" class="h-8 gap-1.5" :disabled="listLoading" @click="loadAccounts()">
+                            <AppIcon name="refresh-cw" class="size-3.5" />
+                            Refresh
+                        </Button>
                     </div>
                 </div>
-
-                <div class="flex flex-wrap gap-2">
-                    <Button variant="outline" class="gap-2" as-child>
-                        <a href="/billing-payment-plans">
-                            <AppIcon name="calendar-range" class="size-4" />
-                            Payment plans
-                        </a>
-                    </Button>
-                    <Button v-if="canManage" class="gap-2" @click="createDialogOpen = true">
-                        <AppIcon name="plus" class="size-4" />
-                        New cash account
-                    </Button>
-                    <Button variant="outline" class="gap-2" :disabled="listLoading" @click="loadAccounts()">
-                        <AppIcon name="refresh-cw" class="size-4" />
-                        Refresh workboard
-                    </Button>
-                </div>
-            </div>
+            </section>
 
             <Alert v-if="!canRead" variant="destructive" class="rounded-lg">
                 <AppIcon name="shield-alert" class="size-4" />

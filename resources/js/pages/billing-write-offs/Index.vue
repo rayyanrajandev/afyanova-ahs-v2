@@ -7,9 +7,6 @@ import { Button } from '@/components/ui/button';
 import {
     Card,
     CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
 } from '@/components/ui/card';
 import {
     Dialog,
@@ -79,7 +76,7 @@ async function submitWriteOff() {
                 <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
                     <div class="flex min-w-0 items-center gap-3">
                         <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
-                            <AppIcon name="file-text" class="size-5" />
+                            <AppIcon name="trash-2" class="size-5" />
                         </div>
                         <div class="min-w-0 space-y-0.5">
                             <h1 class="text-base font-semibold tracking-tight md:text-lg">Write-Offs &amp; Bad Debt</h1>
@@ -98,10 +95,6 @@ async function submitWriteOff() {
             <BillingModuleNav />
 
             <Card>
-                <CardHeader>
-                    <CardTitle>Write-Offs &amp; Bad Debt</CardTitle>
-                    <CardDescription>Create a bad debt write-off request against an invoice</CardDescription>
-                </CardHeader>
                 <CardContent>
                     <div class="flex flex-col items-center gap-3 py-8 text-center text-muted-foreground">
                         <AppIcon name="file-text" class="size-10 opacity-40" />

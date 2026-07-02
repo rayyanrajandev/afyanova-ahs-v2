@@ -8,9 +8,6 @@ import { Button } from '@/components/ui/button';
 import {
     Card,
     CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
 } from '@/components/ui/card';
 import {
     Dialog,
@@ -144,7 +141,7 @@ async function submitAdjustment() {
                 <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
                     <div class="flex min-w-0 items-center gap-3">
                         <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
-                            <AppIcon name="receipt" class="size-5" />
+                            <AppIcon name="scale" class="size-5" />
                         </div>
                         <div class="min-w-0 space-y-0.5">
                             <h1 class="text-base font-semibold tracking-tight md:text-lg">Invoice Adjustments</h1>
@@ -165,10 +162,6 @@ async function submitAdjustment() {
             <div v-if="error" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ error }}</div>
 
             <Card>
-                <CardHeader>
-                    <CardTitle>Invoice Adjustments</CardTitle>
-                    <CardDescription>Create a credit or debit note against an invoice</CardDescription>
-                </CardHeader>
                 <CardContent>
                     <div class="flex flex-col items-center gap-3 py-8 text-center text-muted-foreground">
                         <AppIcon name="receipt" class="size-10 opacity-40" />

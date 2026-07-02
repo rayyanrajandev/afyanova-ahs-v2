@@ -670,33 +670,29 @@ onMounted(async () => {
     <AppLayout :breadcrumbs="breadcrumbs">
         <BillingModuleNav />
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-hidden p-4 md:p-6">
-            <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                <div class="min-w-0">
-                    <div class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <AppIcon name="rotate-ccw" class="size-6 text-muted-foreground" />
-                        <span>Refund Operations</span>
+            <section class="rounded-lg border border-border bg-card shadow-sm">
+                <div class="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:gap-6">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20" aria-hidden="true">
+                            <AppIcon name="undo-2" class="size-5" />
+                        </div>
+                        <div class="min-w-0 space-y-0.5">
+                            <h1 class="text-base font-semibold tracking-tight md:text-lg">Refunds</h1>
+                            <p class="text-xs text-muted-foreground">Finance workboard for refund control: request, approve, process, and keep payout proof tied to the invoice trail.</p>
+                        </div>
                     </div>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Finance workboard for refund control: request, approve, process, and keep payout proof tied to the invoice trail.
-                    </p>
-                    <div class="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                        <Badge variant="outline">Finance approval</Badge>
-                        <Badge variant="outline">Payout proof</Badge>
-                        <Badge variant="outline">Tanzania cashier fit</Badge>
+                    <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button v-if="canCreate" size="sm" class="h-8 gap-1.5" @click="openCreateRefundDialog">
+                            <AppIcon name="plus" class="size-3.5" />
+                            New refund
+                        </Button>
+                        <Button variant="outline" size="sm" class="h-8 gap-1.5" :disabled="listLoading" @click="loadRefunds()">
+                            <AppIcon name="refresh-cw" class="size-3.5" />
+                            Refresh
+                        </Button>
                     </div>
                 </div>
-
-                <div class="flex flex-wrap gap-2">
-                    <Button v-if="canCreate" class="gap-2" @click="openCreateRefundDialog">
-                        <AppIcon name="plus" class="size-4" />
-                        New refund request
-                    </Button>
-                    <Button variant="outline" class="gap-2" :disabled="listLoading" @click="loadRefunds()">
-                        <AppIcon name="refresh-cw" class="size-4" />
-                        Refresh queue
-                    </Button>
-                </div>
-            </div>
+            </section>
 
             <Alert v-if="!canRead" variant="destructive" class="rounded-lg">
                 <AppIcon name="shield-alert" class="size-4" />
