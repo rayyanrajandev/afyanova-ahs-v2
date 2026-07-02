@@ -28,7 +28,7 @@ defineEmits<{
                     <AppIcon name="receipt" class="size-5" />
                 </div>
                 <div class="min-w-0 space-y-0.5">
-                    <h1 class="text-base font-semibold tracking-tight md:text-lg">Billing invoices</h1>
+                    <h1 class="text-base font-semibold tracking-tight md:text-lg">Invoices</h1>
                     <p class="text-xs text-muted-foreground">
                         {{ props.pageDescription }}
                     </p>

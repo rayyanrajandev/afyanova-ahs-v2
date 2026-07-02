@@ -61,6 +61,7 @@ import {
 } from '@/lib/financialCoverage';
 import { generateRequestKey } from '@/lib/idempotency';
 import { formatEnumLabel } from '@/lib/labels';
+import type { AppIconName } from '@/lib/icons';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { patientChartHref } from '@/lib/patientChart';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
@@ -13658,6 +13659,32 @@ const billingWorkspaceHeaderDescription = computed(() => {
     return 'Review cashier queues, payments, and invoice follow-up in one place.';
 });
 
+const invoiceTabTitle = computed(() => {
+    const titles: Record<string, string> = {
+        queue: 'Invoice queue',
+        board: 'Billing board',
+        create: 'Create invoice',
+    };
+    return titles[billingWorkspaceView.value] ?? 'Invoice queue';
+});
+const invoiceTabIcon = computed(() => {
+    const icons: Record<string, string> = {
+        queue: 'list',
+        board: 'layout-grid',
+        create: 'plus',
+    };
+    return icons[billingWorkspaceView.value] ?? 'list';
+});
+const invoiceTabDescription = computed(() => {
+    if (pageLoading.value) return 'Loading billing workspace and restoring the current scope.';
+    const descs: Record<string, string> = {
+        queue: 'Review cashier queues, payments, and invoice follow-up in one place.',
+        board: 'Monitor collections, denial pressure, and settlement reconciliation without crowding the queue.',
+        create: 'Create and issue OPD invoices without losing patient context.',
+    };
+    return descs[billingWorkspaceView.value] ?? '';
+});
+
 const billingWorkspaceHeaderScopeLabel = computed(() => {
     if (pageLoading.value) {
         return 'Loading Scope';
@@ -14479,7 +14506,14 @@ onMounted(refreshPage);
             <BillingModuleNav />
 
             <Card class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70 shadow-sm">
-                <div class="border-b px-4 py-2">
+                <div class="flex flex-col gap-3 border-b px-4 py-3">
+                    <div class="min-w-0">
+                        <h3 class="flex items-center gap-2 text-sm font-semibold leading-none whitespace-nowrap">
+                            <AppIcon :name="invoiceTabIcon as AppIconName" class="size-4 text-primary" />
+                            {{ invoiceTabTitle }}
+                        </h3>
+                        <p class="mt-1 text-xs text-muted-foreground">{{ invoiceTabDescription }}</p>
+                    </div>
                     <BillingInvoiceViewTabs />
                 </div>
 
