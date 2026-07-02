@@ -14477,7 +14477,11 @@ onMounted(refreshPage);
             />
 
             <BillingModuleNav />
-            <BillingInvoiceViewTabs />
+
+            <Card class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70 shadow-sm">
+                <div class="border-b px-4 py-2">
+                    <BillingInvoiceViewTabs />
+                </div>
 
             <template v-if="pageLoading">
                 <div
@@ -15082,6 +15086,7 @@ onMounted(refreshPage);
                 :helpers="statusDialogHelpers"
             />
         </template>
+            </Card>
         </div>
         <LeaveWorkflowDialog
                 :open="createLeaveConfirmOpen"
