@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
-import BillingModuleNav from '@/pages/billing-invoices/components/BillingModuleNav.vue';
+import BillingModuleNav from '@/pages/billing/components/BillingModuleNav.vue';
 import { csrfRequestHeaders, refreshCsrfToken } from '@/lib/csrf';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';

@@ -95,7 +95,7 @@ import { generateRequestKey } from '@/lib/idempotency';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
-import BillingServiceCatalogSyncDialog from '@/pages/billing-service-catalog/BillingServiceCatalogSyncDialog.vue';
+import BillingServiceCatalogSyncDialog from '@/pages/billing/BillingServiceCatalogSyncDialog.vue';
 import { type BreadcrumbItem } from '@/types';
 
 const serviceTypeOptions = SERVICE_TYPE_OPTIONS;

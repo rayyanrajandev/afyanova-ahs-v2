@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import LeaveWorkflowDialog from '@/components/workflow/LeaveWorkflowDialog.vue';
 import { usePendingWorkflowLeaveGuard } from '@/composables/usePendingWorkflowLeaveGuard';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
-import BillingModuleNav from '@/pages/billing-invoices/components/BillingModuleNav.vue';
+import BillingModuleNav from '@/pages/billing/components/BillingModuleNav.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiGet, apiPost } from '@/lib/apiClient';
 import { generateRequestKey } from '@/lib/idempotency';

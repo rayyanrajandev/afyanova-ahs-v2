@@ -19,7 +19,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import BillingModuleNav from '@/pages/billing-invoices/components/BillingModuleNav.vue';
+import BillingModuleNav from '@/pages/billing/components/BillingModuleNav.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
 import { messageFromUnknown, notifySuccess } from '@/lib/notify';
