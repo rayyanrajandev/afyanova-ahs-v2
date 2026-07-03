@@ -20,23 +20,17 @@ defineProps<{
     canRegister: boolean;
 }>();
 
-function readCookie(name: string): string | null {
-    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const match = document.cookie.match(new RegExp(`(?:^|; )${escapedName}=([^;]*)`));
-    return match ? decodeURIComponent(match[1]) : null;
-}
-
-function csrfMetaContent(): string {
-    return document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
-}
-
 const csrfReady = ref(false);
-const csrfToken = ref(csrfMetaContent());
+const csrfToken = ref(
+    document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '',
+);
 
 onMounted(async () => {
     try {
-        await refreshCsrfToken();
-        csrfToken.value = readCookie('XSRF-TOKEN') ?? csrfMetaContent();
+        const token = await refreshCsrfToken();
+        if (token) {
+            csrfToken.value = token;
+        }
     } finally {
         csrfReady.value = true;
     }

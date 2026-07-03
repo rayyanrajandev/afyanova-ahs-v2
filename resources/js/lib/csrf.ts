@@ -1,17 +1,13 @@
-function readCookie(name: string): string | null {
-    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const match = document.cookie.match(new RegExp(`(?:^|; )${escapedName}=([^;]*)`));
-
-    return match ? decodeURIComponent(match[1]) : null;
-}
-
 /**
- * Read the XSRF-TOKEN cookie and return the header object for fetch requests.
+ * Read the XSRF-TOKEN cookie and return the header object for fetch / Axios
+ * requests.
  *
- * The cookie is the **single source of truth** — no meta tag fallback.
  * Laravel encrypts the session CSRF token into this cookie via the
- * EncryptCookies middleware and VerifyCsrfToken compares the decrypted
- * header value against the session `_token`.
+ * EncryptCookies middleware. VerifyCsrfToken decrypts the header value
+ * and compares it against the session `_token`.
+ *
+ * Axios automatically reads XSRF-TOKEN and sends it as X-XSRF-TOKEN,
+ * so this helper is only needed for manual `fetch()` calls.
  */
 export function csrfRequestHeaders(): Record<string, string> {
     const xsrfToken = readCookie('XSRF-TOKEN');
@@ -27,14 +23,15 @@ export function csrfRequestHeaders(): Record<string, string> {
  *
  * Calls the existing `GET /auth/csrf-token` endpoint which:
  *  1. Regenerates the session `_token` via `session()->regenerateToken()`
- *  2. Returns the response through EncryptCookies → sets a fresh XSRF-TOKEN cookie
+ *  2. Returns the plain-text token in JSON
+ *  3. Sets a fresh encrypted XSRF-TOKEN cookie via Set-Cookie
  *
- * Deduplicates concurrent calls so multiple simultaneous 419 recoveries
- * only trigger one server round-trip.
+ * Returns the new plain-text token so callers can update meta tags or
+ * hidden `_token` fields. Deduplicates concurrent calls.
  */
-let refreshPromise: Promise<void> | null = null;
+let refreshPromise: Promise<string> | null = null;
 
-export async function refreshCsrfToken(): Promise<void> {
+export async function refreshCsrfToken(): Promise<string> {
     if (refreshPromise) {
         return refreshPromise;
     }
@@ -53,16 +50,29 @@ export async function refreshCsrfToken(): Promise<void> {
             throw new Error(`Unable to refresh CSRF token (${response.status}).`);
         }
 
-        const xsrfToken = readCookie('XSRF-TOKEN');
-        if (xsrfToken) {
+        const data = (await response.json()) as { token?: string };
+        const token = data?.token ?? '';
+
+        if (token) {
             const meta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]');
             if (meta) {
-                meta.content = xsrfToken;
+                meta.content = token;
             }
         }
+
+        return token;
     })().finally(() => {
         refreshPromise = null;
     });
 
     return refreshPromise;
+}
+
+function readCookie(name: string): string | null {
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = document.cookie.match(
+        new RegExp(`(?:^|; )${escapedName}=([^;]*)`),
+    );
+
+    return match ? decodeURIComponent(match[1]) : null;
 }
