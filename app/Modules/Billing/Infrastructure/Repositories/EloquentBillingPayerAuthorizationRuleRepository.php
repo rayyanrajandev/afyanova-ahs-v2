@@ -156,6 +156,57 @@ class EloquentBillingPayerAuthorizationRuleRepository implements BillingPayerAut
         return $this->toSearchResult($paginator);
     }
 
+    public function listActiveMatchingRulesByServiceCodes(
+        string $billingPayerContractId,
+        array $serviceCodes,
+        ?string $asOfDateTime = null
+    ): array {
+        $normalizedCodes = array_values(array_unique(array_filter(
+            array_map(static fn (mixed $code): string => strtoupper(trim((string) $code)), $serviceCodes),
+            static fn (string $code): bool => $code !== '',
+        )));
+
+        if ($normalizedCodes === []) {
+            return [];
+        }
+
+        $queryBuilder = BillingPayerAuthorizationRuleModel::query()
+            ->where('billing_payer_contract_id', $billingPayerContractId)
+            ->where('status', 'active')
+            ->where(function (Builder $builder) use ($normalizedCodes): void {
+                $builder->whereNull('service_code')
+                    ->orWhereIn('service_code', $normalizedCodes);
+            })
+            ->when($asOfDateTime, function (Builder $builder, string $effectiveAt): void {
+                $builder
+                    ->where(function (Builder $nested) use ($effectiveAt): void {
+                        $nested->whereNull('effective_from')
+                            ->orWhere('effective_from', '<=', $effectiveAt);
+                    })
+                    ->where(function (Builder $nested) use ($effectiveAt): void {
+                        $nested->whereNull('effective_to')
+                            ->orWhere('effective_to', '>=', $effectiveAt);
+                    });
+            })
+            ->orderByDesc('coverage_percent_override')
+            ->orderByDesc('updated_at');
+
+        $this->applyPlatformScopeIfEnabled($queryBuilder);
+
+        $rules = $queryBuilder
+            ->get()
+            ->map(static fn (BillingPayerAuthorizationRuleModel $rule): array => $rule->toArray())
+            ->all();
+
+        $map = [];
+        foreach ($rules as $rule) {
+            $code = strtoupper(trim((string) ($rule['service_code'] ?? '')));
+            $map[$code][] = $rule;
+        }
+
+        return $map;
+    }
+
     public function listActiveMatchingRules(
         string $billingPayerContractId,
         ?string $serviceCode,

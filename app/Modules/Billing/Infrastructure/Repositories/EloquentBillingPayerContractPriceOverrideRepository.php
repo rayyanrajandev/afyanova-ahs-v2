@@ -185,6 +185,52 @@ class EloquentBillingPayerContractPriceOverrideRepository implements BillingPaye
         return $override?->toArray();
     }
 
+    public function findActiveApplicableOverrides(
+        string $billingPayerContractId,
+        array $serviceCodes,
+        string $currencyCode,
+        ?string $asOfDateTime = null
+    ): array {
+        $normalizedCodes = array_values(array_unique(array_filter(
+            array_map(static fn (mixed $code): string => strtoupper(trim((string) $code)), $serviceCodes),
+            static fn (string $code): bool => $code !== '',
+        )));
+
+        if ($normalizedCodes === []) {
+            return [];
+        }
+
+        $effectiveDateTime = $asOfDateTime ?? now()->toDateTimeString();
+
+        $query = BillingPayerContractPriceOverrideModel::query()
+            ->where('billing_payer_contract_id', $billingPayerContractId)
+            ->whereIn('service_code', $normalizedCodes)
+            ->where('currency_code', strtoupper(trim($currencyCode)))
+            ->where('status', 'active')
+            ->where(function (Builder $builder) use ($effectiveDateTime): void {
+                $builder->whereNull('effective_from')
+                    ->orWhere('effective_from', '<=', $effectiveDateTime);
+            })
+            ->where(function (Builder $builder) use ($effectiveDateTime): void {
+                $builder->whereNull('effective_to')
+                    ->orWhere('effective_to', '>=', $effectiveDateTime);
+            })
+            ->orderByDesc('effective_from')
+            ->orderByDesc('updated_at');
+
+        $this->applyPlatformScopeIfEnabled($query);
+
+        $map = [];
+        foreach ($query->get() as $override) {
+            $code = strtoupper(trim((string) $override->service_code));
+            if ($code !== '' && ! isset($map[$code])) {
+                $map[$code] = $override->toArray();
+            }
+        }
+
+        return $map;
+    }
+
     private function applyPlatformScopeIfEnabled(Builder $query): void
     {
         if (! $this->isPlatformScopingEnabled()) {

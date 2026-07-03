@@ -8,6 +8,18 @@ interface BillingServiceCatalogItemRepositoryInterface
 
     public function findById(string $id): ?array;
 
+    /**
+     * @param  array<int, string>  $ids
+     * @return array<string, array<string, mixed>>  Map of id => item
+     */
+    public function findByIds(array $ids): array;
+
+    /**
+     * @param  array<int, string>  $ids
+     * @return array<int, array<string, mixed>>  Updated items
+     */
+    public function bulkUpdate(array $ids, array $attributes): array;
+
     public function findActivePricingByServiceCode(
         string $serviceCode,
         string $currencyCode,

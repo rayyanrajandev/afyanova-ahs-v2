@@ -42,4 +42,14 @@ interface BillingPayerAuthorizationRuleRepositoryInterface
         ?string $department,
         ?string $asOfDateTime
     ): array;
+
+    /**
+     * @param  list<string>  $serviceCodes
+     * @return array<string, list<array<string, mixed>>>  Map of service_code => matching rules
+     */
+    public function listActiveMatchingRulesByServiceCodes(
+        string $billingPayerContractId,
+        array $serviceCodes,
+        ?string $asOfDateTime = null
+    ): array;
 }

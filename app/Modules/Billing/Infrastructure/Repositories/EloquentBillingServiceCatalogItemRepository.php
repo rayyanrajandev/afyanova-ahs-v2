@@ -43,6 +43,61 @@ class EloquentBillingServiceCatalogItemRepository implements BillingServiceCatal
         return $item?->toArray();
     }
 
+    public function findByIds(array $ids): array
+    {
+        $normalizedIds = array_values(array_unique(array_filter(
+            array_map(static fn (mixed $id): string => trim((string) $id), $ids),
+            static fn (string $id): bool => $id !== '',
+        )));
+
+        if ($normalizedIds === []) {
+            return [];
+        }
+
+        $query = BillingServiceCatalogItemModel::query()
+            ->whereIn('id', $normalizedIds);
+        if ($this->supportsClinicalCatalogLink()) {
+            $query->with('clinicalCatalogItem');
+        }
+        $this->applyPlatformScopeIfEnabled($query);
+
+        $map = [];
+        foreach ($query->get() as $item) {
+            $map[(string) $item->id] = $item->toArray();
+        }
+
+        return $map;
+    }
+
+    public function bulkUpdate(array $ids, array $attributes): array
+    {
+        $normalizedIds = array_values(array_unique(array_filter(
+            array_map(static fn (mixed $id): string => trim((string) $id), $ids),
+            static fn (string $id): bool => $id !== '',
+        )));
+
+        if ($normalizedIds === [] || $attributes === []) {
+            return [];
+        }
+
+        $filtered = $this->filterAttributesForCurrentSchema($attributes);
+
+        BillingServiceCatalogItemModel::query()
+            ->whereIn('id', $normalizedIds)
+            ->update($filtered);
+
+        $query = BillingServiceCatalogItemModel::query()
+            ->whereIn('id', $normalizedIds);
+        if ($this->supportsClinicalCatalogLink()) {
+            $query->with('clinicalCatalogItem');
+        }
+        $this->applyPlatformScopeIfEnabled($query);
+
+        return $query->get()
+            ->map(static fn (BillingServiceCatalogItemModel $item): array => $item->toArray())
+            ->all();
+    }
+
     public function findActivePricingByServiceCode(
         string $serviceCode,
         string $currencyCode,

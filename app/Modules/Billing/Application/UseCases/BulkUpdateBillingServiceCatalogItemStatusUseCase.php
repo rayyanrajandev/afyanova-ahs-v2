@@ -23,61 +23,68 @@ class BulkUpdateBillingServiceCatalogItemStatusUseCase
     {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
 
-        $updatedItems = [];
+        $normalizedIds = array_values(array_unique(array_filter(
+            array_map(static fn (mixed $id): string => trim((string) $id), $itemIds),
+            static fn (string $id): bool => $id !== '',
+        )));
+
+        $existingMap = $normalizedIds !== []
+            ? $this->repository->findByIds($normalizedIds)
+            : [];
+
+        $foundIds = [];
         $notFound = [];
+        foreach ($normalizedIds as $id) {
+            if (isset($existingMap[$id])) {
+                $foundIds[] = $id;
+            } else {
+                $notFound[] = $id;
+            }
+        }
+
         $reasonRequired = in_array($status, [
             BillingServiceCatalogItemStatus::INACTIVE->value,
             BillingServiceCatalogItemStatus::RETIRED->value,
         ], true);
 
-        foreach ($itemIds as $id) {
-            $normalizedId = trim((string) $id);
-            if ($normalizedId === '') {
-                continue;
-            }
-
-            $existing = $this->repository->findById($normalizedId);
-            if (! $existing) {
-                $notFound[] = $normalizedId;
-                continue;
-            }
-
-            $updated = $this->repository->update($normalizedId, [
+        $updatedItems = [];
+        if ($foundIds !== []) {
+            $batched = $this->repository->bulkUpdate($foundIds, [
                 'status' => $status,
                 'status_reason' => $reason,
             ]);
 
-            if (! $updated) {
-                $notFound[] = $normalizedId;
-                continue;
+            foreach ($batched as $updated) {
+                $updatedId = (string) ($updated['id'] ?? '');
+                $before = $existingMap[$updatedId] ?? [];
+
+                $this->auditLogRepository->write(
+                    billingServiceCatalogItemId: $updatedId,
+                    action: 'billing-service-catalog-item.status.bulk-updated',
+                    actorId: $actorId,
+                    changes: [
+                        'status' => [
+                            'before' => $before['status'] ?? null,
+                            'after' => $updated['status'] ?? null,
+                        ],
+                        'status_reason' => [
+                            'before' => $before['status_reason'] ?? null,
+                            'after' => $updated['status_reason'] ?? null,
+                        ],
+                    ],
+                    metadata: [
+                        'bulk_update' => true,
+                        'transition' => [
+                            'from' => $before['status'] ?? null,
+                            'to' => $updated['status'] ?? null,
+                        ],
+                        'reason_required' => $reasonRequired,
+                        'reason_provided' => trim((string) ($updated['status_reason'] ?? '')) !== '',
+                    ],
+                );
+
+                $updatedItems[] = $updated;
             }
-
-            $this->auditLogRepository->write(
-                billingServiceCatalogItemId: $normalizedId,
-                action: 'billing-service-catalog-item.status.bulk-updated',
-                actorId: $actorId,
-                changes: [
-                    'status' => [
-                        'before' => $existing['status'] ?? null,
-                        'after' => $updated['status'] ?? null,
-                    ],
-                    'status_reason' => [
-                        'before' => $existing['status_reason'] ?? null,
-                        'after' => $updated['status_reason'] ?? null,
-                    ],
-                ],
-                metadata: [
-                    'bulk_update' => true,
-                    'transition' => [
-                        'from' => $existing['status'] ?? null,
-                        'to' => $updated['status'] ?? null,
-                    ],
-                    'reason_required' => $reasonRequired,
-                    'reason_provided' => trim((string) ($updated['status_reason'] ?? '')) !== '',
-                ],
-            );
-
-            $updatedItems[] = $updated;
         }
 
         return [

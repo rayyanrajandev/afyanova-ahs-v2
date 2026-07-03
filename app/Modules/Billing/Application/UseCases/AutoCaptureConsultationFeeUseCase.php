@@ -6,10 +6,7 @@ use App\Modules\Appointment\Domain\Repositories\AppointmentRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
 use App\Modules\Platform\Domain\Services\DefaultCurrencyResolverInterface;
-use App\Modules\Staff\Infrastructure\Models\ClinicalSpecialtyModel;
 use App\Modules\Staff\Infrastructure\Models\StaffProfileModel;
-use App\Modules\Staff\Infrastructure\Models\StaffProfileSpecialtyModel;
-use App\Modules\Staff\Infrastructure\Models\StaffRegulatoryProfileModel;
 use DateTimeInterface;
 
 class AutoCaptureConsultationFeeUseCase
@@ -113,35 +110,60 @@ class AutoCaptureConsultationFeeUseCase
 
     private function resolveClinicianContext(int $userId): ?array
     {
-        $profile = StaffProfileModel::query()
-            ->where('user_id', $userId)
+        $staffProfileTable = (new StaffProfileModel)->getTable();
+        $regulatoryProfileTable = (new \App\Modules\Staff\Infrastructure\Models\StaffRegulatoryProfileModel)->getTable();
+        $specialtyTable = (new \App\Modules\Staff\Infrastructure\Models\ClinicalSpecialtyModel)->getTable();
+        $specialtyAssignmentTable = (new \App\Modules\Staff\Infrastructure\Models\StaffProfileSpecialtyModel)->getTable();
+
+        $row = StaffProfileModel::query()
+            ->select([
+                "{$staffProfileTable}.*",
+                "{$regulatoryProfileTable}.id as regulatory_profile_id",
+                "{$regulatoryProfileTable}.cadre_code",
+                "{$regulatoryProfileTable}.professional_title",
+                "{$regulatoryProfileTable}.practice_authority_level",
+                "{$specialtyTable}.id as specialty_id",
+                "{$specialtyTable}.name as specialty_name",
+                "{$specialtyTable}.code as specialty_code",
+            ])
+            ->leftJoin($regulatoryProfileTable, "{$regulatoryProfileTable}.staff_profile_id", '=', "{$staffProfileTable}.id")
+            ->leftJoin($specialtyAssignmentTable, "{$specialtyAssignmentTable}.staff_profile_id", '=', "{$staffProfileTable}.id")
+            ->leftJoin($specialtyTable, "{$specialtyTable}.id", '=', "{$specialtyAssignmentTable}.specialty_id")
+            ->where("{$staffProfileTable}.user_id", $userId)
+            ->orderByDesc("{$specialtyAssignmentTable}.is_primary")
+            ->orderBy("{$specialtyAssignmentTable}.created_at")
             ->first();
 
-        if ($profile === null) {
+        if ($row === null) {
             return null;
         }
 
-        $regulatoryProfile = StaffRegulatoryProfileModel::query()
-            ->where('staff_profile_id', $profile->id)
-            ->first();
+        $profileArray = $row->toArray();
 
-        $specialtyAssignment = StaffProfileSpecialtyModel::query()
-            ->where('staff_profile_id', $profile->id)
-            ->orderByDesc('is_primary')
-            ->orderBy('created_at')
-            ->first();
+        $regulatoryProfile = null;
+        if (isset($profileArray['regulatory_profile_id']) && $profileArray['regulatory_profile_id'] !== null) {
+            $regulatoryProfile = [
+                'id' => $profileArray['regulatory_profile_id'],
+                'staff_profile_id' => $row->id,
+                'cadre_code' => $profileArray['cadre_code'] ?? null,
+                'professional_title' => $profileArray['professional_title'] ?? null,
+                'practice_authority_level' => $profileArray['practice_authority_level'] ?? null,
+            ];
+        }
 
         $specialty = null;
-        if ($specialtyAssignment !== null) {
-            $specialty = ClinicalSpecialtyModel::query()
-                ->where('id', $specialtyAssignment->specialty_id)
-                ->first();
+        if (isset($profileArray['specialty_id']) && $profileArray['specialty_id'] !== null) {
+            $specialty = [
+                'id' => $profileArray['specialty_id'],
+                'name' => $profileArray['specialty_name'] ?? null,
+                'code' => $profileArray['specialty_code'] ?? null,
+            ];
         }
 
         return [
-            'profile' => $profile->toArray(),
-            'regulatoryProfile' => $regulatoryProfile?->toArray(),
-            'specialty' => $specialty?->toArray(),
+            'profile' => $profileArray,
+            'regulatoryProfile' => $regulatoryProfile,
+            'specialty' => $specialty,
         ];
     }
 
@@ -282,15 +304,16 @@ class AutoCaptureConsultationFeeUseCase
 
     private function findActivePricingByServiceCodes(array $serviceCodes, string $currencyCode): ?array
     {
-        foreach ($serviceCodes as $serviceCode) {
-            $catalogItem = $this->serviceCatalogRepository->findActivePricingByServiceCode(
-                serviceCode: $serviceCode,
-                currencyCode: $currencyCode,
-                asOfDateTime: null,
-            );
+        $pricingMap = $this->serviceCatalogRepository->findActivePricingByServiceCodes(
+            serviceCodes: $serviceCodes,
+            currencyCode: $currencyCode,
+            asOfDateTime: null,
+        );
 
-            if ($catalogItem !== null) {
-                return $catalogItem;
+        foreach ($serviceCodes as $code) {
+            $normalized = strtoupper(trim($code));
+            if (isset($pricingMap[$normalized])) {
+                return $pricingMap[$normalized];
             }
         }
 

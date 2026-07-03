@@ -90,6 +90,37 @@ class BillingInvoiceLineItemAutoPricingResolver
         $matchedPriceOverrideCount = 0;
         $matchedPriceOverrideServiceCodes = [];
 
+        $serviceCodes = array_values(array_unique(array_filter(array_map(
+            static fn (array $lineItem): string => strtoupper(trim((string) ($lineItem['serviceCode'] ?? ''))),
+            $lineItems,
+        ))));
+        $pricingMap = $serviceCodes !== []
+            ? $this->serviceCatalogRepository->findActivePricingByServiceCodes(
+                serviceCodes: $serviceCodes,
+                currencyCode: $normalizedCurrency,
+                asOfDateTime: $effectiveAt,
+            )
+            : [];
+
+        $overrideMap = [];
+        if ($payerContract !== null) {
+            $overrideMap = $this->payerContractPriceOverrideRepository->findActiveApplicableOverrides(
+                billingPayerContractId: (string) $payerContract['id'],
+                serviceCodes: $serviceCodes,
+                currencyCode: $normalizedCurrency,
+                asOfDateTime: $effectiveAt,
+            );
+        }
+
+        $rulesMap = [];
+        if ($payerContract !== null) {
+            $rulesMap = $this->payerAuthorizationRuleRepository->listActiveMatchingRulesByServiceCodes(
+                billingPayerContractId: (string) $payerContract['id'],
+                serviceCodes: $serviceCodes,
+                asOfDateTime: $effectiveAt,
+            );
+        }
+
         foreach ($lineItems as $index => $lineItem) {
             $serviceCode = strtoupper(trim((string) ($lineItem['serviceCode'] ?? '')));
             if ($serviceCode === '') {
@@ -99,11 +130,7 @@ class BillingInvoiceLineItemAutoPricingResolver
                 );
             }
 
-            $catalogItem = $this->serviceCatalogRepository->findActivePricingByServiceCode(
-                serviceCode: $serviceCode,
-                currencyCode: $normalizedCurrency,
-                asOfDateTime: $effectiveAt,
-            );
+            $catalogItem = $pricingMap[$serviceCode] ?? null;
 
             if (! $catalogItem) {
                 throw new BillingInvoicePricingResolutionException(
@@ -140,12 +167,7 @@ class BillingInvoiceLineItemAutoPricingResolver
                 $pricingSourceId = $catalogItem['id'] ?? null;
 
                 if ($payerContract !== null) {
-                    $priceOverride = $this->payerContractPriceOverrideRepository->findActiveApplicableOverride(
-                        billingPayerContractId: (string) $payerContract['id'],
-                        serviceCode: $serviceCode,
-                        currencyCode: $normalizedCurrency,
-                        asOfDateTime: $effectiveAt,
-                    );
+                    $priceOverride = $overrideMap[$serviceCode] ?? null;
 
                     if ($priceOverride !== null) {
                         $unitPrice = $this->resolveOverriddenUnitPrice($catalogUnitPrice, $priceOverride);
@@ -172,13 +194,18 @@ class BillingInvoiceLineItemAutoPricingResolver
             $coverage = null;
 
             if ($payerContract !== null) {
-                $matchingRules = $this->payerAuthorizationRuleRepository->listActiveMatchingRules(
-                    billingPayerContractId: (string) $payerContract['id'],
-                    serviceCode: $serviceCode,
-                    serviceType: isset($catalogItem['service_type']) ? (string) $catalogItem['service_type'] : null,
-                    department: isset($catalogItem['department']) ? (string) $catalogItem['department'] : null,
-                    asOfDateTime: $effectiveAt,
-                );
+                $matchingRules = array_values(array_filter(
+                    array_merge(
+                        $rulesMap[''] ?? [],
+                        $rulesMap[$serviceCode] ?? [],
+                    ),
+                    fn (array $rule): bool => $this->isServiceLevelRuleMatch(
+                        rule: $rule,
+                        serviceCode: $serviceCode,
+                        serviceType: isset($catalogItem['service_type']) ? (string) $catalogItem['service_type'] : null,
+                        department: isset($catalogItem['department']) ? (string) $catalogItem['department'] : null,
+                    ),
+                ));
 
                 $applicableRules = array_values(array_filter(
                     $matchingRules,
@@ -435,6 +462,29 @@ class BillingInvoiceLineItemAutoPricingResolver
     /**
      * @param  array<string, mixed>  $rule
      */
+    /**
+     * @param  array<string, mixed>  $rule
+     */
+    private function isServiceLevelRuleMatch(array $rule, string $serviceCode, ?string $serviceType, ?string $department): bool
+    {
+        $ruleServiceCode = $this->normalizeNullableString($rule['service_code'] ?? null);
+        if ($ruleServiceCode !== null && $ruleServiceCode !== $serviceCode) {
+            return false;
+        }
+
+        $ruleServiceType = $this->normalizeNullableString($rule['service_type'] ?? null);
+        if ($ruleServiceType !== null && $ruleServiceType !== $serviceType) {
+            return false;
+        }
+
+        $ruleDepartment = $this->normalizeNullableString($rule['department'] ?? null);
+        if ($ruleDepartment !== null && $ruleDepartment !== $department) {
+            return false;
+        }
+
+        return true;
+    }
+
     private function isAuthorizationRuleApplicable(array $rule, float $quantity, float $lineSubtotal): bool
     {
         $quantityLimit = $rule['quantity_limit'] ?? null;

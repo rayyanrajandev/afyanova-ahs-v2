@@ -37,4 +37,15 @@ interface BillingPayerContractPriceOverrideRepositoryInterface
         string $currencyCode,
         ?string $asOfDateTime = null
     ): ?array;
+
+    /**
+     * @param  list<string>  $serviceCodes
+     * @return array<string, array<string, mixed>|null>  Map of service_code => override or null
+     */
+    public function findActiveApplicableOverrides(
+        string $billingPayerContractId,
+        array $serviceCodes,
+        string $currencyCode,
+        ?string $asOfDateTime = null
+    ): array;
 }
