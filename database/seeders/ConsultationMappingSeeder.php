@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
-use App\Models\ConsultationMapping;
 use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemModel;
+use App\Modules\Billing\Infrastructure\Models\ConsultationMappingModel;
 use Illuminate\Database\Seeder;
 
 class ConsultationMappingSeeder extends Seeder
@@ -15,7 +15,7 @@ class ConsultationMappingSeeder extends Seeder
 
         if ($catalogItem) {
             // 2. Create or update the mapping record
-            ConsultationMapping::updateOrCreate(
+            ConsultationMappingModel::updateOrCreate(
                 [
                     'clinician_tier' => 'CO',
                     'department' => 'Outpatient Department (OPD)',
