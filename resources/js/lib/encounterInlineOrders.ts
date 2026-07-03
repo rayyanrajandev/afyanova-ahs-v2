@@ -119,7 +119,7 @@ export async function fetchLabTestCatalog(): Promise<ClinicalCatalogItem[]> {
             status: 'active',
             sortBy: 'name',
             sortDir: 'asc',
-            perPage: 100,
+            perPage: 500,
             page: 1,
         },
     );
@@ -136,7 +136,7 @@ export async function fetchApprovedMedicinesCatalog(): Promise<
             status: 'active',
             sortBy: 'name',
             sortDir: 'asc',
-            perPage: 100,
+            perPage: 500,
             page: 1,
         },
     );
@@ -153,7 +153,7 @@ export async function fetchRadiologyProcedureCatalog(): Promise<
             status: 'active',
             sortBy: 'name',
             sortDir: 'asc',
-            perPage: 100,
+            perPage: 500,
             page: 1,
         },
     );

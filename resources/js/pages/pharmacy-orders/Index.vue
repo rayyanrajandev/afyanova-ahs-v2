@@ -3671,7 +3671,7 @@ async function loadApprovedMedicinesCatalog(force = false) {
                     status: 'active',
                     sortBy: 'name',
                     sortDir: 'asc',
-                    perPage: 100,
+                    perPage: 500,
                     page: 1,
                 },
             },
