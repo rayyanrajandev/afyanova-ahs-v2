@@ -265,6 +265,41 @@ class FrontdeskQuickCashierSupport
     }
 
     /**
+     * @param  \Illuminate\Support\Collection<int, Model>  $orders
+     * @param  string  $kind
+     * @param  string  $catalogFk
+     * @param  array<string, array<string, mixed>>  $catalogIndex
+     * @return array<string, array<string, mixed>|null>  Map of order_id => pricing or null
+     */
+    public function batchPricingIndex($orders, string $kind, string $catalogFk, array $catalogIndex, string $currencyCode): array
+    {
+        $serviceCodeMap = [];
+        foreach ($orders as $order) {
+            $catalogItem = $catalogIndex[(string) $order->{$catalogFk}] ?? null;
+            $code = $this->resolveServiceCode($order, $catalogItem, $kind);
+            if ($code !== null) {
+                $serviceCodeMap[(string) $order->id] = $code;
+            }
+        }
+
+        $uniqueCodes = array_values(array_unique(array_filter(array_values($serviceCodeMap))));
+        $pricingByCode = $uniqueCodes !== []
+            ? $this->billingServiceCatalogItemRepository->findActivePricingByServiceCodes(
+                serviceCodes: $uniqueCodes,
+                currencyCode: $currencyCode,
+                asOfDateTime: now()->toDateTimeString(),
+            )
+            : [];
+
+        $result = [];
+        foreach ($serviceCodeMap as $orderId => $code) {
+            $result[$orderId] = $pricingByCode[$code] ?? null;
+        }
+
+        return $result;
+    }
+
+    /**
      * @param  array<int, mixed>  $orderIds
      * @return array<string, array<string, mixed>>
      */
@@ -317,6 +352,7 @@ class FrontdeskQuickCashierSupport
      * @param  array<string, mixed>|null  $catalogItem
      * @param  array<string, array<string, mixed>>  $invoicedIndex
      * @param  array<string, array<string, mixed>>  $settledIndex
+     * @param  array<string, mixed>|null  $pricing  Pre-resolved pricing (skips DB when provided)
      * @return array<string, mixed>
      */
     public function candidateFromOrder(
@@ -328,15 +364,16 @@ class FrontdeskQuickCashierSupport
         string $catalogFk,
         array $invoicedIndex,
         array $settledIndex,
+        ?array $pricing = null,
     ): array {
         $serviceCode = $this->resolveServiceCode($order, $catalogItem, $kind);
-        $pricing = $serviceCode !== null
-            ? $this->billingServiceCatalogItemRepository->findActivePricingByServiceCode(
-                serviceCode: $serviceCode,
+        if ($pricing === null && $serviceCode !== null) {
+            $pricing = $this->billingServiceCatalogItemRepository->findActivePricingByServiceCodes(
+                serviceCodes: [$serviceCode],
                 currencyCode: $currencyCode,
                 asOfDateTime: $this->performedAt($order),
-            )
-            : null;
+            )[$serviceCode] ?? null;
+        }
 
         $resolvedServiceCode = strtoupper(trim((string) ($pricing['service_code'] ?? $serviceCode ?? '')));
         $unitPrice = round(max((float) ($pricing['base_price'] ?? 0), 0), 2);
@@ -435,7 +472,7 @@ class FrontdeskQuickCashierSupport
         ), static fn (string $value): bool => $value !== '')));
     }
 
-    private function resolveServiceCode(Model $order, ?array $catalogItem, string $kind): ?string
+    public function resolveServiceCode(Model $order, ?array $catalogItem, string $kind): ?string
     {
         $codeFields = [
             match ($kind) {

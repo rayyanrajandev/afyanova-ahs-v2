@@ -146,6 +146,8 @@ class CreateLabQuickPosSaleUseCase
             static fn (array $item): mixed => $item['order']->id,
             $normalized,
         ));
+        $orders = collect(array_map(static fn (array $item) => $item['order'], $normalized));
+        $pricingMap = $this->labQuickCashierSupport->batchPricingIndex($orders, $catalogIndex, $currencyCode);
 
         foreach ($normalized as $index => $item) {
             $order = $item['order'];
@@ -156,6 +158,7 @@ class CreateLabQuickPosSaleUseCase
                 currencyCode: $currencyCode,
                 invoicedIndex: $invoicedIndex,
                 settledIndex: $settledIndex,
+                pricing: $pricingMap[(string) $order->id] ?? null,
             );
 
             if (($candidate['pricing_status'] ?? null) !== 'priced') {

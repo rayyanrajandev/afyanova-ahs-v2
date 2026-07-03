@@ -198,6 +198,39 @@ class LabQuickCashierSupport
     }
 
     /**
+     * @param  \Illuminate\Support\Collection<int, LaboratoryOrderModel>  $orders
+     * @param  array<string, array<string, mixed>>  $catalogIndex
+     * @return array<string, array<string, mixed>|null>  Map of order_id => pricing or null
+     */
+    public function batchPricingIndex($orders, array $catalogIndex, string $currencyCode): array
+    {
+        $serviceCodeMap = [];
+        foreach ($orders as $order) {
+            $catalogItem = $catalogIndex[(string) $order->lab_test_catalog_item_id] ?? null;
+            $code = $this->resolveServiceCode($order, $catalogItem);
+            if ($code !== null) {
+                $serviceCodeMap[(string) $order->id] = $code;
+            }
+        }
+
+        $uniqueCodes = array_values(array_unique(array_filter(array_values($serviceCodeMap))));
+        $pricingByCode = $uniqueCodes !== []
+            ? $this->billingServiceCatalogItemRepository->findActivePricingByServiceCodes(
+                serviceCodes: $uniqueCodes,
+                currencyCode: $currencyCode,
+                asOfDateTime: now()->toDateTimeString(),
+            )
+            : [];
+
+        $result = [];
+        foreach ($serviceCodeMap as $orderId => $code) {
+            $result[$orderId] = $pricingByCode[$code] ?? null;
+        }
+
+        return $result;
+    }
+
+    /**
      * @param  array<int, mixed>  $orderIds
      * @return array<string, array<string, mixed>>
      */
@@ -250,6 +283,7 @@ class LabQuickCashierSupport
      * @param  array<string, mixed>|null  $catalogItem
      * @param  array<string, array<string, mixed>>  $invoicedIndex
      * @param  array<string, array<string, mixed>>  $settledIndex
+     * @param  array<string, mixed>|null  $pricing  Pre-resolved pricing (skips DB when provided)
      * @return array<string, mixed>
      */
     public function candidateFromOrder(
@@ -259,15 +293,16 @@ class LabQuickCashierSupport
         string $currencyCode,
         array $invoicedIndex,
         array $settledIndex,
+        ?array $pricing = null,
     ): array {
         $serviceCode = $this->resolveServiceCode($order, $catalogItem);
-        $pricing = $serviceCode !== null
-            ? $this->billingServiceCatalogItemRepository->findActivePricingByServiceCode(
-                serviceCode: $serviceCode,
+        if ($pricing === null && $serviceCode !== null) {
+            $pricing = $this->billingServiceCatalogItemRepository->findActivePricingByServiceCodes(
+                serviceCodes: [$serviceCode],
                 currencyCode: $currencyCode,
                 asOfDateTime: $this->performedAt($order),
-            )
-            : null;
+            )[$serviceCode] ?? null;
+        }
 
         $resolvedServiceCode = strtoupper(trim((string) ($pricing['service_code'] ?? $serviceCode ?? '')));
         $unitPrice = round(max((float) ($pricing['base_price'] ?? 0), 0), 2);
@@ -370,7 +405,7 @@ class LabQuickCashierSupport
     /**
      * @param  array<string, mixed>|null  $catalogItem
      */
-    private function resolveServiceCode(LaboratoryOrderModel $order, ?array $catalogItem): ?string
+    public function resolveServiceCode(LaboratoryOrderModel $order, ?array $catalogItem): ?string
     {
         $metadata = is_array($catalogItem['metadata'] ?? null)
             ? $catalogItem['metadata']

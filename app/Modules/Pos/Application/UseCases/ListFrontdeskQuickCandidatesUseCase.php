@@ -62,6 +62,7 @@ class ListFrontdeskQuickCandidatesUseCase
             $invoicedIndex = $this->frontdeskQuickCashierSupport->invoicedSourceIndex($orders->pluck('patient_id')->all());
             $settledIndex = $this->frontdeskQuickCashierSupport->posSettledSourceIndex($orders->pluck('id')->all());
             $patientIndex = $this->frontdeskQuickCashierSupport->patientIndex($orders->pluck('patient_id')->all());
+            $pricingMap = $this->frontdeskQuickCashierSupport->batchPricingIndex($orders, $kind, $catalogFk, $catalogIndex, $currencyCode);
 
             foreach ($orders as $order) {
                 $candidate = $this->frontdeskQuickCashierSupport->candidateFromOrder(
@@ -73,6 +74,7 @@ class ListFrontdeskQuickCandidatesUseCase
                     catalogFk: $catalogFk,
                     invoicedIndex: $invoicedIndex,
                     settledIndex: $settledIndex,
+                    pricing: $pricingMap[(string) $order->id] ?? null,
                 );
 
                 if (($candidate['pricing_status'] ?? null) !== 'priced') {

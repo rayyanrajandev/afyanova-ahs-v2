@@ -60,9 +60,10 @@ class ListLabQuickCashierCandidatesUseCase
         $catalogIndex = $this->labQuickCashierSupport->clinicalCatalogIndex($orders->pluck('lab_test_catalog_item_id')->all());
         $invoicedIndex = $this->labQuickCashierSupport->invoicedSourceIndex($orders->pluck('patient_id')->all());
         $settledIndex = $this->labQuickCashierSupport->posSettledSourceIndex($orders->pluck('id')->all());
+        $pricingMap = $this->labQuickCashierSupport->batchPricingIndex($orders, $catalogIndex, $currencyCode);
 
         $visibleRows = $orders
-            ->map(function (LaboratoryOrderModel $order) use ($patientIndex, $catalogIndex, $currencyCode, $invoicedIndex, $settledIndex): array {
+            ->map(function (LaboratoryOrderModel $order) use ($patientIndex, $catalogIndex, $currencyCode, $invoicedIndex, $settledIndex, $pricingMap): array {
                 return $this->labQuickCashierSupport->candidateFromOrder(
                     order: $order,
                     patient: $patientIndex[(string) $order->patient_id] ?? null,
@@ -70,6 +71,7 @@ class ListLabQuickCashierCandidatesUseCase
                     currencyCode: $currencyCode,
                     invoicedIndex: $invoicedIndex,
                     settledIndex: $settledIndex,
+                    pricing: $pricingMap[(string) $order->id] ?? null,
                 );
             })
             ->filter(static fn (array $candidate): bool => ($candidate['pricing_status'] ?? null) === 'priced')
