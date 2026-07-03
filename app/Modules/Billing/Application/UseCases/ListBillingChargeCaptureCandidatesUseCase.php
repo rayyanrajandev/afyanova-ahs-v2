@@ -914,15 +914,16 @@ class ListBillingChargeCaptureCandidatesUseCase
      */
     private function findActivePricingByServiceCodes(array $serviceCodes, string $currencyCode, ?string $performedAt): ?array
     {
-        foreach ($serviceCodes as $serviceCode) {
-            $catalogItem = $this->serviceCatalogRepository->findActivePricingByServiceCode(
-                serviceCode: $serviceCode,
-                currencyCode: $currencyCode,
-                asOfDateTime: $performedAt,
-            );
+        $pricingMap = $this->serviceCatalogRepository->findActivePricingByServiceCodes(
+            serviceCodes: $serviceCodes,
+            currencyCode: $currencyCode,
+            asOfDateTime: $performedAt,
+        );
 
-            if ($catalogItem !== null) {
-                return $catalogItem;
+        foreach ($serviceCodes as $serviceCode) {
+            $normalized = strtoupper(trim($serviceCode));
+            if ($normalized !== '' && isset($pricingMap[$normalized])) {
+                return $pricingMap[$normalized];
             }
         }
 

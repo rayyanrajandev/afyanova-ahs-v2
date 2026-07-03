@@ -77,6 +77,55 @@ class EloquentBillingServiceCatalogItemRepository implements BillingServiceCatal
         return $item?->toArray();
     }
 
+    public function findActivePricingByServiceCodes(
+        array $serviceCodes,
+        string $currencyCode,
+        ?string $asOfDateTime = null
+    ): array {
+        $normalizedCodes = array_values(array_unique(array_filter(
+            array_map(static fn (mixed $code): string => strtoupper(trim((string) $code)), $serviceCodes),
+            static fn (string $code): bool => $code !== '',
+        )));
+
+        if ($normalizedCodes === []) {
+            return [];
+        }
+
+        $effectiveDateTime = $asOfDateTime ?? now()->toDateTimeString();
+
+        $query = BillingServiceCatalogItemModel::query()
+            ->whereIn('service_code', $normalizedCodes)
+            ->where('currency_code', strtoupper(trim($currencyCode)))
+            ->where('status', 'active')
+            ->where(function (Builder $builder) use ($effectiveDateTime): void {
+                $builder->whereNull('effective_from')
+                    ->orWhere('effective_from', '<=', $effectiveDateTime);
+            })
+            ->where(function (Builder $builder) use ($effectiveDateTime): void {
+                $builder->whereNull('effective_to')
+                    ->orWhere('effective_to', '>=', $effectiveDateTime);
+            })
+            ->orderByDesc('effective_from')
+            ->orderByDesc('updated_at');
+
+        if ($this->supportsClinicalCatalogLink()) {
+            $query->with('clinicalCatalogItem');
+        }
+
+        $this->applyPlatformScopeIfEnabled($query);
+        $this->applyFacilityTierAvailability($query);
+
+        $map = [];
+        foreach ($query->get() as $item) {
+            $code = strtoupper(trim((string) $item->service_code));
+            if ($code !== '' && ! isset($map[$code])) {
+                $map[$code] = $item->toArray();
+            }
+        }
+
+        return $map;
+    }
+
     public function update(string $id, array $attributes): ?array
     {
         $query = BillingServiceCatalogItemModel::query();

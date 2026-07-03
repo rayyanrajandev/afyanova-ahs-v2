@@ -48,6 +48,16 @@ interface BillingServiceCatalogItemRepositoryInterface
     ): array;
 
     /**
+     * @param  list<string>  $serviceCodes
+     * @return array<string, array<string, mixed>>  Map of service_code => active pricing.
+     */
+    public function findActivePricingByServiceCodes(
+        array $serviceCodes,
+        string $currencyCode,
+        ?string $asOfDateTime = null
+    ): array;
+
+    /**
      * @param  list<string>  $clinicalCatalogItemIds
      * @return array<string, array<string, mixed>>  Map of clinical_catalog_item_id => latest billing item.
      */
