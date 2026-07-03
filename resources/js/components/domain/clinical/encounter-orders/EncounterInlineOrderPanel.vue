@@ -111,8 +111,7 @@ const catalogOptions = computed(() =>
         value: item.id,
         label: catalogItemLabel(item),
         keywords: [item.code, item.name, item.category]
-            .filter(Boolean)
-            .join(' '),
+            .filter((k): k is string => Boolean(k)),
     })),
 );
 
