@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,25 @@ const emit = defineEmits<{
 
 const open = ref(false);
 const searchQuery = ref('');
+const debouncedSearchQuery = ref('');
+let searchDebounceTimer: number | null = null;
+
+function clearSearchDebounce() {
+    if (searchDebounceTimer !== null) {
+        window.clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = null;
+    }
+}
+
+watch(searchQuery, () => {
+    clearSearchDebounce();
+    searchDebounceTimer = window.setTimeout(() => {
+        debouncedSearchQuery.value = searchQuery.value;
+        searchDebounceTimer = null;
+    }, 150);
+});
+
+onBeforeUnmount(clearSearchDebounce);
 
 function normalizeValue(value: string | null | undefined): string {
     return (value ?? '').trim().toLowerCase();
@@ -161,7 +180,7 @@ function optionMatchScore(option: SearchableSelectOption, query: string): number
 }
 
 const filteredOptions = computed(() => {
-    const query = normalizeSearchText(searchQuery.value);
+    const query = normalizeSearchText(debouncedSearchQuery.value);
     if (!query) return uniqueOptions.value;
 
     return uniqueOptions.value
@@ -261,7 +280,9 @@ watch(
     () => open.value,
     (isOpen) => {
         if (!isOpen) {
+            clearSearchDebounce();
             searchQuery.value = '';
+            debouncedSearchQuery.value = '';
             return;
         }
 
