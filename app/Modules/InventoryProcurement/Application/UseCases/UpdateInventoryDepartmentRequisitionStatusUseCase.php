@@ -3,6 +3,7 @@
 namespace App\Modules\InventoryProcurement\Application\UseCases;
 
 use App\Modules\InventoryProcurement\Application\Exceptions\InventoryProcurementWorkflowException;
+use App\Modules\InventoryProcurement\Application\Services\DepartmentStockService;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryDepartmentRequisitionAuditLogRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryDepartmentRequisitionLineRepositoryInterface;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryDepartmentRequisitionRepositoryInterface;
@@ -28,6 +29,7 @@ class UpdateInventoryDepartmentRequisitionStatusUseCase
         private readonly InventoryStockMovementRepositoryInterface $stockMovementRepository,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
+        private readonly DepartmentStockService $departmentStockService,
     ) {}
 
     public function execute(string $id, string $newStatus, array $payload, ?int $actorId = null): ?array
@@ -195,10 +197,24 @@ class UpdateInventoryDepartmentRequisitionStatusUseCase
                             'requesting_department_id' => $existing['requesting_department_id'] ?? null,
                             'issuing_warehouse_id' => $existing['issuing_warehouse_id'] ?? null,
                         ],
-                        'occurred_at' => now(),
-                        'created_at' => now(),
-                    ]);
-                }
+                    'occurred_at' => now(),
+                    'created_at' => now(),
+                ]);
+
+                $this->departmentStockService->recordIssue(
+                    tenantId: $this->platformScopeContext->tenantId(),
+                    facilityId: $this->platformScopeContext->facilityId(),
+                    departmentId: $existing['requesting_department_id'] ?? '',
+                    itemId: $line['item_id'],
+                    quantity: $lineUpdate['additional_issue_quantity'],
+                    batchId: $line['batch_id'] ?? null,
+                    unit: $line['unit'] ?? null,
+                    source: 'department_requisition',
+                    sourceId: $id,
+                    actorId: $actorId,
+                    notes: 'Department requisition '.$existing['requisition_number'],
+                );
+            }
             }
         }
 

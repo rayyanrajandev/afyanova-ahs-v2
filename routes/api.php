@@ -1533,6 +1533,12 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('inventory-procurement/department-stock', [InventoryExtendedController::class, 'departmentStock'])
         ->middleware('can:inventory.procurement.read')
         ->name('inventory-procurement.department-stock.index');
+    Route::get('inventory-procurement/department-stock-balances', [InventoryExtendedController::class, 'departmentStockBalances'])
+        ->middleware('can:inventory.procurement.read')
+        ->name('inventory-procurement.department-stock-balances.index');
+    Route::get('inventory-procurement/department-stock-balances/{departmentId}/movements', [InventoryExtendedController::class, 'departmentStockMovements'])
+        ->middleware('can:inventory.procurement.read')
+        ->name('inventory-procurement.department-stock-balances.movements');
     Route::post('inventory-procurement/department-requisitions', [InventoryExtendedController::class, 'storeDepartmentRequisition'])
         ->middleware('can:inventory.procurement.create-request')
         ->name('inventory-procurement.department-requisitions.store');

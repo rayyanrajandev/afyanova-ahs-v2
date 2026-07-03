@@ -394,6 +394,156 @@ class InventoryExtendedController extends Controller
         ]);
     }
 
+    public function departmentStockBalances(
+        Request $request,
+        DepartmentRequisitionScopeResolver $departmentScopeResolver,
+        \App\Modules\InventoryProcurement\Application\Services\DepartmentStockService $departmentStockService,
+    ): JsonResponse {
+        $page = max((int) $request->query('page', 1), 1);
+        $perPage = min(max((int) $request->query('perPage', 20), 1), 100);
+        $searchTerm = trim((string) $request->query('q', ''));
+        $departmentId = trim((string) $request->query('departmentId', ''));
+        $context = $departmentScopeResolver->contextForUser($request->user());
+
+        if (! (bool) ($context['canSelectAnyDepartment'] ?? false)) {
+            $lockedDepartmentId = $context['lockedDepartment']['id'] ?? null;
+            if (! $lockedDepartmentId) {
+                return response()->json([
+                    'data' => [],
+                    'summary' => [
+                        'totalItems' => 0,
+                        'totalOnHand' => 0,
+                        'totalConsumed' => 0,
+                        'totalReturned' => 0,
+                        'totalWasted' => 0,
+                        'lowStockItems' => 0,
+                    ],
+                    'meta' => [
+                        'currentPage' => $page,
+                        'perPage' => $perPage,
+                        'total' => 0,
+                        'lastPage' => 1,
+                    ],
+                ]);
+            }
+
+            $departmentId = $lockedDepartmentId;
+        }
+
+        if ($departmentId === '') {
+            return response()->json([
+                'data' => [],
+                'summary' => [
+                    'totalItems' => 0,
+                    'totalOnHand' => 0,
+                    'totalConsumed' => 0,
+                    'totalReturned' => 0,
+                    'totalWasted' => 0,
+                    'lowStockItems' => 0,
+                ],
+                'meta' => [
+                    'currentPage' => $page,
+                    'perPage' => $perPage,
+                    'total' => 0,
+                    'lastPage' => 1,
+                ],
+            ]);
+        }
+
+        $result = $departmentStockService->listDepartmentStock(
+            departmentId: $departmentId,
+            search: $searchTerm !== '' ? $searchTerm : null,
+            page: $page,
+            perPage: $perPage,
+        );
+
+        $summary = $departmentStockService->departmentSummary($departmentId);
+
+        $transformedData = array_map(function (mixed $balance): array {
+            if (! is_array($balance)) {
+                $balance = is_object($balance) ? (array) $balance : [];
+            }
+            $item = $balance['item'] ?? null;
+            if (is_object($item)) {
+                $item = (array) $item;
+            }
+
+            return [
+                'id' => $balance['id'] ?? null,
+                'departmentId' => $balance['department_id'] ?? null,
+                'itemId' => $balance['item_id'] ?? null,
+                'itemCode' => $item['item_code'] ?? null,
+                'itemName' => $item['item_name'] ?? null,
+                'category' => $item['category'] ?? null,
+                'subcategory' => $item['subcategory'] ?? null,
+                'batchId' => $balance['batch_id'] ?? null,
+                'unit' => $balance['unit'] ?? null,
+                'quantityOnHand' => (float) ($balance['quantity_on_hand'] ?? 0),
+                'quantityConsumed' => (float) ($balance['quantity_consumed'] ?? 0),
+                'quantityReturned' => (float) ($balance['quantity_returned'] ?? 0),
+                'quantityWasted' => (float) ($balance['quantity_wasted'] ?? 0),
+                'lastIssuedAt' => $balance['last_issued_at'] ?? null,
+                'lastConsumedAt' => $balance['last_consumed_at'] ?? null,
+            ];
+        }, $result['data']);
+
+        return response()->json([
+            'data' => $transformedData,
+            'summary' => $summary,
+            'meta' => $result['meta'],
+        ]);
+    }
+
+    public function departmentStockMovements(
+        string $departmentId,
+        Request $request,
+        DepartmentRequisitionScopeResolver $departmentScopeResolver,
+        \App\Modules\InventoryProcurement\Domain\Repositories\DepartmentStockMovementRepositoryInterface $movementRepository,
+    ): JsonResponse {
+        $page = max((int) $request->query('page', 1), 1);
+        $perPage = min(max((int) $request->query('perPage', 20), 1), 100);
+        $itemId = trim((string) $request->query('itemId', ''));
+        $movementType = trim((string) $request->query('movementType', ''));
+
+        $result = $movementRepository->listByDepartment(
+            departmentId: $departmentId,
+            itemId: $itemId !== '' ? $itemId : null,
+            movementType: $movementType !== '' ? $movementType : null,
+            page: $page,
+            perPage: $perPage,
+        );
+
+        $transformedData = array_map(function (mixed $movement): array {
+            if (! is_array($movement)) {
+                $movement = is_object($movement) ? (array) $movement : [];
+            }
+            $item = $movement['item'] ?? null;
+            if (is_object($item)) {
+                $item = (array) $item;
+            }
+
+            return [
+                'id' => $movement['id'] ?? null,
+                'movementType' => $movement['movement_type'] ?? null,
+                'quantity' => (float) ($movement['quantity'] ?? 0),
+                'quantityBefore' => (float) ($movement['quantity_before'] ?? 0),
+                'quantityAfter' => (float) ($movement['quantity_after'] ?? 0),
+                'itemId' => $movement['item_id'] ?? null,
+                'itemCode' => $item['item_code'] ?? null,
+                'itemName' => $item['item_name'] ?? null,
+                'source' => $movement['source'] ?? null,
+                'sourceId' => $movement['source_id'] ?? null,
+                'notes' => $movement['notes'] ?? null,
+                'occurredAt' => $movement['occurred_at'] ?? null,
+            ];
+        }, $result['data']);
+
+        return response()->json([
+            'data' => $transformedData,
+            'meta' => $result['meta'],
+        ]);
+    }
+
     public function updateDepartmentRequisitionStatus(
         string $id,
         UpdateInventoryDepartmentRequisitionStatusRequest $request,
