@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import type { AppIconName } from '@/lib/icons';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { apiRequestJson } from '@/lib/apiClient';
+import type { AppIconName } from '@/lib/icons';
 import { useSupplyChainPageApi } from '../supplyChainPageApi';
 
 const ws = useSupplyChainPageApi();

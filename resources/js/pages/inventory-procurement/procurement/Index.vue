@@ -2,7 +2,8 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, ref, nextTick, onBeforeUnmount, onMounted, reactive, watch, type Ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import type { AppIconName } from '@/lib/icons';
+import BillingInvoiceLookupField from '@/components/billing/BillingInvoiceLookupField.vue';
+import ClaimsInsuranceCaseLookupField from '@/components/claims/ClaimsInsuranceCaseLookupField.vue';
 import ComboboxField from '@/components/forms/ComboboxField.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
@@ -11,8 +12,6 @@ import InventoryEmptyState from '@/components/inventory/InventoryEmptyState.vue'
 import InventoryItemLookupField from '@/components/inventory/InventoryItemLookupField.vue';
 import RegistryListRow from '@/components/list/RegistryListRow.vue';
 import RegistryListSkeleton from '@/components/list/RegistryListSkeleton.vue';
-import BillingInvoiceLookupField from '@/components/billing/BillingInvoiceLookupField.vue';
-import ClaimsInsuranceCaseLookupField from '@/components/claims/ClaimsInsuranceCaseLookupField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -34,20 +33,21 @@ import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useUrlQueryState } from '@/composables/useUrlQueryState';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
+import type { AppIconName } from '@/lib/icons';
 import { generateRequestKey } from '@/lib/idempotency';
 import { INVENTORY_PROCUREMENT_HOME_PATH } from '@/lib/inventoryProcurement';
 import { isInventoryDepartmentRequester, isInventoryStoreOperations, type InventoryProcurementAccess } from '@/lib/inventoryProcurementAccess';
 import { formatEnumLabel } from '@/lib/labels';
 import { procurementRequestStripeClass } from '@/lib/listRows';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
-import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue, formatDateTime, formatDateOnly, auditActorLabel } from '@/pages/inventory-procurement/constants';
-import { clearSupplyChainPageApi } from '@/pages/inventory-procurement/supplyChainPageApi';
-import { bindSupplyChainPageApi } from '@/pages/inventory-procurement/registerSupplyChainPageApi';
 import SupplyChainAuxiliarySheets from '@/pages/inventory-procurement/components/SupplyChainAuxiliarySheets.vue';
 import SupplyChainClaimsAndMsdSheets from '@/pages/inventory-procurement/components/SupplyChainClaimsAndMsdSheets.vue';
 import SupplyChainFilterOverlays from '@/pages/inventory-procurement/components/SupplyChainFilterOverlays.vue';
 import SupplyChainFilterPopover from '@/pages/inventory-procurement/components/SupplyChainFilterPopover.vue';
 import SupplyChainProcurementLifecycleSheets from '@/pages/inventory-procurement/components/SupplyChainProcurementLifecycleSheets.vue';
+import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue, formatDateTime, formatDateOnly, auditActorLabel } from '@/pages/inventory-procurement/constants';
+import { bindSupplyChainPageApi } from '@/pages/inventory-procurement/registerSupplyChainPageApi';
+import { clearSupplyChainPageApi } from '@/pages/inventory-procurement/supplyChainPageApi';
 import {
     SupplyChainLeadTimesTab,
     SupplyChainMsdOrdersTab,
@@ -572,7 +572,7 @@ async function submitCreateMsdOrder() {
 // ── Utils ──
 const flashedItemId = ref<string | null>(null);
 const flashedRequestId = ref<string | null>(null);
-let flashedItemTimer: ReturnType<typeof setTimeout> | null = null;
+const flashedItemTimer: ReturnType<typeof setTimeout> | null = null;
 let flashedRequestTimer: ReturnType<typeof setTimeout> | null = null;
 let procurementSearchTimer: ReturnType<typeof setTimeout> | null = null;
 let msdOrderSearchTimer: ReturnType<typeof setTimeout> | null = null;

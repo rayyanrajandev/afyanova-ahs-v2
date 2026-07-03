@@ -15,6 +15,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
+import { useDebounceFn } from '@vueuse/core';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
 import { cn } from '@/lib/utils';
 
@@ -58,6 +59,15 @@ const emit = defineEmits<{
 
 const open = ref(false);
 const commandSearch = ref('');
+const debouncedCommandSearch = ref('');
+
+const updateDebouncedSearch = useDebounceFn((value: string) => {
+    debouncedCommandSearch.value = value;
+}, 150);
+
+watch(commandSearch, (value) => {
+    updateDebouncedSearch(value);
+});
 
 function normalizeValue(value: string | null | undefined): string {
     return (value ?? '').trim().toLowerCase();
@@ -139,6 +149,7 @@ watch(
     (isOpen) => {
         if (!isOpen) {
             commandSearch.value = '';
+            debouncedCommandSearch.value = '';
         }
     },
 );
@@ -147,6 +158,7 @@ watch(
     () => props.options,
     () => {
         commandSearch.value = '';
+        debouncedCommandSearch.value = '';
     },
     { deep: true },
 );
@@ -184,7 +196,7 @@ watch(
                 </button>
             </PopoverTrigger>
             <PopoverContent align="start" class="w-[var(--reka-popover-trigger-width)] p-0">
-                <Command v-model="commandSearch">
+                <Command v-model="debouncedCommandSearch">
                     <CommandInput :placeholder="searchPlaceholder" />
                     <CommandList>
                         <CommandEmpty>{{ emptyText }}</CommandEmpty>

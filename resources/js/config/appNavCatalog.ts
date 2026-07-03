@@ -206,15 +206,6 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Cafeteria food and beverage counter sales',
     },
     {
-        title: 'Invoice adjustments',
-        href: '/billing-adjustments',
-        iconName: 'receipt',
-        section: 'billing',
-        subGroup: 'invoicing',
-        permissionPrefixes: ['billing.invoices.'],
-        helpNote: 'Credit notes, debit notes, and balance corrections on invoices',
-    },
-    {
         title: 'Refunds',
         href: '/billing-refunds',
         iconName: 'rotate-ccw',
@@ -222,15 +213,6 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         subGroup: 'invoicing',
         permissionPrefixes: ['billing.refunds.'],
         helpNote: 'Return money to patient/payer for overpayment or cancelled service',
-    },
-    {
-        title: 'Write-offs & bad debt',
-        href: '/billing-write-offs',
-        iconName: 'file-text',
-        section: 'billing',
-        subGroup: 'invoicing',
-        permissionPrefixes: ['billing.invoices.'],
-        helpNote: 'Approve uncollectible balances for write-off',
     },
     {
         title: 'Discount rules',

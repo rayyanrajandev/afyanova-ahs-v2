@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import AppIcon from '@/components/AppIcon.vue';
+import CatalogLinkBadge from '@/components/shared/CatalogLinkBadge.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import CatalogLinkBadge from '@/components/shared/CatalogLinkBadge.vue';
+import { Skeleton } from '@/components/ui/skeleton';
 import { formatEnumLabel } from '@/lib/labels';
 import { useSupplyChainPageApi } from '../supplyChainPageApi';
 

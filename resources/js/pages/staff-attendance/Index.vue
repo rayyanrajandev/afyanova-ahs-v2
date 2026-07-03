@@ -2,13 +2,14 @@
 import { Head, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import Checkbox from '@/components/ui/checkbox/Checkbox.vue';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
 import RegistryListRow from '@/components/list/RegistryListRow.vue';
 import RegistryListSkeleton from '@/components/list/RegistryListSkeleton.vue';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import Checkbox from '@/components/ui/checkbox/Checkbox.vue';
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -18,10 +19,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
-import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
+import { getInitials } from '@/composables/useInitials';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { csrfRequestHeaders } from '@/lib/csrf';
-import { getInitials } from '@/composables/useInitials';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { BreadcrumbItem } from '@/types';
 import type { Auth } from '@/types/auth';

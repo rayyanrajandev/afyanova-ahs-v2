@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
+import { useDebounceFn } from '@vueuse/core';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
 
 type Props = {
@@ -50,24 +51,14 @@ const emit = defineEmits<{
 const open = ref(false);
 const searchQuery = ref('');
 const debouncedSearchQuery = ref('');
-let searchDebounceTimer: number | null = null;
 
-function clearSearchDebounce() {
-    if (searchDebounceTimer !== null) {
-        window.clearTimeout(searchDebounceTimer);
-        searchDebounceTimer = null;
-    }
-}
+const updateDebouncedSearch = useDebounceFn((value: string) => {
+    debouncedSearchQuery.value = value;
+}, 150);
 
-watch(searchQuery, () => {
-    clearSearchDebounce();
-    searchDebounceTimer = window.setTimeout(() => {
-        debouncedSearchQuery.value = searchQuery.value;
-        searchDebounceTimer = null;
-    }, 150);
+watch(searchQuery, (value) => {
+    updateDebouncedSearch(value);
 });
-
-onBeforeUnmount(clearSearchDebounce);
 
 function normalizeValue(value: string | null | undefined): string {
     return (value ?? '').trim().toLowerCase();
@@ -280,7 +271,6 @@ watch(
     () => open.value,
     (isOpen) => {
         if (!isOpen) {
-            clearSearchDebounce();
             searchQuery.value = '';
             debouncedSearchQuery.value = '';
             return;

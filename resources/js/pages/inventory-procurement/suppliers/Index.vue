@@ -6,7 +6,6 @@ import FacilityWorkspacePageHeader from '@/components/layout/FacilityWorkspacePa
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import SupplyChainFilterPopover from '@/pages/inventory-procurement/components/SupplyChainFilterPopover.vue';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input, SearchInput } from '@/components/ui/input';
@@ -24,6 +23,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
 import { INVENTORY_PROCUREMENT_HOME_PATH } from '@/lib/inventoryProcurement';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
+import SupplyChainFilterPopover from '@/pages/inventory-procurement/components/SupplyChainFilterPopover.vue';
 import { type BreadcrumbItem } from '@/types';
 
 type Pagination = { currentPage: number; perPage: number; total: number; lastPage: number };

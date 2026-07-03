@@ -143,14 +143,6 @@ const routeAccessRules: RouteAccessRule[] = [
         requiredPermissions: ['pos.frontdesk-quick.read'],
     },
     {
-        pathPrefix: '/billing-adjustments',
-        requiredPermissions: ['billing.invoices.read'],
-    },
-    {
-        pathPrefix: '/billing-write-offs',
-        requiredPermissions: ['billing.invoices.read'],
-    },
-    {
         pathPrefix: '/billing-daily-close',
         requiredPermissions: ['billing.financial-controls.read'],
     },
