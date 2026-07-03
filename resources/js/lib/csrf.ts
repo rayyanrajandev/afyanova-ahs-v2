@@ -5,52 +5,56 @@ function readCookie(name: string): string | null {
     return match ? decodeURIComponent(match[1]) : null;
 }
 
+/**
+ * Read the XSRF-TOKEN cookie and return the header object for fetch requests.
+ *
+ * The cookie is the **single source of truth** — no meta tag fallback.
+ * Laravel encrypts the session CSRF token into this cookie via the
+ * EncryptCookies middleware and VerifyCsrfToken compares the decrypted
+ * header value against the session `_token`.
+ */
 export function csrfRequestHeaders(): Record<string, string> {
     const xsrfToken = readCookie('XSRF-TOKEN');
     if (xsrfToken) {
         return { 'X-XSRF-TOKEN': xsrfToken };
     }
 
-    const metaToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? null;
-    if (metaToken) {
-        return { 'X-CSRF-TOKEN': metaToken };
-    }
-
     return {};
 }
 
-export function setCsrfMetaToken(token: string | null | undefined): void {
-    const normalized = token?.trim() ?? '';
-    if (!normalized) return;
-
-    const element = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]');
-    if (element) {
-        element.content = normalized;
-    }
-}
+/**
+ * Request a fresh CSRF token from the server.
+ *
+ * Calls the existing `GET /auth/csrf-token` endpoint which:
+ *  1. Regenerates the session `_token` via `session()->regenerateToken()`
+ *  2. Returns the response through EncryptCookies → sets a fresh XSRF-TOKEN cookie
+ *
+ * Deduplicates concurrent calls so multiple simultaneous 419 recoveries
+ * only trigger one server round-trip.
+ */
+let refreshPromise: Promise<void> | null = null;
 
 export async function refreshCsrfToken(): Promise<void> {
-    const response = await fetch('/auth/csrf-token', {
-        method: 'GET',
-        credentials: 'same-origin',
-        headers: {
-            Accept: 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'Cache-Control': 'no-cache',
-        },
-    });
-
-    const payload = (await response.json().catch(() => ({}))) as {
-        token?: string | null;
-        message?: string | null;
-    };
-
-    if (!response.ok) {
-        const message = typeof payload.message === 'string' && payload.message.trim() !== ''
-            ? payload.message
-            : `Unable to refresh CSRF token (${response.status}).`;
-        throw new Error(message);
+    if (refreshPromise) {
+        return refreshPromise;
     }
 
-    setCsrfMetaToken(payload.token);
+    refreshPromise = (async () => {
+        const response = await fetch('/auth/csrf-token', {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`Unable to refresh CSRF token (${response.status}).`);
+        }
+    })().finally(() => {
+        refreshPromise = null;
+    });
+
+    return refreshPromise;
 }

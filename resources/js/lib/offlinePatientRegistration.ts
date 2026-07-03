@@ -383,7 +383,12 @@ async function postPatientToCloud(
     });
 
     if (response.status === 419 && retryOnCsrfMismatch) {
-        await refreshCsrfToken();
+        try {
+            await refreshCsrfToken();
+        } catch {
+            window.location.reload();
+            throw new Error('Session expired. Page will reload.');
+        }
         return postPatientToCloud(record, false);
     }
 
@@ -419,7 +424,12 @@ async function patchPatientToCloud(
     });
 
     if (response.status === 419 && retryOnCsrfMismatch) {
-        await refreshCsrfToken();
+        try {
+            await refreshCsrfToken();
+        } catch {
+            window.location.reload();
+            throw new Error('Session expired. Page will reload.');
+        }
         return patchPatientToCloud(record, false);
     }
 

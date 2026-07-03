@@ -95,7 +95,7 @@ function messageFromFailurePayload(payload: unknown, status: number, statusText:
 
 /**
  * Single entry point for JSON calls under {@link API_V1_PREFIX}.
- * - Same-origin credentials, CSRF headers on mutating requests (cookie + meta via {@link csrfRequestHeaders}).
+ * - Same-origin credentials, CSRF headers on mutating requests (cookie-only via {@link csrfRequestHeaders}).
  * - On HTTP 403, surfaces facility subscription / entitlement feedback via {@link notifyFacilityEntitlementDenied}.
  * - Throws {@link ApiClientError} with `.payload` for validation and server messages.
  */
@@ -151,9 +151,20 @@ export async function apiRequestJson<T>(
         method !== 'GET' &&
         options?.keepalive !== true
     ) {
-        await refreshCsrfToken();
+        try {
+            await refreshCsrfToken();
+        } catch {
+            window.location.reload();
+            throw new ApiClientError('Session expired. Page will reload.', 419, {});
+        }
+
         Object.assign(headers, csrfRequestHeaders());
         response = await sendRequest();
+
+        if (response.status === 419) {
+            window.location.reload();
+            throw new ApiClientError('Session expired. Page will reload.', 419, {});
+        }
     }
 
     const payload = await parseJsonBody(response);
