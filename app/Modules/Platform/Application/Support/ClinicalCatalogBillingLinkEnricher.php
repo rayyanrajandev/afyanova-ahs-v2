@@ -69,7 +69,70 @@ class ClinicalCatalogBillingLinkEnricher
      */
     public function enrichMany(array $items): array
     {
-        return array_map(fn (array $item): array => $this->enrich($item), $items);
+        if ($items === []) {
+            return [];
+        }
+
+        $clinicalCatalogItemIds = [];
+        $tenantId = null;
+        $facilityId = null;
+
+        foreach ($items as $item) {
+            $id = $this->nullableTrimmedValue($item['id'] ?? null);
+            if ($id !== null) {
+                $clinicalCatalogItemIds[] = $id;
+            }
+            if ($tenantId === null) {
+                $tenantId = $this->nullableTrimmedValue($item['tenant_id'] ?? null);
+            }
+            if ($facilityId === null) {
+                $facilityId = $this->nullableTrimmedValue($item['facility_id'] ?? null);
+            }
+        }
+
+        $billingMap = [];
+        if ($clinicalCatalogItemIds !== []) {
+            $billingMap = $this->billingServiceCatalogRepository->listLatestByClinicalCatalogItemIds(
+                $clinicalCatalogItemIds,
+                $tenantId,
+                $facilityId,
+            );
+        }
+
+        return array_map(function (array $item) use ($billingMap, $tenantId, $facilityId): array {
+            $clinicalCatalogItemId = $this->nullableTrimmedValue($item['id'] ?? null);
+            $billingItem = null;
+            $billingServiceCode = null;
+
+            if ($clinicalCatalogItemId !== null && isset($billingMap[$clinicalCatalogItemId])) {
+                $billingItem = $this->pickPreferredBillingVersion(
+                    [$billingMap[$clinicalCatalogItemId]],
+                );
+            }
+
+            if ($billingItem !== null) {
+                $billingServiceCode = $this->normalizeServiceCode($billingItem['service_code'] ?? null);
+            }
+
+            if ($billingItem === null) {
+                $billingServiceCode = $this->extractBillingServiceCode($item['metadata'] ?? null);
+                if ($billingServiceCode !== null) {
+                    $billingItem = $this->resolveBillingServiceItem(
+                        $billingServiceCode,
+                        $tenantId,
+                        $facilityId,
+                    );
+                }
+            }
+
+            $item['billing_link'] = [
+                'status' => $this->billingLinkStatus($billingServiceCode, $billingItem),
+                'service_code' => $billingServiceCode,
+                'item' => $billingItem === null ? null : $this->summarizeBillingItem($billingItem),
+            ];
+
+            return $item;
+        }, $items);
     }
 
     /**
