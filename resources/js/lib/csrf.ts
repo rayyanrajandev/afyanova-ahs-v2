@@ -52,6 +52,14 @@ export async function refreshCsrfToken(): Promise<void> {
         if (!response.ok) {
             throw new Error(`Unable to refresh CSRF token (${response.status}).`);
         }
+
+        const xsrfToken = readCookie('XSRF-TOKEN');
+        if (xsrfToken) {
+            const meta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]');
+            if (meta) {
+                meta.content = xsrfToken;
+            }
+        }
     })().finally(() => {
         refreshPromise = null;
     });
