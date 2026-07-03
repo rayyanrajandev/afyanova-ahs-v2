@@ -2,6 +2,7 @@
 
 namespace App\Modules\Billing\Application\UseCases;
 
+use App\Models\ConsultationMapping;
 use App\Modules\Appointment\Domain\Repositories\AppointmentRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
@@ -48,17 +49,36 @@ class AutoCaptureConsultationFeeUseCase
 
         $department = trim((string) ($appointment['department'] ?? ''));
         $currencyCode = $this->defaultCurrencyResolver->resolve();
+        $tier = $this->consultationClinicianTier($clinicianContext);
 
-        $serviceCodes = $this->consultationServiceCodes($department, $clinicianContext);
+        // 1. Explicit Mapping Lookup
+        $catalogItem = null;
+        if ($tier !== null && $department !== '') {
+            $mapping = ConsultationMapping::query()
+                ->where('clinician_tier', $tier)
+                ->where('department', $department)
+                ->with('billingServiceCatalogItem')
+                ->first();
+            if ($mapping) {
+                $catalogItem = $mapping->billingServiceCatalogItem?->toArray();
+            }
+        }
+
+        // 2. Fallback to Brittle Generation Logic
+        if (!$catalogItem) {
+            $serviceCodes = $this->consultationServiceCodes($department, $clinicianContext);
+            $catalogItem = $this->findActivePricingByServiceCodes($serviceCodes, $currencyCode);
+        }
+
         $serviceName = $this->consultationServiceName($department, $clinicianContext);
 
-        $catalogItem = $this->findActivePricingByServiceCodes($serviceCodes, $currencyCode);
         $unitPrice = $catalogItem !== null
             ? round(max((float) ($catalogItem['base_price'] ?? 0), 0), 2)
             : 0;
         $normalizedServiceCode = $catalogItem !== null
-            ? strtoupper(trim((string) ($catalogItem['service_code'] ?? $serviceCodes[0] ?? '')))
-            : ($serviceCodes[0] ?? '');
+            ? strtoupper(trim((string) ($catalogItem['service_code'] ?? '')))
+            : 'CONSULTATION'; // Default fallback if no pricing at all
+        
         $resolvedUnit = trim((string) ($catalogItem['unit'] ?? 'visit'));
         $resolvedDescription = trim((string) ($catalogItem['service_name'] ?? $serviceName));
 
