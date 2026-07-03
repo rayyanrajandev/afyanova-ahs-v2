@@ -185,6 +185,24 @@ class EloquentDepartmentRepository implements DepartmentRepositoryInterface
             ->all();
     }
 
+    public function findActiveByName(string $name): ?array
+    {
+        $trimmed = trim($name);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $query = DepartmentModel::query();
+        $this->applyPlatformScopeIfEnabled($query);
+
+        $department = $query
+            ->where('status', 'active')
+            ->whereRaw('LOWER(name) = ?', [strtolower($trimmed)])
+            ->first();
+
+        return $department?->toArray();
+    }
+
     private function toSearchResult(LengthAwarePaginator $paginator): array
     {
         return [

@@ -382,7 +382,7 @@ async function loadDepartmentStock() {
             data: any[];
             summary?: typeof departmentStockSummary.value;
             meta: { currentPage: number; lastPage: number; total?: number };
-        }>('GET', '/inventory-procurement/department-stock', {
+        }>('GET', '/inventory-procurement/department-stock-balances', {
             query: departmentStockQuery(),
         });
         departmentStock.value = response.data ?? [];

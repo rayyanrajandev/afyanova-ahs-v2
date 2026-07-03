@@ -56,12 +56,12 @@ const ws = useSupplyChainPageApi();
                                 status-title="Department stock"
                                 :primary-label="row.itemName || row.itemId"
                                 :secondary-label="row.itemCode || row.itemId"
-                                :meta="`${row.departmentName || 'Department'} · ${ws.formatAmount(row.issuedQuantity)} ${row.unit || ''} on hand · ${row.sourceWarehouseName || row.sourceWarehouseCode || 'Store not recorded'} · ${row.movementCount} movement${row.movementCount === 1 ? '' : 's'} · Last issued ${ws.formatDateTime(row.lastIssuedAt)}`"
+                                :meta="`${ws.formatAmount(row.quantityOnHand)} ${row.unit || ''} on hand · ${ws.formatAmount(row.quantityConsumed)} consumed · ${ws.formatAmount(row.quantityReturned)} returned · Last issued ${ws.formatDateTime(row.lastIssuedAt)}`"
                                 :selectable="false"
                             >
                                 <template #badges>
                                     <Badge variant="secondary" class="h-5 px-1.5 text-[10px]">
-                                        {{ row.departmentName }}
+                                        {{ row.departmentId ? 'Dept' : 'Store' }}
                                     </Badge>
                                 </template>
                                 <template #actions>

@@ -2,6 +2,8 @@
 
 namespace App\Modules\Platform\Application\Services;
 
+use App\Modules\Department\Domain\Repositories\DepartmentRepositoryInterface;
+use App\Modules\InventoryProcurement\Application\Services\DepartmentStockService;
 use App\Modules\InventoryProcurement\Application\Services\InventoryBatchStockService;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryStockMovementModel;
@@ -28,6 +30,8 @@ class ClinicalCatalogRecipeStockConsumptionService
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
         private readonly InventoryBatchStockService $inventoryBatchStockService,
+        private readonly DepartmentStockService $departmentStockService,
+        private readonly DepartmentRepositoryInterface $departmentRepository,
     ) {}
 
     /**
@@ -281,6 +285,16 @@ class ClinicalCatalogRecipeStockConsumptionService
             ]);
         }
 
+        $this->recordDepartmentStockConsumption(
+            sourceSnapshot: $sourceSnapshot,
+            itemId: (string) $inventoryItem->id,
+            quantity: $quantity,
+            unit: $recipeItem->unit ?: ($inventoryItem->unit ?? null),
+            sourceType: $sourceType,
+            sourceId: $sourceId,
+            actorId: $actorId,
+        );
+
         return $storedMovement;
     }
 
@@ -443,5 +457,56 @@ class ClinicalCatalogRecipeStockConsumptionService
         $value = trim((string) $value);
 
         return $value === '' ? null : $value;
+    }
+
+    /**
+     * @param  array<string, mixed>  $sourceSnapshot
+     */
+    private function recordDepartmentStockConsumption(
+        array $sourceSnapshot,
+        string $itemId,
+        float $quantity,
+        ?string $unit,
+        string $sourceType,
+        string $sourceId,
+        ?int $actorId,
+    ): void {
+        $departmentId = $this->resolveDepartmentId($sourceSnapshot);
+        if ($departmentId === null) {
+            return;
+        }
+
+        $this->departmentStockService->recordConsumption(
+            tenantId: $this->platformScopeContext->tenantId(),
+            facilityId: $this->platformScopeContext->facilityId(),
+            departmentId: $departmentId,
+            itemId: $itemId,
+            quantity: $quantity,
+            batchId: null,
+            source: $sourceType,
+            sourceId: $sourceId,
+            actorId: $actorId,
+            notes: 'Clinical recipe consumption (' . $sourceType . ')',
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $sourceSnapshot
+     */
+    private function resolveDepartmentId(array $sourceSnapshot): ?string
+    {
+        $appointmentId = $sourceSnapshot['appointment_id'] ?? null;
+        if ($appointmentId !== null) {
+            $appointment = \App\Modules\Appointment\Infrastructure\Models\AppointmentModel::query()->find($appointmentId);
+            $departmentName = $appointment['department'] ?? null;
+            if ($departmentName !== null && trim((string) $departmentName) !== '') {
+                $department = $this->departmentRepository->findActiveByName((string) $departmentName);
+                if ($department !== null) {
+                    return (string) $department['id'];
+                }
+            }
+        }
+
+        return null;
     }
 }

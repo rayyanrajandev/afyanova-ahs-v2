@@ -35,5 +35,7 @@ interface DepartmentRepositoryInterface
     ): array;
 
     public function listAppointmentableOptions(): array;
+
+    public function findActiveByName(string $name): ?array;
 }
 

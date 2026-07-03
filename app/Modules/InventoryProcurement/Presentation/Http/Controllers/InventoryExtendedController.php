@@ -460,11 +460,15 @@ class InventoryExtendedController extends Controller
         $summary = $departmentStockService->departmentSummary($departmentId);
 
         $transformedData = array_map(function (mixed $balance): array {
-            if (! is_array($balance)) {
-                $balance = is_object($balance) ? (array) $balance : [];
+            if (is_object($balance) && method_exists($balance, 'toArray')) {
+                $balance = $balance->toArray();
+            } elseif (! is_array($balance)) {
+                $balance = [];
             }
             $item = $balance['item'] ?? null;
-            if (is_object($item)) {
+            if (is_object($item) && method_exists($item, 'toArray')) {
+                $item = $item->toArray();
+            } elseif (is_object($item)) {
                 $item = (array) $item;
             }
 
@@ -542,6 +546,70 @@ class InventoryExtendedController extends Controller
             'data' => $transformedData,
             'meta' => $result['meta'],
         ]);
+    }
+
+    public function departmentStockReturn(
+        string $departmentId,
+        Request $request,
+        DepartmentRequisitionScopeResolver $departmentScopeResolver,
+        \App\Modules\InventoryProcurement\Application\Services\DepartmentStockService $departmentStockService,
+        \App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface $platformScopeContext,
+    ): JsonResponse {
+        $request->validate([
+            'item_id' => 'required|uuid',
+            'quantity' => 'required|numeric|min:0.001',
+            'batch_id' => 'nullable|uuid',
+            'notes' => 'nullable|string|max:1000',
+        ]);
+
+        $result = $departmentStockService->recordReturn(
+            tenantId: $platformScopeContext->tenantId(),
+            facilityId: $platformScopeContext->facilityId(),
+            departmentId: $departmentId,
+            itemId: $request->input('item_id'),
+            quantity: (float) $request->input('quantity'),
+            batchId: $request->input('batch_id'),
+            actorId: $request->user()?->id,
+            notes: $request->input('notes'),
+        );
+
+        if ($result === null) {
+            return response()->json(['message' => 'No department stock found to return.'], 404);
+        }
+
+        return response()->json(['data' => $result]);
+    }
+
+    public function departmentStockWastage(
+        string $departmentId,
+        Request $request,
+        DepartmentRequisitionScopeResolver $departmentScopeResolver,
+        \App\Modules\InventoryProcurement\Application\Services\DepartmentStockService $departmentStockService,
+        \App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface $platformScopeContext,
+    ): JsonResponse {
+        $request->validate([
+            'item_id' => 'required|uuid',
+            'quantity' => 'required|numeric|min:0.001',
+            'batch_id' => 'nullable|uuid',
+            'notes' => 'nullable|string|max:1000',
+        ]);
+
+        $result = $departmentStockService->recordWastage(
+            tenantId: $platformScopeContext->tenantId(),
+            facilityId: $platformScopeContext->facilityId(),
+            departmentId: $departmentId,
+            itemId: $request->input('item_id'),
+            quantity: (float) $request->input('quantity'),
+            batchId: $request->input('batch_id'),
+            actorId: $request->user()?->id,
+            notes: $request->input('notes'),
+        );
+
+        if ($result === null) {
+            return response()->json(['message' => 'No department stock found to record wastage.'], 404);
+        }
+
+        return response()->json(['data' => $result]);
     }
 
     public function updateDepartmentRequisitionStatus(

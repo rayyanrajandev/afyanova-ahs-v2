@@ -2,7 +2,9 @@
 
 namespace App\Modules\Pharmacy\Application\UseCases;
 
+use App\Modules\Department\Domain\Repositories\DepartmentRepositoryInterface;
 use App\Modules\InventoryProcurement\Application\Exceptions\InventoryItemNotFoundException;
+use App\Modules\InventoryProcurement\Application\Services\DepartmentStockService;
 use App\Modules\InventoryProcurement\Application\Services\InventoryBatchStockService;
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemRepositoryInterface;
 use App\Modules\Pharmacy\Application\Exceptions\PharmacyOrderStatusUpdateNotAllowedException;
@@ -10,6 +12,7 @@ use App\Modules\Pharmacy\Application\Support\ApprovedMedicineGovernance;
 use App\Modules\Pharmacy\Domain\Repositories\PharmacyOrderAuditLogRepositoryInterface;
 use App\Modules\Pharmacy\Domain\Repositories\PharmacyOrderRepositoryInterface;
 use App\Modules\Pharmacy\Domain\ValueObjects\PharmacyOrderStatus;
+use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use App\Support\ClinicalOrders\ClinicalOrderLifecycle;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +25,9 @@ class UpdatePharmacyOrderStatusUseCase
         private readonly InventoryItemRepositoryInterface $inventoryItemRepository,
         private readonly InventoryBatchStockService $inventoryBatchStockService,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
+        private readonly DepartmentStockService $departmentStockService,
+        private readonly DepartmentRepositoryInterface $departmentRepository,
+        private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
     ) {}
 
     public function execute(
@@ -121,6 +127,12 @@ class UpdatePharmacyOrderStatusUseCase
                     existing: $existing,
                     updated: $updated,
                     quantityIssued: $stockIssueQuantity,
+                    actorId: $actorId,
+                );
+
+                $this->recordDepartmentStockConsumption(
+                    order: $updated,
+                    quantityConsumed: $stockIssueQuantity,
                     actorId: $actorId,
                 );
             }
@@ -466,6 +478,67 @@ class UpdatePharmacyOrderStatusUseCase
             strtolower((string) ($order['dispensing_notes'] ?? '')),
             'substitution: yes',
         );
+    }
+
+    /**
+     * @param array<string, mixed> $order
+     */
+    private function recordDepartmentStockConsumption(
+        array $order,
+        float $quantityConsumed,
+        ?int $actorId,
+    ): void {
+        $departmentId = $this->resolveDepartmentId($order);
+        if ($departmentId === null) {
+            return;
+        }
+
+        [$itemCode, $itemName] = $this->resolveDispenseTargetMedication($order);
+        $inventoryItem = $this->inventoryItemRepository->findBestActiveMatchByCodeOrName(
+            $itemCode,
+            $itemName,
+        );
+
+        if (! $inventoryItem) {
+            return;
+        }
+
+        $resolvedDispenseUnit = $this->normalizeUnit(
+            $order['dispensed_unit'] ?? $order['prescribed_unit'] ?? null,
+        );
+
+        $this->departmentStockService->recordConsumption(
+            tenantId: $this->platformScopeContext->tenantId(),
+            facilityId: $this->platformScopeContext->facilityId(),
+            departmentId: $departmentId,
+            itemId: (string) $inventoryItem['id'],
+            quantity: $quantityConsumed,
+            batchId: null,
+            source: 'pharmacy_dispense',
+            sourceId: $order['id'] ?? null,
+            actorId: $actorId,
+            notes: 'Pharmacy dispense – order ' . ($order['order_number'] ?? $order['id'] ?? ''),
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $order
+     */
+    private function resolveDepartmentId(array $order): ?string
+    {
+        $appointmentId = $order['appointment_id'] ?? null;
+        if ($appointmentId !== null) {
+            $appointment = \App\Modules\Appointment\Infrastructure\Models\AppointmentModel::query()->find($appointmentId);
+            $departmentName = $appointment['department'] ?? null;
+            if ($departmentName !== null && trim((string) $departmentName) !== '') {
+                $department = $this->departmentRepository->findActiveByName((string) $departmentName);
+                if ($department !== null) {
+                    return (string) $department['id'];
+                }
+            }
+        }
+
+        return null;
     }
 
     private function nullableString(mixed $value): ?string
