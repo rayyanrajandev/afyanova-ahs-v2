@@ -84,7 +84,7 @@ function selectStage(stage: BillingCreateStage): void {
     </div>
     <div class="space-y-4">
         <div class="rounded-lg border bg-muted/20 p-2">
-            <div class="grid gap-2 md:grid-cols-3">
+            <div class="grid gap-2 md:grid-cols-2">
                 <button
                     type="button"
                     class="rounded-lg border px-4 py-3 text-left transition-colors"
@@ -95,7 +95,7 @@ function selectStage(stage: BillingCreateStage): void {
                     "
                     @click="selectStage('context')"
                 >
-                    <p class="text-sm font-medium text-foreground">1. Context</p>
+                    <p class="text-sm font-medium text-foreground">1. Patient & Payer</p>
                     <p class="mt-1 text-xs text-muted-foreground">
                         Confirm patient, visit link, and settlement route.
                     </p>
@@ -111,28 +111,13 @@ function selectStage(stage: BillingCreateStage): void {
                     @click="selectStage('charges')"
                 >
                     <div class="flex items-center justify-between gap-2">
-                        <p class="text-sm font-medium text-foreground">2. Charges</p>
+                        <p class="text-sm font-medium text-foreground">2. Charges & Submit</p>
                         <Badge variant="outline" class="text-[10px]">
                             {{ createLineItemsCount }} items
                         </Badge>
                     </div>
                     <p class="mt-1 text-xs text-muted-foreground">
-                        Import services or add governed exception charges.
-                    </p>
-                </button>
-                <button
-                    type="button"
-                    class="rounded-lg border px-4 py-3 text-left transition-colors"
-                    :class="
-                        createInvoiceStage === 'finalize'
-                            ? 'border-primary/40 bg-muted/20 shadow-sm'
-                            : 'border-transparent bg-transparent hover:border-border/70 hover:bg-muted/20'
-                    "
-                    @click="selectStage('finalize')"
-                >
-                    <p class="text-sm font-medium text-foreground">3. Review & Save</p>
-                    <p class="mt-1 text-xs text-muted-foreground">
-                        {{ createWorkspaceReviewStepDescription }}
+                        Import services, review, and save the invoice.
                     </p>
                 </button>
             </div>

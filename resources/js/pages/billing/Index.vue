@@ -2452,10 +2452,6 @@ function goToCreateChargesStage() {
     createInvoiceStage.value = 'charges';
 }
 
-function goToCreateFinalizeStage() {
-    createInvoiceStage.value = 'finalize';
-}
-
 function clearCreateContextActiveDraftDebounce() {
     if (createContextActiveDraftDebounceTimer !== null) {
         window.clearTimeout(createContextActiveDraftDebounceTimer);
@@ -14524,23 +14520,17 @@ onMounted(refreshPage);
                 >
                         <CardContent class="space-y-4">
                             <div class="rounded-lg border bg-muted/20 p-2">
-                                <div class="grid gap-2 md:grid-cols-3">
+                                <div class="grid gap-2 md:grid-cols-2">
                                     <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                        <p class="text-sm font-medium text-foreground">1. Context</p>
+                                        <p class="text-sm font-medium text-foreground">1. Patient & Payer</p>
                                         <p class="mt-1 text-xs text-muted-foreground">
                                             Confirm patient, visit link, and settlement route.
                                         </p>
                                     </div>
                                     <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                        <p class="text-sm font-medium text-foreground">2. Charges</p>
+                                        <p class="text-sm font-medium text-foreground">2. Charges & Submit</p>
                                         <p class="mt-1 text-xs text-muted-foreground">
-                                            Import services or add governed exception charges.
-                                        </p>
-                                    </div>
-                                    <div class="rounded-lg border bg-muted/20 px-4 py-3">
-                                        <p class="text-sm font-medium text-foreground">3. Review & Save</p>
-                                        <p class="mt-1 text-xs text-muted-foreground">
-                                            Review lines, dates, and adjustments before saving the draft invoice.
+                                            Import services, review, and save the invoice.
                                         </p>
                                     </div>
                                 </div>
@@ -14587,63 +14577,6 @@ onMounted(refreshPage);
                 </div>
             </template>
             <template v-else>
-            <BillingBoardView
-                v-if="billingWorkspaceView === 'board'"
-                :can-read-billing-invoices="canReadBillingInvoices"
-                :can-read-billing-financial-controls="canReadBillingFinancialControls"
-                :billing-permissions-resolved="billingPermissionsResolved"
-                :page-loading="pageLoading"
-                :billing-financial-controls-window-label="billingFinancialControlsWindowLabel"
-                :billing-financial-controls-as-of-label="billingFinancialControlsAsOfLabel"
-                :financial-summary-currency-code="financialSummaryCurrencyCode"
-                :billing-financial-controls-summary="billingFinancialControlsSummary"
-                :billing-financial-controls-loading="billingFinancialControlsLoading"
-                :billing-financial-controls-error="billingFinancialControlsError"
-                :billing-financial-controls-exporting="billingFinancialControlsExporting"
-                :billing-outstanding-tone-class="billingOutstandingToneClass"
-                :billing-aging-bucket-rows="billingAgingBucketRows"
-                :billing-daybook-tone-class="billingDaybookToneClass"
-                :billing-daybook-scope-label="billingDaybookScopeLabel"
-                :billing-visible-payment-activity-count="billingVisiblePaymentActivityCount"
-                :billing-operational-queue-counts="billingOperationalQueueCounts"
-                :billing-visible-latest-payment-at="billingVisibleLatestPaymentAt"
-                :billing-visible-payment-method-mix-label="billingVisiblePaymentMethodMixLabel"
-                :billing-visible-payer-type-mix-label="billingVisiblePayerTypeMixLabel"
-                :billing-outstanding-follow-up-count="billingOutstandingFollowUpCount"
-                :billing-daybook-focus-card="billingDaybookFocusCard"
-                :billing-denial-pressure-tone-class="billingDenialPressureToneClass"
-                :billing-denial-focus-card="billingDenialFocusCard"
-                :billing-settlement-pressure-tone-class="billingSettlementPressureToneClass"
-                :billing-settlement-focus-card="billingSettlementFocusCard"
-                :billing-claims-rejected-href="billingClaimsRejectedHref"
-                :billing-claims-partial-denials-href="billingClaimsPartialDenialsHref"
-                :billing-claims-pending-settlement-href="billingClaimsPendingSettlementHref"
-                :billing-claims-open-exceptions-href="billingClaimsOpenExceptionsHref"
-                :format-money="formatMoney"
-                @refresh-summary="loadFinancialControlsSummary"
-                @export-summary="exportFinancialControlsSummaryCsv"
-                @open-cashier-daybook="
-                    applyBillingQueueOperationalPreset('cashier_daybook', {
-                        focusSearch: true,
-                    })
-                "
-                @work-outstanding-follow-up="
-                    applyBillingQueuePreset('outstanding', {
-                        focusSearch: true,
-                    })
-                "
-                @open-claim-prep="
-                    applyBillingQueueOperationalPreset('claim_prep', {
-                        focusSearch: true,
-                    })
-                "
-                @open-reconciliation="
-                    applyBillingQueueOperationalPreset('reconciliation', {
-                        focusSearch: true,
-                    })
-                "
-            />
-
             <BillingWorkspaceAlerts
                 :scope-warning="scopeWarning"
                 :list-errors="listErrors"
@@ -15000,7 +14933,7 @@ onMounted(refreshPage);
                         </div>
 
                         <BillingCreateFinalizePanel
-                            v-else
+                            v-if="createInvoiceStage === 'charges'"
                             :create-basket-count-label="createBasketCountLabel"
                             :create-line-items-subtotal="createLineItemsSubtotal"
                             :default-currency-code="defaultBillingCurrencyCode"

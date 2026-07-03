@@ -27,7 +27,7 @@ defineEmits<{
     <Separator />
     <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <p
-            v-if="props.createInvoiceStage === 'finalize'"
+            v-if="props.createInvoiceStage === 'charges'"
             class="text-xs text-muted-foreground"
         >
             {{ props.createDraftSaveGuidanceDescription }}
@@ -65,18 +65,8 @@ defineEmits<{
                 <AppIcon name="arrow-right" class="size-3.5" />
             </Button>
             <Button
-                v-else-if="props.createInvoiceStage === 'charges'"
-                type="button"
-                class="gap-1.5"
-                :disabled="!props.canContinueFromCharges"
-                @click="$emit('continue-to-review')"
-            >
-                Continue to Review
-                <AppIcon name="arrow-right" class="size-3.5" />
-            </Button>
-            <Button
                 v-else
-                :disabled="props.createLoading"
+                :disabled="props.createLoading || !props.canContinueFromCharges"
                 class="gap-1.5"
                 @click="$emit('submit')"
             >

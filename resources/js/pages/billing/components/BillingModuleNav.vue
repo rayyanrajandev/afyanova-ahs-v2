@@ -16,9 +16,7 @@ interface ModuleLink {
 const moduleLinks = [
     { value: 'invoices', label: 'Invoices', href: '/billing-invoices', icon: 'receipt', permission: 'billing.invoices.read' },
     { value: 'cash', label: 'Cash payments', href: '/billing-cash', icon: 'banknote', permission: 'billing.cash-accounts.read' },
-    { value: 'adjustments', label: 'Adjustments', href: '/billing-adjustments', icon: 'scale', permission: 'billing.invoices.read' },
     { value: 'refunds', label: 'Refunds', href: '/billing-refunds', icon: 'undo-2', permission: 'billing.refunds.read' },
-    { value: 'writeoffs', label: 'Write-offs', href: '/billing-write-offs', icon: 'trash-2', permission: 'billing.invoices.read' },
 ] as const satisfies ModuleLink[];
 
 const { hasPermission, hasUniversalAdminAccess } = usePlatformAccess();
@@ -34,9 +32,7 @@ function isActive(value: string): boolean {
     const u = url.value;
     if (value === 'invoices') return u.startsWith('/billing-invoices');
     if (value === 'cash') return u.startsWith('/billing-cash');
-    if (value === 'adjustments') return u.startsWith('/billing-adjustments');
     if (value === 'refunds') return u.startsWith('/billing-refunds');
-    if (value === 'writeoffs') return u.startsWith('/billing-write-offs');
     return false;
 }
 </script>
