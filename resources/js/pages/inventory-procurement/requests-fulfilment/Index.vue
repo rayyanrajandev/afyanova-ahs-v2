@@ -2,7 +2,7 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, ref, nextTick, onBeforeUnmount, onMounted, reactive, watch, type Ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import type { AppIconName } from '@/lib/icons';
+import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
 import ComboboxField from '@/components/forms/ComboboxField.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
@@ -14,7 +14,6 @@ import RegistryListSkeleton from '@/components/list/RegistryListSkeleton.vue';
 import WorkflowQueueRow from '@/components/list/WorkflowQueueRow.vue';
 import WorkflowQueueSkeleton from '@/components/list/WorkflowQueueSkeleton.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
-import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -41,22 +40,23 @@ import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersi
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
 import { departmentDisplayName, departmentRequesterHeaderDescription } from '@/lib/departmentRequisitionContext';
+import type { AppIconName } from '@/lib/icons';
 import { generateRequestKey } from '@/lib/idempotency';
 import { INVENTORY_PROCUREMENT_HOME_PATH } from '@/lib/inventoryProcurement';
 import { isInventoryDepartmentRequester, isInventoryStoreOperations, type InventoryProcurementAccess } from '@/lib/inventoryProcurementAccess';
 import { formatEnumLabel } from '@/lib/labels';
 import { departmentRequisitionStripeClass, shortageReadinessStripeClass } from '@/lib/listRows';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
-import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue, auditActorLabel } from '@/pages/inventory-procurement/constants';
-import { clearSupplyChainPageApi } from '@/pages/inventory-procurement/supplyChainPageApi';
-import { bindSupplyChainPageApi } from '@/pages/inventory-procurement/registerSupplyChainPageApi';
-import { useRequestPipelineCounts } from '@/pages/inventory-procurement/composables/useRequestPipelineCounts';
-import { type RequestPipelineStage, type SupplyChainNextAction } from '@/pages/inventory-procurement/supplyChainOverview';
-import SupplyChainProcurementLifecycleSheets from '@/pages/inventory-procurement/components/SupplyChainProcurementLifecycleSheets.vue';
-import SupplyChainRequisitionDetailsSheet from '@/pages/inventory-procurement/components/SupplyChainRequisitionDetailsSheet.vue';
-import SupplyChainRequestEntrySheets from '@/pages/inventory-procurement/components/SupplyChainRequestEntrySheets.vue';
-import SupplyChainTransferSheets from '@/pages/inventory-procurement/components/SupplyChainTransferSheets.vue';
 import SupplyChainFilterPopover from '@/pages/inventory-procurement/components/SupplyChainFilterPopover.vue';
+import SupplyChainProcurementLifecycleSheets from '@/pages/inventory-procurement/components/SupplyChainProcurementLifecycleSheets.vue';
+import SupplyChainRequestEntrySheets from '@/pages/inventory-procurement/components/SupplyChainRequestEntrySheets.vue';
+import SupplyChainRequisitionDetailsSheet from '@/pages/inventory-procurement/components/SupplyChainRequisitionDetailsSheet.vue';
+import SupplyChainTransferSheets from '@/pages/inventory-procurement/components/SupplyChainTransferSheets.vue';
+import { useRequestPipelineCounts } from '@/pages/inventory-procurement/composables/useRequestPipelineCounts';
+import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue, auditActorLabel } from '@/pages/inventory-procurement/constants';
+import { bindSupplyChainPageApi } from '@/pages/inventory-procurement/registerSupplyChainPageApi';
+import { type RequestPipelineStage, type SupplyChainNextAction } from '@/pages/inventory-procurement/supplyChainOverview';
+import { clearSupplyChainPageApi } from '@/pages/inventory-procurement/supplyChainPageApi';
 import {
     SupplyChainOverviewTab,
     SupplyChainRequisitionsTab,

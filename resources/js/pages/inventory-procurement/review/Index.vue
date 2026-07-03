@@ -40,11 +40,11 @@ import { INVENTORY_PROCUREMENT_HOME_PATH } from '@/lib/inventoryProcurement';
 import { isInventoryStoreOperations, type InventoryProcurementAccess } from '@/lib/inventoryProcurementAccess';
 import { formatEnumLabel } from '@/lib/labels';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
-import { EMPTY_SELECT_VALUE, toSelectValue, fromSelectValue, formatDateTime, formatDateOnly, auditActorLabel } from '@/pages/inventory-procurement/constants';
-import { clearSupplyChainPageApi } from '@/pages/inventory-procurement/supplyChainPageApi';
-import { bindSupplyChainPageApi } from '@/pages/inventory-procurement/registerSupplyChainPageApi';
 import SupplyChainClaimsAndMsdSheets from '@/pages/inventory-procurement/components/SupplyChainClaimsAndMsdSheets.vue';
 import SupplyChainFilterPopover from '@/pages/inventory-procurement/components/SupplyChainFilterPopover.vue';
+import { EMPTY_SELECT_VALUE, toSelectValue, fromSelectValue, formatDateTime, formatDateOnly, auditActorLabel } from '@/pages/inventory-procurement/constants';
+import { bindSupplyChainPageApi } from '@/pages/inventory-procurement/registerSupplyChainPageApi';
+import { clearSupplyChainPageApi } from '@/pages/inventory-procurement/supplyChainPageApi';
 import {
     SupplyChainAnalyticsTab,
     SupplyChainClaimsTab,

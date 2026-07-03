@@ -27,7 +27,7 @@ class BillingInvoiceDocumentController extends Controller
         DocumentContextLookup $documentContextLookup,
         SystemBrandingManager $brandingManager,
     ): Response {
-        return Inertia::render('billing-invoices/Print', $this->buildPayload(
+        return Inertia::render('billing/invoices/Print', $this->buildPayload(
             id: $id,
             request: $request,
             invoiceUseCase: $invoiceUseCase,

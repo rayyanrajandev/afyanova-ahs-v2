@@ -2,7 +2,6 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, ref, nextTick, onBeforeUnmount, onMounted, reactive, watch, type Ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import type { AppIconName } from '@/lib/icons';
 import ComboboxField from '@/components/forms/ComboboxField.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
@@ -33,6 +32,7 @@ import { useUrlQueryState } from '@/composables/useUrlQueryState';
 import { useWorkflowDraftPersistence } from '@/composables/useWorkflowDraftPersistence';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiRequestJson } from '@/lib/apiClient';
+import type { AppIconName } from '@/lib/icons';
 import { generateRequestKey } from '@/lib/idempotency';
 import { INVENTORY_PROCUREMENT_HOME_PATH } from '@/lib/inventoryProcurement';
 import { isInventoryDepartmentRequester, isInventoryStoreOperations, type InventoryProcurementAccess } from '@/lib/inventoryProcurementAccess';
@@ -40,9 +40,6 @@ import { formatEnumLabel } from '@/lib/labels';
 import { stockMovementStripeClass } from '@/lib/listRows';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 import type { SearchableSelectOption } from '@/lib/patientLocations';
-import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue, formatDateTime, formatDateOnly, auditActorLabel } from '@/pages/inventory-procurement/constants';
-import { clearSupplyChainPageApi } from '@/pages/inventory-procurement/supplyChainPageApi';
-import { bindSupplyChainPageApi } from '@/pages/inventory-procurement/registerSupplyChainPageApi';
 import SupplyChainAuxiliarySheets from '@/pages/inventory-procurement/components/SupplyChainAuxiliarySheets.vue';
 import SupplyChainCatalogSyncDialog from '@/pages/inventory-procurement/components/SupplyChainCatalogSyncDialog.vue';
 import SupplyChainFilterOverlays from '@/pages/inventory-procurement/components/SupplyChainFilterOverlays.vue';
@@ -50,6 +47,9 @@ import SupplyChainFilterPopover from '@/pages/inventory-procurement/components/S
 import SupplyChainInventoryImportCsvDialog from '@/pages/inventory-procurement/components/SupplyChainInventoryImportCsvDialog.vue';
 import SupplyChainInventoryOpsSheets from '@/pages/inventory-procurement/components/SupplyChainInventoryOpsSheets.vue';
 import SupplyChainItemDetailsSheet from '@/pages/inventory-procurement/components/SupplyChainItemDetailsSheet.vue';
+import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue, formatDateTime, formatDateOnly, auditActorLabel } from '@/pages/inventory-procurement/constants';
+import { bindSupplyChainPageApi } from '@/pages/inventory-procurement/registerSupplyChainPageApi';
+import { clearSupplyChainPageApi } from '@/pages/inventory-procurement/supplyChainPageApi';
 import {
     SupplyChainDepartmentStockTab,
     SupplyChainInventoryTab,
@@ -552,8 +552,8 @@ const warehouseReady = computed(() => warehouses.value.length > 0);
 const flashedItemId = ref<string | null>(null);
 const flashedRequestId = ref<string | null>(null);
 let flashedItemTimer: ReturnType<typeof setTimeout> | null = null;
-let flashedRequestTimer: ReturnType<typeof setTimeout> | null = null;
-let pollingTimer: ReturnType<typeof setInterval> | null = null;
+const flashedRequestTimer: ReturnType<typeof setTimeout> | null = null;
+const pollingTimer: ReturnType<typeof setInterval> | null = null;
 let inventorySearchTimer: ReturnType<typeof setTimeout> | null = null;
 let stockLedgerSearchTimer: ReturnType<typeof setTimeout> | null = null;
 let departmentStockSearchTimer: ReturnType<typeof setTimeout> | null = null;

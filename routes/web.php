@@ -116,15 +116,15 @@ Route::get('walk-in-service-requests', function () {
 })->middleware(['auth', 'verified', 'can:service.requests.read', 'facility.entitlement:clinical.walk_in_queue'])->name('walk-in-service-requests.page');
 
 Route::get('billing-invoices', function () {
-    return Inertia::render('billing-invoices/Index');
+    return Inertia::render('billing/invoices/Index');
 })->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.invoices'])->name('billing-invoices.page');
 
 Route::get('billing-cash', function () {
-    return Inertia::render('billing-cash/Index');
+    return Inertia::render('billing/cash/Index');
 })->middleware(['auth', 'verified', 'can:billing.cash-accounts.read', 'facility.entitlement:billing.cash_accounts'])->name('billing-cash.page');
 
 Route::get('billing-payment-plans', function () {
-    return Inertia::render('billing-payment-plans/Index');
+    return Inertia::render('billing/payment-plans/Index');
 })->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.payment_plans'])->name('billing-payment-plans.page');
 
 Route::get('pos', function () {
@@ -156,35 +156,27 @@ Route::get('pos/sessions/{id}/report.pdf', [PosRegisterSessionDocumentController
     ->name('pos.sessions.report.pdf.download');
 
 Route::get('billing-refunds', function () {
-    return Inertia::render('billing-refunds/Index');
+    return Inertia::render('billing/refunds/Index');
 })->middleware(['auth', 'verified', 'can:billing.refunds.read', 'facility.entitlement:billing.discounts_refunds'])->name('billing-refunds.page');
 
 Route::get('billing-discounts', function () {
-    return Inertia::render('billing-discounts/Index');
+    return Inertia::render('billing/discounts/Index');
 })->middleware(['auth', 'verified', 'can:billing.discounts.read', 'facility.entitlement:billing.discounts_refunds'])->name('billing-discounts.page');
 
-Route::get('billing-adjustments', function () {
-    return Inertia::render('billing-adjustments/Index');
-})->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.invoices'])->name('billing-adjustments.page');
-
-Route::get('billing-write-offs', function () {
-    return Inertia::render('billing-write-offs/Index');
-})->middleware(['auth', 'verified', 'can:billing.invoices.read', 'facility.entitlement:billing.invoices'])->name('billing-write-offs.page');
-
 Route::get('billing-aging-report', function () {
-    return Inertia::render('billing-aging-report/Index');
+    return Inertia::render('billing/aging-report/Index');
 })->middleware(['auth', 'verified', 'can:billing.financial-controls.read', 'facility.entitlement:billing.financial_controls'])->name('billing-aging-report.page');
 
 Route::get('billing-daily-close', function () {
-    return Inertia::render('billing-daily-close/Index');
+    return Inertia::render('billing/daily-close/Index');
 })->middleware(['auth', 'verified', 'can:billing.financial-controls.read', 'facility.entitlement:billing.financial_controls'])->name('billing-daily-close.page');
 
 Route::get('billing-financial-reports', function () {
-    return Inertia::render('billing-financial-reports/Index');
+    return Inertia::render('billing/financial-reports/Index');
 })->middleware(['auth', 'verified', 'can:billing.financial-controls.read', 'facility.entitlement:billing.financial_controls'])->name('billing-financial-reports.page');
 
 Route::get('billing-corporate', function () {
-    return Inertia::render('billing-corporate/Index');
+    return Inertia::render('billing/corporate/Index');
 })->middleware(['auth', 'verified', 'can:billing.payer-contracts.read', 'facility.entitlement:billing.payer_contracts'])->name('billing-corporate.page');
 
 Route::get('billing-invoices/{id}/print', [BillingInvoiceDocumentController::class, 'show'])
@@ -204,15 +196,15 @@ Route::get('claims-insurance/{id}/pdf', [ClaimsInsuranceDocumentController::clas
     ->name('claims-insurance.pdf.download');
 
 Route::get('billing-payer-contracts', function () {
-    return Inertia::render('billing-payer-contracts/Index');
+    return Inertia::render('billing/payer-contracts/Index');
 })->middleware(['auth', 'verified', 'can:billing.payer-contracts.read', 'facility.entitlement:billing.payer_contracts'])->name('billing-payer-contracts.page');
 
 Route::get('billing-service-catalog', function () {
-    return Inertia::render('billing-service-catalog/Index');
+    return Inertia::render('billing/service-catalog/Index');
 })->middleware(['auth', 'verified', 'can:billing.service-catalog.read', 'facility.entitlement:billing.service_catalog'])->name('billing-service-catalog.page');
 
 Route::get('billing-service-catalog/{id}/prices', function (string $id) {
-    return Inertia::render('billing-service-catalog/ServicePriceWorkspace', [
+    return Inertia::render('billing/service-catalog/ServicePriceWorkspace', [
         'itemId' => $id,
     ]);
 })->middleware(['auth', 'verified', 'can:billing.service-catalog.read', 'facility.entitlement:billing.service_catalog'])->name('billing-service-catalog.prices.page');

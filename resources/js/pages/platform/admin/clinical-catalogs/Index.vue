@@ -2,7 +2,6 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import type { AppIconName } from '@/lib/icons';
 import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
 import ComboboxField from '@/components/forms/ComboboxField.vue';
 import RegistryListRow from '@/components/list/RegistryListRow.vue';
@@ -34,6 +33,7 @@ import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiGetBlob } from '@/lib/apiClient';
 import { CLINICAL_CATALOG_BULK_MAX_STATUS_IDS } from '@/lib/clinicalCatalogBulk';
+import type { AppIconName } from '@/lib/icons';
 import { supplyChainHref } from '@/lib/inventoryProcurement';
 import { formatEnumLabel } from '@/lib/labels';
 import { catalogTriStateStatusDotClass } from '@/lib/listRows';
