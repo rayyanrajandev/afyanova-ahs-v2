@@ -9581,7 +9581,7 @@ onMounted(() => {
                                                     v-model="createForm.subjective"
                                                     :label="createSubjectiveLabel"
                                                     :placeholder="createSubjectiveUi.placeholder"
-                                                    helper-text=""
+                                                    :helper-text="createSubjectiveUi.helperText"
                                                     :error-message="createFieldError('subjective')"
                                                     min-height-class="min-h-[160px]"
                                                 />
@@ -9606,7 +9606,7 @@ onMounted(() => {
                                                     v-model="createForm.objective"
                                                     :label="createObjectiveLabel"
                                                     :placeholder="createObjectiveUi.placeholder"
-                                                    helper-text=""
+                                                    :helper-text="createObjectiveUi.helperText"
                                                     :error-message="createFieldError('objective')"
                                                     min-height-class="min-h-[160px]"
                                                 />
@@ -9620,7 +9620,7 @@ onMounted(() => {
                                                     v-model="createForm.assessment"
                                                     :label="createAssessmentLabel"
                                                     :placeholder="createAssessmentUi.placeholder"
-                                                    helper-text=""
+                                                    :helper-text="createAssessmentUi.helperText"
                                                     :error-message="createFieldError('assessment')"
                                                     min-height-class="min-h-[160px]"
                                                 />
@@ -9634,7 +9634,7 @@ onMounted(() => {
                                                     v-model="createForm.plan"
                                                     :label="createPlanLabel"
                                                     :placeholder="createPlanUi.placeholder"
-                                                    helper-text=""
+                                                    :helper-text="createPlanUi.helperText"
                                                     :error-message="createFieldError('plan')"
                                                     min-height-class="min-h-[160px]"
                                                 />

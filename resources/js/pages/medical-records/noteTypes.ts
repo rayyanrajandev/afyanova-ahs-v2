@@ -68,24 +68,26 @@ const DEFAULT_SECTION_UI: Record<
         description: 'Patient-reported symptoms, history, and complaints.',
         placeholder: 'e.g. Symptoms, duration, severity, relevant history...',
         helperText:
-            'Patient-reported symptoms, history, and complaints. Basic formatting is supported.',
+            'What the patient reports \u2014 chief complaint, symptom onset, duration, severity, aggravating/relieving factors, and relevant history.',
     },
     objective: {
         description: 'Examination findings, vitals, and observable clinical notes.',
         placeholder: 'e.g. Vitals, exam findings, labs, observations...',
-        helperText: 'Examination findings, vitals, and observable clinical notes.',
+        helperText:
+            'What you observe and measure \u2014 vital signs, physical examination findings, lab results, and imaging.',
     },
     assessment: {
         description: 'Clinical assessment or impression for this encounter.',
         placeholder: 'e.g. Diagnosis, differential, clinical impression...',
-        helperText: 'Clinical assessment or impression for this encounter.',
+        helperText:
+            'Your clinical impression \u2014 working or confirmed diagnosis, severity, differential, and response to any prior treatment.',
     },
     plan: {
         description:
             'Treatment plan, orders, follow-up instructions, and next steps.',
         placeholder: 'e.g. Treatment, medications, follow-up, referrals...',
         helperText:
-            'Treatment plan, orders, follow-up instructions, and next steps.',
+            'What happens next \u2014 medications, investigations, referrals, patient education, and follow-up plan.',
     },
 };
 
@@ -153,7 +155,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Fever and shortness of breath for three days, worsening overnight...',
             helperText:
-                'Document the inpatient presentation, prior care, and the history leading to admission.',
+                'The presenting complaint that led to admission, symptom timeline, prior treatments, and relevant background.',
         },
         objective: {
             description:
@@ -161,7 +163,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Febrile, tachypnoeic, oxygen saturation 90% on room air...',
             helperText:
-                'Record the admission examination, bedside findings, and any results available now.',
+                'Admission vitals, physical exam, bedside findings, and any results available at the time of admission.',
         },
         assessment: {
             description:
@@ -169,7 +171,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Severe community-acquired pneumonia with dehydration risk...',
             helperText:
-                'Summarize the admitting impression, differential, and the major inpatient concerns.',
+                'Admitting diagnosis, differential diagnoses, severity assessment, and immediate clinical concerns.',
         },
         plan: {
             description:
@@ -177,7 +179,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Admit to medical ward, start IV antibiotics, oxygen, CBC, chest X-ray...',
             helperText:
-                'Capture the initial inpatient management plan and what the ward team should do next.',
+                'Admission orders \u2014 ward placement, medications, IV fluids, investigations, monitoring, and escalation plan.',
         },
     },
     progress_note: {
@@ -187,7 +189,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Pain improved overnight, no vomiting, still breathless on exertion...',
             helperText:
-                'Record what changed since the last review and what the patient or caregiver is reporting now.',
+                'What changed since the last review \u2014 current symptoms, patient-reported response to treatment, new concerns.',
         },
         objective: {
             description:
@@ -195,7 +197,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Afebrile, BP stable, urine output adequate, wound dry...',
             helperText:
-                'Document the current clinical state, observations, and interval results.',
+                'Current vitals, exam findings, interval results, and objective measures of progress or decline.',
         },
         assessment: {
             description:
@@ -203,7 +205,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Improving response to antibiotics, hydration status corrected...',
             helperText:
-                'Summarize whether the patient is improving, worsening, or needs a change in direction.',
+                'Updated clinical impression \u2014 improving, stable, or worsening. Revised differential if applicable.',
         },
         plan: {
             description:
@@ -211,7 +213,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Continue current regimen, review in 24 hours, repeat full blood count...',
             helperText:
-                'Capture what continues, what changes, and what should happen before the next review.',
+                'Continuation or changes to treatment, next review timing, outstanding investigations, and goals.',
         },
     },
     discharge_note: {
@@ -221,7 +223,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Pain controlled, walking independently, no new complaints...',
             helperText:
-                'Record how the patient feels at discharge and any issues still needing attention.',
+                'Patient\'s condition at discharge \u2014 symptom resolution, remaining concerns, and functional status.',
         },
         objective: {
             description:
@@ -229,7 +231,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Afebrile, tolerating diet, vital signs stable, wound clean...',
             helperText:
-                'Document the final inpatient condition and objective readiness for discharge.',
+                'Discharge vitals, final examination findings, and results confirming readiness for discharge.',
         },
         assessment: {
             description:
@@ -237,7 +239,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Improved from severe malaria, stable for home follow-up...',
             helperText:
-                'Summarize the outcome of care and what remains active at discharge.',
+                'Outcome of admission \u2014 resolved diagnoses, ongoing conditions, and discharge fitness.',
         },
         plan: {
             description:
@@ -245,7 +247,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Complete oral antibiotics, review in 7 days, return if fever or shortness of breath recurs...',
             helperText:
-                'Capture the full discharge plan so follow-up and patient education stay clear.',
+                'Discharge medications, follow-up appointments, activity restrictions, warning signs, and patient instructions.',
         },
     },
     referral_note: {
@@ -255,7 +257,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Persistent severe abdominal pain with concern for surgical review...',
             helperText:
-                'Explain why the patient is being referred and the history the receiving team needs first.',
+                'Reason for referral, key history, and what the receiving team needs to know first.',
         },
         objective: {
             description:
@@ -263,7 +265,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Guarding in right lower quadrant, pulse 112, ultrasound pending...',
             helperText:
-                'Document the current bedside findings and any results that support the referral.',
+                'Current clinical status, key findings, and results supporting the referral.',
         },
         assessment: {
             description:
@@ -271,7 +273,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Suspected appendicitis requiring urgent surgical assessment...',
             helperText:
-                'Summarize the clinical impression and why another team or facility is needed now.',
+                'Working diagnosis and why this specialty or facility is needed.',
         },
         plan: {
             description:
@@ -279,7 +281,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Refer to surgical team, keep nil by mouth, continue IV fluids, arrange escorted transfer...',
             helperText:
-                'State exactly what is being requested and what should happen before or during transfer.',
+                'Specific request to the receiving team, interim management, and transfer instructions.',
         },
     },
     nursing_note: {
@@ -289,7 +291,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Reports poor sleep, moderate pain at wound site, reduced appetite...',
             helperText:
-                'Capture the bedside concerns and history that matter to nursing care right now.',
+                'Patient-reported concerns, comfort issues, sleep, appetite, pain, and caregiver observations.',
         },
         objective: {
             description:
@@ -297,7 +299,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. BP 118/72, urine output adequate, dressing dry, pain score 4/10...',
             helperText:
-                'Document the observed nursing status, measurements, and bedside care findings.',
+                'Nursing observations \u2014 vital signs, intake/output, wound status, mobility, and skin integrity.',
         },
         assessment: {
             description:
@@ -305,7 +307,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Pain improving after analgesia, pressure injury risk remains moderate...',
             helperText:
-                'Summarize the nursing interpretation of the current condition and any safety concerns.',
+                'Nursing assessment \u2014 response to interventions, fall/skin risk, and comfort level.',
         },
         plan: {
             description:
@@ -313,7 +315,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Continue two-hourly turns, monitor temperature four-hourly, escalate if pain worsens...',
             helperText:
-                'Record the nursing actions, surveillance plan, and what the next shift should continue or watch.',
+                'Nursing interventions, monitoring schedule, escalation triggers, and handoff notes.',
         },
     },
     procedure_note: {
@@ -323,7 +325,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Referred for bronchoscopy after persistent hemoptysis despite initial treatment...',
             helperText:
-                'Record why the procedure is being done now and the pre-procedure clinical context the theatre team should see.',
+                'Procedure indication, consent status, relevant history, and pre-procedure preparation.',
         },
         objective: {
             description:
@@ -331,7 +333,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Flexible bronchoscopy completed under monitored sedation, no active endobronchial bleeding seen...',
             helperText:
-                'Document what was done, how it was performed, and the key objective findings from the procedure itself.',
+                'Procedure performed, technique, findings, specimens collected, and patient tolerance.',
         },
         assessment: {
             description:
@@ -339,7 +341,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Findings support inflammatory airway disease; no obstructing lesion identified...',
             helperText:
-                'Summarize the procedural impression and what it means for the patient right now.',
+                'Procedural outcome, immediate interpretation, and clinical significance.',
         },
         plan: {
             description:
@@ -347,7 +349,7 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_UI: Partial<
             placeholder:
                 'e.g. Observe in recovery for two hours, monitor oxygen saturation, send lavage sample, review with surgery team...',
             helperText:
-                'Capture the recovery plan, follow-up actions, and what the next team needs to continue.',
+                'Post-procedure care, monitoring, specimens sent, complications to watch for, and follow-up.',
         },
     },
 };
