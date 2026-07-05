@@ -80,7 +80,7 @@ class AutoCaptureConsultationFeeUseCase
         $normalizedServiceCode = $catalogItem !== null
             ? strtoupper(trim((string) ($catalogItem['service_code'] ?? '')))
             : 'CONSULTATION'; // Default fallback if no pricing at all
-        
+
         $resolvedUnit = trim((string) ($catalogItem['unit'] ?? 'visit'));
         $resolvedDescription = trim((string) ($catalogItem['service_name'] ?? $serviceName));
 
@@ -111,14 +111,14 @@ class AutoCaptureConsultationFeeUseCase
             'sourceWorkflowId' => $appointmentId,
         ];
 
-        // ── Step 1: Determine explicit billing mode BEFORE invoice creation ──
-        $billingMode = $this->resolveBillingMode(
+        // ── Step 1: Build the immutable BillingDecision BEFORE invoice creation ──
+        $billingDecision = $this->resolveBillingDecision(
             contractId: $appointment['billing_payer_contract_id'] ?? null,
         );
 
-        // ── Step 2: Build payload — billing_mode is TRACE CONTEXT only, not a control flag ──
+        // ── Step 2: Build payload with BillingDecision as single source of truth ──
         $pricingContext = [
-            '_billingMode' => $billingMode,
+            'billingDecision' => $billingDecision,
         ];
 
         $payload = [
@@ -132,20 +132,15 @@ class AutoCaptureConsultationFeeUseCase
             'pricing_context' => $pricingContext,
         ];
 
-        // Only attach payer contract for active insurance paths so
-        // the resolver receives a valid active contract to work with.
-        if ($billingMode === 'INSURANCE_ACTIVE' && ($appointment['billing_payer_contract_id'] ?? null) !== null) {
-            $payload['billing_payer_contract_id'] = (string) $appointment['billing_payer_contract_id'];
+        if ($billingDecision['mode'] === 'INSURANCE_ACTIVE') {
+            $payload['billing_payer_contract_id'] = $billingDecision['contractId'];
         }
 
-        // ── Step 3: Create invoice through the standard deterministic pipeline ──
+        // ── Step 3: Create invoice through the standard deterministic pipeline.
+        // The resolver reads billingDecision from pricing_context and produces
+        // payerSummary + claimReadiness with coverageVerificationRequired set
+        // correctly at creation time — no post-hoc mutation needed. ──
         $invoice = $this->createBillingInvoiceUseCase->execute($payload, $actorId);
-
-        // ── Step 4: Post-invoice policy override — ONLY for fallback cases ──
-        if ($invoice !== null && $billingMode === 'INSURANCE_FALLBACK_SELF_PAY') {
-            $resolvedInvoice = $invoice['invoice'] ?? $invoice;
-            $invoice = $this->applyCoverageVerificationOverride($resolvedInvoice);
-        }
 
         return [
             'captured' => $invoice !== null,
@@ -349,63 +344,73 @@ class AutoCaptureConsultationFeeUseCase
     }
 
     /**
-     * Determine the explicit billing mode before invoice creation.
+     * Build the immutable BillingDecision DTO.
      *
-     * @return 'INSURANCE_ACTIVE'|'INSURANCE_FALLBACK_SELF_PAY'|'TRUE_SELF_PAY'
+     * This is the SINGLE SOURCE OF TRUTH for billing intent.
+     * All contract validation happens HERE — not in the resolver.
+     *
+     * @param mixed $contractId
+     * @return array<string, mixed>
      */
-    private function resolveBillingMode(mixed $contractId): string
+    private function resolveBillingDecision(mixed $contractId): array
     {
         $normalizedContractId = trim((string) $contractId);
+
         if ($normalizedContractId === '') {
-            return 'TRUE_SELF_PAY';
+            return [
+                'mode' => 'TRUE_SELF_PAY',
+                'contractId' => null,
+                'contractState' => 'missing',
+                'reason' => 'Appointment has no billing payer contract assigned.',
+                'decidedAt' => now()->toISOString(),
+                'decidedBy' => 'AutoCaptureConsultationFeeUseCase',
+            ];
         }
 
         $payerContract = $this->payerContractRepository->findById($normalizedContractId);
+
         if (! is_array($payerContract)) {
-            return 'INSURANCE_FALLBACK_SELF_PAY';
+            return [
+                'mode' => 'INSURANCE_FALLBACK_SELF_PAY',
+                'contractId' => $normalizedContractId,
+                'contractState' => 'missing',
+                'reason' => sprintf(
+                    'Payer contract %s referenced by appointment was not found in current scope.',
+                    $normalizedContractId,
+                ),
+                'decidedAt' => now()->toISOString(),
+                'decidedBy' => 'AutoCaptureConsultationFeeUseCase',
+            ];
         }
 
-        if (($payerContract['status'] ?? null) !== 'active') {
-            return 'INSURANCE_FALLBACK_SELF_PAY';
+        $contractStatus = trim((string) ($payerContract['status'] ?? ''));
+
+        if ($contractStatus !== 'active') {
+            return [
+                'mode' => 'INSURANCE_FALLBACK_SELF_PAY',
+                'contractId' => $normalizedContractId,
+                'contractState' => 'inactive',
+                'reason' => sprintf(
+                    'Payer contract %s status is "%s" — must be active for insurance billing.',
+                    $normalizedContractId,
+                    $contractStatus !== '' ? $contractStatus : 'unknown',
+                ),
+                'decidedAt' => now()->toISOString(),
+                'decidedBy' => 'AutoCaptureConsultationFeeUseCase',
+            ];
         }
 
-        return 'INSURANCE_ACTIVE';
-    }
-
-    /**
-     * @param array<string, mixed> $invoice
-     * @return array<string, mixed>
-     */
-    private function applyCoverageVerificationOverride(array $invoice): array
-    {
-        $pricingContext = is_array($invoice['pricing_context'] ?? null)
-            ? $invoice['pricing_context']
-            : [];
-
-        $claimReadiness = is_array($pricingContext['claimReadiness'] ?? null)
-            ? $pricingContext['claimReadiness']
-            : [];
-
-        $pricingContext['claimReadiness'] = array_merge($claimReadiness, [
-            'coverageVerificationRequired' => true,
-            'state' => 'not_applicable',
-            'claimEligible' => false,
-            'ready' => false,
-            'blockingReasons' => [
-                'Payer contract is inactive or missing — verify coverage before issuing.',
-            ],
-        ]);
-
-        $invoiceId = (string) ($invoice['id'] ?? '');
-        if ($invoiceId === '') {
-            return $invoice;
-        }
-
-        $updated = $this->billingInvoiceRepository->update($invoiceId, [
-            'pricing_context' => $pricingContext,
-        ]);
-
-        return $updated ?? $invoice;
+        return [
+            'mode' => 'INSURANCE_ACTIVE',
+            'contractId' => $normalizedContractId,
+            'contractState' => 'active',
+            'reason' => sprintf(
+                'Payer contract %s is active and will be used for insurance billing.',
+                $normalizedContractId,
+            ),
+            'decidedAt' => now()->toISOString(),
+            'decidedBy' => 'AutoCaptureConsultationFeeUseCase',
+        ];
     }
 
     private function findActivePricingByServiceCodes(array $serviceCodes, string $currencyCode): ?array
