@@ -351,6 +351,12 @@ function lineItemReviewLabel(lineItem: BillingInvoiceLineItem): string | null {
                         >
                             {{ badge.label }}
                         </Badge>
+                        <Badge
+                            v-if="invoice.claimReadiness?.coverageVerificationRequired"
+                            variant="destructive"
+                        >
+                            Coverage Verification Required
+                        </Badge>
                     </div>
 
                     <Alert

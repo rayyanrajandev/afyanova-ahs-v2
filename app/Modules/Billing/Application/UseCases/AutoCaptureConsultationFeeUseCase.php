@@ -109,6 +109,8 @@ class AutoCaptureConsultationFeeUseCase
             'sourceWorkflowId' => $appointmentId,
         ];
 
+        $contractId = $appointment['billing_payer_contract_id'] ?? null;
+
         $payload = [
             'patient_id' => $patientId,
             'appointment_id' => $appointmentId,
@@ -117,9 +119,31 @@ class AutoCaptureConsultationFeeUseCase
             'subtotal_amount' => $unitPrice,
             'currency_code' => $currencyCode,
             'issued_by_user_id' => $actorId,
+            'pricing_context' => [
+                '_deferCoverageVerification' => true,
+            ],
         ];
 
+        if ($contractId !== null) {
+            $payload['billing_payer_contract_id'] = (string) $contractId;
+        }
+
         $invoice = $this->createBillingInvoiceUseCase->execute($payload, $actorId);
+
+        if ($invoice !== null) {
+            $resolvedInvoice = $invoice['invoice'] ?? $invoice;
+            $pricingContext = is_array($resolvedInvoice['pricing_context'] ?? null)
+                ? $resolvedInvoice['pricing_context']
+                : [];
+            $payerSummary = is_array($pricingContext['payerSummary'] ?? null)
+                ? $pricingContext['payerSummary']
+                : [];
+            $settlementPath = (string) ($payerSummary['settlementPath'] ?? '');
+
+            if ($settlementPath === 'self_pay') {
+                $invoice = $this->applyCoverageVerificationOverride($resolvedInvoice);
+            }
+        }
 
         return [
             'captured' => $invoice !== null,
@@ -320,6 +344,42 @@ class AutoCaptureConsultationFeeUseCase
         $normalized = trim((string) $normalized, '-');
 
         return $normalized;
+    }
+
+    /**
+     * @param array<string, mixed> $invoice
+     * @return array<string, mixed>
+     */
+    private function applyCoverageVerificationOverride(array $invoice): array
+    {
+        $pricingContext = is_array($invoice['pricing_context'] ?? null)
+            ? $invoice['pricing_context']
+            : [];
+
+        $claimReadiness = is_array($pricingContext['claimReadiness'] ?? null)
+            ? $pricingContext['claimReadiness']
+            : [];
+
+        $pricingContext['claimReadiness'] = array_merge($claimReadiness, [
+            'coverageVerificationRequired' => true,
+            'state' => 'not_applicable',
+            'claimEligible' => false,
+            'ready' => false,
+            'blockingReasons' => [
+                'Payer contract is inactive or missing — verify coverage before issuing.',
+            ],
+        ]);
+
+        $invoiceId = (string) ($invoice['id'] ?? '');
+        if ($invoiceId === '') {
+            return $invoice;
+        }
+
+        $updated = $this->billingInvoiceRepository->update($invoiceId, [
+            'pricing_context' => $pricingContext,
+        ]);
+
+        return $updated ?? $invoice;
     }
 
     private function findActivePricingByServiceCodes(array $serviceCodes, string $currencyCode): ?array

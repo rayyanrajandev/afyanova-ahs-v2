@@ -528,6 +528,7 @@ export type BillingInvoiceClaimReadiness = {
     coverageSummary?: BillingInvoiceCoverageSummary;
     expectedClaimAmount: string | number | null;
     claimSubmissionDueAt: string | null;
+    coverageVerificationRequired?: boolean;
 };
 
 export type BillingInvoicePayerPreview = {

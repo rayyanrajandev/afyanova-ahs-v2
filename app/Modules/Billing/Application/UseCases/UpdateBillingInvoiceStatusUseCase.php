@@ -37,6 +37,21 @@ class UpdateBillingInvoiceStatusUseCase
             return null;
         }
 
+        if ($status === 'issued') {
+            $pricingContext = is_array($existing['pricing_context'] ?? null)
+                ? $existing['pricing_context']
+                : [];
+            $claimReadiness = is_array($pricingContext['claimReadiness'] ?? null)
+                ? $pricingContext['claimReadiness']
+                : [];
+
+            if ((bool) ($claimReadiness['coverageVerificationRequired'] ?? false)) {
+                throw new \RuntimeException(
+                    'Invoice cannot be issued until coverage verification is resolved.',
+                );
+            }
+        }
+
         $totalAmount = (float) ($existing['total_amount'] ?? 0);
         $resolvedPaidAmount = $paidAmount !== null
             ? max($paidAmount, 0)
