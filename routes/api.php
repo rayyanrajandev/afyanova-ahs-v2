@@ -865,6 +865,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('billing-invoices', [BillingInvoiceController::class, 'index'])
         ->middleware('can:billing.invoices.read')
         ->name('billing-invoices.index');
+    Route::get('billing-invoices/cashier-queue', [BillingInvoiceController::class, 'cashierQueue'])
+        ->middleware('can:billing.invoices.read')
+        ->name('billing-invoices.cashier-queue');
     Route::get('billing-invoices/status-counts', [BillingInvoiceController::class, 'statusCounts'])
         ->middleware('can:billing.invoices.read')
         ->name('billing-invoices.status-counts');
@@ -890,43 +893,62 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->name('billing-invoices.preview');
     Route::get('billing-invoices/{id}', [BillingInvoiceController::class, 'show'])
         ->middleware('can:billing.invoices.read')
+        ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.show');
     Route::get('billing-invoices/{id}/finance-posting', [BillingInvoiceController::class, 'financePostingSummary'])
         ->middleware('can:billing.invoices.read')
+        ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.finance-posting');
     Route::patch('billing-invoices/{id}', [BillingInvoiceController::class, 'update'])
         ->middleware('can:billing.invoices.update-draft')
+        ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.update');
-    Route::patch('billing-invoices/{id}/status', [BillingInvoiceController::class, 'updateStatus'])->name('billing-invoices.update-status');
+    Route::patch('billing-invoices/{id}/status', [BillingInvoiceController::class, 'updateStatus'])
+        ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
+        ->name('billing-invoices.update-status');
     Route::post('billing-invoices/{id}/payments', [BillingInvoiceController::class, 'recordPayment'])
         ->middleware('can:billing.payments.record')
+        ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.record-payment');
     Route::post('billing-invoices/{id}/payments/{paymentId}/reversals', [BillingInvoiceController::class, 'reversePayment'])
         ->middleware('can:billing.payments.reverse')
+        ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
+        ->where('paymentId', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.reverse-payment');
     Route::get('billing-invoices/{id}/payments', [BillingInvoiceController::class, 'payments'])
         ->middleware('can:billing.payments.view-history')
+        ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.payments');
     Route::post('billing-invoices/{id}/audit-logs/export-jobs', [BillingInvoiceController::class, 'createAuditLogsCsvExportJob'])
         ->middleware('can:billing-invoices.view-audit-logs')
+        ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.audit-logs.export-jobs.create');
     Route::get('billing-invoices/{id}/audit-logs/export-jobs', [BillingInvoiceController::class, 'auditLogsCsvExportJobs'])
         ->middleware('can:billing-invoices.view-audit-logs')
+        ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.audit-logs.export-jobs.index');
     Route::get('billing-invoices/{id}/audit-logs/export-jobs/{jobId}', [BillingInvoiceController::class, 'auditLogsCsvExportJob'])
         ->middleware('can:billing-invoices.view-audit-logs')
+        ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
+        ->where('jobId', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.audit-logs.export-jobs.show');
     Route::post('billing-invoices/{id}/audit-logs/export-jobs/{jobId}/retry', [BillingInvoiceController::class, 'retryAuditLogsCsvExportJob'])
         ->middleware('can:billing-invoices.view-audit-logs')
+        ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
+        ->where('jobId', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.audit-logs.export-jobs.retry');
     Route::get('billing-invoices/{id}/audit-logs/export-jobs/{jobId}/download', [BillingInvoiceController::class, 'downloadAuditLogsCsvExportJob'])
         ->middleware('can:billing-invoices.view-audit-logs')
+        ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
+        ->where('jobId', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.audit-logs.export-jobs.download');
     Route::get('billing-invoices/{id}/audit-logs/export', [BillingInvoiceController::class, 'exportAuditLogsCsv'])
         ->middleware('can:billing-invoices.view-audit-logs')
+        ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.audit-logs.export');
     Route::get('billing-invoices/{id}/audit-logs', [BillingInvoiceController::class, 'auditLogs'])
         ->middleware('can:billing-invoices.view-audit-logs')
+        ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.audit-logs');
 
     Route::get('billing-payment-plans', [BillingPaymentPlanController::class, 'index'])
