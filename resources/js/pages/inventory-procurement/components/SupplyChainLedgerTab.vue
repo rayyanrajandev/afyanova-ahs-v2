@@ -15,7 +15,7 @@ const ws = useSupplyChainPageApi();
                 <div v-if="ws.canRead" class="flex min-h-0 flex-1 flex-col overflow-hidden">
 
                         <!-- Movement rows -->
-                        <ScrollArea class="max-h-[min(70vh,42rem)]">
+                        <ScrollArea class="min-h-0 flex-1">
                             <WorkflowQueueSkeleton v-if="!ws.stockMovements.length && ws.stockLedgerLoading" :count="5" />
 
                             <div
@@ -110,7 +110,7 @@ const ws = useSupplyChainPageApi();
                                     @click="ws.goToStockLedgerPage((ws.stockMovementPagination?.currentPage ?? 2) - 1)"
                                 >
                                     <AppIcon name="chevron-left" class="size-3.5" />
-                                    Prev
+                                    Previous
                                 </Button>
                                 <template v-for="pg in ws.stockLedgerPages" :key="typeof pg === 'number' ? `sl-${pg}` : `sl-e-${Math.random()}`">
                                     <span v-if="pg === '...'" class="px-1 text-xs text-muted-foreground">&hellip;</span>

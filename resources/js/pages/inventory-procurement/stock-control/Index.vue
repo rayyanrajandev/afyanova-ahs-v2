@@ -1179,6 +1179,28 @@ const itemFilterChips = computed<string[]>(() => {
 });
 const hasAnyItemFilters = computed(() => itemFilterChips.value.length > 0);
 
+const stockFilterChips = computed<string[]>(() => {
+    if (activeTab.value === 'inventory') return itemFilterChips.value;
+    if (activeTab.value === 'ledger') {
+        const chips: string[] = [];
+        if (stockLedgerFilters.q) chips.push(`Search: "${stockLedgerFilters.q}"`);
+        if (stockLedgerFilters.movementType) chips.push(`Type: ${formatEnumLabel(stockLedgerFilters.movementType)}`);
+        if (stockLedgerFilters.sourceKey) chips.push(`Source: ${stockLedgerSourceOptions.find(o => o.value === stockLedgerFilters.sourceKey)?.label || formatEnumLabel(stockLedgerFilters.sourceKey)}`);
+        if (stockLedgerFilters.from || stockLedgerFilters.to) chips.push(`Date range: ${stockLedgerFilters.from || '...'} → ${stockLedgerFilters.to || '...'}`);
+        if (stockLedgerFilters.perPage !== 50) chips.push(`${stockLedgerFilters.perPage} per page`);
+        return chips;
+    }
+    if (activeTab.value === 'department-stock') {
+        const chips: string[] = [];
+        if (departmentStockFilters.q) chips.push(`Search: "${departmentStockFilters.q}"`);
+        if (departmentStockFilters.departmentId) chips.push(`Department: ${departmentFilterOptions.value.find(d => d.id === departmentStockFilters.departmentId)?.name || departmentStockFilters.departmentId}`);
+        if (departmentStockFilters.perPage !== 50) chips.push(`${departmentStockFilters.perPage} per page`);
+        return chips;
+    }
+    return [];
+});
+const hasAnyStockFilter = computed(() => stockFilterChips.value.length > 0);
+
 function resetItemFilters() { itemSearch.q = ''; itemSearch.category = ''; itemSearch.stockState = ''; itemSearch.sortBy = 'itemName'; itemSearch.sortDir = 'asc'; itemSearch.page = 1; void refreshInventoryItems(); }
 
 async function openItemDetails(item: any, tab: string = 'overview') {
@@ -2166,7 +2188,7 @@ watch(() => itemSearch.q, () => {
         if (!canRead.value) return;
         itemSearch.page = 1;
         void refreshInventoryItems();
-    }, 180);
+    }, 300);
 });
 watch(() => itemSearch.category, () => { itemSearch.page = 1; void refreshInventoryItems(); });
 watch(() => itemSearch.stockState, () => { itemSearch.page = 1; void refreshInventoryItems(); });
@@ -2179,7 +2201,7 @@ watch(() => stockLedgerFilters.q, () => {
         if (!canRead.value) return;
         stockLedgerFilters.page = 1;
         void loadStockLedger();
-    }, 180);
+    }, 300);
 });
 watch(() => stockLedgerFilters.movementType, () => { stockLedgerFilters.page = 1; void loadStockLedger(); });
 watch(() => stockLedgerFilters.sourceKey, () => { stockLedgerFilters.page = 1; void loadStockLedger(); });
@@ -2190,7 +2212,7 @@ watch(() => departmentStockFilters.q, () => {
         if (!canRead.value) return;
         departmentStockFilters.page = 1;
         void loadDepartmentStock();
-    }, 180);
+    }, 300);
 });
 watch(() => departmentStockFilters.departmentId, () => { departmentStockFilters.page = 1; void loadDepartmentStock(); });
 watch(() => activeTab.value, () => { syncStockControlStateToUrl(); });
@@ -2313,6 +2335,14 @@ onMounted(async () => {
                     </div>
                 </div>
             </section>
+
+            <Alert v-if="!permissionsResolved">
+                <AlertTitle class="flex items-center gap-2">
+                    <AppIcon name="loader-circle" class="size-4 animate-spin" />
+                    Resolving access
+                </AlertTitle>
+                <AlertDescription>Permission context is still loading.</AlertDescription>
+            </Alert>
 
             <template v-if="!canRead && permissionsResolved">
                 <Alert variant="destructive">
@@ -2477,6 +2507,16 @@ onMounted(async () => {
                                     </span>
                                 </TabsTrigger>
                             </TabsList>
+
+                            <div v-if="hasAnyStockFilter" class="flex flex-wrap items-center gap-1.5 border-t py-2">
+                                <span class="text-[11px] text-muted-foreground">Filters:</span>
+                                <Badge v-for="chip in stockFilterChips" :key="`stock-filter-${chip}`" variant="outline" class="text-[11px]">
+                                    {{ chip }}
+                                </Badge>
+                                <button class="ml-1 text-[11px] text-muted-foreground underline-offset-2 hover:underline" @click="resetAllFilters">
+                                    Clear all
+                                </button>
+                            </div>
                         </div>
 
                         <div class="flex min-h-0 flex-1 flex-col overflow-hidden">

@@ -1,7 +1,7 @@
 
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import ComboboxField from '@/components/forms/ComboboxField.vue';
 import FormFieldShell from '@/components/forms/FormFieldShell.vue';
@@ -141,6 +141,22 @@ const statusCounts = ref<CatalogStatusCounts>({ active: 0, inactive: 0, retired:
 const serviceTypeCounts = ref<ServiceTypeCounts>({ total: 0 });
 const catalogExporting = ref(false);
 const catalogPrinting = ref(false);
+
+type AutoRefreshKey = 'off' | '30s' | '1m' | '5m';
+const AUTO_REFRESH_INTERVAL_MS: Record<AutoRefreshKey, number> = { off: 0, '30s': 30_000, '1m': 60_000, '5m': 300_000 };
+const AUTO_REFRESH_LABEL: Record<AutoRefreshKey, string> = { off: 'Auto: Off', '30s': 'Auto: 30s', '1m': 'Auto: 1m', '5m': 'Auto: 5m' };
+const catalogAutoRefreshInterval = ref<AutoRefreshKey>('off');
+let catalogAutoRefreshTimer: ReturnType<typeof setInterval> | null = null;
+watch(catalogAutoRefreshInterval, (key) => {
+    if (catalogAutoRefreshTimer !== null) {
+        clearInterval(catalogAutoRefreshTimer);
+        catalogAutoRefreshTimer = null;
+    }
+    const ms = AUTO_REFRESH_INTERVAL_MS[key];
+    if (ms > 0) {
+        catalogAutoRefreshTimer = setInterval(() => { void loadItems(); }, ms);
+    }
+});
 const bulkStatusDialogOpen = ref(false);
 const bulkStatusTarget = ref<CatalogStatus | null>(null);
 const bulkStatusReason = ref('');
@@ -1888,6 +1904,13 @@ watch(
         }, 300);
     },
 );
+
+onBeforeUnmount(() => {
+    if (catalogAutoRefreshTimer !== null) {
+        clearInterval(catalogAutoRefreshTimer);
+        catalogAutoRefreshTimer = null;
+    }
+});
 </script>
 <template>
     <Head title="Billing Service Catalog" />
@@ -1934,6 +1957,14 @@ watch(
                         >
                             <AppIcon :name="(listLoading ? 'loader-circle' : 'refresh-cw') as AppIconName" class="size-3.5" :class="listLoading ? 'animate-spin' : ''" />
                         </Button>
+                        <Select v-model="catalogAutoRefreshInterval">
+                            <SelectTrigger class="h-8 w-[8rem] rounded-lg text-xs data-[size=default]:h-8" :title="catalogAutoRefreshInterval !== 'off' ? `Auto-refresh every ${catalogAutoRefreshInterval}` : 'Auto-refresh off'">
+                                <SelectValue placeholder="Auto" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem v-for="[key, label] in Object.entries(AUTO_REFRESH_LABEL)" :key="key" :value="key">{{ label }}</SelectItem>
+                            </SelectContent>
+                        </Select>
                         <Button v-if="canManagePricing" size="sm" class="h-8 gap-1.5" @click="openCreateSheet">
                             <AppIcon name="plus" class="size-3.5" />
                             Add service price
@@ -2501,7 +2532,7 @@ watch(
             </Sheet>
 
             <div v-if="canRead" class="flex min-w-0 flex-col gap-4">
-                <Card class="flex flex-col rounded-lg border-sidebar-border/70 shadow-sm">
+                <Card class="flex min-h-0 flex-1 flex-col rounded-lg border-sidebar-border/70 shadow-sm">
                     <div class="flex flex-col gap-3 border-b px-4 py-3">
                         <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                             <div class="min-w-0 shrink-0">
@@ -2738,7 +2769,7 @@ watch(
                             </button>
                         </div>
                     </div>
-                    <CardContent class="flex flex-col overflow-hidden p-0">
+                    <CardContent class="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
                     <div v-if="listError" class="p-4">
                         <Alert variant="destructive">
                             <AlertTitle>Price list load issue</AlertTitle>
@@ -2746,7 +2777,7 @@ watch(
                         </Alert>
                     </div>
 
-                    <ScrollArea v-else class="max-h-[min(70vh,42rem)]">
+                    <ScrollArea v-else class="min-h-0 flex-1">
                         <div>
                             <RegistryListSkeleton v-if="catalogShowInitialSkeleton" :count="6" />
 

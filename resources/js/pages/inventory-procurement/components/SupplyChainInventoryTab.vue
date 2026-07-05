@@ -18,7 +18,7 @@ const ws = useSupplyChainPageApi();
                     class="flex min-h-0 flex-1 flex-col"
                 >
                     <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-                        <ScrollArea class="max-h-[min(70vh,42rem)]">
+                        <ScrollArea class="min-h-0 flex-1">
                             <RegistryListSkeleton v-if="!ws.items.length && ws.loading" />
                             <div v-else-if="!ws.items.length && !ws.loading" class="p-4">
                                 <InventoryEmptyState

@@ -35,7 +35,7 @@ const ws = useSupplyChainPageApi();
                         <span>Store stock and department stock are intentionally separate. This view shows where issued stock went — consumption, returns and wastage come in the next operational layer.</span>
                     </div>
 
-                    <ScrollArea class="max-h-[min(70vh,42rem)]">
+                    <ScrollArea class="min-h-0 flex-1">
                         <RegistryListSkeleton v-if="!ws.departmentStock.length && ws.departmentStockLoading" :count="5" />
 
                         <div v-else-if="!ws.departmentStock.length && !ws.departmentStockLoading" class="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center">

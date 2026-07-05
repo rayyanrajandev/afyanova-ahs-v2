@@ -54,7 +54,7 @@ class UpdateAppointmentStatusUseCase
             return null;
         }
 
-        if ($status === AppointmentStatus::COMPLETED->value) {
+        if ($status === AppointmentStatus::IN_CONSULTATION->value) {
             try {
                 $this->lastAutoCaptureResult = $this->autoCaptureConsultationFeeUseCase->execute(
                     appointmentId: $id,
@@ -67,7 +67,7 @@ class UpdateAppointmentStatusUseCase
                     'invoice' => null,
                     'error_message' => $e->getMessage(),
                 ];
-                Log::warning('Failed to auto-capture consultation fee on appointment completion', [
+                Log::warning('Failed to auto-capture consultation fee on in_consultation transition', [
                     'appointment_id' => $id,
                     'error' => $e->getMessage(),
                 ]);

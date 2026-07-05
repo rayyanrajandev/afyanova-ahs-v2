@@ -2,7 +2,7 @@
 
 namespace App\Modules\Billing\Application\UseCases;
 
-use App\Models\ConsultationMapping;
+use App\Modules\Billing\Infrastructure\Models\ConsultationMappingModel;
 use App\Modules\Appointment\Domain\Repositories\AppointmentRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
@@ -54,7 +54,7 @@ class AutoCaptureConsultationFeeUseCase
         // 1. Explicit Mapping Lookup
         $catalogItem = null;
         if ($tier !== null && $department !== '') {
-            $mapping = ConsultationMapping::query()
+            $mapping = ConsultationMappingModel::query()
                 ->where('clinician_tier', $tier)
                 ->where('department', $department)
                 ->with('billingServiceCatalogItem')

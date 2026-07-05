@@ -5,6 +5,7 @@ use App\Http\Middleware\EnforceTenantIsolationWhenEnabled;
 use App\Http\Middleware\EnsureFacilitySubscriptionEntitlement;
 use App\Http\Middleware\EnsureMappedFacilitySubscriptionEntitlement;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
+use App\Modules\Appointment\Application\UseCases\UpdateAppointmentStatusUseCase;
 use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
 use App\Modules\Billing\Infrastructure\Models\BillingServiceCatalogItemModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
@@ -106,9 +107,10 @@ function makeAutoCaptureAppointment(string $patientId, int $clinicianUserId, arr
         'clinician_user_id' => $clinicianUserId,
         'consultation_owner_user_id' => $clinicianUserId,
         'department' => 'Outpatient',
-        'status' => 'checked_in',
+        'status' => 'waiting_provider',
         'scheduled_at' => now()->subHours(2),
         'checked_in_at' => now()->subHours(1)->toDateTimeString(),
+        'triaged_at' => now()->subMinutes(45)->toDateTimeString(),
         'duration_minutes' => 30,
         'reason' => 'General checkup',
         'encounter_started_at' => now()->subMinutes(45)->toDateTimeString(),
@@ -116,69 +118,29 @@ function makeAutoCaptureAppointment(string $patientId, int $clinicianUserId, arr
     ], $overrides));
 }
 
-function withAutoCaptureScope(int $userId): array
+function executeStatusTransition(string $appointmentId, string $status, ?int $actorId = null): array
 {
-    $tenantId = (string) Str::uuid();
-    $facilityId = (string) Str::uuid();
-
-    DB::table('tenants')->insert([
-        'id' => $tenantId,
-        'code' => 'TZ-AUTO',
-        'name' => 'Auto Capture Test',
-        'country_code' => 'TZ',
-        'status' => 'active',
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
-
-    DB::table('facilities')->insert([
-        'id' => $facilityId,
-        'tenant_id' => $tenantId,
-        'code' => 'DAR-AUTO',
-        'name' => 'Dar Auto Capture',
-        'facility_type' => 'hospital',
-        'timezone' => 'Africa/Dar_es_Salaam',
-        'status' => 'active',
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
-
-    DB::table('facility_user')->insert([
-        'facility_id' => $facilityId,
-        'user_id' => $userId,
-        'role' => 'clinician',
-        'is_primary' => true,
-        'is_active' => true,
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
+    $useCase = app(UpdateAppointmentStatusUseCase::class);
+    $result = $useCase->execute(
+        id: $appointmentId,
+        status: $status,
+        reason: null,
+        actorId: $actorId,
+    );
 
     return [
-        'tenantId' => $tenantId,
-        'facilityId' => $facilityId,
-        'headers' => [
-            'X-Tenant-Code' => 'TZ-AUTO',
-            'X-Facility-Code' => 'DAR-AUTO',
-        ],
+        'appointment' => $result,
+        'autoCapture' => $useCase->getLastAutoCaptureResult(),
     ];
 }
 
-it('auto-captures consultation fee when appointment status becomes completed', function (): void {
+it('auto-captures consultation fee when appointment status becomes in_consultation', function (): void {
     $user = makeAutoCaptureClinician();
-    $scope = withAutoCaptureScope($user->id);
     $patient = makeAutoCapturePatient();
     $tariff = makeAutoCaptureConsultationTariff();
     $appointment = makeAutoCaptureAppointment($patient->id, $user->id);
 
-    $user->givePermissionTo('appointments.update-status');
-
-    $this->actingAs($user)
-        ->patchJson(
-            '/api/v1/appointments/'.$appointment->id.'/status',
-            ['status' => 'completed'],
-            $scope['headers'],
-        )
-        ->assertOk();
+    $result = executeStatusTransition($appointment->id, 'in_consultation', $user->id);
 
     $invoices = BillingInvoiceModel::query()
         ->where('patient_id', $patient->id)
@@ -198,30 +160,14 @@ it('auto-captures consultation fee when appointment status becomes completed', f
     expect((float) $invoice->balance_amount)->toBe(35000.0);
 });
 
-it('does not duplicate consultation invoice on second completed transition', function (): void {
+it('does not duplicate consultation invoice on second in_consultation transition', function (): void {
     $user = makeAutoCaptureClinician();
-    $scope = withAutoCaptureScope($user->id);
     $patient = makeAutoCapturePatient();
     $tariff = makeAutoCaptureConsultationTariff();
     $appointment = makeAutoCaptureAppointment($patient->id, $user->id);
 
-    $user->givePermissionTo('appointments.update-status');
-
-    $this->actingAs($user)
-        ->patchJson(
-            '/api/v1/appointments/'.$appointment->id.'/status',
-            ['status' => 'completed'],
-            $scope['headers'],
-        )
-        ->assertOk();
-
-    $this->actingAs($user)
-        ->patchJson(
-            '/api/v1/appointments/'.$appointment->id.'/status',
-            ['status' => 'completed'],
-            $scope['headers'],
-        )
-        ->assertOk();
+    executeStatusTransition($appointment->id, 'in_consultation', $user->id);
+    executeStatusTransition($appointment->id, 'in_consultation', $user->id);
 
     $invoices = BillingInvoiceModel::query()
         ->where('patient_id', $patient->id)
@@ -233,20 +179,11 @@ it('does not duplicate consultation invoice on second completed transition', fun
 
 it('creates draft invoice with correct consultation service name for MD clinician', function (): void {
     $user = makeAutoCaptureClinician();
-    $scope = withAutoCaptureScope($user->id);
     $patient = makeAutoCapturePatient();
     $tariff = makeAutoCaptureConsultationTariff();
     $appointment = makeAutoCaptureAppointment($patient->id, $user->id);
 
-    $user->givePermissionTo('appointments.update-status');
-
-    $this->actingAs($user)
-        ->patchJson(
-            '/api/v1/appointments/'.$appointment->id.'/status',
-            ['status' => 'completed'],
-            $scope['headers'],
-        )
-        ->assertOk();
+    executeStatusTransition($appointment->id, 'in_consultation', $user->id);
 
     $invoice = BillingInvoiceModel::query()
         ->where('patient_id', $patient->id)
@@ -259,22 +196,13 @@ it('creates draft invoice with correct consultation service name for MD clinicia
     expect($lineItem['description'] ?? '')->toContain('Consultation');
 });
 
-it('does not auto-capture when appointment transitions to non-completed status', function (): void {
+it('does not auto-capture when appointment transitions to non-in_consultation status', function (): void {
     $user = makeAutoCaptureClinician();
-    $scope = withAutoCaptureScope($user->id);
     $patient = makeAutoCapturePatient();
     $tariff = makeAutoCaptureConsultationTariff();
     $appointment = makeAutoCaptureAppointment($patient->id, $user->id);
 
-    $user->givePermissionTo('appointments.update-status');
-
-    $this->actingAs($user)
-        ->patchJson(
-            '/api/v1/appointments/'.$appointment->id.'/status',
-            ['status' => 'cancelled', 'reason' => 'Patient no-show'],
-            $scope['headers'],
-        )
-        ->assertOk();
+    executeStatusTransition($appointment->id, 'cancelled', $user->id);
 
     $invoices = BillingInvoiceModel::query()
         ->where('patient_id', $patient->id)
@@ -286,19 +214,10 @@ it('does not auto-capture when appointment transitions to non-completed status',
 
 it('auto-captures even when no catalog pricing exists using fallback service code', function (): void {
     $user = makeAutoCaptureClinician();
-    $scope = withAutoCaptureScope($user->id);
     $patient = makeAutoCapturePatient();
     $appointment = makeAutoCaptureAppointment($patient->id, $user->id);
 
-    $user->givePermissionTo('appointments.update-status');
-
-    $this->actingAs($user)
-        ->patchJson(
-            '/api/v1/appointments/'.$appointment->id.'/status',
-            ['status' => 'completed'],
-            $scope['headers'],
-        )
-        ->assertOk();
+    executeStatusTransition($appointment->id, 'in_consultation', $user->id);
 
     $invoices = BillingInvoiceModel::query()
         ->where('patient_id', $patient->id)
@@ -318,27 +237,20 @@ it('auto-capture does not break when clinician has no staff profile', function (
     $tariff = makeAutoCaptureConsultationTariff();
 
     $noProfileUser = User::factory()->create();
-    $scope = withAutoCaptureScope($noProfileUser->id);
-    $noProfileUser->givePermissionTo('appointments.update-status');
 
     $appointment = AppointmentModel::query()->create([
         'appointment_number' => 'APT-'.strtoupper(Str::random(8)),
         'patient_id' => $patient->id,
         'clinician_user_id' => $noProfileUser->id,
         'department' => 'Outpatient',
-        'status' => 'checked_in',
+        'status' => 'waiting_provider',
         'scheduled_at' => now()->subHours(2),
+        'triaged_at' => now()->subMinutes(45)->toDateTimeString(),
         'duration_minutes' => 30,
         'reason' => 'General checkup',
     ]);
 
-    $this->actingAs($noProfileUser)
-        ->patchJson(
-            '/api/v1/appointments/'.$appointment->id.'/status',
-            ['status' => 'completed'],
-            $scope['headers'],
-        )
-        ->assertOk();
+    executeStatusTransition($appointment->id, 'in_consultation', $noProfileUser->id);
 
     $invoices = BillingInvoiceModel::query()
         ->where('patient_id', $patient->id)
