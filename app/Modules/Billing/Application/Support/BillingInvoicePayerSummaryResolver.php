@@ -62,24 +62,7 @@ class BillingInvoicePayerSummaryResolver
             );
         }
 
-        $deferCoverageVerification = (bool) ($normalizedPricingContext['_deferCoverageVerification'] ?? false);
-
         if (($payerContract['status'] ?? null) !== 'active') {
-            if ($deferCoverageVerification) {
-                $normalizedPricingContext['payerSummary'] = $this->selfPayPayerSummary(
-                    totalAmount: $normalizedTotalAmount,
-                    currencyCode: $normalizedCurrencyCode,
-                );
-                $normalizedPricingContext['claimReadiness'] = $this->selfPayClaimReadiness(
-                    totalAmount: $normalizedTotalAmount,
-                    authorizationSummary: $authorizationSummary,
-                    coverageSummary: $coverageSummary,
-                );
-                $normalizedPricingContext['payerSummaryResolvedAt'] = now()->toISOString();
-
-                return $normalizedPricingContext;
-            }
-
             throw new BillingInvoicePricingResolutionException(
                 'billingPayerContractId',
                 'Selected billing payer contract must be active for invoice pricing.',

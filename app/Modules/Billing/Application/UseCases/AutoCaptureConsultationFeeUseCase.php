@@ -5,6 +5,7 @@ namespace App\Modules\Billing\Application\UseCases;
 use App\Modules\Billing\Infrastructure\Models\ConsultationMappingModel;
 use App\Modules\Appointment\Domain\Repositories\AppointmentRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingInvoiceRepositoryInterface;
+use App\Modules\Billing\Domain\Repositories\BillingPayerContractRepositoryInterface;
 use App\Modules\Billing\Domain\Repositories\BillingServiceCatalogItemRepositoryInterface;
 use App\Modules\Platform\Domain\Services\DefaultCurrencyResolverInterface;
 use App\Modules\Staff\Infrastructure\Models\StaffProfileModel;
@@ -18,6 +19,7 @@ class AutoCaptureConsultationFeeUseCase
         private readonly BillingServiceCatalogItemRepositoryInterface $serviceCatalogRepository,
         private readonly CreateBillingInvoiceUseCase $createBillingInvoiceUseCase,
         private readonly DefaultCurrencyResolverInterface $defaultCurrencyResolver,
+        private readonly BillingPayerContractRepositoryInterface $payerContractRepository,
     ) {}
 
     public function execute(string $appointmentId, ?int $actorId = null): array
@@ -109,7 +111,15 @@ class AutoCaptureConsultationFeeUseCase
             'sourceWorkflowId' => $appointmentId,
         ];
 
-        $contractId = $appointment['billing_payer_contract_id'] ?? null;
+        // ── Step 1: Determine explicit billing mode BEFORE invoice creation ──
+        $billingMode = $this->resolveBillingMode(
+            contractId: $appointment['billing_payer_contract_id'] ?? null,
+        );
+
+        // ── Step 2: Build payload — billing_mode is TRACE CONTEXT only, not a control flag ──
+        $pricingContext = [
+            '_billingMode' => $billingMode,
+        ];
 
         $payload = [
             'patient_id' => $patientId,
@@ -119,30 +129,22 @@ class AutoCaptureConsultationFeeUseCase
             'subtotal_amount' => $unitPrice,
             'currency_code' => $currencyCode,
             'issued_by_user_id' => $actorId,
-            'pricing_context' => [
-                '_deferCoverageVerification' => true,
-            ],
+            'pricing_context' => $pricingContext,
         ];
 
-        if ($contractId !== null) {
-            $payload['billing_payer_contract_id'] = (string) $contractId;
+        // Only attach payer contract for active insurance paths so
+        // the resolver receives a valid active contract to work with.
+        if ($billingMode === 'INSURANCE_ACTIVE' && ($appointment['billing_payer_contract_id'] ?? null) !== null) {
+            $payload['billing_payer_contract_id'] = (string) $appointment['billing_payer_contract_id'];
         }
 
+        // ── Step 3: Create invoice through the standard deterministic pipeline ──
         $invoice = $this->createBillingInvoiceUseCase->execute($payload, $actorId);
 
-        if ($invoice !== null) {
+        // ── Step 4: Post-invoice policy override — ONLY for fallback cases ──
+        if ($invoice !== null && $billingMode === 'INSURANCE_FALLBACK_SELF_PAY') {
             $resolvedInvoice = $invoice['invoice'] ?? $invoice;
-            $pricingContext = is_array($resolvedInvoice['pricing_context'] ?? null)
-                ? $resolvedInvoice['pricing_context']
-                : [];
-            $payerSummary = is_array($pricingContext['payerSummary'] ?? null)
-                ? $pricingContext['payerSummary']
-                : [];
-            $settlementPath = (string) ($payerSummary['settlementPath'] ?? '');
-
-            if ($settlementPath === 'self_pay') {
-                $invoice = $this->applyCoverageVerificationOverride($resolvedInvoice);
-            }
+            $invoice = $this->applyCoverageVerificationOverride($resolvedInvoice);
         }
 
         return [
@@ -344,6 +346,30 @@ class AutoCaptureConsultationFeeUseCase
         $normalized = trim((string) $normalized, '-');
 
         return $normalized;
+    }
+
+    /**
+     * Determine the explicit billing mode before invoice creation.
+     *
+     * @return 'INSURANCE_ACTIVE'|'INSURANCE_FALLBACK_SELF_PAY'|'TRUE_SELF_PAY'
+     */
+    private function resolveBillingMode(mixed $contractId): string
+    {
+        $normalizedContractId = trim((string) $contractId);
+        if ($normalizedContractId === '') {
+            return 'TRUE_SELF_PAY';
+        }
+
+        $payerContract = $this->payerContractRepository->findById($normalizedContractId);
+        if (! is_array($payerContract)) {
+            return 'INSURANCE_FALLBACK_SELF_PAY';
+        }
+
+        if (($payerContract['status'] ?? null) !== 'active') {
+            return 'INSURANCE_FALLBACK_SELF_PAY';
+        }
+
+        return 'INSURANCE_ACTIVE';
     }
 
     /**
