@@ -116,11 +116,7 @@ class AutoCaptureConsultationFeeUseCase
             contractId: $appointment['billing_payer_contract_id'] ?? null,
         );
 
-        // ── Step 2: Build payload with BillingDecision as single source of truth ──
-        $pricingContext = [
-            'billingDecision' => $billingDecision,
-        ];
-
+        // ── Step 2: Payload — billing_decision is a TOP-LEVEL field ──
         $payload = [
             'patient_id' => $patientId,
             'appointment_id' => $appointmentId,
@@ -129,7 +125,8 @@ class AutoCaptureConsultationFeeUseCase
             'subtotal_amount' => $unitPrice,
             'currency_code' => $currencyCode,
             'issued_by_user_id' => $actorId,
-            'pricing_context' => $pricingContext,
+            'billing_decision' => $billingDecision,
+            'pricing_context' => null,
         ];
 
         if ($billingDecision['mode'] === 'INSURANCE_ACTIVE') {
@@ -137,9 +134,7 @@ class AutoCaptureConsultationFeeUseCase
         }
 
         // ── Step 3: Create invoice through the standard deterministic pipeline.
-        // The resolver reads billingDecision from pricing_context and produces
-        // payerSummary + claimReadiness with coverageVerificationRequired set
-        // correctly at creation time — no post-hoc mutation needed. ──
+        // CreateBillingInvoiceUseCase routes to resolveFromBillingDecision() ──
         $invoice = $this->createBillingInvoiceUseCase->execute($payload, $actorId);
 
         return [

@@ -109,12 +109,13 @@ class CreateBillingInvoiceUseCase
         $normalizedAmounts = $this->normalizeAmounts($payload);
         $payload = array_merge($payload, $normalizedAmounts);
         $payload['currency_code'] = $this->resolveCurrencyCode($payload['currency_code'] ?? null);
-        $payload['pricing_context'] = $this->payerSummaryResolver->resolve(
+        $payload['pricing_context'] = $this->resolvePricingContext(
             billingPayerContractId: isset($payload['billing_payer_contract_id']) ? (string) $payload['billing_payer_contract_id'] : null,
             currencyCode: $payload['currency_code'],
             totalAmount: (float) ($payload['total_amount'] ?? 0),
             invoiceDateTime: isset($payload['invoice_date']) ? (string) $payload['invoice_date'] : null,
             pricingContext: is_array($payload['pricing_context'] ?? null) ? $payload['pricing_context'] : null,
+            billingDecision: is_array($payload['billing_decision'] ?? null) ? $payload['billing_decision'] : null,
         );
 
         $payload['status'] = BillingInvoiceStatus::DRAFT->value;
@@ -212,12 +213,13 @@ class CreateBillingInvoiceUseCase
         $mergedPayload = $this->consultationReviewDiscountApplier->apply($mergedPayload);
         $mergedPayload = array_merge($mergedPayload, $this->normalizeAmounts($mergedPayload));
         $mergedPayload['currency_code'] = $this->resolveCurrencyCode($mergedPayload['currency_code'] ?? null);
-        $mergedPayload['pricing_context'] = $this->payerSummaryResolver->resolve(
+        $mergedPayload['pricing_context'] = $this->resolvePricingContext(
             billingPayerContractId: $this->normalizeNullableString($mergedPayload['billing_payer_contract_id'] ?? null),
             currencyCode: $mergedPayload['currency_code'],
             totalAmount: (float) ($mergedPayload['total_amount'] ?? 0),
             invoiceDateTime: isset($mergedPayload['invoice_date']) ? (string) $mergedPayload['invoice_date'] : null,
             pricingContext: is_array($mergedPayload['pricing_context'] ?? null) ? $mergedPayload['pricing_context'] : null,
+            billingDecision: is_array($mergedPayload['billing_decision'] ?? null) ? $mergedPayload['billing_decision'] : null,
         );
         $mergedPayload['status'] = BillingInvoiceStatus::DRAFT->value;
         $mergedPayload['last_payment_at'] = ((float) ($mergedPayload['paid_amount'] ?? 0)) > 0
@@ -560,6 +562,40 @@ class CreateBillingInvoiceUseCase
         }
 
         return strtolower($sourceWorkflowKind).'::'.$sourceWorkflowId;
+    }
+
+    /**
+     * Route between BillingDecision-driven and legacy resolver paths.
+     *
+     * @param array<string, mixed>|null $pricingContext
+     * @param array<string, mixed>|null $billingDecision
+     * @return array<string, mixed>
+     */
+    private function resolvePricingContext(
+        ?string $billingPayerContractId,
+        string $currencyCode,
+        float $totalAmount,
+        ?string $invoiceDateTime,
+        ?array $pricingContext,
+        ?array $billingDecision,
+    ): array {
+        if ($billingDecision !== null) {
+            return $this->payerSummaryResolver->resolveFromBillingDecision(
+                billingDecision: $billingDecision,
+                currencyCode: $currencyCode,
+                totalAmount: $totalAmount,
+                invoiceDateTime: $invoiceDateTime,
+                pricingContext: $pricingContext,
+            );
+        }
+
+        return $this->payerSummaryResolver->resolveFromLegacyInvoice(
+            billingPayerContractId: $billingPayerContractId,
+            currencyCode: $currencyCode,
+            totalAmount: $totalAmount,
+            invoiceDateTime: $invoiceDateTime,
+            pricingContext: $pricingContext,
+        );
     }
 
     /**

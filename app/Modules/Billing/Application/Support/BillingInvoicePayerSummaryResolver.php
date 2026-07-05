@@ -12,11 +12,128 @@ class BillingInvoicePayerSummaryResolver
         private readonly BillingPayerContractRepositoryInterface $payerContractRepository,
     ) {}
 
+    // ═══════════════════════════════════════════════════════════════
+    // PURE MAPPING PATH: driven by an explicit BillingDecision DTO.
+    // No DB queries for contract status. No validation. No branching.
+    // All decisions were already made in the orchestration layer.
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * @param  array<string, mixed>  $billingDecision
+     * @param  array<string, mixed>|null  $pricingContext
+     * @return array<string, mixed>
+     */
+    public function resolveFromBillingDecision(
+        array $billingDecision,
+        string $currencyCode,
+        float $totalAmount,
+        ?string $invoiceDateTime,
+        ?array $pricingContext = null,
+    ): array {
+        $normalizedCurrencyCode = strtoupper(trim($currencyCode));
+        $effectiveInvoiceDate = $this->normalizeInvoiceDate($invoiceDateTime);
+        $normalizedTotalAmount = round(max($totalAmount, 0), 2);
+        $normalizedPricingContext = is_array($pricingContext) ? $pricingContext : [];
+        $authorizationSummary = $this->normalizeAuthorizationSummary(
+            is_array($normalizedPricingContext['authorizationSummary'] ?? null)
+                ? $normalizedPricingContext['authorizationSummary']
+                : null,
+        );
+        $coverageSummary = $this->normalizeCoverageSummary(
+            is_array($normalizedPricingContext['coverageSummary'] ?? null)
+                ? $normalizedPricingContext['coverageSummary']
+                : null,
+        );
+
+        $mode = (string) ($billingDecision['mode'] ?? 'TRUE_SELF_PAY');
+
+        if ($mode === 'INSURANCE_ACTIVE') {
+            $contractId = (string) ($billingDecision['contractId'] ?? '');
+
+            if ($contractId === '') {
+                $normalizedPricingContext['payerSummary'] = $this->selfPayPayerSummary(
+                    totalAmount: $normalizedTotalAmount,
+                    currencyCode: $normalizedCurrencyCode,
+                );
+                $normalizedPricingContext['claimReadiness'] = $this->selfPayClaimReadiness(
+                    totalAmount: $normalizedTotalAmount,
+                    authorizationSummary: $authorizationSummary,
+                    coverageSummary: $coverageSummary,
+                );
+                $normalizedPricingContext['payerSummaryResolvedAt'] = now()->toISOString();
+
+                return $normalizedPricingContext;
+            }
+
+            $payerContract = $this->payerContractRepository->findById($contractId);
+            if (! is_array($payerContract)) {
+                throw new BillingInvoicePricingResolutionException(
+                    'billingPayerContractId',
+                    'Payer contract specified in BillingDecision was not found in current scope.',
+                );
+            }
+
+            $this->assertCurrencyAlignment($payerContract, $normalizedCurrencyCode);
+            $this->assertEffectiveOnInvoiceDate($payerContract, $effectiveInvoiceDate);
+
+            $payerSummary = $this->contractPayerSummary(
+                payerContract: $payerContract,
+                totalAmount: $normalizedTotalAmount,
+                currencyCode: $normalizedCurrencyCode,
+                invoiceDate: $effectiveInvoiceDate,
+            );
+
+            $normalizedPricingContext['payerSummary'] = $payerSummary;
+            $normalizedPricingContext['claimReadiness'] = $this->claimReadiness(
+                payerSummary: $payerSummary,
+                authorizationSummary: $authorizationSummary,
+                coverageSummary: $coverageSummary,
+            );
+            $normalizedPricingContext['payerSummaryResolvedAt'] = now()->toISOString();
+
+            return $normalizedPricingContext;
+        }
+
+        // TRUE_SELF_PAY and INSURANCE_FALLBACK_SELF_PAY → self-pay payer summary
+        $normalizedPricingContext['payerSummary'] = $this->selfPayPayerSummary(
+            totalAmount: $normalizedTotalAmount,
+            currencyCode: $normalizedCurrencyCode,
+        );
+
+        $claimReadiness = $this->selfPayClaimReadiness(
+            totalAmount: $normalizedTotalAmount,
+            authorizationSummary: $authorizationSummary,
+            coverageSummary: $coverageSummary,
+        );
+
+        if ($mode === 'INSURANCE_FALLBACK_SELF_PAY') {
+            $claimReadiness['coverageVerificationRequired'] = true;
+            $claimReadiness['state'] = 'not_applicable';
+            $claimReadiness['claimEligible'] = false;
+            $claimReadiness['ready'] = false;
+            $claimReadiness['blockingReasons'] = [
+                'Payer contract is inactive or missing — verify coverage before issuing.',
+            ];
+        }
+
+        $normalizedPricingContext['claimReadiness'] = $claimReadiness;
+        $normalizedPricingContext['payerSummaryResolvedAt'] = now()->toISOString();
+
+        return $normalizedPricingContext;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // LEGACY PATH: manual invoice creation without BillingDecision.
+    // Performs contract lookup + validation as it always has.
+    // Used when CreateBillingInvoiceUseCase is called outside of
+    // the auto-capture orchestration layer.
+    // ═══════════════════════════════════════════════════════════════
+
     /**
      * @param  array<string, mixed>|null  $pricingContext
      * @return array<string, mixed>
      */
-    public function resolve(
+    public function resolveFromLegacyInvoice(
         ?string $billingPayerContractId,
         string $currencyCode,
         float $totalAmount,
@@ -38,25 +155,6 @@ class BillingInvoicePayerSummaryResolver
                 : null,
         );
 
-        // ── Pure-mapping path: billingDecision present ──
-        // When a BillingDecision exists, it is the single source of truth.
-        // No DB queries. No contract validation. No exceptions.
-        // Pure deterministic mapping only.
-        if (is_array($normalizedPricingContext['billingDecision'] ?? null)) {
-            return $this->resolveFromBillingDecision(
-                billingDecision: $normalizedPricingContext['billingDecision'],
-                normalizedCurrencyCode: $normalizedCurrencyCode,
-                effectiveInvoiceDate: $effectiveInvoiceDate,
-                normalizedTotalAmount: $normalizedTotalAmount,
-                authorizationSummary: $authorizationSummary,
-                coverageSummary: $coverageSummary,
-                normalizedPricingContext: $normalizedPricingContext,
-            );
-        }
-
-        // ── Legacy path: direct contract lookup (manual invoice creation) ──
-        // This path remains for backward compatibility when invoices are created
-        // manually without a BillingDecision.
         $contractId = $this->normalizeNullableString($billingPayerContractId);
         if ($contractId === null) {
             $normalizedPricingContext['payerSummary'] = $this->selfPayPayerSummary(
@@ -109,105 +207,9 @@ class BillingInvoicePayerSummaryResolver
         return $normalizedPricingContext;
     }
 
-    /**
-     * Pure-mapping path: resolve payerSummary and claimReadiness from
-     * an explicit BillingDecision without any DB access or validation.
-     *
-     * @param  array<string, mixed>  $billingDecision
-     * @param  array<string, mixed>  $authorizationSummary
-     * @param  array<string, mixed>  $coverageSummary
-     * @param  array<string, mixed>  $normalizedPricingContext
-     * @return array<string, mixed>
-     */
-    private function resolveFromBillingDecision(
-        array $billingDecision,
-        string $normalizedCurrencyCode,
-        CarbonImmutable $effectiveInvoiceDate,
-        float $normalizedTotalAmount,
-        array $authorizationSummary,
-        array $coverageSummary,
-        array $normalizedPricingContext,
-    ): array {
-        $mode = (string) ($billingDecision['mode'] ?? 'TRUE_SELF_PAY');
-
-        if ($mode === 'INSURANCE_ACTIVE') {
-            $contractId = (string) ($billingDecision['contractId'] ?? '');
-
-            if ($contractId === '') {
-                // Edge case: declared INSURANCE_ACTIVE but no contractId —
-                // treat as TRUE_SELF_PAY to avoid a broken resolver state.
-                $normalizedPricingContext['payerSummary'] = $this->selfPayPayerSummary(
-                    totalAmount: $normalizedTotalAmount,
-                    currencyCode: $normalizedCurrencyCode,
-                );
-                $normalizedPricingContext['claimReadiness'] = $this->selfPayClaimReadiness(
-                    totalAmount: $normalizedTotalAmount,
-                    authorizationSummary: $authorizationSummary,
-                    coverageSummary: $coverageSummary,
-                );
-                $normalizedPricingContext['payerSummaryResolvedAt'] = now()->toISOString();
-
-                return $normalizedPricingContext;
-            }
-
-            $payerContract = $this->payerContractRepository->findById($contractId);
-            if (! is_array($payerContract)) {
-                throw new BillingInvoicePricingResolutionException(
-                    'billingPayerContractId',
-                    'Payer contract specified in BillingDecision was not found in current scope.',
-                );
-            }
-
-            $this->assertCurrencyAlignment($payerContract, $normalizedCurrencyCode);
-            $this->assertEffectiveOnInvoiceDate($payerContract, $effectiveInvoiceDate);
-
-            $payerSummary = $this->contractPayerSummary(
-                payerContract: $payerContract,
-                totalAmount: $normalizedTotalAmount,
-                currencyCode: $normalizedCurrencyCode,
-                invoiceDate: $effectiveInvoiceDate,
-            );
-
-            $normalizedPricingContext['payerSummary'] = $payerSummary;
-            $normalizedPricingContext['claimReadiness'] = $this->claimReadiness(
-                payerSummary: $payerSummary,
-                authorizationSummary: $authorizationSummary,
-                coverageSummary: $coverageSummary,
-            );
-            $normalizedPricingContext['payerSummaryResolvedAt'] = now()->toISOString();
-
-            return $normalizedPricingContext;
-        }
-
-        // ── TRUE_SELF_PAY and INSURANCE_FALLBACK_SELF_PAY both produce self-pay ──
-        $normalizedPricingContext['payerSummary'] = $this->selfPayPayerSummary(
-            totalAmount: $normalizedTotalAmount,
-            currencyCode: $normalizedCurrencyCode,
-        );
-
-        $claimReadiness = $this->selfPayClaimReadiness(
-            totalAmount: $normalizedTotalAmount,
-            authorizationSummary: $authorizationSummary,
-            coverageSummary: $coverageSummary,
-        );
-
-        // INSURANCE_FALLBACK_SELF_PAY → coverage verification required
-        // TRUE_SELF_PAY → no coverage verification
-        if ($mode === 'INSURANCE_FALLBACK_SELF_PAY') {
-            $claimReadiness['coverageVerificationRequired'] = true;
-            $claimReadiness['state'] = 'not_applicable';
-            $claimReadiness['claimEligible'] = false;
-            $claimReadiness['ready'] = false;
-            $claimReadiness['blockingReasons'] = [
-                'Payer contract is inactive or missing — verify coverage before issuing.',
-            ];
-        }
-
-        $normalizedPricingContext['claimReadiness'] = $claimReadiness;
-        $normalizedPricingContext['payerSummaryResolvedAt'] = now()->toISOString();
-
-        return $normalizedPricingContext;
-    }
+    // ═══════════════════════════════════════════════════════════════
+    // PRIVATE HELPERS (shared across both paths)
+    // ═══════════════════════════════════════════════════════════════
 
     /**
      * @param  array<string, mixed>|null  $authorizationSummary
