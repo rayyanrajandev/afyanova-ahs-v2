@@ -4550,7 +4550,7 @@ async function updateRecordStatus(
         if (createDraftRecord.value?.id === latestRecord.id) {
             applyCreateDraftRecordToComposer(latestRecord);
             if (latestRecord.encounterId) {
-                void loadCreateEncounterSummary(latestRecord.encounterId);
+                await loadCreateEncounterSummary(latestRecord.encounterId);
             }
         }
 

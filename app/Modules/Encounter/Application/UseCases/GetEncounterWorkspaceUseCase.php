@@ -66,29 +66,8 @@ class GetEncounterWorkspaceUseCase
             return null;
         }
 
-        $draftSearch = $this->medicalRecordRepository->search(
-            query: null,
-            patientId: $patientId,
-            encounterId: $encounterId,
-            appointmentId: null,
-            appointmentReferralId: null,
-            admissionId: null,
-            theatreProcedureId: null,
-            authorUserId: null,
-            status: MedicalRecordStatus::DRAFT->value,
-            recordType: MedicalRecordNoteType::CONSULTATION_NOTE->value,
-            fromDateTime: null,
-            toDateTime: null,
-            page: 1,
-            perPage: 1,
-            sortBy: 'updated_at',
-            sortDirection: 'desc',
-        );
-
-        if ($draftSearch['data'] !== []) {
-            return $draftSearch['data'][0];
-        }
-
+        // Prefer finalized/amended records first — the encounter's primary record should
+        // reflect the signed clinical decision, not an uncommitted draft from autosave.
         foreach ([MedicalRecordStatus::FINALIZED->value, MedicalRecordStatus::AMENDED->value] as $status) {
             $search = $this->medicalRecordRepository->search(
                 query: null,

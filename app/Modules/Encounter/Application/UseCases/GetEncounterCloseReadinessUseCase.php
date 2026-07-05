@@ -138,10 +138,12 @@ class GetEncounterCloseReadinessUseCase
             return null;
         }
 
+        // Prefer finalized/amended records first — the encounter's primary record should
+        // reflect the signed clinical decision, not an uncommitted draft from autosave.
         foreach ([
-            MedicalRecordStatus::DRAFT->value,
             MedicalRecordStatus::FINALIZED->value,
             MedicalRecordStatus::AMENDED->value,
+            MedicalRecordStatus::DRAFT->value,
         ] as $status) {
             $search = $this->medicalRecordRepository->search(
                 query: null,
