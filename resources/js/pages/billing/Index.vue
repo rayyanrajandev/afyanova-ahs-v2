@@ -116,6 +116,7 @@ type UndoEntry = {
 
 const pageLoading = ref(true);
 const listLoading = ref(false);
+const queueError = ref<string | null>(null);
 const queueEntries = ref<CashierQueueEntry[]>([]);
 const pagination = ref<{ currentPage: number; perPage: number; total: number; lastPage: number } | null>(null);
 const searchQuery = ref('');
@@ -214,6 +215,7 @@ async function loadQueue() {
     const signal = searchAbortController.signal;
 
     listLoading.value = true;
+    queueError.value = null;
 
     try {
         const response = await apiRequest<CashierQueueResponse>(
@@ -236,11 +238,8 @@ async function loadQueue() {
         if (error instanceof DOMException && error.name === 'AbortError') return;
         queueEntries.value = [];
         pagination.value = null;
-        notifyError(
-            error instanceof Error
-                ? error.message
-                : 'Unable to load billing queue.',
-        );
+        const message = error instanceof Error ? error.message : 'Unable to load billing queue.';
+        queueError.value = message;
     } finally {
         if (!signal.aborted) {
             listLoading.value = false;
@@ -929,6 +928,29 @@ watch(showPaymentDialog, (open) => {
                             <button class="ml-1 text-[11px] text-muted-foreground underline-offset-2 hover:underline" @click="clearAllFilters">
                                 Clear all
                             </button>
+                        </div>
+                    </div>
+
+                    <!-- Error banner -->
+                    <div
+                        v-if="queueError"
+                        class="mx-4 mb-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3"
+                    >
+                        <div class="flex items-start gap-2.5">
+                            <AppIcon name="alert-triangle" class="mt-0.5 size-4 shrink-0 text-destructive" />
+                            <div class="min-w-0">
+                                <p class="text-sm font-medium text-destructive">Unable to load billing queue</p>
+                                <p class="mt-1 text-xs text-muted-foreground break-all">{{ queueError }}</p>
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                class="ml-auto h-7 shrink-0 px-2"
+                                @click="queueError = null; loadQueue()"
+                            >
+                                <AppIcon name="refresh-cw" class="mr-1 size-3" />
+                                Retry
+                            </Button>
                         </div>
                     </div>
 
