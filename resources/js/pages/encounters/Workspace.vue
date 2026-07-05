@@ -7526,6 +7526,26 @@ const createMedicalRecordWorkflowContextMeta = computed(() => {
 });
 
 const createMedicalRecordContextStatusLabel = computed(() => {
+    const encounterStatus = (
+        createEncounterSummary.value?.status ?? ''
+    ).toLowerCase();
+
+    if (encounterStatus === 'signed' && createEncounterStatusLabel.value) {
+        return createEncounterStatusLabel.value;
+    }
+
+    if (encounterStatus === 'ready_for_sign' && createEncounterStatusLabel.value) {
+        return createEncounterStatusLabel.value;
+    }
+
+    if (encounterStatus === 'closed' && createEncounterStatusLabel.value) {
+        return createEncounterStatusLabel.value;
+    }
+
+    if (encounterStatus === 'amended' && createEncounterStatusLabel.value) {
+        return createEncounterStatusLabel.value;
+    }
+
     if (createAppointmentContextStatusLabel.value) return createAppointmentContextStatusLabel.value;
     if (createAdmissionContextStatusLabel.value) return createAdmissionContextStatusLabel.value;
     if (createPatientContextLocked.value) return 'Locked';
@@ -7535,6 +7555,22 @@ const createMedicalRecordContextStatusLabel = computed(() => {
 const createMedicalRecordContextStatusVariant = computed<
     'default' | 'secondary' | 'outline' | 'destructive'
 >(() => {
+    const encounterStatus = (
+        createEncounterSummary.value?.status ?? ''
+    ).toLowerCase();
+
+    if (encounterStatus === 'signed' || encounterStatus === 'ready_for_sign') {
+        return 'default';
+    }
+
+    if (encounterStatus === 'closed') {
+        return 'secondary';
+    }
+
+    if (encounterStatus === 'amended') {
+        return 'secondary';
+    }
+
     if (createAppointmentContextStatusLabel.value) return createAppointmentContextStatusVariant.value;
     if (createAdmissionContextStatusLabel.value) return createAdmissionContextStatusVariant.value;
     return createForm.patientId.trim() ? 'outline' : 'secondary';
