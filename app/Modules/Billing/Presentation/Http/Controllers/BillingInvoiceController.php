@@ -22,6 +22,7 @@ use App\Modules\Billing\Application\UseCases\GetBillingInvoiceFinancePostingSumm
 use App\Modules\Billing\Application\UseCases\GetBillingInvoiceUseCase;
 use App\Modules\Billing\Application\UseCases\GetBillingRevenueRecognitionSummaryUseCase;
 use App\Modules\Billing\Application\UseCases\ListBillingChargeCaptureCandidatesUseCase;
+use App\Modules\Billing\Application\UseCases\ListCashierQueueUseCase;
 use App\Modules\Billing\Application\UseCases\ListBillingInvoiceAuditLogsUseCase;
 use App\Modules\Billing\Application\UseCases\ListBillingInvoicesUseCase;
 use App\Modules\Billing\Application\UseCases\ListInvoiceAdjustmentsUseCase;
@@ -53,6 +54,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BillingInvoiceController extends Controller
 {
+    // API: billing-invoices.* (cashier-queue, status-counts, charge-capture-candidates, financial-controls, etc.)
     private const AUDIT_CSV_SCHEMA_VERSION = 'audit-log-csv.v1';
 
     private const AUDIT_CSV_COLUMNS = ['createdAt', 'action', 'actorType', 'actorId', 'changes', 'metadata'];
@@ -97,6 +99,13 @@ class BillingInvoiceController extends Controller
         return response()->json([
             'data' => $counts,
         ]);
+    }
+
+    public function cashierQueue(Request $request, ListCashierQueueUseCase $useCase): JsonResponse
+    {
+        $result = $useCase->execute($request->all());
+
+        return response()->json($result);
     }
 
     public function financialControlsSummary(Request $request, GetBillingFinancialControlSummaryUseCase $useCase): JsonResponse
