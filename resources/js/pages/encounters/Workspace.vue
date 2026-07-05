@@ -7262,7 +7262,7 @@ const createEncounterStatusLabel = computed(() => {
         case 'in_progress':
             return 'Encounter in progress';
         case 'ready_for_sign':
-            return 'Ready for sign';
+            return 'Results ready — review and sign';
         case 'signed':
             return 'Encounter signed';
         case 'amended':
@@ -8080,6 +8080,36 @@ const encounterWorkspaceHeaderContextLine = computed(() => {
 });
 
 const encounterWorkspaceDraftHeaderAlert = computed(() => {
+    const encounterStatus = (
+        createEncounterSummary.value?.status ?? ''
+    ).toLowerCase();
+
+    if (encounterStatus === 'ready_for_sign') {
+        return {
+            label: 'Results are ready for review',
+            detail: 'Lab or imaging results are back. Review them and finalize the note to sign the encounter.',
+            tone: 'info' as const,
+        };
+    }
+
+    if (encounterStatus === 'in_progress') {
+        const labOrders = createEncounterLaboratoryOrders.value;
+        const hasPendingOrders = labOrders.some(
+            (order) =>
+                order.status !== 'completed' &&
+                order.status !== 'cancelled' &&
+                !order.enteredInErrorAt,
+        );
+
+        if (hasPendingOrders) {
+            return {
+                label: 'Awaiting results',
+                detail: 'Lab or imaging orders are still in progress. The encounter stays open for clinical continuity.',
+                tone: 'info' as const,
+            };
+        }
+    }
+
     return null;
 });
 

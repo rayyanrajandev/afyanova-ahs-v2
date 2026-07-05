@@ -91,7 +91,16 @@ class EncounterLifecycleService
             $encounter->status = EncounterStatus::IN_PROGRESS->value;
         }
 
-        $encounter->status = $nextStatus;
+        // Preserve ready_for_sign when the note moves back to draft (doctor re-editing).
+        // The results are still available for review — don't downgrade the encounter signal.
+        if (
+            $encounter->status === EncounterStatus::READY_FOR_SIGN->value
+            && $nextStatus === EncounterStatus::IN_PROGRESS->value
+        ) {
+            $encounter->status = EncounterStatus::READY_FOR_SIGN->value;
+        } else {
+            $encounter->status = $nextStatus;
+        }
 
         if ($reason !== null && trim($reason) !== '') {
             $encounter->status_reason = trim($reason);
@@ -113,6 +122,66 @@ class EncounterLifecycleService
             metadata: [
                 'source' => 'medical_record_status',
                 'medical_record_status' => strtolower(trim($medicalRecordStatus)),
+            ],
+        );
+
+        return $encounter->fresh();
+    }
+
+    public function markReadyForSign(
+        string $encounterId,
+        ?string $reason = null,
+        ?int $actorId = null,
+    ): ?EncounterModel {
+        $encounter = $this->findById($encounterId);
+        if ($encounter === null) {
+            return null;
+        }
+
+        if ($encounter->status === EncounterStatus::CLOSED->value) {
+            return $encounter;
+        }
+
+        if ($encounter->status === EncounterStatus::READY_FOR_SIGN->value) {
+            return $encounter;
+        }
+
+        $allowedFrom = [
+            EncounterStatus::IN_PROGRESS->value,
+            EncounterStatus::OPENED->value,
+            EncounterStatus::SIGNED->value,
+            EncounterStatus::AMENDED->value,
+        ];
+
+        if (! in_array($encounter->status, $allowedFrom, true)) {
+            throw new InvalidEncounterStatusTransitionException(
+                (string) $encounter->status,
+                EncounterStatus::READY_FOR_SIGN->value,
+            );
+        }
+
+        $previousStatus = (string) $encounter->status;
+        $encounter->status = EncounterStatus::READY_FOR_SIGN->value;
+
+        if ($reason !== null && trim($reason) !== '') {
+            $encounter->status_reason = trim($reason);
+        }
+
+        $encounter->save();
+
+        $this->writeAudit(
+            encounterId: $encounterId,
+            action: 'encounter.status.updated',
+            actorId: $actorId,
+            changes: [
+                'before' => ['status' => $previousStatus],
+                'after' => [
+                    'status' => EncounterStatus::READY_FOR_SIGN->value,
+                    'status_reason' => $encounter->status_reason,
+                ],
+            ],
+            metadata: [
+                'source' => 'order_results_review_ready',
             ],
         );
 
