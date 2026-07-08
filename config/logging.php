@@ -73,6 +73,14 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'reception_shadow_automation' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/reception_shadow_automation.log'),
+            'level' => env('RECEPTION_SHADOW_AUTOMATION_LOG_LEVEL', 'info'),
+            'days' => env('RECEPTION_SHADOW_AUTOMATION_LOG_DAYS', 30),
+            'replace_placeholders' => true,
+        ],
+
         'platform_audit_retention_execution' => [
             'driver' => 'daily',
             'path' => storage_path('logs/platform_audit_retention_execution.log'),

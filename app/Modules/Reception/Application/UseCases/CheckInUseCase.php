@@ -6,6 +6,7 @@ use App\Modules\Appointment\Application\UseCases\UpdateAppointmentStatusUseCase;
 use App\Modules\Appointment\Domain\ValueObjects\AppointmentStatus;
 use App\Modules\Encounter\Application\Services\EncounterResolverService;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
+use App\Modules\Reception\Domain\Events\AppointmentCheckedIn;
 use App\Modules\Reception\Domain\Repositories\ArrivalEventRepositoryInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -34,6 +35,12 @@ use Illuminate\Support\Facades\DB;
  * POST /medical-records or any other clinically-gated endpoint — the
  * encounter that's opened here has no note, diagnosis, or order attached
  * until a clinician creates one through those separately-gated paths.
+ *
+ * Phase 5 Mode B (plan §3.3, decided to start as soon as Phase 4 shipped):
+ * dispatches AppointmentCheckedIn via DB::afterCommit(), so a listener never
+ * reacts to a check-in that ultimately rolled back. This class does not know
+ * or care what, if anything, listens — no side effects beyond the write this
+ * class owns are inlined here (plan §3.2).
  */
 class CheckInUseCase
 {
@@ -81,6 +88,15 @@ class CheckInUseCase
                 admissionId: null,
                 actorId: $actorId,
             );
+
+            DB::afterCommit(function () use ($appointmentId, $appointment, $arrivalMode, $actorId): void {
+                event(new AppointmentCheckedIn(
+                    appointmentId: $appointmentId,
+                    patientId: (string) $appointment['patient_id'],
+                    arrivalMode: $arrivalMode,
+                    actorId: $actorId,
+                ));
+            });
 
             return $appointment;
         });
