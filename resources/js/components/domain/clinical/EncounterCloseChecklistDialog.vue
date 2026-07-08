@@ -66,6 +66,13 @@ const otherBlockingItems = computed(() =>
 const requiresAcknowledgement = computed(
     () => otherBlockingItems.value.length === 0 && warningItems.value.length > 0,
 );
+// C-5 acknowledgement-quality fix (reports/clinical-note-audit/15-critical-system-integrity-review.md):
+// mirrors EncounterLifecycleService::MIN_CLOSE_REASON_LENGTH. This is a
+// client-side UX floor only — the backend is the authoritative check and
+// also rejects a short list of placeholder phrases this dialog doesn't
+// attempt to replicate.
+const MIN_CLOSE_REASON_LENGTH = 10;
+
 const canConfirm = computed(() => {
     if (otherBlockingItems.value.length > 0) {
         return false;
@@ -79,7 +86,7 @@ const canConfirm = computed(() => {
         return true;
     }
 
-    return props.reason.trim().length >= 3;
+    return props.reason.trim().length >= MIN_CLOSE_REASON_LENGTH;
 });
 
 function closeDialog(): void {
@@ -142,6 +149,25 @@ function closeDialog(): void {
                                 </Badge>
                             </div>
                             <p class="text-xs text-muted-foreground">{{ item.message }}</p>
+                            <ul
+                                v-if="item.details && item.details.length > 0"
+                                class="space-y-0.5 border-l-2 border-muted pl-2"
+                            >
+                                <li
+                                    v-for="detail in item.details"
+                                    :key="detail.id"
+                                    class="flex items-baseline justify-between gap-2 text-xs text-muted-foreground"
+                                >
+                                    <span class="truncate">{{ detail.label }}</span>
+                                    <span v-if="detail.meta" class="shrink-0 tabular-nums">{{ detail.meta }}</span>
+                                </li>
+                                <li
+                                    v-if="item.count !== null && item.count > item.details.length"
+                                    class="text-xs text-muted-foreground italic"
+                                >
+                                    +{{ item.count - item.details.length }} more
+                                </li>
+                            </ul>
                         </div>
                     </div>
                 </div>
@@ -181,6 +207,7 @@ function closeDialog(): void {
                     />
                     <p class="text-xs text-muted-foreground">
                         Required when acknowledging billing, diagnosis, or pending-order warnings.
+                        Be specific — generic text like "n/a" will be rejected.
                     </p>
                 </div>
 

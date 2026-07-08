@@ -75,7 +75,7 @@ describe('useEncounterClose', () => {
             baseOptions({
                 readiness: () =>
                     readiness({
-                        items: [{ id: 'unbilled_services', label: 'Billable services captured', severity: 'warn', status: 'fail', message: '', count: 1 }],
+                        items: [{ id: 'unbilled_services', label: 'Billable services captured', severity: 'warn', status: 'fail', message: '', count: 1, details: [] }],
                     }),
                 onClosed,
             }),
@@ -104,7 +104,7 @@ describe('useEncounterClose', () => {
             baseOptions({
                 readiness: () =>
                     readiness({
-                        items: [{ id: 'disposition_documented', label: 'Disposition recorded', severity: 'block', status: 'fail', message: '', count: null }],
+                        items: [{ id: 'disposition_documented', label: 'Disposition recorded', severity: 'block', status: 'fail', message: '', count: null, details: [] }],
                     }),
             }),
         );

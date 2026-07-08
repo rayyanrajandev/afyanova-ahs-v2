@@ -32,6 +32,7 @@ class EncounterCloseReadinessResponseTransformer
                     'status' => $item['status'] ?? null,
                     'message' => $item['message'] ?? null,
                     'count' => array_key_exists('count', $item) ? $item['count'] : null,
+                    'details' => is_array($item['details'] ?? null) ? $item['details'] : [],
                 ],
                 $items,
             ),

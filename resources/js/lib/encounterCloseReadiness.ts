@@ -1,3 +1,9 @@
+export type EncounterCloseReadinessItemDetail = {
+    id: string;
+    label: string;
+    meta?: string | null;
+};
+
 export type EncounterCloseReadinessItem = {
     id: string;
     label: string;
@@ -5,6 +11,12 @@ export type EncounterCloseReadinessItem = {
     status: 'pass' | 'fail' | string;
     message: string;
     count: number | null;
+    /**
+     * C-5 acknowledgement-quality fix (reports/clinical-note-audit/15-critical-system-integrity-review.md):
+     * the specific outstanding items behind `count`, not just the number —
+     * bounded server-side, so `count` may exceed `details.length`.
+     */
+    details: EncounterCloseReadinessItemDetail[];
 };
 
 export type EncounterBillingSummary = {

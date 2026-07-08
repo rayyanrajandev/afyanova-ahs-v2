@@ -39,6 +39,13 @@ class GetEncounterCloseReadinessUseCase
 
     public const THEATRE_TERMINAL_STATUSES = ['completed', 'cancelled'];
 
+    // C-5 (reports/clinical-note-audit/15-critical-system-integrity-review.md),
+    // acknowledgement-quality fix (decided 2026-07-08): cap on how many
+    // outstanding items are itemized in the close-readiness response. This is
+    // a display bound for the close-checklist dialog, not a change to the
+    // pending count itself — canConfirm/canClose still key off the count.
+    private const ITEM_DETAIL_LIMIT = 20;
+
     public function __construct(
         private readonly EncounterResolverService $encounterResolverService,
         private readonly MedicalRecordRepositoryInterface $medicalRecordRepository,
@@ -80,6 +87,7 @@ class GetEncounterCloseReadinessUseCase
         $assessment = trim((string) ($primaryMedicalRecord['assessment'] ?? ''));
         $diagnosisDocumented = $diagnosisCode !== '' || $assessment !== '';
 
+        $pendingOrderDetails = $this->pendingOrderDetails($encounterId);
         $pendingOrderCount = $this->countPendingOrders($encounterId);
         $billingSummary = $this->resolveBillingSummary($encounter, $patientId);
 
@@ -125,6 +133,10 @@ class GetEncounterCloseReadinessUseCase
                         $pendingOrderCount,
                         $pendingOrderCount === 1 ? '' : 's',
                     ),
+                // C-5 acknowledgement-quality fix: the checklist dialog used to
+                // show only this count — a clinician acknowledging "3" had no
+                // way to see which 3 orders they were leaving outstanding.
+                details: $pendingOrderDetails,
             ),
             $this->buildItem(
                 id: 'unbilled_services',
@@ -139,6 +151,9 @@ class GetEncounterCloseReadinessUseCase
                         (int) $billingSummary['pendingCandidates'],
                         (int) $billingSummary['pendingCandidates'] === 1 ? '' : 's',
                     ),
+                details: is_array($billingSummary['pendingCandidateDetails'] ?? null)
+                    ? $billingSummary['pendingCandidateDetails']
+                    : [],
             ),
             $this->buildItem(
                 id: 'disposition_documented',
@@ -166,7 +181,14 @@ class GetEncounterCloseReadinessUseCase
             'blockingCount' => $blockingCount,
             'warningCount' => $warningCount,
             'items' => $items,
-            'billingSummary' => $billingSummary,
+            // Unchanged shape — pendingCandidateDetails lives on the
+            // unbilled_services item's `details` instead of duplicating it here.
+            'billingSummary' => [
+                'pendingCandidates' => (int) ($billingSummary['pendingCandidates'] ?? 0),
+                'alreadyInvoiced' => (int) ($billingSummary['alreadyInvoiced'] ?? 0),
+                'totalCandidates' => (int) ($billingSummary['totalCandidates'] ?? 0),
+                'currencyCode' => $billingSummary['currencyCode'] ?? null,
+            ],
         ];
     }
 
@@ -209,6 +231,81 @@ class GetEncounterCloseReadinessUseCase
             + $this->countPendingPharmacyOrders($encounterId)
             + $this->countPendingRadiologyOrders($encounterId)
             + $this->countPendingTheatreProcedures($encounterId);
+    }
+
+    /**
+     * C-5 acknowledgement-quality fix: the pending-orders count alone doesn't
+     * tell a clinician *what* they're leaving outstanding. Bounded by
+     * ITEM_DETAIL_LIMIT per type — a display list for the close-checklist
+     * dialog, not a replacement for the authoritative count above.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function pendingOrderDetails(string $encounterId): array
+    {
+        $lab = LaboratoryOrderModel::query()
+            ->where('encounter_id', $encounterId)
+            ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
+            ->whereNull('entered_in_error_at')
+            ->whereNotIn('status', self::LAB_TERMINAL_STATUSES)
+            ->orderByDesc('ordered_at')
+            ->limit(self::ITEM_DETAIL_LIMIT)
+            ->get(['id', 'test_name', 'ordered_at'])
+            ->map(static fn (LaboratoryOrderModel $order): array => [
+                'id' => $order->id,
+                'type' => 'laboratory',
+                'label' => $order->test_name,
+                'orderedAt' => $order->ordered_at?->toIso8601String(),
+            ]);
+
+        $pharmacy = PharmacyOrderModel::query()
+            ->where('encounter_id', $encounterId)
+            ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
+            ->whereNull('entered_in_error_at')
+            ->whereNotIn('status', self::PHARMACY_TERMINAL_STATUSES)
+            ->orderByDesc('ordered_at')
+            ->limit(self::ITEM_DETAIL_LIMIT)
+            ->get(['id', 'medication_name', 'ordered_at'])
+            ->map(static fn (PharmacyOrderModel $order): array => [
+                'id' => $order->id,
+                'type' => 'pharmacy',
+                'label' => $order->medication_name,
+                'orderedAt' => $order->ordered_at?->toIso8601String(),
+            ]);
+
+        $radiology = RadiologyOrderModel::query()
+            ->where('encounter_id', $encounterId)
+            ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
+            ->whereNull('entered_in_error_at')
+            ->whereNotIn('status', self::RADIOLOGY_TERMINAL_STATUSES)
+            ->orderByDesc('ordered_at')
+            ->limit(self::ITEM_DETAIL_LIMIT)
+            ->get(['id', 'study_description', 'ordered_at'])
+            ->map(static fn (RadiologyOrderModel $order): array => [
+                'id' => $order->id,
+                'type' => 'radiology',
+                'label' => $order->study_description,
+                'orderedAt' => $order->ordered_at?->toIso8601String(),
+            ]);
+
+        $theatre = TheatreProcedureModel::query()
+            ->where('encounter_id', $encounterId)
+            ->whereNull('entered_in_error_at')
+            ->whereNotIn('status', self::THEATRE_TERMINAL_STATUSES)
+            ->orderByDesc('scheduled_at')
+            ->limit(self::ITEM_DETAIL_LIMIT)
+            ->get(['id', 'procedure_name', 'scheduled_at'])
+            ->map(static fn (TheatreProcedureModel $procedure): array => [
+                'id' => $procedure->id,
+                'type' => 'theatre',
+                'label' => $procedure->procedure_name,
+                'orderedAt' => $procedure->scheduled_at?->toIso8601String(),
+            ]);
+
+        return $lab->concat($pharmacy)->concat($radiology)->concat($theatre)
+            ->take(self::ITEM_DETAIL_LIMIT)
+            ->values()
+            ->all();
     }
 
     private function countPendingLaboratoryOrders(string $encounterId): int
@@ -261,6 +358,7 @@ class GetEncounterCloseReadinessUseCase
                 'alreadyInvoiced' => 0,
                 'totalCandidates' => 0,
                 'currencyCode' => null,
+                'pendingCandidateDetails' => [],
             ];
         }
 
@@ -274,16 +372,32 @@ class GetEncounterCloseReadinessUseCase
         ]);
 
         $meta = is_array($result['meta'] ?? null) ? $result['meta'] : [];
+        // includeInvoiced: false above means $result['data'] already contains
+        // only the pending (not-yet-invoiced) candidates — no extra query, no
+        // extra filtering, just surfacing what was already fetched instead of
+        // discarding everything but the count (C-5 acknowledgement-quality fix).
+        $candidates = is_array($result['data'] ?? null) ? $result['data'] : [];
 
         return [
             'pendingCandidates' => (int) ($meta['pending'] ?? 0),
             'alreadyInvoiced' => (int) ($meta['alreadyInvoiced'] ?? 0),
             'totalCandidates' => (int) ($meta['total'] ?? 0),
             'currencyCode' => $meta['currencyCode'] ?? null,
+            'pendingCandidateDetails' => array_map(
+                static fn (array $candidate): array => [
+                    'id' => $candidate['id'] ?? null,
+                    'label' => $candidate['serviceName'] ?? $candidate['sourceNumber'] ?? 'Uninvoiced service',
+                    'meta' => isset($candidate['lineTotal'], $candidate['currencyCode'])
+                        ? sprintf('%s %s', $candidate['currencyCode'], number_format((float) $candidate['lineTotal'], 2))
+                        : null,
+                ],
+                array_slice($candidates, 0, self::ITEM_DETAIL_LIMIT),
+            ),
         ];
     }
 
     /**
+     * @param  array<int, array<string, mixed>>  $details
      * @return array<string, mixed>
      */
     private function buildItem(
@@ -293,6 +407,7 @@ class GetEncounterCloseReadinessUseCase
         bool $passed,
         string $message,
         ?int $count = null,
+        array $details = [],
     ): array {
         return [
             'id' => $id,
@@ -301,6 +416,7 @@ class GetEncounterCloseReadinessUseCase
             'status' => $passed ? 'pass' : 'fail',
             'message' => $message,
             'count' => $count,
+            'details' => $details,
         ];
     }
 }

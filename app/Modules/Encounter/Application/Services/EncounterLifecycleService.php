@@ -14,6 +14,20 @@ use App\Modules\MedicalRecord\Domain\ValueObjects\MedicalRecordStatus;
 
 class EncounterLifecycleService
 {
+    // C-5 (reports/clinical-note-audit/15-critical-system-integrity-review.md),
+    // acknowledgement-quality fix (decided 2026-07-08): a bare non-empty check
+    // let "n/a" (3 characters) satisfy the close-out reason requirement — not
+    // an acknowledgement, just a keystroke tax. This does not make close
+    // blocking; it makes the required reason actually mean something.
+    private const MIN_CLOSE_REASON_LENGTH = 10;
+
+    /**
+     * @var array<int, string>
+     */
+    private const TRIVIAL_CLOSE_REASONS = [
+        'n/a', 'na', 'none', 'ok', 'okay', 'done', 'pending', 'tbd', 'asap', 'fine', 'nil',
+    ];
+
     public function __construct(
         private readonly GetEncounterCloseReadinessUseCase $encounterCloseReadinessUseCase,
         private readonly EncounterAuditLogRepositoryInterface $encounterAuditLogRepository,
@@ -296,10 +310,13 @@ class EncounterLifecycleService
             if (
                 (bool) ($readiness['requiresAcknowledgement'] ?? false)
                 && $acknowledgeCloseGaps
-                && trim((string) $reason) === ''
+                && ! $this->isMeaningfulCloseReason($reason)
             ) {
                 throw new EncounterCloseBlockedException(
-                    'A close-out reason is required when acknowledging close warnings.',
+                    sprintf(
+                        'Provide a specific close-out reason (at least %d characters) when acknowledging close warnings — "n/a" or similar placeholders are not accepted.',
+                        self::MIN_CLOSE_REASON_LENGTH,
+                    ),
                     $readiness,
                 );
             }
@@ -341,11 +358,59 @@ class EncounterLifecycleService
                 'close_readiness' => is_array($readiness) ? [
                     'blocking_count' => (int) ($readiness['blockingCount'] ?? 0),
                     'warning_count' => (int) ($readiness['warningCount'] ?? 0),
+                    // C-5 acknowledgement-quality fix: counts alone don't let a
+                    // later investigation reconstruct what was actually
+                    // outstanding at the moment of close — record the specific
+                    // item IDs, not just how many there were.
+                    'outstanding_items' => $this->outstandingItemIdsByWarningItem($readiness),
                 ] : null,
             ],
         );
 
         return $encounter->fresh();
+    }
+
+    /**
+     * C-5 acknowledgement-quality fix: a bare non-empty check let "n/a"
+     * satisfy the requirement. This requires a minimum length and rejects a
+     * short list of common placeholders (normalized: lowercased, trimmed,
+     * trailing punctuation stripped) — a floor on meaningfulness, not an
+     * attempt to fully judge reason quality, which no fixed rule can do.
+     */
+    private function isMeaningfulCloseReason(?string $reason): bool
+    {
+        $trimmed = trim((string) $reason);
+        if (mb_strlen($trimmed) < self::MIN_CLOSE_REASON_LENGTH) {
+            return false;
+        }
+
+        $normalized = strtolower(trim($trimmed, " \t\n\r\0\x0B.!"));
+
+        return ! in_array($normalized, self::TRIVIAL_CLOSE_REASONS, true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $readiness
+     * @return array<string, array<int, string>>
+     */
+    private function outstandingItemIdsByWarningItem(array $readiness): array
+    {
+        $items = is_array($readiness['items'] ?? null) ? $readiness['items'] : [];
+        $outstanding = [];
+
+        foreach ($items as $item) {
+            if (($item['severity'] ?? '') !== 'warn' || ($item['status'] ?? '') !== 'fail') {
+                continue;
+            }
+
+            $details = is_array($item['details'] ?? null) ? $item['details'] : [];
+            $outstanding[(string) ($item['id'] ?? 'unknown')] = array_values(array_filter(array_map(
+                static fn (array $detail): ?string => isset($detail['id']) ? (string) $detail['id'] : null,
+                $details,
+            )));
+        }
+
+        return $outstanding;
     }
 
     public function reopen(string $encounterId, string $reason, ?int $actorId): ?EncounterModel
