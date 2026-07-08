@@ -4,6 +4,7 @@ namespace App\Modules\Reception\Application\UseCases;
 
 use App\Modules\Appointment\Domain\ValueObjects\AppointmentStatus;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
+use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Reception\Domain\ValueObjects\ArrivalMode;
 use App\Modules\Reception\Infrastructure\Models\ArrivalEventModel;
 use InvalidArgumentException;
@@ -72,15 +73,32 @@ class GetReceptionQueueUseCase
             ->unique('appointment_id')
             ->pluck('arrival_mode', 'appointment_id');
 
-        $entries = $appointments->map(function (AppointmentModel $appointment) use ($stage, $latestArrivalModeByAppointmentId): array {
+        // Batched, not per-row: a queue view showing only patientId (a UUID)
+        // is not usable by the front-desk/triage staff it's for.
+        $patientsById = PatientModel::query()
+            ->whereIn('id', $appointments->pluck('patient_id')->unique())
+            ->get(['id', 'patient_number', 'first_name', 'middle_name', 'last_name'])
+            ->keyBy('id');
+
+        $entries = $appointments->map(function (AppointmentModel $appointment) use ($stage, $latestArrivalModeByAppointmentId, $patientsById): array {
             $arrivalMode = $latestArrivalModeByAppointmentId->get($appointment->id);
             $waitStartedAt = $stage === AppointmentStatus::WAITING_PROVIDER->value
                 ? ($appointment->triaged_at ?? $appointment->checked_in_at)
                 : $appointment->checked_in_at;
+            $patient = $patientsById->get($appointment->patient_id);
+            $patientName = $patient !== null
+                ? implode(' ', array_filter([
+                    $patient->first_name,
+                    $patient->middle_name,
+                    $patient->last_name,
+                ], static fn (?string $part): bool => $part !== null && trim($part) !== ''))
+                : null;
 
             return [
                 'appointmentId' => $appointment->id,
                 'patientId' => $appointment->patient_id,
+                'patientName' => $patientName !== '' ? $patientName : null,
+                'patientNumber' => $patient?->patient_number,
                 'department' => $appointment->department,
                 'clinicianUserId' => $appointment->clinician_user_id,
                 'arrivalMode' => $arrivalMode,

@@ -93,6 +93,21 @@ it('orders the triage queue by arrival-mode tier then oldest wait first', functi
     expect($orderedIds)->toBe([$emergencyId, $scheduledId, $walkInId]);
 });
 
+it('includes the patient name and number, not just the id, in each queue entry', function (): void {
+    $user = queueUser();
+    $patient = queuePatient();
+    $appointmentId = checkInViaApi($user, $patient->id, 'walk_in');
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/reception/queue?stage=waiting_triage')
+        ->assertOk();
+
+    $entry = collect($response->json('data'))->firstWhere('appointmentId', $appointmentId);
+
+    expect($entry['patientName'])->toBe('Queue Fixture');
+    expect($entry['patientNumber'])->toBe($patient->patient_number);
+});
+
 it('orders same-tier entries oldest-wait-first', function (): void {
     $user = queueUser();
 

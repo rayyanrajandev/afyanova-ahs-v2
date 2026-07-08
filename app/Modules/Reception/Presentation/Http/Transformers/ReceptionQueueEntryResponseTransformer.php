@@ -13,6 +13,8 @@ class ReceptionQueueEntryResponseTransformer
         return [
             'appointmentId' => $entry['appointmentId'] ?? null,
             'patientId' => $entry['patientId'] ?? null,
+            'patientName' => $entry['patientName'] ?? null,
+            'patientNumber' => $entry['patientNumber'] ?? null,
             'department' => $entry['department'] ?? null,
             'clinicianUserId' => $entry['clinicianUserId'] ?? null,
             'arrivalMode' => $entry['arrivalMode'] ?? null,
