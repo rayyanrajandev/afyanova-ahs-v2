@@ -422,12 +422,12 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => [
 const activeTab = ref<'overview' | 'timeline' | 'visits' | 'orders'>('overview');
 
 const scrollContainerRef = useTemplateRef<HTMLDivElement>('scrollContainer');
-const scrollContainerHeight = ref('100dvh');
+const scrollContainerHeight = ref('98dvh');
 
 function updateScrollContainerHeight(): void {
     const el = scrollContainerRef.value;
     if (!el) return;
-    scrollContainerHeight.value = `calc(100dvh - ${el.getBoundingClientRect().top}px)`;
+    scrollContainerHeight.value = `calc(98dvh - ${el.getBoundingClientRect().top}px)`;
 }
 
 onMounted(() => {
