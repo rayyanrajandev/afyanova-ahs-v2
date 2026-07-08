@@ -9,6 +9,7 @@ use App\Modules\Encounter\Domain\ValueObjects\EncounterType;
 use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
 use App\Modules\MedicalRecord\Application\Exceptions\AppointmentNotEligibleForMedicalRecordException;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -77,34 +78,41 @@ class EncounterResolverService
             );
         }
 
-        $query = EncounterModel::query()->where('patient_id', $normalizedPatientId);
-        if ($normalizedAppointmentId !== '') {
-            $query->where('appointment_id', $normalizedAppointmentId);
-        } else {
-            $query->where('admission_id', $normalizedAdmissionId);
-        }
-
-        $existingEncounter = $query
-            ->orderByDesc('updated_at')
-            ->orderByDesc('created_at')
-            ->first();
-
+        $existingEncounter = $this->findExistingForVisit($normalizedPatientId, $normalizedAppointmentId, $normalizedAdmissionId);
         if ($existingEncounter !== null) {
             return $existingEncounter;
         }
 
-        $encounter = EncounterModel::query()->create([
-            'encounter_number' => $this->generateEncounterNumber(),
-            'tenant_id' => $this->platformScopeContext->tenantId(),
-            'facility_id' => $this->platformScopeContext->facilityId(),
-            'patient_id' => $normalizedPatientId,
-            'appointment_id' => $normalizedAppointmentId !== '' ? $normalizedAppointmentId : null,
-            'admission_id' => $normalizedAdmissionId !== '' ? $normalizedAdmissionId : null,
-            'primary_clinician_user_id' => $actorId,
-            'status' => EncounterStatus::OPENED->value,
-            'type' => $this->deriveEncounterType($normalizedAppointmentId, $normalizedAdmissionId),
-            'opened_at' => now(),
-        ]);
+        // C-4 (reports/clinical-note-audit/15-critical-system-integrity-review.md):
+        // the lookup above and this create() are not atomic — a second, near-
+        // simultaneous request for the same appointment/admission can pass the
+        // same lookup before either side has committed a row. The unique
+        // indexes added on encounters.appointment_id/admission_id turn that
+        // race into a UniqueConstraintViolationException here instead of a
+        // silent duplicate encounter; recover by returning whichever row the
+        // concurrent writer actually committed.
+        try {
+            $encounter = EncounterModel::query()->create([
+                'encounter_number' => $this->generateEncounterNumber(),
+                'tenant_id' => $this->platformScopeContext->tenantId(),
+                'facility_id' => $this->platformScopeContext->facilityId(),
+                'patient_id' => $normalizedPatientId,
+                'appointment_id' => $normalizedAppointmentId !== '' ? $normalizedAppointmentId : null,
+                'admission_id' => $normalizedAdmissionId !== '' ? $normalizedAdmissionId : null,
+                'primary_clinician_user_id' => $actorId,
+                'status' => EncounterStatus::OPENED->value,
+                'type' => $this->deriveEncounterType($normalizedAppointmentId, $normalizedAdmissionId),
+                'opened_at' => now(),
+            ]);
+        } catch (UniqueConstraintViolationException $exception) {
+            $winningEncounter = $this->findExistingForVisit($normalizedPatientId, $normalizedAppointmentId, $normalizedAdmissionId);
+
+            if ($winningEncounter === null) {
+                throw $exception;
+            }
+
+            return $winningEncounter;
+        }
 
         $this->encounterAuditLogRepository->write(
             encounterId: (string) $encounter->id,
@@ -121,6 +129,21 @@ class EncounterResolverService
         );
 
         return $encounter;
+    }
+
+    private function findExistingForVisit(string $patientId, string $appointmentId, string $admissionId): ?EncounterModel
+    {
+        $query = EncounterModel::query()->where('patient_id', $patientId);
+        if ($appointmentId !== '') {
+            $query->where('appointment_id', $appointmentId);
+        } else {
+            $query->where('admission_id', $admissionId);
+        }
+
+        return $query
+            ->orderByDesc('updated_at')
+            ->orderByDesc('created_at')
+            ->first();
     }
 
     /**
