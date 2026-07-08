@@ -44,6 +44,13 @@ class RegisterWalkInAndCheckInUseCase
                         ArrivalMode::EMERGENCY->value => 'Emergency walk-in',
                         default => 'OPD walk-in',
                     },
+                    // Since Phase 3, check-in opens the visit's Encounter, and
+                    // EncounterResolverService::deriveEncounterType() classifies
+                    // emergency-vs-outpatient from the appointment's department
+                    // string — set it here so an emergency walk-in's encounter is
+                    // correctly typed from the moment it's created, not left to
+                    // whatever the default department heuristic would guess.
+                    'department' => $arrivalMode === ArrivalMode::EMERGENCY->value ? 'Emergency' : null,
                 ],
                 actorId: $actorId,
             );

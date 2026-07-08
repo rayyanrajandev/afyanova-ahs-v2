@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
+use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Reception\Infrastructure\Models\ArrivalEventModel;
 use App\Models\User;
@@ -155,4 +156,84 @@ it('rejects an invalid arrival mode for walk-in registration', function (): void
         ])
         ->assertStatus(422)
         ->assertJsonValidationErrors(['arrivalMode']);
+});
+
+/**
+ * Phase 3 (plan §5, decided): check-in also opens the visit's Encounter —
+ * one Encounter spans the whole visit rather than a separate administrative
+ * record. This must not grant reception any clinical capability: they still
+ * lack medical.records.create and cannot reach the note-creation endpoint.
+ */
+it('opens the encounter for the appointment at check-in', function (): void {
+    $user = receptionUser();
+    $patient = receptionPatient();
+    $appointment = receptionScheduledAppointment($patient->id);
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/appointments/'.$appointment->id.'/check-in', [])
+        ->assertOk();
+
+    $encounter = EncounterModel::query()->where('appointment_id', $appointment->id)->first();
+    expect($encounter)->not->toBeNull();
+    expect($encounter->patient_id)->toBe($patient->id);
+    expect($encounter->status)->toBe('opened');
+});
+
+it('resolves the same encounter on repeated check-in-adjacent calls instead of duplicating it', function (): void {
+    $user = receptionUser();
+    $patient = receptionPatient();
+    $appointment = receptionScheduledAppointment($patient->id);
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/appointments/'.$appointment->id.'/check-in', [])
+        ->assertOk();
+
+    $firstEncounterId = EncounterModel::query()->where('appointment_id', $appointment->id)->value('id');
+
+    // Same-status re-check-in is idempotent per AppointmentStatus::canTransitionTo();
+    // this proves the encounter side is equally idempotent, not re-created.
+    $this->actingAs($user)
+        ->patchJson('/api/v1/appointments/'.$appointment->id.'/check-in', [])
+        ->assertOk();
+
+    expect(EncounterModel::query()->where('appointment_id', $appointment->id)->count())->toBe(1);
+    expect(EncounterModel::query()->where('appointment_id', $appointment->id)->value('id'))->toBe($firstEncounterId);
+});
+
+it('opens an emergency-typed encounter for an emergency walk-in', function (): void {
+    $user = receptionUser();
+    $patient = receptionPatient();
+
+    $response = $this->actingAs($user)
+        ->postJson('/api/v1/reception/walk-ins', [
+            'patientId' => $patient->id,
+            'arrivalMode' => 'emergency',
+        ])
+        ->assertCreated();
+
+    $appointmentId = $response->json('data.id');
+    $encounter = EncounterModel::query()->where('appointment_id', $appointmentId)->first();
+
+    expect($encounter)->not->toBeNull();
+    expect($encounter->type)->toBe('emergency');
+});
+
+it('still forbids a reception-only user from creating a medical record after check-in opens the encounter', function (): void {
+    $user = receptionUser();
+    $patient = receptionPatient();
+    $appointment = receptionScheduledAppointment($patient->id);
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/appointments/'.$appointment->id.'/check-in', [])
+        ->assertOk();
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/medical-records', [
+            'patientId' => $patient->id,
+            'appointmentId' => $appointment->id,
+            'encounterAt' => now()->toDateTimeString(),
+            'recordType' => 'consultation_note',
+            'subjective' => 'Should not be reachable by reception.',
+        ])
+        ->assertForbidden();
 });

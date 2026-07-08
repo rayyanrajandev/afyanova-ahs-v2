@@ -4,6 +4,7 @@ namespace App\Modules\Reception\Application\UseCases;
 
 use App\Modules\Appointment\Application\UseCases\UpdateAppointmentStatusUseCase;
 use App\Modules\Appointment\Domain\ValueObjects\AppointmentStatus;
+use App\Modules\Encounter\Application\Services\EncounterResolverService;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Reception\Domain\Repositories\ArrivalEventRepositoryInterface;
 use Illuminate\Support\Facades\DB;
@@ -21,12 +22,25 @@ use Illuminate\Support\Facades\DB;
  * reports/clinical-note-audit/15-critical-system-integrity-review.md: two
  * independently-committed writes for one logical action risk leaving one
  * half committed if the other fails.
+ *
+ * Phase 3 (plan §5, decided): also opens the visit's Encounter at check-in —
+ * a single Encounter spans the whole visit rather than a separate
+ * administrative-vs-clinical record split. This does not grant reception any
+ * clinical capability: EncounterResolverService::findOrCreateForVisit() has
+ * no permission check of its own (this codebase enforces permissions at the
+ * route/FormRequest layer, not inside domain services), and this use case is
+ * only reachable via appointments.update-status. Reception still lacks
+ * medical.records.create, so it remains unable to reach
+ * POST /medical-records or any other clinically-gated endpoint — the
+ * encounter that's opened here has no note, diagnosis, or order attached
+ * until a clinician creates one through those separately-gated paths.
  */
 class CheckInUseCase
 {
     public function __construct(
         private readonly UpdateAppointmentStatusUseCase $updateAppointmentStatusUseCase,
         private readonly ArrivalEventRepositoryInterface $arrivalEventRepository,
+        private readonly EncounterResolverService $encounterResolverService,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
     ) {}
 
@@ -60,6 +74,13 @@ class CheckInUseCase
                 'recorded_by_user_id' => $actorId,
                 'verification_notes' => $verificationNotes,
             ]);
+
+            $this->encounterResolverService->findOrCreateForVisit(
+                patientId: (string) $appointment['patient_id'],
+                appointmentId: $appointmentId,
+                admissionId: null,
+                actorId: $actorId,
+            );
 
             return $appointment;
         });
