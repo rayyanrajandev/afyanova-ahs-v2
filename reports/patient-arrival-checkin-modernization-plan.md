@@ -150,15 +150,17 @@ resources/js/components/reception/
 
 Effort figures are rough order-of-magnitude placeholders, consistent with every other plan in this repo's convention (no team velocity data exists to ground them precisely).
 
-| Phase | Content | Depends on | Risk | Rough effort |
-|---|---|---|---|---|
-| **0 — Security fix** | Remove `triageVitalsSummary`/`triageNotes` from `UpdateAppointmentRequest`; remove the auto-stamp block in `AppointmentController::update()` | — | Low | Hours |
-| **1 — Arrival event + atomic check-in** | `arrival_events` migration, `CheckInUseCase`, `RegisterWalkInAndCheckInUseCase` | — | Low | 2–3 days |
-| **2 — Status state machine** | `AppointmentStatus::canTransitionTo()`, wired into `UpdateAppointmentStatusUseCase` | — | Low | 1–2 days |
-| **3 — Earlier encounter resolution (optional)** | Call `EncounterResolverService::findOrCreateForVisit()` from `CheckInUseCase` instead of only from clinician-gated endpoints | 1 | **Medium** — touches a deliberately race-hardened, permission-boundaried service; requires a permission-model decision (§5) | 3–5 days once decided |
-| **4 — Queue read-model** | `visit_queue_entries` migration + read endpoint, priority/wait-time ordering | 1 | Medium | 1–1.5 weeks |
-| **5 — Mode A→B→C automation** | `AppointmentCheckedIn`/`AppointmentStatusChanged` events; Mode B shadow-log listener; Mode C skeleton-record creation (opt-in) | 1, 4 | Medium — same staged-trust discipline as the encounter canonical-state work | Mode B: 3–5 days. Mode C: 1 week, only after Mode B soak |
-| **6 — Frontend rebuild** | Composables (§3.4), `ArrivalHandoffSheet.vue`, `ReceptionQueueList.vue`, dead-link cleanup | 1, 4 | Low–Medium | 2–3 weeks (two large existing pages, more surface than a single-page rebuild like Patient Chart) |
+| Phase | Content | Depends on | Risk | Rough effort | Status |
+|---|---|---|---|---|---|
+| **0 — Security fix** | Remove `triageVitalsSummary`/`triageNotes` from `UpdateAppointmentRequest`; remove the auto-stamp block in `AppointmentController::update()` | — | Low | Hours | **Done** |
+| **1 — Arrival event + atomic check-in** | `arrival_events` migration, `CheckInUseCase`, `RegisterWalkInAndCheckInUseCase` | — | Low | 2–3 days | **Done** |
+| **2 — Status state machine** | `AppointmentStatus::canTransitionTo()`, wired into `UpdateAppointmentStatusUseCase` | — | Low | 1–2 days | **Done** |
+| **3 — Earlier encounter resolution (optional)** | Call `EncounterResolverService::findOrCreateForVisit()` from `CheckInUseCase` instead of only from clinician-gated endpoints | 1 | **Medium** — touches a deliberately race-hardened, permission-boundaried service; requires a permission-model decision (§5) | 3–5 days once decided | Blocked on decision |
+| **4 — Queue read-model** | `visit_queue_entries` migration + read endpoint, priority/wait-time ordering | 1 | Medium | 1–1.5 weeks | Blocked on decision (queue-priority ranking scheme, §5) |
+| **5 — Mode A→B→C automation** | `AppointmentCheckedIn`/`AppointmentStatusChanged` events; Mode B shadow-log listener; Mode C skeleton-record creation (opt-in) | 1, 4 | Medium — same staged-trust discipline as the encounter canonical-state work | Mode B: 3–5 days. Mode C: 1 week, only after Mode B soak | Blocked on Phase 4 |
+| **6 — Frontend rebuild** | Composables (§3.4), `ArrivalHandoffSheet.vue`, `ReceptionQueueList.vue`, dead-link cleanup | 1, 4 | Low–Medium | 2–3 weeks (two large existing pages, more surface than a single-page rebuild like Patient Chart) | Blocked on naming/routing decision, §5 |
+
+**Update**: Phases 0–2 are implemented and merged. Every remaining phase requires a product/clinical decision before it can start (§5) — none of the decisions have been made yet, so no further phase is currently unblocked. This is not an engineering stopping point of convenience; Phase 4's own dependents (5, 6) inherit its blocker even though the plan's §7 originally suggested Mode B of Phase 5 was decision-free, its dependency on Phase 4 means it isn't in practice.
 
 ---
 
