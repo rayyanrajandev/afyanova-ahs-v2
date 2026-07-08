@@ -2,6 +2,7 @@
 
 namespace App\Modules\Encounter\Presentation\Http\Requests;
 
+use App\Modules\Encounter\Domain\ValueObjects\EncounterDisposition;
 use App\Modules\Encounter\Domain\ValueObjects\EncounterStatus;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -45,6 +46,14 @@ class UpdateEncounterStatusRequest extends FormRequest
             ],
             'reason' => ['nullable', 'string', 'max:255', 'required_if:status,reopened'],
             'acknowledgeCloseGaps' => ['nullable', 'boolean'],
+            // Not required_if here — closing without a disposition is blocked
+            // via the close-readiness checklist (a 'disposition_documented'
+            // item, see GetEncounterCloseReadinessUseCase), which returns the
+            // richer ENCOUNTER_CLOSE_BLOCKED payload the frontend checklist
+            // dialog already knows how to render, instead of a generic
+            // validation error.
+            'disposition' => ['nullable', 'string', Rule::in(EncounterDisposition::values())],
+            'dispositionNotes' => ['nullable', 'string', 'max:2000'],
         ];
     }
 }

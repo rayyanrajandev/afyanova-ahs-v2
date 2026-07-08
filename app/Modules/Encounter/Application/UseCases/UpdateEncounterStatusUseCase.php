@@ -19,6 +19,8 @@ class UpdateEncounterStatusUseCase
         ?string $reason,
         ?int $actorId = null,
         bool $acknowledgeCloseGaps = false,
+        ?string $disposition = null,
+        ?string $dispositionNotes = null,
     ): ?array {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
 
@@ -30,6 +32,8 @@ class UpdateEncounterStatusUseCase
                 reason: $reason,
                 actorId: $actorId,
                 acknowledgeCloseGaps: $acknowledgeCloseGaps,
+                disposition: $disposition,
+                dispositionNotes: $dispositionNotes,
             ),
             'reopened', EncounterStatus::IN_PROGRESS->value => $this->encounterLifecycleService->reopen(
                 encounterId: $id,

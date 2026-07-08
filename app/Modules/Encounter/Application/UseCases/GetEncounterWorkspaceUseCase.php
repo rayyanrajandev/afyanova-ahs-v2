@@ -2,13 +2,16 @@
 
 namespace App\Modules\Encounter\Application\UseCases;
 
+use App\Modules\Admission\Infrastructure\Models\AdmissionModel;
 use App\Modules\Encounter\Application\UseCases\GetEncounterCloseReadinessUseCase;
 use App\Modules\Encounter\Application\Services\EncounterResolverService;
+use App\Modules\Encounter\Infrastructure\Models\EncounterDiagnosisModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\MedicalRecord\Domain\Repositories\MedicalRecordRepositoryInterface;
 use App\Modules\MedicalRecord\Domain\Services\AppointmentLookupServiceInterface;
 use App\Modules\MedicalRecord\Domain\ValueObjects\MedicalRecordNoteType;
 use App\Modules\MedicalRecord\Domain\ValueObjects\MedicalRecordStatus;
+use App\Modules\Patient\Domain\Repositories\PatientRepositoryInterface;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
 use App\Modules\TheatreProcedure\Infrastructure\Models\TheatreProcedureModel;
@@ -24,6 +27,7 @@ class GetEncounterWorkspaceUseCase
         private readonly MedicalRecordRepositoryInterface $medicalRecordRepository,
         private readonly AppointmentLookupServiceInterface $appointmentLookupService,
         private readonly GetEncounterCloseReadinessUseCase $encounterCloseReadinessUseCase,
+        private readonly PatientRepositoryInterface $patientRepository,
     ) {}
 
     /**
@@ -45,16 +49,40 @@ class GetEncounterWorkspaceUseCase
             $appointment = $this->appointmentLookupService->findById($appointmentId);
         }
 
+        $admission = null;
+        $admissionId = trim((string) ($encounterArray['admission_id'] ?? ''));
+        if ($admissionId !== '') {
+            $admission = AdmissionModel::query()->find($admissionId)?->toArray();
+        }
+
         return [
             'encounter' => $encounterArray,
+            'patient' => $patientId !== '' ? $this->patientRepository->findById($patientId) : null,
             'primaryMedicalRecord' => $this->resolvePrimaryMedicalRecord($encounterId, $patientId),
             'appointment' => $appointment,
+            'admission' => $admission,
+            'diagnoses' => $this->loadDiagnoses($encounterId),
             'laboratoryOrders' => $this->loadLaboratoryOrders($encounterId),
             'pharmacyOrders' => $this->loadPharmacyOrders($encounterId),
             'radiologyOrders' => $this->loadRadiologyOrders($encounterId),
             'theatreProcedures' => $this->loadTheatreProcedures($encounterId),
             'closeReadiness' => $this->encounterCloseReadinessUseCase->execute($encounterId),
         ];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function loadDiagnoses(string $encounterId): array
+    {
+        return EncounterDiagnosisModel::query()
+            ->where('encounter_id', $encounterId)
+            ->with('recordedBy:id,name')
+            ->orderByRaw("CASE WHEN diagnosis_type = 'primary' THEN 0 ELSE 1 END")
+            ->orderByDesc('recorded_at')
+            ->get()
+            ->map(static fn (EncounterDiagnosisModel $diagnosis): array => $diagnosis->toArray())
+            ->all();
     }
 
     /**

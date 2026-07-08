@@ -24,6 +24,8 @@ const props = defineProps<{
     open: boolean;
     readiness: EncounterCloseReadiness | null;
     reason: string;
+    disposition: string;
+    dispositionNotes: string;
     submitting?: boolean;
     error?: string | null;
 }>();
@@ -31,8 +33,20 @@ const props = defineProps<{
 const emit = defineEmits<{
     'update:open': [value: boolean];
     'update:reason': [value: string];
+    'update:disposition': [value: string];
+    'update:dispositionNotes': [value: string];
     confirm: [];
 }>();
+
+const dispositionOptions = [
+    { value: 'discharged', label: 'Discharged' },
+    { value: 'admitted', label: 'Admitted' },
+    { value: 'transferred', label: 'Transferred' },
+    { value: 'referred', label: 'Referred' },
+    { value: 'deceased', label: 'Deceased' },
+    { value: 'left_against_medical_advice', label: 'Left against medical advice' },
+    { value: 'other', label: 'Other' },
+];
 
 const blockingItems = computed(() =>
     encounterCloseReadinessBlockingItems(props.readiness),
@@ -40,12 +54,28 @@ const blockingItems = computed(() =>
 const warningItems = computed(() =>
     encounterCloseReadinessWarningItems(props.readiness),
 );
+/**
+ * disposition_documented is a required-block item, but it can only ever be
+ * satisfied by what the user is about to submit in this same dialog — so it's
+ * excluded from the "still blocked" checks below and handled by its own
+ * dedicated field instead.
+ */
+const otherBlockingItems = computed(() =>
+    blockingItems.value.filter((item) => item.id !== 'disposition_documented'),
+);
+const requiresAcknowledgement = computed(
+    () => otherBlockingItems.value.length === 0 && warningItems.value.length > 0,
+);
 const canConfirm = computed(() => {
-    if (!props.readiness?.canClose) {
+    if (otherBlockingItems.value.length > 0) {
         return false;
     }
 
-    if (!props.readiness.requiresAcknowledgement) {
+    if (props.disposition.trim() === '') {
+        return false;
+    }
+
+    if (!requiresAcknowledgement.value) {
         return true;
     }
 
@@ -68,7 +98,7 @@ function closeDialog(): void {
             </DialogHeader>
 
             <div class="space-y-4">
-                <Alert v-if="blockingItems.length > 0" variant="destructive">
+                <Alert v-if="otherBlockingItems.length > 0" variant="destructive">
                     <AlertTitle>Close blocked</AlertTitle>
                     <AlertDescription>
                         Resolve the required items below before this encounter can be closed.
@@ -116,8 +146,29 @@ function closeDialog(): void {
                     </div>
                 </div>
 
+                <div v-if="otherBlockingItems.length === 0" class="space-y-2">
+                    <Label for="encounter-close-disposition">Disposition</Label>
+                    <select
+                        id="encounter-close-disposition"
+                        :value="disposition"
+                        class="h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                        @change="emit('update:disposition', ($event.target as HTMLSelectElement).value)"
+                    >
+                        <option value="" disabled>Select how this encounter concluded</option>
+                        <option v-for="option in dispositionOptions" :key="option.value" :value="option.value">
+                            {{ option.label }}
+                        </option>
+                    </select>
+                    <Textarea
+                        :model-value="dispositionNotes"
+                        rows="2"
+                        placeholder="Optional disposition notes"
+                        @update:model-value="emit('update:dispositionNotes', String($event ?? ''))"
+                    />
+                </div>
+
                 <div
-                    v-if="warningItems.length > 0 && readiness?.canClose"
+                    v-if="warningItems.length > 0 && otherBlockingItems.length === 0"
                     class="space-y-2"
                 >
                     <Label for="encounter-close-reason">Close-out reason</Label>
@@ -144,7 +195,7 @@ function closeDialog(): void {
                     :disabled="!canConfirm || submitting"
                     @click="emit('confirm')"
                 >
-                    {{ readiness?.requiresAcknowledgement ? 'Acknowledge and close' : 'Close encounter' }}
+                    {{ requiresAcknowledgement ? 'Acknowledge and close' : 'Close encounter' }}
                 </Button>
             </DialogFooter>
         </DialogContent>

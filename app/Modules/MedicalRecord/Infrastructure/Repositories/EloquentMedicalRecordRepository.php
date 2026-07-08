@@ -57,6 +57,25 @@ class EloquentMedicalRecordRepository implements MedicalRecordRepositoryInterfac
             ?->toArray();
     }
 
+    public function findLatestDraftForEncounter(
+        string $patientId,
+        string $encounterId,
+        string $recordType,
+    ): ?array {
+        $query = MedicalRecordModel::query();
+        $this->applyPlatformScopeIfEnabled($query);
+
+        return $query
+            ->where('patient_id', $patientId)
+            ->where('encounter_id', $encounterId)
+            ->where('record_type', $recordType)
+            ->where('status', MedicalRecordStatus::DRAFT->value)
+            ->orderByDesc('updated_at')
+            ->orderByDesc('created_at')
+            ->first()
+            ?->toArray();
+    }
+
     public function hasDraftConsultationNoteForAppointment(string $appointmentId): bool
     {
         $query = MedicalRecordModel::query();
@@ -141,6 +160,36 @@ class EloquentMedicalRecordRepository implements MedicalRecordRepositoryInterfac
         });
 
         return $result;
+    }
+
+    public function updateWithLock(string $id, callable $mutator): array
+    {
+        return DB::transaction(function () use ($id, $mutator): array {
+            $query = MedicalRecordModel::query();
+            $this->applyPlatformScopeIfEnabled($query);
+
+            /** @var MedicalRecordModel|null $record */
+            $record = $query
+                ->whereKey($id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($record === null) {
+                return ['outcome' => 'missing'];
+            }
+
+            $before = $record->toArray();
+            $attributes = $mutator($before);
+
+            $record->fill($attributes);
+            $record->save();
+
+            return [
+                'outcome' => 'updated',
+                'before' => $before,
+                'record' => $record->fresh()?->toArray() ?? $record->toArray(),
+            ];
+        });
     }
 
     private function updatedAtMatches(mixed $current, mixed $expected): bool

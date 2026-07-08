@@ -3,9 +3,11 @@
 namespace App\Modules\Encounter\Infrastructure\Models;
 
 use App\Models\User;
+use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class EncounterModel extends Model
 {
@@ -29,9 +31,12 @@ class EncounterModel extends Model
         'admission_id',
         'primary_clinician_user_id',
         'status',
+        'type',
         'opened_at',
         'closed_at',
         'status_reason',
+        'disposition',
+        'disposition_notes',
     ];
 
     /**
@@ -50,5 +55,15 @@ class EncounterModel extends Model
     public function primaryClinician(): BelongsTo
     {
         return $this->belongsTo(User::class, 'primary_clinician_user_id');
+    }
+
+    public function patient(): BelongsTo
+    {
+        return $this->belongsTo(PatientModel::class, 'patient_id');
+    }
+
+    public function diagnoses(): HasMany
+    {
+        return $this->hasMany(EncounterDiagnosisModel::class, 'encounter_id');
     }
 }

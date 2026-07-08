@@ -8,29 +8,60 @@ use App\Modules\Encounter\Application\Exceptions\InvalidEncounterStatusTransitio
 use App\Modules\Encounter\Application\UseCases\GetEncounterUseCase;
 use App\Modules\Encounter\Application\UseCases\GetEncounterWorkspaceUseCase;
 use App\Modules\Encounter\Application\UseCases\ListEncounterAuditLogsUseCase;
+use App\Modules\Encounter\Application\UseCases\ListEncounterStatusCountsUseCase;
+use App\Modules\Encounter\Application\UseCases\ListEncountersUseCase;
 use App\Modules\Encounter\Application\UseCases\ResolveEncounterForAppointmentUseCase;
 use App\Modules\Encounter\Application\UseCases\UpdateEncounterStatusUseCase;
 use App\Modules\MedicalRecord\Application\Exceptions\AppointmentNotEligibleForMedicalRecordException;
 use App\Modules\Encounter\Presentation\Http\Requests\UpdateEncounterStatusRequest;
 use App\Modules\Encounter\Presentation\Http\Transformers\EncounterAuditLogResponseTransformer;
+use App\Modules\Encounter\Presentation\Http\Transformers\EncounterListItemResponseTransformer;
 use App\Modules\Encounter\Presentation\Http\Transformers\EncounterResponseTransformer;
 use App\Modules\Encounter\Presentation\Http\Transformers\EncounterWorkspaceResponseTransformer;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
+use App\Support\CanonicalEncounterState\CanonicalEncounterShadowLogger;
+use App\Support\CanonicalEncounterState\CanonicalEncounterStateResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class EncounterController extends Controller
 {
+    public function index(Request $request, ListEncountersUseCase $useCase): JsonResponse
+    {
+        $result = $useCase->execute($request->all());
+
+        return response()->json([
+            'data' => array_map([EncounterListItemResponseTransformer::class, 'transform'], $result['data']),
+            'meta' => $result['meta'],
+        ]);
+    }
+
+    public function statusCounts(Request $request, ListEncounterStatusCountsUseCase $useCase): JsonResponse
+    {
+        $counts = $useCase->execute($request->all());
+
+        return response()->json([
+            'data' => $counts,
+        ]);
+    }
+
     public function show(
         Request $request,
         string $id,
         GetEncounterUseCase $useCase,
         GetEncounterWorkspaceUseCase $workspaceUseCase,
+        CanonicalEncounterStateResolver $canonicalStateResolver,
+        CanonicalEncounterShadowLogger $canonicalStateLogger,
     ): JsonResponse {
         if ($request->query('view') === 'workspace') {
             $workspace = $workspaceUseCase->execute($id);
             abort_if($workspace === null, 404, 'Encounter not found.');
+
+            // Shadow Mode only (Mode B) — non-blocking, never affects this response.
+            // See reports/encounter-state-machine-design/01-integration-and-migration-architecture.md §3.
+            $this->runCanonicalEncounterStateShadowEvaluation($id, $canonicalStateResolver, $canonicalStateLogger);
 
             return response()->json([
                 'data' => EncounterWorkspaceResponseTransformer::transform($workspace),
@@ -90,6 +121,8 @@ class EncounterController extends Controller
                 reason: $request->input('reason'),
                 actorId: $request->user()?->id,
                 acknowledgeCloseGaps: (bool) $request->boolean('acknowledgeCloseGaps'),
+                disposition: $request->input('disposition'),
+                dispositionNotes: $request->input('dispositionNotes'),
             );
         } catch (EncounterCloseBlockedException $exception) {
             return response()->json([
@@ -159,5 +192,30 @@ class EncounterController extends Controller
                 return $useCase->execute(encounterId: $id, filters: $pageFilters);
             },
         );
+    }
+
+    /**
+     * Canonical Encounter State — Shadow Mode only. Config-gated (off by default,
+     * i.e. Mode A / Legacy Only unless CANONICAL_ENCOUNTER_SHADOW_MODE_ENABLED=true),
+     * fully try/catch isolated, and never merged into any response. See
+     * reports/encounter-state-machine-design/01-integration-and-migration-architecture.md.
+     */
+    private function runCanonicalEncounterStateShadowEvaluation(
+        string $encounterId,
+        CanonicalEncounterStateResolver $resolver,
+        CanonicalEncounterShadowLogger $logger,
+    ): void {
+        if (! config('canonical_encounter_state.shadow_mode_enabled')) {
+            return;
+        }
+
+        try {
+            $snapshot = $resolver->resolve($encounterId);
+            if ($snapshot !== null) {
+                $logger->log($snapshot);
+            }
+        } catch (Throwable $exception) {
+            $logger->logFailure($encounterId, $exception);
+        }
     }
 }

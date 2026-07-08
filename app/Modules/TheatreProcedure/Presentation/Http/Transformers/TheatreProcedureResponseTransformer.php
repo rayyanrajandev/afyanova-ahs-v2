@@ -22,6 +22,7 @@ class TheatreProcedureResponseTransformer
             'patientLabel' => self::patientLabel($patient, $procedure['patient_id'] ?? null),
             'admissionId' => $procedure['admission_id'] ?? null,
             'appointmentId' => $procedure['appointment_id'] ?? null,
+            'encounterId' => $procedure['encounter_id'] ?? null,
             'orderSessionId' => $procedure['clinical_order_session_id'] ?? null,
             'replacesOrderId' => $procedure['replaces_order_id'] ?? null,
             'addOnToOrderId' => $procedure['add_on_to_order_id'] ?? null,

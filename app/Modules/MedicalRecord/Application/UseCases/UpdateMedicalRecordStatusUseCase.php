@@ -27,44 +27,54 @@ class UpdateMedicalRecordStatusUseCase
     {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
 
-        $existing = $this->medicalRecordRepository->findById($id);
-        if (! $existing) {
-            return null;
-        }
+        $requestedStatus = strtolower(trim($status));
 
-        $this->assertConsultationOwnershipForEncounterWrite(
-            $existing['appointment_id'] ?? null,
-            $actorId,
+        // The ownership check, transition validation, and payload construction all run
+        // inside the mutator, against the record as read under a row lock — not against
+        // a value read before any lock was taken. This closes the race where a concurrent
+        // content autosave (which also locks the row, via updateWithOptimisticLock) could
+        // change status/content between an earlier stale read and this write. See
+        // reports/clinical-note-audit/15-critical-system-integrity-review.md, finding C-1.
+        $result = $this->medicalRecordRepository->updateWithLock(
+            $id,
+            function (array $existing) use ($status, $reason, $requestedStatus, $actorId): array {
+                $this->assertConsultationOwnershipForEncounterWrite(
+                    $existing['appointment_id'] ?? null,
+                    $actorId,
+                );
+
+                $currentStatus = strtolower(trim((string) ($existing['status'] ?? '')));
+                $this->assertValidStatusTransition($currentStatus, $requestedStatus);
+
+                $statusUpdatePayload = [
+                    'status' => $status,
+                    'status_reason' => $reason,
+                ];
+
+                if ($requestedStatus === MedicalRecordStatus::AMENDED->value) {
+                    $statusUpdatePayload['status'] = MedicalRecordStatus::DRAFT->value;
+                }
+
+                if ($requestedStatus === MedicalRecordStatus::FINALIZED->value) {
+                    $wasPreviouslySigned = ($existing['signed_at'] ?? null) !== null;
+                    if ($wasPreviouslySigned) {
+                        $statusUpdatePayload['status'] = MedicalRecordStatus::AMENDED->value;
+                    }
+
+                    $statusUpdatePayload['signed_by_user_id'] = $actorId;
+                    $statusUpdatePayload['signed_at'] = now();
+                }
+
+                return $statusUpdatePayload;
+            },
         );
 
-        $currentStatus = strtolower(trim((string) ($existing['status'] ?? '')));
-        $requestedStatus = strtolower(trim($status));
-        $this->assertValidStatusTransition($currentStatus, $requestedStatus);
-
-        $statusUpdatePayload = [
-            'status' => $status,
-            'status_reason' => $reason,
-        ];
-
-        if ($requestedStatus === MedicalRecordStatus::AMENDED->value) {
-            $statusUpdatePayload['status'] = MedicalRecordStatus::DRAFT->value;
-        }
-
-        if ($requestedStatus === MedicalRecordStatus::FINALIZED->value) {
-            $wasPreviouslySigned = ($existing['signed_at'] ?? null) !== null;
-            if ($wasPreviouslySigned) {
-                $statusUpdatePayload['status'] = MedicalRecordStatus::AMENDED->value;
-            }
-
-            $statusUpdatePayload['signed_by_user_id'] = $actorId;
-            $statusUpdatePayload['signed_at'] = now();
-        }
-
-        $updated = $this->medicalRecordRepository->update($id, $statusUpdatePayload);
-
-        if (! $updated) {
+        if ($result['outcome'] === 'missing') {
             return null;
         }
+
+        $existing = $result['before'];
+        $updated = $result['record'];
 
         $reasonRequired = in_array($status, [
             MedicalRecordStatus::AMENDED->value,
@@ -107,6 +117,20 @@ class UpdateMedicalRecordStatusUseCase
                     : null,
                 actorId: $actorId,
             );
+
+            // Signing off (finalize — whether it lands as finalized, or as
+            // amended when re-signing an already-signed note) is the moment
+            // the note's single diagnosisCode should flow into the
+            // encounter's structured problem list, not while still a draft.
+            if ($requestedStatus === MedicalRecordStatus::FINALIZED->value) {
+                $this->encounterLifecycleService->syncPrimaryDiagnosisFromMedicalRecord(
+                    encounterId: $encounterId,
+                    diagnosisCode: is_string($updated['diagnosis_code'] ?? null)
+                        ? $updated['diagnosis_code']
+                        : null,
+                    actorId: $actorId,
+                );
+            }
         }
 
         return $updated;

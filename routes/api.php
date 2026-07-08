@@ -25,6 +25,7 @@ use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventorySupp
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryWarehouseController;
 use App\Modules\Encounter\Presentation\Http\Controllers\EncounterClinicalAttachmentController;
 use App\Modules\Encounter\Presentation\Http\Controllers\EncounterController;
+use App\Modules\Encounter\Presentation\Http\Controllers\EncounterDiagnosisController;
 use App\Modules\Laboratory\Presentation\Http\Controllers\LaboratoryOrderController;
 use App\Modules\MedicalRecord\Presentation\Http\Controllers\MedicalRecordController;
 use App\Modules\Patient\Presentation\Http\Controllers\PatientController;
@@ -774,6 +775,12 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:medical.records.attest')
         ->name('medical-records.signer-attestations.store');
 
+    Route::get('encounters', [EncounterController::class, 'index'])
+        ->middleware('can:medical.records.read')
+        ->name('encounters.index');
+    Route::get('encounters/status-counts', [EncounterController::class, 'statusCounts'])
+        ->middleware('can:medical.records.read')
+        ->name('encounters.status-counts');
     Route::get('encounters/by-appointment/{appointmentId}', [EncounterController::class, 'resolveForAppointment'])
         ->middleware('can:medical.records.read')
         ->name('encounters.by-appointment.resolve');
@@ -806,6 +813,12 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('encounters/{id}/clinical-documents/{documentId}/download', [EncounterClinicalAttachmentController::class, 'download'])
         ->middleware('can:medical.records.read')
         ->name('encounters.clinical-documents.download');
+    Route::post('encounters/{id}/diagnoses', [EncounterDiagnosisController::class, 'store'])
+        ->middleware('can:medical.records.create')
+        ->name('encounters.diagnoses.store');
+    Route::delete('encounters/{id}/diagnoses/{diagnosisId}', [EncounterDiagnosisController::class, 'destroy'])
+        ->middleware('can:medical.records.update')
+        ->name('encounters.diagnoses.destroy');
 
     Route::get('laboratory-orders', [LaboratoryOrderController::class, 'index'])
         ->middleware('can:laboratory.orders.read')

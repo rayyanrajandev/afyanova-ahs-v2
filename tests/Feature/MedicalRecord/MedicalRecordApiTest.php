@@ -958,6 +958,7 @@ it('syncs encounter lifecycle when consultation note is finalized and closed', f
             'status' => 'closed',
             'acknowledgeCloseGaps' => true,
             'reason' => 'Visit complete',
+            'disposition' => 'discharged',
         ])
         ->assertOk()
         ->assertJsonPath('data.status', 'closed')
@@ -1168,6 +1169,7 @@ it('requires acknowledgement when closing with documentation or billing warnings
     $this->actingAs($user)
         ->patchJson('/api/v1/encounters/'.$created['encounterId'].'/status', [
             'status' => 'closed',
+            'disposition' => 'discharged',
         ])
         ->assertStatus(422)
         ->assertJsonPath('code', 'ENCOUNTER_CLOSE_BLOCKED')
@@ -1178,6 +1180,7 @@ it('requires acknowledgement when closing with documentation or billing warnings
             'status' => 'closed',
             'acknowledgeCloseGaps' => true,
             'reason' => 'Patient left before billing capture completed',
+            'disposition' => 'discharged',
         ])
         ->assertOk()
         ->assertJsonPath('data.status', 'closed')
@@ -1221,6 +1224,7 @@ it('writes encounter audit logs for open close and reopen lifecycle events', fun
             'status' => 'closed',
             'acknowledgeCloseGaps' => true,
             'reason' => 'Visit complete',
+            'disposition' => 'discharged',
         ])
         ->assertOk();
 

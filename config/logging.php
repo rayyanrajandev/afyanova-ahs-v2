@@ -97,6 +97,18 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Canonical Encounter State Machine — Shadow Mode diagnostics only.
+        // Deliberately separate from the clinical audit-log tables/channels above:
+        // this channel carries system-diagnostic evaluation output, not clinical
+        // audit trail. See reports/encounter-state-machine-design/01-integration-and-migration-architecture.md §4.1.
+        'canonical_encounter_shadow' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/canonical_encounter_shadow.log'),
+            'level' => env('CANONICAL_ENCOUNTER_SHADOW_LOG_LEVEL', 'info'),
+            'days' => env('CANONICAL_ENCOUNTER_SHADOW_LOG_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

@@ -38,7 +38,7 @@ class GetEncounterCloseReadinessUseCase
     /**
      * @return array<string, mixed>|null
      */
-    public function execute(string $encounterId): ?array
+    public function execute(string $encounterId, ?string $dispositionOverride = null): ?array
     {
         $encounter = $this->encounterResolverService->findById($encounterId);
         if ($encounter === null) {
@@ -60,6 +60,14 @@ class GetEncounterCloseReadinessUseCase
 
         $pendingOrderCount = $this->countPendingOrders($encounterId);
         $billingSummary = $this->resolveBillingSummary($encounter, $patientId);
+
+        // dispositionOverride lets a close attempt (which submits disposition
+        // in the same request) be judged against what's about to be saved,
+        // not stale persisted state — see EncounterLifecycleService::close().
+        $dispositionValue = $dispositionOverride !== null
+            ? trim($dispositionOverride)
+            : trim((string) ($encounterArray['disposition'] ?? ''));
+        $dispositionDocumented = $dispositionValue !== '';
 
         $items = [
             $this->buildItem(
@@ -107,6 +115,15 @@ class GetEncounterCloseReadinessUseCase
                         (int) $billingSummary['pendingCandidates'],
                         (int) $billingSummary['pendingCandidates'] === 1 ? '' : 's',
                     ),
+            ),
+            $this->buildItem(
+                id: 'disposition_documented',
+                label: 'Disposition recorded',
+                severity: 'block',
+                passed: $dispositionDocumented,
+                message: $dispositionDocumented
+                    ? 'Encounter disposition has been recorded.'
+                    : 'Record how this encounter concluded (e.g. discharged, admitted, transferred, referred) before closing.',
             ),
         ];
 

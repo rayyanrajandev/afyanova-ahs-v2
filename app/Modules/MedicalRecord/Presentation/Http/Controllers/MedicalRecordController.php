@@ -90,7 +90,20 @@ class MedicalRecordController extends Controller
         } catch (TheatreProcedureNotEligibleForMedicalRecordException $exception) {
             return $this->validationError('theatreProcedureId', $exception->getMessage());
         } catch (DuplicateEncounterDraftMedicalRecordException $exception) {
-            return $this->validationError('appointmentId', $exception->getMessage());
+            // This exception now fires for both appointment-linked and admission-linked
+            // visits (broadened in the C-16 fix — see
+            // reports/clinical-note-audit/15-critical-system-integrity-review.md).
+            // Key the error to whichever visit-context field the request actually
+            // supplied, rather than always assuming appointmentId.
+            $conflictField = trim((string) ($request->validated()['appointmentId'] ?? '')) !== ''
+                ? 'appointmentId'
+                : 'admissionId';
+
+            // Distinct code (not the generic VALIDATION_ERROR) so callers can tell this
+            // apart from a real field-validation problem and recover by looking up the
+            // existing draft, instead of just surfacing an error. See the frontend fix
+            // in useMedicalRecordDraft.ts / reports/clinical-notes-frontend-rebuild-plan.md.
+            return $this->validationError($conflictField, $exception->getMessage(), 'MEDICAL_RECORD_DUPLICATE_DRAFT');
         } catch (InvalidMedicalRecordTypeException $exception) {
             return $this->validationError('recordType', $exception->getMessage());
         } catch (InvalidMedicalRecordDiagnosisCodeException $exception) {
@@ -305,11 +318,11 @@ class MedicalRecordController extends Controller
         );
     }
 
-    private function validationError(string $field, string $message): JsonResponse
+    private function validationError(string $field, string $message, string $code = 'VALIDATION_ERROR'): JsonResponse
     {
         return response()->json([
             'message' => $message,
-            'code' => 'VALIDATION_ERROR',
+            'code' => $code,
             'errors' => [
                 $field => [$message],
             ],

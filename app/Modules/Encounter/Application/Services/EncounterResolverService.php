@@ -3,7 +3,9 @@
 namespace App\Modules\Encounter\Application\Services;
 
 use App\Modules\Encounter\Domain\Repositories\EncounterAuditLogRepositoryInterface;
+use App\Modules\Encounter\Domain\Services\AppointmentLookupServiceInterface;
 use App\Modules\Encounter\Domain\ValueObjects\EncounterStatus;
+use App\Modules\Encounter\Domain\ValueObjects\EncounterType;
 use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
 use App\Modules\MedicalRecord\Application\Exceptions\AppointmentNotEligibleForMedicalRecordException;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
@@ -15,6 +17,7 @@ class EncounterResolverService
     public function __construct(
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly EncounterAuditLogRepositoryInterface $encounterAuditLogRepository,
+        private readonly AppointmentLookupServiceInterface $appointmentLookupService,
     ) {}
 
     public function findById(string $encounterId): ?EncounterModel
@@ -99,6 +102,7 @@ class EncounterResolverService
             'admission_id' => $normalizedAdmissionId !== '' ? $normalizedAdmissionId : null,
             'primary_clinician_user_id' => $actorId,
             'status' => EncounterStatus::OPENED->value,
+            'type' => $this->deriveEncounterType($normalizedAppointmentId, $normalizedAdmissionId),
             'opened_at' => now(),
         ]);
 
@@ -117,6 +121,29 @@ class EncounterResolverService
         );
 
         return $encounter;
+    }
+
+    /**
+     * Best-effort derivation at open time, not a re-verifiable clinical
+     * classification — inpatient is certain (admission_id is authoritative),
+     * emergency is a heuristic (department string match, since Appointment
+     * has no structured department FK or emergency flag today).
+     */
+    private function deriveEncounterType(string $appointmentId, string $admissionId): string
+    {
+        if ($admissionId !== '') {
+            return EncounterType::INPATIENT->value;
+        }
+
+        if ($appointmentId !== '') {
+            $appointment = $this->appointmentLookupService->findById($appointmentId);
+            $department = strtolower(trim((string) ($appointment['department'] ?? '')));
+            if (str_contains($department, 'emergency')) {
+                return EncounterType::EMERGENCY->value;
+            }
+        }
+
+        return EncounterType::OUTPATIENT->value;
     }
 
     private function generateEncounterNumber(): string

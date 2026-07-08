@@ -6,7 +6,9 @@ use App\Modules\Encounter\Application\Exceptions\EncounterCloseBlockedException;
 use App\Modules\Encounter\Application\Exceptions\InvalidEncounterStatusTransitionException;
 use App\Modules\Encounter\Application\UseCases\GetEncounterCloseReadinessUseCase;
 use App\Modules\Encounter\Domain\Repositories\EncounterAuditLogRepositoryInterface;
+use App\Modules\Encounter\Domain\ValueObjects\EncounterDiagnosisType;
 use App\Modules\Encounter\Domain\ValueObjects\EncounterStatus;
+use App\Modules\Encounter\Infrastructure\Models\EncounterDiagnosisModel;
 use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
 use App\Modules\MedicalRecord\Domain\ValueObjects\MedicalRecordStatus;
 
@@ -128,6 +130,59 @@ class EncounterLifecycleService
         return $encounter->fresh();
     }
 
+    /**
+     * Keeps the encounter's structured diagnoses list in sync with the note's
+     * single diagnosisCode field whenever a note is signed (finalized, or
+     * re-finalized into amended) — that's the moment the clinician commits to
+     * the documentation, not while it's still a draft. Idempotent: re-signing
+     * the same code repeatedly does not create duplicate rows, it only
+     * (re-)promotes that code to primary, demoting whatever was primary
+     * before it. Deliberately does not run for admission/discharge/progress
+     * notes without a code, or for draft saves.
+     */
+    public function syncPrimaryDiagnosisFromMedicalRecord(
+        string $encounterId,
+        ?string $diagnosisCode,
+        ?int $actorId,
+    ): void {
+        $normalizedCode = strtoupper(trim((string) $diagnosisCode));
+        if ($normalizedCode === '') {
+            return;
+        }
+
+        $matching = EncounterDiagnosisModel::query()
+            ->where('encounter_id', $encounterId)
+            ->get()
+            ->first(
+                static fn (EncounterDiagnosisModel $diagnosis): bool => strtoupper(trim((string) $diagnosis->diagnosis_code)) === $normalizedCode,
+            );
+
+        if ($matching !== null && $matching->diagnosis_type === EncounterDiagnosisType::PRIMARY->value) {
+            return;
+        }
+
+        EncounterDiagnosisModel::query()
+            ->where('encounter_id', $encounterId)
+            ->where('diagnosis_type', EncounterDiagnosisType::PRIMARY->value)
+            ->update(['diagnosis_type' => EncounterDiagnosisType::SECONDARY->value]);
+
+        if ($matching !== null) {
+            $matching->diagnosis_type = EncounterDiagnosisType::PRIMARY->value;
+            $matching->save();
+
+            return;
+        }
+
+        EncounterDiagnosisModel::query()->create([
+            'encounter_id' => $encounterId,
+            'diagnosis_code' => $normalizedCode,
+            'diagnosis_description' => null,
+            'diagnosis_type' => EncounterDiagnosisType::PRIMARY->value,
+            'recorded_by_user_id' => $actorId,
+            'recorded_at' => now(),
+        ]);
+    }
+
     public function markReadyForSign(
         string $encounterId,
         ?string $reason = null,
@@ -193,6 +248,8 @@ class EncounterLifecycleService
         ?string $reason,
         ?int $actorId,
         bool $acknowledgeCloseGaps = false,
+        ?string $disposition = null,
+        ?string $dispositionNotes = null,
     ): ?EncounterModel {
         $encounter = $this->findById($encounterId);
         if ($encounter === null) {
@@ -217,7 +274,7 @@ class EncounterLifecycleService
             );
         }
 
-        $readiness = $this->encounterCloseReadinessUseCase->execute($encounterId);
+        $readiness = $this->encounterCloseReadinessUseCase->execute($encounterId, dispositionOverride: $disposition);
         if (is_array($readiness)) {
             if (! (bool) ($readiness['canClose'] ?? false)) {
                 throw new EncounterCloseBlockedException(
@@ -253,6 +310,12 @@ class EncounterLifecycleService
         $encounter->status_reason = $reason !== null && trim($reason) !== ''
             ? trim($reason)
             : $encounter->status_reason;
+        $encounter->disposition = $disposition !== null && trim($disposition) !== ''
+            ? trim($disposition)
+            : $encounter->disposition;
+        $encounter->disposition_notes = $dispositionNotes !== null && trim($dispositionNotes) !== ''
+            ? trim($dispositionNotes)
+            : $encounter->disposition_notes;
 
         if ($actorId !== null && (int) ($encounter->primary_clinician_user_id ?? 0) <= 0) {
             $encounter->primary_clinician_user_id = $actorId;
@@ -270,6 +333,7 @@ class EncounterLifecycleService
                     'status' => EncounterStatus::CLOSED->value,
                     'closed_at' => $encounter->closed_at?->toISOString(),
                     'status_reason' => $encounter->status_reason,
+                    'disposition' => $encounter->disposition,
                 ],
             ],
             metadata: [

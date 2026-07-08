@@ -18,16 +18,24 @@ class EncounterWorkspaceResponseTransformer
     public static function transform(array $workspace): array
     {
         $encounter = is_array($workspace['encounter'] ?? null) ? $workspace['encounter'] : [];
+        $patient = is_array($workspace['patient'] ?? null) ? $workspace['patient'] : null;
         $appointment = is_array($workspace['appointment'] ?? null) ? $workspace['appointment'] : null;
+        $admission = is_array($workspace['admission'] ?? null) ? $workspace['admission'] : null;
         $primaryMedicalRecord = is_array($workspace['primaryMedicalRecord'] ?? null)
             ? $workspace['primaryMedicalRecord']
             : null;
 
         return [
             'encounter' => EncounterResponseTransformer::transform($encounter),
+            'patient' => $patient !== null ? self::transformPatientSummary($patient) : null,
             'appointment' => $appointment !== null
                 ? AppointmentResponseTransformer::transform($appointment)
                 : null,
+            'admission' => $admission !== null ? self::transformAdmissionSummary($admission) : null,
+            'diagnoses' => array_map(
+                static fn (array $diagnosis): array => EncounterDiagnosisResponseTransformer::transform($diagnosis),
+                is_array($workspace['diagnoses'] ?? null) ? $workspace['diagnoses'] : [],
+            ),
             'primaryMedicalRecord' => $primaryMedicalRecord !== null
                 ? MedicalRecordResponseTransformer::transform($primaryMedicalRecord)
                 : null,
@@ -50,6 +58,44 @@ class EncounterWorkspaceResponseTransformer
             'closeReadiness' => EncounterCloseReadinessResponseTransformer::transform(
                 is_array($workspace['closeReadiness'] ?? null) ? $workspace['closeReadiness'] : null,
             ),
+        ];
+    }
+
+    /**
+     * Minimal — only what's needed to derive an admission-based encounter's
+     * "location" (ward/bed) for display; not the full admission record.
+     *
+     * @param  array<string, mixed>  $admission
+     * @return array<string, mixed>
+     */
+    private static function transformAdmissionSummary(array $admission): array
+    {
+        return [
+            'id' => $admission['id'] ?? null,
+            'ward' => $admission['ward'] ?? null,
+            'bed' => $admission['bed'] ?? null,
+        ];
+    }
+
+    /**
+     * Deliberately minimal — this bundle is read by clinical/ordering staff for
+     * identification, not the patient's own chart. Full PII (national ID, next
+     * of kin, address, contact details — see PatientResponseTransformer) has
+     * no reason to travel in a workspace-header payload.
+     *
+     * @param  array<string, mixed>  $patient
+     * @return array<string, mixed>
+     */
+    private static function transformPatientSummary(array $patient): array
+    {
+        return [
+            'id' => $patient['id'] ?? null,
+            'patientNumber' => $patient['patient_number'] ?? null,
+            'firstName' => $patient['first_name'] ?? null,
+            'middleName' => $patient['middle_name'] ?? null,
+            'lastName' => $patient['last_name'] ?? null,
+            'gender' => $patient['gender'] ?? null,
+            'dateOfBirth' => $patient['date_of_birth'] ?? null,
         ];
     }
 }

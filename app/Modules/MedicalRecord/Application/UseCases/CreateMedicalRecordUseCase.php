@@ -107,16 +107,41 @@ class CreateMedicalRecordUseCase
             $payload['encounter_id'] = null;
         }
 
-        if ($appointmentId !== null && $recordType === MedicalRecordNoteType::CONSULTATION_NOTE->value) {
-            $existingDraft = $this->medicalRecordRepository->findLatestDraftForAppointment(
+        // Broadened per reports/clinical-note-audit/15-critical-system-integrity-review.md
+        // finding C-16: previously this only guarded appointment-linked consultation
+        // notes, leaving admission-based visits (no appointment_id at all) and other
+        // note types unprotected against a retried/duplicated create request. Scoping by
+        // encounter_id instead of appointment_id covers both appointment- and
+        // admission-based visits.
+        //
+        // Deliberately NOT broadened to every note type: progress_note and nursing_note
+        // are, by clinical design, expected to repeat multiple times per encounter (e.g.
+        // one progress note per shift/day of an admission), and referral_note/
+        // procedure_note are scoped to a specific referral/procedure rather than to the
+        // encounter as a whole — an encounter can legitimately need two simultaneous
+        // referral_note drafts (e.g. one to Respiratory, one to Orthopaedics) or two
+        // procedure_note drafts (one per distinct theatre procedure). Confirmed by
+        // tests\Feature\MedicalRecord\MedicalRecordApiTest.php's own "filters medical
+        // record list and status counts by appointment referral/theatre procedure
+        // context" tests, which intentionally create two same-type drafts per encounter.
+        // Only note types genuinely singular-per-visit are guarded here.
+        $singularPerVisitRecordTypes = [
+            MedicalRecordNoteType::CONSULTATION_NOTE->value,
+            MedicalRecordNoteType::ADMISSION_NOTE->value,
+            MedicalRecordNoteType::DISCHARGE_NOTE->value,
+        ];
+
+        $resolvedEncounterId = is_string($payload['encounter_id'] ?? null) ? trim($payload['encounter_id']) : '';
+        if ($resolvedEncounterId !== '' && in_array($recordType, $singularPerVisitRecordTypes, true)) {
+            $existingDraft = $this->medicalRecordRepository->findLatestDraftForEncounter(
                 $patientId,
-                (string) $appointmentId,
+                $resolvedEncounterId,
                 $recordType,
             );
 
             if ($existingDraft !== null) {
                 throw new DuplicateEncounterDraftMedicalRecordException(
-                    'A draft consultation note already exists for this visit. Continue the existing draft instead of creating another one.',
+                    'A draft note of this type already exists for this visit. Continue the existing draft instead of creating another one.',
                 );
             }
         }
