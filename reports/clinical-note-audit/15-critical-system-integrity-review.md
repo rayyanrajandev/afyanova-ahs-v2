@@ -62,6 +62,8 @@ Scope: risks only — cross-module state inconsistency, broken/missing transitio
 
 **Severity: High**
 
+**Update — decided (2026-07-08).** Block/warn split confirmed correct, no policy change: `note_signed`/`disposition_documented` remain the only hard blocks; `diagnosis_documented`/`pending_orders`/`unbilled_services` remain warn-only. Investigation found the original finding's assumed harm doesn't hold — closing an encounter never cascades to order records, and every lab/pharmacy/radiology worklist filters by the order's own status, not the parent encounter's, so a pending order on a closed encounter is exactly as visible to the team that would act on it as one on an open encounter; billing charge-capture candidates are equally unaffected by encounter status. A hard block on pending orders would also fight normal outpatient workflow, where visits routinely close while labs are still processing. What *was* genuinely weak — the 3-character reason floor and count-only (not itemized) acknowledgement — is being fixed separately, without changing the non-blocking policy; see the encounter workspace/close-readiness code for the itemized-acknowledgement work.
+
 ---
 
 ## C-6. Two different use cases resolve "the primary medical record" for the same encounter differently
