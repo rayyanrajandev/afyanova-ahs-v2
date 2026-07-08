@@ -110,6 +110,8 @@ Scope: risks only — cross-module state inconsistency, broken/missing transitio
 
 **Severity: Medium**
 
+**Update — decided, no code change (2026-07-08, see `16-remediation-options-c8-c9-c10-c12.md`).** Consultation-ownership locking stays scoped to appointment-based outpatient consultations, where one clinician owning a time-bound session is the correct model. Admission-based encounters are intentionally multi-clinician — different clinicians creating different note types, or contributing to the same admission over its course, is expected inpatient workflow, reinforced by C-16's own duplicate-guard design (`progress_note`/`nursing_note` explicitly exempted as repeating per shift/day) and `InpatientWard`'s acknowledgement-based (not ownership-based) round-note model. The actual data-loss risk — two people clobbering the same edit — is already covered per-record by `updateWithOptimisticLock()`/`MedicalRecordDraftConflictException`, uniformly for admission- and appointment-linked notes. Revisit only on a real (not theoretical) incident.
+
 ---
 
 ## C-10. Diagnosis-terminology catalog validation is silently disabled when the catalog is empty
@@ -121,6 +123,8 @@ Scope: risks only — cross-module state inconsistency, broken/missing transitio
 **Real-world clinical risk**: Diagnosis codes with no correspondence to a real clinical vocabulary can be recorded and then flow into billing, quality-reporting, or any downstream system that trusts `diagnosis_code` as coded terminology — producing clinically meaningless or misleading diagnosis data without any signal that validation was effectively bypassed.
 
 **Severity: Medium**
+
+**Update — fixed (2026-07-08, see `16-remediation-options-c8-c9-c10-c12.md`).** Create/update audit-log entries now carry `metadata.diagnosis_code_catalog_verified = false` whenever a code is accepted with an empty catalog, and a new `EmptyDiagnosisCatalogAuditor` (`medical-records:audit-empty-diagnosis-catalogs`) flags any facility with zero active diagnosis-terminology entries, writing to `catalog_integrity_audit_findings`. Run against the dev database on 2026-07-08: all 5 current facilities were flagged — a live, real gap, not hypothetical.
 
 ---
 
@@ -145,6 +149,8 @@ Scope: risks only — cross-module state inconsistency, broken/missing transitio
 **Real-world clinical risk**: A documented treatment plan can diverge from what was actually ordered — either because the clinician forgot to place the structured order after writing the plan, or because an order was placed that doesn't match what was written — with no system-level cross-check to catch the discrepancy. This is a classic source of care-plan/order mismatch in EHR systems generally, and this codebase has no mechanism identified that narrows that gap.
 
 **Severity: Medium**
+
+**Update — decided, no code change (2026-07-08, see `16-remediation-options-c8-c9-c10-c12.md`).** No specific clinical incident motivates closing this gap — the finding was audit-derived, not incident-derived. Narrative clinical documentation and structured orders remain deliberately independent workflows, consistent with how many EHR systems separate these concerns. Revisit only if real clinical incidents show missing orders after documentation are actually causing problems.
 
 ---
 

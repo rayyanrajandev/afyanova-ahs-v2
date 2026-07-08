@@ -35,6 +35,8 @@ For context: C-1 and C-16 were fixed directly in this pass because they were una
 
 **Recommendation**: this one **cannot be resolved by engineering judgment alone**. The real question is clinical, not technical: *should two clinicians be able to write on the same admitted patient's note concurrently without a conflict warning?* If the answer is "no, inpatient care should still get a warning, just not a hard single-owner lock," option B is the technical answer. If the answer is "yes, that's normal inpatient workflow and always has been," option C is correct and no code should change. This needs a clinical/product stakeholder decision before either A or B is built.
 
+**Status: Decided — Option C, no code change (2026-07-08).** Consultation-ownership locking stays scoped to appointment-based outpatient consultations, where one clinician owning a time-bound session is the correct model. Admission-based encounters remain intentionally multi-clinician: different clinicians creating different note types (or contributing to the same admission over its course) is expected inpatient workflow, not a conflict to guard against. This is reinforced by two independent decisions already in the codebase — C-16's duplicate-guard explicitly exempts `progress_note`/`nursing_note` as "expected to repeat multiple times per encounter (e.g. one progress note per shift/day of an admission)" (`CreateMedicalRecordUseCase.php`), and `InpatientWard`'s round-note model uses multi-reader *acknowledgement*, not exclusive ownership. The actual risk a lock would address — two people clobbering the same edit — is already covered per-record by `updateWithOptimisticLock()`/`MedicalRecordDraftConflictException`, uniformly for admission- and appointment-linked notes alike. Revisit only if a real incident (not merely a theoretical one) shows optimistic locking insufficient for inpatient care specifically.
+
 ---
 
 ## C-10: Diagnosis catalog validation silently permissive when empty
@@ -64,6 +66,8 @@ For context: C-1 and C-16 were fixed directly in this pass because they were una
 | **C. Accept as an intentional design boundary** | Document that narrative documentation and structured orders are deliberately independent, consistent with how many EHR systems separate these concerns, and that cross-validation is left to clinical judgment | None | Correct if there's no real incident motivating this; wrong if clinicians have actually experienced "documented a plan, forgot the order" as a recurring problem |
 
 **Recommendation**: this is the most product-judgment-dependent of the four. Option A is a genuine new feature, not a fix, and shouldn't be scoped as "finishing" C-12 without a real product decision to build it. I'd start with **C** (document as an accepted boundary) unless there is a specific, named clinical incident motivating at least the cheap heuristic in **B** — in which case build B first and treat A as a separate, larger future initiative, not part of this remediation pass.
+
+**Status: Decided — Option C, no code change (2026-07-08).** No specific clinical incident motivates this — the finding was audit-derived (a theoretical gap), not incident-derived. Narrative clinical documentation and structured orders remain deliberately independent workflows, consistent with how many EHR systems separate these concerns; cross-validation is left to clinical judgment. Revisit only if real clinical incidents show that missing orders after documentation are actually causing problems.
 
 ---
 
