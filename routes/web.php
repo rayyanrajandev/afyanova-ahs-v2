@@ -57,6 +57,17 @@ Route::get('patients/{id}/chart', function (string $id) {
     ]);
 })->middleware(['auth', 'verified', 'can:patients.read', 'facility.entitlement:patients.search'])->name('patients.chart.page');
 
+// Rebuild-in-progress page (reports/patient-chart-rebuild-plan.md). Config-gated,
+// off by default — 404s unless FRONTEND_PATIENT_CHART_V2_ENABLED=true. Fully additive:
+// the patients.chart.page route above is completely untouched.
+Route::get('patients/{id}/chart/v2', function (string $id) {
+    abort_unless(config('frontend_rebuild.patient_chart_v2_enabled'), 404);
+
+    return Inertia::render('patients/chart/ShowV2', [
+        'patientId' => $id,
+    ]);
+})->middleware(['auth', 'verified', 'can:patients.read', 'facility.entitlement:patients.search'])->name('patients.chart.v2');
+
 Route::get('appointments', function () {
     return Inertia::render('appointments/Index');
 })->middleware(['auth', 'verified', 'can:appointments.read', 'facility.entitlement:appointments.scheduling'])->name('appointments.page');
@@ -71,6 +82,16 @@ Route::get('admissions', function () {
     'facility.entitlement.any:admissions.management,appointments.scheduling',
 ])->name('admissions.page');
 
+// New page — see reports/encounters-list-analysis (backend built as part of the
+// same effort). Config-gated, off by default — 404s unless
+// FRONTEND_ENCOUNTERS_LIST_ENABLED=true. There is no existing /encounters list
+// route to protect, so this is purely additive.
+Route::get('encounters', function () {
+    abort_unless(config('frontend_rebuild.encounters_list_enabled'), 404);
+
+    return Inertia::render('encounters/List');
+})->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])->name('encounters.list');
+
 Route::get('encounters/{encounterId}', function (string $encounterId) {
     return Inertia::render('encounters/Show', [
         'encounterId' => $encounterId,
@@ -83,9 +104,29 @@ Route::get('encounters/by-appointment/{appointmentId}', function (string $appoin
     ]);
 })->middleware(['auth', 'verified', 'can:medical.records.read', 'can:medical.records.create', 'facility.entitlement:medical_records.core'])->name('encounters.by-appointment');
 
+// Rebuild-in-progress page (reports/clinical-notes-frontend-rebuild-plan.md). Config-gated,
+// off by default — 404s unless FRONTEND_WORKSPACE_V2_ENABLED=true. Fully additive: the
+// encounters.show route above is completely untouched.
+Route::get('encounters/{encounterId}/v2', function (string $encounterId) {
+    abort_unless(config('frontend_rebuild.workspace_v2_enabled'), 404);
+
+    return Inertia::render('encounters/WorkspaceV2', [
+        'encounterId' => $encounterId,
+    ]);
+})->middleware(['auth', 'verified', 'can:medical.records.read', 'can:medical.records.create', 'facility.entitlement:medical_records.core'])->name('encounters.workspace-v2');
+
 Route::get('medical-records', function () {
     return Inertia::render('medical-records/Index');
 })->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])->name('medical-records.page');
+
+// Rebuild-in-progress page (reports/medical-records-index-rebuild-plan.md). Config-gated,
+// off by default — 404s unless FRONTEND_MEDICAL_RECORDS_INDEX_V2_ENABLED=true. Fully
+// additive: the medical-records.page route above is completely untouched.
+Route::get('medical-records/v2', function () {
+    abort_unless(config('frontend_rebuild.medical_records_index_v2_enabled'), 404);
+
+    return Inertia::render('medical-records/IndexV2');
+})->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])->name('medical-records.page-v2');
 
 Route::get('medical-records/{id}/print', [MedicalRecordDocumentController::class, 'show'])
     ->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])
