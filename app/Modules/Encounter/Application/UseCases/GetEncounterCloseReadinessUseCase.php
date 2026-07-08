@@ -4,6 +4,7 @@ namespace App\Modules\Encounter\Application\UseCases;
 
 use App\Modules\Billing\Application\UseCases\ListBillingChargeCaptureCandidatesUseCase;
 use App\Modules\Encounter\Application\Services\EncounterResolverService;
+use App\Modules\Encounter\Application\Services\PrimaryMedicalRecordResolverService;
 use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\MedicalRecord\Domain\Repositories\MedicalRecordRepositoryInterface;
@@ -32,6 +33,7 @@ class GetEncounterCloseReadinessUseCase
     public function __construct(
         private readonly EncounterResolverService $encounterResolverService,
         private readonly MedicalRecordRepositoryInterface $medicalRecordRepository,
+        private readonly PrimaryMedicalRecordResolverService $primaryMedicalRecordResolverService,
         private readonly ListBillingChargeCaptureCandidatesUseCase $chargeCaptureCandidatesUseCase,
     ) {}
 
@@ -47,7 +49,7 @@ class GetEncounterCloseReadinessUseCase
 
         $encounterArray = $encounter->toArray();
         $patientId = trim((string) ($encounterArray['patient_id'] ?? ''));
-        $primaryMedicalRecord = $this->resolvePrimaryMedicalRecord($encounterId, $patientId);
+        $primaryMedicalRecord = $this->primaryMedicalRecordResolverService->resolve($encounterId, $patientId);
         $noteStatus = strtolower(trim((string) ($primaryMedicalRecord['status'] ?? '')));
         $hasSignedNote = in_array($noteStatus, [
             MedicalRecordStatus::FINALIZED->value,
@@ -55,12 +57,13 @@ class GetEncounterCloseReadinessUseCase
         ], true);
 
         // C-2 (reports/clinical-note-audit/15-critical-system-integrity-review.md):
-        // resolvePrimaryMedicalRecord() returns the first FINALIZED/AMENDED/DRAFT
-        // match it finds, in that priority order — so a single signed note used to
-        // satisfy this item even if a *different* consultation note on the same
-        // encounter (an addendum, a co-signer's note, a corrected re-entry) was
-        // still an untouched draft. An encounter must have zero unsigned
-        // consultation-note drafts to close, not merely one signed one.
+        // PrimaryMedicalRecordResolverService::resolve() returns the first
+        // FINALIZED/AMENDED/DRAFT match it finds, in that priority order — so a
+        // single signed note used to satisfy this item even if a *different*
+        // consultation note on the same encounter (an addendum, a co-signer's
+        // note, a corrected re-entry) was still an untouched draft. An
+        // encounter must have zero unsigned consultation-note drafts to
+        // close, not merely one signed one.
         $hasUnsignedNote = $this->hasUnsignedConsultationNote($encounterId, $patientId);
         $noteSigned = $hasSignedNote && ! $hasUnsignedNote;
 
@@ -156,49 +159,6 @@ class GetEncounterCloseReadinessUseCase
             'items' => $items,
             'billingSummary' => $billingSummary,
         ];
-    }
-
-    /**
-     * @return array<string, mixed>|null
-     */
-    private function resolvePrimaryMedicalRecord(string $encounterId, string $patientId): ?array
-    {
-        if ($patientId === '') {
-            return null;
-        }
-
-        // Prefer finalized/amended records first — the encounter's primary record should
-        // reflect the signed clinical decision, not an uncommitted draft from autosave.
-        foreach ([
-            MedicalRecordStatus::FINALIZED->value,
-            MedicalRecordStatus::AMENDED->value,
-            MedicalRecordStatus::DRAFT->value,
-        ] as $status) {
-            $search = $this->medicalRecordRepository->search(
-                query: null,
-                patientId: $patientId,
-                encounterId: $encounterId,
-                appointmentId: null,
-                appointmentReferralId: null,
-                admissionId: null,
-                theatreProcedureId: null,
-                authorUserId: null,
-                status: $status,
-                recordType: MedicalRecordNoteType::CONSULTATION_NOTE->value,
-                fromDateTime: null,
-                toDateTime: null,
-                page: 1,
-                perPage: 1,
-                sortBy: 'updated_at',
-                sortDirection: 'desc',
-            );
-
-            if ($search['data'] !== []) {
-                return $search['data'][0];
-            }
-        }
-
-        return null;
     }
 
     /**

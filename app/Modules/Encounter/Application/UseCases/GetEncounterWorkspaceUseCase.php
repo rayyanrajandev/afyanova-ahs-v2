@@ -5,12 +5,10 @@ namespace App\Modules\Encounter\Application\UseCases;
 use App\Modules\Admission\Infrastructure\Models\AdmissionModel;
 use App\Modules\Encounter\Application\UseCases\GetEncounterCloseReadinessUseCase;
 use App\Modules\Encounter\Application\Services\EncounterResolverService;
+use App\Modules\Encounter\Application\Services\PrimaryMedicalRecordResolverService;
 use App\Modules\Encounter\Infrastructure\Models\EncounterDiagnosisModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
-use App\Modules\MedicalRecord\Domain\Repositories\MedicalRecordRepositoryInterface;
 use App\Modules\MedicalRecord\Domain\Services\AppointmentLookupServiceInterface;
-use App\Modules\MedicalRecord\Domain\ValueObjects\MedicalRecordNoteType;
-use App\Modules\MedicalRecord\Domain\ValueObjects\MedicalRecordStatus;
 use App\Modules\Patient\Domain\Repositories\PatientRepositoryInterface;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
@@ -24,7 +22,7 @@ class GetEncounterWorkspaceUseCase
 
     public function __construct(
         private readonly EncounterResolverService $encounterResolverService,
-        private readonly MedicalRecordRepositoryInterface $medicalRecordRepository,
+        private readonly PrimaryMedicalRecordResolverService $primaryMedicalRecordResolverService,
         private readonly AppointmentLookupServiceInterface $appointmentLookupService,
         private readonly GetEncounterCloseReadinessUseCase $encounterCloseReadinessUseCase,
         private readonly PatientRepositoryInterface $patientRepository,
@@ -58,7 +56,7 @@ class GetEncounterWorkspaceUseCase
         return [
             'encounter' => $encounterArray,
             'patient' => $patientId !== '' ? $this->patientRepository->findById($patientId) : null,
-            'primaryMedicalRecord' => $this->resolvePrimaryMedicalRecord($encounterId, $patientId),
+            'primaryMedicalRecord' => $this->primaryMedicalRecordResolverService->resolve($encounterId, $patientId),
             'appointment' => $appointment,
             'admission' => $admission,
             'diagnoses' => $this->loadDiagnoses($encounterId),
@@ -83,45 +81,6 @@ class GetEncounterWorkspaceUseCase
             ->get()
             ->map(static fn (EncounterDiagnosisModel $diagnosis): array => $diagnosis->toArray())
             ->all();
-    }
-
-    /**
-     * @return array<string, mixed>|null
-     */
-    private function resolvePrimaryMedicalRecord(string $encounterId, string $patientId): ?array
-    {
-        if ($patientId === '') {
-            return null;
-        }
-
-        // Prefer finalized/amended records first — the encounter's primary record should
-        // reflect the signed clinical decision, not an uncommitted draft from autosave.
-        foreach ([MedicalRecordStatus::FINALIZED->value, MedicalRecordStatus::AMENDED->value] as $status) {
-            $search = $this->medicalRecordRepository->search(
-                query: null,
-                patientId: $patientId,
-                encounterId: $encounterId,
-                appointmentId: null,
-                appointmentReferralId: null,
-                admissionId: null,
-                theatreProcedureId: null,
-                authorUserId: null,
-                status: $status,
-                recordType: MedicalRecordNoteType::CONSULTATION_NOTE->value,
-                fromDateTime: null,
-                toDateTime: null,
-                page: 1,
-                perPage: 1,
-                sortBy: 'updated_at',
-                sortDirection: 'desc',
-            );
-
-            if ($search['data'] !== []) {
-                return $search['data'][0];
-            }
-        }
-
-        return null;
     }
 
     /**
