@@ -56,6 +56,13 @@ class EloquentEmergencyTriageCaseRepository implements EmergencyTriageCaseReposi
             ->exists();
     }
 
+    public function existsByAppointmentId(string $appointmentId): bool
+    {
+        return EmergencyTriageCaseModel::query()
+            ->where('appointment_id', $appointmentId)
+            ->exists();
+    }
+
     public function search(
         ?string $query,
         ?string $patientId,
