@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Notifications\AppointmentConsultationTakenOverNotification;
 use App\Modules\Appointment\Application\Exceptions\ActiveAppointmentConflictException;
 use App\Modules\Appointment\Application\Exceptions\InvalidAppointmentReferralTargetFacilityException;
+use App\Modules\Appointment\Application\Exceptions\InvalidAppointmentStatusTransitionException;
 use App\Modules\Appointment\Application\Exceptions\PatientNotEligibleForAppointmentException;
 use App\Modules\Appointment\Application\Exceptions\SourceAdmissionNotEligibleForAppointmentException;
 use App\Modules\Appointment\Application\UseCases\CreateAppointmentUseCase;
@@ -279,6 +280,8 @@ class AppointmentController extends Controller
             );
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return $this->tenantScopeRequiredResponse($exception->getMessage());
+        } catch (InvalidAppointmentStatusTransitionException $exception) {
+            return $this->invalidStatusTransitionResponse($exception);
         }
 
         abort_if($appointment === null, 404, 'Appointment not found.');
@@ -289,6 +292,17 @@ class AppointmentController extends Controller
             ['data' => AppointmentResponseTransformer::transform($appointment)],
             $billingCapture !== null ? ['billing_capture' => $billingCapture] : [],
         ));
+    }
+
+    private function invalidStatusTransitionResponse(InvalidAppointmentStatusTransitionException $exception): JsonResponse
+    {
+        return response()->json([
+            'message' => $exception->getMessage(),
+            'code' => 'APPOINTMENT_STATUS_TRANSITION_INVALID',
+            'errors' => [
+                'status' => [$exception->getMessage()],
+            ],
+        ], 422);
     }
 
     public function overrideConsultationType(
@@ -425,24 +439,28 @@ class AppointmentController extends Controller
                 $takeoverReason = $this->normalizedTakeoverReason($request->input('takeoverReason'));
                 $currentTakeoverCount = max((int) ($existing['consultation_takeover_count'] ?? 0), 0);
 
-                $appointment = $updateStatus->execute(
-                    id: $id,
-                    status: 'in_consultation',
-                    reason: $existing['status_reason'] ?? null,
-                    actorId: $actorId,
-                    statusAttributes: [
-                        'consultation_owner_user_id' => $actorId,
-                        'consultation_owner_assigned_at' => now(),
-                        'consultation_takeover_count' => $currentTakeoverCount + 1,
-                    ],
-                    auditMetadata: [
-                        'consultation_takeover' => [
-                            'from_owner_user_id' => $ownerUserId,
-                            'to_owner_user_id' => $actorId,
-                            'reason' => $takeoverReason,
+                try {
+                    $appointment = $updateStatus->execute(
+                        id: $id,
+                        status: 'in_consultation',
+                        reason: $existing['status_reason'] ?? null,
+                        actorId: $actorId,
+                        statusAttributes: [
+                            'consultation_owner_user_id' => $actorId,
+                            'consultation_owner_assigned_at' => now(),
+                            'consultation_takeover_count' => $currentTakeoverCount + 1,
                         ],
-                    ],
-                );
+                        auditMetadata: [
+                            'consultation_takeover' => [
+                                'from_owner_user_id' => $ownerUserId,
+                                'to_owner_user_id' => $actorId,
+                                'reason' => $takeoverReason,
+                            ],
+                        ],
+                    );
+                } catch (InvalidAppointmentStatusTransitionException $exception) {
+                    return $this->invalidStatusTransitionResponse($exception);
+                }
 
                 abort_if($appointment === null, 404, 'Appointment not found.');
 
@@ -459,20 +477,24 @@ class AppointmentController extends Controller
             }
 
             if ($explicitOwnerUserId === null && $actorId !== null) {
-                $appointment = $updateStatus->execute(
-                    id: $id,
-                    status: 'in_consultation',
-                    reason: $existing['status_reason'] ?? null,
-                    actorId: $actorId,
-                    statusAttributes: [
-                        'consultation_owner_user_id' => $actorId,
-                        'consultation_owner_assigned_at' => now(),
-                        'consultation_started_at' => $existing['consultation_started_at'] ?? now(),
-                    ],
-                    auditMetadata: [
-                        'consultation_owner_assigned' => true,
-                    ],
-                );
+                try {
+                    $appointment = $updateStatus->execute(
+                        id: $id,
+                        status: 'in_consultation',
+                        reason: $existing['status_reason'] ?? null,
+                        actorId: $actorId,
+                        statusAttributes: [
+                            'consultation_owner_user_id' => $actorId,
+                            'consultation_owner_assigned_at' => now(),
+                            'consultation_started_at' => $existing['consultation_started_at'] ?? now(),
+                        ],
+                        auditMetadata: [
+                            'consultation_owner_assigned' => true,
+                        ],
+                    );
+                } catch (InvalidAppointmentStatusTransitionException $exception) {
+                    return $this->invalidStatusTransitionResponse($exception);
+                }
 
                 abort_if($appointment === null, 404, 'Appointment not found.');
 
@@ -512,6 +534,8 @@ class AppointmentController extends Controller
             );
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return $this->tenantScopeRequiredResponse($exception->getMessage());
+        } catch (InvalidAppointmentStatusTransitionException $exception) {
+            return $this->invalidStatusTransitionResponse($exception);
         }
 
         abort_if($appointment === null, 404, 'Appointment not found.');
@@ -611,6 +635,8 @@ class AppointmentController extends Controller
             );
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return $this->tenantScopeRequiredResponse($exception->getMessage());
+        } catch (InvalidAppointmentStatusTransitionException $exception) {
+            return $this->invalidStatusTransitionResponse($exception);
         }
 
         abort_if($appointment === null, 404, 'Appointment not found.');

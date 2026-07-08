@@ -2,6 +2,7 @@
 
 namespace App\Modules\Appointment\Application\UseCases;
 
+use App\Modules\Appointment\Application\Exceptions\InvalidAppointmentStatusTransitionException;
 use App\Modules\Appointment\Domain\Repositories\AppointmentAuditLogRepositoryInterface;
 use App\Modules\Appointment\Domain\Repositories\AppointmentRepositoryInterface;
 use App\Modules\Appointment\Domain\ValueObjects\AppointmentStatus;
@@ -39,6 +40,13 @@ class UpdateAppointmentStatusUseCase
         $existing = $this->appointmentRepository->findById($id);
         if (! $existing) {
             return null;
+        }
+
+        $currentStatus = strtolower(trim((string) ($existing['status'] ?? '')));
+        $requestedStatus = strtolower(trim($status));
+        $currentStatusEnum = AppointmentStatus::tryFrom($currentStatus);
+        if ($currentStatusEnum !== null && ! $currentStatusEnum->canTransitionTo($requestedStatus)) {
+            throw new InvalidAppointmentStatusTransitionException($currentStatus, $requestedStatus);
         }
 
         $updated = $this->appointmentRepository->update($id, array_merge([
