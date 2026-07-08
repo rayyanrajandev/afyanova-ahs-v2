@@ -669,6 +669,8 @@ const createEncounterSummaryLoading = ref(false);
 const createEncounterCloseReadiness = ref<EncounterCloseReadiness | null>(null);
 const createEncounterCloseDialogOpen = ref(false);
 const createEncounterCloseReason = ref('');
+const createEncounterCloseDisposition = ref('');
+const createEncounterCloseDispositionNotes = ref('');
 const createEncounterCloseError = ref<string | null>(null);
 const createEncounterCloseSubmitting = ref(false);
 const createEncounterReopenDialogOpen = ref(false);
@@ -2136,17 +2138,23 @@ async function closeEncounterFromWorkspace(
                 status: 'closed',
                 reason,
                 acknowledgeCloseGaps,
+                disposition: createEncounterCloseDisposition.value.trim() || null,
+                dispositionNotes: createEncounterCloseDispositionNotes.value.trim() || null,
             },
         },
     );
     createEncounterSummary.value = response.data;
     createEncounterCloseDialogOpen.value = false;
     createEncounterCloseReason.value = '';
+    createEncounterCloseDisposition.value = '';
+    createEncounterCloseDispositionNotes.value = '';
     createEncounterCloseError.value = null;
 }
 
 function openEncounterCloseDialog(): void {
     createEncounterCloseReason.value = '';
+    createEncounterCloseDisposition.value = '';
+    createEncounterCloseDispositionNotes.value = '';
     createEncounterCloseError.value = null;
     createEncounterCloseDialogOpen.value = true;
 }
@@ -2161,13 +2169,18 @@ async function submitEncounterCloseDialog(): Promise<void> {
 
     try {
         const readiness = createEncounterCloseReadiness.value;
-        const reason = readiness?.requiresAcknowledgement
+        const nonDispositionBlocking = (readiness?.items ?? []).filter(
+            (item) => item.id !== 'disposition_documented' && item.severity === 'block' && item.status === 'fail',
+        );
+        const requiresAcknowledgement = nonDispositionBlocking.length === 0
+            && (readiness?.items ?? []).some((item) => item.severity === 'warn' && item.status === 'fail');
+        const reason = requiresAcknowledgement
             ? createEncounterCloseReason.value.trim()
             : null;
 
         await closeEncounterFromWorkspace(
             reason,
-            Boolean(readiness?.requiresAcknowledgement),
+            requiresAcknowledgement,
         );
 
         if (
@@ -10025,10 +10038,14 @@ onMounted(() => {
             :open="createEncounterCloseDialogOpen"
             :readiness="createEncounterCloseReadiness"
             :reason="createEncounterCloseReason"
+            :disposition="createEncounterCloseDisposition"
+            :disposition-notes="createEncounterCloseDispositionNotes"
             :submitting="createEncounterCloseSubmitting"
             :error="createEncounterCloseError"
             @update:open="createEncounterCloseDialogOpen = $event"
             @update:reason="createEncounterCloseReason = $event"
+            @update:disposition="createEncounterCloseDisposition = $event"
+            @update:disposition-notes="createEncounterCloseDispositionNotes = $event"
             @confirm="void submitEncounterCloseDialog()"
         />
 
