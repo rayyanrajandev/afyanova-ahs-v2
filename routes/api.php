@@ -684,6 +684,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::post('reception/walk-ins', [ReceptionController::class, 'registerWalkIn'])
         ->middleware(['can:appointments.create', 'can:appointments.update-status'])
         ->name('reception.walk-ins.store');
+    Route::get('reception/queue', [ReceptionController::class, 'queue'])
+        ->middleware('can:appointments.read')
+        ->name('reception.queue');
     Route::patch('appointments/{id}/consultation-type', [AppointmentController::class, 'overrideConsultationType'])
         ->middleware('can:appointments.update')
         ->name('appointments.override-consultation-type');

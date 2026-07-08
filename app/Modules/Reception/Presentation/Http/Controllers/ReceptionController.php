@@ -6,14 +6,19 @@ use App\Http\Controllers\Controller;
 use App\Modules\Appointment\Application\Exceptions\ActiveAppointmentConflictException;
 use App\Modules\Appointment\Application\Exceptions\InvalidAppointmentStatusTransitionException;
 use App\Modules\Appointment\Application\Exceptions\PatientNotEligibleForAppointmentException;
+use App\Modules\Appointment\Domain\ValueObjects\AppointmentStatus;
 use App\Modules\Appointment\Presentation\Http\Transformers\AppointmentResponseTransformer;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
 use App\Modules\Reception\Application\UseCases\CheckInUseCase;
+use App\Modules\Reception\Application\UseCases\GetReceptionQueueUseCase;
 use App\Modules\Reception\Application\UseCases\RegisterWalkInAndCheckInUseCase;
 use App\Modules\Reception\Domain\ValueObjects\ArrivalMode;
 use App\Modules\Reception\Presentation\Http\Requests\CheckInAppointmentRequest;
 use App\Modules\Reception\Presentation\Http\Requests\RegisterWalkInRequest;
+use App\Modules\Reception\Presentation\Http\Transformers\ReceptionQueueEntryResponseTransformer;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class ReceptionController extends Controller
 {
@@ -83,6 +88,25 @@ class ReceptionController extends Controller
         return response()->json([
             'data' => AppointmentResponseTransformer::transform($appointment),
         ], 201);
+    }
+
+    public function queue(Request $request, GetReceptionQueueUseCase $useCase): JsonResponse
+    {
+        $validated = $request->validate([
+            'stage' => [
+                'required',
+                Rule::in([
+                    AppointmentStatus::WAITING_TRIAGE->value,
+                    AppointmentStatus::WAITING_PROVIDER->value,
+                ]),
+            ],
+        ]);
+
+        $entries = $useCase->execute((string) $validated['stage']);
+
+        return response()->json([
+            'data' => array_map([ReceptionQueueEntryResponseTransformer::class, 'transform'], $entries),
+        ]);
     }
 
     private function tenantScopeRequiredResponse(string $message): JsonResponse
