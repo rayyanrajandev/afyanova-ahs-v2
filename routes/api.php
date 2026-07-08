@@ -38,6 +38,7 @@ use App\Modules\Platform\Presentation\Http\Controllers\MultiFacilityRolloutContr
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformAdminController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformBrandingController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformClinicalCatalogController;
+use App\Modules\Reception\Presentation\Http\Controllers\ReceptionController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformConfigurationController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformRbacController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformSubscriptionPlanController;
@@ -677,6 +678,12 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::patch('appointments/{id}/status', [AppointmentController::class, 'updateStatus'])
         ->middleware('can:appointments.update-status')
         ->name('appointments.update-status');
+    Route::patch('appointments/{id}/check-in', [ReceptionController::class, 'checkIn'])
+        ->middleware('can:appointments.update-status')
+        ->name('appointments.check-in');
+    Route::post('reception/walk-ins', [ReceptionController::class, 'registerWalkIn'])
+        ->middleware(['can:appointments.create', 'can:appointments.update-status'])
+        ->name('reception.walk-ins.store');
     Route::patch('appointments/{id}/consultation-type', [AppointmentController::class, 'overrideConsultationType'])
         ->middleware('can:appointments.update')
         ->name('appointments.override-consultation-type');
