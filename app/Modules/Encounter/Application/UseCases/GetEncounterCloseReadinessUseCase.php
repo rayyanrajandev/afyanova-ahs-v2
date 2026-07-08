@@ -19,11 +19,16 @@ class GetEncounterCloseReadinessUseCase
 {
     private const LAB_TERMINAL_STATUSES = ['completed', 'cancelled'];
 
+    // C-11 (reports/clinical-note-audit/15-critical-system-integrity-review.md):
+    // reconciliation_exception is an unresolved-problem state (a flagged
+    // medication-reconciliation discrepancy), not a safe end-state — it must
+    // not be grouped with dispensed/cancelled/reconciliation_completed here,
+    // or an unresolved medication-safety flag silently stops contributing to
+    // the pending-orders close-readiness warning the moment it's raised.
     private const PHARMACY_TERMINAL_STATUSES = [
         'dispensed',
         'cancelled',
         'reconciliation_completed',
-        'reconciliation_exception',
     ];
 
     private const RADIOLOGY_TERMINAL_STATUSES = ['completed', 'cancelled'];

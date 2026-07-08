@@ -191,8 +191,8 @@ it('resolves a high-volume multi-module order encounter correctly within a bound
     validationSuiteNote($patient->id, $encounter->id, ['status' => 'finalized', 'signed_at' => now()]);
 
     // 25 lab orders, all completed (terminal) — deliberately zero genuinely pending
-    // orders here, so that the only thing standing between "pending_orders passes"
-    // and reality is the pharmacy reconciliation_exception below (isolates CONFLICT-08).
+    // orders of any other kind here, isolating the pharmacy reconciliation_exception
+    // below as the only source of pending-orders signal in this fixture.
     for ($i = 0; $i < 25; $i++) {
         validationSuiteLabOrder($patient->id, $encounter->id, ['status' => 'completed']);
     }
@@ -228,11 +228,16 @@ it('resolves a high-volume multi-module order encounter correctly within a bound
 
     // Correctness: one pharmacy reconciliation_exception with zero genuinely pending
     // orders elsewhere => EXCEPTION wins per the mapping's priority (checked before
-    // PENDING/RESULTED), and the legacy pending_orders check reports "pass" despite it.
+    // PENDING/RESULTED).
     expect($snapshot->ordersDimension)->toBe(CanonicalOrdersDimension::EXCEPTION);
 
+    // C-11 (reports/clinical-note-audit/15-critical-system-integrity-review.md),
+    // fixed: GetEncounterCloseReadinessUseCase no longer treats
+    // reconciliation_exception as terminal, so pending_orders now correctly
+    // fails here too — CONFLICT-08 (which flagged exactly this masking) can
+    // no longer fire.
     $codes = array_column($snapshot->detectedConflicts, 'code');
-    expect($codes)->toContain(CanonicalEncounterConflictCode::CONFLICT_08->value);
+    expect($codes)->not->toContain(CanonicalEncounterConflictCode::CONFLICT_08->value);
 
     // KNOWN FINDING (not a resolver defect — see readiness/validation notes):
     // GetEncounterCloseReadinessUseCase itself issues a large, order/candidate-count-
