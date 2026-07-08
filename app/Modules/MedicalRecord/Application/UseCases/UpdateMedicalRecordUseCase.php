@@ -26,6 +26,7 @@ use App\Modules\MedicalRecord\Domain\Services\TheatreProcedureLookupServiceInter
 use App\Modules\MedicalRecord\Domain\ValueObjects\MedicalRecordNoteType;
 use App\Modules\MedicalRecord\Domain\ValueObjects\MedicalRecordStatus;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
+use Illuminate\Support\Facades\DB;
 
 class UpdateMedicalRecordUseCase
 {
@@ -125,52 +126,70 @@ class UpdateMedicalRecordUseCase
             ? null
             : $normalizedExpectedUpdatedAt;
 
-        $updateResult = $this->medicalRecordRepository->updateWithOptimisticLock(
-            id: $id,
-            attributes: $payload,
-            expectedUpdatedAt: $normalizedExpectedUpdatedAt,
-            forceDraftSave: $forceDraftSave,
-        );
-
-        if (($updateResult['outcome'] ?? null) === 'missing') {
-            return null;
-        }
-
-        if (($updateResult['outcome'] ?? null) === 'conflict') {
-            throw new MedicalRecordDraftConflictException(
-                is_array($updateResult['record'] ?? null) ? $updateResult['record'] : $existing,
-            );
-        }
-
-        $updated = is_array($updateResult['record'] ?? null) ? $updateResult['record'] : null;
-        if (! $updated) {
-            return null;
-        }
-
-        $changes = $this->extractChanges($existing, $updated);
-        if ($changes !== []) {
-            $this->auditLogRepository->write(
-                medicalRecordId: $id,
-                action: 'medical-record.updated',
-                actorId: $actorId,
-                changes: $changes,
-                metadata: [],
+        // C-7 (reports/clinical-note-audit/15-critical-system-integrity-review.md):
+        // the primary write, audit log, version snapshot, and encounter-status
+        // sync used to be four independently-committed operations — a failure
+        // between steps left the note and its encounter permanently out of
+        // sync, with nothing to detect or reconcile the drift. Wrapping the
+        // whole sequence in one transaction means a failure anywhere in it
+        // rolls back everything, including the row-locked write inside
+        // updateWithOptimisticLock() (nested via a savepoint, not a second
+        // top-level transaction).
+        return DB::transaction(function () use (
+            $id,
+            $payload,
+            $actorId,
+            $normalizedExpectedUpdatedAt,
+            $forceDraftSave,
+            $existing,
+        ): ?array {
+            $updateResult = $this->medicalRecordRepository->updateWithOptimisticLock(
+                id: $id,
+                attributes: $payload,
+                expectedUpdatedAt: $normalizedExpectedUpdatedAt,
+                forceDraftSave: $forceDraftSave,
             );
 
-            $this->medicalRecordVersionRepository->create(
-                medicalRecordId: $id,
-                snapshot: $this->extractVersionSnapshot($updated),
-                changedFields: array_keys($changes),
-                createdByUserId: $actorId,
-            );
-        }
+            if (($updateResult['outcome'] ?? null) === 'missing') {
+                return null;
+            }
 
-        $encounterId = trim((string) ($updated['encounter_id'] ?? ''));
-        if ($encounterId !== '') {
-            $this->encounterLifecycleService->markInProgress($encounterId, $actorId);
-        }
+            if (($updateResult['outcome'] ?? null) === 'conflict') {
+                throw new MedicalRecordDraftConflictException(
+                    is_array($updateResult['record'] ?? null) ? $updateResult['record'] : $existing,
+                );
+            }
 
-        return $updated;
+            $updated = is_array($updateResult['record'] ?? null) ? $updateResult['record'] : null;
+            if (! $updated) {
+                return null;
+            }
+
+            $changes = $this->extractChanges($existing, $updated);
+            if ($changes !== []) {
+                $this->auditLogRepository->write(
+                    medicalRecordId: $id,
+                    action: 'medical-record.updated',
+                    actorId: $actorId,
+                    changes: $changes,
+                    metadata: [],
+                );
+
+                $this->medicalRecordVersionRepository->create(
+                    medicalRecordId: $id,
+                    snapshot: $this->extractVersionSnapshot($updated),
+                    changedFields: array_keys($changes),
+                    createdByUserId: $actorId,
+                );
+            }
+
+            $encounterId = trim((string) ($updated['encounter_id'] ?? ''));
+            if ($encounterId !== '') {
+                $this->encounterLifecycleService->markInProgress($encounterId, $actorId);
+            }
+
+            return $updated;
+        });
     }
 
     /**
