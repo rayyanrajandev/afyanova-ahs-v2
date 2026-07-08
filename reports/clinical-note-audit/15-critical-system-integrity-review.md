@@ -158,6 +158,8 @@ Scope: risks only — cross-module state inconsistency, broken/missing transitio
 
 **Severity: Medium (unverified — confidence lower than other items in this report)**
 
+**Update — verified, not a defect**: `EncounterInlineOrderPanel.vue` imports `EncounterMedicationSafetyPanel` from `resources/js/components/domain/clinical/EncounterMedicationSafetyPanel.vue` (present on disk) and calls `fetchPatientMedicationSafetySummary()` (`resources/js/lib/encounterInlineOrders.ts:209`), which hits `GET /patients/{id}/medication-safety-summary`. That route is wired to `PatientMedicationSafetyController::medicationSafetySummary()` → `GetPatientMedicationSafetySummaryUseCase`, which returns real allergy conflicts, drug-interaction conflicts, laboratory signals, and dosing-sanity rules (including pediatric weight-based dosing, high-dose alerts, and route/form mismatch checks), with over 30 scenario tests in `tests/Feature/Patient/PatientApiTest.php`. The panel is reliably wired to a live, substantive safety check — this finding is closed as verified-safe, no code change required.
+
 ---
 
 ## C-14. Encounter status can change through an unguarded side-channel with weaker validation than the explicit status API
@@ -181,6 +183,8 @@ Scope: risks only — cross-module state inconsistency, broken/missing transitio
 **Real-world clinical risk**: An encounter could enter a state (`cancelled`) with no confirmed rule for what that means for its linked orders, notes, or billing, and no audit trail proving how or why it got there, since the only transition logic this audit could verify never produces that value.
 
 **Severity: Low-Medium (contingent — depends on unaudited code that may or may not exist)**
+
+**Update — confirmed, no action taken**: a repo-wide search for `EncounterStatus::CANCELLED` found zero references outside the enum declaration itself. `EncounterLifecycleService`'s every status-writing method (`close()`, `reopen()`, `markReadyForSign()`, `syncFromMedicalRecordStatus()`) has an explicit allow-list that excludes it, and `UpdateEncounterStatusRequest::rules()` whitelists only `closed`/`reopened`/`in_progress` at the API boundary — a request for `status: cancelled` is rejected by validation before reaching any use case. This is no longer contingent: within application code, the case is confirmed unreachable. Reviewed with the product owner, who chose to leave it as-is (reserved-but-unbuilt, not cruft to delete, not a feature to build now) — revisit only if a cancel-encounter feature is actually requested.
 
 ---
 
