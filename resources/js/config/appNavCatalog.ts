@@ -129,6 +129,14 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Procedure scheduling and perioperative workflow',
     },
     {
+        title: 'Encounters',
+        href: '/encounters',
+        iconName: 'stethoscope',
+        section: 'clinical_care',
+        permissionPrefixes: ['medical.records.', 'medical-records.'],
+        helpNote: 'Every visit by patient, regardless of note status',
+    },
+    {
         title: 'Clinical records',
         href: '/medical-records',
         iconName: 'file-text',

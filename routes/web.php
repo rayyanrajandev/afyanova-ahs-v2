@@ -86,13 +86,11 @@ Route::get('admissions', function () {
     'facility.entitlement.any:admissions.management,appointments.scheduling',
 ])->name('admissions.page');
 
-// New page — see reports/encounters-list-analysis (backend built as part of the
-// same effort). Config-gated, off by default — 404s unless
-// FRONTEND_ENCOUNTERS_LIST_ENABLED=true. There is no existing /encounters list
-// route to protect, so this is purely additive.
+// Encounter-centric visit list (there was no dormant equivalent to reuse —
+// medical-records/Index.vue is record-centric, one row per note). Cut over
+// to always-on now that it's browser-verified; there's no prior page here
+// to preserve as a rollback route.
 Route::get('encounters', function () {
-    abort_unless(config('frontend_rebuild.encounters_list_enabled'), 404);
-
     return Inertia::render('encounters/List');
 })->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])->name('encounters.list');
 
