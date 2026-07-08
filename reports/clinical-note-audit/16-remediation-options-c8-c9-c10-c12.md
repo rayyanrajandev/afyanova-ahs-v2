@@ -19,6 +19,8 @@ For context: C-1 and C-16 were fixed directly in this pass because they were una
 
 **Recommendation**: **D**. It directly addresses the failure mode named in the original finding (an old, unresulted order silently invisible) at a fraction of the cost of full pagination (C), and is a strict improvement over just raising the cap (A).
 
+**Status: Done (Option D implemented).** `GetEncounterWorkspaceUseCase` now sorts each order-type panel pending-first (via the same terminal-status lists `GetEncounterCloseReadinessUseCase` already uses, promoted to `public const` rather than duplicated) and exposes an uncapped `{type}OrdersPendingCount` alongside each capped list. The count is additive to the response; the frontend "+N more pending" affordance itself is not built (deferred, consistent with this codebase's backend-first pattern for this kind of work).
+
 ---
 
 ## C-9: No ownership/conflict check for admission-only encounters
