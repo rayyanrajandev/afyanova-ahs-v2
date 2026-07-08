@@ -33,8 +33,30 @@ const props = defineProps<{
     canOpenRadiologyWorkflow: boolean;
     canOpenTheatreWorkflow: boolean;
     canOpenBillingWorkflow: boolean;
-    contextCreateHref: (path: string, options?: { includeTabNew?: boolean }) => string;
+    contextCreateHref: (
+        path: string,
+        options?: { includeTabNew?: boolean },
+    ) => string;
     compact?: boolean;
+    /**
+     * Opt-in, additive-only: when true, the Theatre button triggers an
+     * inline booking flow (like lab/pharmacy/radiology) instead of linking
+     * out to /theatre-procedures. Defaults to undefined/falsy so the
+     * existing encounters/{id} Workspace.vue page (which doesn't pass this)
+     * keeps its current Link-only behavior unchanged.
+     */
+    canOpenTheatreInline?: boolean;
+    /** Whether an external theatre-inline form is currently open — hides this button grid the same way inlineOrderType does for lab/pharmacy/radiology. */
+    theatreInlineOpen?: boolean;
+    /**
+     * Opt-in, additive-only: hides the Billing button from this grid.
+     * Billing isn't clinical ordering — WorkspaceV2 renders its own billing
+     * link elsewhere, grouped with other "go to a different page" actions
+     * instead of alongside lab/pharmacy/radiology/theatre. Defaults to
+     * undefined/falsy so the existing encounters/{id} Workspace.vue page
+     * (which doesn't pass this) keeps Billing in the grid unchanged.
+     */
+    hideBillingLink?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -44,6 +66,7 @@ const emit = defineEmits<{
         type: EncounterInlineOrderType,
         linkage?: EncounterInlineOrderLinkageContext | null,
     ];
+    openTheatreInline: [];
 }>();
 
 const summariesById = computed(
@@ -53,7 +76,9 @@ const summariesById = computed(
         ),
 );
 
-function careSummary(id: CreateEncounterCareSectionId): CreateEncounterCareSummary | null {
+function careSummary(
+    id: CreateEncounterCareSectionId,
+): CreateEncounterCareSummary | null {
     return summariesById.value.get(id) ?? null;
 }
 
@@ -88,7 +113,9 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
             ]"
         >
             <div class="min-w-0 space-y-1">
-                <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <p
+                    class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                >
                     Order command center
                 </p>
                 <h3
@@ -128,7 +155,7 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
         />
 
         <div
-            v-if="!inlineOrderType && hasWorkflowActions"
+            v-if="!inlineOrderType && !theatreInlineOpen && hasWorkflowActions"
             :class="[
                 'grid gap-2',
                 compact
@@ -141,7 +168,9 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
                 variant="outline"
                 :class="[
                     'h-auto justify-start text-left',
-                    compact ? 'min-h-11 gap-2 px-2 py-2' : 'min-h-14 gap-3 px-3 py-3',
+                    compact
+                        ? 'min-h-11 gap-2 px-2 py-2'
+                        : 'min-h-14 gap-3 px-3 py-3',
                 ]"
                 data-test="encounter-workspace-new-order"
                 @click="emit('openInlineOrder', 'laboratory')"
@@ -176,11 +205,19 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
                 variant="outline"
                 :class="[
                     'h-auto justify-start text-left',
-                    compact ? 'min-h-11 gap-2 px-2 py-2' : 'min-h-14 gap-3 px-3 py-3',
+                    compact
+                        ? 'min-h-11 gap-2 px-2 py-2'
+                        : 'min-h-14 gap-3 px-3 py-3',
                 ]"
                 as-child
             >
-                <Link :href="contextCreateHref('/laboratory-orders', { includeTabNew: true })">
+                <Link
+                    :href="
+                        contextCreateHref('/laboratory-orders', {
+                            includeTabNew: true,
+                        })
+                    "
+                >
                     <span
                         :class="[
                             'flex shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary',
@@ -213,7 +250,9 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
                 variant="outline"
                 :class="[
                     'h-auto justify-start text-left',
-                    compact ? 'min-h-11 gap-2 px-2 py-2' : 'min-h-14 gap-3 px-3 py-3',
+                    compact
+                        ? 'min-h-11 gap-2 px-2 py-2'
+                        : 'min-h-14 gap-3 px-3 py-3',
                 ]"
                 @click="emit('openInlineOrder', 'pharmacy')"
             >
@@ -247,11 +286,19 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
                 variant="outline"
                 :class="[
                     'h-auto justify-start text-left',
-                    compact ? 'min-h-11 gap-2 px-2 py-2' : 'min-h-14 gap-3 px-3 py-3',
+                    compact
+                        ? 'min-h-11 gap-2 px-2 py-2'
+                        : 'min-h-14 gap-3 px-3 py-3',
                 ]"
                 as-child
             >
-                <Link :href="contextCreateHref('/pharmacy-orders', { includeTabNew: true })">
+                <Link
+                    :href="
+                        contextCreateHref('/pharmacy-orders', {
+                            includeTabNew: true,
+                        })
+                    "
+                >
                     <span
                         :class="[
                             'flex shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary',
@@ -284,7 +331,9 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
                 variant="outline"
                 :class="[
                     'h-auto justify-start text-left',
-                    compact ? 'min-h-11 gap-2 px-2 py-2' : 'min-h-14 gap-3 px-3 py-3',
+                    compact
+                        ? 'min-h-11 gap-2 px-2 py-2'
+                        : 'min-h-14 gap-3 px-3 py-3',
                 ]"
                 @click="emit('openInlineOrder', 'radiology')"
             >
@@ -318,11 +367,19 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
                 variant="outline"
                 :class="[
                     'h-auto justify-start text-left',
-                    compact ? 'min-h-11 gap-2 px-2 py-2' : 'min-h-14 gap-3 px-3 py-3',
+                    compact
+                        ? 'min-h-11 gap-2 px-2 py-2'
+                        : 'min-h-14 gap-3 px-3 py-3',
                 ]"
                 as-child
             >
-                <Link :href="contextCreateHref('/radiology-orders', { includeTabNew: true })">
+                <Link
+                    :href="
+                        contextCreateHref('/radiology-orders', {
+                            includeTabNew: true,
+                        })
+                    "
+                >
                     <span
                         :class="[
                             'flex shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary',
@@ -351,15 +408,59 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
             </Button>
 
             <Button
-                v-if="canOpenTheatreWorkflow"
+                v-if="canOpenTheatreWorkflow && canOpenTheatreInline"
                 variant="outline"
                 :class="[
                     'h-auto justify-start text-left',
-                    compact ? 'min-h-11 gap-2 px-2 py-2' : 'min-h-14 gap-3 px-3 py-3',
+                    compact
+                        ? 'min-h-11 gap-2 px-2 py-2'
+                        : 'min-h-14 gap-3 px-3 py-3',
+                ]"
+                @click="emit('openTheatreInline')"
+            >
+                <span
+                    :class="[
+                        'flex shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary',
+                        compact ? 'size-7' : 'size-8',
+                    ]"
+                >
+                    <AppIcon name="scissors" class="size-4" />
+                </span>
+                <span class="min-w-0">
+                    <span class="block text-sm font-medium">Theatre</span>
+                    <span
+                        v-if="!compact"
+                        class="block text-[11px] font-normal text-muted-foreground"
+                    >
+                        Procedures
+                    </span>
+                </span>
+                <Badge
+                    v-if="canShowCare"
+                    :variant="careSummaryBadgeVariant('theatre-procedures')"
+                    class="ml-auto shrink-0 text-[10px]"
+                >
+                    {{ careSummaryCountLabel('theatre-procedures') }}
+                </Badge>
+            </Button>
+            <Button
+                v-else-if="canOpenTheatreWorkflow"
+                variant="outline"
+                :class="[
+                    'h-auto justify-start text-left',
+                    compact
+                        ? 'min-h-11 gap-2 px-2 py-2'
+                        : 'min-h-14 gap-3 px-3 py-3',
                 ]"
                 as-child
             >
-                <Link :href="contextCreateHref('/theatre-procedures', { includeTabNew: true })">
+                <Link
+                    :href="
+                        contextCreateHref('/theatre-procedures', {
+                            includeTabNew: true,
+                        })
+                    "
+                >
                     <span
                         :class="[
                             'flex shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary',
@@ -388,15 +489,23 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
             </Button>
 
             <Button
-                v-if="canOpenBillingWorkflow"
+                v-if="canOpenBillingWorkflow && !hideBillingLink"
                 variant="outline"
                 :class="[
                     'h-auto justify-start text-left',
-                    compact ? 'min-h-11 gap-2 px-2 py-2' : 'min-h-14 gap-3 px-3 py-3',
+                    compact
+                        ? 'min-h-11 gap-2 px-2 py-2'
+                        : 'min-h-14 gap-3 px-3 py-3',
                 ]"
                 as-child
             >
-                <Link :href="contextCreateHref('/billing-invoices', { includeTabNew: true })">
+                <Link
+                    :href="
+                        contextCreateHref('/billing-invoices', {
+                            includeTabNew: true,
+                        })
+                    "
+                >
                     <span
                         :class="[
                             'flex shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary',
@@ -422,7 +531,8 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
             v-if="canUseInlineOrders && !inlineOrderType && !compact"
             class="text-[11px] leading-5 text-muted-foreground"
         >
-            Lab, pharmacy, and imaging open inline. Duplicate checks and medication safety run before placement.
+            Lab, pharmacy, and imaging open inline. Duplicate checks and
+            medication safety run before placement.
         </p>
     </section>
 </template>
