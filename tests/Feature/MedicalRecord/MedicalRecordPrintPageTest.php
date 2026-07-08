@@ -537,6 +537,49 @@ it('forbids encounter chart packet print when consultation note is unsigned', fu
         ->assertForbidden();
 });
 
+it('forbids the per-record print page for a reopened-for-amendment note with stale signer fields', function (): void {
+    // C-3 (reports/clinical-note-audit/15-critical-system-integrity-review.md):
+    // amend stores status back to draft while signed_at/signed_by_user_id from
+    // the prior finalization are deliberately left in place. Without the status
+    // gate, this would render a currently-editable draft as "Signed by Dr. X."
+    $actor = makeMedicalRecordPrintActor(['medical.records.read']);
+    $author = makeMedicalRecordPrintActor();
+    $signer = makeMedicalRecordPrintActor();
+    $patient = makeMedicalRecordPrintPatient();
+    $record = makeMedicalRecordPrintRecord($patient, $author, $signer);
+    $record->forceFill([
+        'status' => 'draft',
+        'status_reason' => 'Reopened for correction',
+    ])->save();
+
+    expect($record->refresh()->signed_by_user_id)->toBe($signer->id);
+    expect($record->refresh()->signed_at)->not->toBeNull();
+
+    $this->actingAs($actor)
+        ->get('/medical-records/'.$record->id.'/print')
+        ->assertForbidden();
+
+    $this->actingAs($actor)
+        ->get('/medical-records/'.$record->id.'/pdf')
+        ->assertForbidden();
+});
+
+it('allows the per-record print page for an amended note', function (): void {
+    $actor = makeMedicalRecordPrintActor(['medical.records.read']);
+    $author = makeMedicalRecordPrintActor();
+    $signer = makeMedicalRecordPrintActor();
+    $patient = makeMedicalRecordPrintPatient();
+    $record = makeMedicalRecordPrintRecord($patient, $author, $signer);
+    $record->forceFill(['status' => 'amended'])->save();
+
+    $this->actingAs($actor)
+        ->get('/medical-records/'.$record->id.'/print')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('medical-records/Print')
+            ->where('record.id', (string) $record->id));
+});
+
 it('writes encounter audit log when chart packet pdf is downloaded', function (): void {
     $actor = makeMedicalRecordPrintActor(['medical.records.read']);
     $author = makeMedicalRecordPrintActor();

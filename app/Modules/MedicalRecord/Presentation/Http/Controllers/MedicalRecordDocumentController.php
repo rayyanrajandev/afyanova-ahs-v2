@@ -144,6 +144,21 @@ class MedicalRecordDocumentController extends Controller
         $record = $recordUseCase->execute($id);
         abort_if($record === null, 404, 'Medical record not found.');
 
+        // C-3 (reports/clinical-note-audit/15-critical-system-integrity-review.md):
+        // an amended note is stored back as status=draft while its stale signed_at/
+        // signed_by_user_id from the prior finalization are deliberately left in
+        // place (needed so a subsequent re-finalize can land on `amended` instead
+        // of `finalized` — see UpdateMedicalRecordStatusUseCase). Without this gate,
+        // that stale signer identity would render as "Signed by Dr. X" on a note
+        // that is, right now, reopened and editable. Same gate already enforced for
+        // the encounter-level chart packet in EncounterDocumentController.
+        $status = strtolower(trim((string) ($record['status'] ?? '')));
+        abort_if(
+            ! in_array($status, ['finalized', 'amended'], true),
+            403,
+            'This document requires a finalized or amended consultation note.',
+        );
+
         $encounterId = trim((string) ($record['encounter_id'] ?? ''));
 
         $canViewEncounterOrders = [

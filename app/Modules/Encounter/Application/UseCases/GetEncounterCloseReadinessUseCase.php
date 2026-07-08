@@ -49,10 +49,20 @@ class GetEncounterCloseReadinessUseCase
         $patientId = trim((string) ($encounterArray['patient_id'] ?? ''));
         $primaryMedicalRecord = $this->resolvePrimaryMedicalRecord($encounterId, $patientId);
         $noteStatus = strtolower(trim((string) ($primaryMedicalRecord['status'] ?? '')));
-        $noteSigned = in_array($noteStatus, [
+        $hasSignedNote = in_array($noteStatus, [
             MedicalRecordStatus::FINALIZED->value,
             MedicalRecordStatus::AMENDED->value,
         ], true);
+
+        // C-2 (reports/clinical-note-audit/15-critical-system-integrity-review.md):
+        // resolvePrimaryMedicalRecord() returns the first FINALIZED/AMENDED/DRAFT
+        // match it finds, in that priority order — so a single signed note used to
+        // satisfy this item even if a *different* consultation note on the same
+        // encounter (an addendum, a co-signer's note, a corrected re-entry) was
+        // still an untouched draft. An encounter must have zero unsigned
+        // consultation-note drafts to close, not merely one signed one.
+        $hasUnsignedNote = $this->hasUnsignedConsultationNote($encounterId, $patientId);
+        $noteSigned = $hasSignedNote && ! $hasUnsignedNote;
 
         $diagnosisCode = trim((string) ($primaryMedicalRecord['diagnosis_code'] ?? ''));
         $assessment = trim((string) ($primaryMedicalRecord['assessment'] ?? ''));
@@ -75,9 +85,11 @@ class GetEncounterCloseReadinessUseCase
                 label: 'Consultation note signed',
                 severity: 'block',
                 passed: $noteSigned,
-                message: $noteSigned
-                    ? 'The consultation note is finalized or amended.'
-                    : 'Finalize or amend the consultation note before closing this encounter.',
+                message: match (true) {
+                    $noteSigned => 'The consultation note is finalized or amended.',
+                    $hasUnsignedNote => 'A draft consultation note for this encounter is still unsigned — finalize or amend it before closing.',
+                    default => 'Finalize or amend the consultation note before closing this encounter.',
+                },
             ),
             $this->buildItem(
                 id: 'diagnosis_documented',
@@ -187,6 +199,39 @@ class GetEncounterCloseReadinessUseCase
         }
 
         return null;
+    }
+
+    /**
+     * Whether any consultation note tied to this encounter is still a draft —
+     * distinct from resolvePrimaryMedicalRecord()'s "pick one representative
+     * note" resolution above. See the C-2 note on $hasUnsignedNote in execute().
+     */
+    private function hasUnsignedConsultationNote(string $encounterId, string $patientId): bool
+    {
+        if ($patientId === '') {
+            return false;
+        }
+
+        $search = $this->medicalRecordRepository->search(
+            query: null,
+            patientId: $patientId,
+            encounterId: $encounterId,
+            appointmentId: null,
+            appointmentReferralId: null,
+            admissionId: null,
+            theatreProcedureId: null,
+            authorUserId: null,
+            status: MedicalRecordStatus::DRAFT->value,
+            recordType: MedicalRecordNoteType::CONSULTATION_NOTE->value,
+            fromDateTime: null,
+            toDateTime: null,
+            page: 1,
+            perPage: 1,
+            sortBy: 'updated_at',
+            sortDirection: 'desc',
+        );
+
+        return $search['data'] !== [];
     }
 
     private function countPendingOrders(string $encounterId): int
