@@ -223,6 +223,10 @@ const routeAccessRules: RouteAccessRule[] = [
         requiredPermissions: ['appointments.read'],
     },
     {
+        pathPrefix: '/reception',
+        requiredPermissions: ['appointments.read'],
+    },
+    {
         pathPrefix: '/admissions',
         requiredPermissions: ['admissions.read'],
     },

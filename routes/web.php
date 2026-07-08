@@ -76,6 +76,13 @@ Route::get('appointments', function () {
     return Inertia::render('appointments/Index');
 })->middleware(['auth', 'verified', 'can:appointments.read', 'facility.entitlement:appointments.scheduling'])->name('appointments.page');
 
+// Phase 6 (slice 1) of reports/patient-arrival-checkin-modernization-plan.md:
+// a new, standalone page — no predecessor to replace, so no V2/legacy-fallback
+// route pair, matching encounters/List.vue's precedent.
+Route::get('reception/queue', function () {
+    return Inertia::render('reception/Queue');
+})->middleware(['auth', 'verified', 'can:appointments.read', 'facility.entitlement:appointments.scheduling'])->name('reception.queue');
+
 Route::get('admissions', function () {
     return Inertia::render('admissions/Index');
 })->middleware([

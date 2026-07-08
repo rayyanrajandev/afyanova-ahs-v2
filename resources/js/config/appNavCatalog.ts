@@ -97,6 +97,14 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Check-in queue, triage, and quick booking',
     },
     {
+        title: 'Reception queue',
+        href: '/reception/queue',
+        iconName: 'clipboard-list',
+        section: 'front_office',
+        permissionPrefixes: ['appointments.'],
+        helpNote: 'Live triage/provider queue and walk-in registration',
+    },
+    {
         title: 'Inpatient admissions',
         href: '/admissions',
         iconName: 'bed-double',
