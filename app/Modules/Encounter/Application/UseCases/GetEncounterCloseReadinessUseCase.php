@@ -17,7 +17,11 @@ use App\Support\ClinicalOrders\ClinicalOrderEntryState;
 
 class GetEncounterCloseReadinessUseCase
 {
-    private const LAB_TERMINAL_STATUSES = ['completed', 'cancelled'];
+    // Public: reused by GetEncounterWorkspaceUseCase for C-8's pending-first
+    // order-panel sort (reports/clinical-note-audit/15-critical-system-integrity-review.md).
+    // Deliberately a single source of truth rather than a second copy — a
+    // duplicated list is exactly what let C-11 drift out of sync with reality.
+    public const LAB_TERMINAL_STATUSES = ['completed', 'cancelled'];
 
     // C-11 (reports/clinical-note-audit/15-critical-system-integrity-review.md):
     // reconciliation_exception is an unresolved-problem state (a flagged
@@ -25,15 +29,15 @@ class GetEncounterCloseReadinessUseCase
     // not be grouped with dispensed/cancelled/reconciliation_completed here,
     // or an unresolved medication-safety flag silently stops contributing to
     // the pending-orders close-readiness warning the moment it's raised.
-    private const PHARMACY_TERMINAL_STATUSES = [
+    public const PHARMACY_TERMINAL_STATUSES = [
         'dispensed',
         'cancelled',
         'reconciliation_completed',
     ];
 
-    private const RADIOLOGY_TERMINAL_STATUSES = ['completed', 'cancelled'];
+    public const RADIOLOGY_TERMINAL_STATUSES = ['completed', 'cancelled'];
 
-    private const THEATRE_TERMINAL_STATUSES = ['completed', 'cancelled'];
+    public const THEATRE_TERMINAL_STATUSES = ['completed', 'cancelled'];
 
     public function __construct(
         private readonly EncounterResolverService $encounterResolverService,

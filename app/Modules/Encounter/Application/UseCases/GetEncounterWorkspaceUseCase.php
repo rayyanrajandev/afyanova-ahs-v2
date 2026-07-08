@@ -61,9 +61,13 @@ class GetEncounterWorkspaceUseCase
             'admission' => $admission,
             'diagnoses' => $this->loadDiagnoses($encounterId),
             'laboratoryOrders' => $this->loadLaboratoryOrders($encounterId),
+            'laboratoryOrdersPendingCount' => $this->countPendingLaboratoryOrders($encounterId),
             'pharmacyOrders' => $this->loadPharmacyOrders($encounterId),
+            'pharmacyOrdersPendingCount' => $this->countPendingPharmacyOrders($encounterId),
             'radiologyOrders' => $this->loadRadiologyOrders($encounterId),
+            'radiologyOrdersPendingCount' => $this->countPendingRadiologyOrders($encounterId),
             'theatreProcedures' => $this->loadTheatreProcedures($encounterId),
+            'theatreProceduresPendingCount' => $this->countPendingTheatreProcedures($encounterId),
             'closeReadiness' => $this->encounterCloseReadinessUseCase->execute($encounterId),
         ];
     }
@@ -88,9 +92,12 @@ class GetEncounterWorkspaceUseCase
      */
     private function loadLaboratoryOrders(string $encounterId): array
     {
-        return LaboratoryOrderModel::query()
+        $query = LaboratoryOrderModel::query()
             ->where('encounter_id', $encounterId)
-            ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
+            ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value);
+        $this->orderPendingFirst($query, GetEncounterCloseReadinessUseCase::LAB_TERMINAL_STATUSES);
+
+        return $query
             ->orderByDesc('ordered_at')
             ->orderByDesc('created_at')
             ->limit(self::CARE_ARTIFACT_LIMIT)
@@ -99,14 +106,26 @@ class GetEncounterWorkspaceUseCase
             ->all();
     }
 
+    private function countPendingLaboratoryOrders(string $encounterId): int
+    {
+        return LaboratoryOrderModel::query()
+            ->where('encounter_id', $encounterId)
+            ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
+            ->whereNotIn('status', GetEncounterCloseReadinessUseCase::LAB_TERMINAL_STATUSES)
+            ->count();
+    }
+
     /**
      * @return array<int, array<string, mixed>>
      */
     private function loadPharmacyOrders(string $encounterId): array
     {
-        return PharmacyOrderModel::query()
+        $query = PharmacyOrderModel::query()
             ->where('encounter_id', $encounterId)
-            ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
+            ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value);
+        $this->orderPendingFirst($query, GetEncounterCloseReadinessUseCase::PHARMACY_TERMINAL_STATUSES);
+
+        return $query
             ->orderByDesc('ordered_at')
             ->orderByDesc('created_at')
             ->limit(self::CARE_ARTIFACT_LIMIT)
@@ -115,14 +134,26 @@ class GetEncounterWorkspaceUseCase
             ->all();
     }
 
+    private function countPendingPharmacyOrders(string $encounterId): int
+    {
+        return PharmacyOrderModel::query()
+            ->where('encounter_id', $encounterId)
+            ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
+            ->whereNotIn('status', GetEncounterCloseReadinessUseCase::PHARMACY_TERMINAL_STATUSES)
+            ->count();
+    }
+
     /**
      * @return array<int, array<string, mixed>>
      */
     private function loadRadiologyOrders(string $encounterId): array
     {
-        return RadiologyOrderModel::query()
+        $query = RadiologyOrderModel::query()
             ->where('encounter_id', $encounterId)
-            ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
+            ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value);
+        $this->orderPendingFirst($query, GetEncounterCloseReadinessUseCase::RADIOLOGY_TERMINAL_STATUSES);
+
+        return $query
             ->orderByDesc('ordered_at')
             ->orderByDesc('created_at')
             ->limit(self::CARE_ARTIFACT_LIMIT)
@@ -131,19 +162,60 @@ class GetEncounterWorkspaceUseCase
             ->all();
     }
 
+    private function countPendingRadiologyOrders(string $encounterId): int
+    {
+        return RadiologyOrderModel::query()
+            ->where('encounter_id', $encounterId)
+            ->where('entry_state', ClinicalOrderEntryState::ACTIVE->value)
+            ->whereNotIn('status', GetEncounterCloseReadinessUseCase::RADIOLOGY_TERMINAL_STATUSES)
+            ->count();
+    }
+
     /**
      * @return array<int, array<string, mixed>>
      */
     private function loadTheatreProcedures(string $encounterId): array
     {
-        return TheatreProcedureModel::query()
+        $query = TheatreProcedureModel::query()
             ->where('encounter_id', $encounterId)
-            ->whereNull('entered_in_error_at')
+            ->whereNull('entered_in_error_at');
+        $this->orderPendingFirst($query, GetEncounterCloseReadinessUseCase::THEATRE_TERMINAL_STATUSES);
+
+        return $query
             ->orderByDesc('scheduled_at')
             ->orderByDesc('created_at')
             ->limit(self::CARE_ARTIFACT_LIMIT)
             ->get()
             ->map(static fn (TheatreProcedureModel $procedure): array => $procedure->toArray())
             ->all();
+    }
+
+    private function countPendingTheatreProcedures(string $encounterId): int
+    {
+        return TheatreProcedureModel::query()
+            ->where('encounter_id', $encounterId)
+            ->whereNull('entered_in_error_at')
+            ->whereNotIn('status', GetEncounterCloseReadinessUseCase::THEATRE_TERMINAL_STATUSES)
+            ->count();
+    }
+
+    /**
+     * C-8 (reports/clinical-note-audit/15-critical-system-integrity-review.md):
+     * each order-type panel is capped at CARE_ARTIFACT_LIMIT rows. Sorting by
+     * recency alone meant an old *pending* order — exactly the one most
+     * overdue for follow-up — could be silently pushed out of the visible
+     * panel by newer *completed* rows, while still counting toward the
+     * opaque close-readiness "N pending" badge. Sorting pending-first (using
+     * the same terminal-status lists close-readiness treats as resolved, not
+     * a second copy — see the constants' own docblock) means the cap can
+     * only ever hide a completed/cancelled row, never a pending one, until
+     * pending rows alone exceed the cap.
+     *
+     * @param  array<int, string>  $terminalStatuses
+     */
+    private function orderPendingFirst(Builder $query, array $terminalStatuses): void
+    {
+        $placeholders = implode(',', array_fill(0, count($terminalStatuses), '?'));
+        $query->orderByRaw("CASE WHEN status IN ({$placeholders}) THEN 1 ELSE 0 END ASC", $terminalStatuses);
     }
 }

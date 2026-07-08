@@ -43,18 +43,26 @@ class EncounterWorkspaceResponseTransformer
                 static fn (array $order): array => LaboratoryOrderResponseTransformer::transform($order),
                 is_array($workspace['laboratoryOrders'] ?? null) ? $workspace['laboratoryOrders'] : [],
             ),
+            // C-8 (reports/clinical-note-audit/15-critical-system-integrity-review.md):
+            // the total pending count, independent of the CARE_ARTIFACT_LIMIT cap on
+            // the list above, so a "+N more pending" affordance can be shown without
+            // guessing from the capped list's length.
+            'laboratoryOrdersPendingCount' => (int) ($workspace['laboratoryOrdersPendingCount'] ?? 0),
             'pharmacyOrders' => array_map(
                 static fn (array $order): array => PharmacyOrderResponseTransformer::transform($order),
                 is_array($workspace['pharmacyOrders'] ?? null) ? $workspace['pharmacyOrders'] : [],
             ),
+            'pharmacyOrdersPendingCount' => (int) ($workspace['pharmacyOrdersPendingCount'] ?? 0),
             'radiologyOrders' => array_map(
                 static fn (array $order): array => RadiologyOrderResponseTransformer::transform($order),
                 is_array($workspace['radiologyOrders'] ?? null) ? $workspace['radiologyOrders'] : [],
             ),
+            'radiologyOrdersPendingCount' => (int) ($workspace['radiologyOrdersPendingCount'] ?? 0),
             'theatreProcedures' => array_map(
                 static fn (array $procedure): array => TheatreProcedureResponseTransformer::transform($procedure),
                 is_array($workspace['theatreProcedures'] ?? null) ? $workspace['theatreProcedures'] : [],
             ),
+            'theatreProceduresPendingCount' => (int) ($workspace['theatreProceduresPendingCount'] ?? 0),
             'closeReadiness' => EncounterCloseReadinessResponseTransformer::transform(
                 is_array($workspace['closeReadiness'] ?? null) ? $workspace['closeReadiness'] : null,
             ),
