@@ -1,5 +1,7 @@
 import { createInertiaApp } from '@inertiajs/vue3';
+import { VueQueryPlugin } from '@tanstack/vue-query';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
+import { createPinia } from 'pinia';
 import type { DefineComponent } from 'vue';
 import { createApp, Fragment, h } from 'vue';
 import 'vue-sonner/style.css';
@@ -9,6 +11,7 @@ import { initializeTheme } from './composables/useAppearance';
 import { initializeUiPreferences } from './composables/useUiPreferences';
 import { buildDocumentTitle, syncClientBranding } from './lib/branding';
 import { purgeKnownSensitiveBrowserStorage } from './lib/browserStoragePolicy';
+import { createAppQueryClient } from './lib/queryClient';
 
 syncClientBranding(
     typeof window !== 'undefined' ? window.__AFYANOVA_BRANDING__ : undefined,
@@ -30,6 +33,8 @@ createInertiaApp({
             render: () => h(Fragment, null, [h(App, props), h(Toaster)]),
         })
             .use(plugin)
+            .use(createPinia())
+            .use(VueQueryPlugin, { queryClient: createAppQueryClient() })
             .mount(el);
     },
     progress: {
