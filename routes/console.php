@@ -17,6 +17,7 @@ use App\Modules\Platform\Infrastructure\Models\FacilityModel;
 use App\Modules\Platform\Infrastructure\Models\RoleModel;
 use App\Modules\Platform\Infrastructure\Models\TenantModel;
 use App\Support\CatalogGovernance\CatalogPlacementAuditor;
+use App\Support\CatalogGovernance\EmptyDiagnosisCatalogAuditor;
 use Database\Seeders\Support\BaselineDepartmentCatalog;
 use Database\Seeders\Support\FacilitySubscriptionBootstrap;
 use Illuminate\Database\QueryException;
@@ -76,6 +77,39 @@ Artisan::command('catalog:audit-placement {--fix : Repair safe inventory placeme
 
     return self::SUCCESS;
 })->purpose('Audit catalog, price list, and inventory placement integrity');
+
+// C-10 (reports/clinical-note-audit/15-critical-system-integrity-review.md),
+// Option C (decided, reports/clinical-note-audit/16-remediation-options-c8-c9-c10-c12.md):
+// flag any facility whose diagnosis-terminology catalog is empty, so the
+// misconfiguration that makes diagnosis validation silently permissive is
+// caught at its source rather than only visible per-request (Option B).
+Artisan::command('medical-records:audit-empty-diagnosis-catalogs {--json : Output machine-readable JSON}', function (EmptyDiagnosisCatalogAuditor $auditor): int {
+    $findings = $auditor->audit();
+    $auditor->writeAuditFindings($findings);
+
+    if ($this->option('json')) {
+        $this->line(json_encode(['findings' => $findings], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+        return self::SUCCESS;
+    }
+
+    $this->info(sprintf('Empty diagnosis catalog audit completed: %d facility/facilities flagged.', count($findings)));
+
+    if ($findings !== []) {
+        $this->table(
+            ['Facility', 'Summary'],
+            array_map(
+                static fn (array $finding): array => [
+                    trim((string) ($finding['payload']['facilityCode'] ?? '').' '.(string) ($finding['payload']['facilityName'] ?? '')),
+                    $finding['summary'] ?? '',
+                ],
+                $findings,
+            ),
+        );
+    }
+
+    return self::SUCCESS;
+})->purpose('Flag any facility whose diagnosis-terminology catalog has zero active entries');
 
 // --- Inventory Scheduled Commands ---
 Schedule::command('inventory:check-expiring-batches --quarantine-expired')

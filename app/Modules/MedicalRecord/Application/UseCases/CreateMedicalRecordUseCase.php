@@ -146,7 +146,7 @@ class CreateMedicalRecordUseCase
             }
         }
 
-        $this->applyDiagnosisCodeValidationBaseline($payload);
+        $diagnosisCodeAcceptedUnverified = $this->applyDiagnosisCodeValidationBaseline($payload);
 
         $payload['status'] = MedicalRecordStatus::DRAFT->value;
         $payload['record_number'] = $this->generateRecordNumber();
@@ -165,7 +165,9 @@ class CreateMedicalRecordUseCase
                 changes: [
                     'after' => $this->extractTrackedFields($createdRecord),
                 ],
-                metadata: [],
+                metadata: $diagnosisCodeAcceptedUnverified
+                    ? ['diagnosis_code_catalog_verified' => false]
+                    : [],
             );
 
         $snapshot = $this->extractVersionSnapshot($createdRecord);
@@ -410,22 +412,31 @@ class CreateMedicalRecordUseCase
         return $snapshot;
     }
 
-    private function applyDiagnosisCodeValidationBaseline(array &$payload): void
+    /**
+     * C-10 (reports/clinical-note-audit/15-critical-system-integrity-review.md),
+     * Option B (decided): when the catalog is empty, a shape-valid code is
+     * still accepted (unchanged behavior — Option A's fail-closed default
+     * was rejected as an onboarding-friction risk), but the caller must be
+     * able to tell "verified against real terminology" apart from
+     * "accepted because there was nothing to verify against." The return
+     * value is that signal: true means this code was accepted unverified.
+     */
+    private function applyDiagnosisCodeValidationBaseline(array &$payload): bool
     {
         if (! array_key_exists('diagnosis_code', $payload)) {
-            return;
+            return false;
         }
 
         $diagnosisCode = $payload['diagnosis_code'];
         if ($diagnosisCode === null) {
-            return;
+            return false;
         }
 
         $normalized = strtoupper(trim((string) $diagnosisCode));
         if ($normalized === '') {
             $payload['diagnosis_code'] = null;
 
-            return;
+            return false;
         }
 
         if (! preg_match(self::ICD10_CODE_PATTERN, $normalized)) {
@@ -434,15 +445,15 @@ class CreateMedicalRecordUseCase
             );
         }
 
-        if (
-            $this->diagnosisTerminologyLookupService->hasAnyActiveDiagnosisCodes()
-            && ! $this->diagnosisTerminologyLookupService->isActiveDiagnosisCode($normalized)
-        ) {
+        $catalogHasActiveCodes = $this->diagnosisTerminologyLookupService->hasAnyActiveDiagnosisCodes();
+        if ($catalogHasActiveCodes && ! $this->diagnosisTerminologyLookupService->isActiveDiagnosisCode($normalized)) {
             throw new InvalidMedicalRecordDiagnosisCodeException(
                 'Diagnosis code must match an active diagnosis terminology catalog entry.',
             );
         }
 
         $payload['diagnosis_code'] = $normalized;
+
+        return ! $catalogHasActiveCodes;
     }
 }

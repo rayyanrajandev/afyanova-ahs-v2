@@ -117,7 +117,7 @@ class UpdateMedicalRecordUseCase
             $admissionId,
             $recordType,
         );
-        $this->applyDiagnosisCodeValidationBaseline($payload);
+        $diagnosisCodeAcceptedUnverified = $this->applyDiagnosisCodeValidationBaseline($payload);
 
         $normalizedExpectedUpdatedAt = $expectedUpdatedAt !== null
             ? trim((string) $expectedUpdatedAt)
@@ -142,6 +142,7 @@ class UpdateMedicalRecordUseCase
             $normalizedExpectedUpdatedAt,
             $forceDraftSave,
             $existing,
+            $diagnosisCodeAcceptedUnverified,
         ): ?array {
             $updateResult = $this->medicalRecordRepository->updateWithOptimisticLock(
                 id: $id,
@@ -172,7 +173,9 @@ class UpdateMedicalRecordUseCase
                     action: 'medical-record.updated',
                     actorId: $actorId,
                     changes: $changes,
-                    metadata: [],
+                    metadata: $diagnosisCodeAcceptedUnverified
+                        ? ['diagnosis_code_catalog_verified' => false]
+                        : [],
                 );
 
                 $this->medicalRecordVersionRepository->create(
@@ -236,22 +239,30 @@ class UpdateMedicalRecordUseCase
         return $changes;
     }
 
-    private function applyDiagnosisCodeValidationBaseline(array &$payload): void
+    /**
+     * C-10 (reports/clinical-note-audit/15-critical-system-integrity-review.md),
+     * Option B (decided): when the catalog is empty, a shape-valid code is
+     * still accepted (unchanged behavior), but the caller must be able to
+     * tell "verified against real terminology" apart from "accepted because
+     * there was nothing to verify against." The return value is that
+     * signal: true means this code was accepted unverified.
+     */
+    private function applyDiagnosisCodeValidationBaseline(array &$payload): bool
     {
         if (! array_key_exists('diagnosis_code', $payload)) {
-            return;
+            return false;
         }
 
         $diagnosisCode = $payload['diagnosis_code'];
         if ($diagnosisCode === null) {
-            return;
+            return false;
         }
 
         $normalized = strtoupper(trim((string) $diagnosisCode));
         if ($normalized === '') {
             $payload['diagnosis_code'] = null;
 
-            return;
+            return false;
         }
 
         if (! preg_match(self::ICD10_CODE_PATTERN, $normalized)) {
@@ -260,16 +271,16 @@ class UpdateMedicalRecordUseCase
             );
         }
 
-        if (
-            $this->diagnosisTerminologyLookupService->hasAnyActiveDiagnosisCodes()
-            && ! $this->diagnosisTerminologyLookupService->isActiveDiagnosisCode($normalized)
-        ) {
+        $catalogHasActiveCodes = $this->diagnosisTerminologyLookupService->hasAnyActiveDiagnosisCodes();
+        if ($catalogHasActiveCodes && ! $this->diagnosisTerminologyLookupService->isActiveDiagnosisCode($normalized)) {
             throw new InvalidMedicalRecordDiagnosisCodeException(
                 'Diagnosis code must match an active diagnosis terminology catalog entry.',
             );
         }
 
         $payload['diagnosis_code'] = $normalized;
+
+        return ! $catalogHasActiveCodes;
     }
 
     private function applyRecordTypeValidationBaseline(array &$payload, array $existing): string
