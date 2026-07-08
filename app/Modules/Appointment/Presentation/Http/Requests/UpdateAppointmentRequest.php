@@ -24,8 +24,6 @@ class UpdateAppointmentRequest extends FormRequest
         'billingPayerContractId',
         'coverageReference',
         'coverageNotes',
-        'triageVitalsSummary',
-        'triageNotes',
     ];
 
     public function authorize(): bool
@@ -51,10 +49,13 @@ class UpdateAppointmentRequest extends FormRequest
             'billingPayerContractId' => ['nullable', 'uuid', 'exists:billing_payer_contracts,id'],
             'coverageReference' => ['nullable', 'string', 'max:160'],
             'coverageNotes' => ['nullable', 'string', 'max:4000'],
-            'triageVitalsSummary' => ['nullable', 'string', 'max:4000'],
-            'triageNotes' => ['nullable', 'string', 'max:4000'],
             'status' => ['prohibited'],
             'statusReason' => ['prohibited'],
+            // Triage fields must go through PATCH /appointments/{id}/triage, which is
+            // gated by appointments.record-triage rather than this endpoint's
+            // appointments.update — see reports/patient-arrival-checkin-audit.md §7.
+            'triageVitalsSummary' => ['prohibited'],
+            'triageNotes' => ['prohibited'],
         ];
     }
 

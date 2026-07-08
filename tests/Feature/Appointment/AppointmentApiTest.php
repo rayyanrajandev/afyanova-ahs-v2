@@ -1141,6 +1141,39 @@ it('rejects status lifecycle fields on appointment detail update endpoint', func
     expect($appointment->notes)->toBe('Follow-up required');
 });
 
+it('rejects triage fields on the generic appointment update endpoint, closing the appointments.update bypass of appointments.record-triage', function (): void {
+    $creator = makeAppointmentUser();
+    $registrationClerk = User::factory()->create();
+    grantAppointmentReadPermission($registrationClerk);
+    $registrationClerk->givePermissionTo('appointments.update');
+    $patient = makePatient();
+
+    $created = $this->actingAs($creator)
+        ->postJson('/api/v1/appointments', appointmentPayload($patient->id))
+        ->json('data');
+
+    $this->actingAs($creator)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/status', [
+            'status' => 'waiting_triage',
+            'reason' => null,
+        ])
+        ->assertOk();
+
+    $this->actingAs($registrationClerk)
+        ->patchJson('/api/v1/appointments/'.$created['id'], [
+            'triageVitalsSummary' => 'BP 118/74, Pulse 82, Temp 37.1 C',
+            'triageNotes' => 'Recorded by front desk without triage permission.',
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['triageVitalsSummary', 'triageNotes']);
+
+    $appointment = AppointmentModel::query()->findOrFail($created['id']);
+    expect($appointment->triage_vitals_summary)->toBeNull();
+    expect($appointment->triage_notes)->toBeNull();
+    expect($appointment->triaged_at)->toBeNull();
+    expect($appointment->triaged_by_user_id)->toBeNull();
+});
+
 it('updates appointment status', function (): void {
     $user = makeAppointmentUser();
     $patient = makePatient();

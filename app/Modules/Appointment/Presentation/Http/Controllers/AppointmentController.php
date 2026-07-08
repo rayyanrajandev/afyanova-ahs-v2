@@ -184,13 +184,6 @@ class AppointmentController extends Controller
     {
         try {
             $payload = $this->toPersistencePayload($request->validated());
-            if (
-                (array_key_exists('triage_vitals_summary', $payload) && trim((string) ($payload['triage_vitals_summary'] ?? '')) !== '')
-                || (array_key_exists('triage_notes', $payload) && trim((string) ($payload['triage_notes'] ?? '')) !== '')
-            ) {
-                $payload['triaged_at'] = now();
-                $payload['triaged_by_user_id'] = $request->user()?->id;
-            }
 
             $appointment = $useCase->execute(
                 id: $id,
@@ -875,8 +868,6 @@ class AppointmentController extends Controller
             'billingPayerContractId' => 'billing_payer_contract_id',
             'coverageReference' => 'coverage_reference',
             'coverageNotes' => 'coverage_notes',
-            'triageVitalsSummary' => 'triage_vitals_summary',
-            'triageNotes' => 'triage_notes',
             'appointmentType' => 'appointment_type',
         ];
 
