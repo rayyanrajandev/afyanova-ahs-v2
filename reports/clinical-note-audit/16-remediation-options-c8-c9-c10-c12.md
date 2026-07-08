@@ -49,6 +49,8 @@ For context: C-1 and C-16 were fixed directly in this pass because they were una
 
 **Recommendation**: **B now, A later, C alongside either.** B is safe to build immediately regardless of what else is decided — it costs little and turns a silent gap into a visible one. A is the right long-term default once every tenant/facility is expected to have a populated catalog, but flipping it on before that's true would break legitimate onboarding. C is a good complement to either.
 
+**Status: Done (B + C implemented; A not built).** Create/update audit-log entries now carry `metadata.diagnosis_code_catalog_verified = false` whenever a code is accepted with an empty catalog (Option B). A new `EmptyDiagnosisCatalogAuditor` + `medical-records:audit-empty-diagnosis-catalogs` command flags any facility with zero active diagnosis-terminology entries, writing to the existing `catalog_integrity_audit_findings` table (Option C) — run manually for now, not yet wired into the schedule since the alerting cadence/destination is still undecided. Run against the dev database on 2026-07-08: all 5 current facilities were flagged, confirming this is a live, real gap, not a hypothetical.
+
 ---
 
 ## C-12: No linkage between note content and structured orders
