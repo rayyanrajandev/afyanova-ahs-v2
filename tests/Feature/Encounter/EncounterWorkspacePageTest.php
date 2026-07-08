@@ -65,7 +65,7 @@ it('renders the medical record archive page without the encounter workspace shel
         ->get('/medical-records')
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->component('medical-records/Index')
+            ->component('medical-records/IndexV2')
             ->missing('encounterId')
             ->missing('encounterWorkspace'));
 });
@@ -90,9 +90,8 @@ it('renders the encounter workspace page shell', function (): void {
         ->get('/encounters/'.$encounter->id)
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->component('encounters/Show')
-            ->where('encounterId', $encounter->id)
-            ->missing('legacyAppointmentId'));
+            ->component('encounters/WorkspaceV2')
+            ->where('encounterId', $encounter->id));
 });
 
 it('renders the legacy appointment encounter route shell', function (): void {

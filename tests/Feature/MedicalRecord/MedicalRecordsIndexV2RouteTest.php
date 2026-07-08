@@ -7,13 +7,11 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 uses(RefreshDatabase::class);
 
 /**
- * The /medical-records/v2 route must be fully inert by default — confirming
- * the config-gate actually works, not just trusting the code reads correctly.
- * Same pattern as WorkspaceV2RouteTest / EncountersListRouteTest.
+ * Post-cutover: /medical-records renders the rebuilt registry directly (no
+ * config gate). /medical-records/v2 stays as a working alias, and the
+ * pre-cutover page is still reachable at /medical-records/legacy for rollback.
  */
-it('404s on the medical records index v2 route when the flag is disabled (default)', function (): void {
-    config(['frontend_rebuild.medical_records_index_v2_enabled' => false]);
-
+it('renders the medical records index v2 page at the canonical medical-records route', function (): void {
     $user = makeUserWithRole(['medical.records.read']);
 
     $this->withoutMiddleware([
@@ -22,13 +20,12 @@ it('404s on the medical records index v2 route when the flag is disabled (defaul
     ]);
 
     $this->actingAs($user)
-        ->get('/medical-records/v2')
-        ->assertNotFound();
+        ->get('/medical-records')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->component('medical-records/IndexV2'));
 });
 
-it('renders the medical records index v2 page when the flag is explicitly enabled', function (): void {
-    config(['frontend_rebuild.medical_records_index_v2_enabled' => true]);
-
+it('renders the medical records index v2 page at the /v2 alias', function (): void {
     $user = makeUserWithRole(['medical.records.read']);
 
     $this->withoutMiddleware([
@@ -40,4 +37,18 @@ it('renders the medical records index v2 page when the flag is explicitly enable
         ->get('/medical-records/v2')
         ->assertOk()
         ->assertInertia(fn ($page) => $page->component('medical-records/IndexV2'));
+});
+
+it('renders the pre-cutover medical records page at the legacy route', function (): void {
+    $user = makeUserWithRole(['medical.records.read']);
+
+    $this->withoutMiddleware([
+        EnsureMappedFacilitySubscriptionEntitlement::class,
+        EnsureFacilitySubscriptionEntitlement::class,
+    ]);
+
+    $this->actingAs($user)
+        ->get('/medical-records/legacy')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->component('medical-records/Index'));
 });

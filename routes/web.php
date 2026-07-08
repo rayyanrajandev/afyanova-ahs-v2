@@ -51,22 +51,26 @@ Route::get('patients', function () {
     return Inertia::render('patients/Index');
 })->middleware(['auth', 'verified', 'can:patients.read', 'facility.entitlement:patients.search'])->name('patients.page');
 
+// Cut over to the rebuilt page (reports/patient-chart-rebuild-plan.md).
+// The old page remains reachable at patients/{id}/chart/legacy for rollback.
 Route::get('patients/{id}/chart', function (string $id) {
-    return Inertia::render('patients/chart/Show', [
+    return Inertia::render('patients/chart/ShowV2', [
         'patientId' => $id,
     ]);
 })->middleware(['auth', 'verified', 'can:patients.read', 'facility.entitlement:patients.search'])->name('patients.chart.page');
 
-// Rebuild-in-progress page (reports/patient-chart-rebuild-plan.md). Config-gated,
-// off by default — 404s unless FRONTEND_PATIENT_CHART_V2_ENABLED=true. Fully additive:
-// the patients.chart.page route above is completely untouched.
 Route::get('patients/{id}/chart/v2', function (string $id) {
-    abort_unless(config('frontend_rebuild.patient_chart_v2_enabled'), 404);
-
     return Inertia::render('patients/chart/ShowV2', [
         'patientId' => $id,
     ]);
 })->middleware(['auth', 'verified', 'can:patients.read', 'facility.entitlement:patients.search'])->name('patients.chart.v2');
+
+// Rollback path — the pre-cutover page, unchanged.
+Route::get('patients/{id}/chart/legacy', function (string $id) {
+    return Inertia::render('patients/chart/Show', [
+        'patientId' => $id,
+    ]);
+})->middleware(['auth', 'verified', 'can:patients.read', 'facility.entitlement:patients.search'])->name('patients.chart.legacy');
 
 Route::get('appointments', function () {
     return Inertia::render('appointments/Index');
@@ -92,41 +96,49 @@ Route::get('encounters', function () {
     return Inertia::render('encounters/List');
 })->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])->name('encounters.list');
 
+// Cut over to the rebuilt workspace (reports/clinical-notes-frontend-rebuild-plan.md).
+// The old page remains reachable at encounters/{encounterId}/legacy for rollback.
 Route::get('encounters/{encounterId}', function (string $encounterId) {
-    return Inertia::render('encounters/Show', [
+    return Inertia::render('encounters/WorkspaceV2', [
         'encounterId' => $encounterId,
     ]);
 })->middleware(['auth', 'verified', 'can:medical.records.read', 'can:medical.records.create', 'facility.entitlement:medical_records.core'])->name('encounters.show');
 
+// Appointment-based resolution has no WorkspaceV2 equivalent yet (WorkspaceV2 only
+// accepts a resolved encounterId) — stays on the legacy page, not part of this cutover.
 Route::get('encounters/by-appointment/{appointmentId}', function (string $appointmentId) {
     return Inertia::render('encounters/Show', [
         'legacyAppointmentId' => $appointmentId,
     ]);
 })->middleware(['auth', 'verified', 'can:medical.records.read', 'can:medical.records.create', 'facility.entitlement:medical_records.core'])->name('encounters.by-appointment');
 
-// Rebuild-in-progress page (reports/clinical-notes-frontend-rebuild-plan.md). Config-gated,
-// off by default — 404s unless FRONTEND_WORKSPACE_V2_ENABLED=true. Fully additive: the
-// encounters.show route above is completely untouched.
 Route::get('encounters/{encounterId}/v2', function (string $encounterId) {
-    abort_unless(config('frontend_rebuild.workspace_v2_enabled'), 404);
-
     return Inertia::render('encounters/WorkspaceV2', [
         'encounterId' => $encounterId,
     ]);
 })->middleware(['auth', 'verified', 'can:medical.records.read', 'can:medical.records.create', 'facility.entitlement:medical_records.core'])->name('encounters.workspace-v2');
 
+// Rollback path — the pre-cutover page, unchanged.
+Route::get('encounters/{encounterId}/legacy', function (string $encounterId) {
+    return Inertia::render('encounters/Show', [
+        'encounterId' => $encounterId,
+    ]);
+})->middleware(['auth', 'verified', 'can:medical.records.read', 'can:medical.records.create', 'facility.entitlement:medical_records.core'])->name('encounters.show-legacy');
+
+// Cut over to the rebuilt registry (reports/medical-records-index-rebuild-plan.md).
+// The old page remains reachable at medical-records/legacy for rollback.
 Route::get('medical-records', function () {
-    return Inertia::render('medical-records/Index');
+    return Inertia::render('medical-records/IndexV2');
 })->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])->name('medical-records.page');
 
-// Rebuild-in-progress page (reports/medical-records-index-rebuild-plan.md). Config-gated,
-// off by default — 404s unless FRONTEND_MEDICAL_RECORDS_INDEX_V2_ENABLED=true. Fully
-// additive: the medical-records.page route above is completely untouched.
 Route::get('medical-records/v2', function () {
-    abort_unless(config('frontend_rebuild.medical_records_index_v2_enabled'), 404);
-
     return Inertia::render('medical-records/IndexV2');
 })->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])->name('medical-records.page-v2');
+
+// Rollback path — the pre-cutover page, unchanged.
+Route::get('medical-records/legacy', function () {
+    return Inertia::render('medical-records/Index');
+})->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])->name('medical-records.page-legacy');
 
 Route::get('medical-records/{id}/print', [MedicalRecordDocumentController::class, 'show'])
     ->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])
