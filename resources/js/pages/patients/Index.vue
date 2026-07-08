@@ -2610,31 +2610,22 @@ async function startOutpatientWalkInFromHandoff(): Promise<void> {
     visitHandoffActionError.value = null;
 
     try {
+        // Reception module Phase 1 (reports/patient-arrival-checkin-modernization-plan.md):
+        // one atomic call instead of create-then-check-in, closing the race
+        // window audit §4 flagged between the two prior sequential calls.
         const created = await apiRequest<{ data: PatientTimelineAppointment }>(
             'POST',
-            '/appointments',
+            '/reception/walk-ins',
             {
                 body: {
                     patientId: patient.id,
-                    appointmentType: 'walk_in',
-                    scheduledAt: new Date(Date.now() + 60_000).toISOString(),
+                    arrivalMode: 'walk_in',
                     reason: 'OPD walk-in - created from patient handoff',
                 },
             },
         );
 
-        const updated = await apiRequest<{ data: PatientTimelineAppointment }>(
-            'PATCH',
-            `/appointments/${created.data.id}/status`,
-            {
-                body: {
-                    status: 'waiting_triage',
-                    reason: 'OPD walk-in checked in from patient handoff',
-                },
-            },
-        );
-
-        replaceVisitHandoffAppointment(updated.data);
+        replaceVisitHandoffAppointment(created.data);
         visitHandoffMode.value = 'outpatient';
         notifySuccess(
             'OPD walk-in started. Patient is now waiting for nurse triage.',
@@ -2658,33 +2649,22 @@ async function sendToEmergencyQueue(): Promise<void> {
     visitHandoffActionError.value = null;
 
     try {
-        // Create a walk-in appointment at the current time.
+        // Reception module Phase 1 (reports/patient-arrival-checkin-modernization-plan.md):
+        // one atomic call instead of create-then-check-in, closing the race
+        // window audit §4 flagged between the two prior sequential calls.
         const created = await apiRequest<{ data: PatientTimelineAppointment }>(
             'POST',
-            '/appointments',
+            '/reception/walk-ins',
             {
                 body: {
                     patientId: patient.id,
-                    appointmentType: 'walk_in',
-                    scheduledAt: new Date(Date.now() + 60_000).toISOString(),
+                    arrivalMode: 'emergency',
                     reason: 'Emergency — directed to triage by registration',
                 },
             },
         );
 
-        // Immediately advance status to waiting_triage so it appears in the triage queue.
-        const updated = await apiRequest<{ data: PatientTimelineAppointment }>(
-            'PATCH',
-            `/appointments/${created.data.id}/status`,
-            {
-                body: {
-                    status: 'waiting_triage',
-                    reason: 'Patient directed to emergency triage queue by registration',
-                },
-            },
-        );
-
-        replaceVisitHandoffAppointment(updated.data);
+        replaceVisitHandoffAppointment(created.data);
         notifySuccess(
             'Patient is now in the emergency triage queue. Triage staff will take over from there.',
         );

@@ -16,7 +16,7 @@ return [
 return [
             { label: 'Register Patient', icon: 'user', variant: 'default', href: '/patients' },
             { label: 'Appointment queue', icon: 'calendar-clock', variant: 'outline', href: `/appointments?view=queue&from=${runtime.today}` },
-            { label: 'Register OPD walk-in', icon: 'log-in', variant: 'outline', href: `/appointments?open=schedule&type=walkin&view=queue&from=${runtime.today}` },
+            { label: 'Register OPD walk-in', icon: 'log-in', variant: 'outline', href: '/reception/queue' },
         ];
     })();
 
