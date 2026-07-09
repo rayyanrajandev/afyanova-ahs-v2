@@ -19,6 +19,9 @@ export function usePatientEditForm() {
         lastName: '',
         gender: 'female' as 'male' | 'female' | 'other' | 'unknown',
         dateOfBirth: '',
+        /** UI-local scratch state — derived into dateOfBirth, never sent to the server on its own (UpdatePatientRequest has no ageYears/ageMonths field). */
+        ageYears: '',
+        ageMonths: '',
         phone: '',
         email: '',
         nationalId: '',
@@ -40,6 +43,8 @@ export function loadPatientIntoEditForm(form: PatientEditForm, patient: PatientL
     form.lastName = patient.lastName ?? '';
     form.gender = (patient.gender as PatientEditForm['gender']) || 'female';
     form.dateOfBirth = patient.dateOfBirth ?? '';
+    form.ageYears = '';
+    form.ageMonths = '';
     form.phone = patient.phone ?? '';
     form.email = patient.email ?? '';
     form.nationalId = patient.nationalId ?? '';

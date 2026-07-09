@@ -12,7 +12,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
-import { useOfflinePatientRegistrationQueue } from '@/composables/patientsIndex/useOfflinePatientRegistrationQueue';
+import { useOfflinePatientQueue } from '@/composables/patientsIndex/useOfflinePatientQueue';
 import { usePatientCountryProfile } from '@/composables/patientsIndex/usePatientCountryProfile';
 import { usePatientDuplicateCheck } from '@/composables/patientsIndex/usePatientDuplicateCheck';
 import {
@@ -36,7 +36,7 @@ import { notifySuccess } from '@/lib/notify';
  * of its own.
  *
  * Offline resilience (audit §1's "follow-up slice", now closed): when
- * useOfflinePatientRegistrationQueue's isOnline is false, or the online
+ * useOfflinePatientQueue's isOnline is false, or the online
  * POST fails with a network-shaped error mid-flight
  * (isLikelyPatientOfflineFailure), the same payload gets queued into
  * @/lib/offlinePatientRegistration's IndexedDB outbox instead of failing —
@@ -91,7 +91,7 @@ const emit = defineEmits<{
 
 const form = usePatientRegistrationForm();
 const registration = usePatientRegistration();
-const { isOnline, saveOffline } = useOfflinePatientRegistrationQueue();
+const { isOnline, saveOfflineRegistration } = useOfflinePatientQueue();
 
 const identitySource = computed(() => ({
     firstName: form.firstName,
@@ -230,7 +230,7 @@ function submitErrorMessage(): string | null {
 
 async function submitOffline(): Promise<void> {
     try {
-        const record = await saveOffline(buildPatientRegistrationPayload(form));
+        const record = await saveOfflineRegistration(buildPatientRegistrationPayload(form));
         notifySuccess(`Patient saved offline as ${record.temporaryPatientNumber}. It will upload automatically once you're back online.`);
         open.value = false;
         resetForm();

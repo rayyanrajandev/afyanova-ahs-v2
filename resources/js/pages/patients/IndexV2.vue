@@ -16,7 +16,7 @@ import PatientRegistrationSheet from '@/components/patients/PatientRegistrationS
 import PatientStatusDialog from '@/components/patients/PatientStatusDialog.vue';
 import PatientSummaryPopover from '@/components/patients/summary/PatientSummaryPopover.vue';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
-import { useOfflinePatientRegistrationQueue } from '@/composables/patientsIndex/useOfflinePatientRegistrationQueue';
+import { useOfflinePatientQueue } from '@/composables/patientsIndex/useOfflinePatientQueue';
 import { usePatientList, usePatientStatusCounts, type PatientListItem } from '@/composables/patientsIndex/usePatientList';
 import { usePatientListFilters } from '@/composables/patientsIndex/usePatientListFilters';
 import { notifyError, notifySuccess } from '@/lib/notify';
@@ -79,8 +79,8 @@ const patients = computed(() => list.data.value?.data ?? []);
 const meta = computed(() => list.data.value?.meta ?? null);
 
 /**
- * Quick-pick region suggestions for the registration sheet, ranked by
- * frequency in the currently-loaded page. Deliberately reuses data this
+ * Quick-pick region suggestions for the registration and edit sheets,
+ * ranked by frequency in the currently-loaded page. Deliberately reuses data this
  * page already fetches for the table rather than the legacy page's
  * historicalRegionOptionsForCountry(), which bulk-loaded every patient
  * client-side just to mine this same signal (reports/patients-index-audit.md
@@ -191,12 +191,12 @@ function onPatientStatusChanged(patient: PatientListItem): void {
 /**
  * Surfaces PatientRegistrationSheet.vue's offline-queue outbox at the page
  * level: pendingCount/syncing are shared module-singleton state (see
- * useOfflinePatientRegistrationQueue.ts), so a patient saved offline from
+ * useOfflinePatientQueue.ts), so a patient saved offline from
  * the sheet immediately shows up here without any prop/event plumbing.
  * This composable stays queryClient-agnostic; invalidating the list on a
  * successful sync is this page's job, not the generic queue's.
  */
-const offlineQueue = useOfflinePatientRegistrationQueue();
+const offlineQueue = useOfflinePatientQueue();
 
 async function syncOfflineRegistrationsNow(): Promise<void> {
     const result = await offlineQueue.syncNow();
@@ -435,7 +435,7 @@ onBeforeUnmount(() => {
         </div>
 
         <PatientRegistrationSheet v-model:open="registerSheetOpen" :suggested-regions="suggestedRegions" @registered="onPatientRegistered" />
-        <PatientEditSheet v-model:open="editSheetOpen" :patient="editingPatient" @updated="onPatientUpdated" />
+        <PatientEditSheet v-model:open="editSheetOpen" :patient="editingPatient" :suggested-regions="suggestedRegions" @updated="onPatientUpdated" />
         <PatientStatusDialog v-model:open="statusDialogOpen" :patient="statusChangingPatient" @changed="onPatientStatusChanged" />
     </AppLayout>
 </template>
