@@ -69,4 +69,18 @@ Total: ~3-4 days. Other pages (reception, queues, lab, etc.) adopt the module la
 
 164/164 frontend Vitest passing (12 new), 1491/1535 backend passing (44 pre-existing baseline failures, unchanged — confirmed via full-suite run, none in `Patient`/`PatientFlow`).
 
-**Not done, and correctly out of scope for this pass**: adoption by reception/triage/queues/lab/pharmacy/radiology/billing/medical-records/encounter pages. The module and its first consumer are validated; wiring it into each of those pages is real, separate work per page, to be scheduled individually rather than bundled here.
+**Not done, and correctly out of scope for this pass**: adoption by triage/lab/pharmacy/radiology/billing/medical-records/encounter pages beyond the two shipped (`patients/v2`, `reception/Queue.vue`). The module and its consumers are validated; wiring it into each remaining page is real, separate work per page, to be scheduled individually rather than bundled here.
+
+## 8. Second disclosure tier — PatientDetailSheet.vue
+
+Research-grounded addition (progressive disclosure / record-preview patterns — Notion's row-expansion, Epic's Storyboard banner, "make the user commit to seeing more with an intentional click rather than hover"): a single popover trying to hold identity + contact + alerts + insurance + admission + appointments + stats + activity becomes unreadable. The actual 2026/2027 norm for this kind of quick-context UI is a 3-tier architecture:
+
+1. **Tier 1** (`PatientSummaryPopover`/`PatientSummaryCard`, §4): glanceable, hover/click, minimal info.
+2. **Tier 2** (`PatientDetailSheet.vue`, new): identity, contact, alerts, current admission (surfaced prominently as an `Alert` when present — the most urgent context a page could show), active workflow status, upcoming appointment, latest encounter, insurance, quick stats (visits/encounters/outstanding invoices), and a recent-activity preview. Still deliberately short of `ShowV2.vue`'s full deep history — that boundary hasn't moved.
+3. **Tier 3** (`patients/chart/ShowV2.vue`, unchanged): the full record.
+
+Backend: `GetPatientSummaryUseCase`/`PatientSummaryResponseTransformer` extended (same endpoint, same query) with `contact`, `upcomingAppointment`, `currentAdmission`, `stats`, and `recentActivity` (a lightweight stand-in for a real cross-module activity feed — the single most recent row from each module the patient has touched, not a dedicated event-sourcing table). Frontend: `usePatientSummary.ts`'s types extended; `PatientSummaryCard.vue` gained a "View full summary" affordance; `PatientSummaryPopover.vue` now owns the Tier 1 → Tier 2 transition internally (closes itself, opens the Sheet), so **existing consumers needed zero changes** — `IndexV2.vue` and `ReceptionQueueList.vue` inherited the new tier automatically since the public prop/slot API didn't change.
+
+Because Tier 1 and Tier 2 share the exact same `usePatientSummary()` query key, opening the Sheet right after the Popover for the same patient is a TanStack Query cache hit, not a second network request.
+
+5 new backend tests (contact, upcoming appointment, current admission — present and absent, outstanding invoices + recent activity). Confirmed via `git stash` comparison that 10 pre-existing `Billing`/`Admission`/`PatientFlow` suite failures (`BillingInvoicePrintPageTest` Inertia-page assertion) are unrelated — identical failure count with and without this change. 164/164 frontend Vitest passing, no new TypeScript errors.
