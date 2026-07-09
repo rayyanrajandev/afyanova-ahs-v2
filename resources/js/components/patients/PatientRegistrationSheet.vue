@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { refDebounced } from '@vueuse/core';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Textarea } from '@/components/ui/textarea';
+import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
+import { usePatientCountryProfile } from '@/composables/patientsIndex/usePatientCountryProfile';
 import { usePatientDuplicateCheck } from '@/composables/patientsIndex/usePatientDuplicateCheck';
 import { usePatientRegistration, usePatientRegistrationForm } from '@/composables/patientsIndex/usePatientRegistration';
 import { type PatientListItem } from '@/composables/patientsIndex/usePatientList';
@@ -25,6 +28,15 @@ import { isApiClientError } from '@/lib/apiClient';
  * queueing (audit §1) — documented as a follow-up slice, not dropped
  * silently, in reports/patients-index-modernization-plan.md's Phase 2
  * update note.
+ *
+ * Region/district reuse the legacy sheet's actual working UX rather than
+ * plain text inputs: SearchableSelectField (@/components/forms) — a
+ * searchable, cascading combobox that still allows a free-text custom
+ * value — fed by GET /platform/country-profile's server-sourced region/
+ * district presets (usePatientCountryProfile), the same endpoint and
+ * @/lib/patientLocations helpers the legacy page already used. District
+ * is disabled until a region is chosen and resets whenever region changes,
+ * matching patients/Index.vue's own watcher.
  *
  * SheetContent uses variant="form" (not the unset default), matching both
  * EncounterHistorySheet.vue and the legacy Register Patient sheet it
@@ -54,6 +66,21 @@ const identitySource = computed(() => ({
 }));
 const debouncedIdentity = refDebounced(identitySource, 400);
 const duplicateCheck = usePatientDuplicateCheck(debouncedIdentity);
+
+const countryCode = computed(() => form.countryCode);
+const { profile: countryProfile, regionOptions, districtOptionsForRegion } = usePatientCountryProfile(countryCode);
+const districtOptions = computed(() => districtOptionsForRegion(form.region));
+const districtPlaceholder = computed(() =>
+    form.region.trim() ? countryProfile.value.districtPlaceholder : `Select ${countryProfile.value.regionLabel.toLowerCase()} first`,
+);
+
+watch(
+    () => form.region,
+    (value, previousValue) => {
+        if (value === previousValue || !previousValue) return;
+        form.district = '';
+    },
+);
 
 const severityLabel: Record<string, string> = {
     hard_block: 'Blocks registration',
@@ -160,17 +187,32 @@ function resetForm(): void {
                         <Label for="reg-national-id">National ID (optional)</Label>
                         <Input id="reg-national-id" v-model="form.nationalId" />
                     </div>
-                    <div class="space-y-1.5">
-                        <Label for="reg-region">Region</Label>
-                        <Input id="reg-region" v-model="form.region" />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label for="reg-district">District</Label>
-                        <Input id="reg-district" v-model="form.district" />
-                    </div>
+                    <SearchableSelectField
+                        input-id="reg-region"
+                        v-model="form.region"
+                        :label="countryProfile.regionLabel"
+                        :options="regionOptions"
+                        :placeholder="countryProfile.regionPlaceholder"
+                        :search-placeholder="`Search ${countryProfile.regionLabel.toLowerCase()} or use a custom value`"
+                        :empty-text="`No ${countryProfile.regionLabel.toLowerCase()} suggestion found.`"
+                        :required="true"
+                        :allow-custom-value="true"
+                    />
+                    <SearchableSelectField
+                        input-id="reg-district"
+                        v-model="form.district"
+                        :label="countryProfile.districtLabel"
+                        :options="districtOptions"
+                        :placeholder="districtPlaceholder"
+                        :search-placeholder="`Search ${countryProfile.districtLabel.toLowerCase()} or use a custom value`"
+                        :empty-text="`No ${countryProfile.districtLabel.toLowerCase()} suggestion found.`"
+                        :required="true"
+                        :allow-custom-value="true"
+                        :disabled="!form.region.trim()"
+                    />
                     <div class="col-span-2 space-y-1.5">
-                        <Label for="reg-address">Address</Label>
-                        <Input id="reg-address" v-model="form.addressLine" />
+                        <Label for="reg-address">{{ countryProfile.addressLabel }}</Label>
+                        <Textarea id="reg-address" v-model="form.addressLine" rows="2" :placeholder="countryProfile.addressPlaceholder" />
                     </div>
                     <div class="space-y-1.5">
                         <Label for="reg-nok-name">Next of kin (optional)</Label>

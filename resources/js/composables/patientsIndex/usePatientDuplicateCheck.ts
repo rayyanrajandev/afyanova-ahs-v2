@@ -64,9 +64,35 @@ type PatientDuplicateCheckResult = {
 
 type PatientDuplicateCheckResponse = { data: PatientDuplicateCheckResult };
 
-/** A dry run isn't worth sending until there's enough identity to score against. */
+/**
+ * A dry run isn't worth sending until there's enough identity for the
+ * server to actually find something — mirrored 1:1 against what
+ * EloquentPatientRepository can match on, not just the common case:
+ * `findActiveHardDuplicateIdentifiers` matches on nationalId alone (no
+ * name needed), and `findActiveDuplicateCandidates` matches on phone alone
+ * or via its own `$hasDemographicCandidateKey` combinations (first+last,
+ * last+DOB, first+DOB, gender+address). Gating on "first+last name only"
+ * silently drops every one of those — e.g. typing a phone number or
+ * national ID that matches an existing patient, without also typing a
+ * matching name, would never trigger a check at all.
+ */
 function hasEnoughIdentity(identity: PatientDuplicateCheckIdentity): boolean {
-    return identity.firstName.trim().length >= 2 && identity.lastName.trim().length >= 2;
+    const firstName = identity.firstName.trim();
+    const lastName = identity.lastName.trim();
+    const phone = identity.phone.trim();
+    const nationalId = identity.nationalId.trim();
+    const dateOfBirth = identity.dateOfBirth.trim();
+    const gender = identity.gender.trim();
+    const addressLine = identity.addressLine.trim();
+
+    return (
+        nationalId.length >= 3 ||
+        phone.length >= 6 ||
+        (firstName.length >= 2 && lastName.length >= 2) ||
+        (lastName.length >= 2 && dateOfBirth !== '') ||
+        (firstName.length >= 2 && dateOfBirth !== '') ||
+        (gender !== '' && addressLine.length >= 2)
+    );
 }
 
 /**

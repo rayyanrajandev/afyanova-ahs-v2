@@ -50,6 +50,34 @@ describe('usePatientDuplicateCheck', () => {
         expect(postSpy).not.toHaveBeenCalled();
     });
 
+    it('calls the server on a phone number alone, without any name', async () => {
+        const postSpy = vi.spyOn(apiClient, 'apiPost').mockResolvedValue({
+            data: { severity: 'none', duplicates: [] },
+        });
+
+        const id = ref(identity({ phone: '+255700000001' }));
+        await mount(() => usePatientDuplicateCheck(id));
+
+        expect(postSpy).toHaveBeenCalledWith(
+            '/patients/duplicate-check',
+            expect.objectContaining({ body: expect.objectContaining({ phone: '+255700000001', firstName: null, lastName: null }) }),
+        );
+    });
+
+    it('calls the server on a national ID alone, without any name', async () => {
+        const postSpy = vi.spyOn(apiClient, 'apiPost').mockResolvedValue({
+            data: { severity: 'none', duplicates: [] },
+        });
+
+        const id = ref(identity({ nationalId: 'NIDA-12345' }));
+        await mount(() => usePatientDuplicateCheck(id));
+
+        expect(postSpy).toHaveBeenCalledWith(
+            '/patients/duplicate-check',
+            expect.objectContaining({ body: expect.objectContaining({ nationalId: 'NIDA-12345' }) }),
+        );
+    });
+
     it('calls the server once enough identity is present', async () => {
         const postSpy = vi.spyOn(apiClient, 'apiPost').mockResolvedValue({
             data: { severity: 'none', duplicates: [] },
