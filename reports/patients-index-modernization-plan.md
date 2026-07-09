@@ -152,6 +152,15 @@ Note: `usePlatformCountryProfile.ts` (an existing shared composable) was **not**
 
 141/141 Vitest passing; no new TypeScript errors. No backend files touched (`PatientDuplicateDetectionService`/`EloquentPatientRepository` were read, not modified — the fix was entirely in the frontend gate matching existing backend capability).
 
+**Update**: Explicit direction from the user: don't just replicate the legacy sheet's UX — build something genuinely better, "downgrade" if it merely matches. Two concrete gaps called out (location picker, date-of-birth entry) became two real upgrades, not reskins:
+
+1. **Date of birth, two entry mechanisms** (`@/lib/patientAge.ts`, pure and unit-tested — 12 tests). The sheet previously had only a single exact-date input, a real capability gap for walk-ins and infant guardians who often don't know an exact birth date. Added an "Estimated age" / "Exact date" switch using the app's shared `Tabs` primitive (not a one-off button pair like the legacy sheet's hand-rolled toggle), with a live `≈ N yrs M mos old` preview computed in both directions and a native `max` date guard against future dates. Only `dateOfBirth` is ever sent to the server (`StorePatientRequest` has no age fields) — years/months are derived, client-side-only scratch state, same division of responsibility the legacy sheet used.
+2. **Region quick-pick chips**, ranked by frequency in the page's already-loaded patient list (`IndexV2.vue`'s own `usePatientList` data — zero extra fetch). The legacy sheet mined the same "recently common region" signal via `historicalRegionOptionsForCountry()`, which bulk-loaded *every* patient client-side just to compute it — a real cost the audit flagged as an anti-pattern. This version gets the same practical value (one-tap for the common case) from data the page was fetching anyway.
+
+Also converted the sheet's remaining native gender `<select>` to shadcn-vue's `Select`, closing the last native-dropdown gap in the sheet.
+
+153/153 Vitest passing (12 new for `patientAge.ts`); no new TypeScript errors.
+
 ---
 
 ## 5. Risks & open questions
