@@ -8,7 +8,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import PatientRegistrationSheet from '@/components/patients/PatientRegistrationSheet.vue';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { usePatientList, usePatientStatusCounts, type PatientListItem } from '@/composables/patientsIndex/usePatientList';
@@ -26,12 +28,17 @@ import { type BreadcrumbItem } from '@/types';
  * ShowV2.vue/WorkspaceV2.vue.
  *
  * Phase 1: usePatientList/usePatientStatusCounts/usePatientListFilters —
- * the list table, status-count KPI cards (clickable, doubling as the
- * active/inactive/all filter, matching the legacy page's own status-pill
- * behavior), and an inline search+gender+sort filter bar. Deliberately
- * simpler than the legacy page's separate "Filters" sheet — inline filters
- * match medical-records/IndexV2.vue's established shape instead of
- * replicating a legacy UI decision this rebuild isn't obligated to keep.
+ * the list table, status counts, and an inline search+gender+sort filter
+ * bar. Deliberately simpler than the legacy page's separate "Filters"
+ * sheet — inline filters match medical-records/IndexV2.vue's established
+ * shape instead of replicating a legacy UI decision this rebuild isn't
+ * obligated to keep.
+ *
+ * Sticky header cards are informational only (ShowV2.vue's mini-stat-card
+ * treatment); the active/inactive/all filter is a real Tabs control in the
+ * scrolling body (ShowV2.vue's TabsList/TabsTrigger pattern) — the two are
+ * deliberately not the same control, per the correction already applied to
+ * reception/Queue.vue.
  * Phase 2: registration, via PatientRegistrationSheet.vue — a thin UI
  * layer over usePatientDuplicateCheck/usePatientRegistration, both backed
  * by the server's authoritative PatientDuplicateDetectionService (decided:
@@ -62,11 +69,12 @@ const statusCounts = usePatientStatusCounts(filters);
 const patients = computed(() => list.data.value?.data ?? []);
 const meta = computed(() => list.data.value?.meta ?? null);
 
-const STATUS_TABS: { value: string; label: string; dot: string }[] = [
-    { value: 'active', label: 'Active', dot: 'bg-emerald-500' },
-    { value: 'inactive', label: 'Inactive', dot: 'bg-rose-500' },
-    { value: '', label: 'All', dot: 'bg-slate-400' },
-];
+const genderSelectValue = computed({
+    get: () => filters.gender || 'all',
+    set: (value: string | number) => {
+        filters.gender = value === 'all' ? '' : String(value);
+    },
+});
 
 function statusTabCount(value: string): number | null {
     const counts = statusCounts.data.value;
@@ -76,8 +84,8 @@ function statusTabCount(value: string): number | null {
     return counts.total;
 }
 
-function setStatus(value: string): void {
-    filters.status = value;
+function setStatus(value: string | number): void {
+    filters.status = value === 'all' ? '' : String(value);
     filters.page = 1;
 }
 
@@ -165,19 +173,19 @@ onBeforeUnmount(() => {
                     </div>
                 </div>
 
-                <div v-if="canReadPatients" class="mt-3 flex flex-wrap gap-2">
-                    <button
-                        v-for="tab in STATUS_TABS"
-                        :key="tab.value"
-                        type="button"
-                        class="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs transition-colors hover:bg-accent"
-                        :class="filters.status === tab.value ? 'border-primary bg-primary/5' : ''"
-                        @click="setStatus(tab.value)"
-                    >
-                        <span class="inline-block h-2 w-2 rounded-full" :class="tab.dot" />
-                        <span class="font-medium">{{ statusTabCount(tab.value) ?? '—' }}</span>
-                        <span class="text-muted-foreground">{{ tab.label }}</span>
-                    </button>
+                <div v-if="canReadPatients" class="mt-3 grid grid-cols-3 gap-2">
+                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Active</p>
+                        <p class="text-sm font-bold tabular-nums">{{ statusTabCount('active') ?? '—' }}</p>
+                    </div>
+                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Inactive</p>
+                        <p class="text-sm font-bold tabular-nums">{{ statusTabCount('inactive') ?? '—' }}</p>
+                    </div>
+                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Total</p>
+                        <p class="text-sm font-bold tabular-nums">{{ statusTabCount('') ?? '—' }}</p>
+                    </div>
                 </div>
             </div>
 
@@ -188,6 +196,23 @@ onBeforeUnmount(() => {
                 </Alert>
 
                 <template v-else>
+                    <Tabs :model-value="filters.status || 'all'" @update:model-value="setStatus">
+                        <TabsList class="grid w-full grid-cols-3">
+                            <TabsTrigger value="active" class="inline-flex items-center gap-1.5">
+                                Active
+                                <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusTabCount('active') ?? '—' }}</Badge>
+                            </TabsTrigger>
+                            <TabsTrigger value="inactive" class="inline-flex items-center gap-1.5">
+                                Inactive
+                                <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusTabCount('inactive') ?? '—' }}</Badge>
+                            </TabsTrigger>
+                            <TabsTrigger value="all" class="inline-flex items-center gap-1.5">
+                                All
+                                <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusTabCount('') ?? '—' }}</Badge>
+                            </TabsTrigger>
+                        </TabsList>
+                    </Tabs>
+
                     <div class="flex flex-wrap items-center gap-2">
                         <div class="relative min-w-0 flex-1">
                             <AppIcon name="search" class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -198,26 +223,30 @@ onBeforeUnmount(() => {
                                 @keyup.enter="submitSearch"
                             />
                         </div>
-                        <select
-                            v-model="filters.gender"
-                            class="h-9 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none"
-                        >
-                            <option value="">All genders</option>
-                            <option value="female">Female</option>
-                            <option value="male">Male</option>
-                            <option value="other">Other</option>
-                            <option value="unknown">Unknown</option>
-                        </select>
-                        <select
-                            v-model="filters.sortBy"
-                            class="h-9 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none"
-                        >
-                            <option value="createdAt">Newest first</option>
-                            <option value="updatedAt">Recently updated</option>
-                            <option value="firstName">First name</option>
-                            <option value="lastName">Last name</option>
-                            <option value="patientNumber">MRN</option>
-                        </select>
+                        <Select v-model="genderSelectValue">
+                            <SelectTrigger class="h-9 w-40 bg-background">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All genders</SelectItem>
+                                <SelectItem value="female">Female</SelectItem>
+                                <SelectItem value="male">Male</SelectItem>
+                                <SelectItem value="other">Other</SelectItem>
+                                <SelectItem value="unknown">Unknown</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select v-model="filters.sortBy">
+                            <SelectTrigger class="h-9 w-44 bg-background">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="createdAt">Newest first</SelectItem>
+                                <SelectItem value="updatedAt">Recently updated</SelectItem>
+                                <SelectItem value="firstName">First name</SelectItem>
+                                <SelectItem value="lastName">Last name</SelectItem>
+                                <SelectItem value="patientNumber">MRN</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
 
                     <div v-if="list.isPending.value" class="space-y-2">

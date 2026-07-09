@@ -25,6 +25,14 @@ import { isApiClientError } from '@/lib/apiClient';
  * queueing (audit §1) — documented as a follow-up slice, not dropped
  * silently, in reports/patients-index-modernization-plan.md's Phase 2
  * update note.
+ *
+ * SheetContent uses variant="form" (not the unset default), matching both
+ * EncounterHistorySheet.vue and the legacy Register Patient sheet it
+ * replaces — that variant is what makes the sheet a full-height,
+ * overflow-hidden flex column in the first place, which the sticky
+ * header/footer below (bg-background/95 + backdrop-blur, same treatment
+ * ShowV2.vue/WorkspaceV2.vue/Board.vue/reception/Queue.vue already use)
+ * depends on to stay pinned while the form body scrolls independently.
  */
 const open = defineModel<boolean>('open', { required: true });
 
@@ -101,13 +109,15 @@ function resetForm(): void {
 
 <template>
     <Sheet :open="open" @update:open="(value) => (open = value)">
-        <SheetContent side="right" size="xl">
-            <SheetHeader class="border-b">
+        <SheetContent side="right" variant="form" size="2xl">
+            <SheetHeader
+                class="shrink-0 border-b bg-background/95 px-6 py-4 text-left backdrop-blur supports-[backdrop-filter]:bg-background/80"
+            >
                 <SheetTitle>Register Patient</SheetTitle>
                 <SheetDescription>Duplicate checks run against the server as you type.</SheetDescription>
             </SheetHeader>
 
-            <div class="flex-1 space-y-4 overflow-y-auto px-6 py-4">
+            <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
                 <div class="grid grid-cols-2 gap-3">
                     <div class="space-y-1.5">
                         <Label for="reg-first-name">First name</Label>
@@ -196,7 +206,9 @@ function resetForm(): void {
                 </Alert>
             </div>
 
-            <SheetFooter class="border-t">
+            <SheetFooter
+                class="shrink-0 border-t bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+            >
                 <Button variant="outline" @click="open = false">Cancel</Button>
                 <Button :disabled="!canSubmit" @click="submit">
                     {{ registration.isPending.value ? 'Registering…' : 'Register Patient' }}
