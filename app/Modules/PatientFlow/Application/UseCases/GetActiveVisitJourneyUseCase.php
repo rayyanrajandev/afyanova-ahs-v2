@@ -96,17 +96,23 @@ class GetActiveVisitJourneyUseCase
     ];
 
     /**
+     * @param  string|null  $patientId  Scopes the board to one patient — pushed into the
+     *   underlying queries themselves (not fetch-the-whole-board-then-filter), so
+     *   GetPatientSummaryUseCase can ask "does this one patient have an active
+     *   visit right now?" without materializing the entire facility board.
      * @return array<int, array<string, mixed>>
      */
-    public function execute(): array
+    public function execute(?string $patientId = null): array
     {
         $appointments = AppointmentModel::query()
             ->whereIn('status', self::ACTIVE_APPOINTMENT_STATUSES)
+            ->when($patientId !== null, fn ($query) => $query->where('patient_id', $patientId))
             ->get();
 
         $serviceRequests = ServiceRequestModel::query()
             ->whereIn('status', self::OPEN_SERVICE_REQUEST_STATUSES)
             ->whereNull('linked_order_id')
+            ->when($patientId !== null, fn ($query) => $query->where('patient_id', $patientId))
             ->get();
 
         if ($appointments->isEmpty() && $serviceRequests->isEmpty()) {

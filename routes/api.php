@@ -594,6 +594,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('patients/{id}/activity-feed', [PatientController::class, 'activityFeed'])
         ->middleware(['can:patients.read', 'facility.entitlement:patients.search'])
         ->name('patients.activity-feed');
+    Route::get('patients/{id}/summary', [PatientController::class, 'summary'])
+        ->middleware(['can:patients.read', 'facility.entitlement:patients.search'])
+        ->name('patients.summary');
     Route::get('patients/{id}/audit-logs/export', [PatientController::class, 'exportAuditLogsCsv'])
         ->middleware(['can:patients.view-audit-logs', 'facility.entitlement:patients.search'])
         ->name('patients.audit-logs.export');

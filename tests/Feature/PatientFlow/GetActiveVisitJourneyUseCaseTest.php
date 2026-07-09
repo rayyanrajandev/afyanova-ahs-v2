@@ -350,3 +350,36 @@ it('excludes completed, cancelled, and no_show appointments entirely', function 
 
     expect($entries)->toBe([]);
 });
+
+it('scopes the board to one patient when a patientId is given, pushed into the query rather than filtered after', function (): void {
+    $target = makePatientFlowPatient();
+    $other = makePatientFlowPatient(['phone' => '+255700000099']);
+    makePatientFlowAppointment($target->id, ['status' => 'waiting_triage']);
+    makePatientFlowAppointment($other->id, ['status' => 'waiting_provider']);
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute($target->id);
+
+    expect($entries)->toHaveCount(1);
+    expect($entries[0]['patientId'])->toBe($target->id);
+});
+
+it('scopes direct-service walk-ins to one patient when a patientId is given', function (): void {
+    $target = makePatientFlowPatient();
+    $other = makePatientFlowPatient(['phone' => '+255700000098']);
+    makePatientFlowServiceRequest($target->id, 'pending');
+    makePatientFlowServiceRequest($other->id, 'pending');
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute($target->id);
+
+    expect($entries)->toHaveCount(1);
+    expect($entries[0]['patientId'])->toBe($target->id);
+    expect($entries[0]['step'])->toBe('waiting_direct_service');
+});
+
+it('returns an empty array when the scoped patientId has no active visit', function (): void {
+    $patient = makePatientFlowPatient();
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute($patient->id);
+
+    expect($entries)->toBe([]);
+});

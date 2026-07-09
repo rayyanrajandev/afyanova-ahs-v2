@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Patient\Application\Exceptions\DuplicatePatientException;
 use App\Modules\Patient\Application\UseCases\CheckPatientDuplicatesUseCase;
 use App\Modules\Patient\Application\UseCases\CreatePatientUseCase;
+use App\Modules\Patient\Application\UseCases\GetPatientSummaryUseCase;
 use App\Modules\Patient\Application\UseCases\GetPatientUseCase;
 use App\Modules\Patient\Application\UseCases\ListPatientAuditLogsUseCase;
 use App\Modules\Patient\Application\UseCases\ListPatientStatusCountsUseCase;
@@ -19,6 +20,7 @@ use App\Modules\Patient\Presentation\Http\Requests\UpdatePatientStatusRequest;
 use App\Modules\Patient\Presentation\Http\Transformers\PatientActivityFeedEventResponseTransformer;
 use App\Modules\Patient\Presentation\Http\Transformers\PatientAuditLogResponseTransformer;
 use App\Modules\Patient\Presentation\Http\Transformers\PatientResponseTransformer;
+use App\Modules\Patient\Presentation\Http\Transformers\PatientSummaryResponseTransformer;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\ServiceRequest\Application\UseCases\ListActiveWalkInsForPatientIdsUseCase;
@@ -262,6 +264,16 @@ class PatientController extends Controller
 
         return response()->json([
             'data' => PatientResponseTransformer::transform($patient),
+        ]);
+    }
+
+    public function summary(string $id, GetPatientSummaryUseCase $useCase): JsonResponse
+    {
+        $summary = $useCase->execute($id);
+        abort_if($summary === null, 404, 'Patient not found.');
+
+        return response()->json([
+            'data' => PatientSummaryResponseTransformer::transform($summary),
         ]);
     }
 

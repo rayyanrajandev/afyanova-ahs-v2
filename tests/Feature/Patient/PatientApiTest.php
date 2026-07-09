@@ -370,6 +370,79 @@ it('returns 404 for unknown patient id', function (): void {
         ->assertNotFound();
 });
 
+it('returns a patient summary with identity, alerts, and zeroed active-order counts for a freshly registered patient', function (): void {
+    $user = makePatientReadUser();
+    $patient = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
+
+    PatientAllergyModel::query()->create([
+        'patient_id' => $patient['id'],
+        'tenant_id' => null,
+        'substance_code' => 'ATC:N02BE01',
+        'substance_name' => 'Paracetamol 500mg',
+        'reaction' => 'Rash',
+        'severity' => 'severe',
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/patients/'.$patient['id'].'/summary')
+        ->assertOk()
+        ->assertJsonPath('data.patient.id', $patient['id'])
+        ->assertJsonPath('data.patient.firstName', 'Amina')
+        ->assertJsonPath('data.alerts.0.substanceName', 'Paracetamol 500mg')
+        ->assertJsonPath('data.alerts.0.severity', 'severe')
+        ->assertJsonPath('data.insurance', null)
+        ->assertJsonPath('data.latestEncounter', null)
+        ->assertJsonPath('data.workflowStatus', null)
+        ->assertJsonPath('data.activeOrders.labActive', 0)
+        ->assertJsonPath('data.activeOrders.pharmacyActive', 0)
+        ->assertJsonPath('data.activeOrders.imagingActive', 0)
+        ->assertJsonPath('data.activeOrders.procedureActive', 0);
+});
+
+it('caps summary alerts at 5, ordered by severity', function (): void {
+    $user = makePatientReadUser();
+    $patient = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
+
+    foreach (range(1, 6) as $index) {
+        PatientAllergyModel::query()->create([
+            'patient_id' => $patient['id'],
+            'tenant_id' => null,
+            'substance_code' => "ATC:{$index}",
+            'substance_name' => "Substance {$index}",
+            'reaction' => 'Rash',
+            'severity' => 'mild',
+            'status' => 'active',
+        ]);
+    }
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/patients/'.$patient['id'].'/summary')
+        ->assertOk();
+
+    expect($response->json('data.alerts'))->toHaveCount(5);
+});
+
+it('returns 404 for the summary endpoint on an unknown patient id', function (): void {
+    $user = makePatientReadUser();
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/patients/37ba7f5b-b5eb-4ee1-a989-f904a590cb2b/summary')
+        ->assertNotFound();
+});
+
+it('forbids the summary endpoint without read permission', function (): void {
+    $writer = User::factory()->create();
+    grantPatientCreatePermission($writer);
+    $patient = $this->actingAs($writer)->postJson('/api/v1/patients', patientPayload())->json('data');
+
+    $userWithoutRead = User::factory()->create();
+
+    $this->actingAs($userWithoutRead)
+        ->getJson('/api/v1/patients/'.$patient['id'].'/summary')
+        ->assertForbidden();
+});
+
 it('updates patient profile fields', function (): void {
     $user = makePatientManageUser();
     $created = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
