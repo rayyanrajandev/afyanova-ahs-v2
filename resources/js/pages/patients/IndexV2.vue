@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import PatientEditSheet from '@/components/patients/PatientEditSheet.vue';
 import PatientRegistrationSheet from '@/components/patients/PatientRegistrationSheet.vue';
 import PatientStatusDialog from '@/components/patients/PatientStatusDialog.vue';
+import PatientVisitActionsMenu from '@/components/patients/PatientVisitActionsMenu.vue';
 import PatientSummaryPopover from '@/components/patients/summary/PatientSummaryPopover.vue';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useOfflinePatientQueue } from '@/composables/patientsIndex/useOfflinePatientQueue';
@@ -66,6 +67,13 @@ const canReadPatients = computed(() => hasAccess('patients.read'));
 const canCreatePatients = computed(() => hasAccess('patients.create'));
 const canUpdatePatients = computed(() => hasAccess('patients.update'));
 const canUpdatePatientStatus = computed(() => hasAccess('patients.update-status'));
+const canShowVisitActions = computed(
+    () =>
+        (hasAccess('appointments.create') && hasAccess('appointments.update-status')) ||
+        hasAccess('service.requests.create') ||
+        hasAccess('billing.invoices.create'),
+);
+const canShowRowActions = computed(() => canUpdatePatients.value || canUpdatePatientStatus.value || canShowVisitActions.value);
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'Patients', href: '/patients/v2' },
@@ -367,7 +375,7 @@ onBeforeUnmount(() => {
                                     <th class="px-3 py-2 text-left">Phone</th>
                                     <th class="px-3 py-2 text-left">Region / District</th>
                                     <th class="px-3 py-2 text-left">Registered</th>
-                                    <th v-if="canUpdatePatients || canUpdatePatientStatus" class="px-3 py-2 text-right">Actions</th>
+                                    <th v-if="canShowRowActions" class="px-3 py-2 text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -388,6 +396,7 @@ onBeforeUnmount(() => {
                                                         <a :href="`/patients/${patient.id}/chart`" class="text-xs font-medium text-primary hover:underline">
                                                             View chart
                                                         </a>
+                                                        <PatientVisitActionsMenu :patient="patient" />
                                                     </template>
                                                 </PatientSummaryPopover>
                                                 <p class="truncate text-xs text-muted-foreground">{{ patient.patientNumber || 'No MRN assigned' }}</p>
@@ -404,8 +413,9 @@ onBeforeUnmount(() => {
                                         {{ [patient.region, patient.district].filter(Boolean).join(' / ') || '—' }}
                                     </td>
                                     <td class="px-3 py-2 text-muted-foreground">{{ formatDate(patient.createdAt) }}</td>
-                                    <td v-if="canUpdatePatients || canUpdatePatientStatus" class="px-3 py-2">
+                                    <td v-if="canShowRowActions" class="px-3 py-2">
                                         <div class="flex items-center justify-end gap-1">
+                                            <PatientVisitActionsMenu :patient="patient" />
                                             <Button v-if="canUpdatePatients" size="sm" variant="ghost" class="h-7 gap-1 px-2 text-xs" @click="openEditSheet(patient)">
                                                 <AppIcon name="pencil" class="size-3.5" />Edit
                                             </Button>
