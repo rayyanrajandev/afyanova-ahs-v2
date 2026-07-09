@@ -12,6 +12,7 @@ class VisitJourneyEntryResponseTransformer
     {
         return [
             'appointmentId' => $entry['appointmentId'] ?? null,
+            'serviceRequestId' => $entry['serviceRequestId'] ?? null,
             'patientId' => $entry['patientId'] ?? null,
             'patientName' => $entry['patientName'] ?? null,
             'patientNumber' => $entry['patientNumber'] ?? null,

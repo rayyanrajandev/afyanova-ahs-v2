@@ -9,10 +9,15 @@ export type VisitJourneyStep =
     | 'with_clinician'
     | 'waiting_lab'
     | 'in_lab'
-    | 'waiting_pharmacy';
+    | 'waiting_pharmacy'
+    | 'waiting_direct_service'
+    | 'in_direct_service';
 
 export type VisitJourneyEntry = {
-    appointmentId: string;
+    /** Null for a direct-service walk-in with no linked appointment. */
+    appointmentId: string | null;
+    /** Set only for entries sourced from a ServiceRequest (Phase 1b). */
+    serviceRequestId: string | null;
     patientId: string | null;
     patientName: string | null;
     patientNumber: string | null;

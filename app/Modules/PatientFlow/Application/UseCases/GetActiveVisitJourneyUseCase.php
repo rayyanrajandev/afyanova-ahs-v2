@@ -11,6 +11,9 @@ use App\Modules\Pharmacy\Domain\ValueObjects\PharmacyOrderStatus;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Modules\Radiology\Domain\ValueObjects\RadiologyOrderStatus;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
+use App\Modules\ServiceRequest\Domain\ValueObjects\ServiceRequestStatus;
+use App\Modules\ServiceRequest\Infrastructure\Models\ServiceRequestModel;
+use Illuminate\Support\Collection;
 
 /**
  * Phase 1 of reports/queue-based-workflow-modernization-plan.md §3.2: a live
@@ -38,6 +41,18 @@ use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
  * triage_owner_user_id claim (set by ClaimAppointmentTriageUseCase) — a
  * WAITING_TRIAGE appointment with a claim in place is 'in_triage', otherwise
  * 'waiting_triage'.
+ *
+ * Phase 1b: direct-service walk-ins (patients/Index.vue's "Direct services"
+ * handoff mode, POST /service-requests) bypass triage/consultation entirely
+ * for a patient who needs only a lab/pharmacy/radiology/theatre service, not
+ * a doctor visit — often with no appointment_id at all. Every open
+ * (PENDING/IN_PROGRESS), not-yet-linked-to-a-real-order ServiceRequest
+ * becomes its own entry here (appointmentId nullable, serviceRequestId set),
+ * deriving waiting_direct_service/in_direct_service — new, distinct steps,
+ * not folded into waiting_lab/in_lab, since this patient never saw a
+ * clinician at all. A request with linked_order_id already set is excluded:
+ * once linked, the real order (already covered above) is what matters, and
+ * counting both would double the same underlying work on the board.
  */
 class GetActiveVisitJourneyUseCase
 {
@@ -68,6 +83,18 @@ class GetActiveVisitJourneyUseCase
 
     private const RADIOLOGY_IN_PROGRESS_STATUSES = [RadiologyOrderStatus::IN_PROGRESS->value];
 
+    private const OPEN_SERVICE_REQUEST_STATUSES = [
+        ServiceRequestStatus::PENDING->value,
+        ServiceRequestStatus::IN_PROGRESS->value,
+    ];
+
+    private const SERVICE_TYPE_LABELS = [
+        'laboratory' => 'Laboratory',
+        'pharmacy' => 'Pharmacy',
+        'radiology' => 'Radiology',
+        'theatre_procedure' => 'Theatre procedure',
+    ];
+
     /**
      * @return array<int, array<string, mixed>>
      */
@@ -77,7 +104,12 @@ class GetActiveVisitJourneyUseCase
             ->whereIn('status', self::ACTIVE_APPOINTMENT_STATUSES)
             ->get();
 
-        if ($appointments->isEmpty()) {
+        $serviceRequests = ServiceRequestModel::query()
+            ->whereIn('status', self::OPEN_SERVICE_REQUEST_STATUSES)
+            ->whereNull('linked_order_id')
+            ->get();
+
+        if ($appointments->isEmpty() && $serviceRequests->isEmpty()) {
             return [];
         }
 
@@ -106,49 +138,81 @@ class GetActiveVisitJourneyUseCase
 
         // Batched, not per-row — same reasoning as GetReceptionQueueUseCase:
         // a board showing only patientId is not usable by the staff it's for.
+        $patientIds = $appointments->pluck('patient_id')
+            ->concat($serviceRequests->pluck('patient_id'))
+            ->unique();
         $patientsById = PatientModel::query()
-            ->whereIn('id', $appointments->pluck('patient_id')->unique())
+            ->whereIn('id', $patientIds)
             ->get(['id', 'patient_number', 'first_name', 'middle_name', 'last_name'])
             ->keyBy('id');
 
-        return $appointments->map(function (AppointmentModel $appointment) use (
+        $appointmentEntries = $appointments->map(function (AppointmentModel $appointment) use (
             $openLabStatusesByAppointmentId,
             $openRadiologyStatusesByAppointmentId,
             $hasOpenPharmacyByAppointmentId,
             $patientsById,
         ): array {
-            $patient = $patientsById->get($appointment->patient_id);
-            $patientName = $patient !== null
-                ? implode(' ', array_filter([
-                    $patient->first_name,
-                    $patient->middle_name,
-                    $patient->last_name,
-                ], static fn (?string $part): bool => $part !== null && trim($part) !== ''))
-                : null;
-
             return [
                 'appointmentId' => $appointment->id,
+                'serviceRequestId' => null,
                 'patientId' => $appointment->patient_id,
-                'patientName' => $patientName !== '' ? $patientName : null,
-                'patientNumber' => $patient?->patient_number,
+                'patientName' => $this->patientName($patientsById, $appointment->patient_id),
+                'patientNumber' => $patientsById->get($appointment->patient_id)?->patient_number,
                 'department' => $appointment->department,
                 'clinicianUserId' => $appointment->clinician_user_id,
                 'appointmentStatus' => $appointment->status,
-                'step' => $this->deriveStep(
+                'step' => $this->deriveAppointmentStep(
                     $appointment,
                     $openLabStatusesByAppointmentId->get($appointment->id, []),
                     $openRadiologyStatusesByAppointmentId->get($appointment->id, []),
                     $hasOpenPharmacyByAppointmentId->has($appointment->id),
                 ),
             ];
-        })->all();
+        });
+
+        $serviceRequestEntries = $serviceRequests->map(function (ServiceRequestModel $serviceRequest) use ($patientsById): array {
+            return [
+                'appointmentId' => $serviceRequest->appointment_id,
+                'serviceRequestId' => $serviceRequest->id,
+                'patientId' => $serviceRequest->patient_id,
+                'patientName' => $this->patientName($patientsById, $serviceRequest->patient_id),
+                'patientNumber' => $patientsById->get($serviceRequest->patient_id)?->patient_number,
+                'department' => self::SERVICE_TYPE_LABELS[$serviceRequest->service_type] ?? $serviceRequest->service_type,
+                'clinicianUserId' => null,
+                'appointmentStatus' => null,
+                'step' => $serviceRequest->status === ServiceRequestStatus::IN_PROGRESS->value
+                    ? 'in_direct_service'
+                    : 'waiting_direct_service',
+            ];
+        });
+
+        return $appointmentEntries->concat($serviceRequestEntries)->all();
+    }
+
+    /**
+     * @param  Collection<string, PatientModel>  $patientsById
+     */
+    private function patientName(Collection $patientsById, ?string $patientId): ?string
+    {
+        $patient = $patientId !== null ? $patientsById->get($patientId) : null;
+        if ($patient === null) {
+            return null;
+        }
+
+        $name = implode(' ', array_filter([
+            $patient->first_name,
+            $patient->middle_name,
+            $patient->last_name,
+        ], static fn (?string $part): bool => $part !== null && trim($part) !== ''));
+
+        return $name !== '' ? $name : null;
     }
 
     /**
      * @param  array<int, string>  $openLabStatuses
      * @param  array<int, string>  $openRadiologyStatuses
      */
-    private function deriveStep(
+    private function deriveAppointmentStep(
         AppointmentModel $appointment,
         array $openLabStatuses,
         array $openRadiologyStatuses,

@@ -7,6 +7,7 @@ use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\PatientFlow\Application\UseCases\GetActiveVisitJourneyUseCase;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
+use App\Modules\ServiceRequest\Infrastructure\Models\ServiceRequestModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -92,6 +93,25 @@ function makePatientFlowPharmacyOrder(string $patientId, string $appointmentId, 
         'quantity_prescribed' => 12,
         'quantity_dispensed' => 0,
         'status' => $status,
+    ]);
+}
+
+function makePatientFlowServiceRequest(
+    string $patientId,
+    string $status,
+    ?string $appointmentId = null,
+    ?string $linkedOrderId = null,
+    string $serviceType = 'laboratory',
+): ServiceRequestModel {
+    return ServiceRequestModel::query()->create([
+        'request_number' => 'SR'.now()->format('Ymd').strtoupper(Str::random(6)),
+        'patient_id' => $patientId,
+        'appointment_id' => $appointmentId,
+        'service_type' => $serviceType,
+        'priority' => 'routine',
+        'status' => $status,
+        'requested_at' => now(),
+        'linked_order_id' => $linkedOrderId,
     ]);
 }
 
@@ -237,6 +257,62 @@ it('ignores completed lab orders when deriving the step', function (): void {
     expect($entries[0]['step'])->toBe('with_clinician');
 });
 
+it('maps a pending, unlinked service request to waiting_direct_service with no appointment', function (): void {
+    $patient = makePatientFlowPatient();
+    $serviceRequest = makePatientFlowServiceRequest($patient->id, 'pending');
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries)->toHaveCount(1);
+    expect($entries[0]['appointmentId'])->toBeNull();
+    expect($entries[0]['serviceRequestId'])->toBe($serviceRequest->id);
+    expect($entries[0]['step'])->toBe('waiting_direct_service');
+    expect($entries[0]['department'])->toBe('Laboratory');
+    expect($entries[0]['patientName'])->toBe('Furaha Ngowi');
+});
+
+it('maps an in-progress service request to in_direct_service', function (): void {
+    $patient = makePatientFlowPatient();
+    makePatientFlowServiceRequest($patient->id, 'in_progress', serviceType: 'pharmacy');
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries[0]['step'])->toBe('in_direct_service');
+    expect($entries[0]['department'])->toBe('Pharmacy');
+});
+
+it('excludes a service request already linked to a real order', function (): void {
+    $patient = makePatientFlowPatient();
+    makePatientFlowServiceRequest($patient->id, 'pending', linkedOrderId: (string) Str::uuid());
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries)->toBe([]);
+});
+
+it('excludes completed and cancelled service requests', function (): void {
+    $patient = makePatientFlowPatient();
+    makePatientFlowServiceRequest($patient->id, 'completed');
+    makePatientFlowServiceRequest($patient->id, 'cancelled');
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries)->toBe([]);
+});
+
+it('shows a service request tied to an appointment alongside the appointment entry', function (): void {
+    $patient = makePatientFlowPatient();
+    $appointment = makePatientFlowAppointment($patient->id, ['status' => 'in_consultation']);
+    makePatientFlowServiceRequest($patient->id, 'pending', appointmentId: $appointment->id);
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries)->toHaveCount(2);
+    $steps = array_column($entries, 'step');
+    expect($steps)->toContain('with_clinician');
+    expect($steps)->toContain('waiting_direct_service');
+});
+
 it('runs a bounded, N-independent number of queries regardless of active-visit volume', function (): void {
     // Direct answer to the plan's own §2.2/§6 requirement: measure this
     // before trusting it, per the encounter-state-machine-design/02 lesson
@@ -261,7 +337,7 @@ it('runs a bounded, N-independent number of queries regardless of active-visit v
     DB::disableQueryLog();
 
     expect($entries)->toHaveCount(150);
-    expect($queryCount)->toBeLessThanOrEqual(5);
+    expect($queryCount)->toBeLessThanOrEqual(6);
 });
 
 it('excludes completed, cancelled, and no_show appointments entirely', function (): void {

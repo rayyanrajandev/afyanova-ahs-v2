@@ -8,17 +8,25 @@ const props = defineProps<{
 }>();
 
 /**
- * Deliberately only the four steps nothing else in the app shows —
- * waiting_triage/in_triage/waiting_clinician/waiting_clinician_review
- * duplicate reception/Queue.vue's own waiting_triage/waiting_provider
- * stages and are excluded here, not just hidden by filtering (see
- * useVisitJourneyBoard's earlierStageCount). Board.vue links to
- * /reception/queue for those. This board exists for the segment
- * reports/queue-based-workflow-audit.md found had zero cross-module
- * visibility: once a patient is with the clinician, nothing shows where
- * they actually are.
+ * Deliberately excludes waiting_triage/in_triage/waiting_clinician/
+ * waiting_clinician_review — those duplicate reception/Queue.vue's own
+ * waiting_triage/waiting_provider stages (see useVisitJourneyBoard's
+ * earlierStageCount). Board.vue links to /reception/queue for those.
+ *
+ * waiting_direct_service/in_direct_service (Phase 1b) are a genuinely
+ * distinct situation from waiting_lab/in_lab, not folded into them: a
+ * direct-service walk-in never saw a clinician at all, so showing it in
+ * the same column as a clinician-ordered lab result in progress would
+ * misrepresent where the patient actually is.
  */
-const STEP_ORDER: VisitJourneyStep[] = ['with_clinician', 'waiting_lab', 'in_lab', 'waiting_pharmacy'];
+const STEP_ORDER: VisitJourneyStep[] = [
+    'with_clinician',
+    'waiting_lab',
+    'in_lab',
+    'waiting_pharmacy',
+    'waiting_direct_service',
+    'in_direct_service',
+];
 
 const STEP_LABELS: Record<VisitJourneyStep, string> = {
     waiting_triage: 'Waiting for triage',
@@ -29,6 +37,8 @@ const STEP_LABELS: Record<VisitJourneyStep, string> = {
     waiting_lab: 'Waiting for lab',
     in_lab: 'In lab',
     waiting_pharmacy: 'Waiting for pharmacy',
+    waiting_direct_service: 'Waiting (direct service)',
+    in_direct_service: 'In progress (direct service)',
 };
 
 const columns = computed(() =>
@@ -41,7 +51,7 @@ const columns = computed(() =>
 </script>
 
 <template>
-    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <div
             v-for="column in columns"
             :key="column.step"
@@ -63,7 +73,7 @@ const columns = computed(() =>
 
             <div
                 v-for="entry in column.entries"
-                :key="entry.appointmentId"
+                :key="entry.appointmentId ?? entry.serviceRequestId ?? undefined"
                 class="rounded-md border bg-background px-2.5 py-2 shadow-sm"
             >
                 <p class="truncate text-sm font-medium text-foreground">

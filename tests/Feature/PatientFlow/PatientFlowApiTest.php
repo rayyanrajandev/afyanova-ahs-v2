@@ -34,6 +34,19 @@ it('returns the board with derived steps for active visits', function (): void {
         ->assertJsonPath('data.0.patientName', 'Furaha Ngowi');
 });
 
+it('includes a direct-service walk-in on the board with no appointment', function (): void {
+    $user = makePatientFlowUser();
+    $patient = makePatientFlowPatient();
+    makePatientFlowServiceRequest($patient->id, 'pending');
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/patient-flow/board')
+        ->assertOk()
+        ->assertJsonPath('data.0.appointmentId', null)
+        ->assertJsonPath('data.0.step', 'waiting_direct_service')
+        ->assertJsonPath('data.0.department', 'Laboratory');
+});
+
 it('forbids the board without appointments.read', function (): void {
     $user = User::factory()->create();
 
