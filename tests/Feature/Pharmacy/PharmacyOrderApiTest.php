@@ -7,17 +7,20 @@ use App\Jobs\GenerateAuditExportCsvJob;
 use App\Modules\Admission\Infrastructure\Models\AdmissionModel;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
+use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemUnitModel;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryStockMovementModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\Patient\Infrastructure\Models\PatientAllergyModel;
 use App\Modules\Patient\Infrastructure\Models\PatientMedicationProfileModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
+use App\Modules\Pharmacy\Domain\Events\PharmacyOrderDispensed;
 use App\Modules\Platform\Infrastructure\Models\AuditExportJobModel;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderAuditLogModel;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -264,6 +267,56 @@ function createVerifiedDispensedPharmacyOrder(
         ->assertOk()
         ->json('data');
 }
+it('dispatches PharmacyOrderDispensed when the order reaches dispensed', function (): void {
+    Event::fake([PharmacyOrderDispensed::class]);
+
+    $user = makePharmacyUser();
+    $patient = makePharmacyPatient();
+    $inventoryItem = makePharmacyInventoryItem([
+        'item_code' => 'ATC:N02BE01',
+        'item_name' => 'Paracetamol 500mg',
+    ]);
+    InventoryItemUnitModel::query()->create([
+        'item_id' => $inventoryItem->id,
+        'unit_name' => 'tablet',
+        'unit_code' => 'tab',
+        'base_quantity' => 1,
+        'is_base_unit' => true,
+        'is_active' => true,
+    ]);
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/pharmacy-orders', array_merge(
+            pharmacyOrderPayload($patient->id),
+            ['safetyAcknowledged' => true],
+        ))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/pharmacy-orders/'.$created['id'].'/status', [
+            'status' => 'in_preparation',
+            'dispensingNotes' => 'Prepared for dispensing.',
+        ])
+        ->assertOk();
+
+    Event::assertNotDispatched(PharmacyOrderDispensed::class);
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/pharmacy-orders/'.$created['id'].'/status', [
+            'status' => 'dispensed',
+            'dispensingNotes' => 'Dispensed full quantity.',
+        ])
+        ->assertOk();
+
+    Event::assertDispatched(
+        PharmacyOrderDispensed::class,
+        fn (PharmacyOrderDispensed $event): bool => $event->pharmacyOrderId === $created['id']
+            && $event->patientId === $patient->id
+            && $event->orderedByUserId === $user->id,
+    );
+});
+
 it('requires authentication for pharmacy order creation', function (): void {
     $patient = makePharmacyPatient();
     $this->postJson('/api/v1/pharmacy-orders', pharmacyOrderPayload($patient->id))

@@ -5,6 +5,7 @@ namespace App\Modules\Radiology\Application\UseCases;
 use App\Modules\Platform\Application\Services\ClinicalCatalogRecipeStockConsumptionService;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogType;
+use App\Modules\Radiology\Domain\Events\RadiologyOrderCompleted;
 use App\Modules\Radiology\Domain\Repositories\RadiologyOrderAuditLogRepositoryInterface;
 use App\Modules\Radiology\Domain\Repositories\RadiologyOrderRepositoryInterface;
 use App\Modules\Radiology\Domain\ValueObjects\RadiologyOrderStatus;
@@ -106,6 +107,18 @@ class UpdateRadiologyOrderStatusUseCase
                     'cancellation_reason_provided' => ! blank($reason),
                 ],
             );
+
+            if ($status === RadiologyOrderStatus::COMPLETED->value) {
+                DB::afterCommit(function () use ($id, $updated, $actorId): void {
+                    event(new RadiologyOrderCompleted(
+                        radiologyOrderId: $id,
+                        patientId: (string) $updated['patient_id'],
+                        appointmentId: $updated['appointment_id'] ?? null,
+                        orderedByUserId: $updated['ordered_by_user_id'] ?? null,
+                        actorId: $actorId,
+                    ));
+                });
+            }
 
             return $updated;
         });

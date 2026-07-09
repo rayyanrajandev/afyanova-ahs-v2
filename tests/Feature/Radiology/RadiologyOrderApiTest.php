@@ -6,10 +6,12 @@ use App\Modules\Admission\Infrastructure\Models\AdmissionModel;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
+use App\Modules\Radiology\Domain\Events\RadiologyOrderCompleted;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderAuditLogModel;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
@@ -163,6 +165,51 @@ function advanceRadiologyOrderToCompleted($test, User $user, string $orderId, st
             'reportSummary' => $reportSummary,
         ]);
 }
+
+it('dispatches RadiologyOrderCompleted when the order reaches completed', function (): void {
+    Event::fake([RadiologyOrderCompleted::class]);
+
+    $user = makeRadiologyUser();
+    $patient = makeRadiologyPatient();
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/radiology-orders', radiologyOrderPayload($patient->id, [
+            'orderedByUserId' => $user->id,
+        ]))
+        ->assertCreated()
+        ->json('data');
+
+    advanceRadiologyOrderToCompleted($this, $user, $created['id'], 'Clear.')
+        ->assertOk();
+
+    Event::assertDispatched(
+        RadiologyOrderCompleted::class,
+        fn (RadiologyOrderCompleted $event): bool => $event->radiologyOrderId === $created['id']
+            && $event->patientId === $patient->id
+            && $event->orderedByUserId === $user->id,
+    );
+});
+
+it('does not dispatch RadiologyOrderCompleted for a non-completing transition', function (): void {
+    Event::fake([RadiologyOrderCompleted::class]);
+
+    $user = makeRadiologyUser();
+    $patient = makeRadiologyPatient();
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/radiology-orders', radiologyOrderPayload($patient->id))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/radiology-orders/'.$created['id'].'/status', [
+            'status' => 'scheduled',
+            'reason' => null,
+        ])
+        ->assertOk();
+
+    Event::assertNotDispatched(RadiologyOrderCompleted::class);
+});
 
 it('requires authentication for radiology order creation', function (): void {
     $patient = makeRadiologyPatient();

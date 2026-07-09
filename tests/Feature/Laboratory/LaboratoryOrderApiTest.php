@@ -10,10 +10,12 @@ use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
 use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
+use App\Modules\Laboratory\Domain\Events\LaboratoryOrderCompleted;
 use App\Modules\Platform\Infrastructure\Models\AuditExportJobModel;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -523,6 +525,49 @@ it('updates laboratory order status to completed and sets result timestamp', fun
 
     $record = LaboratoryOrderModel::query()->find($created['id']);
     expect($record?->resulted_at)->not->toBeNull();
+});
+
+it('dispatches LaboratoryOrderCompleted when the order reaches completed', function (): void {
+    Event::fake([LaboratoryOrderCompleted::class]);
+
+    $user = makeLaboratoryUser();
+    $patient = makeLaboratoryPatient();
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/laboratory-orders', laboratoryOrderPayload($patient->id, [
+            'orderedByUserId' => $user->id,
+        ]))
+        ->json('data');
+
+    advanceLaboratoryOrderToCompleted($this, $user, $created['id'], 'Normal')
+        ->assertOk();
+
+    Event::assertDispatched(
+        LaboratoryOrderCompleted::class,
+        fn (LaboratoryOrderCompleted $event): bool => $event->laboratoryOrderId === $created['id']
+            && $event->patientId === $patient->id
+            && $event->orderedByUserId === $user->id,
+    );
+});
+
+it('does not dispatch LaboratoryOrderCompleted for a non-completing transition', function (): void {
+    Event::fake([LaboratoryOrderCompleted::class]);
+
+    $user = makeLaboratoryUser();
+    $patient = makeLaboratoryPatient();
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/laboratory-orders', laboratoryOrderPayload($patient->id))
+        ->json('data');
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/laboratory-orders/'.$created['id'].'/status', [
+            'status' => 'collected',
+            'reason' => null,
+        ])
+        ->assertOk();
+
+    Event::assertNotDispatched(LaboratoryOrderCompleted::class);
 });
 
 it('forbids laboratory order verification without verification permission', function (): void {

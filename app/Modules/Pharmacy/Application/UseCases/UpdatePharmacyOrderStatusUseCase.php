@@ -9,6 +9,7 @@ use App\Modules\InventoryProcurement\Application\Services\InventoryBatchStockSer
 use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemRepositoryInterface;
 use App\Modules\Pharmacy\Application\Exceptions\PharmacyOrderStatusUpdateNotAllowedException;
 use App\Modules\Pharmacy\Application\Support\ApprovedMedicineGovernance;
+use App\Modules\Pharmacy\Domain\Events\PharmacyOrderDispensed;
 use App\Modules\Pharmacy\Domain\Repositories\PharmacyOrderAuditLogRepositoryInterface;
 use App\Modules\Pharmacy\Domain\Repositories\PharmacyOrderRepositoryInterface;
 use App\Modules\Pharmacy\Domain\ValueObjects\PharmacyOrderStatus;
@@ -186,6 +187,18 @@ class UpdatePharmacyOrderStatusUseCase
                     'inventory_issue_unit' => $updated['dispensed_unit'] ?? $existing['dispensed_unit'] ?? $existing['prescribed_unit'] ?? null,
                 ],
             );
+
+            if (($updated['status'] ?? null) === PharmacyOrderStatus::DISPENSED->value) {
+                DB::afterCommit(function () use ($id, $updated, $actorId): void {
+                    event(new PharmacyOrderDispensed(
+                        pharmacyOrderId: $id,
+                        patientId: (string) $updated['patient_id'],
+                        appointmentId: $updated['appointment_id'] ?? null,
+                        orderedByUserId: $updated['ordered_by_user_id'] ?? null,
+                        actorId: $actorId,
+                    ));
+                });
+            }
 
             return $updated;
         });

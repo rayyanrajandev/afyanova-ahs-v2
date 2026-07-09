@@ -2,6 +2,7 @@
 
 namespace App\Modules\Laboratory\Application\UseCases;
 
+use App\Modules\Laboratory\Domain\Events\LaboratoryOrderCompleted;
 use App\Modules\Laboratory\Domain\Repositories\LaboratoryOrderAuditLogRepositoryInterface;
 use App\Modules\Laboratory\Domain\Repositories\LaboratoryOrderRepositoryInterface;
 use App\Modules\Laboratory\Domain\ValueObjects\LaboratoryOrderStatus;
@@ -96,6 +97,18 @@ class UpdateLaboratoryOrderStatusUseCase
                     ],
                 ],
             );
+
+            if ($status === LaboratoryOrderStatus::COMPLETED->value) {
+                DB::afterCommit(function () use ($id, $updated, $actorId): void {
+                    event(new LaboratoryOrderCompleted(
+                        laboratoryOrderId: $id,
+                        patientId: (string) $updated['patient_id'],
+                        appointmentId: $updated['appointment_id'] ?? null,
+                        orderedByUserId: $updated['ordered_by_user_id'] ?? null,
+                        actorId: $actorId,
+                    ));
+                });
+            }
 
             return $updated;
         });
