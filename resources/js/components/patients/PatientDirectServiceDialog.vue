@@ -7,7 +7,6 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useDirectServiceRequest, type DirectServiceType } from '@/composables/patientsIndex/useDirectServiceRequest';
-import { type PatientListItem } from '@/composables/patientsIndex/usePatientList';
 
 /**
  * Phase 5 of reports/patients-index-modernization-plan.md — the
@@ -17,9 +16,21 @@ import { type PatientListItem } from '@/composables/patientsIndex/usePatientList
  * get a dialog — outpatient/emergency check-in do not, and are one-click
  * actions in PatientVisitActionsMenu.vue instead). A small Dialog, not a
  * Sheet: three fields is a "lightweight dialog," not a workspace.
+ *
+ * `patient` is deliberately the minimal shape this component actually
+ * uses (id + name, for the description text), not the full
+ * PatientListItem — that keeps this usable from any caller that has
+ * already resolved a patient, including reception/Queue.vue's own
+ * PatientSearchResult (a narrower local type), not just IndexV2.vue.
  */
+export type DirectServiceDialogPatient = {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+};
+
 const props = defineProps<{
-    patient: PatientListItem | null;
+    patient: DirectServiceDialogPatient | null;
 }>();
 
 const open = defineModel<boolean>('open', { required: true });

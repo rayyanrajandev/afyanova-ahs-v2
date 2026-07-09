@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ReceptionQueueList from '@/components/reception/ReceptionQueueList.vue';
+import PatientDirectServiceDialog from '@/components/patients/PatientDirectServiceDialog.vue';
 import {
     useReceptionQueue,
     type ReceptionQueueFilters,
@@ -19,6 +20,7 @@ import {
 import { useWalkInCheckIn, type WalkInArrivalMode } from '@/composables/reception/useWalkInCheckIn';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { apiGet } from '@/lib/apiClient';
+import { notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
 
 /**
@@ -50,6 +52,18 @@ import { type BreadcrumbItem } from '@/types';
  * collided with actual patient registration in patients/Index.vue. Now
  * explicit — a caption links to /patients for adding a new patient, and an
  * empty-search-result state points there too.
+ *
+ * "Direct service request" sits alongside the walk-in check-in action for
+ * the same selected patient — added per reports/reception-checkin-
+ * architecture-audit.md's finding that this is the canonical front-desk
+ * workspace, yet a receptionist previously had no way to reach Direct
+ * Service (a patient who needs only a lab/pharmacy/radiology/theatre
+ * service, not a doctor visit) without leaving for patients/IndexV2.vue.
+ * Not a third arrival-mode option — Direct Service isn't an arrival mode
+ * at all (it creates a ServiceRequest, not an appointment, and never
+ * touches triage), so it's its own action, reusing the same
+ * PatientDirectServiceDialog.vue/useDirectServiceRequest.ts
+ * PatientVisitActionsMenu.vue already established.
  */
 const { hasPermission, isFacilitySuperAdmin } = usePlatformAccess();
 
@@ -58,6 +72,7 @@ function hasAccess(permission: string): boolean {
 }
 
 const canReadAppointments = computed(() => hasAccess('appointments.read'));
+const canCreateServiceRequest = computed(() => hasAccess('service.requests.create'));
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'Reception queue', href: '/reception/queue' },
@@ -150,6 +165,8 @@ async function submitWalkIn(): Promise<void> {
     arrivalMode.value = 'walk_in';
     await queryClient.invalidateQueries({ queryKey: ['reception-queue'] });
 }
+
+const directServiceDialogOpen = ref(false);
 
 // Same bounded-scroll-container pattern as ShowV2.vue/WorkspaceV2.vue: the
 // container's height is the viewport minus whatever AppLayout chrome sits
@@ -262,6 +279,14 @@ onBeforeUnmount(() => {
                             <Button :disabled="!canSubmitWalkIn" @click="submitWalkIn">
                                 {{ walkIn.isPending.value ? 'Checking in…' : 'Check in' }}
                             </Button>
+                            <Button
+                                v-if="canCreateServiceRequest"
+                                variant="outline"
+                                :disabled="!selectedPatient"
+                                @click="directServiceDialogOpen = true"
+                            >
+                                Direct service…
+                            </Button>
                         </div>
 
                         <p v-if="selectedPatient" class="mt-2 text-xs text-muted-foreground">
@@ -323,5 +348,11 @@ onBeforeUnmount(() => {
                 </template>
             </div>
         </div>
+
+        <PatientDirectServiceDialog
+            v-model:open="directServiceDialogOpen"
+            :patient="selectedPatient"
+            @created="(requestNumber) => notifySuccess(`Direct service request ${requestNumber ?? ''} created.`)"
+        />
     </AppLayout>
 </template>
