@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { useQueryClient } from '@tanstack/vue-query';
 import { useDebounceFn } from '@vueuse/core';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, useTemplateRef } from 'vue';
@@ -40,7 +40,16 @@ import { type BreadcrumbItem } from '@/types';
  * into the sticky KPI cards themselves. Fixed here to match: sticky header
  * is informational only, and the waiting_triage/waiting_provider switch is
  * a real Tabs component, the same pattern ShowV2.vue uses for its
- * Overview/Timeline/Visits/etc. tabs.
+ * Overview/Timeline/Visits/etc. tabs. The KPI grid and TabsList fill the
+ * available width rather than being capped to a fixed size — with only two
+ * items each, a narrow fixed-width strip left most of the header empty.
+ *
+ * "Register walk-in" was renamed to "Check in a walk-in visit": this form
+ * only searches for a patient who already exists (POST /reception/walk-ins
+ * creates the appointment/arrival, never the patient record), so "register"
+ * collided with actual patient registration in patients/Index.vue. Now
+ * explicit — a caption links to /patients for adding a new patient, and an
+ * empty-search-result state points there too.
  */
 const { hasPermission, isFacilitySuperAdmin } = usePlatformAccess();
 
@@ -180,7 +189,7 @@ onBeforeUnmount(() => {
                     </p>
                 </div>
 
-                <div v-if="canReadAppointments" class="mt-3 grid grid-cols-2 gap-2 sm:w-96">
+                <div v-if="canReadAppointments" class="mt-3 grid grid-cols-2 gap-2">
                     <div v-for="kpi in kpis" :key="kpi.value" class="rounded-md bg-muted/30 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">{{ kpi.label }}</p>
                         <p class="text-sm font-bold tabular-nums">{{ kpi.count ?? '—' }}</p>
@@ -196,12 +205,20 @@ onBeforeUnmount(() => {
 
                 <template v-else>
                     <div class="rounded-lg border bg-card p-3 shadow-sm">
-                        <h2 class="text-sm font-medium">Register walk-in</h2>
+                        <div class="flex flex-wrap items-baseline justify-between gap-2">
+                            <h2 class="text-sm font-medium">Check in a walk-in visit</h2>
+                            <p class="text-xs text-muted-foreground">
+                                For a patient already in the system.
+                                <Link href="/patients" class="font-medium text-primary underline-offset-2 hover:underline">
+                                    Add a new patient
+                                </Link>
+                            </p>
+                        </div>
                         <div class="mt-2 flex flex-wrap items-start gap-2">
                             <div class="relative w-64">
                                 <Input
                                     v-model="patientQuery"
-                                    placeholder="Search patient by name, MRN, or phone…"
+                                    placeholder="Search existing patient by name, MRN, or phone…"
                                     class="h-9"
                                     @update:model-value="onPatientQueryInput"
                                 />
@@ -221,6 +238,15 @@ onBeforeUnmount(() => {
                                         </span>
                                     </li>
                                 </ul>
+                                <p
+                                    v-else-if="!patientSearchPending && patientQuery.trim().length >= 2 && !selectedPatient"
+                                    class="absolute z-10 mt-1 w-full rounded-md border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md"
+                                >
+                                    No matching patient.
+                                    <Link href="/patients" class="font-medium text-primary underline-offset-2 hover:underline">
+                                        Register them first
+                                    </Link>
+                                </p>
                             </div>
 
                             <select
@@ -234,7 +260,7 @@ onBeforeUnmount(() => {
                             <Input v-model="reason" placeholder="Reason (optional)" class="h-9 w-56" />
 
                             <Button :disabled="!canSubmitWalkIn" @click="submitWalkIn">
-                                {{ walkIn.isPending.value ? 'Registering…' : 'Check in' }}
+                                {{ walkIn.isPending.value ? 'Checking in…' : 'Check in' }}
                             </Button>
                         </div>
 
@@ -247,7 +273,7 @@ onBeforeUnmount(() => {
                     </div>
 
                     <Tabs v-model="selectedStage">
-                        <TabsList class="grid w-full grid-cols-2 sm:w-96">
+                        <TabsList class="grid w-full grid-cols-2">
                             <TabsTrigger value="waiting_triage" class="inline-flex items-center gap-1.5">
                                 Waiting for triage
                                 <Badge v-if="triageQueue.data.value?.length" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
