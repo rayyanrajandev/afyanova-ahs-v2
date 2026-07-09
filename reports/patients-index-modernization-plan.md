@@ -102,7 +102,7 @@ The audit (§8) found this codebase's own flag-gating convention has drifted: `c
 | Phase | Content | Depends on | Risk | Effort |
 |---|---|---|---|---|
 | **0 — Foundation** | `usePlatformAccess()`-based permission computeds, no redundant `/auth/me/permissions` call, empty `IndexV2.vue` shell at a new, unlinked route | — | Low | **Done** |
-| **1 — List, filters, status counts** | `usePatientList`, `usePatientListFilters`, `usePatientStatusCounts` | 0 | Low — direct analog to `useMedicalRecordList` | 3-5 days |
+| **1 — List, filters, status counts** | `usePatientList`, `usePatientListFilters`, `usePatientStatusCounts` | 0 | Low — direct analog to `useMedicalRecordList` | **Done** |
 | **2 — Registration + duplicate detection** | `usePatientRegistration`, draft autosave, offline queue wiring | 0 | Medium — depends on §5's dedup-scoring decision | 1 week |
 | **3 — Patient Details sheet** | `usePatientTimeline`, `usePatientAuditLog`, `usePatientInsurance` | 1 | Medium — 3 composables, ~2020 lines of source template to account for | 1-1.5 weeks |
 | **4 — Edit + Status dialogs** | `usePatientEdit`, `usePatientStatusChange`, offline-edit-queue wiring | 1 | Low | 3-5 days |
@@ -118,6 +118,14 @@ Two scope corrections made during implementation, both resolving ambiguity in th
 2. **Genuinely empty shell, not "rendering only the list."** The original phase-table wording ("empty shell rendering only the list") clashed with Phase 1's own content (building the list composables) — resolved in favor of true Phase 0 scope: no data-bearing UI at all yet, just the route/permission/layout foundation, with an in-page note pointing back to `/patients` for the working page. Phase 1 adds the first real data.
 
 3 new tests (page renders, permission-forbidden, legacy route unaffected). No new TypeScript errors (778, unchanged). Full `Patient`/`WebRouteAuthorizationTest`/Vitest suites confirm zero regressions.
+
+**Update**: Phase 1 is implemented — `usePatientListFilters` (matches `ListPatientsUseCase`'s filter shape 1:1: `q`/`status`/`gender`/`region`/`district`/`page`/`perPage`/`sortBy`/`sortDir`), `usePatientList` and `usePatientStatusCounts` (both in `usePatientList.ts`, mirroring `useMedicalRecordList.ts`'s one-file-two-composables shape), and the `IndexV2.vue` list table itself — search bar, gender/sort selects, clickable active/inactive/all status-pill KPI cards (doubling as the status filter, matching the legacy page's own pill behavior), a real `<table>` (not the legacy page's div-grid — matching `medical-records/IndexV2.vue`'s established markup instead), and pagination.
+
+Two deliberate, documented departures from legacy behavior, not oversights:
+1. **No URL-query-param filter hydration.** The legacy page restores filters from the URL on load (`queryParam()`/`queryStatusParam()`); `useMedicalRecordListFilters.ts` established no such convention, and this composable doesn't either. Deep-linkable filtered views are deferred to the Phase 6 feature-parity checklist (§2.1) as an explicit decision, not silently dropped.
+2. **Inline filter bar, not a separate "Filters" sheet.** The legacy page's region/district/sort filters live behind a dedicated sheet (`patientFiltersSheetOpen`); this page puts gender/sort inline next to search, matching `medical-records/IndexV2.vue`'s shape. `region`/`district` filters exist in `usePatientListFilters`/the backend contract but have no UI control yet — not needed for Phase 1's read-only table, revisit if Phase 6's checklist calls for it.
+
+No row actions yet (view/edit/status-change/register) — those arrive with Phases 2-5. 5 new Vitest tests for the two composables (mocking `apiGet`, mounting via the same `QueryClient`/`VueQueryPlugin` pattern `useMedicalRecordAuditLog.spec.ts` already uses). No new TypeScript errors (778, unchanged). Full frontend Vitest (129/129) and backend `Patient`/`WebRouteAuthorizationTest` suites confirm zero regressions.
 
 ---
 
