@@ -17,9 +17,9 @@ function todayAtMidnight(): Date {
     return now;
 }
 
-export function deriveDateOfBirthFromAge(ageYearsInput: string, ageMonthsInput: string): string | null {
-    const yearsInput = ageYearsInput.trim();
-    const monthsInput = ageMonthsInput.trim();
+export function deriveDateOfBirthFromAge(ageYearsInput: string | number, ageMonthsInput: string | number): string | null {
+    const yearsInput = String(ageYearsInput ?? '').trim();
+    const monthsInput = String(ageMonthsInput ?? '').trim();
     if (yearsInput === '' && monthsInput === '') return null;
 
     const years = /^\d{1,3}$/.test(yearsInput) ? Number.parseInt(yearsInput, 10) : 0;
@@ -34,7 +34,7 @@ export function deriveDateOfBirthFromAge(ageYearsInput: string, ageMonthsInput: 
 }
 
 export function deriveAgeFromDateOfBirth(dateOfBirthInput: string): PatientAgeParts | null {
-    const trimmed = dateOfBirthInput.trim();
+    const trimmed = String(dateOfBirthInput ?? '').trim();
     if (trimmed === '') return null;
 
     const dateOfBirth = new Date(trimmed);

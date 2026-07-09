@@ -134,10 +134,10 @@ const todayIsoDate = new Date().toISOString().slice(0, 10);
 
 const derivedAge = computed(() => {
     if (dobMode.value === 'estimated') {
-        const years = Number.parseInt(form.ageYears, 10) || 0;
-        const months = Number.parseInt(form.ageMonths, 10) || 0;
-        if (form.ageYears.trim() === '' && form.ageMonths.trim() === '') return null;
-        return { years, months };
+        const ageYears = String(form.ageYears ?? '').trim();
+        const ageMonths = String(form.ageMonths ?? '').trim();
+        if (ageYears === '' && ageMonths === '') return null;
+        return { years: Number.parseInt(ageYears, 10) || 0, months: Number.parseInt(ageMonths, 10) || 0 };
     }
     return deriveAgeFromDateOfBirth(form.dateOfBirth);
 });
@@ -348,11 +348,11 @@ function resetForm(): void {
                         <div v-if="dobMode === 'estimated'" class="grid grid-cols-2 gap-3">
                             <div class="space-y-1.5">
                                 <Label for="reg-age-years" class="text-xs text-muted-foreground">Years</Label>
-                                <Input id="reg-age-years" v-model="form.ageYears" type="number" min="0" max="130" inputmode="numeric" placeholder="e.g. 45" />
+                                <Input id="reg-age-years" v-model="form.ageYears" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="e.g. 45" />
                             </div>
                             <div class="space-y-1.5">
                                 <Label for="reg-age-months" class="text-xs text-muted-foreground">Months</Label>
-                                <Input id="reg-age-months" v-model="form.ageMonths" type="number" min="0" max="11" inputmode="numeric" placeholder="e.g. 6" />
+                                <Input id="reg-age-months" v-model="form.ageMonths" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="e.g. 6" />
                             </div>
                             <p class="col-span-2 text-xs text-muted-foreground">Enter years, months, or both — months only is fine for infants.</p>
                         </div>

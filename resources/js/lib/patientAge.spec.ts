@@ -32,6 +32,15 @@ describe('patientAge', () => {
             expect(deriveDateOfBirthFromAge('200', '0')).toBeNull();
             expect(deriveDateOfBirthFromAge('0', '20')).toBeNull();
         });
+
+        it('does not throw when given actual numbers instead of strings', () => {
+            // Vue's v-model on a native <input type="number"> auto-coerces
+            // the bound value to a JS number at runtime, regardless of the
+            // .number modifier — a real bug this composable's caller hit
+            // (ageYearsInput.trim is not a function). Guard against any
+            // caller making that same mistake.
+            expect(deriveDateOfBirthFromAge(30 as unknown as string, 2 as unknown as string)).toBe('1996-05-09');
+        });
     });
 
     describe('deriveAgeFromDateOfBirth', () => {
