@@ -5392,10 +5392,19 @@ watchDebounced(
                             We are showing triage-ready visits by default so nursing staff can move the queue forward without front-desk noise.
                         </p>
                     </div>
-                    <Button size="sm" variant="outline" class="h-8 gap-1.5 self-start" @click="openAllAppointmentsQueue()">
-                        <AppIcon name="list-restart" class="size-3.5" />
-                        Back to all appointments
-                    </Button>
+                    <div class="flex shrink-0 gap-1.5 self-start">
+                        <a
+                            href="/reception/queue"
+                            class="inline-flex h-8 items-center gap-1.5 rounded-md border border-input bg-background px-3 text-sm font-medium shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+                        >
+                            <AppIcon name="clipboard-list" class="size-3.5" />
+                            Open reception queue
+                        </a>
+                        <Button size="sm" variant="outline" class="h-8 gap-1.5" @click="openAllAppointmentsQueue()">
+                            <AppIcon name="list-restart" class="size-3.5" />
+                            Back to all appointments
+                        </Button>
+                    </div>
                 </div>
                 <div class="mt-3 grid gap-2 sm:grid-cols-2">
                     <div class="rounded-lg border bg-background/90 px-3 py-2.5">
@@ -5407,6 +5416,9 @@ watchDebounced(
                         <p class="mt-1 text-lg font-semibold text-foreground">{{ appointmentCountText(counts.waiting_provider) }}</p>
                     </div>
                 </div>
+                <p class="mt-2 text-[11px] text-muted-foreground">
+                    The reception queue orders these same visits by arrival priority (emergency, then scheduled, then walk-in) with patient name and wait time — useful when triage order matters more than this list's default sort.
+                </p>
             </section>
 
             <section v-if="!pageLoading && isMyClinicalQueue" class="rounded-lg border border-primary/20 bg-primary/5 px-3 py-3">
