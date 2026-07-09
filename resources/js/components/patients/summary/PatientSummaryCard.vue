@@ -27,6 +27,10 @@ const props = defineProps<{
     error?: Error | null;
 }>();
 
+const emit = defineEmits<{
+    expand: [];
+}>();
+
 defineSlots<{
     actions?: () => unknown;
 }>();
@@ -166,8 +170,13 @@ const activeOrdersTotal = computed(() => {
                 </Badge>
             </div>
 
-            <div v-if="$slots.actions" class="flex items-center gap-1.5 border-t pt-2">
-                <slot name="actions" />
+            <div class="flex items-center justify-between gap-1.5 border-t pt-2">
+                <button type="button" class="text-xs font-medium text-primary hover:underline" @click="emit('expand')">
+                    View full summary
+                </button>
+                <div v-if="$slots.actions" class="flex items-center gap-1.5">
+                    <slot name="actions" />
+                </div>
             </div>
         </template>
     </div>

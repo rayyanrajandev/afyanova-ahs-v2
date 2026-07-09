@@ -21,11 +21,16 @@ function summaryFixture() {
             region: 'Dar es Salaam',
             district: 'Ilala',
         },
+        contact: { email: null, addressLine: null, nextOfKinName: null, nextOfKinPhone: null },
         alerts: [],
         insurance: null,
         latestEncounter: null,
         workflowStatus: null,
         activeOrders: { labActive: 0, pharmacyActive: 0, imagingActive: 0, procedureActive: 0 },
+        upcomingAppointment: null,
+        currentAdmission: null,
+        stats: { totalVisits: 0, totalEncounters: 0, outstandingInvoices: 0 },
+        recentActivity: [],
     };
 }
 

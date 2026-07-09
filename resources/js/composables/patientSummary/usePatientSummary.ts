@@ -23,6 +23,41 @@ export type PatientSummaryIdentity = {
     district: string | null;
 };
 
+export type PatientSummaryContact = {
+    email: string | null;
+    addressLine: string | null;
+    nextOfKinName: string | null;
+    nextOfKinPhone: string | null;
+};
+
+export type PatientSummaryUpcomingAppointment = {
+    id: string;
+    appointmentNumber: string | null;
+    department: string | null;
+    scheduledAt: string | null;
+    reason: string | null;
+};
+
+export type PatientSummaryAdmission = {
+    id: string;
+    admissionNumber: string | null;
+    ward: string | null;
+    bed: string | null;
+    admittedAt: string | null;
+};
+
+export type PatientSummaryStats = {
+    totalVisits: number;
+    totalEncounters: number;
+    outstandingInvoices: number;
+};
+
+export type PatientSummaryActivityEntry = {
+    type: string | null;
+    label: string | null;
+    occurredAt: string | null;
+};
+
 export type PatientSummaryAlert = {
     id: string;
     substanceName: string | null;
@@ -66,11 +101,16 @@ export type PatientSummaryActiveOrders = {
 
 export type PatientSummaryDetails = {
     patient: PatientSummaryIdentity;
+    contact: PatientSummaryContact;
     alerts: PatientSummaryAlert[];
     insurance: PatientSummaryInsurance | null;
     latestEncounter: PatientSummaryEncounter | null;
     workflowStatus: PatientSummaryWorkflowStatus | null;
     activeOrders: PatientSummaryActiveOrders;
+    upcomingAppointment: PatientSummaryUpcomingAppointment | null;
+    currentAdmission: PatientSummaryAdmission | null;
+    stats: PatientSummaryStats;
+    recentActivity: PatientSummaryActivityEntry[];
 };
 
 type PatientSummaryResponse = { data: PatientSummaryDetails };
