@@ -311,7 +311,7 @@ function resetForm(): void {
                         <Input id="reg-last-name" v-model="form.lastName" />
                     </div>
                     <div class="space-y-1.5">
-                        <Label for="reg-middle-name">Middle name</Label>
+                        <Label for="reg-middle-name">Middle name (optional)</Label>
                         <Input id="reg-middle-name" v-model="form.middleName" />
                     </div>
                     <div class="space-y-1.5">
@@ -367,7 +367,7 @@ function resetForm(): void {
                         <Label for="reg-email">Email (optional)</Label>
                         <Input id="reg-email" v-model="form.email" type="email" />
                     </div>
-                    <div class="space-y-1.5">
+                    <div class="col-span-2 space-y-1.5">
                         <Label for="reg-national-id">National ID (optional)</Label>
                         <Input id="reg-national-id" v-model="form.nationalId" />
                     </div>
@@ -392,7 +392,6 @@ function resetForm(): void {
                         :placeholder="countryProfile.regionPlaceholder"
                         :search-placeholder="`Search ${countryProfile.regionLabel.toLowerCase()} or use a custom value`"
                         :empty-text="`No ${countryProfile.regionLabel.toLowerCase()} suggestion found.`"
-                        :required="true"
                         :allow-custom-value="true"
                     />
                     <SearchableSelectField
@@ -403,7 +402,6 @@ function resetForm(): void {
                         :placeholder="districtPlaceholder"
                         :search-placeholder="`Search ${countryProfile.districtLabel.toLowerCase()} or use a custom value`"
                         :empty-text="`No ${countryProfile.districtLabel.toLowerCase()} suggestion found.`"
-                        :required="true"
                         :allow-custom-value="true"
                         :disabled="!form.region.trim()"
                     />
