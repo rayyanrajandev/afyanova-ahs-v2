@@ -669,6 +669,12 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::patch('appointments/{id}/triage', [AppointmentController::class, 'recordTriage'])
         ->middleware('can:appointments.record-triage')
         ->name('appointments.record-triage');
+    Route::patch('appointments/{id}/claim-triage', [AppointmentController::class, 'claimTriage'])
+        ->middleware('can:appointments.record-triage')
+        ->name('appointments.claim-triage');
+    Route::patch('appointments/{id}/release-triage-claim', [AppointmentController::class, 'releaseTriageClaim'])
+        ->middleware('can:appointments.record-triage')
+        ->name('appointments.release-triage-claim');
     Route::patch('appointments/{id}/start-consultation', [AppointmentController::class, 'startConsultation'])
         ->middleware('can:appointments.start-consultation')
         ->name('appointments.start-consultation');

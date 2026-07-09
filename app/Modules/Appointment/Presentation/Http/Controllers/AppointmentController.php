@@ -10,6 +10,8 @@ use App\Modules\Appointment\Application\Exceptions\InvalidAppointmentReferralTar
 use App\Modules\Appointment\Application\Exceptions\InvalidAppointmentStatusTransitionException;
 use App\Modules\Appointment\Application\Exceptions\PatientNotEligibleForAppointmentException;
 use App\Modules\Appointment\Application\Exceptions\SourceAdmissionNotEligibleForAppointmentException;
+use App\Modules\Appointment\Application\Exceptions\TriageClaimConflictException;
+use App\Modules\Appointment\Application\UseCases\ClaimAppointmentTriageUseCase;
 use App\Modules\Appointment\Application\UseCases\CreateAppointmentUseCase;
 use App\Modules\Appointment\Application\UseCases\CreateAppointmentReferralUseCase;
 use App\Modules\Appointment\Application\UseCases\GetAppointmentUseCase;
@@ -23,6 +25,7 @@ use App\Modules\Appointment\Application\UseCases\ListAppointmentDepartmentOption
 use App\Modules\Appointment\Application\UseCases\ListAppointmentStatusCountsUseCase;
 use App\Modules\Appointment\Application\UseCases\ListAppointmentAuditLogsUseCase;
 use App\Modules\Appointment\Application\UseCases\RecordAppointmentTriageUseCase;
+use App\Modules\Appointment\Application\UseCases\ReleaseAppointmentTriageClaimUseCase;
 use App\Modules\Appointment\Application\UseCases\UpdateAppointmentReferralStatusUseCase;
 use App\Modules\Appointment\Application\UseCases\UpdateAppointmentReferralUseCase;
 use App\Modules\Appointment\Application\UseCases\UpdateAppointmentStatusUseCase;
@@ -37,7 +40,9 @@ use App\Modules\Appointment\Presentation\Http\Transformers\AppointmentAuditLogRe
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
 use App\Modules\Appointment\Presentation\Http\Requests\StoreAppointmentRequest;
 use App\Modules\Appointment\Presentation\Http\Requests\StoreAppointmentReferralRequest;
+use App\Modules\Appointment\Presentation\Http\Requests\ClaimAppointmentTriageRequest;
 use App\Modules\Appointment\Presentation\Http\Requests\RecordAppointmentTriageRequest;
+use App\Modules\Appointment\Presentation\Http\Requests\ReleaseAppointmentTriageClaimRequest;
 use App\Modules\Appointment\Presentation\Http\Requests\StartAppointmentConsultationRequest;
 use App\Modules\Appointment\Presentation\Http\Requests\UpdateAppointmentProviderWorkflowRequest;
 use App\Modules\Appointment\Presentation\Http\Requests\UpdateAppointmentRequest;
@@ -265,6 +270,67 @@ class AppointmentController extends Controller
         ]);
     }
 
+    public function claimTriage(
+        string $id,
+        ClaimAppointmentTriageRequest $request,
+        ClaimAppointmentTriageUseCase $useCase,
+    ): JsonResponse {
+        try {
+            $appointment = $useCase->execute(
+                id: $id,
+                actorId: $request->user()?->id,
+                forceTakeover: $request->boolean('forceTakeover'),
+            );
+        } catch (TenantScopeRequiredForIsolationException $exception) {
+            return $this->tenantScopeRequiredResponse($exception->getMessage());
+        } catch (TriageClaimConflictException $exception) {
+            return $this->triageClaimConflictResponse($exception->ownerUserId);
+        }
+
+        abort_if($appointment === null, 404, 'Appointment not found.');
+
+        return response()->json([
+            'data' => AppointmentResponseTransformer::transform($appointment),
+        ]);
+    }
+
+    public function releaseTriageClaim(
+        string $id,
+        ReleaseAppointmentTriageClaimRequest $request,
+        ReleaseAppointmentTriageClaimUseCase $useCase,
+    ): JsonResponse {
+        try {
+            $appointment = $useCase->execute(
+                id: $id,
+                actorId: $request->user()?->id,
+            );
+        } catch (TenantScopeRequiredForIsolationException $exception) {
+            return $this->tenantScopeRequiredResponse($exception->getMessage());
+        } catch (TriageClaimConflictException $exception) {
+            return $this->triageClaimConflictResponse($exception->ownerUserId);
+        }
+
+        abort_if($appointment === null, 404, 'Appointment not found.');
+
+        return response()->json([
+            'data' => AppointmentResponseTransformer::transform($appointment),
+        ]);
+    }
+
+    private function triageClaimConflictResponse(int $ownerUserId): JsonResponse
+    {
+        return response()->json([
+            'message' => 'This visit is already claimed by another nurse for triage.',
+            'code' => 'TRIAGE_CLAIM_CONFLICT',
+            'errors' => [
+                'forceTakeover' => ['Triage claim confirmation is required before takeover.'],
+            ],
+            'context' => [
+                'triageOwnerUserId' => $ownerUserId,
+                'takeoverAllowed' => true,
+            ],
+        ], 409);
+    }
 
     public function updateStatus(
         string $id,

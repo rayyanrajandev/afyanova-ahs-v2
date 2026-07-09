@@ -38,6 +38,8 @@ class AppointmentResponseTransformer
             'triageCategory' => $appointment['triage_category'] ?? null,
             'triagedAt' => $appointment['triaged_at'] ?? null,
             'triagedByUserId' => $appointment['triaged_by_user_id'] ?? null,
+            'triageOwnerUserId' => $appointment['triage_owner_user_id'] ?? null,
+            'triageOwnerAssignedAt' => $appointment['triage_owner_assigned_at'] ?? null,
             'consultationStartedAt' => $appointment['consultation_started_at'] ?? null,
             'consultationOwnerUserId' => self::consultationOwnerUserId($appointment),
             'consultationOwnerAssignedAt' => $appointment['consultation_owner_assigned_at'] ?? null,

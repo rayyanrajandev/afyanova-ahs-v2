@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\User;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
@@ -105,6 +106,20 @@ it('maps waiting_triage appointments to the waiting_triage step', function (): v
     expect($entries[0]['step'])->toBe('waiting_triage');
     expect($entries[0]['patientName'])->toBe('Furaha Ngowi');
     expect($entries[0]['patientNumber'])->toBe($patient->patient_number);
+});
+
+it('maps a claimed waiting_triage appointment to in_triage', function (): void {
+    $patient = makePatientFlowPatient();
+    $nurse = User::factory()->create();
+    makePatientFlowAppointment($patient->id, [
+        'status' => 'waiting_triage',
+        'triage_owner_user_id' => $nurse->id,
+        'triage_owner_assigned_at' => now(),
+    ]);
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries[0]['step'])->toBe('in_triage');
 });
 
 it('maps a first-time waiting_provider appointment to waiting_clinician', function (): void {

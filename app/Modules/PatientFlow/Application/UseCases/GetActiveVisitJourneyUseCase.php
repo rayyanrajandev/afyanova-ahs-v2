@@ -23,12 +23,8 @@ use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
  * order statuses exist but are invisible to the visit's own queue position,
  * and nothing connects a completed order back to "the visit can move on."
  *
- * Two known limits, both intentional for this phase, not oversights:
+ * One known limit, intentional for this phase, not an oversight:
  *
- * - "In Triage" is not distinguished from "Waiting for Triage" here — that
- *   needs the triage claim/lock Phase 2 introduces (independent of this
- *   phase). Every WAITING_TRIAGE appointment maps to 'waiting_triage' until
- *   that ships.
  * - "Waiting for Clinician Review" is inferred, not stored: a WAITING_PROVIDER
  *   appointment whose consultation_started_at is already set has been through
  *   at least one consultation before (per
@@ -37,6 +33,11 @@ use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
  *   to distinguish "returning after being sent for orders" from "waiting for
  *   the first consultation," short of adding a new persisted field, which
  *   this read-only phase deliberately does not do.
+ *
+ * "In Triage" is distinguished from "Waiting for Triage" using Phase 2's
+ * triage_owner_user_id claim (set by ClaimAppointmentTriageUseCase) — a
+ * WAITING_TRIAGE appointment with a claim in place is 'in_triage', otherwise
+ * 'waiting_triage'.
  */
 class GetActiveVisitJourneyUseCase
 {
@@ -147,7 +148,7 @@ class GetActiveVisitJourneyUseCase
         bool $hasOpenPharmacy,
     ): string {
         if ($appointment->status === AppointmentStatus::WAITING_TRIAGE->value) {
-            return 'waiting_triage';
+            return $appointment->triage_owner_user_id !== null ? 'in_triage' : 'waiting_triage';
         }
 
         if ($appointment->status === AppointmentStatus::WAITING_PROVIDER->value) {
