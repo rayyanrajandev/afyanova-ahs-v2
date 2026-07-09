@@ -5,9 +5,11 @@ import { useDebounceFn } from '@vueuse/core';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, useTemplateRef } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ReceptionQueueList from '@/components/reception/ReceptionQueueList.vue';
 import {
     useReceptionQueue,
@@ -30,14 +32,15 @@ import { type BreadcrumbItem } from '@/types';
  *
  * Brought in line with the established V2 surface conventions — checked
  * directly against patients/chart/ShowV2.vue and encounters/WorkspaceV2.vue
- * rather than assumed — alongside patient-flow/Board.vue during the
- * duplication/convention audit that also scoped that board down to
- * with_clinician-onward only: this page remains the owner of the
- * waiting_triage/waiting_provider segment. <Head> title, usePlatformAccess()
- * in-page gate, clickable KPI stage-switcher cards inside a sticky header
- * pinned inside a bounded, independently-scrolling container (not
- * page-level scroll) — the walk-in form and queue list can grow long, and
- * the header/stage-switcher should stay visible while scrolling through them.
+ * rather than assumed. That check found the sticky header in those pages
+ * holds only the title and non-interactive KPI mini-stats; stage/tab
+ * switching is a separate Tabs (TabsList/TabsTrigger/TabsContent) row
+ * living in the normal scrolling body below it, with badge counts on each
+ * trigger — an initial pass on this page wrongly folded the stage switcher
+ * into the sticky KPI cards themselves. Fixed here to match: sticky header
+ * is informational only, and the waiting_triage/waiting_provider switch is
+ * a real Tabs component, the same pattern ShowV2.vue uses for its
+ * Overview/Timeline/Visits/etc. tabs.
  */
 const { hasPermission, isFacilitySuperAdmin } = usePlatformAccess();
 
@@ -53,26 +56,19 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => [
 
 const selectedStage = ref<ReceptionQueueStage>('waiting_triage');
 
-// Two independently-pinned queries, not one — this is what makes the KPI
-// cards below show both stages' counts at once. TanStack Query dedupes by
-// queryKey, so selecting a stage that matches one of these two never
-// triggers a third network call: the "current" list just reads whichever
-// of these two query objects matches selectedStage.
+// Two independently-pinned queries, not one — this is what makes both the
+// header KPI cards and the tab badges show both stages' counts at once,
+// each TabsContent below reading directly from its own query rather than a
+// single "current" one.
 const triageFilters = reactive<ReceptionQueueFilters>({ stage: 'waiting_triage' });
 const providerFilters = reactive<ReceptionQueueFilters>({ stage: 'waiting_provider' });
 const triageQueue = useReceptionQueue(triageFilters);
 const providerQueue = useReceptionQueue(providerFilters);
 
-const queue = computed(() => (selectedStage.value === 'waiting_triage' ? triageQueue : providerQueue));
-
 const kpis = computed(() => [
     { value: 'waiting_triage' as const, label: 'Waiting for triage', count: triageQueue.data.value?.length ?? null },
     { value: 'waiting_provider' as const, label: 'Waiting for provider', count: providerQueue.data.value?.length ?? null },
 ]);
-
-function setStage(stage: ReceptionQueueStage): void {
-    selectedStage.value = stage;
-}
 
 // --- Walk-in registration -------------------------------------------------
 // Deliberately inline here rather than a shared component: this is a small,
@@ -185,19 +181,10 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div v-if="canReadAppointments" class="mt-3 grid grid-cols-2 gap-2 sm:w-96">
-                    <button
-                        v-for="kpi in kpis"
-                        :key="kpi.value"
-                        type="button"
-                        :class="[
-                            'rounded-md px-2.5 py-1.5 text-left transition',
-                            selectedStage === kpi.value ? 'bg-primary/10 ring-1 ring-primary' : 'bg-muted/30 hover:bg-muted/50',
-                        ]"
-                        @click="setStage(kpi.value)"
-                    >
+                    <div v-for="kpi in kpis" :key="kpi.value" class="rounded-md bg-muted/30 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">{{ kpi.label }}</p>
                         <p class="text-sm font-bold tabular-nums">{{ kpi.count ?? '—' }}</p>
-                    </button>
+                    </div>
                 </div>
             </div>
 
@@ -259,19 +246,54 @@ onBeforeUnmount(() => {
                         </p>
                     </div>
 
-                    <div v-if="queue.isPending.value" class="space-y-2">
-                        <Skeleton class="h-16 w-full" />
-                        <Skeleton class="h-16 w-full" />
-                    </div>
+                    <Tabs v-model="selectedStage">
+                        <TabsList class="grid w-full grid-cols-2 sm:w-96">
+                            <TabsTrigger value="waiting_triage" class="inline-flex items-center gap-1.5">
+                                Waiting for triage
+                                <Badge v-if="triageQueue.data.value?.length" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
+                                    {{ triageQueue.data.value.length }}
+                                </Badge>
+                            </TabsTrigger>
+                            <TabsTrigger value="waiting_provider" class="inline-flex items-center gap-1.5">
+                                Waiting for provider
+                                <Badge v-if="providerQueue.data.value?.length" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
+                                    {{ providerQueue.data.value.length }}
+                                </Badge>
+                            </TabsTrigger>
+                        </TabsList>
 
-                    <Alert v-else-if="queue.isError.value" variant="destructive">
-                        <AlertTitle>Unable to load the queue</AlertTitle>
-                        <AlertDescription>
-                            {{ queue.error.value?.message ?? 'Unknown error.' }}
-                        </AlertDescription>
-                    </Alert>
+                        <TabsContent value="waiting_triage">
+                            <div v-if="triageQueue.isPending.value" class="space-y-2">
+                                <Skeleton class="h-16 w-full" />
+                                <Skeleton class="h-16 w-full" />
+                            </div>
 
-                    <ReceptionQueueList v-else :entries="queue.data.value ?? []" />
+                            <Alert v-else-if="triageQueue.isError.value" variant="destructive">
+                                <AlertTitle>Unable to load the queue</AlertTitle>
+                                <AlertDescription>
+                                    {{ triageQueue.error.value?.message ?? 'Unknown error.' }}
+                                </AlertDescription>
+                            </Alert>
+
+                            <ReceptionQueueList v-else :entries="triageQueue.data.value ?? []" />
+                        </TabsContent>
+
+                        <TabsContent value="waiting_provider">
+                            <div v-if="providerQueue.isPending.value" class="space-y-2">
+                                <Skeleton class="h-16 w-full" />
+                                <Skeleton class="h-16 w-full" />
+                            </div>
+
+                            <Alert v-else-if="providerQueue.isError.value" variant="destructive">
+                                <AlertTitle>Unable to load the queue</AlertTitle>
+                                <AlertDescription>
+                                    {{ providerQueue.error.value?.message ?? 'Unknown error.' }}
+                                </AlertDescription>
+                            </Alert>
+
+                            <ReceptionQueueList v-else :entries="providerQueue.data.value ?? []" />
+                        </TabsContent>
+                    </Tabs>
                 </template>
             </div>
         </div>
