@@ -81,6 +81,14 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'patient_flow_shadow_automation' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/patient_flow_shadow_automation.log'),
+            'level' => env('PATIENT_FLOW_SHADOW_AUTOMATION_LOG_LEVEL', 'info'),
+            'days' => env('PATIENT_FLOW_SHADOW_AUTOMATION_LOG_DAYS', 30),
+            'replace_placeholders' => true,
+        ],
+
         'platform_audit_retention_execution' => [
             'driver' => 'daily',
             'path' => storage_path('logs/platform_audit_retention_execution.log'),

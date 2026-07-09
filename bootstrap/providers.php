@@ -5,4 +5,5 @@ return [
     App\Providers\FortifyServiceProvider::class,
     App\Modules\Billing\BillingServiceProvider::class,
     App\Modules\Reception\ReceptionServiceProvider::class,
+    App\Modules\PatientFlow\PatientFlowServiceProvider::class,
 ];
