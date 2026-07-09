@@ -58,3 +58,15 @@ usePatientSummary(patientId: Ref<string>, options?: { enabled?: Ref<boolean> }):
 | **C — Drop-in wrapper + first consumer** | `PatientSummaryPopover.vue`, wired into `patients/v2`'s table rows (click/hover a patient name) | 0.5-1 day |
 
 Total: ~3-4 days. Other pages (reception, queues, lab, etc.) adopt the module later, as separate follow-up work, not part of this pass.
+
+## 7. Status
+
+**All three phases shipped.**
+
+- **Phase A** (backend): `GetPatientSummaryUseCase`, `PatientSummaryResponseTransformer`, `GET /patients/{id}/summary`. `GetActiveVisitJourneyUseCase` gained an optional `patientId` parameter pushed into its queries (existing callers unaffected — defaults to `null`, full board). 7 new tests (4 `PatientApiTest.php`, 3 `GetActiveVisitJourneyUseCaseTest.php`).
+- **Phase B** (composable + presentational component): `usePatientSummary.ts` (one `useQuery`, `enabled` option to defer fetching until actually opened), `PatientSummaryCard.vue` (pure presentational, `actions` slot matching `RegistryListRow.vue`'s `$slots`-gated convention). Exported type renamed `PatientSummary` → `PatientSummaryDetails` after finding 15 unrelated files each already define their own local `PatientSummary` type (a `PatientLookupField.vue`-shaped lookup result) — no compile conflict, but confusing to grep for. 4 new tests (`usePatientSummary.spec.ts`).
+- **Phase C** (drop-in wrapper + first consumer): `PatientSummaryPopover.vue` (`Popover`-based — no `HoverCard` primitive exists in this codebase), wired into `IndexV2.vue`'s table rows (click a patient's name → summary popover, with "View chart" as the page's own `actions`-slot quick action).
+
+164/164 frontend Vitest passing (12 new), 1491/1535 backend passing (44 pre-existing baseline failures, unchanged — confirmed via full-suite run, none in `Patient`/`PatientFlow`).
+
+**Not done, and correctly out of scope for this pass**: adoption by reception/triage/queues/lab/pharmacy/radiology/billing/medical-records/encounter pages. The module and its first consumer are validated; wiring it into each of those pages is real, separate work per page, to be scheduled individually rather than bundled here.
