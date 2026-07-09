@@ -13,9 +13,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import PatientRegistrationSheet from '@/components/patients/PatientRegistrationSheet.vue';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
+import { useOfflinePatientRegistrationQueue } from '@/composables/patientsIndex/useOfflinePatientRegistrationQueue';
 import { usePatientList, usePatientStatusCounts, type PatientListItem } from '@/composables/patientsIndex/usePatientList';
 import { usePatientListFilters } from '@/composables/patientsIndex/usePatientListFilters';
-import { notifySuccess } from '@/lib/notify';
+import { notifyError, notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
 
 /**
@@ -152,6 +153,28 @@ function onPatientRegistered(patient: PatientListItem): void {
     notifySuccess(`${patientName(patient)} registered (${patient.patientNumber ?? 'MRN pending'}).`);
 }
 
+/**
+ * Surfaces PatientRegistrationSheet.vue's offline-queue outbox at the page
+ * level: pendingCount/syncing are shared module-singleton state (see
+ * useOfflinePatientRegistrationQueue.ts), so a patient saved offline from
+ * the sheet immediately shows up here without any prop/event plumbing.
+ * This composable stays queryClient-agnostic; invalidating the list on a
+ * successful sync is this page's job, not the generic queue's.
+ */
+const offlineQueue = useOfflinePatientRegistrationQueue();
+
+async function syncOfflineRegistrationsNow(): Promise<void> {
+    const result = await offlineQueue.syncNow();
+    if (result.synced > 0) {
+        void queryClient.invalidateQueries({ queryKey: ['patients-index'] });
+        void queryClient.invalidateQueries({ queryKey: ['patients-index-status-counts'] });
+        notifySuccess(`${result.synced} offline patient registration(s) uploaded.`);
+    }
+    if (result.failed > 0) {
+        notifyError('Some offline patient registrations need review before they can upload.');
+    }
+}
+
 // Same bounded-scroll-container pattern as ShowV2.vue/WorkspaceV2.vue/
 // patient-flow/Board.vue/reception/Queue.vue.
 const scrollContainerRef = useTemplateRef<HTMLDivElement>('scrollContainer');
@@ -188,6 +211,17 @@ onBeforeUnmount(() => {
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
                         <Badge v-if="meta" variant="secondary">{{ meta.total }} patients</Badge>
+                        <Button
+                            v-if="offlineQueue.pendingCount.value > 0"
+                            size="sm"
+                            variant="outline"
+                            class="h-8 gap-1.5"
+                            :disabled="!offlineQueue.isOnline.value || offlineQueue.syncing.value"
+                            @click="syncOfflineRegistrationsNow"
+                        >
+                            <AppIcon name="refresh-cw" :class="offlineQueue.syncing.value ? 'size-3.5 animate-spin' : 'size-3.5'" />
+                            {{ offlineQueue.syncing.value ? 'Syncing…' : `${offlineQueue.pendingCount.value} saved offline` }}
+                        </Button>
                         <Button v-if="canCreatePatients" size="sm" class="h-8 gap-1.5" @click="registerSheetOpen = true">
                             <AppIcon name="plus" class="size-3.5" />
                             Register Patient
