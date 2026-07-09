@@ -18,6 +18,9 @@ class PatientSummaryResponseTransformer
         $latestEncounter = $summary['latestEncounter'] ?? null;
         $workflowStatus = $summary['workflowStatus'] ?? null;
         $activeOrders = $summary['activeOrders'] ?? [];
+        $upcomingAppointment = $summary['upcomingAppointment'] ?? null;
+        $currentAdmission = $summary['currentAdmission'] ?? null;
+        $stats = $summary['stats'] ?? [];
 
         return [
             'patient' => [
@@ -32,6 +35,12 @@ class PatientSummaryResponseTransformer
                 'status' => $patient['status'] ?? null,
                 'region' => $patient['region'] ?? null,
                 'district' => $patient['district'] ?? null,
+            ],
+            'contact' => [
+                'email' => $patient['email'] ?? null,
+                'addressLine' => $patient['address_line'] ?? null,
+                'nextOfKinName' => $patient['next_of_kin_name'] ?? null,
+                'nextOfKinPhone' => $patient['next_of_kin_phone'] ?? null,
             ],
             'alerts' => array_map(
                 [PatientAllergyResponseTransformer::class, 'transform'],
@@ -55,6 +64,33 @@ class PatientSummaryResponseTransformer
                 'imagingActive' => $activeOrders['imagingActive'] ?? 0,
                 'procedureActive' => $activeOrders['procedureActive'] ?? 0,
             ],
+            'upcomingAppointment' => $upcomingAppointment !== null ? [
+                'id' => $upcomingAppointment['id'] ?? null,
+                'appointmentNumber' => $upcomingAppointment['appointment_number'] ?? null,
+                'department' => $upcomingAppointment['department'] ?? null,
+                'scheduledAt' => $upcomingAppointment['scheduled_at'] ?? null,
+                'reason' => $upcomingAppointment['reason'] ?? null,
+            ] : null,
+            'currentAdmission' => $currentAdmission !== null ? [
+                'id' => $currentAdmission['id'] ?? null,
+                'admissionNumber' => $currentAdmission['admission_number'] ?? null,
+                'ward' => $currentAdmission['ward'] ?? null,
+                'bed' => $currentAdmission['bed'] ?? null,
+                'admittedAt' => $currentAdmission['admitted_at'] ?? null,
+            ] : null,
+            'stats' => [
+                'totalVisits' => $stats['totalVisits'] ?? 0,
+                'totalEncounters' => $stats['totalEncounters'] ?? 0,
+                'outstandingInvoices' => $stats['outstandingInvoices'] ?? 0,
+            ],
+            'recentActivity' => array_map(
+                static fn (array $entry): array => [
+                    'type' => $entry['type'] ?? null,
+                    'label' => $entry['label'] ?? null,
+                    'occurredAt' => $entry['occurredAt'] !== null ? (string) $entry['occurredAt'] : null,
+                ],
+                $summary['recentActivity'] ?? [],
+            ),
         ];
     }
 }

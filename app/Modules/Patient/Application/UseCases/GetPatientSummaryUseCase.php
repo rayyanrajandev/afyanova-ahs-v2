@@ -2,8 +2,15 @@
 
 namespace App\Modules\Patient\Application\UseCases;
 
+use App\Modules\Admission\Domain\ValueObjects\AdmissionStatus;
+use App\Modules\Admission\Infrastructure\Models\AdmissionModel;
+use App\Modules\Appointment\Domain\ValueObjects\AppointmentStatus;
+use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
 use App\Modules\Billing\Domain\Repositories\PatientInsuranceRepositoryInterface;
+use App\Modules\Billing\Domain\ValueObjects\BillingInvoiceStatus;
+use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
 use App\Modules\Encounter\Application\UseCases\ListEncountersUseCase;
+use App\Modules\Encounter\Infrastructure\Models\EncounterModel;
 use App\Modules\Laboratory\Domain\ValueObjects\LaboratoryOrderStatus;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\Patient\Domain\Repositories\PatientAllergyRepositoryInterface;
@@ -16,13 +23,14 @@ use App\Modules\Radiology\Domain\ValueObjects\RadiologyOrderStatus;
 use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
 use App\Modules\TheatreProcedure\Domain\ValueObjects\TheatreProcedureStatus;
 use App\Modules\TheatreProcedure\Infrastructure\Models\TheatreProcedureModel;
+use Illuminate\Support\Carbon;
 
 /**
  * Backs GET /patients/{id}/summary (reports/patient-summary-module-plan.md
  * §3) — one aggregated round trip for the reusable Patient Summary module,
- * deliberately not a client-side fan-out of 4-5 requests: the module's
- * primary reuse targets are queue/list pages, where one request beats five
- * every time a summary is opened.
+ * deliberately not a client-side fan-out of several requests: the module's
+ * primary reuse targets are queue/list pages, where one request beats
+ * several every time a summary is opened.
  *
  * Every piece here reuses an existing repository/use case rather than
  * inventing new query logic — GetActiveVisitJourneyUseCase's patientId
@@ -35,10 +43,17 @@ use App\Modules\TheatreProcedure\Infrastructure\Models\TheatreProcedureModel;
  * resources/js/composables/patientChart/usePatientEncounters.ts's current
  * shape).
  *
- * Active-order counts are the plan's deliberately scoped-down stand-in for
- * "recent activity preview" — a real cross-module activity timeline is a
- * distinct, larger feature (arguably Phase 3 deep-history territory), not
- * built here.
+ * Extended for the Sheet tier (reports/patient-summary-module-plan.md's
+ * follow-up "Patient Detail Sheet" — a second, deliberate-click level of
+ * disclosure above the hover/click Popover card, not a duplicate of it):
+ * contact details, the next scheduled appointment, any current inpatient
+ * admission, cross-module visit/encounter/billing counts, and a short
+ * recentActivity preview assembled from each module's own single most
+ * recent row (not a dedicated activity-log table — that's real,
+ * separate scope). Same endpoint, same query — the Popover card simply
+ * displays a subset of this same payload, so opening the Sheet right
+ * after the Popover for the same patient costs zero extra requests
+ * (TanStack Query's cache already has it under the same key).
  */
 class GetPatientSummaryUseCase
 {
@@ -93,7 +108,112 @@ class GetPatientSummaryUseCase
             'latestEncounter' => $latestEncounter,
             'workflowStatus' => $workflowStatus,
             'activeOrders' => $this->activeOrderCounts($id),
+            'upcomingAppointment' => $this->upcomingAppointment($id),
+            'currentAdmission' => $this->currentAdmission($id),
+            'stats' => $this->stats($id),
+            'recentActivity' => $this->recentActivity($id, $latestEncounter),
         ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function upcomingAppointment(string $patientId): ?array
+    {
+        $appointment = AppointmentModel::query()
+            ->where('patient_id', $patientId)
+            ->where('status', AppointmentStatus::SCHEDULED->value)
+            ->where('scheduled_at', '>', Carbon::now())
+            ->orderBy('scheduled_at')
+            ->first();
+
+        return $appointment?->toArray();
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function currentAdmission(string $patientId): ?array
+    {
+        $admission = AdmissionModel::query()
+            ->where('patient_id', $patientId)
+            ->where('status', AdmissionStatus::ADMITTED->value)
+            ->orderByDesc('admitted_at')
+            ->first();
+
+        return $admission?->toArray();
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function stats(string $patientId): array
+    {
+        return [
+            'totalVisits' => AppointmentModel::query()->where('patient_id', $patientId)->count(),
+            'totalEncounters' => EncounterModel::query()->where('patient_id', $patientId)->count(),
+            'outstandingInvoices' => BillingInvoiceModel::query()
+                ->where('patient_id', $patientId)
+                ->whereIn('status', [BillingInvoiceStatus::ISSUED->value, BillingInvoiceStatus::PARTIALLY_PAID->value])
+                ->count(),
+        ];
+    }
+
+    /**
+     * A lightweight stand-in for a real cross-module activity feed (which
+     * would need its own event-sourcing/audit infrastructure — real,
+     * separate scope, not built here): the single most recent row from
+     * each module this patient has touched, merged and sorted by
+     * recency. Reuses $latestEncounter (already fetched) instead of
+     * querying it again.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function recentActivity(string $patientId, ?array $latestEncounter): array
+    {
+        $entries = [];
+
+        if ($latestEncounter !== null) {
+            $entries[] = [
+                'type' => 'encounter',
+                'label' => 'Encounter '.($latestEncounter['encounter_number'] ?? ''),
+                'occurredAt' => $latestEncounter['opened_at'] ?? null,
+            ];
+        }
+
+        $latestLabOrder = LaboratoryOrderModel::query()->where('patient_id', $patientId)->latest('ordered_at')->first();
+        if ($latestLabOrder !== null) {
+            $entries[] = [
+                'type' => 'laboratory',
+                'label' => 'Lab order: '.($latestLabOrder->test_name ?? 'Unknown test'),
+                'occurredAt' => $latestLabOrder->ordered_at,
+            ];
+        }
+
+        $latestPharmacyOrder = PharmacyOrderModel::query()->where('patient_id', $patientId)->latest('ordered_at')->first();
+        if ($latestPharmacyOrder !== null) {
+            $entries[] = [
+                'type' => 'pharmacy',
+                'label' => 'Pharmacy order: '.($latestPharmacyOrder->medication_name ?? 'Unknown medication'),
+                'occurredAt' => $latestPharmacyOrder->ordered_at,
+            ];
+        }
+
+        $latestInvoice = BillingInvoiceModel::query()->where('patient_id', $patientId)->latest('created_at')->first();
+        if ($latestInvoice !== null) {
+            $entries[] = [
+                'type' => 'billing',
+                'label' => 'Invoice '.($latestInvoice->invoice_number ?? ''),
+                'occurredAt' => $latestInvoice->created_at,
+            ];
+        }
+
+        usort(
+            $entries,
+            static fn (array $left, array $right): int => strcmp((string) ($right['occurredAt'] ?? ''), (string) ($left['occurredAt'] ?? '')),
+        );
+
+        return array_slice($entries, 0, 5);
     }
 
     /**

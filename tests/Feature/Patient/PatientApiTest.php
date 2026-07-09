@@ -3,7 +3,9 @@
 use App\Models\User;
 use App\Http\Middleware\EnforceTenantIsolationWhenEnabled;
 use App\Http\Middleware\EnsureFacilitySubscriptionEntitlement;
+use App\Modules\Admission\Infrastructure\Models\AdmissionModel;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
+use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
 use App\Modules\Patient\Infrastructure\Models\PatientAuditLogModel;
 use App\Modules\Patient\Infrastructure\Models\PatientAllergyModel;
@@ -441,6 +443,133 @@ it('forbids the summary endpoint without read permission', function (): void {
     $this->actingAs($userWithoutRead)
         ->getJson('/api/v1/patients/'.$patient['id'].'/summary')
         ->assertForbidden();
+});
+
+it('includes contact details in the summary', function (): void {
+    $user = makePatientReadUser();
+    $patient = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/patients/'.$patient['id'].'/summary')
+        ->assertOk()
+        ->assertJsonPath('data.contact.email', 'amina@example.test')
+        ->assertJsonPath('data.contact.addressLine', 'Msasani')
+        ->assertJsonPath('data.contact.nextOfKinName', 'Juma Moshi');
+});
+
+it('surfaces the next scheduled appointment as upcomingAppointment', function (): void {
+    $user = makePatientReadUser();
+    $patient = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
+
+    AppointmentModel::query()->create([
+        'appointment_number' => 'APT'.strtoupper(Str::random(8)),
+        'patient_id' => $patient['id'],
+        'clinician_user_id' => null,
+        'department' => 'Outpatient',
+        'scheduled_at' => now()->addDays(3)->toDateTimeString(),
+        'duration_minutes' => 30,
+        'reason' => 'Follow-up',
+        'notes' => null,
+        'status' => 'scheduled',
+        'status_reason' => null,
+    ]);
+    AppointmentModel::query()->create([
+        'appointment_number' => 'APT'.strtoupper(Str::random(8)),
+        'patient_id' => $patient['id'],
+        'clinician_user_id' => null,
+        'department' => 'Outpatient',
+        'scheduled_at' => now()->subDays(10)->toDateTimeString(),
+        'duration_minutes' => 30,
+        'reason' => 'Past visit',
+        'notes' => null,
+        'status' => 'completed',
+        'status_reason' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/patients/'.$patient['id'].'/summary')
+        ->assertOk()
+        ->assertJsonPath('data.upcomingAppointment.reason', 'Follow-up')
+        ->assertJsonPath('data.stats.totalVisits', 2);
+});
+
+it('surfaces a current inpatient admission', function (): void {
+    $user = makePatientReadUser();
+    $patient = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
+
+    AdmissionModel::query()->create([
+        'admission_number' => 'ADM'.strtoupper(Str::random(8)),
+        'patient_id' => $patient['id'],
+        'appointment_id' => null,
+        'attending_clinician_user_id' => null,
+        'ward' => 'Ward A',
+        'bed' => 'B-07',
+        'admitted_at' => now()->subHours(3)->toDateTimeString(),
+        'discharged_at' => null,
+        'admission_reason' => 'Observation',
+        'notes' => null,
+        'status' => 'admitted',
+        'status_reason' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/patients/'.$patient['id'].'/summary')
+        ->assertOk()
+        ->assertJsonPath('data.currentAdmission.ward', 'Ward A')
+        ->assertJsonPath('data.currentAdmission.bed', 'B-07');
+});
+
+it('does not surface a discharged admission as current', function (): void {
+    $user = makePatientReadUser();
+    $patient = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
+
+    AdmissionModel::query()->create([
+        'admission_number' => 'ADM'.strtoupper(Str::random(8)),
+        'patient_id' => $patient['id'],
+        'appointment_id' => null,
+        'attending_clinician_user_id' => null,
+        'ward' => 'Ward B',
+        'bed' => 'B-02',
+        'admitted_at' => now()->subDays(5)->toDateTimeString(),
+        'discharged_at' => now()->subDays(1)->toDateTimeString(),
+        'admission_reason' => 'Observation',
+        'notes' => null,
+        'status' => 'discharged',
+        'status_reason' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/patients/'.$patient['id'].'/summary')
+        ->assertOk()
+        ->assertJsonPath('data.currentAdmission', null);
+});
+
+it('counts outstanding invoices and includes the latest invoice in recent activity', function (): void {
+    $user = makePatientReadUser();
+    $patient = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
+
+    BillingInvoiceModel::query()->create([
+        'invoice_number' => 'INV-'.strtoupper(Str::random(10)),
+        'patient_id' => $patient['id'],
+        'invoice_date' => now()->toDateTimeString(),
+        'currency_code' => 'TZS',
+        'subtotal_amount' => 10000,
+        'discount_amount' => 0,
+        'tax_amount' => 0,
+        'total_amount' => 10000,
+        'paid_amount' => 0,
+        'balance_amount' => 10000,
+        'payment_due_at' => null,
+        'line_items' => [],
+        'status' => 'issued',
+    ]);
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/patients/'.$patient['id'].'/summary')
+        ->assertOk()
+        ->assertJsonPath('data.stats.outstandingInvoices', 1);
+
+    expect(collect($response->json('data.recentActivity'))->pluck('type'))->toContain('billing');
 });
 
 it('updates patient profile fields', function (): void {
