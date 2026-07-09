@@ -51,6 +51,15 @@ Route::get('patients', function () {
     return Inertia::render('patients/Index');
 })->middleware(['auth', 'verified', 'can:patients.read', 'facility.entitlement:patients.search'])->name('patients.page');
 
+// Phase 0 of reports/patients-index-modernization-plan.md: unlinked during
+// construction (Phases 0-5), not in the nav catalog, not the live /patients
+// route — the same "new route, old page untouched until cutover" precedent
+// patients/{id}/chart/v2 established during the Patient Chart rebuild.
+// /patients keeps rendering the legacy page until Phase 6 explicitly swaps it.
+Route::get('patients/v2', function () {
+    return Inertia::render('patients/IndexV2');
+})->middleware(['auth', 'verified', 'can:patients.read', 'facility.entitlement:patients.search'])->name('patients.page.v2');
+
 // Cut over to the rebuilt page (reports/patient-chart-rebuild-plan.md).
 // The old page remains reachable at patients/{id}/chart/legacy for rollback.
 Route::get('patients/{id}/chart', function (string $id) {
