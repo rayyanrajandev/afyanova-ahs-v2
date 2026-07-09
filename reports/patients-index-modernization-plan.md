@@ -161,6 +161,15 @@ Also converted the sheet's remaining native gender `<select>` to shadcn-vue's `S
 
 153/153 Vitest passing (12 new for `patientAge.ts`); no new TypeScript errors.
 
+**Update**: A direct old-vs-new comparison surfaced two remaining regressions versus the legacy sheet — not visual/legacy-parity gaps, but a safety-UX gap and a resilience gap. Both are now closed:
+
+1. **Duplicate acknowledgment gate.** The live duplicate-check Alert had no cost to ignoring it — `canSubmit` only blocked on `hard_block`, so a `strong_warning`/`possible_warning` match could be click-through-ignored, unlike the legacy sheet's forced "Continue registration / View existing patient / Review form" choice. Added an explicit checkbox ("I've reviewed the match(es) above and confirm this is a different patient") that gates submission, plus a "View chart" link per match (`/patients/{id}/chart`). The acknowledgment resets whenever the matched duplicate set changes (`duplicateWarningSignature`), so it never silently carries over to a different match typed a moment later.
+2. **Offline resilience.** Registration had no fallback for a dropped connection — a real regression given Tanzania's connectivity reality, not legacy cruft the rebuild was entitled to drop. Added `useOfflinePatientRegistrationQueue.ts` (VueUse's `useOnline()` + the same IndexedDB outbox `@/lib/offlinePatientRegistration.ts` already provided, so records land in one place regardless of which sheet saved them): submitting while offline, or an online submit that fails with a network-shaped error mid-flight, queues the payload instead of failing; the sheet shows an inline offline state and relabels the submit button; `IndexV2.vue`'s header surfaces a "N saved offline" sync action, and the queue auto-syncs on reconnect. Module-singleton state (same pattern as `usePlatformCountryProfile.ts`) means a patient saved offline from the sheet immediately shows up in the page's badge with no prop/event plumbing.
+
+Explicitly still out of scope: draft autosave (persisting not-yet-submitted, in-progress form state across a crash/reload) — a distinct feature from "don't lose a completed submission to a dropped connection," and not the gap that made this sheet a functional downgrade.
+
+159/159 Vitest passing (6 new for `useOfflinePatientRegistrationQueue.ts`); no new TypeScript errors. With this, `PatientRegistrationSheet.vue` has no known regression versus the legacy sheet on either architecture or UX.
+
 ---
 
 ## 5. Risks & open questions
