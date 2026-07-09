@@ -105,6 +105,14 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Live triage/provider queue and walk-in registration',
     },
     {
+        title: 'Patient flow board',
+        href: '/patient-flow/board',
+        iconName: 'layout-grid',
+        section: 'front_office',
+        permissionPrefixes: ['appointments.'],
+        helpNote: 'Where active visits stand from consultation through lab and pharmacy',
+    },
+    {
         title: 'Inpatient admissions',
         href: '/admissions',
         iconName: 'bed-double',

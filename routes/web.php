@@ -83,6 +83,13 @@ Route::get('reception/queue', function () {
     return Inertia::render('reception/Queue');
 })->middleware(['auth', 'verified', 'can:appointments.read', 'facility.entitlement:appointments.scheduling'])->name('reception.queue');
 
+// Phase 4 of reports/queue-based-workflow-modernization-plan.md: a new,
+// standalone page, same reasoning as reception/queue above — no existing
+// page shows the visit journey across Lab/Pharmacy/Radiology to replace.
+Route::get('patient-flow/board', function () {
+    return Inertia::render('patient-flow/Board');
+})->middleware(['auth', 'verified', 'can:appointments.read', 'facility.entitlement:appointments.scheduling'])->name('patient-flow.board');
+
 Route::get('admissions', function () {
     return Inertia::render('admissions/Index');
 })->middleware([

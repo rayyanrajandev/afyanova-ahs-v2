@@ -41,7 +41,14 @@ use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
  */
 class GetActiveVisitJourneyUseCase
 {
-    private const ACTIVE_APPOINTMENT_STATUSES = [
+    /**
+     * Public so Phase 4's GetOrderCompletionNotificationsForClinicianUseCase
+     * can reuse the exact same "what counts as an active visit" definition
+     * rather than redefining it — same reasoning as C-8's promotion of the
+     * lab/pharmacy/radiology terminal-status consts in
+     * GetEncounterCloseReadinessUseCase.
+     */
+    public const ACTIVE_APPOINTMENT_STATUSES = [
         AppointmentStatus::WAITING_TRIAGE->value,
         AppointmentStatus::WAITING_PROVIDER->value,
         AppointmentStatus::IN_CONSULTATION->value,

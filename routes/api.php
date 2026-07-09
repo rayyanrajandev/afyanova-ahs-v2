@@ -38,6 +38,7 @@ use App\Modules\Platform\Presentation\Http\Controllers\MultiFacilityRolloutContr
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformAdminController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformBrandingController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformClinicalCatalogController;
+use App\Modules\PatientFlow\Presentation\Http\Controllers\PatientFlowController;
 use App\Modules\Reception\Presentation\Http\Controllers\ReceptionController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformConfigurationController;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformRbacController;
@@ -693,6 +694,12 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('reception/queue', [ReceptionController::class, 'queue'])
         ->middleware('can:appointments.read')
         ->name('reception.queue');
+    Route::get('patient-flow/board', [PatientFlowController::class, 'board'])
+        ->middleware('can:appointments.read')
+        ->name('patient-flow.board');
+    Route::get('patient-flow/notifications', [PatientFlowController::class, 'notifications'])
+        ->middleware('can:appointments.read')
+        ->name('patient-flow.notifications');
     Route::patch('appointments/{id}/consultation-type', [AppointmentController::class, 'overrideConsultationType'])
         ->middleware('can:appointments.update')
         ->name('appointments.override-consultation-type');
