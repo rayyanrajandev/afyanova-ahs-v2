@@ -104,8 +104,8 @@ The audit (§8) found this codebase's own flag-gating convention has drifted: `c
 | **0 — Foundation** | `usePlatformAccess()`-based permission computeds, no redundant `/auth/me/permissions` call, empty `IndexV2.vue` shell at a new, unlinked route | — | Low | **Done** |
 | **1 — List, filters, status counts** | `usePatientList`, `usePatientListFilters`, `usePatientStatusCounts` | 0 | Low — direct analog to `useMedicalRecordList` | **Done** |
 | **2 — Registration + duplicate detection** | `usePatientRegistration`, draft autosave, offline queue wiring | 0 | Medium — depends on §5's dedup-scoring decision | **Done** — registration, live server-backed duplicate check with an explicit acknowledgment gate, offline queue wiring, region/DOB UX upgrades. Draft autosave (persisting not-yet-submitted form state across a crash/reload) intentionally not built — a distinct feature from offline submit resilience, not required for feature parity with the legacy sheet's actual risk (losing a *completed* registration to a dropped connection) |
-| **3 — Patient Details sheet** | `usePatientTimeline`, `usePatientAuditLog`, `usePatientInsurance` | 1 | Medium — 3 composables, ~2020 lines of source template to account for | 1-1.5 weeks |
-| **4 — Edit + Status dialogs** | `usePatientEdit`, `usePatientStatusChange`, offline-edit-queue wiring | 1 | Low | 3-5 days |
+| **3 — Patient Details sheet** | Superseded by `PatientDetailSheet.vue` (`reports/patient-summary-module-plan.md`'s Tier 2) for the glance-level content, plus new Insurance/Audit tabs on `ShowV2.vue` for the two capabilities Tier 2 deliberately excludes | 1 | — | **Done**, re-scoped — see the Update note below |
+| **4 — Edit + Status dialogs** | `usePatientEdit`, `usePatientStatusChange` | 1 | Low | **Done** — `PatientEditSheet.vue`/`PatientStatusDialog.vue`, row actions on `IndexV2.vue`'s table. Offline-edit-queue wiring not built (edits are far lower-frequency and lower-risk to lose than a fresh registration; real, separate scope if it turns out to matter) |
 | **5 — Visit Handoff sheet** | `usePatientVisitHandoff`, `useOutpatientWalkIn`, `useDirectServiceHandoff`; billing/chart modes (thin href routing, no new composable needed) | 1, 3 | Medium-High — highest-complexity single feature; the walk-in race condition is already fixed (nothing to redo), and direct-services can be simplified now that `patient-flow/Board.vue` gives it a real downstream view | 1-1.5 weeks |
 | **6 — Cutover** | Feature-parity checklist (§2.1) verified against the legacy page side-by-side; `/patients` → `IndexV2`, old page moves to `/patients/legacy` | 0-5 | Medium — the actual risk moment, per §6's de-risking strategy | 3-5 days |
 
@@ -169,6 +169,16 @@ Also converted the sheet's remaining native gender `<select>` to shadcn-vue's `S
 Explicitly still out of scope: draft autosave (persisting not-yet-submitted, in-progress form state across a crash/reload) — a distinct feature from "don't lose a completed submission to a dropped connection," and not the gap that made this sheet a functional downgrade.
 
 159/159 Vitest passing (6 new for `useOfflinePatientRegistrationQueue.ts`); no new TypeScript errors. With this, `PatientRegistrationSheet.vue` has no known regression versus the legacy sheet on either architecture or UX.
+
+**Update**: Phases 3 and 4 done, with Phase 3 explicitly re-scoped from its original framing (a plan doc pre-dating the Patient Summary module's existence). Rather than rebuild the legacy Overview/Activity/Audit sheet as a third, competing "big sheet" living inside `IndexV2.vue`:
+
+- **Phase 3's "Overview" content** is now `PatientDetailSheet.vue` (`reports/patient-summary-module-plan.md`'s Tier 2 — identity, contact, alerts, current admission, workflow status, upcoming appointment, latest encounter, insurance glance, stats, recent activity), already wired into `IndexV2.vue`'s table rows via `PatientSummaryPopover`'s "View full summary."
+- **Phase 3's "Insurance management" and "Audit log"** — the two capabilities the Summary module deliberately excludes, and which didn't exist anywhere in the V2 surface — landed as two new tabs on `patients/chart/ShowV2.vue` (Tier 3, the established "click through for everything" destination) instead: `usePatientInsuranceRecords`/`usePatientInsuranceDialog` (list, add, verify — mirrors `usePatientAllergyDialog.ts`'s established shape) and `usePatientAuditLogs` (paginated). This keeps the Popover → Sheet → Full Chart model coherent rather than growing a fourth, overlapping surface.
+- **Phase 4** shipped as originally scoped: `usePatientEdit`/`usePatientStatusChange`, `PatientEditSheet.vue`/`PatientStatusDialog.vue`, row actions on `IndexV2.vue`'s table (Edit, Change status — each independently permission-gated), plus the summary-module actions already there (View summary, View chart).
+
+18 new tests across the two features (5 backend for the summary Sheet-tier fields already logged in `patient-summary-module-plan.md`, 9 for the Insurance/Audit composables, 4 for Edit/Status). 177/177 frontend Vitest passing, no new TypeScript errors.
+
+`IndexV2.vue`'s table now has real row actions where it had none before Phase 4: View summary/View chart (Popover), Edit, Change status.
 
 ---
 
