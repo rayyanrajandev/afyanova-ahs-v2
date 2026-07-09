@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import PatientRegistrationSheet from '@/components/patients/PatientRegistrationSheet.vue';
+import PatientSummaryPopover from '@/components/patients/summary/PatientSummaryPopover.vue';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useOfflinePatientRegistrationQueue } from '@/composables/patientsIndex/useOfflinePatientRegistrationQueue';
 import { usePatientList, usePatientStatusCounts, type PatientListItem } from '@/composables/patientsIndex/usePatientList';
@@ -342,7 +343,18 @@ onBeforeUnmount(() => {
                                                 {{ patientInitials(patient) }}
                                             </div>
                                             <div class="min-w-0">
-                                                <p class="truncate font-medium text-foreground">{{ patientName(patient) }}</p>
+                                                <PatientSummaryPopover :patient-id="patient.id">
+                                                    <template #trigger>
+                                                        <button type="button" class="truncate text-left font-medium text-foreground hover:underline">
+                                                            {{ patientName(patient) }}
+                                                        </button>
+                                                    </template>
+                                                    <template #actions>
+                                                        <a :href="`/patients/${patient.id}/chart`" class="text-xs font-medium text-primary hover:underline">
+                                                            View chart
+                                                        </a>
+                                                    </template>
+                                                </PatientSummaryPopover>
                                                 <p class="truncate text-xs text-muted-foreground">{{ patient.patientNumber || 'No MRN assigned' }}</p>
                                             </div>
                                         </div>
