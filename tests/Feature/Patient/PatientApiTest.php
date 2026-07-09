@@ -493,6 +493,66 @@ it('surfaces the next scheduled appointment as upcomingAppointment', function ()
         ->assertJsonPath('data.stats.totalVisits', 2);
 });
 
+it('surfaces a same-day scheduled appointment as activeAppointmentToday', function (): void {
+    $user = makePatientReadUser();
+    $patient = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
+
+    $appointmentNumber = 'APT'.strtoupper(Str::random(8));
+    AppointmentModel::query()->create([
+        'appointment_number' => $appointmentNumber,
+        'patient_id' => $patient['id'],
+        'clinician_user_id' => null,
+        'department' => 'Outpatient',
+        'scheduled_at' => now()->addHour()->toDateTimeString(),
+        'duration_minutes' => 30,
+        'reason' => 'Routine visit',
+        'notes' => null,
+        'status' => 'scheduled',
+        'status_reason' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/patients/'.$patient['id'].'/summary')
+        ->assertOk()
+        ->assertJsonPath('data.activeAppointmentToday.appointmentNumber', $appointmentNumber)
+        ->assertJsonPath('data.activeAppointmentToday.status', 'scheduled');
+});
+
+it('does not surface a completed or a different-day appointment as activeAppointmentToday', function (): void {
+    $user = makePatientReadUser();
+    $patient = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
+
+    AppointmentModel::query()->create([
+        'appointment_number' => 'APT'.strtoupper(Str::random(8)),
+        'patient_id' => $patient['id'],
+        'clinician_user_id' => null,
+        'department' => 'Outpatient',
+        'scheduled_at' => now()->toDateTimeString(),
+        'duration_minutes' => 30,
+        'reason' => 'Completed earlier today',
+        'notes' => null,
+        'status' => 'completed',
+        'status_reason' => null,
+    ]);
+    AppointmentModel::query()->create([
+        'appointment_number' => 'APT'.strtoupper(Str::random(8)),
+        'patient_id' => $patient['id'],
+        'clinician_user_id' => null,
+        'department' => 'Outpatient',
+        'scheduled_at' => now()->addDays(3)->toDateTimeString(),
+        'duration_minutes' => 30,
+        'reason' => 'Future visit',
+        'notes' => null,
+        'status' => 'scheduled',
+        'status_reason' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/patients/'.$patient['id'].'/summary')
+        ->assertOk()
+        ->assertJsonPath('data.activeAppointmentToday', null);
+});
+
 it('surfaces a current inpatient admission', function (): void {
     $user = makePatientReadUser();
     $patient = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');

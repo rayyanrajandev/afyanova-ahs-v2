@@ -99,6 +99,22 @@ export type PatientSummaryActiveOrders = {
     procedureActive: number;
 };
 
+/**
+ * Same "active" definition as the backend's own same-day appointment
+ * conflict guard (CreateAppointmentUseCase::assertNoActiveSameDayConflict())
+ * — not a separate rule. Lets a consumer (PatientVisitActionsMenu.vue)
+ * proactively disable OPD/emergency check-in instead of letting a doomed
+ * click round-trip to the server for an error it could have known about
+ * in advance.
+ */
+export type PatientSummaryActiveAppointmentToday = {
+    id: string;
+    appointmentNumber: string | null;
+    status: string | null;
+    scheduledAt: string | null;
+    department: string | null;
+};
+
 export type PatientSummaryDetails = {
     patient: PatientSummaryIdentity;
     contact: PatientSummaryContact;
@@ -111,6 +127,7 @@ export type PatientSummaryDetails = {
     currentAdmission: PatientSummaryAdmission | null;
     stats: PatientSummaryStats;
     recentActivity: PatientSummaryActivityEntry[];
+    activeAppointmentToday: PatientSummaryActiveAppointmentToday | null;
 };
 
 type PatientSummaryResponse = { data: PatientSummaryDetails };

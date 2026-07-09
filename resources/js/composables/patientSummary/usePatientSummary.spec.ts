@@ -31,6 +31,7 @@ function summaryFixture() {
         currentAdmission: null,
         stats: { totalVisits: 0, totalEncounters: 0, outstandingInvoices: 0 },
         recentActivity: [],
+        activeAppointmentToday: null,
     };
 }
 

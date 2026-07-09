@@ -13,6 +13,7 @@ import {
 import { patientChartModuleHref } from '@/composables/patientChart/patientChartModuleHref';
 import { useWalkInCheckIn, type WalkInArrivalMode } from '@/composables/reception/useWalkInCheckIn';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
+import { usePatientSummary } from '@/composables/patientSummary/usePatientSummary';
 import { type PatientListItem } from '@/composables/patientsIndex/usePatientList';
 import { notifyError, notifySuccess } from '@/lib/notify';
 import PatientDirectServiceDialog from './PatientDirectServiceDialog.vue';
@@ -35,6 +36,17 @@ import PatientDirectServiceDialog from './PatientDirectServiceDialog.vue';
  * here — the Patient Summary Popover's "View chart" action already
  * covers it; a second link to the same place would be redundant, not
  * completeness.
+ *
+ * OPD/emergency are disabled — not just left to fail — when the patient
+ * already has an active appointment today (usePatientSummary's
+ * activeAppointmentToday, itself the same AppointmentRepositoryInterface::
+ * findActiveForPatientOnDate() the backend's own same-day conflict guard
+ * uses): letting a click round-trip to the server for an error it could
+ * have known about in advance is a worse experience than telling the
+ * user up front. Fetched lazily (enabled only while the menu is open),
+ * matching this module's "nothing fetches until asked for" convention —
+ * and if the same patient's summary was already opened via the Popover,
+ * this is a cache hit, not a second request.
  */
 const props = defineProps<{
     patient: PatientListItem;
@@ -56,6 +68,20 @@ const canShowMenu = computed(() => canStartVisit.value || canCreateServiceReques
 const walkIn = useWalkInCheckIn();
 const directServiceDialogOpen = ref(false);
 
+const menuOpen = ref(false);
+const patientId = computed(() => props.patient.id);
+const summary = usePatientSummary(patientId, { enabled: menuOpen });
+const activeAppointmentToday = computed(() => summary.data.value?.activeAppointmentToday ?? null);
+const activeAppointmentLabel = computed(() => {
+    const appointment = activeAppointmentToday.value;
+    if (!appointment) return null;
+    const scheduledAt = appointment.scheduledAt ? new Date(appointment.scheduledAt) : null;
+    const time = scheduledAt && !Number.isNaN(scheduledAt.getTime())
+        ? new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(scheduledAt)
+        : null;
+    return `Already has an active appointment${appointment.appointmentNumber ? ` (${appointment.appointmentNumber})` : ''}${time ? ` at ${time}` : ''} today.`;
+});
+
 async function startVisit(arrivalMode: WalkInArrivalMode): Promise<void> {
     try {
         await walkIn.mutateAsync({
@@ -76,18 +102,29 @@ async function startVisit(arrivalMode: WalkInArrivalMode): Promise<void> {
 </script>
 
 <template>
-    <DropdownMenu v-if="canShowMenu">
+    <DropdownMenu v-if="canShowMenu" v-model:open="menuOpen">
         <DropdownMenuTrigger as-child>
             <Button size="sm" variant="ghost" class="h-7 gap-1 px-2 text-xs" :disabled="walkIn.isPending.value">
                 <AppIcon name="calendar-plus-2" class="size-3.5" />Visit
             </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" class="w-56">
+        <DropdownMenuContent align="end" class="w-64">
             <template v-if="canStartVisit">
-                <DropdownMenuItem class="cursor-pointer text-sm" :disabled="walkIn.isPending.value" @select="startVisit('walk_in')">
+                <p v-if="activeAppointmentLabel" class="px-2 py-1.5 text-xs text-muted-foreground">
+                    {{ activeAppointmentLabel }}
+                </p>
+                <DropdownMenuItem
+                    class="cursor-pointer text-sm"
+                    :disabled="walkIn.isPending.value || Boolean(activeAppointmentToday)"
+                    @select="startVisit('walk_in')"
+                >
                     Start OPD walk-in
                 </DropdownMenuItem>
-                <DropdownMenuItem class="cursor-pointer text-sm" :disabled="walkIn.isPending.value" @select="startVisit('emergency')">
+                <DropdownMenuItem
+                    class="cursor-pointer text-sm"
+                    :disabled="walkIn.isPending.value || Boolean(activeAppointmentToday)"
+                    @select="startVisit('emergency')"
+                >
                     Send to emergency
                 </DropdownMenuItem>
             </template>

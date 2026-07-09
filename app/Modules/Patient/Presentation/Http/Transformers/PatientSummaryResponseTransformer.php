@@ -21,6 +21,7 @@ class PatientSummaryResponseTransformer
         $upcomingAppointment = $summary['upcomingAppointment'] ?? null;
         $currentAdmission = $summary['currentAdmission'] ?? null;
         $stats = $summary['stats'] ?? [];
+        $activeAppointmentToday = $summary['activeAppointmentToday'] ?? null;
 
         return [
             'patient' => [
@@ -91,6 +92,13 @@ class PatientSummaryResponseTransformer
                 ],
                 $summary['recentActivity'] ?? [],
             ),
+            'activeAppointmentToday' => $activeAppointmentToday !== null ? [
+                'id' => $activeAppointmentToday['id'] ?? null,
+                'appointmentNumber' => $activeAppointmentToday['appointment_number'] ?? null,
+                'status' => $activeAppointmentToday['status'] ?? null,
+                'scheduledAt' => $activeAppointmentToday['scheduled_at'] ?? null,
+                'department' => $activeAppointmentToday['department'] ?? null,
+            ] : null,
         ];
     }
 }

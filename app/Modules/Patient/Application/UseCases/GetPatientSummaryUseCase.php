@@ -4,6 +4,7 @@ namespace App\Modules\Patient\Application\UseCases;
 
 use App\Modules\Admission\Domain\ValueObjects\AdmissionStatus;
 use App\Modules\Admission\Infrastructure\Models\AdmissionModel;
+use App\Modules\Appointment\Domain\Repositories\AppointmentRepositoryInterface;
 use App\Modules\Appointment\Domain\ValueObjects\AppointmentStatus;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
 use App\Modules\Billing\Domain\Repositories\PatientInsuranceRepositoryInterface;
@@ -54,6 +55,15 @@ use Illuminate\Support\Carbon;
  * displays a subset of this same payload, so opening the Sheet right
  * after the Popover for the same patient costs zero extra requests
  * (TanStack Query's cache already has it under the same key).
+ *
+ * activeAppointmentToday reuses AppointmentRepositoryInterface::
+ * findActiveForPatientOnDate() — the exact same method
+ * CreateAppointmentUseCase::assertNoActiveSameDayConflict() calls to
+ * block a duplicate walk-in/emergency check-in. Exposing it here lets
+ * PatientVisitActionsMenu.vue disable those two actions proactively
+ * instead of letting a doomed click round-trip to the server for an
+ * error it could have known about in advance — without redefining what
+ * "active" means in a second place.
  */
 class GetPatientSummaryUseCase
 {
@@ -69,6 +79,7 @@ class GetPatientSummaryUseCase
         private readonly PatientInsuranceRepositoryInterface $insuranceRepository,
         private readonly ListEncountersUseCase $listEncountersUseCase,
         private readonly GetActiveVisitJourneyUseCase $activeVisitJourneyUseCase,
+        private readonly AppointmentRepositoryInterface $appointmentRepository,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
     ) {}
 
@@ -112,6 +123,10 @@ class GetPatientSummaryUseCase
             'currentAdmission' => $this->currentAdmission($id),
             'stats' => $this->stats($id),
             'recentActivity' => $this->recentActivity($id, $latestEncounter),
+            'activeAppointmentToday' => $this->appointmentRepository->findActiveForPatientOnDate(
+                patientId: $id,
+                scheduledDate: Carbon::now()->toDateString(),
+            ),
         ];
     }
 
