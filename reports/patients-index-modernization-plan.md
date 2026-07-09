@@ -180,6 +180,8 @@ Explicitly still out of scope: draft autosave (persisting not-yet-submitted, in-
 
 `IndexV2.vue`'s table now has real row actions where it had none before Phase 4: View summary/View chart (Popover), Edit, Change status.
 
+**Update**: `PatientEditSheet.vue` initially shipped with a visibly thinner interaction model than `PatientRegistrationSheet.vue` — flagged directly and corrected to full parity: DOB dual-mode entry (defaulting to `'exact'` here, not `'estimated'`, since an existing record normally already has a real DOB), the same live duplicate check with the acknowledgment gate (scoped via `excludePatientId` so editing a patient never flags a match against itself), region quick-pick chips, and offline resilience. The offline piece required real infrastructure work: `useOfflinePatientRegistrationQueue.ts` was renamed to `useOfflinePatientQueue.ts` and extended to track both the registration and update IndexedDB outboxes with one combined `pendingCount`/`syncNow` — `@/lib/offlinePatientRegistration.ts` already had `enqueueOfflinePatientUpdate`/`syncPendingOfflinePatientUpdates`, but no frontend caller until now. 177/177 frontend Vitest passing, no new TypeScript errors.
+
 ---
 
 ## 5. Risks & open questions
