@@ -38,6 +38,9 @@ import { usePatientMedicationProfileDialog } from '@/composables/patientChart/us
 import { usePatientMedicationReconciliation } from '@/composables/patientChart/usePatientMedicationReconciliation';
 import { useVisitScope } from '@/composables/patientChart/useVisitScope';
 import { usePatientChartOrderLifecycle } from '@/composables/patientChart/usePatientChartOrderLifecycle';
+import { usePatientInsuranceRecords } from '@/composables/patientChart/usePatientInsuranceRecords';
+import { usePatientInsuranceDialog } from '@/composables/patientChart/usePatientInsuranceDialog';
+import { usePatientAuditLogs } from '@/composables/patientChart/usePatientAuditLogs';
 import {
     formatDate,
     formatDateTime,
@@ -126,6 +129,10 @@ const hasOrdersAndResultsAccess = computed(
 );
 const hasMedicationWorkspaceAccess = computed(() => canUpdatePatients.value || canReadPharmacyOrders.value || canCreatePharmacyOrders.value);
 const hasBillingAccess = computed(() => canReadBillingInvoices.value || canCreateBillingInvoices.value);
+const canReadPatientInsurance = computed(() => hasAccess('patients.insurance.read'));
+const canManagePatientInsurance = computed(() => hasAccess('patients.insurance.manage'));
+const canVerifyPatientInsurance = computed(() => hasAccess('patients.insurance.verify'));
+const canViewPatientAuditLogs = computed(() => hasAccess('patients.view-audit-logs'));
 
 type Patient = {
     id: string;
@@ -216,6 +223,14 @@ function reloadMedicationWorkspace(): void {
 
 const allergyDialog = usePatientAllergyDialog(patientIdRef, reloadMedicationWorkspace);
 const medicationProfileDialog = usePatientMedicationProfileDialog(patientIdRef, medicationProfile, reloadMedicationWorkspace);
+
+const insuranceQuery = usePatientInsuranceRecords(patientIdRef, canReadPatientInsurance);
+const insuranceRecords = computed(() => insuranceQuery.data.value ?? []);
+const insuranceDialog = usePatientInsuranceDialog(patientIdRef, () => void insuranceQuery.refetch());
+
+const auditLogPage = ref(1);
+const auditLogQuery = usePatientAuditLogs(patientIdRef, auditLogPage, canViewPatientAuditLogs);
+const auditLogs = computed(() => auditLogQuery.data.value?.data ?? []);
 
 const encountersQuery = usePatientEncounters(patientIdRef);
 const encounters = computed(() => encountersQuery.data.value?.data ?? []);
@@ -419,7 +434,9 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     },
 ]);
 
-const activeTab = ref<'overview' | 'timeline' | 'visits' | 'orders'>('overview');
+const activeTab = ref<
+    'overview' | 'timeline' | 'visits' | 'medications' | 'orders' | 'billing' | 'records' | 'insurance' | 'audit'
+>('overview');
 
 const scrollContainerRef = useTemplateRef<HTMLDivElement>('scrollContainer');
 const scrollContainerHeight = ref('98dvh');
@@ -502,7 +519,7 @@ onBeforeUnmount(() => {
                 </Alert>
 
                 <Tabs v-else-if="patient" v-model="activeTab">
-                    <TabsList class="grid w-full grid-cols-2 sm:w-auto sm:inline-grid sm:grid-cols-7">
+                    <TabsList class="grid w-full grid-cols-2 sm:w-auto sm:inline-grid sm:grid-cols-9">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="timeline" class="inline-flex items-center gap-1.5">
                             Timeline
@@ -536,6 +553,15 @@ onBeforeUnmount(() => {
                             <Badge v-if="timeline.chartCounts.value.records" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
                                 {{ timeline.chartCounts.value.records }}
                             </Badge>
+                        </TabsTrigger>
+                        <TabsTrigger v-if="canReadPatientInsurance" value="insurance" class="inline-flex items-center gap-1.5">
+                            Insurance
+                            <Badge v-if="insuranceRecords.length" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
+                                {{ insuranceRecords.length }}
+                            </Badge>
+                        </TabsTrigger>
+                        <TabsTrigger v-if="canViewPatientAuditLogs" value="audit" class="inline-flex items-center gap-1.5">
+                            Audit
                         </TabsTrigger>
                     </TabsList>
 
@@ -1653,6 +1679,123 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
                     </TabsContent>
+
+                    <TabsContent v-if="canReadPatientInsurance" value="insurance" class="space-y-6">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                            <div class="space-y-1">
+                                <p class="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">Insurance</p>
+                                <p class="text-sm text-muted-foreground">Manage coverage records and verification status for this patient.</p>
+                            </div>
+                            <Button v-if="canManagePatientInsurance" size="sm" class="gap-1.5" @click="insuranceDialog.openDialog()">
+                                <AppIcon name="plus" class="size-3.5" />Add insurance
+                            </Button>
+                        </div>
+
+                        <div class="rounded-lg border bg-muted/10 px-3 py-3">
+                            <template v-if="insuranceQuery.isPending.value">
+                                <Skeleton class="h-4 w-40 rounded-lg" />
+                                <Skeleton class="mt-2 h-3 w-full rounded-lg" />
+                            </template>
+                            <template v-else-if="insuranceQuery.isError.value">
+                                <p class="text-sm text-destructive">{{ (insuranceQuery.error.value as Error | null)?.message ?? 'Unable to load insurance records.' }}</p>
+                            </template>
+                            <template v-else-if="insuranceRecords.length === 0">
+                                <p class="text-sm font-medium text-foreground">No insurance on file</p>
+                                <p class="mt-1 text-xs text-muted-foreground">Add a coverage record to enable insurance-routed billing for this patient.</p>
+                            </template>
+                            <template v-else>
+                                <div class="grid gap-2">
+                                    <div v-for="record in insuranceRecords" :key="record.id" class="rounded-lg border bg-background px-3 py-2.5">
+                                        <div class="flex items-start justify-between gap-2">
+                                            <div class="min-w-0">
+                                                <p class="truncate text-sm font-medium text-foreground">{{ record.insuranceProvider || 'Provider not set' }}</p>
+                                                <p class="mt-1 text-xs text-muted-foreground">
+                                                    {{ [record.planName, record.memberId ? `Member ${record.memberId}` : null, record.cardNumber ? `Card ${record.cardNumber}` : null].filter(Boolean).join(' · ') || 'No plan details' }}
+                                                </p>
+                                            </div>
+                                            <div class="flex shrink-0 flex-col items-end gap-1.5">
+                                                <Badge :variant="workflowStatusVariant(record.verificationStatus)">{{ formatEnumLabel(record.verificationStatus || 'unverified') }}</Badge>
+                                                <div v-if="canVerifyPatientInsurance && record.verificationStatus !== 'verified'" class="flex gap-1">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        class="h-6 px-2 text-[11px]"
+                                                        :disabled="insuranceDialog.verifyingId.value === record.id"
+                                                        @click="insuranceDialog.verifyRecord(record.id, 'verified')"
+                                                    >
+                                                        Verify
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        class="h-6 px-2 text-[11px]"
+                                                        :disabled="insuranceDialog.verifyingId.value === record.id"
+                                                        @click="insuranceDialog.verifyRecord(record.id, 'failed')"
+                                                    >
+                                                        Mark failed
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                            <span v-if="record.effectiveDate">Effective {{ formatDateTime(record.effectiveDate) }}</span>
+                                            <span v-if="record.expiryDate">Expires {{ formatDateTime(record.expiryDate) }}</span>
+                                            <span v-if="record.coverageLevel">{{ record.coverageLevel }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent v-if="canViewPatientAuditLogs" value="audit" class="space-y-6">
+                        <div class="space-y-1">
+                            <p class="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">Audit log</p>
+                            <p class="text-sm text-muted-foreground">Who changed what, and when, for this patient's record.</p>
+                        </div>
+
+                        <div class="rounded-lg border bg-muted/10 px-3 py-3">
+                            <template v-if="auditLogQuery.isPending.value">
+                                <Skeleton class="h-4 w-40 rounded-lg" />
+                                <Skeleton class="mt-2 h-3 w-full rounded-lg" />
+                            </template>
+                            <template v-else-if="auditLogQuery.isError.value">
+                                <p class="text-sm text-destructive">{{ (auditLogQuery.error.value as Error | null)?.message ?? 'Unable to load the audit log.' }}</p>
+                            </template>
+                            <template v-else-if="auditLogs.length === 0">
+                                <p class="text-sm font-medium text-foreground">No audit history yet</p>
+                                <p class="mt-1 text-xs text-muted-foreground">Changes to this patient's record will appear here.</p>
+                            </template>
+                            <template v-else>
+                                <div class="grid gap-2">
+                                    <div v-for="log in auditLogs" :key="log.id" class="rounded-lg border bg-background px-3 py-2.5">
+                                        <div class="flex items-start justify-between gap-2">
+                                            <p class="truncate text-sm font-medium text-foreground">{{ log.actionLabel || log.action || 'Unknown action' }}</p>
+                                            <span class="shrink-0 text-xs text-muted-foreground">{{ formatDateTime(log.createdAt) }}</span>
+                                        </div>
+                                        <p v-if="log.actorId" class="mt-1 text-xs text-muted-foreground">By user #{{ log.actorId }}</p>
+                                    </div>
+                                </div>
+                                <div v-if="auditLogQuery.data.value && auditLogQuery.data.value.meta.lastPage > 1" class="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                                    <p>Page {{ auditLogQuery.data.value.meta.currentPage }} of {{ auditLogQuery.data.value.meta.lastPage }}</p>
+                                    <div class="flex gap-2">
+                                        <Button size="sm" variant="outline" class="h-7 px-2" :disabled="auditLogPage <= 1" @click="auditLogPage = Math.max(1, auditLogPage - 1)">
+                                            Previous
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            class="h-7 px-2"
+                                            :disabled="auditLogPage >= auditLogQuery.data.value.meta.lastPage"
+                                            @click="auditLogPage = auditLogPage + 1"
+                                        >
+                                            Next
+                                        </Button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </TabsContent>
                 </Tabs>
 
                 <EncounterLifecycleDialog
@@ -1733,6 +1876,85 @@ onBeforeUnmount(() => {
                                 <Button variant="outline" @click="allergyDialog.closeDialog()">Cancel</Button>
                                 <Button :disabled="allergyDialog.submitting.value" @click="allergyDialog.submitDialog()">
                                     {{ allergyDialog.submitting.value ? 'Saving...' : allergyDialog.editingId.value ? 'Save changes' : 'Add allergy' }}
+                                </Button>
+                            </DialogFooter>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog :open="insuranceDialog.open.value" @update:open="(isOpen) => (isOpen ? (insuranceDialog.open.value = true) : insuranceDialog.closeDialog())">
+                    <DialogContent variant="form" size="xl">
+                        <div class="flex h-full max-h-[90vh] flex-col">
+                            <DialogHeader class="shrink-0 border-b bg-background px-6 py-4">
+                                <DialogTitle>Add insurance</DialogTitle>
+                                <DialogDescription>Record a coverage entry so insurance-routed billing has real details to work with.</DialogDescription>
+                            </DialogHeader>
+                            <div class="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+                                <div class="grid gap-4">
+                                    <div class="grid gap-4 sm:grid-cols-2">
+                                        <div class="grid gap-2">
+                                            <Label for="patient-chart-v2-insurance-provider">Provider</Label>
+                                            <Input id="patient-chart-v2-insurance-provider" v-model="insuranceDialog.form.insuranceProvider" placeholder="e.g. NHIF" />
+                                            <p v-if="insuranceDialog.formErrors.value.insuranceProvider?.length" class="text-sm text-destructive">{{ insuranceDialog.formErrors.value.insuranceProvider[0] }}</p>
+                                        </div>
+                                        <div class="grid gap-2">
+                                            <Label for="patient-chart-v2-insurance-type">Type</Label>
+                                            <select
+                                                id="patient-chart-v2-insurance-type"
+                                                v-model="insuranceDialog.form.insuranceType"
+                                                class="h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                            >
+                                                <option value="insurance">Insurance</option>
+                                                <option value="government">Government</option>
+                                                <option value="employer">Employer</option>
+                                                <option value="donor">Donor</option>
+                                                <option value="other">Other</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="grid gap-4 sm:grid-cols-2">
+                                        <div class="grid gap-2">
+                                            <Label for="patient-chart-v2-insurance-member-id">Member ID</Label>
+                                            <Input id="patient-chart-v2-insurance-member-id" v-model="insuranceDialog.form.memberId" placeholder="Required if no card number" />
+                                            <p v-if="insuranceDialog.formErrors.value.memberId?.length" class="text-sm text-destructive">{{ insuranceDialog.formErrors.value.memberId[0] }}</p>
+                                        </div>
+                                        <div class="grid gap-2">
+                                            <Label for="patient-chart-v2-insurance-card-number">Card number</Label>
+                                            <Input id="patient-chart-v2-insurance-card-number" v-model="insuranceDialog.form.cardNumber" placeholder="Required if no member ID" />
+                                            <p v-if="insuranceDialog.formErrors.value.cardNumber?.length" class="text-sm text-destructive">{{ insuranceDialog.formErrors.value.cardNumber[0] }}</p>
+                                        </div>
+                                    </div>
+                                    <div class="grid gap-4 sm:grid-cols-2">
+                                        <div class="grid gap-2">
+                                            <Label for="patient-chart-v2-insurance-plan">Plan name</Label>
+                                            <Input id="patient-chart-v2-insurance-plan" v-model="insuranceDialog.form.planName" />
+                                        </div>
+                                        <div class="grid gap-2">
+                                            <Label for="patient-chart-v2-insurance-policy">Policy number</Label>
+                                            <Input id="patient-chart-v2-insurance-policy" v-model="insuranceDialog.form.policyNumber" />
+                                        </div>
+                                    </div>
+                                    <div class="grid gap-4 sm:grid-cols-2">
+                                        <div class="grid gap-2">
+                                            <Label for="patient-chart-v2-insurance-effective">Effective date</Label>
+                                            <Input id="patient-chart-v2-insurance-effective" v-model="insuranceDialog.form.effectiveDate" type="date" />
+                                        </div>
+                                        <div class="grid gap-2">
+                                            <Label for="patient-chart-v2-insurance-expiry">Expiry date</Label>
+                                            <Input id="patient-chart-v2-insurance-expiry" v-model="insuranceDialog.form.expiryDate" type="date" />
+                                        </div>
+                                    </div>
+                                    <div class="grid gap-2">
+                                        <Label for="patient-chart-v2-insurance-notes">Notes</Label>
+                                        <Textarea id="patient-chart-v2-insurance-notes" v-model="insuranceDialog.form.notes" rows="3" />
+                                    </div>
+                                    <p v-if="insuranceDialog.error.value" class="text-sm text-destructive">{{ insuranceDialog.error.value }}</p>
+                                </div>
+                            </div>
+                            <DialogFooter class="shrink-0 gap-2 border-t px-6 py-4">
+                                <Button variant="outline" @click="insuranceDialog.closeDialog()">Cancel</Button>
+                                <Button :disabled="insuranceDialog.submitting.value" @click="insuranceDialog.submitDialog()">
+                                    {{ insuranceDialog.submitting.value ? 'Saving...' : 'Add insurance' }}
                                 </Button>
                             </DialogFooter>
                         </div>
