@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
+import { useQueryClient } from '@tanstack/vue-query';
 import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import AppIcon from '@/components/AppIcon.vue';
@@ -8,9 +9,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import PatientRegistrationSheet from '@/components/patients/PatientRegistrationSheet.vue';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { usePatientList, usePatientStatusCounts, type PatientListItem } from '@/composables/patientsIndex/usePatientList';
 import { usePatientListFilters } from '@/composables/patientsIndex/usePatientListFilters';
+import { notifySuccess } from '@/lib/notify';
 import { type BreadcrumbItem } from '@/types';
 
 /**
@@ -29,8 +32,12 @@ import { type BreadcrumbItem } from '@/types';
  * simpler than the legacy page's separate "Filters" sheet — inline filters
  * match medical-records/IndexV2.vue's established shape instead of
  * replicating a legacy UI decision this rebuild isn't obligated to keep.
- * No row actions yet (view/edit/status-change/register — those arrive in
- * later phases); this table is read-only until then.
+ * Phase 2: registration, via PatientRegistrationSheet.vue — a thin UI
+ * layer over usePatientDuplicateCheck/usePatientRegistration, both backed
+ * by the server's authoritative PatientDuplicateDetectionService (decided:
+ * reports/patients-index-modernization-plan.md's duplicate-scoring
+ * question). No row actions yet (view/edit/status-change) — those arrive
+ * in Phases 3-5.
  *
  * Route remains unlinked (reports/patients-index-modernization-plan.md
  * §3.3): /patients keeps rendering the legacy page until Phase 6.
@@ -42,6 +49,7 @@ function hasAccess(permission: string): boolean {
 }
 
 const canReadPatients = computed(() => hasAccess('patients.read'));
+const canCreatePatients = computed(() => hasAccess('patients.create'));
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'Patients', href: '/patients/v2' },
@@ -105,6 +113,15 @@ function goToPage(page: number): void {
     filters.page = Math.min(Math.max(page, 1), meta.value.lastPage);
 }
 
+const registerSheetOpen = ref(false);
+const queryClient = useQueryClient();
+
+function onPatientRegistered(patient: PatientListItem): void {
+    void queryClient.invalidateQueries({ queryKey: ['patients-index'] });
+    void queryClient.invalidateQueries({ queryKey: ['patients-index-status-counts'] });
+    notifySuccess(`${patientName(patient)} registered (${patient.patientNumber ?? 'MRN pending'}).`);
+}
+
 // Same bounded-scroll-container pattern as ShowV2.vue/WorkspaceV2.vue/
 // patient-flow/Board.vue/reception/Queue.vue.
 const scrollContainerRef = useTemplateRef<HTMLDivElement>('scrollContainer');
@@ -139,7 +156,13 @@ onBeforeUnmount(() => {
                         <h1 class="text-lg font-bold tracking-tight md:text-xl">Patients</h1>
                         <p class="text-xs text-muted-foreground">Rebuild in progress — see reports/patients-index-modernization-plan.md.</p>
                     </div>
-                    <Badge v-if="meta" variant="secondary">{{ meta.total }} patients</Badge>
+                    <div class="flex shrink-0 items-center gap-2">
+                        <Badge v-if="meta" variant="secondary">{{ meta.total }} patients</Badge>
+                        <Button v-if="canCreatePatients" size="sm" class="h-8 gap-1.5" @click="registerSheetOpen = true">
+                            <AppIcon name="plus" class="size-3.5" />
+                            Register Patient
+                        </Button>
+                    </div>
                 </div>
 
                 <div v-if="canReadPatients" class="mt-3 flex flex-wrap gap-2">
@@ -268,5 +291,7 @@ onBeforeUnmount(() => {
                 </template>
             </div>
         </div>
+
+        <PatientRegistrationSheet v-model:open="registerSheetOpen" @registered="onPatientRegistered" />
     </AppLayout>
 </template>

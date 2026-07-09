@@ -197,6 +197,69 @@ it('blocks duplicate registration by national id even when demographic fields di
         ->assertJsonPath('duplicates.0.id', $first['id']);
 });
 
+it('reports no duplicates for a check that matches nothing', function (): void {
+    $user = makePatientReadUser();
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/patients/duplicate-check', [
+            'firstName' => 'Nobody',
+            'lastName' => 'Matches',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.severity', 'none')
+        ->assertJsonPath('data.duplicates', []);
+
+    expect(PatientModel::query()->count())->toBe(0);
+});
+
+it('reports a strong_warning duplicate check without creating anything', function (): void {
+    $user = makePatientReadUser();
+
+    $first = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/patients/duplicate-check', [
+            'firstName' => 'Amina',
+            'lastName' => 'Moshi',
+            'gender' => 'female',
+            'dateOfBirth' => '1996-04-21',
+            'phone' => '+255700000009',
+            'addressLine' => 'Msasani',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.severity', 'strong_warning')
+        ->assertJsonPath('data.duplicates.0.id', $first['id']);
+
+    expect(PatientModel::query()->count())->toBe(1);
+});
+
+it('reports a hard_block duplicate check when the national id matches exactly', function (): void {
+    $user = makePatientReadUser();
+
+    $first = $this->actingAs($user)->postJson('/api/v1/patients', patientPayload())->json('data');
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/patients/duplicate-check', [
+            'firstName' => 'Different',
+            'lastName' => 'Person',
+            'nationalId' => 'TZ-123456789',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.severity', 'hard_block')
+        ->assertJsonPath('data.duplicates.0.id', $first['id']);
+
+    expect(PatientModel::query()->count())->toBe(1);
+});
+
+it('forbids the duplicate-check endpoint without create permission', function (): void {
+    $user = User::factory()->create();
+    grantPatientReadPermission($user);
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/patients/duplicate-check', ['firstName' => 'Amina'])
+        ->assertForbidden();
+});
+
 it('allows registration with matching demographics when phone and national id are different', function (): void {
     $user = makePatientReadUser();
 

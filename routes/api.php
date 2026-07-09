@@ -576,6 +576,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::post('patients', [PatientController::class, 'store'])
         ->middleware(['can:patients.create', 'facility.entitlement:patients.registration'])
         ->name('patients.store');
+    Route::post('patients/duplicate-check', [PatientController::class, 'checkDuplicates'])
+        ->middleware(['can:patients.create', 'facility.entitlement:patients.registration'])
+        ->name('patients.duplicate-check');
     Route::get('patients/insurance-options', [PatientInsuranceController::class, 'options'])
         ->middleware(['can:patients.insurance.read', 'facility.entitlement:patients.search'])
         ->name('patients.insurance.options');

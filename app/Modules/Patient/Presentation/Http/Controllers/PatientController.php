@@ -4,6 +4,7 @@ namespace App\Modules\Patient\Presentation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Patient\Application\Exceptions\DuplicatePatientException;
+use App\Modules\Patient\Application\UseCases\CheckPatientDuplicatesUseCase;
 use App\Modules\Patient\Application\UseCases\CreatePatientUseCase;
 use App\Modules\Patient\Application\UseCases\GetPatientUseCase;
 use App\Modules\Patient\Application\UseCases\ListPatientAuditLogsUseCase;
@@ -11,6 +12,7 @@ use App\Modules\Patient\Application\UseCases\ListPatientStatusCountsUseCase;
 use App\Modules\Patient\Application\UseCases\ListPatientsUseCase;
 use App\Modules\Patient\Application\UseCases\UpdatePatientStatusUseCase;
 use App\Modules\Patient\Application\UseCases\UpdatePatientUseCase;
+use App\Modules\Patient\Presentation\Http\Requests\CheckPatientDuplicatesRequest;
 use App\Modules\Patient\Presentation\Http\Requests\StorePatientRequest;
 use App\Modules\Patient\Presentation\Http\Requests\UpdatePatientRequest;
 use App\Modules\Patient\Presentation\Http\Requests\UpdatePatientStatusRequest;
@@ -110,6 +112,20 @@ class PatientController extends Controller
         return response()->json([
             'data' => $counts,
         ]);
+    }
+
+    public function checkDuplicates(CheckPatientDuplicatesRequest $request, CheckPatientDuplicatesUseCase $useCase): JsonResponse
+    {
+        $validated = $request->validated();
+        $excludePatientId = $validated['excludePatientId'] ?? null;
+        unset($validated['excludePatientId']);
+
+        $result = $useCase->execute(
+            payload: $this->toPersistencePayload($validated),
+            excludePatientId: $excludePatientId,
+        );
+
+        return response()->json(['data' => $result]);
     }
 
     public function store(StorePatientRequest $request, CreatePatientUseCase $useCase): JsonResponse
