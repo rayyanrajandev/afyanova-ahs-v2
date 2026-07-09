@@ -215,7 +215,7 @@ onBeforeUnmount(() => {
                             </p>
                         </div>
                         <div class="mt-2 flex flex-wrap items-start gap-2">
-                            <div class="relative w-64">
+                            <div class="relative min-w-72 flex-1">
                                 <Input
                                     v-model="patientQuery"
                                     placeholder="Search existing patient by name, MRN, or phone…"
@@ -251,13 +251,13 @@ onBeforeUnmount(() => {
 
                             <select
                                 v-model="arrivalMode"
-                                class="h-9 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none"
+                                class="h-9 w-44 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none"
                             >
                                 <option value="walk_in">Walk-in (OPD)</option>
                                 <option value="emergency">Emergency</option>
                             </select>
 
-                            <Input v-model="reason" placeholder="Reason (optional)" class="h-9 w-56" />
+                            <Input v-model="reason" placeholder="Reason (optional)" class="h-9 min-w-64 flex-1" />
 
                             <Button :disabled="!canSubmitWalkIn" @click="submitWalkIn">
                                 {{ walkIn.isPending.value ? 'Checking in…' : 'Check in' }}
