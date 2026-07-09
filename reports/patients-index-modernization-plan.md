@@ -144,6 +144,14 @@ No row actions yet (view/edit/status-change/register) — those arrive with Phas
 
 136/136 Vitest still passing; no new TypeScript errors in the file.
 
+**Update**: Fixed two real gaps in `PatientRegistrationSheet.vue`/`usePatientDuplicateCheck.ts`, both raised directly by the user testing the sheet against the legacy page's actual behavior:
+1. **Duplicate-check gate bug.** `hasEnoughIdentity()` only enabled the query once both `firstName` and `lastName` were filled — but `EloquentPatientRepository::findActiveHardDuplicateIdentifiers()` matches on `nationalId` alone (no name needed at all) and `findActiveDuplicateCandidates()` matches on `phone` alone, independent of name. Typing a phone number or national ID that matched an existing patient, without also typing a matching name, silently never triggered a check — the query never fired, so nothing appeared. The gate now mirrors the repository's actual match conditions (nationalId alone, phone alone, or any of the repository's `$hasDemographicCandidateKey` combinations). 2 new tests.
+2. **Region/district were plain text `Input`s, not the legacy sheet's actual UX.** The legacy sheet uses `SearchableSelectField` (`@/components/forms`) — a searchable, cascading combobox that still allows a free-text custom value — fed by `GET /platform/country-profile`'s server-sourced region/district presets and localized addressing labels (`patients/Index.vue`'s `loadCountryProfile()`/`@/lib/patientLocations.ts`). Added `usePatientCountryProfile.ts` (the same endpoint as a real `useQuery`, not a manual ref+fetch) and wired it in: district disables until a region is picked and resets when region changes (matching the legacy sheet's own watcher), and the address field became a `Textarea` using the profile's own label/placeholder. 3 new tests.
+
+Note: `usePlatformCountryProfile.ts` (an existing shared composable) was **not** reused — it only exposes `code`/`name`/`currencyCode` (built for billing/currency contexts), not the `patientAddressing`/`patientLocations` fields this needed, so a dedicated composable was the correct call rather than widening a composable's contract for an unrelated consumer.
+
+141/141 Vitest passing; no new TypeScript errors. No backend files touched (`PatientDuplicateDetectionService`/`EloquentPatientRepository` were read, not modified — the fix was entirely in the frontend gate matching existing backend capability).
+
 ---
 
 ## 5. Risks & open questions
