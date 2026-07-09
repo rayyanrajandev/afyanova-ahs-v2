@@ -138,6 +138,12 @@ No row actions yet (view/edit/status-change/register) — those arrive with Phas
 
 12 new tests (4 backend `PatientApiTest.php`, 4 `usePatientDuplicateCheck.spec.ts`, 3 `usePatientRegistration.spec.ts`, plus a Vitest count check). No new TypeScript errors (778, unchanged). Full frontend Vitest (136/136) and backend `Patient`/`WebRouteAuthorizationTest` suites confirm zero regressions.
 
+**Update**: Corrected two V2-convention drifts in `IndexV2.vue` after the fact, both repeats of a mistake already caught and fixed once on `reception/Queue.vue` this session — logged here so the pattern doesn't recur in Phases 3-5:
+1. The sticky header's status-pill KPI cards were clickable buttons doubling as the status filter (§4's Phase 1 note above literally documents this as "matching the legacy page's own pill behavior" — that was the wrong precedent to match). Fixed: the sticky header now shows non-interactive mini-stat cards (`ShowV2.vue`'s `rounded-md bg-muted/30` treatment), and active/inactive/all filtering moved into a real `Tabs`/`TabsList`/`TabsTrigger` control in the scrolling body.
+2. The gender/sort filters used native `<select>` elements. Fixed: both now use shadcn-vue's `Select`/`SelectTrigger`/`SelectContent`/`SelectItem`, matching `appointments/Index.vue`'s convention (including its `"all"`-sentinel workaround for the gender field, since Radix `Select` rejects empty-string item values — `usePatientListFilters.gender`'s `''` "no filter" state maps to/from `"all"` via a computed).
+
+136/136 Vitest still passing; no new TypeScript errors in the file.
+
 ---
 
 ## 5. Risks & open questions
