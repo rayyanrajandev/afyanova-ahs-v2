@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Badge } from '@/components/ui/badge';
+import PatientSummaryPopover from '@/components/patients/summary/PatientSummaryPopover.vue';
 import { type ReceptionQueueEntry } from '@/composables/reception/useReceptionQueue';
 
 defineProps<{
@@ -56,7 +57,19 @@ function waitLabel(minutes: number | null): string {
         >
             <div class="min-w-0 space-y-1">
                 <div class="flex flex-wrap items-center gap-2">
-                    <p class="font-medium text-foreground">
+                    <PatientSummaryPopover v-if="entry.patientId" :patient-id="entry.patientId">
+                        <template #trigger>
+                            <button type="button" class="font-medium text-foreground hover:underline">
+                                {{ entry.patientName ?? 'Unknown patient' }}
+                            </button>
+                        </template>
+                        <template #actions>
+                            <a :href="`/patients/${entry.patientId}/chart`" class="text-xs font-medium text-primary hover:underline">
+                                View chart
+                            </a>
+                        </template>
+                    </PatientSummaryPopover>
+                    <p v-else class="font-medium text-foreground">
                         {{ entry.patientName ?? 'Unknown patient' }}
                     </p>
                     <span v-if="entry.patientNumber" class="text-xs text-muted-foreground">
