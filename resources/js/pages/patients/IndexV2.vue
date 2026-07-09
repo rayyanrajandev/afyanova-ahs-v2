@@ -11,7 +11,9 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import PatientEditSheet from '@/components/patients/PatientEditSheet.vue';
 import PatientRegistrationSheet from '@/components/patients/PatientRegistrationSheet.vue';
+import PatientStatusDialog from '@/components/patients/PatientStatusDialog.vue';
 import PatientSummaryPopover from '@/components/patients/summary/PatientSummaryPopover.vue';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useOfflinePatientRegistrationQueue } from '@/composables/patientsIndex/useOfflinePatientRegistrationQueue';
@@ -45,8 +47,11 @@ import { type BreadcrumbItem } from '@/types';
  * layer over usePatientDuplicateCheck/usePatientRegistration, both backed
  * by the server's authoritative PatientDuplicateDetectionService (decided:
  * reports/patients-index-modernization-plan.md's duplicate-scoring
- * question). No row actions yet (view/edit/status-change) — those arrive
- * in Phases 3-5.
+ * question).
+ * Phase 4: row actions — View summary/View chart (via PatientSummaryPopover,
+ * added when the Patient Summary module shipped), Edit (PatientEditSheet.vue,
+ * canUpdatePatients), Change status (PatientStatusDialog.vue,
+ * canUpdatePatientStatus).
  *
  * Route remains unlinked (reports/patients-index-modernization-plan.md
  * §3.3): /patients keeps rendering the legacy page until Phase 6.
@@ -59,6 +64,8 @@ function hasAccess(permission: string): boolean {
 
 const canReadPatients = computed(() => hasAccess('patients.read'));
 const canCreatePatients = computed(() => hasAccess('patients.create'));
+const canUpdatePatients = computed(() => hasAccess('patients.update'));
+const canUpdatePatientStatus = computed(() => hasAccess('patients.update-status'));
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'Patients', href: '/patients/v2' },
@@ -152,6 +159,33 @@ function onPatientRegistered(patient: PatientListItem): void {
     void queryClient.invalidateQueries({ queryKey: ['patients-index'] });
     void queryClient.invalidateQueries({ queryKey: ['patients-index-status-counts'] });
     notifySuccess(`${patientName(patient)} registered (${patient.patientNumber ?? 'MRN pending'}).`);
+}
+
+const editSheetOpen = ref(false);
+const editingPatient = ref<PatientListItem | null>(null);
+
+function openEditSheet(patient: PatientListItem): void {
+    editingPatient.value = patient;
+    editSheetOpen.value = true;
+}
+
+function onPatientUpdated(patient: PatientListItem): void {
+    void queryClient.invalidateQueries({ queryKey: ['patients-index'] });
+    notifySuccess(`${patientName(patient)} updated.`);
+}
+
+const statusDialogOpen = ref(false);
+const statusChangingPatient = ref<PatientListItem | null>(null);
+
+function openStatusDialog(patient: PatientListItem): void {
+    statusChangingPatient.value = patient;
+    statusDialogOpen.value = true;
+}
+
+function onPatientStatusChanged(patient: PatientListItem): void {
+    void queryClient.invalidateQueries({ queryKey: ['patients-index'] });
+    void queryClient.invalidateQueries({ queryKey: ['patients-index-status-counts'] });
+    notifySuccess(`${patientName(patient)} is now ${patient.status ?? 'unknown'}.`);
 }
 
 /**
@@ -333,6 +367,7 @@ onBeforeUnmount(() => {
                                     <th class="px-3 py-2 text-left">Phone</th>
                                     <th class="px-3 py-2 text-left">Region / District</th>
                                     <th class="px-3 py-2 text-left">Registered</th>
+                                    <th v-if="canUpdatePatients || canUpdatePatientStatus" class="px-3 py-2 text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -369,6 +404,16 @@ onBeforeUnmount(() => {
                                         {{ [patient.region, patient.district].filter(Boolean).join(' / ') || '—' }}
                                     </td>
                                     <td class="px-3 py-2 text-muted-foreground">{{ formatDate(patient.createdAt) }}</td>
+                                    <td v-if="canUpdatePatients || canUpdatePatientStatus" class="px-3 py-2">
+                                        <div class="flex items-center justify-end gap-1">
+                                            <Button v-if="canUpdatePatients" size="sm" variant="ghost" class="h-7 gap-1 px-2 text-xs" @click="openEditSheet(patient)">
+                                                <AppIcon name="pencil" class="size-3.5" />Edit
+                                            </Button>
+                                            <Button v-if="canUpdatePatientStatus" size="sm" variant="ghost" class="h-7 gap-1 px-2 text-xs" @click="openStatusDialog(patient)">
+                                                <AppIcon name="refresh-cw" class="size-3.5" />Status
+                                            </Button>
+                                        </div>
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
@@ -390,5 +435,7 @@ onBeforeUnmount(() => {
         </div>
 
         <PatientRegistrationSheet v-model:open="registerSheetOpen" :suggested-regions="suggestedRegions" @registered="onPatientRegistered" />
+        <PatientEditSheet v-model:open="editSheetOpen" :patient="editingPatient" @updated="onPatientUpdated" />
+        <PatientStatusDialog v-model:open="statusDialogOpen" :patient="statusChangingPatient" @changed="onPatientStatusChanged" />
     </AppLayout>
 </template>
