@@ -69,6 +69,28 @@ const statusCounts = usePatientStatusCounts(filters);
 const patients = computed(() => list.data.value?.data ?? []);
 const meta = computed(() => list.data.value?.meta ?? null);
 
+/**
+ * Quick-pick region suggestions for the registration sheet, ranked by
+ * frequency in the currently-loaded page. Deliberately reuses data this
+ * page already fetches for the table rather than the legacy page's
+ * historicalRegionOptionsForCountry(), which bulk-loaded every patient
+ * client-side just to mine this same signal (reports/patients-index-audit.md
+ * §1) — a real cost for a "recently common" convenience, not an
+ * authoritative list.
+ */
+const suggestedRegions = computed<string[]>(() => {
+    const counts = new Map<string, number>();
+    for (const patient of patients.value) {
+        const region = patient.region?.trim();
+        if (!region) continue;
+        counts.set(region, (counts.get(region) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+        .sort((left, right) => right[1] - left[1])
+        .slice(0, 6)
+        .map(([region]) => region);
+});
+
 const genderSelectValue = computed({
     get: () => filters.gender || 'all',
     set: (value: string | number) => {
@@ -321,6 +343,6 @@ onBeforeUnmount(() => {
             </div>
         </div>
 
-        <PatientRegistrationSheet v-model:open="registerSheetOpen" @registered="onPatientRegistered" />
+        <PatientRegistrationSheet v-model:open="registerSheetOpen" :suggested-regions="suggestedRegions" @registered="onPatientRegistered" />
     </AppLayout>
 </template>

@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { refDebounced } from '@vueuse/core';
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
 import { usePatientCountryProfile } from '@/composables/patientsIndex/usePatientCountryProfile';
@@ -14,6 +16,7 @@ import { usePatientDuplicateCheck } from '@/composables/patientsIndex/usePatient
 import { usePatientRegistration, usePatientRegistrationForm } from '@/composables/patientsIndex/usePatientRegistration';
 import { type PatientListItem } from '@/composables/patientsIndex/usePatientList';
 import { isApiClientError } from '@/lib/apiClient';
+import { deriveAgeFromDateOfBirth, deriveDateOfBirthFromAge, formatAgeLabel } from '@/lib/patientAge';
 
 /**
  * Phase 2 of reports/patients-index-modernization-plan.md. A "thin UI
@@ -38,6 +41,21 @@ import { isApiClientError } from '@/lib/apiClient';
  * is disabled until a region is chosen and resets whenever region changes,
  * matching patients/Index.vue's own watcher.
  *
+ * suggestedRegions (from IndexV2.vue's own already-loaded patient list, no
+ * extra fetch) renders one-tap quick-pick chips above the region field for
+ * whatever regions are already common on the current page — cheaper and
+ * more honestly-scoped than the legacy sheet's equivalent, which bulk-
+ * loaded every patient client-side just to mine the same "recently common"
+ * signal.
+ *
+ * Date of birth has two entry mechanisms (@/lib/patientAge) — many walk-in
+ * patients and infant guardians don't know an exact birth date, only an
+ * approximate age — switched via the app's shared Tabs primitive rather
+ * than a one-off button pair, with a live "≈ N yrs M mos old" preview in
+ * both directions. Only dateOfBirth is ever sent to the server
+ * (StorePatientRequest has no age fields); years/months are derived
+ * client-side scratch state.
+ *
  * SheetContent uses variant="form" (not the unset default), matching both
  * EncounterHistorySheet.vue and the legacy Register Patient sheet it
  * replaces — that variant is what makes the sheet a full-height,
@@ -46,6 +64,10 @@ import { isApiClientError } from '@/lib/apiClient';
  * ShowV2.vue/WorkspaceV2.vue/Board.vue/reception/Queue.vue already use)
  * depends on to stay pinned while the form body scrolls independently.
  */
+const props = withDefaults(defineProps<{ suggestedRegions?: string[] }>(), {
+    suggestedRegions: () => [],
+});
+
 const open = defineModel<boolean>('open', { required: true });
 
 const emit = defineEmits<{
@@ -81,6 +103,52 @@ watch(
         form.district = '';
     },
 );
+
+/**
+ * Two entry mechanisms for date of birth, matching a real registration
+ * scenario this form was missing entirely: many walk-in patients (and
+ * guardians registering infants) don't know an exact birth date, only an
+ * approximate age. "Estimated age" derives dateOfBirth from years/months
+ * as you type; "Exact date" is a native date picker. Only dateOfBirth is
+ * ever sent to the server (StorePatientRequest has no age fields) — age
+ * inputs are pure client-side scratch state.
+ */
+const dobMode = ref<'estimated' | 'exact'>('estimated');
+const todayIsoDate = new Date().toISOString().slice(0, 10);
+
+const derivedAge = computed(() => {
+    if (dobMode.value === 'estimated') {
+        const years = Number.parseInt(form.ageYears, 10) || 0;
+        const months = Number.parseInt(form.ageMonths, 10) || 0;
+        if (form.ageYears.trim() === '' && form.ageMonths.trim() === '') return null;
+        return { years, months };
+    }
+    return deriveAgeFromDateOfBirth(form.dateOfBirth);
+});
+
+watch([() => form.ageYears, () => form.ageMonths], () => {
+    if (dobMode.value !== 'estimated') return;
+    form.dateOfBirth = deriveDateOfBirthFromAge(form.ageYears, form.ageMonths) ?? '';
+});
+
+function setDobMode(mode: string | number): void {
+    const next = mode === 'exact' ? 'exact' : 'estimated';
+    if (dobMode.value === next) return;
+    dobMode.value = next;
+
+    if (next === 'exact') {
+        form.ageYears = '';
+        form.ageMonths = '';
+        return;
+    }
+
+    const age = deriveAgeFromDateOfBirth(form.dateOfBirth);
+    form.dateOfBirth = '';
+    if (age) {
+        form.ageYears = String(age.years);
+        form.ageMonths = String(age.months);
+    }
+}
 
 const severityLabel: Record<string, string> = {
     hard_block: 'Blocks registration',
@@ -123,6 +191,9 @@ function resetForm(): void {
     form.lastName = '';
     form.gender = 'female';
     form.dateOfBirth = '';
+    form.ageYears = '';
+    form.ageMonths = '';
+    dobMode.value = 'estimated';
     form.phone = '';
     form.email = '';
     form.nationalId = '';
@@ -160,21 +231,49 @@ function resetForm(): void {
                     </div>
                     <div class="space-y-1.5">
                         <Label for="reg-gender">Gender</Label>
-                        <select
-                            id="reg-gender"
-                            v-model="form.gender"
-                            class="h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none"
-                        >
-                            <option value="female">Female</option>
-                            <option value="male">Male</option>
-                            <option value="other">Other</option>
-                            <option value="unknown">Unknown</option>
-                        </select>
+                        <Select v-model="form.gender">
+                            <SelectTrigger id="reg-gender" class="h-9 w-full bg-background">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="female">Female</SelectItem>
+                                <SelectItem value="male">Male</SelectItem>
+                                <SelectItem value="other">Other</SelectItem>
+                                <SelectItem value="unknown">Unknown</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
-                    <div class="space-y-1.5">
-                        <Label for="reg-dob">Date of birth</Label>
-                        <Input id="reg-dob" v-model="form.dateOfBirth" type="date" />
+
+                    <div class="col-span-2 space-y-1.5 rounded-lg border bg-muted/20 p-3">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <Label class="text-sm">
+                                Date of birth
+                                <span v-if="derivedAge" class="ml-1.5 font-normal text-muted-foreground">
+                                    (≈ {{ formatAgeLabel(derivedAge) }} old)
+                                </span>
+                            </Label>
+                            <Tabs :model-value="dobMode" @update:model-value="setDobMode">
+                                <TabsList class="h-8">
+                                    <TabsTrigger value="estimated" class="h-6.5 px-2.5 text-xs">Estimated age</TabsTrigger>
+                                    <TabsTrigger value="exact" class="h-6.5 px-2.5 text-xs">Exact date</TabsTrigger>
+                                </TabsList>
+                            </Tabs>
+                        </div>
+
+                        <div v-if="dobMode === 'estimated'" class="grid grid-cols-2 gap-3">
+                            <div class="space-y-1.5">
+                                <Label for="reg-age-years" class="text-xs text-muted-foreground">Years</Label>
+                                <Input id="reg-age-years" v-model="form.ageYears" type="number" min="0" max="130" inputmode="numeric" placeholder="e.g. 45" />
+                            </div>
+                            <div class="space-y-1.5">
+                                <Label for="reg-age-months" class="text-xs text-muted-foreground">Months</Label>
+                                <Input id="reg-age-months" v-model="form.ageMonths" type="number" min="0" max="11" inputmode="numeric" placeholder="e.g. 6" />
+                            </div>
+                            <p class="col-span-2 text-xs text-muted-foreground">Enter years, months, or both — months only is fine for infants.</p>
+                        </div>
+                        <Input v-else id="reg-dob" v-model="form.dateOfBirth" type="date" :max="todayIsoDate" />
                     </div>
+
                     <div class="space-y-1.5">
                         <Label for="reg-phone">Phone</Label>
                         <Input id="reg-phone" v-model="form.phone" placeholder="+255…" />
@@ -186,6 +285,19 @@ function resetForm(): void {
                     <div class="space-y-1.5">
                         <Label for="reg-national-id">National ID (optional)</Label>
                         <Input id="reg-national-id" v-model="form.nationalId" />
+                    </div>
+                    <div v-if="suggestedRegions.length > 0" class="col-span-2 flex flex-wrap items-center gap-1.5">
+                        <span class="text-xs text-muted-foreground">Common here:</span>
+                        <button
+                            v-for="region in suggestedRegions"
+                            :key="region"
+                            type="button"
+                            class="rounded-full border px-2.5 py-0.5 text-xs transition-colors hover:bg-accent"
+                            :class="form.region === region ? 'border-primary bg-primary/5 text-foreground' : 'text-muted-foreground'"
+                            @click="form.region = region"
+                        >
+                            {{ region }}
+                        </button>
                     </div>
                     <SearchableSelectField
                         input-id="reg-region"
