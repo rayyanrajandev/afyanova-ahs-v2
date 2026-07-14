@@ -36,7 +36,9 @@ class NotificationController extends Controller
 
         $result = $this->listNotificationsUseCase->execute($userId, $filters);
 
-        $result['data'] = NotificationTransformer::collection($result['data']);
+        $result['data'] = NotificationTransformer::collection(
+            array_map(fn (mixed $item): array => $item instanceof \App\Modules\Notifications\Infrastructure\Models\NotificationModel ? $item->toArray() : (array) $item, $result['data']),
+        );
 
         return response()->json($result);
     }
