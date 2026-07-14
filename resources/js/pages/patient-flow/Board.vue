@@ -243,7 +243,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     </Link>
                 </div>
 
-                <div v-if="canReadAppointments" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                <div v-if="canReadAppointments" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                     <div v-for="kpi in kpis" :key="kpi.step" class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">{{ kpi.label }}</p>
                         <p class="text-sm font-bold tabular-nums">{{ kpi.count }}</p>
@@ -330,7 +330,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         </ul>
                     </div>
 
-                    <div v-if="board.isPending.value" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                    <div v-if="board.isPending.value" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                         <Skeleton class="h-40 w-full" />
                         <Skeleton class="h-40 w-full" />
                         <Skeleton class="h-40 w-full" />

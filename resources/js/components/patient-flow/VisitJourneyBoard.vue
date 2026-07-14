@@ -192,7 +192,7 @@ function columnStats(entries: VisitJourneyEntry[]): { averageLabel: string; long
 </script>
 
 <template>
-    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <div
             v-for="column in columns"
             :key="column.step"

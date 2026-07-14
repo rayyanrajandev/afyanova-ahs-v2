@@ -119,11 +119,11 @@
     --primary-foreground: hsl(0 0% 100%);
 
     /* Secondary */
-    --secondary: hsl(214 20% 93%);
+    --secondary: hsl(214 16% 86%);
     --secondary-foreground: hsl(222 18% 22%);
 
     /* Muted */
-    --muted: hsl(214 18% 93%);
+    --muted: hsl(214 14% 86%);
     --muted-foreground: hsl(215 14% 40%);
 
     /* Accent — Teal for clinical context */

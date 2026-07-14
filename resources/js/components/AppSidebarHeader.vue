@@ -248,15 +248,15 @@ function selectScope(key: string) {
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                        class="cursor-pointer text-sm"
+                        class="cursor-pointer text-sm group"
                         :class="{ 'bg-accent': selectedScopeKey === 'auto' }"
                         @select="selectScope('auto')"
                     >
                         <div class="flex min-w-0 items-center gap-2">
-                            <AppIcon :name="hasUniversalAdminAccess ? 'shield-check' : 'refresh-cw'" class="size-3.5 shrink-0 text-muted-foreground" />
+                            <AppIcon :name="hasUniversalAdminAccess ? 'shield-check' : 'refresh-cw'" class="size-3.5 shrink-0 text-muted-foreground group-focus:text-accent-foreground" />
                             <div class="min-w-0">
                                 <p class="text-sm font-medium">{{ hasUniversalAdminAccess ? 'Global admin / all facilities' : 'Auto-resolve' }}</p>
-                                <p class="text-xs text-muted-foreground">
+                                <p class="text-xs text-muted-foreground group-focus:text-accent-foreground">
                                     {{ hasUniversalAdminAccess ? 'Use platform-wide scope where pages support it.' : 'Use your primary assigned facility.' }}
                                 </p>
                             </div>
@@ -273,15 +273,15 @@ function selectScope(key: string) {
                     <DropdownMenuItem
                         v-for="facility in accessibleFacilities"
                         :key="facility.key"
-                        class="cursor-pointer text-sm"
+                        class="cursor-pointer text-sm group"
                         :class="{ 'bg-accent': selectedScopeKey === facility.key }"
                         @select="selectScope(facility.key)"
                     >
                         <div class="flex min-w-0 items-center gap-2">
-                            <AppIcon name="map-pin" class="size-3.5 shrink-0 text-muted-foreground" />
+                            <AppIcon name="map-pin" class="size-3.5 shrink-0 text-muted-foreground group-focus:text-accent-foreground" />
                             <div class="min-w-0">
                                 <p class="truncate text-sm font-medium">{{ facility.facilityName }}</p>
-                                <p class="truncate text-xs text-muted-foreground">
+                                <p class="truncate text-xs text-muted-foreground group-focus:text-accent-foreground">
                                     {{ facility.facilityCode }}{{ facility.isPrimary ? ' | Primary facility' : '' }}
                                 </p>
                             </div>
@@ -324,15 +324,15 @@ function selectScope(key: string) {
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                        class="cursor-pointer text-sm"
+                        class="cursor-pointer text-sm group"
                         :class="{ 'bg-accent': !activeRole }"
                         @select="setActiveRole(null)"
                     >
                         <div class="flex min-w-0 items-center gap-2">
-                            <AppIcon name="layout-grid" class="size-3.5 shrink-0 text-muted-foreground" />
+                            <AppIcon name="layout-grid" class="size-3.5 shrink-0 text-muted-foreground group-focus:text-accent-foreground" />
                             <div class="min-w-0">
                                 <p class="text-sm font-medium">All access</p>
-                                <p class="text-xs text-muted-foreground">Show all available modules</p>
+                                <p class="text-xs text-muted-foreground group-focus:text-accent-foreground">Show all available modules</p>
                             </div>
                         </div>
                     </DropdownMenuItem>
@@ -340,15 +340,15 @@ function selectScope(key: string) {
                     <DropdownMenuItem
                         v-for="role in availableRoles"
                         :key="role.code"
-                        class="cursor-pointer text-sm"
+                        class="cursor-pointer text-sm group"
                         :class="{ 'bg-accent': activeRole?.code === role.code }"
                         @select="setActiveRole(role.code)"
                     >
                         <div class="flex min-w-0 items-center gap-2">
-                            <AppIcon name="shield-check" class="size-3.5 shrink-0 text-muted-foreground" />
+                            <AppIcon name="shield-check" class="size-3.5 shrink-0 text-muted-foreground group-focus:text-accent-foreground" />
                             <div class="min-w-0">
                                 <p class="text-sm font-medium">{{ role.label }}</p>
-                                <p class="text-xs text-muted-foreground">{{ role.code }}</p>
+                                <p class="text-xs text-muted-foreground group-focus:text-accent-foreground">{{ role.code }}</p>
                             </div>
                         </div>
                     </DropdownMenuItem>
