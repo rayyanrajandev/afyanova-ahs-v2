@@ -19,6 +19,19 @@ class EloquentPatientRepository implements PatientRepositoryInterface
     public function create(array $attributes): array
     {
         $patient = new PatientModel();
+
+        // Bulk-restore (PatientCsvSchema/BulkImportPatientsUseCase) needs to
+        // preserve the original UUID so foreign keys in other modules
+        // (appointments, admissions, service requests, etc.) stay valid
+        // across a backup/restore cycle. `id` isn't in $fillable, so it's
+        // set directly here rather than via fill(); normal registration
+        // (CreatePatientUseCase) never passes it, leaving HasUuids' default
+        // auto-generation untouched for that flow.
+        if (isset($attributes['id'])) {
+            $patient->id = $attributes['id'];
+            unset($attributes['id']);
+        }
+
         $patient->fill($attributes);
         $patient->save();
 

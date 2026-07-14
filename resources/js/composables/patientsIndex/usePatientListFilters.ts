@@ -22,7 +22,7 @@ export function usePatientListFilters() {
         region: '',
         district: '',
         page: 1,
-        perPage: 10,
+        perPage: 50,
         sortBy: 'createdAt' as string,
         sortDir: 'desc' as 'asc' | 'desc',
     });

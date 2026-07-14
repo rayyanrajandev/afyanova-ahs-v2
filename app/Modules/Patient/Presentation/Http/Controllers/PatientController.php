@@ -4,8 +4,11 @@ namespace App\Modules\Patient\Presentation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Patient\Application\Exceptions\DuplicatePatientException;
+use App\Modules\Patient\Application\Support\PatientCsvSchema;
+use App\Modules\Patient\Application\UseCases\BulkImportPatientsUseCase;
 use App\Modules\Patient\Application\UseCases\CheckPatientDuplicatesUseCase;
 use App\Modules\Patient\Application\UseCases\CreatePatientUseCase;
+use App\Modules\Patient\Application\UseCases\ExportPatientsCsvUseCase;
 use App\Modules\Patient\Application\UseCases\GetPatientSummaryUseCase;
 use App\Modules\Patient\Application\UseCases\GetPatientUseCase;
 use App\Modules\Patient\Application\UseCases\ListPatientAuditLogsUseCase;
@@ -13,6 +16,7 @@ use App\Modules\Patient\Application\UseCases\ListPatientStatusCountsUseCase;
 use App\Modules\Patient\Application\UseCases\ListPatientsUseCase;
 use App\Modules\Patient\Application\UseCases\UpdatePatientStatusUseCase;
 use App\Modules\Patient\Application\UseCases\UpdatePatientUseCase;
+use App\Modules\Patient\Presentation\Http\Requests\BulkImportPatientsRequest;
 use App\Modules\Patient\Presentation\Http\Requests\CheckPatientDuplicatesRequest;
 use App\Modules\Patient\Presentation\Http\Requests\StorePatientRequest;
 use App\Modules\Patient\Presentation\Http\Requests\UpdatePatientRequest;
@@ -333,6 +337,62 @@ class PatientController extends Controller
                 );
             },
         );
+    }
+
+    public function exportCsv(Request $request, ExportPatientsCsvUseCase $useCase): StreamedResponse
+    {
+        $export = $useCase->execute($request->all());
+        $columns = $export['columns'];
+        $rows = $export['rows'];
+
+        return $this->streamCsvExport(
+            baseName: sprintf('patients_backup_%s', now()->format('Ymd_His')),
+            columns: $columns,
+            writeRows: static function ($output) use ($columns, $rows): void {
+                foreach ($rows as $row) {
+                    $line = [];
+                    foreach ($columns as $column) {
+                        $line[] = $row[$column] ?? '';
+                    }
+                    fputcsv($output, $line);
+                }
+            },
+            schemaHeaderName: 'X-Patients-Csv-Schema',
+            schemaVersion: PatientCsvSchema::SCHEMA_VERSION,
+        );
+    }
+
+    public function importTemplate(): StreamedResponse
+    {
+        $columns = PatientCsvSchema::COLUMNS;
+        $example = PatientCsvSchema::exampleRow();
+
+        return $this->streamCsvExport(
+            baseName: 'patients_import_template',
+            columns: $columns,
+            writeRows: static function ($output) use ($columns, $example): void {
+                $line = [];
+                foreach ($columns as $column) {
+                    $line[] = $example[$column] ?? '';
+                }
+                fputcsv($output, $line);
+            },
+            schemaHeaderName: 'X-Patients-Csv-Schema',
+            schemaVersion: PatientCsvSchema::SCHEMA_VERSION,
+        );
+    }
+
+    public function bulkImport(BulkImportPatientsRequest $request, BulkImportPatientsUseCase $useCase): JsonResponse
+    {
+        $validated = $request->validated();
+
+        $result = $useCase->execute(
+            rows: $validated['rows'],
+            dryRun: (bool) $validated['dryRun'],
+            actorId: $request->user()?->id,
+        );
+
+        return response()->json(['data' => $result]);
     }
 
     private function tenantScopeRequiredError(string $message): JsonResponse

@@ -579,6 +579,15 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::post('patients/duplicate-check', [PatientController::class, 'checkDuplicates'])
         ->middleware(['can:patients.create', 'facility.entitlement:patients.registration'])
         ->name('patients.duplicate-check');
+    Route::get('patients/export/csv', [PatientController::class, 'exportCsv'])
+        ->middleware(['can:patients.export', 'facility.entitlement:patients.search'])
+        ->name('patients.export.csv');
+    Route::get('patients/import-template', [PatientController::class, 'importTemplate'])
+        ->middleware(['can:patients.export', 'facility.entitlement:patients.search'])
+        ->name('patients.import-template');
+    Route::post('patients/bulk-import', [PatientController::class, 'bulkImport'])
+        ->middleware(['can:patients.import', 'facility.entitlement:patients.registration'])
+        ->name('patients.bulk-import');
     Route::get('patients/insurance-options', [PatientInsuranceController::class, 'options'])
         ->middleware(['can:patients.insurance.read', 'facility.entitlement:patients.search'])
         ->name('patients.insurance.options');

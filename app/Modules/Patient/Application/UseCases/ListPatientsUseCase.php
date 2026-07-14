@@ -12,7 +12,7 @@ class ListPatientsUseCase
     public function execute(array $filters): array
     {
         $page = max((int) ($filters['page'] ?? 1), 1);
-        $perPage = min(max((int) ($filters['perPage'] ?? 15), 1), 100);
+        $perPage = min(max((int) ($filters['perPage'] ?? 50), 1), 100);
 
         $status = $filters['status'] ?? null;
         if (! in_array($status, PatientStatus::values(), true)) {

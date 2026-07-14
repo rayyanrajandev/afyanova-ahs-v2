@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import PatientBulkSheet from '@/components/patients/PatientBulkSheet.vue';
 import PatientEditSheet from '@/components/patients/PatientEditSheet.vue';
 import PatientRegistrationSheet from '@/components/patients/PatientRegistrationSheet.vue';
 import PatientStatusDialog from '@/components/patients/PatientStatusDialog.vue';
@@ -69,6 +70,8 @@ const canReadPatients = computed(() => hasAccess('patients.read'));
 const canCreatePatients = computed(() => hasAccess('patients.create'));
 const canUpdatePatients = computed(() => hasAccess('patients.update'));
 const canUpdatePatientStatus = computed(() => hasAccess('patients.update-status'));
+const canExportPatients = computed(() => hasAccess('patients.export'));
+const canImportPatients = computed(() => hasAccess('patients.import'));
 const canShowVisitActions = computed(
     () =>
         (hasAccess('appointments.create') && hasAccess('appointments.update-status')) ||
@@ -163,7 +166,13 @@ function goToPage(page: number): void {
 }
 
 const registerSheetOpen = ref(false);
+const bulkSheetOpen = ref(false);
 const queryClient = useQueryClient();
+
+function onBulkImportCompleted(): void {
+    void queryClient.invalidateQueries({ queryKey: ['patients-index'] });
+    void queryClient.invalidateQueries({ queryKey: ['patients-index-status-counts'] });
+}
 
 function onPatientRegistered(patient: PatientListItem): void {
     void queryClient.invalidateQueries({ queryKey: ['patients-index'] });
@@ -248,6 +257,16 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         >
                             <AppIcon name="refresh-cw" :class="offlineQueue.syncing.value ? 'size-3.5 animate-spin' : 'size-3.5'" />
                             {{ offlineQueue.syncing.value ? 'Syncing…' : `${offlineQueue.pendingCount.value} saved offline` }}
+                        </Button>
+                        <Button
+                            v-if="canExportPatients || canImportPatients"
+                            size="sm"
+                            variant="outline"
+                            class="h-8 gap-1.5"
+                            @click="bulkSheetOpen = true"
+                        >
+                            <AppIcon name="archive" class="size-3.5" />
+                            Backup / Restore
                         </Button>
                         <Button v-if="canCreatePatients" size="sm" class="h-8 gap-1.5" @click="registerSheetOpen = true">
                             <AppIcon name="plus" class="size-3.5" />
@@ -428,6 +447,12 @@ const { scrollContainerHeight } = useStickyScrollContainer();
             </div>
         </div>
 
+        <PatientBulkSheet
+            v-model:open="bulkSheetOpen"
+            :can-export="canExportPatients"
+            :can-import="canImportPatients"
+            @completed="onBulkImportCompleted"
+        />
         <PatientRegistrationSheet v-model:open="registerSheetOpen" :suggested-regions="suggestedRegions" @registered="onPatientRegistered" />
         <PatientEditSheet v-model:open="editSheetOpen" :patient="editingPatient" :suggested-regions="suggestedRegions" @updated="onPatientUpdated" />
         <PatientStatusDialog v-model:open="statusDialogOpen" :patient="statusChangingPatient" @changed="onPatientStatusChanged" />
