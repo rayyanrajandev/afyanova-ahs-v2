@@ -401,14 +401,11 @@ onBeforeUnmount(() => {
             type="button"
             :variant="variant"
             size="sm"
-            class="h-9 w-9 justify-center gap-2 px-0 text-muted-foreground shadow-xs md:w-[240px] md:justify-start md:px-3 lg:w-[280px]"
+            class="h-9 w-9 justify-center gap-2 px-0 text-muted-foreground shadow-xs md:w-[280px] md:justify-start md:px-3 lg:w-[340px]"
             @click="toggleSearch"
         >
             <AppIcon name="search" class="size-4 shrink-0" />
-            <span class="hidden min-w-0 flex-1 truncate text-left md:inline">Search patients...</span>
-            <span class="hidden shrink-0 rounded border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground lg:inline">
-                MRN
-            </span>
+            <span class="hidden min-w-0 flex-1 truncate text-left md:inline">Search by name, number, phone, or national ID</span>
             <span class="sr-only md:hidden">Find Patient</span>
         </Button>
 
