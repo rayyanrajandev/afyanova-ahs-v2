@@ -219,57 +219,6 @@ function selectScope(key: string) {
         </div>
 
         <div class="flex min-w-0 items-center gap-2">
-            <DropdownMenu v-if="hasMultipleRoles">
-                <DropdownMenuTrigger as-child>
-                    <Button
-                        id="app-role-switch-trigger"
-                        variant="outline"
-                        size="sm"
-                        class="h-9 gap-2 px-2.5 font-normal text-muted-foreground"
-                    >
-                        <AppIcon name="user" class="size-3.5 shrink-0" />
-                        <span class="hidden max-w-[130px] truncate text-left sm:inline">{{ activeRole?.label ?? 'All access' }}</span>
-                        <span class="sm:hidden">Role</span>
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" class="w-[240px]">
-                    <DropdownMenuLabel class="space-y-0.5">
-                        <span class="text-sm font-medium">Active role</span>
-                        <span class="block text-xs font-normal text-muted-foreground">Show sidebar for selected role</span>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                        class="cursor-pointer text-sm"
-                        :class="{ 'bg-accent': !activeRole }"
-                        @select="setActiveRole(null)"
-                    >
-                        <div class="flex min-w-0 items-center gap-2">
-                            <AppIcon name="layout-grid" class="size-3.5 shrink-0 text-muted-foreground" />
-                            <div class="min-w-0">
-                                <p class="text-sm font-medium">All access</p>
-                                <p class="text-xs text-muted-foreground">Show all available modules</p>
-                            </div>
-                        </div>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                        v-for="role in availableRoles"
-                        :key="role.code"
-                        class="cursor-pointer text-sm"
-                        :class="{ 'bg-accent': activeRole?.code === role.code }"
-                        @select="setActiveRole(role.code)"
-                    >
-                        <div class="flex min-w-0 items-center gap-2">
-                            <AppIcon name="shield-check" class="size-3.5 shrink-0 text-muted-foreground" />
-                            <div class="min-w-0">
-                                <p class="text-sm font-medium">{{ role.label }}</p>
-                                <p class="text-xs text-muted-foreground">{{ role.code }}</p>
-                            </div>
-                        </div>
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
-
             <DropdownMenu v-if="hasUniversalAdminAccess">
                 <DropdownMenuTrigger as-child>
                     <Button
@@ -349,6 +298,57 @@ function selectScope(key: string) {
             <div class="md:hidden">
                 <GlobalPatientSearch />
             </div>
+
+            <DropdownMenu v-if="hasMultipleRoles">
+                <DropdownMenuTrigger as-child>
+                    <Button
+                        id="app-role-switch-trigger"
+                        variant="outline"
+                        size="sm"
+                        class="h-9 gap-2 px-2.5 font-normal text-muted-foreground"
+                    >
+                        <AppIcon name="user" class="size-3.5 shrink-0" />
+                        <span class="hidden max-w-[130px] truncate text-left sm:inline">{{ activeRole?.label ?? 'All access' }}</span>
+                        <span class="sm:hidden">Role</span>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" class="w-[240px]">
+                    <DropdownMenuLabel class="space-y-0.5">
+                        <span class="text-sm font-medium">Active role</span>
+                        <span class="block text-xs font-normal text-muted-foreground">Show sidebar for selected role</span>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                        class="cursor-pointer text-sm"
+                        :class="{ 'bg-accent': !activeRole }"
+                        @select="setActiveRole(null)"
+                    >
+                        <div class="flex min-w-0 items-center gap-2">
+                            <AppIcon name="layout-grid" class="size-3.5 shrink-0 text-muted-foreground" />
+                            <div class="min-w-0">
+                                <p class="text-sm font-medium">All access</p>
+                                <p class="text-xs text-muted-foreground">Show all available modules</p>
+                            </div>
+                        </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                        v-for="role in availableRoles"
+                        :key="role.code"
+                        class="cursor-pointer text-sm"
+                        :class="{ 'bg-accent': activeRole?.code === role.code }"
+                        @select="setActiveRole(role.code)"
+                    >
+                        <div class="flex min-w-0 items-center gap-2">
+                            <AppIcon name="shield-check" class="size-3.5 shrink-0 text-muted-foreground" />
+                            <div class="min-w-0">
+                                <p class="text-sm font-medium">{{ role.label }}</p>
+                                <p class="text-xs text-muted-foreground">{{ role.code }}</p>
+                            </div>
+                        </div>
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
 
             <DropdownMenu v-if="user">
                 <DropdownMenuTrigger as-child>
