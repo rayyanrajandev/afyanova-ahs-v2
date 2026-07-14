@@ -6,6 +6,7 @@ import AppIcon from '@/components/AppIcon.vue';
 import AppSettingsDialog from '@/components/AppSettingsDialog.vue';
 import Breadcrumbs from '@/components/Breadcrumbs.vue';
 import GlobalPatientSearch from '@/components/GlobalPatientSearch.vue';
+import NotificationBell from '@/components/NotificationBell.vue';
 import OPDQuickCommandPalette from '@/components/OPDQuickCommandPalette.vue';
 import UserInfo from '@/components/UserInfo.vue';
 import UserMenuContent from '@/components/UserMenuContent.vue';
@@ -303,6 +304,8 @@ function selectScope(key: string) {
             </div>
 
             <Separator orientation="vertical" class="mx-1 !h-6" />
+
+            <NotificationBell />
 
             <DropdownMenu v-if="hasMultipleRoles">
                 <DropdownMenuTrigger as-child>

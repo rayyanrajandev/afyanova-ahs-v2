@@ -3,7 +3,6 @@ import type { AppIconName } from '@/lib/icons';
 export type NavSectionKey =
     | 'front_office'
     | 'clinical_care'
-    | 'health_information'
     | 'diagnostics'
     | 'billing'
     | 'stores'
@@ -26,7 +25,6 @@ export type AppNavCatalogItem = {
 export const navSectionLabels: Record<NavSectionKey, string> = {
     front_office: 'Registration & visits',
     clinical_care: 'Clinical care',
-    health_information: 'Health Information',
     diagnostics: 'Diagnostics & pharmacy',
     billing: 'Billing & insurance',
     stores: 'Stores & supply',
@@ -38,7 +36,6 @@ export const navSectionLabels: Record<NavSectionKey, string> = {
 export const navSectionOrder: NavSectionKey[] = [
     'front_office',
     'clinical_care',
-    'health_information',
     'diagnostics',
     'billing',
     'stores',
@@ -51,7 +48,6 @@ export const navSectionOrder: NavSectionKey[] = [
 export const navSectionIcons: Record<NavSectionKey, AppIconName> = {
     front_office: 'calendar-clock',
     clinical_care: 'heart-pulse',
-    health_information: 'folder',
     diagnostics: 'stethoscope',
     billing: 'circle-check-big',
     stores: 'package',
@@ -73,11 +69,50 @@ export const navSubGroupLabels: Partial<
         transactions: 'Transactions',
         admin: 'Administration',
     },
+    facility_setup: {
+        foundation: 'Foundation',
+        catalog: 'Clinical Catalog',
+        subscriptions: 'Subscriptions',
+    },
+    people: {
+        staff: 'Staff',
+        credentials: 'Credentials',
+    },
+    clinical_care: {
+        records: 'Records',
+    },
+};
+
+export const navSubGroupIcons: Partial<
+    Record<NavSectionKey, Record<string, AppIconName>>
+> = {
+    billing: {
+        invoicing: 'receipt',
+        point_of_sale: 'shopping-cart',
+        rates: 'shield-check',
+        reports: 'file-text',
+    },
+    stores: {
+        transactions: 'arrow-up-down',
+        admin: 'list',
+    },
+    facility_setup: {
+        foundation: 'building-2',
+        catalog: 'book-open',
+        subscriptions: 'receipt',
+    },
+    people: {
+        staff: 'users',
+        credentials: 'shield-check',
+    },
+    clinical_care: {
+        records: 'folder',
+    },
 };
 
 export const appNavCatalog: AppNavCatalogItem[] = [
     {
-        title: 'Patient registry',
+        title: 'Patients',
         href: '/patients',
         iconName: 'users',
         section: 'front_office',
@@ -196,7 +231,8 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         title: 'Encounter records',
         href: '/encounters',
         iconName: 'stethoscope',
-        section: 'health_information',
+        section: 'clinical_care',
+        subGroup: 'records',
         permissionPrefixes: ['medical.records.', 'medical-records.'],
         helpNote: "Look up any patient's visit and open its workspace — records & oversight",
     },
@@ -204,7 +240,8 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         title: 'Medical Records',
         href: '/medical-records',
         iconName: 'file-text',
-        section: 'health_information',
+        section: 'clinical_care',
+        subGroup: 'records',
         permissionPrefixes: ['medical.records.', 'medical-records.'],
         helpNote: 'Medical Records (HIM): govern clinical-note completeness — finalize, amend, archive, audit',
     },
@@ -460,6 +497,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         href: '/staff',
         iconName: 'users',
         section: 'people',
+        subGroup: 'staff',
         permissionPrefixes: ['staff.'],
         helpNote: 'Staff profiles and employment status',
     },
@@ -468,6 +506,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         href: '/staff-attendance',
         iconName: 'clock',
         section: 'people',
+        subGroup: 'staff',
         permissionPrefixes: ['staff.attendance.'],
         helpNote: 'Biometric attendance logs from ZKTeco devices',
     },
@@ -476,6 +515,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         href: '/staff-credentialing',
         iconName: 'shield-check',
         section: 'people',
+        subGroup: 'credentials',
         permissionPrefixes: ['staff.credentialing.'],
         helpNote: 'Licences, documents, and credentialing queue',
     },
@@ -484,6 +524,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         href: '/staff-privileges',
         iconName: 'shield-check',
         section: 'people',
+        subGroup: 'credentials',
         permissionPrefixes: ['staff.privileges.', 'staff.privileges'],
         helpNote: 'Privilege grants, coverage board, and approvals',
     },
@@ -492,6 +533,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         href: '/platform/admin/privilege-catalogs',
         iconName: 'shield-check',
         section: 'people',
+        subGroup: 'credentials',
         permissionPrefixes: ['staff.privileges.'],
         helpNote: 'Master privilege definitions for the facility',
     },
@@ -500,6 +542,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         href: '/platform/admin/facility-config',
         iconName: 'building-2',
         section: 'facility_setup',
+        subGroup: 'foundation',
         permissionPrefixes: [
             'platform.facilities.',
             'platform.multi-facility.',
@@ -520,6 +563,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         href: '/platform/admin/service-plans',
         iconName: 'receipt',
         section: 'facility_setup',
+        subGroup: 'subscriptions',
         permissionPrefixes: ['platform.subscription-plans.'],
         helpNote: 'Module packages, fees, and entitlements',
     },
@@ -528,6 +572,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         href: '/platform/admin/facility-rollouts',
         iconName: 'clipboard-list',
         section: 'facility_setup',
+        subGroup: 'subscriptions',
         permissionPrefixes: ['platform.multi-facility.'],
         helpNote: 'Multi-facility rollout queue and command centre',
     },
@@ -536,6 +581,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         href: '/platform/admin/departments',
         iconName: 'building-2',
         section: 'facility_setup',
+        subGroup: 'foundation',
         permissionPrefixes: ['departments.'],
         helpNote: 'Department master data administration',
     },
@@ -544,6 +590,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         href: '/platform/admin/service-points',
         iconName: 'map-pin',
         section: 'facility_setup',
+        subGroup: 'foundation',
         permissionPrefixes: ['platform.resources.'],
         helpNote: 'Clinics, counters, and service point resources',
     },
@@ -552,6 +599,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         href: '/platform/admin/ward-beds',
         iconName: 'bed-double',
         section: 'facility_setup',
+        subGroup: 'foundation',
         permissionPrefixes: ['platform.resources.'],
         helpNote: 'Ward and bed capacity registry',
     },
@@ -560,6 +608,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         href: '/platform/admin/specialties',
         iconName: 'activity',
         section: 'facility_setup',
+        subGroup: 'catalog',
         permissionPrefixes: ['specialties.', 'staff.specialties.'],
         helpNote: 'Specialty registry and staff assignments',
     },
@@ -568,6 +617,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         href: '/platform/admin/clinical-catalogs',
         iconName: 'book-open',
         section: 'facility_setup',
+        subGroup: 'catalog',
         permissionPrefixes: [
             'platform.clinical-catalog.',
             'laboratory.orders.',
@@ -582,6 +632,7 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         href: '/platform/admin/branding',
         iconName: 'pencil',
         section: 'facility_setup',
+        subGroup: 'catalog',
         permissionPrefixes: ['platform.settings.'],
         helpNote: 'Facility logo, colours, and print branding',
     },
@@ -631,11 +682,9 @@ export const helpTipsBySection: Record<NavSectionKey, string[]> = {
         'The emergency dashboard preset shows a critical alert when any P1 patient is waiting.',
         'Record triage in OPD appointments before the provider opens the consultation workspace.',
         'Lab, imaging, pharmacy, and theatre work linked to a visit appear in the visit side panel.',
-    ],
-    health_information: [
-        'Health Information tools are for records lookup and note governance, not day-to-day clinical work — clinicians finalize their own notes inside the Encounter Workspace.',
         'Encounter records looks up any patient visit across the facility and opens its workspace for review.',
-        'The clinical note registry is where the records team finalizes, amends, archives, and audits notes for completeness and release.',
+        'Medical Records is where the records team finalizes, amends, archives, and audits notes for completeness and release.',
+        'Clinicians finalize their own notes inside the Encounter Workspace — the Records team handles governance.',
     ],
     diagnostics: [
         'Laboratory and imaging queues support status transitions from ordered through completed.',

@@ -48,6 +48,7 @@ import {
     ArrowRight,
     ArrowUpDown,
     ArrowUpRight,
+    Bell,
     Banknote,
     BedDouble,
     Building2,
@@ -120,6 +121,7 @@ export type AppIconName =
     | 'activity'
     | 'alert-circle'
     | 'archive'
+    | 'bell'
     | 'alert-triangle'
     | 'arrow-right'
     | 'arrow-up-down'
@@ -196,6 +198,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     activity: Activity,
     'alert-circle': AlertCircle,
     archive: Archive,
+    bell: Bell,
     'alert-triangle': AlertTriangle,
     'arrow-right': ArrowRight,
     'arrow-up-down': ArrowUpDown,

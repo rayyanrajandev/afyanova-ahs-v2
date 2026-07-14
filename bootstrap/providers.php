@@ -6,4 +6,5 @@ return [
     App\Modules\Billing\BillingServiceProvider::class,
     App\Modules\Reception\ReceptionServiceProvider::class,
     App\Modules\PatientFlow\PatientFlowServiceProvider::class,
+    App\Modules\Notifications\NotificationsServiceProvider::class,
 ];

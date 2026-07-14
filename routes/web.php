@@ -662,6 +662,10 @@ Route::get('help/shortcuts', function () {
     return Inertia::render('help/Shortcuts');
 })->middleware(['auth', 'verified'])->name('help.shortcuts');
 
+Route::get('notifications', function () {
+    return Inertia::render('notifications/Index');
+})->middleware(['auth', 'verified'])->name('notifications.index');
+
 Route::get('docs/opd-ui-sprint1-workflow-status', function () {
     $path = base_path('documents/00-governance/OPD_UI_SPRINT1_WORKFLOW_STATUS.md');
     abort_unless(is_file($path), 404);

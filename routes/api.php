@@ -2155,6 +2155,23 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('departments/{id}/audit-logs', [DepartmentController::class, 'auditLogs'])
         ->middleware('can:departments.view-audit-logs')
         ->name('departments.audit-logs');
+
+    // Notification Center
+    Route::get('notifications', [\App\Modules\Notifications\Presentation\Http\Controllers\NotificationController::class, 'index'])
+        ->middleware('auth')
+        ->name('notifications.index');
+    Route::get('notifications/unread-count', [\App\Modules\Notifications\Presentation\Http\Controllers\NotificationController::class, 'unreadCount'])
+        ->middleware('auth')
+        ->name('notifications.unread-count');
+    Route::patch('notifications/{id}/read', [\App\Modules\Notifications\Presentation\Http\Controllers\NotificationController::class, 'markAsRead'])
+        ->middleware('auth')
+        ->name('notifications.mark-as-read');
+    Route::patch('notifications/read-all', [\App\Modules\Notifications\Presentation\Http\Controllers\NotificationController::class, 'markAllAsRead'])
+        ->middleware('auth')
+        ->name('notifications.mark-all-as-read');
+    Route::delete('notifications/{id}', [\App\Modules\Notifications\Presentation\Http\Controllers\NotificationController::class, 'dismiss'])
+        ->middleware('auth')
+        ->name('notifications.dismiss');
 });
 
 Route::middleware('agent.token')->prefix('v1')->group(function (): void {

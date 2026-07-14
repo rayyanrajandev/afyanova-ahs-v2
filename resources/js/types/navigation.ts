@@ -17,6 +17,7 @@ export type NavItem = {
     section?: NavSectionKey;
     subGroup?: string;
     subGroupLabel?: string;
+    subGroupIcon?: AppIconName;
     isActive?: boolean;
     badge?: string | number;
 };

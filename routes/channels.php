@@ -15,3 +15,8 @@ Broadcast::channel(
     'patient-flow.{facilityId}',
     fn ($user, string $facilityId): bool => app(PatientFlowBoardChannelAuthorizer::class)->authorize($user, $facilityId),
 );
+
+Broadcast::channel(
+    'notifications.{userId}',
+    fn ($user, int $userId): bool => $user->id === $userId,
+);

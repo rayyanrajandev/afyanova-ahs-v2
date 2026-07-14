@@ -1,14 +1,6 @@
 import { useQuery, type UseQueryReturnType } from '@tanstack/vue-query';
-import { computed } from 'vue';
 import { apiGet } from '@/lib/apiClient';
-import type { PharmacyOrderFilters } from './usePharmacyOrderFilters';
 
-/**
- * Matches ListPharmacyOrderStatusCountsUseCase's return shape exactly
- * (app/Modules/Pharmacy/Application/UseCases/ListPharmacyOrderStatusCountsUseCase.php
- * -> EloquentPharmacyOrderRepository::statusCounts()). Counts are all-time
- * (not scoped by worklistScope) — only q/patientId/from/to filter them.
- */
 export type PharmacyOrderStatusCounts = {
     pending: number;
     in_preparation: number;
@@ -24,26 +16,11 @@ export type PharmacyOrderStatusCounts = {
 
 type PharmacyOrderStatusCountsResponse = { data: PharmacyOrderStatusCounts };
 
-export function usePharmacyOrderStatusCounts(
-    filters: PharmacyOrderFilters,
-): UseQueryReturnType<PharmacyOrderStatusCounts, Error> {
+export function usePharmacyOrderStatusCounts(): UseQueryReturnType<PharmacyOrderStatusCounts, Error> {
     return useQuery({
-        queryKey: [
-            'pharmacy-orders-status-counts',
-            computed(() => ({
-                q: filters.q,
-                patientId: filters.patientId,
-                from: filters.from,
-                to: filters.to,
-            })),
-        ],
+        queryKey: ['sidebar-pharmacy-order-status-counts'],
         queryFn: async () => {
-            const response = await apiGet<PharmacyOrderStatusCountsResponse>('/pharmacy-orders/status-counts', {
-                q: filters.q.trim() || null,
-                patientId: filters.patientId || null,
-                from: filters.from || null,
-                to: filters.to || null,
-            });
+            const response = await apiGet<PharmacyOrderStatusCountsResponse>('/pharmacy-orders/status-counts');
             return response.data;
         },
         refetchInterval: 30_000,

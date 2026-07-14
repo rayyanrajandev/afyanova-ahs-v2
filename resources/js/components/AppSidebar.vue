@@ -19,16 +19,18 @@ import {
 } from '@/components/ui/sidebar';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import { useSidebarFavorites } from '@/composables/useSidebarFavorites';
-import { useSidebarHistory } from '@/composables/useSidebarHistory';
+
 import {
     appNavCatalog,
     navSectionLabels,
     navSectionOrder,
     navSectionIcons,
     navSubGroupLabels,
+    navSubGroupIcons,
     type NavSectionKey,
 } from '@/config/appNavCatalog';
 import { useActiveRole } from '@/composables/useActiveRole';
+import { useSidebarBadges } from '@/composables/useSidebarBadges';
 import { filterSidebarNavCatalogItems } from '@/lib/routeAccess';
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
@@ -43,8 +45,27 @@ type NavSection = {
 const { permissionNames, hasUniversalAdminAccess, facilityEntitlementNames } =
     usePlatformAccess();
 const { toggleFavorite, getFavorites } = useSidebarFavorites();
-const { recentItems, recordVisit } = useSidebarHistory();
 const { activeSections } = useActiveRole();
+
+const { badges } = useSidebarBadges();
+
+const BADGE_HREF_MAP: Record<string, string> = {
+    '/reception/queue': 'reception-queue',
+    '/triage/queue': 'triage-queue',
+    '/clinician/queue': 'clinician-queue',
+    '/emergency/queue': 'emergency-queue',
+    '/laboratory-orders': 'laboratory',
+    '/radiology-orders': 'radiology',
+    '/pharmacy-orders': 'pharmacy',
+    '/billing-invoices': 'billing-invoices',
+};
+
+function badgeForHref(href: string): number | undefined {
+    const key = BADGE_HREF_MAP[href];
+    if (!key) return undefined;
+    const count = badges.value[key];
+    return count && count > 0 ? count : undefined;
+}
 
 const searchQuery = ref('');
 
@@ -99,6 +120,10 @@ const allNavItems = computed<NavItem[]>(() => {
                 subGroupLabel: subGroup
                     ? (navSubGroupLabels[section]?.[subGroup] ?? subGroup)
                     : undefined,
+                subGroupIcon: subGroup
+                    ? (navSubGroupIcons[section]?.[subGroup] ?? 'folder')
+                    : undefined,
+                badge: badgeForHref(href as string),
             }));
         items.push(...sectionItems);
     }
@@ -109,20 +134,6 @@ const favoriteItems = computed<NavItem[]>(() =>
     getFavorites(allNavItems.value),
 );
 const hasFavorites = computed(() => favoriteItems.value.length > 0);
-const recentNavItems = computed<NavItem[]>(() => {
-    const visibleItemsByHref = new Map<string, NavItem>();
-
-    for (const item of allNavItems.value) {
-        if (typeof item.href === 'string') {
-            visibleItemsByHref.set(item.href, item);
-        }
-    }
-
-    return recentItems.value
-        .map((item) => visibleItemsByHref.get(item.href))
-        .filter((item): item is NavItem => Boolean(item));
-});
-const hasRecentItems = computed(() => recentNavItems.value.length > 0);
 
 const navSections = computed<NavSection[]>(() =>
     navSectionOrder
@@ -141,6 +152,10 @@ const navSections = computed<NavSection[]>(() =>
                     subGroupLabel: subGroup
                         ? (navSubGroupLabels[section]?.[subGroup] ?? subGroup)
                         : undefined,
+                    subGroupIcon: subGroup
+                        ? (navSubGroupIcons[section]?.[subGroup] ?? 'folder')
+                        : undefined,
+                    badge: badgeForHref(href as string),
                 })),
         }))
         .filter((section) => section.items.length > 0),
@@ -152,13 +167,6 @@ function onToggleFavorite(item: NavItem) {
 
 function onItemSelect(item: NavItem) {
     if (!item.id || typeof item.href !== 'string') return;
-
-    recordVisit({
-        id: item.id,
-        title: item.title,
-        href: item.href,
-        iconName: item.iconName,
-    });
 
     emitSidebarNavigationEvent(item);
 }
@@ -245,16 +253,6 @@ function sectionHasMatches(key: NavSectionKey): boolean {
                     v-if="hasFavorites && !searchQuery"
                     :items="favoriteItems"
                     label="Favorites"
-                    :show-favorites="false"
-                    is-favorites-section
-                    @item-select="onItemSelect"
-                />
-
-                <!-- Recent navigation history -->
-                <NavMain
-                    v-if="hasRecentItems && !searchQuery"
-                    :items="recentNavItems"
-                    label="Recent"
                     :show-favorites="false"
                     is-favorites-section
                     @item-select="onItemSelect"

@@ -201,12 +201,12 @@ const navBlocks = computed<NavBlock[]>(() => {
                     :default-open="block.isActive || Boolean(searchQuery)"
                 >
                     <SidebarMenuItem>
-                        <CollapsibleTrigger as-child>
-                            <SidebarMenuButton :is-active="block.isActive">
-                                <AppIcon
-                                    name="folder"
-                                    class="size-4 shrink-0"
-                                />
+                            <CollapsibleTrigger as-child>
+                                <SidebarMenuButton :is-active="block.isActive">
+                                    <AppIcon
+                                        :name="block.items[0]?.subGroupIcon ?? 'folder'"
+                                        class="size-4 shrink-0"
+                                    />
                                 <span class="truncate">{{ block.label }}</span>
                                 <AppIcon
                                     name="chevron-right"

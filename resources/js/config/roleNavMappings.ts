@@ -10,15 +10,11 @@ function codeIncludes(...patterns: string[]): (code: string) => boolean {
     return (code: string) => patterns.some((p) => code.includes(p.toUpperCase()));
 }
 
-function codeStartsWith(...prefixes: string[]): (code: string) => boolean {
-    return (code: string) => prefixes.some((p) => code.startsWith(p.toUpperCase()));
-}
-
 export const roleNavMappings: RoleNavMapping[] = [
     {
         label: 'Nurse',
         match: codeIncludes('NURSE'),
-        sections: ['clinical_care', 'health_information', 'diagnostics', 'front_office'],
+        sections: ['clinical_care', 'diagnostics', 'front_office'],
     },
     {
         label: 'Registration Clerk',
@@ -28,7 +24,7 @@ export const roleNavMappings: RoleNavMapping[] = [
     {
         label: 'Doctor / Clinician',
         match: codeIncludes('DOCTOR', 'CLINICIAN', 'PHYSICIAN', 'MEDICAL.OFFICER'),
-        sections: ['clinical_care', 'health_information', 'diagnostics', 'front_office'],
+        sections: ['clinical_care', 'diagnostics', 'front_office'],
     },
     {
         label: 'Lab Technician',
@@ -53,7 +49,7 @@ export const roleNavMappings: RoleNavMapping[] = [
     {
         label: 'Administrator',
         match: codeIncludes('ADMIN', 'SUPER.ADMIN', 'SUPER_ADMIN'),
-        sections: ['front_office', 'clinical_care', 'health_information', 'diagnostics', 'billing', 'stores', 'people', 'facility_setup', 'system_access'],
+        sections: ['front_office', 'clinical_care', 'diagnostics', 'billing', 'stores', 'people', 'facility_setup', 'system_access'],
     },
     {
         label: 'People / HR',
