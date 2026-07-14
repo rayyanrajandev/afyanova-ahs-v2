@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { router, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { ChevronsUpDown } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import AppSettingsDialog from '@/components/AppSettingsDialog.vue';
 import Breadcrumbs from '@/components/Breadcrumbs.vue';
 import GlobalPatientSearch from '@/components/GlobalPatientSearch.vue';
 import OPDQuickCommandPalette from '@/components/OPDQuickCommandPalette.vue';
+import UserInfo from '@/components/UserInfo.vue';
+import UserMenuContent from '@/components/UserMenuContent.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -39,6 +43,8 @@ withDefaults(
     },
 );
 
+const isSettingsDialogOpen = ref(false);
+
 const {
     scope,
     subscriptionAccess,
@@ -53,6 +59,7 @@ const {
 } = useActiveRole();
 
 const page = usePage();
+const user = page.props.auth?.user ?? null;
 
 const currentPath = computed(() => normalizePlatformPath(page.url));
 
@@ -202,20 +209,16 @@ function selectScope(key: string) {
 
 <template>
     <header
-        class="grid h-16 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-b border-sidebar-border/70 px-6 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 md:px-4"
+        class="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-sidebar-border/70 px-6 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 md:px-4"
     >
-        <div class="flex min-w-0 items-center gap-2 justify-self-start overflow-hidden">
+        <div class="flex min-w-0 items-center gap-2 overflow-hidden">
             <SidebarTrigger class="-ml-1 shrink-0" />
             <template v-if="breadcrumbs && breadcrumbs.length > 0">
                 <Breadcrumbs :breadcrumbs="breadcrumbs" />
             </template>
         </div>
 
-        <div class="hidden min-w-0 justify-self-center md:flex">
-            <GlobalPatientSearch />
-        </div>
-
-        <div class="flex min-w-0 items-center justify-self-end gap-2">
+        <div class="flex min-w-0 items-center gap-2">
             <DropdownMenu v-if="hasMultipleRoles">
                 <DropdownMenuTrigger as-child>
                     <Button
@@ -336,10 +339,40 @@ function selectScope(key: string) {
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
+
+            <OPDQuickCommandPalette />
+
+            <div class="hidden md:flex">
+                <GlobalPatientSearch />
+            </div>
+
             <div class="md:hidden">
                 <GlobalPatientSearch />
             </div>
-            <OPDQuickCommandPalette />
+
+            <DropdownMenu v-if="user">
+                <DropdownMenuTrigger as-child>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        class="h-9 gap-2 px-2 font-normal text-muted-foreground"
+                    >
+                        <UserInfo :user="user" />
+                        <ChevronsUpDown class="size-4 shrink-0 text-muted-foreground/50" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                    class="w-(--reka-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+                    align="end"
+                    :side-offset="4"
+                >
+                    <UserMenuContent
+                        :user="user"
+                        @open-settings="isSettingsDialogOpen = true"
+                    />
+                </DropdownMenuContent>
+            </DropdownMenu>
         </div>
     </header>
+    <AppSettingsDialog v-model:open="isSettingsDialogOpen" />
 </template>
