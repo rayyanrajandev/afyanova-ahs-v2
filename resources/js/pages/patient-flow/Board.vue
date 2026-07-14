@@ -301,15 +301,14 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         <p class="text-sm font-medium text-rose-700 dark:text-rose-300">
                             ⚠ {{ overdueEntries.length }} patient{{ overdueEntries.length === 1 ? '' : 's' }} waiting more than 90 minutes
                         </p>
-                        <ul class="mt-2 space-y-1">
-                            <li
-                                v-for="entry in overdueEntries"
+                        <p class="mt-2 flex flex-wrap gap-x-1 gap-y-1 text-xs text-muted-foreground">
+                            <span
+                                v-for="(entry, index) in overdueEntries"
                                 :key="entry.appointmentId ?? entry.serviceRequestId ?? undefined"
-                                class="text-xs text-muted-foreground"
                             >
-                                {{ entry.patientName ?? 'Unknown patient' }} — {{ entry.department ?? 'No department set' }}
-                            </li>
-                        </ul>
+                                {{ entry.patientName ?? 'Unknown patient' }} — {{ entry.department ?? 'No department set' }}<span v-if="index < overdueEntries.length - 1">,</span>
+                            </span>
+                        </p>
                     </div>
 
                     <div
