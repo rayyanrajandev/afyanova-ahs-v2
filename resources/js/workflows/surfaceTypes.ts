@@ -35,6 +35,7 @@ export type DashboardSurfaceRuntime = {
         status?: 'waiting_provider' | 'in_consultation' | 'completed',
         focusAppointmentId?: string,
     ) => string;
+    triageQueueHref: (focusAppointmentId?: string, triageCategory?: string) => string;
     departmentQueueHref: (
         department: string,
         status?: 'waiting_provider' | 'in_consultation',

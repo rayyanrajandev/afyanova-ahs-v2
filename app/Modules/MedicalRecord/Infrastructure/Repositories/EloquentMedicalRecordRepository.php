@@ -103,6 +103,34 @@ class EloquentMedicalRecordRepository implements MedicalRecordRepositoryInterfac
             ->exists();
     }
 
+    public function hasSignedConsultationNoteForAppointments(array $appointmentIds): array
+    {
+        $result = array_fill_keys($appointmentIds, false);
+
+        if ($appointmentIds === []) {
+            return $result;
+        }
+
+        $query = MedicalRecordModel::query();
+        $this->applyPlatformScopeIfEnabled($query);
+
+        $signedAppointmentIds = $query
+            ->whereIn('appointment_id', $appointmentIds)
+            ->where('record_type', MedicalRecordNoteType::CONSULTATION_NOTE->value)
+            ->whereIn('status', [
+                MedicalRecordStatus::FINALIZED->value,
+                MedicalRecordStatus::AMENDED->value,
+            ])
+            ->pluck('appointment_id')
+            ->unique();
+
+        foreach ($signedAppointmentIds as $appointmentId) {
+            $result[$appointmentId] = true;
+        }
+
+        return $result;
+    }
+
     public function update(string $id, array $attributes): ?array
     {
         $query = MedicalRecordModel::query();

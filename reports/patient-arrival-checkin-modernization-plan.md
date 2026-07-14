@@ -175,6 +175,8 @@ Effort figures are rough order-of-magnitude placeholders, consistent with every 
 
 Still deferred, now explicitly out of this plan's remaining scope unless revisited: the `ArrivalHandoffSheet.vue` extraction and the `ReceptionQueueList.vue` rewiring. Both are real refactors of large, untested legacy pages and are more appropriately scoped as their own dedicated effort than as "the rest of Phase 6."
 
+**Update**: one narrower piece of the deferred gap this section named — `appointments/Index.vue`'s own "Check in" button still calling `PATCH appointments/{id}/status` instead of this plan's `PATCH appointments/{id}/check-in` — was found independently by `reports/appointments-scheduling-model-audit.md` §5.1 and fixed as a single-endpoint swap (not the full row-template rewiring §6's "Slice 3" note describes, which remains deferred). `submitStatusUpdate()` now routes the front-desk check-in case (`!isProviderStatusDialog && nextStatus === 'waiting_triage'`) through `CheckInUseCase`, so it gets an `ArrivalEvent` row and fires `AppointmentCheckedIn` like every other check-in path in the app. See `reports/appointments-scheduling-model-audit.md`'s own Update note for verification detail.
+
 ---
 
 ## 5. Risks & open questions

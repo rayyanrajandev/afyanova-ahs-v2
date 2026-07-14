@@ -9,6 +9,7 @@ import {
     SheetTitle,
 } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useMedicalRecordAuditLog } from '@/composables/clinical/useMedicalRecordAuditLog';
 import AuditLogPanel from './AuditLogPanel.vue';
 import SignerAttestationPanel from './SignerAttestationPanel.vue';
 import VersionHistoryPanel from './VersionHistoryPanel.vue';
@@ -25,11 +26,13 @@ import VersionHistoryPanel from './VersionHistoryPanel.vue';
 const open = defineModel<boolean>('open', { required: true });
 const tab = defineModel<string>('tab', { default: 'versions' });
 
-defineProps<{
+const props = defineProps<{
     recordId: string | null;
     canCreateAttestation: boolean;
     canViewAuditLogs: boolean;
 }>();
+
+const auditLog = useMedicalRecordAuditLog(() => props.recordId);
 </script>
 
 <template>
@@ -88,7 +91,7 @@ defineProps<{
                                 />
                             </TabsContent>
                             <TabsContent v-if="canViewAuditLogs" value="audit">
-                                <AuditLogPanel :record-id="recordId" />
+                                <AuditLogPanel :audit="auditLog" />
                             </TabsContent>
                         </div>
                     </ScrollArea>

@@ -104,10 +104,10 @@ export function laboratoryOrderCardViewModel(order: PatientChartLaboratoryOrder,
         nextActionVariant: currentCareNextActionVariant(nextAction),
         nextActionIcon: 'flask-conical',
         reorderHref: canCreateLaboratoryEncounterFollowOnOrder(order, canCreate)
-            ? patientChartModuleHref('/laboratory-orders', ctx.patientId, ctx.appointmentId, { includeTabNew: true, reorderOfId: order.id })
+            ? patientChartModuleHref('/laboratory-orders/legacy', ctx.patientId, ctx.appointmentId, { includeTabNew: true, reorderOfId: order.id })
             : null,
         addOnHref: canCreateLaboratoryEncounterFollowOnOrder(order, canCreate)
-            ? patientChartModuleHref('/laboratory-orders', ctx.patientId, ctx.appointmentId, { includeTabNew: true, addOnToOrderId: order.id })
+            ? patientChartModuleHref('/laboratory-orders/legacy', ctx.patientId, ctx.appointmentId, { includeTabNew: true, addOnToOrderId: order.id })
             : null,
         moreActions: hasLaboratoryEncounterMoreActions(order, canCreate)
             ? moreActionsFor([
@@ -142,10 +142,10 @@ export function radiologyOrderCardViewModel(order: PatientChartRadiologyOrder, c
         nextActionVariant: currentCareNextActionVariant(nextAction),
         nextActionIcon: 'scan-line',
         reorderHref: canCreateRadiologyEncounterFollowOnOrder(order, canCreate)
-            ? patientChartModuleHref('/radiology-orders', ctx.patientId, ctx.appointmentId, { includeTabNew: true, reorderOfId: order.id })
+            ? patientChartModuleHref('/radiology-orders/legacy', ctx.patientId, ctx.appointmentId, { includeTabNew: true, reorderOfId: order.id })
             : null,
         addOnHref: canCreateRadiologyEncounterFollowOnOrder(order, canCreate)
-            ? patientChartModuleHref('/radiology-orders', ctx.patientId, ctx.appointmentId, { includeTabNew: true, addOnToOrderId: order.id })
+            ? patientChartModuleHref('/radiology-orders/legacy', ctx.patientId, ctx.appointmentId, { includeTabNew: true, addOnToOrderId: order.id })
             : null,
         moreActions: hasRadiologyEncounterMoreActions(order, canCreate)
             ? moreActionsFor([
@@ -180,10 +180,10 @@ export function pharmacyOrderCardViewModel(order: PatientChartPharmacyOrder, ctx
         nextActionVariant: currentCareNextActionVariant(nextAction),
         nextActionIcon: 'pill',
         reorderHref: canCreatePharmacyEncounterFollowOnOrder(order, canCreate)
-            ? patientChartModuleHref('/pharmacy-orders', ctx.patientId, ctx.appointmentId, { includeTabNew: true, reorderOfId: order.id })
+            ? patientChartModuleHref('/pharmacy-orders/legacy', ctx.patientId, ctx.appointmentId, { includeTabNew: true, reorderOfId: order.id })
             : null,
         addOnHref: canCreatePharmacyEncounterFollowOnOrder(order, canCreate)
-            ? patientChartModuleHref('/pharmacy-orders', ctx.patientId, ctx.appointmentId, { includeTabNew: true, addOnToOrderId: order.id })
+            ? patientChartModuleHref('/pharmacy-orders/legacy', ctx.patientId, ctx.appointmentId, { includeTabNew: true, addOnToOrderId: order.id })
             : null,
         moreActions: hasPharmacyEncounterMoreActions(order, canCreate)
             ? moreActionsFor([
@@ -221,10 +221,10 @@ export function theatreProcedureCardViewModel(procedure: PatientChartTheatreProc
         nextActionVariant: currentCareNextActionVariant(nextAction),
         nextActionIcon: 'scissors',
         reorderHref: canCreateTheatreEncounterFollowOnOrder(procedure, canCreate)
-            ? patientChartModuleHref('/theatre-procedures', ctx.patientId, ctx.appointmentId, { includeTabNew: true, reorderOfId: procedure.id })
+            ? patientChartModuleHref('/theatre-procedures/legacy', ctx.patientId, ctx.appointmentId, { includeTabNew: true, reorderOfId: procedure.id })
             : null,
         addOnHref: canCreateTheatreEncounterFollowOnOrder(procedure, canCreate)
-            ? patientChartModuleHref('/theatre-procedures', ctx.patientId, ctx.appointmentId, { includeTabNew: true, addOnToOrderId: procedure.id })
+            ? patientChartModuleHref('/theatre-procedures/legacy', ctx.patientId, ctx.appointmentId, { includeTabNew: true, addOnToOrderId: procedure.id })
             : null,
         moreActions: hasTheatreEncounterMoreActions(procedure, canCreate)
             ? moreActionsFor([

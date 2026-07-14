@@ -6,6 +6,7 @@ import AppIcon from '@/components/AppIcon.vue';
 import InventoryEmptyState from '@/components/inventory/InventoryEmptyState.vue';
 import RegistryListRow from '@/components/list/RegistryListRow.vue';
 import RegistryListSkeleton from '@/components/list/RegistryListSkeleton.vue';
+import PatientSummaryPopover from '@/components/patients/summary/PatientSummaryPopover.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -1022,6 +1023,22 @@ watch(showPaymentDialog, (open) => {
                                             </Badge>
                                         </template>
                                         <template #actions>
+                                            <PatientSummaryPopover v-if="entry.patientId" :patient-id="entry.patientId">
+                                                <template #trigger>
+                                                    <button
+                                                        type="button"
+                                                        class="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                                                        aria-label="View patient summary"
+                                                    >
+                                                        <AppIcon name="info" class="size-3.5" />
+                                                    </button>
+                                                </template>
+                                                <template #actions>
+                                                    <a :href="`/patients/${entry.patientId}/chart`" class="text-xs font-medium text-primary hover:underline">
+                                                        View chart
+                                                    </a>
+                                                </template>
+                                            </PatientSummaryPopover>
                                             <AppIcon name="chevron-right" class="size-4 text-muted-foreground" />
                                         </template>
                                     </RegistryListRow>

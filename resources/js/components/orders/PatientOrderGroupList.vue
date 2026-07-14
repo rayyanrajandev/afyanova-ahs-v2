@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="T extends DirectServiceOrderLike">
 import AppIcon from '@/components/AppIcon.vue';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -6,12 +6,17 @@ import {
     CollapsibleContent,
     CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import type { PatientOrderGroup } from '@/lib/directServicePatientWorklist';
+import PatientSummaryPopover from '@/components/patients/summary/PatientSummaryPopover.vue';
+import type { DirectServiceOrderLike, PatientOrderGroup } from '@/lib/directServicePatientWorklist';
 
 defineProps<{
-    groups: PatientOrderGroup[];
+    groups: PatientOrderGroup<T>[];
     isExpanded: (patientId: string) => boolean;
     compact?: boolean;
+}>();
+
+defineSlots<{
+    orders: (props: { group: PatientOrderGroup<T> }) => unknown;
 }>();
 
 const emit = defineEmits<{
@@ -33,9 +38,25 @@ const emit = defineEmits<{
             >
                 <div class="min-w-0 space-y-1">
                     <div class="flex flex-wrap items-center gap-2">
-                        <p class="text-sm font-semibold text-foreground">
-                            {{ group.patientLabel }}
-                        </p>
+                        <PatientSummaryPopover :patient-id="group.patientId">
+                            <template #trigger>
+                                <span
+                                    role="button"
+                                    tabindex="0"
+                                    class="text-sm font-semibold text-foreground hover:underline"
+                                    @click.stop
+                                    @keydown.enter.stop
+                                    @keydown.space.stop.prevent
+                                >
+                                    {{ group.patientLabel }}
+                                </span>
+                            </template>
+                            <template #actions>
+                                <a :href="`/patients/${group.patientId}/chart`" class="text-xs font-medium text-primary hover:underline">
+                                    View chart
+                                </a>
+                            </template>
+                        </PatientSummaryPopover>
                         <Badge variant="secondary" class="tabular-nums">
                             {{ group.orders.length }}
                             {{ group.orders.length === 1 ? 'order' : 'orders' }}

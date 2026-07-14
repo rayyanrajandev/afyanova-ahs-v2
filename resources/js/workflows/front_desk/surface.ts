@@ -15,7 +15,7 @@ return [
     const actions = (() => {
 return [
             { label: 'Register Patient', icon: 'user', variant: 'default', href: '/patients' },
-            { label: 'Appointment queue', icon: 'calendar-clock', variant: 'outline', href: `/appointments?view=queue&from=${runtime.today}` },
+            { label: 'Appointment queue', icon: 'calendar-clock', variant: 'outline', href: '/reception/queue' },
             { label: 'Register OPD walk-in', icon: 'log-in', variant: 'outline', href: '/reception/queue' },
         ];
     })();
@@ -44,7 +44,7 @@ const now = Date.now();
                 ? `Checked in ${runtime.formatDateTime(item.checkedInAt ?? item.scheduledAt)} · ${triageCategory}`
                 : `Checked in ${runtime.formatDateTime(item.checkedInAt ?? item.scheduledAt)}`,
             status: runtime.formatEnumLabel(String(item.status ?? 'checked_in')),
-            href: `/appointments?view=queue&status=checked_in&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${runtime.today}`,
+            href: '/reception/queue',
             actionLabel: 'Open checked-in queue',
             isOverdue: false,
             group: 'Checked-in',
@@ -65,7 +65,7 @@ const now = Date.now();
                     ? `Scheduled ${runtime.formatDateTime(item.scheduledAt)} · ${triageCategory}`
                     : `Scheduled ${runtime.formatDateTime(item.scheduledAt)}`,
                 status: runtime.formatEnumLabel(String(item.status ?? 'scheduled')),
-                href: `/appointments?view=queue&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${runtime.today}`,
+                href: '/reception/queue',
                 actionLabel: 'Open queue',
                 isOverdue,
                 group: 'Scheduled',
@@ -101,7 +101,7 @@ const checkedIn = helpers.numberValue(counts.appointments, 'checked_in');
                 : 'Review remaining scheduled arrivals and patient search requests.',
             primaryAction: {
                 label: hasCheckedInBlocker ? 'Open checked-in queue' : 'Open appointments',
-                href: hasCheckedInBlocker ? `/appointments?view=queue&status=checked_in&from=${runtime.today}` : `/appointments?view=queue&from=${runtime.today}`,
+                href: '/reception/queue',
             },
             secondaryAction: { label: 'Open patients', href: '/patients' },
             chips: [
@@ -118,7 +118,7 @@ return [
                 label: 'Checked-in handoff',
                 note: 'Arrivals already ready for clinician handoff.',
                 value: helpers.numberValue(counts.appointments, 'checked_in'),
-                href: `/appointments?view=queue&status=checked_in&from=${runtime.today}`,
+                href: '/reception/queue',
                 actionLabel: 'Open checked-in queue',
                 icon: 'calendar-clock',
             },
@@ -126,7 +126,7 @@ return [
                 label: 'Scheduled arrivals still open',
                 note: 'Upcoming appointments still need check-in coverage.',
                 value: helpers.numberValue(counts.appointments, 'scheduled'),
-                href: `/appointments?view=queue&from=${runtime.today}`,
+                href: '/appointments',
                 actionLabel: 'Open appointments',
                 icon: 'calendar',
             },

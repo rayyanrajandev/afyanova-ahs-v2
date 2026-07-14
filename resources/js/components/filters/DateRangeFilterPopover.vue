@@ -115,57 +115,6 @@ function toIsoDateString(value: { toString(): string } | undefined): string {
     return value ? value.toString() : '';
 }
 
-function formatDate(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-
-    return `${year}-${month}-${day}`;
-}
-
-function addDays(date: Date, days: number): Date {
-    const nextDate = new Date(date);
-    nextDate.setDate(nextDate.getDate() + days);
-
-    return nextDate;
-}
-
-function applyToday() {
-    const today = new Date();
-    const iso = formatDate(today);
-    emit('update:from', iso);
-    emit('update:to', '');
-}
-
-function applyNext7Days() {
-    const start = new Date();
-    const end = addDays(start, 6);
-    emit('update:from', formatDate(start));
-    emit('update:to', formatDate(end));
-}
-
-function applyPrevious7Days() {
-    const end = new Date();
-    const start = addDays(end, -6);
-    emit('update:from', formatDate(start));
-    emit('update:to', formatDate(end));
-}
-
-function applyPrevious30Days() {
-    const end = new Date();
-    const start = addDays(end, -29);
-    emit('update:from', formatDate(start));
-    emit('update:to', formatDate(end));
-}
-
-function clearEndDate() {
-    emit('update:to', '');
-}
-
-function clearAll() {
-    emit('update:from', '');
-    emit('update:to', '');
-}
 </script>
 
 <template>
@@ -189,7 +138,7 @@ function clearAll() {
                     </span>
                 </Button>
             </PopoverTrigger>
-            <PopoverContent align="start" class="w-[18.5rem] max-w-[calc(100vw-1rem)] space-y-3 p-3">
+            <PopoverContent align="start" class="w-[26rem] max-w-[calc(100vw-1rem)] space-y-3 p-3">
                 <div class="space-y-1">
                     <p class="text-sm font-medium">{{ title }}</p>
                     <p v-if="helperText" class="text-xs text-muted-foreground">
@@ -203,7 +152,7 @@ function clearAll() {
                         class="w-full p-2 [&_[data-slot=range-calendar-header]]:pt-0 [&_[data-slot=range-calendar-grid]]:w-full [&_[data-slot=range-calendar-grid-row]]:justify-between [&_[data-slot=range-calendar-grid-row]]:mt-1 [&_[data-slot=range-calendar-head-cell]]:h-7 [&_[data-slot=range-calendar-head-cell]]:w-7 [&_[data-slot=range-calendar-head-cell]]:text-[11px] [&_[data-slot=range-calendar-trigger]]:h-7 [&_[data-slot=range-calendar-trigger]]:w-7 [&_[data-slot=range-calendar-trigger]]:text-xs"
                     />
                 </div>
-                <div v-if="showManualInputs" class="grid gap-2.5">
+                <div v-if="showManualInputs" class="grid grid-cols-2 gap-2">
                     <div class="grid gap-2">
                         <Label :for="`${inputBaseId}-from`">{{ fromLabel }}</Label>
                         <Input
@@ -222,66 +171,6 @@ function clearAll() {
                             @update:model-value="(value) => updateTo(String(value ?? ''))"
                         />
                     </div>
-                </div>
-                <div
-                    class="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,8.75rem),1fr))]"
-                >
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        class="w-full justify-center whitespace-nowrap px-2"
-                        @click="applyToday"
-                    >
-                        Today onward
-                    </Button>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        class="w-full justify-center whitespace-nowrap px-2"
-                        @click="applyNext7Days"
-                    >
-                        Next 7 days
-                    </Button>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        class="w-full justify-center whitespace-nowrap px-2"
-                        @click="applyPrevious7Days"
-                    >
-                        Previous 7 days
-                    </Button>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        class="w-full justify-center whitespace-nowrap px-2"
-                        @click="applyPrevious30Days"
-                    >
-                        Previous 30 days
-                    </Button>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        class="w-full justify-center whitespace-nowrap px-2"
-                        :disabled="!props.to"
-                        @click="clearEndDate"
-                    >
-                        Clear end
-                    </Button>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        class="w-full justify-center whitespace-nowrap px-2"
-                        :disabled="!props.from && !props.to"
-                        @click="clearAll"
-                    >
-                        Clear all
-                    </Button>
                 </div>
                 <div class="flex justify-end">
                     <Button type="button" size="sm" @click="open = false">
@@ -305,7 +194,7 @@ function clearAll() {
                     class="w-full [&_[data-slot=range-calendar-grid-row]]:w-full [&_[data-slot=range-calendar-grid-row]]:justify-between"
                 />
             </div>
-            <div v-if="showManualInputs" class="grid gap-3 sm:grid-cols-2">
+            <div v-if="showManualInputs" class="grid grid-cols-2 gap-3">
                 <div class="grid gap-2">
                     <Label :for="`${inputBaseId}-from`">{{ fromLabel }}</Label>
                     <Input
@@ -324,66 +213,6 @@ function clearAll() {
                         @update:model-value="(value) => updateTo(String(value ?? ''))"
                     />
                 </div>
-            </div>
-            <div
-                class="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,8.75rem),1fr))]"
-            >
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    class="w-full justify-center whitespace-nowrap px-2"
-                    @click="applyToday"
-                >
-                    Today onward
-                </Button>
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    class="w-full justify-center whitespace-nowrap px-2"
-                    @click="applyNext7Days"
-                >
-                    Next 7 days
-                </Button>
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    class="w-full justify-center whitespace-nowrap px-2"
-                    @click="applyPrevious7Days"
-                >
-                    Previous 7 days
-                </Button>
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    class="w-full justify-center whitespace-nowrap px-2"
-                    @click="applyPrevious30Days"
-                >
-                    Previous 30 days
-                </Button>
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    class="w-full justify-center whitespace-nowrap px-2"
-                    :disabled="!props.to"
-                    @click="clearEndDate"
-                >
-                    Clear end
-                </Button>
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    class="w-full justify-center whitespace-nowrap px-2"
-                    :disabled="!props.from && !props.to"
-                    @click="clearAll"
-                >
-                    Clear all
-                </Button>
             </div>
         </template>
     </div>

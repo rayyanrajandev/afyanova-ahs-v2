@@ -74,8 +74,8 @@ const routes: CommandRoute[] = [
         shortcut: 'G M',
     },
     {
-        label: 'Emergency & Triage',
-        href: '/emergency-triage',
+        label: 'Emergency Queue',
+        href: '/emergency/queue',
         icon: 'alert-triangle',
         shortcut: 'G E',
     },
@@ -294,7 +294,7 @@ const createWorkflowRoutes: CommandRoute[] = [
     },
     {
         label: 'Consultation Queue',
-        href: '/appointments?status=waiting_provider&from=quick-command',
+        href: '/clinician/queue',
         icon: 'stethoscope',
         shortcut: 'C M',
     },
@@ -305,8 +305,8 @@ const createWorkflowRoutes: CommandRoute[] = [
         shortcut: 'C L',
     },
     {
-        label: 'New Emergency Triage Intake',
-        href: '/emergency-triage',
+        label: 'New Emergency Intake',
+        href: '/emergency/queue',
         icon: 'alert-triangle',
         shortcut: 'C E',
     },
@@ -505,7 +505,7 @@ const queuePresets = computed<CommandPreset[]>(() => {
         },
         {
             label: 'Appointments - Checked In',
-            href: buildHref('/appointments', { status: 'checked_in', from: today }),
+            href: '/triage/queue',
             icon: 'calendar-clock',
         },
         {
@@ -658,7 +658,7 @@ const workflowActions = computed<WorkflowActionCommand[]>(() => {
         },
         {
             label: 'Open Appointments - Checked In (Compact)',
-            href: buildHref('/appointments', { status: 'checked_in', from: today }),
+            href: '/triage/queue',
             icon: 'calendar-clock',
             compactRows: true,
         },
@@ -679,8 +679,8 @@ const workflowActions = computed<WorkflowActionCommand[]>(() => {
             compactRows: true,
         },
         {
-            label: 'Open Emergency & Triage Workspace',
-            href: '/emergency-triage',
+            label: 'Open Emergency Queue',
+            href: '/emergency/queue',
             icon: 'alert-triangle',
         },
         {

@@ -246,7 +246,7 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                                         Reorder inline
                                     </DropdownMenuItem>
                                     <DropdownMenuItem v-else as-child>
-                                        <Link :href="contextCreateHref('/laboratory-orders', { includeTabNew: true, reorderOfId: order.id })">
+                                        <Link :href="contextCreateHref('/laboratory-orders/legacy', { includeTabNew: true, reorderOfId: order.id })">
                                             <AppIcon name="repeat-2" class="size-4" />
                                             Reorder
                                         </Link>
@@ -259,7 +259,7 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                                         Add linked test
                                     </DropdownMenuItem>
                                     <DropdownMenuItem v-else as-child>
-                                        <Link :href="contextCreateHref('/laboratory-orders', { includeTabNew: true, addOnToOrderId: order.id })">
+                                        <Link :href="contextCreateHref('/laboratory-orders/legacy', { includeTabNew: true, addOnToOrderId: order.id })">
                                             <AppIcon name="git-branch-plus" class="size-4" />
                                             Add linked test
                                         </Link>
@@ -384,7 +384,7 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                                         Reorder inline
                                     </DropdownMenuItem>
                                     <DropdownMenuItem v-else as-child>
-                                        <Link :href="contextCreateHref('/pharmacy-orders', { includeTabNew: true, reorderOfId: order.id })">
+                                        <Link :href="contextCreateHref('/pharmacy-orders/legacy', { includeTabNew: true, reorderOfId: order.id })">
                                             <AppIcon name="repeat-2" class="size-4" />
                                             Reorder
                                         </Link>
@@ -397,7 +397,7 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                                         Add linked medication
                                     </DropdownMenuItem>
                                     <DropdownMenuItem v-else as-child>
-                                        <Link :href="contextCreateHref('/pharmacy-orders', { includeTabNew: true, addOnToOrderId: order.id })">
+                                        <Link :href="contextCreateHref('/pharmacy-orders/legacy', { includeTabNew: true, addOnToOrderId: order.id })">
                                             <AppIcon name="git-branch-plus" class="size-4" />
                                             Add linked medication
                                         </Link>
@@ -524,7 +524,7 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                                         Reorder inline
                                     </DropdownMenuItem>
                                     <DropdownMenuItem v-else as-child>
-                                        <Link :href="contextCreateHref('/radiology-orders', { includeTabNew: true, reorderOfId: order.id })">
+                                        <Link :href="contextCreateHref('/radiology-orders/legacy', { includeTabNew: true, reorderOfId: order.id })">
                                             <AppIcon name="repeat-2" class="size-4" />
                                             Reorder
                                         </Link>
@@ -537,7 +537,7 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                                         Add linked study
                                     </DropdownMenuItem>
                                     <DropdownMenuItem v-else as-child>
-                                        <Link :href="contextCreateHref('/radiology-orders', { includeTabNew: true, addOnToOrderId: order.id })">
+                                        <Link :href="contextCreateHref('/radiology-orders/legacy', { includeTabNew: true, addOnToOrderId: order.id })">
                                             <AppIcon name="git-branch-plus" class="size-4" />
                                             Add linked study
                                         </Link>
@@ -649,13 +649,13 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" class="w-52">
                                     <DropdownMenuItem as-child>
-                                        <Link :href="contextCreateHref('/theatre-procedures', { includeTabNew: true, reorderOfId: procedure.id })">
+                                        <Link :href="contextCreateHref('/theatre-procedures/legacy', { includeTabNew: true, reorderOfId: procedure.id })">
                                             <AppIcon name="repeat-2" class="size-4" />
                                             Reorder in theatre
                                         </Link>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem as-child>
-                                        <Link :href="contextCreateHref('/theatre-procedures', { includeTabNew: true, addOnToOrderId: procedure.id })">
+                                        <Link :href="contextCreateHref('/theatre-procedures/legacy', { includeTabNew: true, addOnToOrderId: procedure.id })">
                                             <AppIcon name="git-branch-plus" class="size-4" />
                                             Add linked procedure
                                         </Link>

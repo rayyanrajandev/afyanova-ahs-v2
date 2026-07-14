@@ -81,6 +81,29 @@ class InventoryBatchStockService
     }
 
     /**
+     * Merges an inventory item array (as returned by
+     * InventoryItemRepositoryInterface::findBestActiveMatchByCodeOrName())
+     * with its reservation/FEFO-aware availability, so callers get a
+     * single array carrying both raw on-hand stock and the real
+     * dispensable quantity. Shared by any consumer that needs "is there
+     * actually enough of this to fulfil" rather than a raw stock count.
+     *
+     * @param  array<string, mixed>  $item
+     * @return array<string, mixed>
+     */
+    public function enrichItemAvailability(array $item): array
+    {
+        $availability = $this->availability((string) $item['id'], now(), $item['default_warehouse_id'] ?? null);
+
+        return array_merge($item, [
+            'available_stock' => $availability['availableQuantity'] ?? ($item['current_stock'] ?? null),
+            'stock_state' => $availability['stockState'] ?? null,
+            'batch_tracking_mode' => $availability['trackingMode'] ?? 'untracked',
+            'blocked_batch_quantity' => $availability['blockedQuantity'] ?? 0,
+        ]);
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */

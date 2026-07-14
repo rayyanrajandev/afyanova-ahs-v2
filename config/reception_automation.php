@@ -15,17 +15,19 @@ return [
     | flag. Mode C actually creates a skeleton (no clinical fields) case on
     | emergency-mode check-in.
     |
-    | Deliberately disabled by default: when to enable this is a
-    | clinical-workflow decision (does auto-creating a WAITING case change
-    | what a triage nurse sees the moment they open their queue, in a way
-    | that needs sign-off from whoever owns that workflow?), not an
-    | engineering default — see the plan's §5 risk register. Building the
-    | capability now and deciding when to flip it on later are separate
-    | steps; this flag is that separation.
+    | Was deliberately disabled by default while this was purely an
+    | engineering capability with no clinical sign-off — see the plan's §5
+    | risk register. Enabled by explicit product decision alongside
+    | reports/emergency-queue-modernization-plan.md: emergency/Queue.vue is
+    | now a real, used page, and without this flag an emergency-mode
+    | check-in from Reception or the patients list produced an Appointment
+    | with no corresponding EmergencyTriageCase — invisible to any
+    | clinician working that queue. See that plan's "sync gap" update for
+    | the full trace of what was disconnected before this changed.
     |
     */
     'mode_c_skeleton_emergency_triage_case' => [
-        'enabled' => (bool) env('RECEPTION_MODE_C_SKELETON_TRIAGE_CASE_ENABLED', false),
+        'enabled' => (bool) env('RECEPTION_MODE_C_SKELETON_TRIAGE_CASE_ENABLED', true),
     ],
 
 ];

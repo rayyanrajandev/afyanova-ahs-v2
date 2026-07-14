@@ -24,6 +24,18 @@ export function encounterWorkspaceHref(
         : `/encounters/${normalizedId}`;
 }
 
+/**
+ * Name predates the fix in routes/web.php's `encounters/by-appointment/{id}`
+ * route — it used to render the pre-cutover encounters/Show.vue page
+ * directly (a real bug, not intentional), so this helper's URL landed
+ * clinicians on the legacy workspace with no way to reach WorkspaceV2 via an
+ * appointment id. That route now resolves the encounter server-side and
+ * redirects to the canonical encounters/{encounterId} route
+ * (encounters/WorkspaceV2.vue), so this helper's actual behavior is no
+ * longer "legacy" at all — kept the name to avoid a purely-cosmetic rename
+ * touching every legacy-page caller (appointments/Index.vue,
+ * medical-records/Index.vue) for no functional benefit.
+ */
 export function encounterWorkspaceLegacyAppointmentHref(
     appointmentId: string,
     options?: { from?: string },

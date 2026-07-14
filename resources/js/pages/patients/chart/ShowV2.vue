@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query';
 import { Head, Link } from '@inertiajs/vue3';
-import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue';
+import { computed, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +26,7 @@ import PatientChartOrdersDomainSection from '@/components/patient-chart/PatientC
 import { apiGet } from '@/lib/apiClient';
 import { formatEnumLabel } from '@/lib/labels';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
+import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
 import { usePatientMedicalRecords } from '@/composables/patientChart/usePatientMedicalRecords';
 import { usePatientAppointments } from '@/composables/patientChart/usePatientAppointments';
 import { usePatientEncounters } from '@/composables/patientChart/usePatientEncounters';
@@ -40,7 +41,7 @@ import { useVisitScope } from '@/composables/patientChart/useVisitScope';
 import { usePatientChartOrderLifecycle } from '@/composables/patientChart/usePatientChartOrderLifecycle';
 import { usePatientInsuranceRecords } from '@/composables/patientChart/usePatientInsuranceRecords';
 import { usePatientInsuranceDialog } from '@/composables/patientChart/usePatientInsuranceDialog';
-import { usePatientAuditLogs } from '@/composables/patientChart/usePatientAuditLogs';
+import { exportPatientAuditLogsCsv, usePatientAuditLogs } from '@/composables/patientChart/usePatientAuditLogs';
 import {
     formatDate,
     formatDateTime,
@@ -438,22 +439,7 @@ const activeTab = ref<
     'overview' | 'timeline' | 'visits' | 'medications' | 'orders' | 'billing' | 'records' | 'insurance' | 'audit'
 >('overview');
 
-const scrollContainerRef = useTemplateRef<HTMLDivElement>('scrollContainer');
-const scrollContainerHeight = ref('98dvh');
-
-function updateScrollContainerHeight(): void {
-    const el = scrollContainerRef.value;
-    if (!el) return;
-    scrollContainerHeight.value = `calc(98dvh - ${el.getBoundingClientRect().top}px)`;
-}
-
-onMounted(() => {
-    updateScrollContainerHeight();
-    window.addEventListener('resize', updateScrollContainerHeight);
-});
-onBeforeUnmount(() => {
-    window.removeEventListener('resize', updateScrollContainerHeight);
-});
+const { scrollContainerHeight } = useStickyScrollContainer();
 </script>
 
 <template>
@@ -464,6 +450,7 @@ onBeforeUnmount(() => {
             class="flex flex-col gap-4 overflow-x-hidden overflow-y-auto rounded-lg"
             :style="{ height: scrollContainerHeight }"
         >
+            <Tabs v-model="activeTab" class="contents">
             <div
                 v-if="patient"
                 class="sticky top-0 z-10 bg-background/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80"
@@ -505,6 +492,52 @@ onBeforeUnmount(() => {
                         <p class="text-sm font-bold tabular-nums">{{ timeline.chartCounts.value.timelineEvents }}</p>
                     </div>
                 </div>
+
+                <TabsList class="mt-3 flex w-full flex-wrap justify-start gap-1">
+                    <TabsTrigger value="overview">Overview</TabsTrigger>
+                    <TabsTrigger value="timeline" class="inline-flex items-center gap-1.5">
+                        Timeline
+                        <Badge v-if="timeline.chartCounts.value.timelineEvents" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
+                            {{ timeline.chartCounts.value.timelineEvents }}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger v-if="canReadAppointments" value="visits" class="inline-flex items-center gap-1.5">
+                        Visits
+                        <Badge v-if="timeline.chartCounts.value.activeVisits" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
+                            {{ timeline.chartCounts.value.activeVisits }}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger v-if="hasMedicationWorkspaceAccess" value="medications" class="inline-flex items-center gap-1.5">
+                        Medications
+                        <Badge v-if="medicationReconciliation && medicationReconciliation.counts.unreconciledDispensedOrders > 0" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
+                            {{ medicationReconciliation.counts.unreconciledDispensedOrders }}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger v-if="hasOrdersAndResultsAccess" value="orders" class="inline-flex items-center gap-1.5">
+                        Orders &amp; Results
+                    </TabsTrigger>
+                    <TabsTrigger v-if="hasBillingAccess" value="billing" class="inline-flex items-center gap-1.5">
+                        Billing
+                        <Badge v-if="timeline.careCounts.value.billingOpen" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
+                            {{ timeline.careCounts.value.billingOpen }}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger v-if="canReadMedicalRecords" value="records" class="inline-flex items-center gap-1.5">
+                        Notes
+                        <Badge v-if="timeline.chartCounts.value.records" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
+                            {{ timeline.chartCounts.value.records }}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger v-if="canReadPatientInsurance" value="insurance" class="inline-flex items-center gap-1.5">
+                        Insurance
+                        <Badge v-if="insuranceRecords.length" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
+                            {{ insuranceRecords.length }}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger v-if="canViewPatientAuditLogs" value="audit" class="inline-flex items-center gap-1.5">
+                        Audit
+                    </TabsTrigger>
+                </TabsList>
             </div>
 
             <div class="space-y-4 p-4 md:p-6">
@@ -518,53 +551,7 @@ onBeforeUnmount(() => {
                     <AlertDescription>{{ (patientQuery.error.value as Error | null)?.message ?? 'Unknown error.' }}</AlertDescription>
                 </Alert>
 
-                <Tabs v-else-if="patient" v-model="activeTab">
-                    <TabsList class="grid w-full grid-cols-2 sm:w-auto sm:inline-grid sm:grid-cols-9">
-                        <TabsTrigger value="overview">Overview</TabsTrigger>
-                        <TabsTrigger value="timeline" class="inline-flex items-center gap-1.5">
-                            Timeline
-                            <Badge v-if="timeline.chartCounts.value.timelineEvents" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
-                                {{ timeline.chartCounts.value.timelineEvents }}
-                            </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger v-if="canReadAppointments" value="visits" class="inline-flex items-center gap-1.5">
-                            Visits
-                            <Badge v-if="timeline.chartCounts.value.activeVisits" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
-                                {{ timeline.chartCounts.value.activeVisits }}
-                            </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger v-if="hasMedicationWorkspaceAccess" value="medications" class="inline-flex items-center gap-1.5">
-                            Medications
-                            <Badge v-if="medicationReconciliation && medicationReconciliation.counts.unreconciledDispensedOrders > 0" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
-                                {{ medicationReconciliation.counts.unreconciledDispensedOrders }}
-                            </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger v-if="hasOrdersAndResultsAccess" value="orders" class="inline-flex items-center gap-1.5">
-                            Orders &amp; Results
-                        </TabsTrigger>
-                        <TabsTrigger v-if="hasBillingAccess" value="billing" class="inline-flex items-center gap-1.5">
-                            Billing
-                            <Badge v-if="timeline.careCounts.value.billingOpen" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
-                                {{ timeline.careCounts.value.billingOpen }}
-                            </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger v-if="canReadMedicalRecords" value="records" class="inline-flex items-center gap-1.5">
-                            Notes
-                            <Badge v-if="timeline.chartCounts.value.records" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
-                                {{ timeline.chartCounts.value.records }}
-                            </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger v-if="canReadPatientInsurance" value="insurance" class="inline-flex items-center gap-1.5">
-                            Insurance
-                            <Badge v-if="insuranceRecords.length" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
-                                {{ insuranceRecords.length }}
-                            </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger v-if="canViewPatientAuditLogs" value="audit" class="inline-flex items-center gap-1.5">
-                            Audit
-                        </TabsTrigger>
-                    </TabsList>
-
+                <template v-else-if="patient">
                     <TabsContent value="overview" class="space-y-6">
                         <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                             <button
@@ -1037,16 +1024,16 @@ onBeforeUnmount(() => {
                             </div>
                             <div class="flex flex-wrap gap-2">
                                 <Button v-if="canCreateLaboratoryOrders" size="sm" class="gap-1.5" as-child>
-                                    <Link :href="patientChartModuleHref('/laboratory-orders', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true })"><AppIcon name="flask-conical" class="size-3.5" />Order lab</Link>
+                                    <Link :href="patientChartModuleHref('/laboratory-orders/legacy', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true })"><AppIcon name="flask-conical" class="size-3.5" />Order lab</Link>
                                 </Button>
                                 <Button v-if="canCreateRadiologyOrders" size="sm" variant="outline" class="gap-1.5" as-child>
-                                    <Link :href="patientChartModuleHref('/radiology-orders', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true })"><AppIcon name="activity" class="size-3.5" />Order imaging</Link>
+                                    <Link :href="patientChartModuleHref('/radiology-orders/legacy', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true })"><AppIcon name="activity" class="size-3.5" />Order imaging</Link>
                                 </Button>
                                 <Button v-if="canCreatePharmacyOrders" size="sm" variant="outline" class="gap-1.5" as-child>
-                                    <Link :href="patientChartModuleHref('/pharmacy-orders', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true })"><AppIcon name="pill" class="size-3.5" />Order pharmacy</Link>
+                                    <Link :href="patientChartModuleHref('/pharmacy-orders/legacy', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true })"><AppIcon name="pill" class="size-3.5" />Order pharmacy</Link>
                                 </Button>
                                 <Button v-if="canCreateTheatreProcedures" size="sm" variant="outline" class="gap-1.5" as-child>
-                                    <Link :href="patientChartModuleHref('/theatre-procedures', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true })"><AppIcon name="scissors" class="size-3.5" />Schedule procedure</Link>
+                                    <Link :href="patientChartModuleHref('/theatre-procedures/legacy', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true })"><AppIcon name="scissors" class="size-3.5" />Schedule procedure</Link>
                                 </Button>
                             </div>
                         </div>
@@ -1126,7 +1113,7 @@ onBeforeUnmount(() => {
                                     :cards="laboratoryCards"
                                     :critical-alert-title="hasCriticalLaboratoryResult ? 'Critical laboratory result' : null"
                                     critical-alert-description="One or more laboratory results in this view are flagged as critical and require immediate clinical review."
-                                    :create-href="canCreateLaboratoryOrders ? patientChartModuleHref('/laboratory-orders', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true }) : null"
+                                    :create-href="canCreateLaboratoryOrders ? patientChartModuleHref('/laboratory-orders/legacy', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true }) : null"
                                     create-label="Order lab"
                                     create-icon="flask-conical"
                                     @lifecycle-action="(...args) => orderLifecycle.openDialog(...args)"
@@ -1147,7 +1134,7 @@ onBeforeUnmount(() => {
                                     :scope-label="scopeLabelFor('imaging')"
                                     :scope-description="scopeDescriptionFor('imaging', 'Critical, abnormal, pending, and recent imaging work is shown first.')"
                                     :cards="radiologyCards"
-                                    :create-href="canCreateRadiologyOrders ? patientChartModuleHref('/radiology-orders', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true }) : null"
+                                    :create-href="canCreateRadiologyOrders ? patientChartModuleHref('/radiology-orders/legacy', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true }) : null"
                                     create-label="Order imaging"
                                     create-icon="activity"
                                     @lifecycle-action="(...args) => orderLifecycle.openDialog(...args)"
@@ -1168,7 +1155,7 @@ onBeforeUnmount(() => {
                                     :scope-label="scopeLabelFor('pharmacy')"
                                     :scope-description="scopeDescriptionFor('pharmacy', 'Verification, reconciliation, active medication orders, and recent pharmacy work are shown first.')"
                                     :cards="pharmacyCards"
-                                    :create-href="canCreatePharmacyOrders ? patientChartModuleHref('/pharmacy-orders', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true }) : null"
+                                    :create-href="canCreatePharmacyOrders ? patientChartModuleHref('/pharmacy-orders/legacy', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true }) : null"
                                     create-label="Order pharmacy"
                                     create-icon="pill"
                                     @lifecycle-action="(...args) => orderLifecycle.openDialog(...args)"
@@ -1189,7 +1176,7 @@ onBeforeUnmount(() => {
                                     :scope-label="scopeLabelFor('procedure')"
                                     :scope-description="scopeDescriptionFor('procedure', 'In-progress, upcoming, and recently completed procedures are shown first.')"
                                     :cards="theatreCards"
-                                    :create-href="canCreateTheatreProcedures ? patientChartModuleHref('/theatre-procedures', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true }) : null"
+                                    :create-href="canCreateTheatreProcedures ? patientChartModuleHref('/theatre-procedures/legacy', props.patientId, primaryVisit?.id ?? null, { includeTabNew: true }) : null"
                                     create-label="Schedule procedure"
                                     create-icon="scissors"
                                     @lifecycle-action="(...args) => orderLifecycle.openDialog(...args)"
@@ -1749,9 +1736,14 @@ onBeforeUnmount(() => {
                     </TabsContent>
 
                     <TabsContent v-if="canViewPatientAuditLogs" value="audit" class="space-y-6">
-                        <div class="space-y-1">
-                            <p class="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">Audit log</p>
-                            <p class="text-sm text-muted-foreground">Who changed what, and when, for this patient's record.</p>
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="space-y-1">
+                                <p class="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">Audit log</p>
+                                <p class="text-sm text-muted-foreground">Who changed what, and when, for this patient's record.</p>
+                            </div>
+                            <Button size="sm" variant="outline" class="h-7 shrink-0 px-2 text-xs" @click="exportPatientAuditLogsCsv(props.patientId)">
+                                Export CSV
+                            </Button>
                         </div>
 
                         <div class="rounded-lg border bg-muted/10 px-3 py-3">
@@ -1796,7 +1788,7 @@ onBeforeUnmount(() => {
                             </template>
                         </div>
                     </TabsContent>
-                </Tabs>
+                </template>
 
                 <EncounterLifecycleDialog
                     v-model:open="orderLifecycle.dialogOpen.value"
@@ -2057,6 +2049,7 @@ onBeforeUnmount(() => {
                     </DialogContent>
                 </Dialog>
             </div>
+            </Tabs>
         </div>
     </AppLayout>
 </template>

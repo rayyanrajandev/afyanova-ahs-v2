@@ -3,6 +3,7 @@ import type { AppIconName } from '@/lib/icons';
 export type NavSectionKey =
     | 'front_office'
     | 'clinical_care'
+    | 'health_information'
     | 'diagnostics'
     | 'billing'
     | 'stores'
@@ -25,6 +26,7 @@ export type AppNavCatalogItem = {
 export const navSectionLabels: Record<NavSectionKey, string> = {
     front_office: 'Registration & visits',
     clinical_care: 'Clinical care',
+    health_information: 'Health Information',
     diagnostics: 'Diagnostics & pharmacy',
     billing: 'Billing & insurance',
     stores: 'Stores & supply',
@@ -36,6 +38,7 @@ export const navSectionLabels: Record<NavSectionKey, string> = {
 export const navSectionOrder: NavSectionKey[] = [
     'front_office',
     'clinical_care',
+    'health_information',
     'diagnostics',
     'billing',
     'stores',
@@ -48,6 +51,7 @@ export const navSectionOrder: NavSectionKey[] = [
 export const navSectionIcons: Record<NavSectionKey, AppIconName> = {
     front_office: 'calendar-clock',
     clinical_care: 'heart-pulse',
+    health_information: 'folder',
     diagnostics: 'stethoscope',
     billing: 'circle-check-big',
     stores: 'package',
@@ -81,12 +85,17 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Front desk lookup, registration, and duplicate checks',
     },
     {
-        title: 'Walk-in service desk',
-        href: '/walk-in-service-requests',
+        // Patient flow redesign B5: replaces the legacy walk-in service
+        // desk entry — /walk-in-service-requests still renders (now marked
+        // "(Legacy)") but is no longer nav-linked, same "URL-only rollback
+        // path" treatment as /patients/legacy, /appointments/legacy,
+        // /emergency-triage.
+        title: 'Direct Service Queue',
+        href: '/direct-service/queue',
         iconName: 'layout-list',
         section: 'front_office',
         permissionPrefixes: ['service.requests.'],
-        helpNote: 'Direct service requests and walk-in handoffs',
+        helpNote: 'Per-department direct service tickets — lab, pharmacy, radiology, theatre',
     },
     {
         title: 'OPD appointments',
@@ -94,7 +103,12 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         iconName: 'calendar-clock',
         section: 'front_office',
         permissionPrefixes: ['appointments.'],
-        helpNote: 'Check-in queue, triage, and quick booking',
+        // Phase 6 cutover of reports/appointments-scheduling-workspace-
+        // modernization-plan.md: /appointments now renders IndexV2.vue
+        // (scheduling only — search, create, edit/reschedule, cancel/
+        // no-show). Check-in lives on "Reception queue" below; triage
+        // recording lives on "OPD triage queue" below.
+        helpNote: 'Search, schedule, and manage upcoming appointments',
     },
     {
         title: 'Reception queue',
@@ -121,12 +135,46 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Admission list, bed assignment, and status transitions',
     },
     {
-        title: 'Emergency & triage',
-        href: '/emergency-triage',
+        // emergency/Queue.vue reached full parity with the legacy page
+        // (queue, status transitions, case creation, transfers, audit
+        // logs) — /emergency-triage now renders this same page too (a real
+        // route swap, not an alias to a kept-around legacy file), so this
+        // one nav entry covers both URLs.
+        title: 'Emergency queue',
+        href: '/emergency/queue',
         iconName: 'alert-triangle',
         section: 'clinical_care',
         permissionPrefixes: ['emergency.triage.'],
-        helpNote: 'Rapid intake, triage category, and transfer desk',
+        helpNote: 'Active ED cases from arrival through disposition',
+    },
+    {
+        title: 'OPD triage queue',
+        href: '/triage/queue',
+        iconName: 'heart-pulse',
+        section: 'clinical_care',
+        // appointments.record-triage is a backend-only Gate::define()
+        // closure, but EffectivePermissionNameResolver deliberately mirrors
+        // it into the frontend permission list (see
+        // triage/Queue.vue's canRecordTriage docblock) — checking it
+        // directly here is correct. Inert anyway for actual visibility,
+        // since routeAccess.ts has an explicit /triage rule
+        // (appointments.read) that takes precedence — kept accurate as
+        // documentation regardless.
+        permissionPrefixes: ['appointments.record-triage'],
+        helpNote: 'Checked-in OPD patients waiting for nurse assessment — distinct from the Emergency queue',
+    },
+    {
+        title: 'Clinician queue',
+        // Phase 4 of reports/appointments-scheduling-workspace-
+        // modernization-plan.md: retargeted from the temporary
+        // /appointments/legacy?view=clinical placeholder (set during the
+        // Phase 6 cutover, before this page existed) to the real
+        // clinician/Queue.vue.
+        href: '/clinician/queue',
+        iconName: 'stethoscope',
+        section: 'clinical_care',
+        permissionPrefixes: ['appointments.start-consultation'],
+        helpNote: 'Your own patients waiting for review or already in consultation',
     },
     {
         title: 'Ward management',
@@ -145,20 +193,20 @@ export const appNavCatalog: AppNavCatalogItem[] = [
         helpNote: 'Procedure scheduling and perioperative workflow',
     },
     {
-        title: 'Encounters',
+        title: 'Encounter records',
         href: '/encounters',
         iconName: 'stethoscope',
-        section: 'clinical_care',
+        section: 'health_information',
         permissionPrefixes: ['medical.records.', 'medical-records.'],
-        helpNote: 'Every visit by patient, regardless of note status',
+        helpNote: "Look up any patient's visit and open its workspace — records & oversight",
     },
     {
-        title: 'Clinical records',
+        title: 'Medical Records',
         href: '/medical-records',
         iconName: 'file-text',
-        section: 'clinical_care',
+        section: 'health_information',
         permissionPrefixes: ['medical.records.', 'medical-records.'],
-        helpNote: 'Consultation workspace and clinical documentation',
+        helpNote: 'Medical Records (HIM): govern clinical-note completeness — finalize, amend, archive, audit',
     },
     {
         title: 'Laboratory',
@@ -583,6 +631,11 @@ export const helpTipsBySection: Record<NavSectionKey, string[]> = {
         'The emergency dashboard preset shows a critical alert when any P1 patient is waiting.',
         'Record triage in OPD appointments before the provider opens the consultation workspace.',
         'Lab, imaging, pharmacy, and theatre work linked to a visit appear in the visit side panel.',
+    ],
+    health_information: [
+        'Health Information tools are for records lookup and note governance, not day-to-day clinical work — clinicians finalize their own notes inside the Encounter Workspace.',
+        'Encounter records looks up any patient visit across the facility and opens its workspace for review.',
+        'The clinical note registry is where the records team finalizes, amends, archives, and audits notes for completeness and release.',
     ],
     diagnostics: [
         'Laboratory and imaging queues support status transitions from ordered through completed.',

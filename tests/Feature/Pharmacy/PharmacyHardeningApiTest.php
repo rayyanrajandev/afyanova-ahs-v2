@@ -3,6 +3,7 @@
 use App\Models\Permission;
 use App\Models\User;
 use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemModel;
+use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryItemUnitModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderAuditLogModel;
@@ -164,7 +165,7 @@ it('writes pharmacy verify and reconciliation parity metadata in audit logs', fu
     ]);
     $patient = pharmacyHardeningMakePatient();
     $catalogItem = pharmacyHardeningEnsureActiveApprovedMedicineCatalogItem();
-    InventoryItemModel::query()->create([
+    $inventoryItem = InventoryItemModel::query()->create([
         'tenant_id' => null,
         'facility_id' => null,
         'clinical_catalog_item_id' => $catalogItem->id,
@@ -177,6 +178,20 @@ it('writes pharmacy verify and reconciliation parity metadata in audit logs', fu
         'max_stock_level' => 200,
         'status' => 'active',
     ]);
+
+    InventoryItemUnitModel::query()->create([
+        'tenant_id' => $inventoryItem->tenant_id,
+        'facility_id' => $inventoryItem->facility_id,
+        'item_id' => $inventoryItem->id,
+        'unit_name' => $inventoryItem->unit,
+        'unit_code' => null,
+        'base_quantity' => 1,
+        'is_base_unit' => true,
+        'is_default_sales_unit' => true,
+        'is_default_purchase_unit' => true,
+        'is_active' => true,
+    ]);
+
     $order = pharmacyHardeningCreateOrder($user, $patient->id);
 
     $this->actingAs($user)

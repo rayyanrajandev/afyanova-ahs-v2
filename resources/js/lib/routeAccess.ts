@@ -191,6 +191,10 @@ const routeAccessRules: RouteAccessRule[] = [
         requiredPermissions: ['emergency.triage.read'],
     },
     {
+        pathPrefix: '/emergency',
+        requiredPermissions: ['emergency.triage.read'],
+    },
+    {
         pathPrefix: '/inpatient-ward',
         requiredPermissions: ['inpatient.ward.read'],
     },
@@ -215,6 +219,10 @@ const routeAccessRules: RouteAccessRule[] = [
         requiredPermissions: ['service.requests.read'],
     },
     {
+        pathPrefix: '/direct-service',
+        requiredPermissions: ['service.requests.read'],
+    },
+    {
         pathPrefix: '/patients',
         requiredPermissions: ['patients.read'],
     },
@@ -224,6 +232,14 @@ const routeAccessRules: RouteAccessRule[] = [
     },
     {
         pathPrefix: '/reception',
+        requiredPermissions: ['appointments.read'],
+    },
+    {
+        pathPrefix: '/triage',
+        requiredPermissions: ['appointments.read'],
+    },
+    {
+        pathPrefix: '/clinician',
         requiredPermissions: ['appointments.read'],
     },
     {

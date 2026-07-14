@@ -156,21 +156,8 @@ class GetPharmacyOrderSafetyReviewUseCase
             $this->dispenseTargetMedicationCode($order),
             $this->dispenseTargetMedicationName($order),
         );
-        $dispenseAvailability = $dispenseInventory === null
-            ? null
-            : $this->inventoryBatchStockService->availability(
-                (string) $dispenseInventory['id'],
-                now(),
-                $dispenseInventory['default_warehouse_id'] ?? null,
-            );
-
         if ($dispenseInventory !== null) {
-            $dispenseInventory = array_merge($dispenseInventory, [
-                'available_stock' => $dispenseAvailability['availableQuantity'] ?? ($dispenseInventory['current_stock'] ?? null),
-                'stock_state' => $dispenseAvailability['stockState'] ?? null,
-                'batch_tracking_mode' => $dispenseAvailability['trackingMode'] ?? 'untracked',
-                'blocked_batch_quantity' => $dispenseAvailability['blockedQuantity'] ?? 0,
-            ]);
+            $dispenseInventory = $this->inventoryBatchStockService->enrichItemAvailability($dispenseInventory);
         }
 
         $rules = [];
@@ -235,7 +222,7 @@ class GetPharmacyOrderSafetyReviewUseCase
                 ],
             );
         } else {
-            $currentStock = round((float) ($dispenseAvailability['availableQuantity'] ?? $dispenseInventory['current_stock'] ?? 0), 2);
+            $currentStock = round((float) ($dispenseInventory['available_stock'] ?? $dispenseInventory['current_stock'] ?? 0), 2);
             $reorderLevel = round((float) ($dispenseInventory['reorder_level'] ?? 0), 2);
 
             if ($currentStock <= 0) {
@@ -243,7 +230,7 @@ class GetPharmacyOrderSafetyReviewUseCase
                     code: 'inventory_out_of_stock',
                     severity: 'critical',
                     category: 'inventory',
-                    message: ($dispenseAvailability['trackingMode'] ?? 'untracked') === 'tracked'
+                    message: ($dispenseInventory['batch_tracking_mode'] ?? 'untracked') === 'tracked'
                         ? 'No valid FEFO batch stock is currently available for the medicine selected for release.'
                         : 'Dispense stock is currently zero for the medicine selected for release.',
                     source: [

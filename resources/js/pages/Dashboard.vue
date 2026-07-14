@@ -104,33 +104,33 @@ const currentUserId = computed<number | null>(() => {
     return Number.isFinite(normalized) && normalized > 0 ? normalized : null;
 });
 
+/**
+ * Points at clinician/Queue.vue (Phase 4 of reports/appointments-scheduling-
+ * workspace-modernization-plan.md) — the legacy view=clinical query-param
+ * mode this function used to build no longer means anything post-cutover
+ * (IndexV2.vue reads no query params, and the legacy page is being retired,
+ * not kept as a permanent target). Deliberately doesn't try to replicate
+ * the old status/focusAppointmentId/clinicianUserId/q filtering — the new
+ * per-role queue pages don't have (and don't need) that query-param surface;
+ * landing on the correct page is the fix, not preserving every legacy deep-
+ * link convenience.
+ */
 function clinicianQueueHref(
-    status: 'waiting_provider' | 'in_consultation' | 'completed' = 'waiting_provider',
-    focusAppointmentId?: string,
-    searchQuery?: string,
+    _status: 'waiting_provider' | 'in_consultation' | 'completed' = 'waiting_provider',
+    _focusAppointmentId?: string,
+    _searchQuery?: string,
 ): string {
-    const params = new URLSearchParams({
-        view: 'clinical',
-        status,
-        from: today,
-    });
+    return '/clinician/queue';
+}
 
-    if (currentUserId.value !== null) {
-        params.set('clinicianUserId', String(currentUserId.value));
-    }
-
-    if (focusAppointmentId && focusAppointmentId !== '') {
-        params.set('focusAppointmentId', focusAppointmentId);
-        if (status === 'waiting_provider' || status === 'in_consultation') {
-            params.set('focusAction', 'consultation');
-        }
-    }
-
-    if (searchQuery && searchQuery.trim() !== '') {
-        params.set('q', searchQuery.trim());
-    }
-
-    return `/appointments?${params.toString()}`;
+/**
+ * Points at triage/Queue.vue (Phase 3 of reports/appointments-scheduling-
+ * workspace-modernization-plan.md) — same reasoning as clinicianQueueHref
+ * above: the old view=triage/status=checked_in query-param mode has nowhere
+ * to land anymore now that /appointments is IndexV2.vue.
+ */
+function triageQueueHref(_focusAppointmentId?: string, _triageCategory?: string): string {
+    return '/triage/queue';
 }
 
 function activeConsultationWorkspaceHref(appointmentId: string): string {
@@ -139,30 +139,14 @@ function activeConsultationWorkspaceHref(appointmentId: string): string {
     });
 }
 
+/** Same reasoning as clinicianQueueHref above — points at clinician/Queue.vue. */
 function departmentQueueHref(
-    department: string,
-    status: 'waiting_provider' | 'in_consultation' = 'waiting_provider',
-    focusAppointmentId?: string,
-    searchQuery?: string,
+    _department: string,
+    _status: 'waiting_provider' | 'in_consultation' = 'waiting_provider',
+    _focusAppointmentId?: string,
+    _searchQuery?: string,
 ): string {
-    const params = new URLSearchParams({
-        view: 'queue',
-        status,
-        from: today,
-        department,
-        unassignedClinician: 'true',
-    });
-
-    if (focusAppointmentId && focusAppointmentId !== '') {
-        params.set('focusAppointmentId', focusAppointmentId);
-        params.set('focusAction', 'consultation');
-    }
-
-    if (searchQuery && searchQuery.trim() !== '') {
-        params.set('q', searchQuery.trim());
-    }
-
-    return `/appointments?${params.toString()}`;
+    return '/clinician/queue';
 }
 
 function appointmentsWorklistSearchHref(searchQuery: string): string {
@@ -381,15 +365,13 @@ function dashboardAppointmentHref(item: any): string {
         }
     }
 
-    const params = new URLSearchParams({ view: 'queue', from: today });
-    if (status !== '') {
-        params.set('status', status);
-    }
-    if (appointmentId !== '') {
-        params.set('focusAppointmentId', appointmentId);
-    }
-
-    return `/appointments?${params.toString()}`;
+    // Fallback for every row this function's clinician-specific branches
+    // above don't cover — routed by the visit's actual stage, same mapping
+    // clinicianQueueHref/triageQueueHref use, rather than a query-param
+    // mode IndexV2.vue can't read.
+    if (status === 'waiting_provider' || status === 'in_consultation') return '/clinician/queue';
+    if (status === 'waiting_triage' || status === 'checked_in') return '/triage/queue';
+    return '/appointments';
 }
 
 function appointmentTriageCategory(item: any): QueueRow['triageCategory'] {
@@ -1649,6 +1631,7 @@ const dashboardSurfaceRuntime = computed(() => ({
     formatMoney,
     formatEnumLabel,
     clinicianQueueHref,
+    triageQueueHref,
     departmentQueueHref,
     activeConsultationWorkspaceHref,
     directServiceModuleHref,
@@ -1825,7 +1808,7 @@ const clinicianConsultationQueueAlertDescription = computed(() => {
 });
 
 const queueViewAllHref = computed(() => {
-    if (activePresetKey.value === 'front_desk') return `/appointments?view=queue&from=${today}`;
+    if (activePresetKey.value === 'front_desk') return '/reception/queue';
     if (activePresetKey.value === 'clinician') {
         if (clinicianMyQueueWaitingCount.value > 0) {
             return clinicianQueueHref('waiting_provider');
@@ -1837,8 +1820,8 @@ const queueViewAllHref = computed(() => {
 
         return clinicianQueueHref('waiting_provider');
     }
-    if (activePresetKey.value === 'nursing') return `/appointments?view=queue&status=checked_in&from=${today}`;
-    if (activePresetKey.value === 'emergency') return `/appointments?view=queue&status=checked_in&from=${today}`;
+    if (activePresetKey.value === 'nursing') return triageQueueHref();
+    if (activePresetKey.value === 'emergency') return triageQueueHref();
     if (activePresetKey.value === 'direct_service') return directServiceModuleHref(primaryDirectServiceModule.value);
     if (activePresetKey.value === 'cashier') return '/billing-invoices?status=draft';
     return '#';

@@ -213,7 +213,7 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
             >
                 <Link
                     :href="
-                        contextCreateHref('/laboratory-orders', {
+                        contextCreateHref('/laboratory-orders/legacy', {
                             includeTabNew: true,
                         })
                     "
@@ -294,7 +294,7 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
             >
                 <Link
                     :href="
-                        contextCreateHref('/pharmacy-orders', {
+                        contextCreateHref('/pharmacy-orders/legacy', {
                             includeTabNew: true,
                         })
                     "
@@ -375,7 +375,7 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
             >
                 <Link
                     :href="
-                        contextCreateHref('/radiology-orders', {
+                        contextCreateHref('/radiology-orders/legacy', {
                             includeTabNew: true,
                         })
                     "
@@ -456,7 +456,7 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
             >
                 <Link
                     :href="
-                        contextCreateHref('/theatre-procedures', {
+                        contextCreateHref('/theatre-procedures/legacy', {
                             includeTabNew: true,
                         })
                     "

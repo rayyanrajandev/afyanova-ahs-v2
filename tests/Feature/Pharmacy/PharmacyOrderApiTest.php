@@ -161,7 +161,27 @@ function makePharmacyInventoryItem(array $overrides = []): InventoryItemModel
         ],
     )->id;
 
-    return InventoryItemModel::query()->create($attributes);
+    $item = InventoryItemModel::query()->create($attributes);
+
+    // InventoryUnitConversionService requires an active base-unit record to resolve
+    // a unit for dispensing at all (throws "Selected inventory unit could not be
+    // resolved for this item." otherwise) — a requirement this fixture predates.
+    // Real inventory items get this via a migration backfill; test fixtures need it
+    // created explicitly.
+    InventoryItemUnitModel::query()->create([
+        'tenant_id' => $item->tenant_id,
+        'facility_id' => $item->facility_id,
+        'item_id' => $item->id,
+        'unit_name' => $item->unit,
+        'unit_code' => null,
+        'base_quantity' => 1,
+        'is_base_unit' => true,
+        'is_default_sales_unit' => true,
+        'is_default_purchase_unit' => true,
+        'is_active' => true,
+    ]);
+
+    return $item;
 }
 
 function pharmacyOrderPayload(string $patientId, array $overrides = []): array
@@ -272,17 +292,9 @@ it('dispatches PharmacyOrderDispensed when the order reaches dispensed', functio
 
     $user = makePharmacyUser();
     $patient = makePharmacyPatient();
-    $inventoryItem = makePharmacyInventoryItem([
+    makePharmacyInventoryItem([
         'item_code' => 'ATC:N02BE01',
         'item_name' => 'Paracetamol 500mg',
-    ]);
-    InventoryItemUnitModel::query()->create([
-        'item_id' => $inventoryItem->id,
-        'unit_name' => 'tablet',
-        'unit_code' => 'tab',
-        'base_quantity' => 1,
-        'is_base_unit' => true,
-        'is_active' => true,
     ]);
 
     $created = $this->actingAs($user)
@@ -4398,6 +4410,74 @@ it('rejects pharmacy cancel lifecycle action when dispensed quantity exists', fu
         ])
         ->assertStatus(422)
         ->assertJsonValidationErrors(['action']);
+});
+
+it('reports raw on-hand stock as available when no reservation exists', function (): void {
+    $user = makePharmacyUser();
+    makePharmacyInventoryItem();
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/pharmacy-orders/availability?'.http_build_query([
+            'medicationCode' => 'ATC:N02BE01',
+            'medicationName' => 'Paracetamol 500mg',
+        ]))
+        ->assertOk()
+        ->assertJsonPath('data.itemCode', 'ATC:N02BE01')
+        ->assertJsonPath('data.currentStock', 480)
+        ->assertJsonPath('data.onHandStock', '480.000')
+        ->assertJsonPath('data.stockState', 'healthy');
+});
+
+it('reduces available stock by active reservations without changing on-hand stock', function (): void {
+    $user = makePharmacyUser();
+    $item = makePharmacyInventoryItem();
+
+    [$tenantId, $facilityId] = seedPharmacyPlatformScopeFacility(
+        tenantCode: 'AVAIL-TEST-TENANT',
+        tenantName: 'Availability Test Tenant',
+        countryCode: 'KE',
+        facilityCode: 'AVAIL-TEST-FACILITY',
+        facilityName: 'Availability Test Facility',
+    );
+
+    DB::table('inventory_stock_reservations')->insert([
+        'id' => (string) Str::uuid(),
+        'tenant_id' => $tenantId,
+        'facility_id' => $facilityId,
+        'item_id' => $item->id,
+        'batch_id' => null,
+        'warehouse_id' => null,
+        'source_type' => 'pharmacy_order',
+        'source_id' => (string) Str::uuid(),
+        'source_line_id' => null,
+        'quantity' => 150,
+        'status' => 'active',
+        'reserved_by_user_id' => $user->id,
+        'reserved_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/pharmacy-orders/availability?'.http_build_query([
+            'medicationCode' => 'ATC:N02BE01',
+            'medicationName' => 'Paracetamol 500mg',
+        ]))
+        ->assertOk()
+        ->assertJsonPath('data.currentStock', 330)
+        ->assertJsonPath('data.onHandStock', '480.000');
+});
+
+it('reports no active inventory match for an unknown medication', function (): void {
+    $user = makePharmacyUser();
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/pharmacy-orders/availability?'.http_build_query([
+            'medicationCode' => 'NOT-A-REAL-CODE',
+            'medicationName' => 'Nonexistent Medicine',
+        ]))
+        ->assertOk()
+        ->assertJsonPath('data', null);
 });
 
 /**

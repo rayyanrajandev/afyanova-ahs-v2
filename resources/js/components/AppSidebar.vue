@@ -63,7 +63,7 @@ const visibleNavItems = computed(() =>
 const homeItems = computed<NavItem[]>(() => [
     {
         id: 'dashboard',
-        title: 'Dashboard',
+        title: 'My Workspace',
         href: dashboard(),
         iconName: 'layout-grid',
     },

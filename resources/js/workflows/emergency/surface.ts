@@ -32,7 +32,7 @@ const triageRows = lists.checkedInAppointments ?? [];
     const actions = (() => {
 return [
             { label: 'Register emergency walk-in', icon: 'calendar-plus-2', variant: 'default', href: `/appointments?open=schedule&type=walkin&view=queue&from=${runtime.today}` },
-            { label: 'Triage queue', icon: 'heart-pulse', variant: 'outline', href: `/appointments?view=queue&status=checked_in&from=${runtime.today}` },
+            { label: 'Triage queue', icon: 'heart-pulse', variant: 'outline', href: runtime.triageQueueHref() },
             { label: 'Admit patient', icon: 'bed-double', variant: 'outline', href: '/admissions' },
         ];
     })();
@@ -65,7 +65,7 @@ const now = runtime.nowTick;
                 subtitle: subtitleParts.join(' | ') || 'Awaiting triage assessment.',
                 meta: arrivalTime ? `Waiting ${waitMins}m${cat ? ` · ${cat}` : ''}` : (cat ? cat : 'Wait time unknown'),
                 status: runtime.formatEnumLabel(String(item.status ?? 'checked_in')),
-                href: `/appointments?view=queue&status=checked_in&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${runtime.today}`,
+                href: runtime.triageQueueHref(String(item.id ?? '')),
                 actionLabel: 'Open triage',
                 isOverdue,
                 triageCategory: cat,
@@ -109,7 +109,7 @@ const waitingTriage = helpers.numberValue(counts.appointments, 'checked_in');
                 : 'Review current admissions for discharge or escalation decisions.',
             primaryAction: {
                 label: hasWaiting ? 'Open triage queue' : 'Open admissions',
-                href: hasWaiting ? `/appointments?view=queue&status=checked_in&from=${runtime.today}` : '/admissions?view=queue',
+                href: hasWaiting ? runtime.triageQueueHref() : '/admissions?view=queue',
             },
             secondaryAction: { label: 'Register emergency walk-in', href: `/appointments?open=schedule&type=walkin&view=queue&from=${runtime.today}` },
             chips: [
@@ -127,7 +127,7 @@ return [
                 label: 'Triage queue',
                 note: 'Patients checked in and waiting for initial clinical assessment.',
                 value: helpers.numberValue(counts.appointments, 'checked_in'),
-                href: `/appointments?view=queue&status=checked_in&from=${runtime.today}`,
+                href: runtime.triageQueueHref(),
                 actionLabel: 'Open triage queue',
                 icon: 'heart-pulse',
             },
@@ -135,7 +135,7 @@ return [
                 label: 'P1 — Resuscitation',
                 note: 'Immediately life-threatening patients in triage. Requires instantaneous response.',
                 value: (counts.appointments?.triage_categories as any)?.P1 ?? 0,
-                href: `/appointments?view=queue&status=checked_in&triageCategory=P1&from=${runtime.today}`,
+                href: runtime.triageQueueHref(undefined, 'P1'),
                 actionLabel: 'View P1 patients',
                 icon: 'alert-triangle',
             },
@@ -143,7 +143,7 @@ return [
                 label: 'P2 — Emergent',
                 note: 'Very urgent patients. Clinical assessment target: within 10 minutes of check-in.',
                 value: (counts.appointments?.triage_categories as any)?.P2 ?? 0,
-                href: `/appointments?view=queue&status=checked_in&triageCategory=P2&from=${runtime.today}`,
+                href: runtime.triageQueueHref(undefined, 'P2'),
                 actionLabel: 'View P2 patients',
                 icon: 'activity',
             },

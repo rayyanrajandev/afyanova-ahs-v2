@@ -5,6 +5,7 @@ import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     Dialog,
     DialogContent,
@@ -18,13 +19,15 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
-import PatientLookupField from '@/components/patients/PatientLookupField.vue';
+import PatientQuickSearchField from '@/components/patients/PatientQuickSearchField.vue';
+import { type PatientQuickSearchResult } from '@/composables/patients/usePatientQuickSearch';
 import EncounterHistorySheet from '@/components/clinical/panels/EncounterHistorySheet.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { apiGet } from '@/lib/apiClient';
 import { formatEnumLabel } from '@/lib/labels';
 import { encounterWorkspaceHrefForRecord, encounterWorkspaceLegacyAppointmentHref } from '@/lib/encounterWorkspace';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
+import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
 import {
     useMedicalRecordList,
     useMedicalRecordStatusCounts,
@@ -80,12 +83,25 @@ function patientLabel(patientId: string | null): string {
 }
 
 const statusOptions = [
-    { value: '', label: 'All statuses' },
+    { value: 'all', label: 'All statuses' },
     { value: 'draft', label: 'Draft' },
     { value: 'finalized', label: 'Finalized' },
     { value: 'amended', label: 'Amended' },
     { value: 'archived', label: 'Archived' },
 ];
+
+function statusCount(status: string): number | null {
+    if (!statusCounts.value) return null;
+    if (status === 'all') return statusCounts.value.total ?? null;
+    return statusCounts.value[status as keyof typeof statusCounts.value] ?? null;
+}
+
+function setStatus(value: string | number): void {
+    filters.status = value === 'all' ? '' : String(value);
+    filters.page = 1;
+}
+
+const { scrollContainerHeight } = useStickyScrollContainer();
 
 function statusBadgeVariant(status: string | null): 'default' | 'secondary' | 'outline' | 'destructive' {
     switch (status) {
@@ -113,11 +129,26 @@ function formatDateTime(value: string | null): string {
     }).format(date);
 }
 
+const patientSearchQuery = ref('');
+
+/**
+ * PatientQuickSearchField, not PatientLookupField — a filter row (narrow
+ * the list) doesn't need PatientLookupField's selected-patient summary
+ * card (name/PT number/status/phone/demographics), which pushes this
+ * whole filter grid down. Matches Reception Queue's own convention for
+ * this kind of dense filter search.
+ */
+function onPatientSelected(patient: PatientQuickSearchResult | null): void {
+    filters.patientId = patient?.id ?? '';
+    filters.page = 1;
+}
+
 function resetFilters(): void {
     filters.q = '';
     filters.status = '';
     filters.recordType = '';
     filters.patientId = '';
+    patientSearchQuery.value = '';
     filters.encounterId = '';
     filters.appointmentId = '';
     filters.appointmentReferralId = '';
@@ -209,17 +240,17 @@ onMounted(() => {
 
     if (tab === 'new' || appointmentId || admissionId) {
         if (appointmentId) {
-            router.replace(encounterWorkspaceLegacyAppointmentHref(appointmentId, { from: 'medical-records' }));
+            router.visit(encounterWorkspaceLegacyAppointmentHref(appointmentId, { from: 'medical-records' }), { replace: true });
             return;
         }
 
         if (patientId) {
-            router.replace(appointmentsEntryHref(patientId));
+            router.visit(appointmentsEntryHref(patientId), { replace: true });
             return;
         }
 
         if (tab === 'new') {
-            router.replace(appointmentsEntryHref());
+            router.visit(appointmentsEntryHref(), { replace: true });
             return;
         }
 
@@ -241,42 +272,66 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Medical Records', href: '/medic
 <template>
     <Head title="Medical Records" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="space-y-4 p-4 md:p-6">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                    <h1 class="text-lg font-bold tracking-tight md:text-xl">Medical Records</h1>
-                    <p class="text-sm text-muted-foreground">Search and review consultation documentation across all patients.</p>
+        <div
+            ref="scrollContainer"
+            class="flex flex-col gap-4 overflow-x-hidden overflow-y-auto rounded-lg"
+            :style="{ height: scrollContainerHeight }"
+        >
+            <Tabs :model-value="filters.status || 'all'" class="contents" @update:model-value="setStatus">
+            <div class="sticky top-0 z-10 bg-background/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0 space-y-0.5">
+                        <h1 class="text-lg font-bold tracking-tight md:text-xl">Medical Records</h1>
+                        <p class="text-xs text-muted-foreground">Health Information: search and govern clinical notes across all patients — finalize, amend, archive.</p>
+                    </div>
+                    <Badge v-if="statusCounts" variant="secondary">{{ statusCounts.total }} notes</Badge>
                 </div>
+
+                <div v-if="canReadMedicalRecords" class="mt-3 grid grid-cols-5 gap-2">
+                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Total</p>
+                        <p class="text-sm font-bold tabular-nums">{{ statusCount('all') ?? '—' }}</p>
+                    </div>
+                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Draft</p>
+                        <p class="text-sm font-bold tabular-nums">{{ statusCount('draft') ?? '—' }}</p>
+                    </div>
+                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Finalized</p>
+                        <p class="text-sm font-bold tabular-nums">{{ statusCount('finalized') ?? '—' }}</p>
+                    </div>
+                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Amended</p>
+                        <p class="text-sm font-bold tabular-nums">{{ statusCount('amended') ?? '—' }}</p>
+                    </div>
+                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Archived</p>
+                        <p class="text-sm font-bold tabular-nums">{{ statusCount('archived') ?? '—' }}</p>
+                    </div>
+                </div>
+
+                <TabsList v-if="canReadMedicalRecords" class="mt-3 grid w-full grid-cols-5">
+                    <TabsTrigger
+                        v-for="option in statusOptions"
+                        :key="option.value"
+                        :value="option.value"
+                        class="inline-flex items-center gap-1.5"
+                    >
+                        {{ option.label }}
+                        <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
+                            {{ statusCount(option.value) ?? '—' }}
+                        </Badge>
+                    </TabsTrigger>
+                </TabsList>
             </div>
 
+            <div class="space-y-4 px-6 pb-6">
             <Alert v-if="!canReadMedicalRecords" variant="destructive">
                 <AlertTitle>Access required</AlertTitle>
-                <AlertDescription>Viewing the medical records registry requires <code>medical.records.read</code>.</AlertDescription>
+                <AlertDescription>Viewing the clinical note registry requires <code>medical.records.read</code>.</AlertDescription>
             </Alert>
 
             <template v-else>
-                <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                    <button
-                        v-for="option in statusOptions"
-                        :key="option.value"
-                        type="button"
-                        :class="[
-                            'rounded-lg border px-3 py-2 text-left transition',
-                            filters.status === option.value ? 'border-primary bg-primary/5' : 'bg-background hover:border-primary/40',
-                        ]"
-                        @click="filters.status = option.value; filters.page = 1"
-                    >
-                        <p class="text-xs font-medium text-muted-foreground">{{ option.label }}</p>
-                        <p class="mt-1 text-lg font-semibold tabular-nums">
-                            {{
-                                option.value === ''
-                                    ? (statusCounts?.total ?? '—')
-                                    : (statusCounts?.[option.value as keyof typeof statusCounts] ?? '—')
-                            }}
-                        </p>
-                    </button>
-                </div>
-
                 <div class="rounded-lg border bg-background p-4">
                     <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                         <div class="grid gap-1.5 xl:col-span-2">
@@ -284,12 +339,12 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Medical Records', href: '/medic
                             <Input id="mri-search" v-model="filters.q" placeholder="Record number, assessment, plan, diagnosis code" @keyup.enter="filters.page = 1" />
                         </div>
                         <div class="grid gap-1.5">
-                            <PatientLookupField
+                            <Label for="mri-patient">Patient</Label>
+                            <PatientQuickSearchField
+                                v-model:query="patientSearchQuery"
                                 input-id="mri-patient"
-                                label="Patient"
-                                mode="filter"
-                                :model-value="filters.patientId"
-                                @update:model-value="(value) => { filters.patientId = value; filters.page = 1; }"
+                                placeholder="Search patient by name, MRN, or phone…"
+                                @selected="onPatientSelected"
                             />
                         </div>
                         <div class="grid gap-1.5">
@@ -329,12 +384,12 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Medical Records', href: '/medic
                 </div>
 
                 <Alert v-else-if="listQuery.isError.value" variant="destructive">
-                    <AlertTitle>Unable to load medical records</AlertTitle>
+                    <AlertTitle>Unable to load clinical notes</AlertTitle>
                     <AlertDescription>{{ (listQuery.error.value as Error | null)?.message ?? 'Unknown error.' }}</AlertDescription>
                 </Alert>
 
                 <div v-else-if="records.length === 0" class="rounded-lg border border-dashed px-5 py-5">
-                    <p class="text-base font-medium text-foreground">No medical records match these filters</p>
+                    <p class="text-base font-medium text-foreground">No clinical notes match these filters</p>
                     <p class="mt-1 text-sm text-muted-foreground">Adjust the search, patient, or date range filters above.</p>
                 </div>
 
@@ -431,21 +486,21 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Medical Records', href: '/medic
                             <DialogTitle>
                                 {{
                                     statusAction.action.value === 'finalized'
-                                        ? 'Finalize Medical Record'
+                                        ? 'Finalize Clinical Note'
                                         : statusAction.action.value === 'amended'
-                                          ? 'Amend Medical Record'
-                                          : 'Archive Medical Record'
+                                          ? 'Amend Clinical Note'
+                                          : 'Archive Clinical Note'
                                 }}
                             </DialogTitle>
                             <DialogDescription>
                                 <template v-if="statusAction.action.value === 'finalized'">
-                                    Confirm finalization for {{ statusAction.targetRecord.value?.recordNumber ?? 'this medical record' }}. Attestation and status audit remain available after finalization.
+                                    Confirm finalization for {{ statusAction.targetRecord.value?.recordNumber ?? 'this clinical note' }}. Attestation and status audit remain available after finalization.
                                 </template>
                                 <template v-else-if="statusAction.action.value === 'amended'">
-                                    Provide an amendment reason for {{ statusAction.targetRecord.value?.recordNumber ?? 'this medical record' }}. The note will reopen as a draft so you can correct it, then finalize the amendment when ready.
+                                    Provide an amendment reason for {{ statusAction.targetRecord.value?.recordNumber ?? 'this clinical note' }}. The note will reopen as a draft so you can correct it, then finalize the amendment when ready.
                                 </template>
                                 <template v-else>
-                                    Provide an archive reason for {{ statusAction.targetRecord.value?.recordNumber ?? 'this medical record' }}.
+                                    Provide an archive reason for {{ statusAction.targetRecord.value?.recordNumber ?? 'this clinical note' }}.
                                 </template>
                             </DialogDescription>
                         </DialogHeader>
@@ -471,6 +526,8 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Medical Records', href: '/medic
                     :can-view-audit-logs="canViewMedicalRecordAuditLogs"
                 />
             </template>
+            </div>
+            </Tabs>
         </div>
     </AppLayout>
 </template>

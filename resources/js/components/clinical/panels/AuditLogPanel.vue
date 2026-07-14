@@ -3,15 +3,19 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { auditActionDisplayLabel, auditActorDisplayName } from '@/lib/audit';
-import { useMedicalRecordAuditLog } from '@/composables/clinical/useMedicalRecordAuditLog';
+import { auditActionDisplayLabel, auditActorDisplayName, type AuditLogLike, type AuditLogQueryResult } from '@/lib/audit';
 import { formatDateTime } from '@/composables/clinical/useEncounterOrdering';
 
-const props = defineProps<{
-    recordId: string;
+/**
+ * Domain-agnostic: accepts a use{X}AuditLog(id) composable's return value as
+ * a prop instead of owning one specific composable/endpoint internally, so
+ * the same panel serves medical records (useMedicalRecordAuditLog),
+ * emergency cases (useEmergencyCaseAuditLog), and emergency transfers
+ * (useEmergencyTransferAuditLog) — see AuditLogQueryResult's own docblock.
+ */
+defineProps<{
+    audit: AuditLogQueryResult<AuditLogLike & { id: string; createdAt: string | null }>;
 }>();
-
-const audit = useMedicalRecordAuditLog(() => props.recordId);
 </script>
 
 <template>

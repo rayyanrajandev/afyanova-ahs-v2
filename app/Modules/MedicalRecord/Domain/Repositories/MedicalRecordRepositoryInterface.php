@@ -30,6 +30,19 @@ interface MedicalRecordRepositoryInterface
 
     public function hasSignedConsultationNoteForAppointment(string $appointmentId): bool;
 
+    /**
+     * Batched form of hasSignedConsultationNoteForAppointment() — one query
+     * for N appointments, not N queries. Backs clinician/Queue.vue's "note
+     * signed" indicator (reports/appointments-scheduling-workspace-
+     * modernization-plan.md); calling the single-appointment method per
+     * queue row would be N+1.
+     *
+     * @param  array<int, string>  $appointmentIds
+     * @return array<string, bool> keyed by appointment id; every id in
+     *         $appointmentIds is present, false when no signed note exists.
+     */
+    public function hasSignedConsultationNoteForAppointments(array $appointmentIds): array;
+
     public function update(string $id, array $attributes): ?array;
 
     /**

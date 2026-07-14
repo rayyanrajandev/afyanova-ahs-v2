@@ -4,7 +4,6 @@ namespace App\Modules\Pharmacy\Presentation\Http\Controllers;
 
 use App\Jobs\GenerateAuditExportCsvJob;
 use App\Http\Controllers\Controller;
-use App\Modules\InventoryProcurement\Domain\Repositories\InventoryItemRepositoryInterface;
 use App\Modules\InventoryProcurement\Application\Exceptions\InsufficientInventoryStockException;
 use App\Modules\InventoryProcurement\Application\Exceptions\InventoryItemNotFoundException;
 use App\Modules\Patient\Presentation\Http\Transformers\PatientAllergyResponseTransformer;
@@ -21,6 +20,7 @@ use App\Modules\Pharmacy\Application\UseCases\ApplyPharmacyOrderLifecycleActionU
 use App\Modules\Pharmacy\Application\UseCases\CheckPharmacyOrderDuplicatesUseCase;
 use App\Modules\Pharmacy\Application\UseCases\CreatePharmacyOrderUseCase;
 use App\Modules\Pharmacy\Application\UseCases\DiscardPharmacyOrderDraftUseCase;
+use App\Modules\Pharmacy\Application\UseCases\GetPharmacyMedicationAvailabilityUseCase;
 use App\Modules\Pharmacy\Application\UseCases\GetPharmacyOrderUseCase;
 use App\Modules\Pharmacy\Application\UseCases\GetPharmacyOrderSafetyReviewUseCase;
 use App\Modules\Pharmacy\Application\UseCases\ListPharmacyOrderAuditLogsUseCase;
@@ -91,14 +91,14 @@ class PharmacyOrderController extends Controller
 
     public function availability(
         Request $request,
-        InventoryItemRepositoryInterface $inventoryItemRepository
+        GetPharmacyMedicationAvailabilityUseCase $useCase
     ): JsonResponse {
         $payload = $request->validate([
             'medicationCode' => ['nullable', 'string', 'max:255'],
             'medicationName' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $item = $inventoryItemRepository->findBestActiveMatchByCodeOrName(
+        $item = $useCase->execute(
             $payload['medicationCode'] ?? null,
             $payload['medicationName'] ?? null,
         );

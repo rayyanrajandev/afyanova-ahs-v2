@@ -1,3 +1,4 @@
+import type { ComputedRef, Ref } from 'vue';
 import { formatEnumLabel } from '@/lib/labels';
 
 export type AuditActorSummary = {
@@ -19,6 +20,25 @@ export type AuditLogLike = {
     actorId?: number | null;
     actor?: AuditActorSummary | null;
     metadata?: AuditMetadata;
+};
+
+/**
+ * The shape every `use{X}AuditLog(id)` composable returns
+ * (useMedicalRecordAuditLog.ts is the original; useEmergencyCaseAuditLog.ts/
+ * useEmergencyTransferAuditLog.ts mirror it exactly) — lets AuditLogPanel.vue
+ * accept the composable's return value as a prop instead of hardcoding one
+ * specific composable/entity internally, so the same panel serves any
+ * audit-log domain.
+ */
+export type AuditLogQueryResult<T extends AuditLogLike = AuditLogLike> = {
+    filters: { q: string; action: string; actorType: string; actorId: string; from: string; to: string; page: number; perPage: number };
+    logs: ComputedRef<T[]>;
+    meta: ComputedRef<{ currentPage: number; perPage: number; total: number; lastPage: number } | null>;
+    isLoading: Ref<boolean> | ComputedRef<boolean>;
+    error: Ref<unknown> | ComputedRef<unknown>;
+    resetFilters: () => void;
+    goToPage: (page: number) => void;
+    exportCsv: () => void;
 };
 
 const auditMetadataKeyLabels: Record<string, string> = {

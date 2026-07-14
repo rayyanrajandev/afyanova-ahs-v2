@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { useQueryClient } from '@tanstack/vue-query';
-import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue';
+import { computed, ref } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -17,6 +17,7 @@ import PatientStatusDialog from '@/components/patients/PatientStatusDialog.vue';
 import PatientVisitActionsMenu from '@/components/patients/PatientVisitActionsMenu.vue';
 import PatientSummaryPopover from '@/components/patients/summary/PatientSummaryPopover.vue';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
+import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
 import { useOfflinePatientQueue } from '@/composables/patientsIndex/useOfflinePatientQueue';
 import { usePatientList, usePatientStatusCounts, type PatientListItem } from '@/composables/patientsIndex/usePatientList';
 import { usePatientListFilters } from '@/composables/patientsIndex/usePatientListFilters';
@@ -54,8 +55,9 @@ import { type BreadcrumbItem } from '@/types';
  * canUpdatePatients), Change status (PatientStatusDialog.vue,
  * canUpdatePatientStatus).
  *
- * Route remains unlinked (reports/patients-index-modernization-plan.md
- * §3.3): /patients keeps rendering the legacy page until Phase 6.
+ * Phase 6 (cutover): /patients now renders this page directly
+ * (reports/patients-index-modernization-plan.md §3.3); the pre-cutover
+ * page remains reachable at /patients/legacy for rollback.
  */
 const { hasPermission, isFacilitySuperAdmin } = usePlatformAccess();
 
@@ -76,7 +78,7 @@ const canShowVisitActions = computed(
 const canShowRowActions = computed(() => canUpdatePatients.value || canUpdatePatientStatus.value || canShowVisitActions.value);
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
-    { title: 'Patients', href: '/patients/v2' },
+    { title: 'Patients', href: '/patients' },
 ]);
 
 const filters = usePatientListFilters();
@@ -218,24 +220,7 @@ async function syncOfflineRegistrationsNow(): Promise<void> {
     }
 }
 
-// Same bounded-scroll-container pattern as ShowV2.vue/WorkspaceV2.vue/
-// patient-flow/Board.vue/reception/Queue.vue.
-const scrollContainerRef = useTemplateRef<HTMLDivElement>('scrollContainer');
-const scrollContainerHeight = ref('98dvh');
-
-function updateScrollContainerHeight(): void {
-    const el = scrollContainerRef.value;
-    if (!el) return;
-    scrollContainerHeight.value = `calc(98dvh - ${el.getBoundingClientRect().top}px)`;
-}
-
-onMounted(() => {
-    updateScrollContainerHeight();
-    window.addEventListener('resize', updateScrollContainerHeight);
-});
-onBeforeUnmount(() => {
-    window.removeEventListener('resize', updateScrollContainerHeight);
-});
+const { scrollContainerHeight } = useStickyScrollContainer();
 </script>
 
 <template>
@@ -250,7 +235,6 @@ onBeforeUnmount(() => {
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div class="min-w-0 space-y-0.5">
                         <h1 class="text-lg font-bold tracking-tight md:text-xl">Patients</h1>
-                        <p class="text-xs text-muted-foreground">Rebuild in progress — see reports/patients-index-modernization-plan.md.</p>
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
                         <Badge v-if="meta" variant="secondary">{{ meta.total }} patients</Badge>
@@ -286,6 +270,23 @@ onBeforeUnmount(() => {
                         <p class="text-sm font-bold tabular-nums">{{ statusTabCount('') ?? '—' }}</p>
                     </div>
                 </div>
+
+                <Tabs v-if="canReadPatients" :model-value="filters.status || 'all'" class="mt-3" @update:model-value="setStatus">
+                    <TabsList class="grid w-full grid-cols-3">
+                        <TabsTrigger value="active" class="inline-flex items-center gap-1.5">
+                            Active
+                            <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusTabCount('active') ?? '—' }}</Badge>
+                        </TabsTrigger>
+                        <TabsTrigger value="inactive" class="inline-flex items-center gap-1.5">
+                            Inactive
+                            <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusTabCount('inactive') ?? '—' }}</Badge>
+                        </TabsTrigger>
+                        <TabsTrigger value="all" class="inline-flex items-center gap-1.5">
+                            All
+                            <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusTabCount('') ?? '—' }}</Badge>
+                        </TabsTrigger>
+                    </TabsList>
+                </Tabs>
             </div>
 
             <div class="space-y-4 px-6 pb-6">
@@ -295,23 +296,6 @@ onBeforeUnmount(() => {
                 </Alert>
 
                 <template v-else>
-                    <Tabs :model-value="filters.status || 'all'" @update:model-value="setStatus">
-                        <TabsList class="grid w-full grid-cols-3">
-                            <TabsTrigger value="active" class="inline-flex items-center gap-1.5">
-                                Active
-                                <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusTabCount('active') ?? '—' }}</Badge>
-                            </TabsTrigger>
-                            <TabsTrigger value="inactive" class="inline-flex items-center gap-1.5">
-                                Inactive
-                                <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusTabCount('inactive') ?? '—' }}</Badge>
-                            </TabsTrigger>
-                            <TabsTrigger value="all" class="inline-flex items-center gap-1.5">
-                                All
-                                <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">{{ statusTabCount('') ?? '—' }}</Badge>
-                            </TabsTrigger>
-                        </TabsList>
-                    </Tabs>
-
                     <div class="flex flex-wrap items-center gap-2">
                         <div class="relative min-w-0 flex-1">
                             <AppIcon name="search" class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />

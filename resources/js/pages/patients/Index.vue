@@ -6959,7 +6959,7 @@ onMounted(() => {
                                             class="h-7 shrink-0 gap-1.5 text-xs"
                                         >
                                             <Link
-                                                :href="`/patients?q=${encodeURIComponent(match.patientNumber || match.id)}`"
+                                                :href="`/patients/legacy?q=${encodeURIComponent(match.patientNumber || match.id)}`"
                                                 target="_blank"
                                             >
                                                 <AppIcon

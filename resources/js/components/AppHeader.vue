@@ -55,7 +55,7 @@ const activeItemStyles =
 
 const mainNavItems: NavItem[] = [
     {
-        title: 'Dashboard',
+        title: 'My Workspace',
         href: dashboard(),
         iconName: 'layout-grid',
     },

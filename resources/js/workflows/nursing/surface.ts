@@ -14,7 +14,7 @@ return [
 
     const actions = (() => {
 return [
-            { label: 'Triage queue', icon: 'users', variant: 'default', href: `/appointments?view=queue&status=checked_in&from=${runtime.today}` },
+            { label: 'Triage queue', icon: 'users', variant: 'default', href: runtime.triageQueueHref() },
             { label: 'Admission queue', icon: 'layout-list', variant: 'outline', href: '/admissions?view=queue' },
             { label: 'Inpatient ward', icon: 'bed-double', variant: 'outline', href: '/inpatient-ward' },
         ];
@@ -43,7 +43,7 @@ const sortByArrival = (a: any, b: any) => {
                 ? `Checked in ${runtime.formatDateTime(item.checkedInAt ?? item.scheduledAt)} · ${triageCategory}`
                 : `Checked in ${runtime.formatDateTime(item.checkedInAt ?? item.scheduledAt)}`,
             status: runtime.formatEnumLabel(String(item.status ?? 'checked_in')),
-            href: `/appointments?view=queue&status=checked_in&focusAppointmentId=${encodeURIComponent(String(item.id ?? ''))}&from=${runtime.today}`,
+            href: runtime.triageQueueHref(String(item.id ?? '')),
             actionLabel: 'Open triage queue',
             isOverdue: false,
             group: 'Triage',
@@ -101,7 +101,7 @@ const escalatedTasks = helpers.numberValue(counts.wardTasks, 'escalated');
                 ? 'Review current occupancy and placement before the next handoff.'
                 : 'Start from the live admissions view, then step into ward follow-up.',
             primaryAction: hasWaitingTriage
-                ? { label: 'Open triage queue', href: `/appointments?view=queue&status=checked_in&from=${runtime.today}` }
+                ? { label: 'Open triage queue', href: runtime.triageQueueHref() }
                 : { label: 'Open bed board', href: '/admissions?view=board' },
             secondaryAction: { label: 'Open inpatient ward', href: '/inpatient-ward' },
             chips: [
@@ -118,7 +118,7 @@ return [
                 label: 'Triage queue',
                 note: 'Checked-in patients waiting for nurse assessment.',
                 value: helpers.numberValue(counts.appointments, 'checked_in'),
-                href: `/appointments?view=queue&status=checked_in&from=${runtime.today}`,
+                href: runtime.triageQueueHref(),
                 actionLabel: 'Open triage',
                 icon: 'users',
             },

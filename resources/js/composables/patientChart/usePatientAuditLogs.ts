@@ -1,6 +1,6 @@
 import { useQuery, type UseQueryReturnType } from '@tanstack/vue-query';
 import { computed, type Ref } from 'vue';
-import { apiGet } from '@/lib/apiClient';
+import { API_V1_PREFIX, apiGet } from '@/lib/apiClient';
 
 /** Backs ShowV2.vue's Audit tab — GET /patients/{id}/audit-logs, gated by patients.view-audit-logs. */
 export type PatientChartAuditLog = {
@@ -33,4 +33,19 @@ export function usePatientAuditLogs(
             }),
         enabled: computed(() => patientId.value.trim() !== '' && enabled.value),
     });
+}
+
+/**
+ * Opens GET /patients/{id}/audit-logs/export in a new tab, the same
+ * window.open-based download the legacy patients/Index.vue's
+ * exportDetailsAuditLogsCsv used (Phase 6 feature-parity checklist,
+ * reports/patients-index-modernization-plan.md §2.1) — matching
+ * useMedicalRecordAuditLog.ts's exportCsv() convention. No filter params:
+ * ShowV2.vue's Audit tab is deliberately simpler than the legacy filter
+ * sheet (paginated only), so this exports everything, not a filtered view.
+ */
+export function exportPatientAuditLogsCsv(patientId: string): void {
+    if (!patientId) return;
+    const url = new URL(`${API_V1_PREFIX}/patients/${patientId}/audit-logs/export`, window.location.origin);
+    window.open(url.toString(), '_blank', 'noopener');
 }
