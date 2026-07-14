@@ -37,7 +37,9 @@ describe('useDirectServiceRequest', () => {
 
         expect(postSpy).toHaveBeenCalledWith(
             '/service-requests',
-            expect.objectContaining({ body: { patientId: 'pat-1', serviceType: 'laboratory', priority: 'routine', notes: null } }),
+            expect.objectContaining({
+                body: { patientId: 'pat-1', serviceType: 'laboratory', departmentId: null, priority: 'routine', notes: null },
+            }),
         );
         expect(result.requestNumber).toBe('SR1');
     });
@@ -52,7 +54,25 @@ describe('useDirectServiceRequest', () => {
 
         expect(postSpy).toHaveBeenCalledWith(
             '/service-requests',
-            expect.objectContaining({ body: { patientId: 'pat-1', serviceType: 'pharmacy', priority: 'urgent', notes: 'needs review' } }),
+            expect.objectContaining({
+                body: { patientId: 'pat-1', serviceType: 'pharmacy', departmentId: null, priority: 'urgent', notes: 'needs review' },
+            }),
+        );
+    });
+
+    it('sends the selected department id', async () => {
+        const postSpy = vi.spyOn(apiClient, 'apiPost').mockResolvedValue({
+            data: { id: 'sr-1', requestNumber: 'SR1', serviceType: 'laboratory', status: 'pending' },
+        });
+
+        const request = await mount(() => useDirectServiceRequest());
+        await request.mutateAsync({ patientId: 'pat-1', serviceType: 'laboratory', departmentId: 'dept-1' });
+
+        expect(postSpy).toHaveBeenCalledWith(
+            '/service-requests',
+            expect.objectContaining({
+                body: { patientId: 'pat-1', serviceType: 'laboratory', departmentId: 'dept-1', priority: 'routine', notes: null },
+            }),
         );
     });
 });

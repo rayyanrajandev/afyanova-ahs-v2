@@ -2,14 +2,22 @@
 
 namespace App\Modules\ServiceRequest\Application\UseCases;
 
+use App\Modules\ServiceRequest\Application\Services\ServiceRequestDepartmentScope;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ExportServiceRequestsCsvUseCase
 {
     public function __construct(private readonly ListServiceRequestsUseCase $listServiceRequests) {}
 
+    /**
+     * CSV export is gated by its own service.requests.export permission and
+     * is deliberately not department-scoped by B1 — always exports across
+     * every department, matching the pre-existing export behavior.
+     */
     public function execute(array $filters): StreamedResponse
     {
+        $scope = new ServiceRequestDepartmentScope(canViewAllDepartments: true, departmentId: null);
+
         $headers = [
             'Content-Type' => 'text/csv; charset=UTF-8',
             'Content-Disposition' => 'attachment; filename="service-requests.csv"',
@@ -45,7 +53,7 @@ class ExportServiceRequestsCsvUseCase
                 $batch = $this->listServiceRequests->execute(array_merge($filters, [
                     'page' => $page,
                     'perPage' => 250,
-                ]));
+                ]), $scope);
                 /** @var array<int, array<string, mixed>> $rows */
                 $rows = $batch['data'];
 

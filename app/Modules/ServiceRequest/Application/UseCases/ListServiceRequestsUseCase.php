@@ -2,6 +2,7 @@
 
 namespace App\Modules\ServiceRequest\Application\UseCases;
 
+use App\Modules\ServiceRequest\Application\Services\ServiceRequestDepartmentScope;
 use App\Modules\ServiceRequest\Domain\Repositories\ServiceRequestRepositoryInterface;
 use App\Modules\ServiceRequest\Domain\ValueObjects\ServiceRequestServiceType;
 use App\Modules\ServiceRequest\Domain\ValueObjects\ServiceRequestStatus;
@@ -11,8 +12,23 @@ class ListServiceRequestsUseCase
 {
     public function __construct(private readonly ServiceRequestRepositoryInterface $serviceRequestRepository) {}
 
-    public function execute(array $filters): array
+    /**
+     * $scope enforces Direct Service Queue V2's hard department scoping
+     * (see ServiceRequestDepartmentScopeResolver's docblock): a
+     * department-scoped actor's own department always wins over any
+     * client-supplied departmentId filter, and an actor with no assigned
+     * department gets an empty result set rather than falling back to
+     * showing everything.
+     */
+    public function execute(array $filters, ServiceRequestDepartmentScope $scope): array
     {
+        if ($scope->hasNoAssignedDepartment()) {
+            return [
+                'data' => [],
+                'meta' => ['currentPage' => 1, 'perPage' => (int) ($filters['perPage'] ?? 20), 'total' => 0, 'lastPage' => 1],
+            ];
+        }
+
         $page = max((int) ($filters['page'] ?? 1), 1);
         $perPage = min(max((int) ($filters['perPage'] ?? 20), 1), 100);
 
@@ -43,6 +59,10 @@ class ListServiceRequestsUseCase
         $sortDirection = strtolower((string) ($filters['sortDir'] ?? 'asc'));
         $sortDirection = $sortDirection === 'desc' ? 'desc' : 'asc';
 
+        $departmentId = $scope->canViewAllDepartments
+            ? (isset($filters['departmentId']) && Str::isUuid((string) $filters['departmentId']) ? (string) $filters['departmentId'] : null)
+            : $scope->departmentId;
+
         return $this->serviceRequestRepository->search(
             patientId: $patientId,
             serviceType: $serviceType,
@@ -53,6 +73,7 @@ class ListServiceRequestsUseCase
             page: $page,
             perPage: $perPage,
             sortDirection: $sortDirection,
+            departmentId: $departmentId,
         );
     }
 }

@@ -5,7 +5,9 @@ use App\Modules\ClaimsInsurance\Presentation\Http\Controllers\ClaimsInsuranceDoc
 use App\Modules\InpatientWard\Presentation\Http\Controllers\InpatientWardDischargeChecklistDocumentController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryProcurementDocumentController;
 use App\Modules\InventoryProcurement\Presentation\Http\Controllers\InventoryWarehouseTransferDocumentController;
+use App\Modules\Encounter\Application\UseCases\ResolveEncounterForAppointmentUseCase;
 use App\Modules\Encounter\Presentation\Http\Controllers\EncounterDocumentController;
+use App\Modules\MedicalRecord\Application\Exceptions\AppointmentNotEligibleForMedicalRecordException;
 use App\Modules\MedicalRecord\Presentation\Http\Controllers\MedicalRecordDocumentController;
 use App\Modules\Platform\Application\UseCases\GetDashboardContextUseCase;
 use App\Modules\Platform\Presentation\Http\Controllers\PlatformBrandingController;
@@ -47,18 +49,22 @@ Route::get('dashboard', function (GetDashboardContextUseCase $dashboardContext) 
     ]);
 })->middleware(['auth', 'verified'])->name('dashboard');
 
+// Cut over to the rebuilt page (Phase 6 of
+// reports/patients-index-modernization-plan.md). The old page remains
+// reachable at patients/legacy for rollback — same precedent
+// patients/{id}/chart/legacy established during the Patient Chart rebuild.
 Route::get('patients', function () {
-    return Inertia::render('patients/Index');
+    return Inertia::render('patients/IndexV2');
 })->middleware(['auth', 'verified', 'can:patients.read', 'facility.entitlement:patients.search'])->name('patients.page');
 
-// Phase 0 of reports/patients-index-modernization-plan.md: unlinked during
-// construction (Phases 0-5), not in the nav catalog, not the live /patients
-// route — the same "new route, old page untouched until cutover" precedent
-// patients/{id}/chart/v2 established during the Patient Chart rebuild.
-// /patients keeps rendering the legacy page until Phase 6 explicitly swaps it.
 Route::get('patients/v2', function () {
     return Inertia::render('patients/IndexV2');
 })->middleware(['auth', 'verified', 'can:patients.read', 'facility.entitlement:patients.search'])->name('patients.page.v2');
+
+// Rollback path — the pre-cutover page, unchanged.
+Route::get('patients/legacy', function () {
+    return Inertia::render('patients/Index');
+})->middleware(['auth', 'verified', 'can:patients.read', 'facility.entitlement:patients.search'])->name('patients.page.legacy');
 
 // Cut over to the rebuilt page (reports/patient-chart-rebuild-plan.md).
 // The old page remains reachable at patients/{id}/chart/legacy for rollback.
@@ -81,9 +87,28 @@ Route::get('patients/{id}/chart/legacy', function (string $id) {
     ]);
 })->middleware(['auth', 'verified', 'can:patients.read', 'facility.entitlement:patients.search'])->name('patients.chart.legacy');
 
+// Phase 6 (cutover) of reports/appointments-scheduling-workspace-
+// modernization-plan.md — same precedent patients.page's own cutover
+// established: swap the live route to the rebuilt page, keep the old page
+// reachable at appointments/legacy for rollback. Phase 4 (Clinician Queue)
+// and Phase 5 (Referrals) are not built yet — this cutover is scoped to
+// what IndexV2.vue actually covers today (scheduling: list/create/edit/
+// reschedule/cancel/no-show), matching §2.1's responsibility table; the
+// operational actions the legacy page also has (triage, consultation,
+// referrals) already live on their own pages (triage/Queue.vue, and a
+// future clinician/Queue.vue), not this one.
 Route::get('appointments', function () {
-    return Inertia::render('appointments/Index');
+    return Inertia::render('appointments/IndexV2');
 })->middleware(['auth', 'verified', 'can:appointments.read', 'facility.entitlement:appointments.scheduling'])->name('appointments.page');
+
+Route::get('appointments/v2', function () {
+    return Inertia::render('appointments/IndexV2');
+})->middleware(['auth', 'verified', 'can:appointments.read', 'facility.entitlement:appointments.scheduling'])->name('appointments.page.v2');
+
+// Rollback path — the pre-cutover page, unchanged.
+Route::get('appointments/legacy', function () {
+    return Inertia::render('appointments/Index');
+})->middleware(['auth', 'verified', 'can:appointments.read', 'facility.entitlement:appointments.scheduling'])->name('appointments.page.legacy');
 
 // Phase 6 (slice 1) of reports/patient-arrival-checkin-modernization-plan.md:
 // a new, standalone page — no predecessor to replace, so no V2/legacy-fallback
@@ -99,8 +124,33 @@ Route::get('patient-flow/board', function () {
     return Inertia::render('patient-flow/Board');
 })->middleware(['auth', 'verified', 'can:appointments.read', 'facility.entitlement:appointments.scheduling'])->name('patient-flow.board');
 
+// Phase 3 (corrected) of reports/appointments-scheduling-workspace-
+// modernization-plan.md: a new, standalone, nurse-scoped page — deliberately
+// separate from reception/queue, whose own route this is not a variant of.
+// Triage recording is clinical work, not front-desk work; see the plan's
+// Phase 3 correction note for why an earlier version put it on
+// reception/Queue.vue instead and was reverted.
+Route::get('triage/queue', function () {
+    return Inertia::render('triage/Queue');
+})->middleware(['auth', 'verified', 'can:appointments.read', 'facility.entitlement:appointments.scheduling'])->name('triage.queue');
+
+// Phase 4 of reports/appointments-scheduling-workspace-modernization-plan.md:
+// a new, standalone, clinician-scoped page — same reasoning as
+// triage/Queue.vue's own split from reception/Queue.vue. Consultation
+// takeover and provider workflow (hold, send back to triage, complete) are
+// clinician work, not front-desk work.
+Route::get('clinician/queue', function () {
+    return Inertia::render('clinician/Queue');
+})->middleware(['auth', 'verified', 'can:appointments.read', 'facility.entitlement:appointments.scheduling'])->name('clinician.queue');
+
+// Admission V2 + real bed assignment plan, Phase 5 (cutover): swap the
+// live route to the rebuilt page. AdmF of the Admission V2 full-parity plan
+// reached full parity with the legacy page (ADT timeline, audit logs,
+// discharge readiness, payer contract picker, bed-board click-through) and
+// deleted it outright — same "no legacy patches, ever" standing directive
+// applied to Emergency's P0e.
 Route::get('admissions', function () {
-    return Inertia::render('admissions/Index');
+    return Inertia::render('admissions/IndexV2');
 })->middleware([
     'auth',
     'verified',
@@ -108,6 +158,15 @@ Route::get('admissions', function () {
     // Scheduling-tier OR full admissions SKU (aligns with API admissions list + dashboard KPIs).
     'facility.entitlement.any:admissions.management,appointments.scheduling',
 ])->name('admissions.page');
+
+Route::get('admissions/v2', function () {
+    return Inertia::render('admissions/IndexV2');
+})->middleware([
+    'auth',
+    'verified',
+    'can:admissions.read',
+    'facility.entitlement.any:admissions.management,appointments.scheduling',
+])->name('admissions.page.v2');
 
 // Encounter-centric visit list (there was no dormant equivalent to reuse —
 // medical-records/Index.vue is record-centric, one row per note). Cut over
@@ -118,19 +177,51 @@ Route::get('encounters', function () {
 })->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])->name('encounters.list');
 
 // Cut over to the rebuilt workspace (reports/clinical-notes-frontend-rebuild-plan.md).
-// The old page remains reachable at encounters/{encounterId}/legacy for rollback.
+// The pre-cutover page (encounters/Show.vue + encounters/Workspace.vue) reached
+// full parity and was deleted outright — no /legacy rollback route kept, per
+// the standing "no legacy patches, ever" directive applied throughout this
+// session (same treatment as emergency-triage/Index.vue, admissions/Index.vue,
+// platform/admin/ward-beds/Index.vue).
 Route::get('encounters/{encounterId}', function (string $encounterId) {
     return Inertia::render('encounters/WorkspaceV2', [
         'encounterId' => $encounterId,
     ]);
 })->middleware(['auth', 'verified', 'can:medical.records.read', 'can:medical.records.create', 'facility.entitlement:medical_records.core'])->name('encounters.show');
 
-// Appointment-based resolution has no WorkspaceV2 equivalent yet (WorkspaceV2 only
-// accepts a resolved encounterId) — stays on the legacy page, not part of this cutover.
-Route::get('encounters/by-appointment/{appointmentId}', function (string $appointmentId) {
-    return Inertia::render('encounters/Show', [
-        'legacyAppointmentId' => $appointmentId,
-    ]);
+/**
+ * Resolves (or creates, via ResolveEncounterForAppointmentUseCase's
+ * findOrCreateForVisit) the encounter for an appointment, then redirects to
+ * the canonical encounters/{encounterId} route above — WorkspaceV2 only ever
+ * accepts an already-resolved encounterId, so this route's whole job is the
+ * resolve step, not rendering anything itself. Previously rendered the
+ * legacy encounters/Show page directly (never cut over); that was a real
+ * bug, not a deliberate scope decision — every caller of
+ * encounterWorkspaceLegacyAppointmentHref() (clinician/Queue.vue,
+ * appointments/Index.vue, medical-records/Index.vue + IndexV2.vue,
+ * Dashboard.vue) was silently landing on the pre-cutover workspace with no
+ * way to reach WorkspaceV2 via an appointment id.
+ *
+ * redirect('/encounters/{id}'), not redirect()->route('encounters.show', ...)
+ * — routes/api.php registers its own JSON `encounters/{id}` route under the
+ * same `encounters.show` name (different param name, `id` not
+ * `encounterId`), and Laravel resolves route-name lookups against whichever
+ * definition wins the collision, not necessarily this web route. A raw path
+ * sidesteps the collision entirely; renaming either route is a separate,
+ * wider-blast-radius fix not needed for this bug.
+ */
+Route::get('encounters/by-appointment/{appointmentId}', function (
+    string $appointmentId,
+    ResolveEncounterForAppointmentUseCase $useCase,
+) {
+    try {
+        $result = $useCase->execute($appointmentId, request()->user()?->id);
+    } catch (AppointmentNotEligibleForMedicalRecordException $exception) {
+        abort(422, $exception->getMessage());
+    }
+
+    abort_if($result === null, 404, 'Appointment not found.');
+
+    return redirect('/encounters/'.$result['encounter']['id']);
 })->middleware(['auth', 'verified', 'can:medical.records.read', 'can:medical.records.create', 'facility.entitlement:medical_records.core'])->name('encounters.by-appointment');
 
 Route::get('encounters/{encounterId}/v2', function (string $encounterId) {
@@ -138,13 +229,6 @@ Route::get('encounters/{encounterId}/v2', function (string $encounterId) {
         'encounterId' => $encounterId,
     ]);
 })->middleware(['auth', 'verified', 'can:medical.records.read', 'can:medical.records.create', 'facility.entitlement:medical_records.core'])->name('encounters.workspace-v2');
-
-// Rollback path — the pre-cutover page, unchanged.
-Route::get('encounters/{encounterId}/legacy', function (string $encounterId) {
-    return Inertia::render('encounters/Show', [
-        'encounterId' => $encounterId,
-    ]);
-})->middleware(['auth', 'verified', 'can:medical.records.read', 'can:medical.records.create', 'facility.entitlement:medical_records.core'])->name('encounters.show-legacy');
 
 // Cut over to the rebuilt registry (reports/medical-records-index-rebuild-plan.md).
 // The old page remains reachable at medical-records/legacy for rollback.
@@ -177,17 +261,60 @@ Route::get('encounters/{id}/pdf', [EncounterDocumentController::class, 'download
     ->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])
     ->name('encounters.pdf.download');
 
+// Cut over to the rebuilt worklist (collect/process/complete result/verify/
+// lifecycle actions on existing orders). Order creation — the "new" view,
+// duplicate-check, walk-in intake — isn't in the V2 build yet, so the old
+// page remains reachable at laboratory-orders/legacy for that, same
+// precedent pharmacy-orders/legacy established.
 Route::get('laboratory-orders', function () {
-    return Inertia::render('laboratory-orders/Index');
+    return Inertia::render('laboratory-orders/IndexV2');
 })->middleware(['auth', 'verified', 'can:laboratory.orders.read', 'facility.entitlement:laboratory.orders'])->name('laboratory-orders.page');
 
+Route::get('laboratory-orders/v2', function () {
+    return Inertia::render('laboratory-orders/IndexV2');
+})->middleware(['auth', 'verified', 'can:laboratory.orders.read', 'facility.entitlement:laboratory.orders'])->name('laboratory-orders.page.v2');
+
+// Rollback path — the pre-cutover page, unchanged. Also the only place
+// order creation (including walk-in intake) currently lives.
+Route::get('laboratory-orders/legacy', function () {
+    return Inertia::render('laboratory-orders/Index');
+})->middleware(['auth', 'verified', 'can:laboratory.orders.read', 'facility.entitlement:laboratory.orders'])->name('laboratory-orders.page.legacy');
+
+// Cut over to the rebuilt worklist (dispense/verify/policy/reconciliation/
+// lifecycle actions on existing orders). Order creation — the "new" view,
+// walk-in intake panel, formulary policy-review-required governance tier —
+// isn't in the V2 build yet, so the old page remains reachable at
+// pharmacy-orders/legacy for that, same precedent patients/legacy and
+// patients/{id}/chart/legacy established during those rebuilds. Both
+// creation paths hit the same backend endpoints as the Encounter
+// Workspace's inline order panel either way.
 Route::get('pharmacy-orders', function () {
-    return Inertia::render('pharmacy-orders/Index');
+    return Inertia::render('pharmacy-orders/IndexV2');
 })->middleware(['auth', 'verified', 'can:pharmacy.orders.read', 'facility.entitlement:pharmacy.orders'])->name('pharmacy-orders.page');
+
+Route::get('pharmacy-orders/v2', function () {
+    return Inertia::render('pharmacy-orders/IndexV2');
+})->middleware(['auth', 'verified', 'can:pharmacy.orders.read', 'facility.entitlement:pharmacy.orders'])->name('pharmacy-orders.page.v2');
+
+// Rollback path — the pre-cutover page, unchanged. Also the only place
+// order creation (including walk-in intake) currently lives.
+Route::get('pharmacy-orders/legacy', function () {
+    return Inertia::render('pharmacy-orders/Index');
+})->middleware(['auth', 'verified', 'can:pharmacy.orders.read', 'facility.entitlement:pharmacy.orders'])->name('pharmacy-orders.page.legacy');
 
 Route::get('walk-in-service-requests', function () {
     return Inertia::render('walk-in-service-requests/Index');
 })->middleware(['auth', 'verified', 'can:service.requests.read', 'facility.entitlement:clinical.walk_in_queue'])->name('walk-in-service-requests.page');
+
+// Patient flow redesign B3: a new, standalone page over ServiceRequestModel
+// — per-department Direct Service queue management (hard department
+// enforcement server-side, see ServiceRequestDepartmentScopeResolver). Not
+// a route swap: /walk-in-service-requests keeps rendering the legacy page,
+// now marked (Legacy) and un-nav-linked, same "URL-only rollback path" as
+// /patients/legacy, /appointments/legacy, /emergency-triage.
+Route::get('direct-service/queue', function () {
+    return Inertia::render('directService/Queue');
+})->middleware(['auth', 'verified', 'can:service.requests.read', 'facility.entitlement:clinical.walk_in_queue'])->name('direct-service.queue');
 
 Route::get('billing-invoices', function () {
     return Inertia::render('billing/Index');
@@ -339,8 +466,11 @@ Route::get('platform/admin/service-points', function () {
     return Inertia::render('platform/admin/service-points/Index');
 })->middleware(['auth', 'verified', 'can:platform.resources.read'])->name('platform-admin-service-points.page');
 
+// Ward/bed registry V2 redesign — cutover, no /legacy alias kept, per the
+// standing "no legacy patches, ever" directive already applied to
+// emergency-triage and admissions this session.
 Route::get('platform/admin/ward-beds', function () {
-    return Inertia::render('platform/admin/ward-beds/Index');
+    return Inertia::render('platform/admin/ward-beds/IndexV2');
 })->middleware(['auth', 'verified', 'can:platform.resources.read'])->name('platform-admin-ward-beds.page');
 
 Route::get('platform/admin/facility-rollouts', function () {
@@ -382,13 +512,39 @@ Route::get('platform/admin/clinical-catalogs/{catalog?}', function (?string $cat
     ->middleware(['auth', 'verified', 'can:platform.clinical-catalog.read'])
     ->name('platform-admin-clinical-catalogs.page');
 
+// Cut over to the rebuilt worklist (schedule/start imaging/complete
+// report/lifecycle actions on existing orders). Order creation — the
+// duplicate-check, draft/sign flow — isn't in the V2 build yet, so the
+// old page remains reachable at radiology-orders/legacy, same precedent
+// laboratory-orders/legacy and pharmacy-orders/legacy established.
 Route::get('radiology-orders', function () {
-    return Inertia::render('radiology-orders/Index');
+    return Inertia::render('radiology-orders/IndexV2');
 })->middleware(['auth', 'verified', 'can:radiology.orders.read', 'facility.entitlement:radiology.orders'])->name('radiology-orders.page');
 
+Route::get('radiology-orders/v2', function () {
+    return Inertia::render('radiology-orders/IndexV2');
+})->middleware(['auth', 'verified', 'can:radiology.orders.read', 'facility.entitlement:radiology.orders'])->name('radiology-orders.page.v2');
+
+// Rollback path — the pre-cutover page, unchanged. Also the only place
+// order creation currently lives.
+Route::get('radiology-orders/legacy', function () {
+    return Inertia::render('radiology-orders/Index');
+})->middleware(['auth', 'verified', 'can:radiology.orders.read', 'facility.entitlement:radiology.orders'])->name('radiology-orders.page.legacy');
+
+// P0 of the Reception/Emergency/Admission/Bed-Management audit
+// follow-through: emergency/Queue.vue reached full parity with the legacy
+// page (queue, status transitions incl. admit-with-bed, case creation,
+// transfers, audit logs) — this is now a real route swap, not an alias
+// pair with a /legacy fallback, per the standing "legacy pages get deleted,
+// not kept around" directive. The old emergency-triage/Index.vue file is
+// removed in the same initiative (see P0e).
 Route::get('emergency-triage', function () {
-    return Inertia::render('emergency-triage/Index');
+    return Inertia::render('emergency/Queue');
 })->middleware(['auth', 'verified', 'can:emergency.triage.read', 'facility.entitlement:emergency.triage'])->name('emergency-triage.page');
+
+Route::get('emergency/queue', function () {
+    return Inertia::render('emergency/Queue');
+})->middleware(['auth', 'verified', 'can:emergency.triage.read', 'facility.entitlement:emergency.triage'])->name('emergency.queue');
 
 Route::get('inpatient-ward', function () {
     return Inertia::render('inpatient-ward/Index');
@@ -402,9 +558,25 @@ Route::get('inpatient-ward/discharge-checklists/{id}/pdf', [InpatientWardDischar
     ->middleware(['auth', 'verified', 'can:inpatient.ward.read', 'facility.entitlement:inpatient.care_plans'])
     ->name('inpatient-ward-discharge-checklists.pdf.download');
 
+// Cut over to the rebuilt worklist (pre-op/start/complete/lifecycle
+// actions on existing procedures). Scheduling — creation, OR room/resource
+// booking — isn't in the V2 build (a whole separate resource-allocation
+// sub-system with no lab/pharmacy/radiology analogue), so the old page
+// remains reachable at theatre-procedures/legacy, same precedent
+// laboratory-orders/legacy and radiology-orders/legacy established.
 Route::get('theatre-procedures', function () {
-    return Inertia::render('theatre-procedures/Index');
+    return Inertia::render('theatre-procedures/IndexV2');
 })->middleware(['auth', 'verified', 'can:theatre.procedures.read', 'facility.entitlement:theatre.procedures'])->name('theatre-procedures.page');
+
+Route::get('theatre-procedures/v2', function () {
+    return Inertia::render('theatre-procedures/IndexV2');
+})->middleware(['auth', 'verified', 'can:theatre.procedures.read', 'facility.entitlement:theatre.procedures'])->name('theatre-procedures.page.v2');
+
+// Rollback path — the pre-cutover page, unchanged. Also the only place
+// scheduling (creation + resource allocation) currently lives.
+Route::get('theatre-procedures/legacy', function () {
+    return Inertia::render('theatre-procedures/Index');
+})->middleware(['auth', 'verified', 'can:theatre.procedures.read', 'facility.entitlement:theatre.procedures'])->name('theatre-procedures.page.legacy');
 
 Route::get('claims-insurance', function () {
     return Inertia::render('claims-insurance/Index');

@@ -700,12 +700,27 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('reception/queue', [ReceptionController::class, 'queue'])
         ->middleware('can:appointments.read')
         ->name('reception.queue');
+    Route::get('reception/queue/status-counts', [ReceptionController::class, 'queueStatusCounts'])
+        ->middleware('can:appointments.read')
+        ->name('reception.queue.status-counts');
+    Route::get('reception/triage-queue/status-counts', [ReceptionController::class, 'triageQueueStatusCounts'])
+        ->middleware('can:appointments.read')
+        ->name('reception.triage-queue.status-counts');
+    Route::get('reception/triage-queue/completed-today', [ReceptionController::class, 'triageCompletedToday'])
+        ->middleware('can:appointments.read')
+        ->name('reception.triage-queue.completed-today');
+    Route::get('reception/clinician-queue/status-counts', [ReceptionController::class, 'clinicianQueueStatusCounts'])
+        ->middleware('can:appointments.read')
+        ->name('reception.clinician-queue.status-counts');
     Route::get('patient-flow/board', [PatientFlowController::class, 'board'])
         ->middleware('can:appointments.read')
         ->name('patient-flow.board');
     Route::get('patient-flow/notifications', [PatientFlowController::class, 'notifications'])
         ->middleware('can:appointments.read')
         ->name('patient-flow.notifications');
+    Route::get('patient-flow/clinician-directory', [PatientFlowController::class, 'clinicianDirectory'])
+        ->middleware('can:appointments.read')
+        ->name('patient-flow.clinician-directory');
     Route::patch('appointments/{id}/consultation-type', [AppointmentController::class, 'overrideConsultationType'])
         ->middleware('can:appointments.update')
         ->name('appointments.override-consultation-type');
@@ -749,6 +764,9 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::get('admissions/discharge-destination-options', [AdmissionController::class, 'dischargeDestinationOptions'])
         ->middleware('can:admissions.read')
         ->name('admissions.discharge-destination-options');
+    Route::get('admissions/available-beds', [AdmissionController::class, 'availableBeds'])
+        ->middleware('can:admissions.read')
+        ->name('admissions.available-beds.index');
     Route::post('admissions', [AdmissionController::class, 'store'])
         ->middleware('can:admissions.create')
         ->name('admissions.store');

@@ -3,7 +3,9 @@
 namespace App\Modules\Appointment\Application\UseCases;
 
 use App\Modules\Appointment\Application\Exceptions\ActiveAppointmentConflictException;
+use App\Modules\Appointment\Application\Exceptions\ClinicianScheduleConflictException;
 use App\Modules\Appointment\Application\Exceptions\PatientNotEligibleForAppointmentException;
+use App\Modules\Appointment\Application\Support\AppointmentConflictMessageFormatter;
 use App\Modules\Appointment\Domain\Repositories\AppointmentAuditLogRepositoryInterface;
 use App\Modules\Appointment\Domain\Repositories\AppointmentRepositoryInterface;
 use App\Modules\Appointment\Domain\Services\PatientLookupServiceInterface;
@@ -39,6 +41,11 @@ class UpdateAppointmentUseCase
         }
 
         $this->assertNoActiveSameDayConflict(
+            appointmentId: $id,
+            existing: $existing,
+            payload: $payload,
+        );
+        $this->assertNoClinicianScheduleConflict(
             appointmentId: $id,
             existing: $existing,
             payload: $payload,
@@ -135,22 +142,74 @@ class UpdateAppointmentUseCase
             return;
         }
 
-        $appointmentNumber = (string) ($existingConflict['appointment_number'] ?? 'existing appointment');
-        $department = trim((string) ($existingConflict['department'] ?? ''));
-        $scheduledTime = isset($existingConflict['scheduled_at'])
-            ? Carbon::parse((string) $existingConflict['scheduled_at'])->format('d M Y H:i')
-            : $scheduledDate;
-        $departmentPart = $department !== '' ? sprintf(' in %s', $department) : '';
-
         throw new ActiveAppointmentConflictException(
             existingAppointment: $existingConflict,
-            message: sprintf(
-                'Patient already has an active appointment (%s) on %s%s.',
-                $appointmentNumber,
-                $scheduledTime,
-                $departmentPart,
-            ),
+            message: AppointmentConflictMessageFormatter::activeSameDayConflict($existingConflict),
         );
+    }
+
+    /**
+     * Same hard-block as CreateAppointmentUseCase, applied to reschedules
+     * and clinician reassignments — see that class's own docblock for the
+     * overlap-window reasoning. Skipped when the resolved (payload-or-
+     * existing) clinicianUserId is null, or when the next status is
+     * terminal (cancelled/completed/no_show — closing or cancelling a visit
+     * should never be blocked by a schedule conflict).
+     *
+     * @param array<string, mixed> $existing
+     * @param array<string, mixed> $payload
+     */
+    private function assertNoClinicianScheduleConflict(string $appointmentId, array $existing, array $payload): void
+    {
+        $nextStatus = strtolower((string) ($payload['status'] ?? $existing['status'] ?? ''));
+        if (! in_array($nextStatus, ['scheduled', 'waiting_triage', 'waiting_provider', 'in_consultation'], true)) {
+            return;
+        }
+
+        $clinicianUserId = array_key_exists('clinician_user_id', $payload)
+            ? $payload['clinician_user_id']
+            : ($existing['clinician_user_id'] ?? null);
+
+        if ($clinicianUserId === null) {
+            return;
+        }
+
+        $scheduledAt = (string) ($payload['scheduled_at'] ?? $existing['scheduled_at'] ?? '');
+        if ($scheduledAt === '') {
+            return;
+        }
+
+        $durationMinutes = array_key_exists('duration_minutes', $payload)
+            ? $payload['duration_minutes']
+            : ($existing['duration_minutes'] ?? null);
+
+        $duration = $durationMinutes !== null ? (int) $durationMinutes : 30;
+        $start = Carbon::parse($scheduledAt);
+        $end = $start->copy()->addMinutes($duration);
+
+        $candidates = $this->appointmentRepository->findActiveForClinicianInWindow(
+            clinicianUserId: (int) $clinicianUserId,
+            windowStart: $start->copy()->subMinutes(480)->toDateTimeString(),
+            windowEnd: $end->copy()->addMinutes(480)->toDateTimeString(),
+            excludeAppointmentId: $appointmentId,
+        );
+
+        foreach ($candidates as $candidate) {
+            $candidateStart = Carbon::parse((string) $candidate['scheduled_at']);
+            $candidateEnd = $candidateStart->copy()->addMinutes((int) ($candidate['duration_minutes'] ?? 30));
+
+            if ($candidateStart->lt($end) && $start->lt($candidateEnd)) {
+                throw new ClinicianScheduleConflictException(
+                    existingAppointment: $candidate,
+                    message: sprintf(
+                        'This clinician already has an appointment (%s) from %s to %s.',
+                        (string) ($candidate['appointment_number'] ?? 'existing appointment'),
+                        $candidateStart->format('d M Y H:i'),
+                        $candidateEnd->format('H:i'),
+                    ),
+                );
+            }
+        }
     }
 
     /**

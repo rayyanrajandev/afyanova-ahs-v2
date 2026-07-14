@@ -5,6 +5,7 @@ use App\Modules\EmergencyTriage\Infrastructure\Models\EmergencyTriageCaseAuditLo
 use App\Modules\EmergencyTriage\Infrastructure\Models\EmergencyTriageCaseModel;
 use App\Modules\EmergencyTriage\Infrastructure\Models\EmergencyTriageCaseTransferAuditLogModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
+use App\Modules\Platform\Infrastructure\Models\FacilityResourceModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 
@@ -213,11 +214,22 @@ it('writes emergency triage case status transition parity metadata in audit logs
         ->assertCreated()
         ->json('data');
 
+    $bed = FacilityResourceModel::query()->create([
+        'resource_type' => 'ward_bed',
+        'code' => 'WB-OBS-1',
+        'name' => 'Observation 1',
+        'ward_name' => 'Observation',
+        'bed_number' => '1',
+        'location' => 'Admission registry',
+        'status' => 'active',
+    ]);
+
     $this->actingAs($user)
         ->patchJson('/api/v1/emergency-triage-cases/'.$created['id'].'/status', [
             'status' => 'admitted',
             'reason' => null,
             'dispositionNotes' => 'Admit for close monitoring and diagnostics.',
+            'bedResourceId' => $bed->id,
         ])
         ->assertOk()
         ->assertJsonPath('data.status', 'admitted');

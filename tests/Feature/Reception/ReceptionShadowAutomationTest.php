@@ -92,18 +92,26 @@ it('does not dispatch AppointmentCheckedIn when check-in is rejected', function 
 });
 
 it('logs the shadow skeleton-triage-case proposal for an emergency walk-in end-to-end', function (): void {
-    Log::shouldReceive('channel')
-        ->once()
-        ->with('reception_shadow_automation')
-        ->andReturnSelf();
+    // Not a strict single-call count: Mode C is now enabled by default
+    // alongside Mode B (see config/reception_automation.php and
+    // reports/emergency-queue-modernization-plan.md's sync-gap update), so
+    // both listeners fire on the same emergency check-in and both log to
+    // this channel — a hardcoded ->once() total is coupled to exactly one
+    // listener being active, which is no longer true. andReturnSelf() lets
+    // both listeners' ->channel()->info()/->warning() chains resolve; the
+    // catch-all ->info() expectation absorbs Mode C's own differently-worded
+    // log line so only Mode B's exact message is asserted as the subject
+    // of this test.
+    Log::shouldReceive('channel')->with('reception_shadow_automation')->andReturnSelf();
     Log::shouldReceive('info')
-        ->once()
+        ->atLeast()->once()
         ->with(
             'Mode B shadow: would create a skeleton EmergencyTriageCase for this arrival',
             \Mockery::on(fn (array $context): bool => $context['mode'] === 'B'
                 && $context['proposed_action'] === 'create_skeleton_emergency_triage_case'
                 && $context['arrival_mode'] === 'emergency'),
         );
+    Log::shouldReceive('info')->withAnyArgs();
 
     $user = shadowAutomationUser();
     $patient = shadowAutomationPatient();

@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
+use App\Modules\MedicalRecord\Infrastructure\Models\MedicalRecordModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -146,5 +147,277 @@ it('forbids queue access without appointments.read permission', function (): voi
 
     $this->actingAs($user)
         ->getJson('/api/v1/reception/queue?stage=waiting_triage')
+        ->assertForbidden();
+});
+
+it('accepts the in_consultation stage and exposes consultation ownership and status on each entry', function (): void {
+    $user = queueUser();
+    $patient = queuePatient();
+    $appointment = AppointmentModel::query()->create([
+        'appointment_number' => 'APTQ'.strtoupper(Str::random(8)),
+        'patient_id' => $patient->id,
+        'department' => 'Outpatient',
+        'scheduled_at' => now()->addHour(),
+        'duration_minutes' => 30,
+        'reason' => 'Consultation',
+        'status' => 'in_consultation',
+        'checked_in_at' => now()->subMinutes(30),
+        'triaged_at' => now()->subMinutes(20),
+        'consultation_started_at' => now()->subMinutes(5),
+        'consultation_owner_user_id' => $user->id,
+        'consultation_owner_assigned_at' => now()->subMinutes(5),
+    ]);
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/reception/queue?stage=in_consultation')
+        ->assertOk();
+
+    $entry = collect($response->json('data'))->firstWhere('appointmentId', (string) $appointment->id);
+
+    expect($entry['status'])->toBe('in_consultation');
+    expect($entry['consultationOwnerUserId'])->toBe($user->id);
+    expect($entry['consultationStartedAt'])->not->toBeNull();
+    expect($entry['hasSignedConsultationNote'])->toBeFalse();
+});
+
+it('flags hasSignedConsultationNote only when a finalized consultation note exists, not a draft', function (): void {
+    $user = queueUser();
+
+    $signedPatient = queuePatient();
+    $signedAppointment = AppointmentModel::query()->create([
+        'appointment_number' => 'APTQ'.strtoupper(Str::random(8)),
+        'patient_id' => $signedPatient->id,
+        'department' => 'Outpatient',
+        'scheduled_at' => now()->addHour(),
+        'duration_minutes' => 30,
+        'reason' => 'Consultation',
+        'status' => 'in_consultation',
+        'consultation_started_at' => now()->subMinutes(10),
+        'consultation_owner_user_id' => $user->id,
+        'consultation_owner_assigned_at' => now()->subMinutes(10),
+    ]);
+    MedicalRecordModel::query()->create([
+        'record_number' => 'MR'.strtoupper(Str::random(8)),
+        'patient_id' => $signedPatient->id,
+        'appointment_id' => $signedAppointment->id,
+        'author_user_id' => $user->id,
+        'encounter_at' => now()->subMinutes(10),
+        'record_type' => 'consultation_note',
+        'status' => 'finalized',
+        'signed_by_user_id' => $user->id,
+        'signed_at' => now()->subMinutes(2),
+    ]);
+
+    $draftPatient = queuePatient();
+    $draftAppointment = AppointmentModel::query()->create([
+        'appointment_number' => 'APTQ'.strtoupper(Str::random(8)),
+        'patient_id' => $draftPatient->id,
+        'department' => 'Outpatient',
+        'scheduled_at' => now()->addHour(),
+        'duration_minutes' => 30,
+        'reason' => 'Consultation',
+        'status' => 'in_consultation',
+        'consultation_started_at' => now()->subMinutes(10),
+        'consultation_owner_user_id' => $user->id,
+        'consultation_owner_assigned_at' => now()->subMinutes(10),
+    ]);
+    MedicalRecordModel::query()->create([
+        'record_number' => 'MR'.strtoupper(Str::random(8)),
+        'patient_id' => $draftPatient->id,
+        'appointment_id' => $draftAppointment->id,
+        'author_user_id' => $user->id,
+        'encounter_at' => now()->subMinutes(10),
+        'record_type' => 'consultation_note',
+        'status' => 'draft',
+    ]);
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/reception/queue?stage=in_consultation')
+        ->assertOk();
+
+    $entries = collect($response->json('data'));
+
+    expect($entries->firstWhere('appointmentId', (string) $signedAppointment->id)['hasSignedConsultationNote'])->toBeTrue();
+    expect($entries->firstWhere('appointmentId', (string) $draftAppointment->id)['hasSignedConsultationNote'])->toBeFalse();
+});
+
+it('exposes consultationStep on in_consultation entries, reusing GetActiveVisitJourneyUseCase\'s own diagnostic-step derivation', function (): void {
+    $user = queueUser();
+
+    $inLabPatient = queuePatient();
+    $inLabAppointment = AppointmentModel::query()->create([
+        'appointment_number' => 'APTQ'.strtoupper(Str::random(8)),
+        'patient_id' => $inLabPatient->id,
+        'department' => 'Outpatient',
+        'scheduled_at' => now()->addHour(),
+        'duration_minutes' => 30,
+        'reason' => 'Consultation',
+        'status' => 'in_consultation',
+        'consultation_started_at' => now()->subMinutes(10),
+        'consultation_owner_user_id' => $user->id,
+        'consultation_owner_assigned_at' => now()->subMinutes(10),
+    ]);
+    \App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel::query()->create([
+        'order_number' => 'LAB'.strtoupper(Str::random(8)),
+        'patient_id' => $inLabPatient->id,
+        'appointment_id' => $inLabAppointment->id,
+        'ordered_at' => now(),
+        'test_code' => 'LOINC:57021-8',
+        'test_name' => 'Complete Blood Count',
+        'priority' => 'routine',
+        'status' => 'collected',
+    ]);
+
+    $withClinicianPatient = queuePatient();
+    $withClinicianAppointment = AppointmentModel::query()->create([
+        'appointment_number' => 'APTQ'.strtoupper(Str::random(8)),
+        'patient_id' => $withClinicianPatient->id,
+        'department' => 'Outpatient',
+        'scheduled_at' => now()->addHour(),
+        'duration_minutes' => 30,
+        'reason' => 'Consultation',
+        'status' => 'in_consultation',
+        'consultation_started_at' => now()->subMinutes(5),
+        'consultation_owner_user_id' => $user->id,
+        'consultation_owner_assigned_at' => now()->subMinutes(5),
+    ]);
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/reception/queue?stage=in_consultation')
+        ->assertOk();
+
+    $entries = collect($response->json('data'));
+
+    expect($entries->firstWhere('appointmentId', (string) $inLabAppointment->id)['consultationStep'])->toBe('in_lab');
+    expect($entries->firstWhere('appointmentId', (string) $withClinicianAppointment->id)['consultationStep'])->toBe('with_clinician');
+});
+
+it('leaves consultationStep null for stages other than in_consultation', function (): void {
+    $user = queueUser();
+    checkInViaApi($user, queuePatient()->id, 'walk_in');
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/reception/queue?stage=waiting_triage')
+        ->assertOk();
+
+    $entry = collect($response->json('data'))->first();
+
+    expect($entry['consultationStep'])->toBeNull();
+});
+
+it('filters the queue by patient name, MRN, or appointment number', function (): void {
+    $user = queueUser();
+    $target = PatientModel::query()->create([
+        'patient_number' => 'PTQ'.now()->format('Ymd').strtoupper(Str::random(6)),
+        'first_name' => 'Zawadi', 'last_name' => 'Mrema', 'gender' => 'female',
+        'date_of_birth' => '1990-01-01', 'phone' => '+255700000099', 'country_code' => 'TZ',
+        'status' => 'active',
+    ]);
+    $targetAppointmentId = checkInViaApi($user, $target->id, 'walk_in');
+    checkInViaApi($user, queuePatient()->id, 'walk_in');
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/reception/queue?stage=waiting_triage&q=Zawadi')
+        ->assertOk();
+
+    $orderedIds = collect($response->json('data'))->pluck('appointmentId')->all();
+    expect($orderedIds)->toBe([$targetAppointmentId]);
+});
+
+/**
+ * Postgres's LIKE is case-sensitive (unlike SQLite, which this test suite
+ * runs on) — a plain where('first_name', 'like', ...) silently missed
+ * mixed-case matches in production. This is very likely why the reception
+ * queue search "never worked" in practice: a receptionist typing a
+ * patient's name rarely matches the exact stored casing. Fixed via
+ * GetReceptionQueueUseCase::baseQuery() (LOWER() on both sides). Can't
+ * reproduce the case-sensitivity bug itself on SQLite, but this documents
+ * and guards the intended case-insensitive behavior going forward.
+ */
+it('filters the queue by patient name regardless of case', function (): void {
+    $user = queueUser();
+    $target = PatientModel::query()->create([
+        'patient_number' => 'PTQ'.now()->format('Ymd').strtoupper(Str::random(6)),
+        'first_name' => 'Zawadi', 'last_name' => 'Mrema', 'gender' => 'female',
+        'date_of_birth' => '1990-01-01', 'phone' => '+255700000098', 'country_code' => 'TZ',
+        'status' => 'active',
+    ]);
+    $targetAppointmentId = checkInViaApi($user, $target->id, 'walk_in');
+    checkInViaApi($user, queuePatient()->id, 'walk_in');
+
+    foreach (['zawadi', 'ZAWADI', 'ZaWaDi'] as $term) {
+        $response = $this->actingAs($user)
+            ->getJson('/api/v1/reception/queue?stage=waiting_triage&q='.$term)
+            ->assertOk();
+
+        $orderedIds = collect($response->json('data'))->pluck('appointmentId')->all();
+        expect($orderedIds)->toBe([$targetAppointmentId]);
+    }
+});
+
+it('filters the queue by department', function (): void {
+    $user = queueUser();
+    $patient = queuePatient();
+    $appointment = AppointmentModel::query()->create([
+        'appointment_number' => 'APTQ'.strtoupper(Str::random(8)),
+        'patient_id' => $patient->id,
+        'department' => 'Dental',
+        'scheduled_at' => now()->addHour(),
+        'duration_minutes' => 30,
+        'reason' => 'Consultation',
+        'status' => 'waiting_triage',
+        'checked_in_at' => now()->subMinutes(5),
+    ]);
+    checkInViaApi($user, queuePatient()->id, 'walk_in');
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/reception/queue?stage=waiting_triage&department=Dental')
+        ->assertOk();
+
+    $orderedIds = collect($response->json('data'))->pluck('appointmentId')->all();
+    expect($orderedIds)->toBe([(string) $appointment->id]);
+});
+
+it('paginates the queue and returns accurate meta', function (): void {
+    $user = queueUser();
+    for ($i = 0; $i < 3; $i++) {
+        checkInViaApi($user, queuePatient()->id, 'walk_in');
+    }
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/reception/queue?stage=waiting_triage&perPage=2&page=1')
+        ->assertOk();
+
+    expect($response->json('data'))->toHaveCount(2);
+    expect($response->json('meta.total'))->toBe(3);
+    expect($response->json('meta.lastPage'))->toBe(2);
+
+    $secondPage = $this->actingAs($user)
+        ->getJson('/api/v1/reception/queue?stage=waiting_triage&perPage=2&page=2')
+        ->assertOk();
+
+    expect($secondPage->json('data'))->toHaveCount(1);
+});
+
+it('returns status counts across all three reception stages', function (): void {
+    $user = queueUser();
+    checkInViaApi($user, queuePatient()->id, 'walk_in');
+    checkInViaApi($user, queuePatient()->id, 'walk_in');
+    checkInViaApi($user, queuePatient()->id, 'scheduled_checkin');
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/reception/queue/status-counts')
+        ->assertOk();
+
+    expect($response->json('data.waiting_triage'))->toBe(3);
+    expect($response->json('data.waiting_provider'))->toBe(0);
+    expect($response->json('data.total'))->toBe(3);
+});
+
+it('forbids status counts without appointments.read permission', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/reception/queue/status-counts')
         ->assertForbidden();
 });

@@ -11,12 +11,19 @@ uses(RefreshDatabase::class);
 
 /**
  * Coverage for Phase 5 Mode C of
- * reports/patient-arrival-checkin-modernization-plan.md §3.3: opt-in
- * (disabled by default, config/reception_automation.php), advisory skeleton
- * EmergencyTriageCase creation on emergency-mode check-in. No clinical
- * fields are ever set here — CreateSkeletonEmergencyTriageCase reuses
- * CreateEmergencyTriageCaseUseCase, the same validated path a clinician's
- * own request goes through.
+ * reports/patient-arrival-checkin-modernization-plan.md §3.3: advisory
+ * skeleton EmergencyTriageCase creation on emergency-mode check-in. No
+ * clinical fields are ever set here — CreateSkeletonEmergencyTriageCase
+ * reuses CreateEmergencyTriageCaseUseCase, the same validated path a
+ * clinician's own request goes through.
+ *
+ * Enabled by default as of reports/emergency-queue-modernization-plan.md's
+ * "sync gap" update — previously opt-in and disabled by default while this
+ * was purely an engineering capability with no clinical sign-off; flipped
+ * on once emergency/Queue.vue became a real, used page and the
+ * disconnected-records gap this closes became operationally significant.
+ * config/reception_automation.php still supports disabling it per
+ * deployment via RECEPTION_MODE_C_SKELETON_TRIAGE_CASE_ENABLED=false.
  */
 function modeCUser(): User
 {
@@ -49,7 +56,10 @@ function modeCRegisterWalkIn(User $user, string $patientId, string $arrivalMode)
         ->json('data.id');
 }
 
-it('does not create a skeleton triage case when Mode C is disabled (the default)', function (): void {
+it('does not create a skeleton triage case when Mode C is disabled', function (): void {
+    // Mode C is now enabled by default (config/reception_automation.php) —
+    // this test still covers the disabled path explicitly, in case a
+    // deployment opts back out via RECEPTION_MODE_C_SKELETON_TRIAGE_CASE_ENABLED=false.
     config(['reception_automation.mode_c_skeleton_emergency_triage_case.enabled' => false]);
 
     $appointmentId = modeCRegisterWalkIn(modeCUser(), modeCPatient()->id, 'emergency');

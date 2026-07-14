@@ -3,14 +3,18 @@
 namespace App\Modules\Appointment\Application\UseCases;
 
 use App\Modules\Appointment\Application\Exceptions\ActiveAppointmentConflictException;
+use App\Modules\Appointment\Application\Exceptions\ClinicianScheduleConflictException;
+use App\Modules\Appointment\Application\Exceptions\PatientActiveEncounterConflictException;
 use App\Modules\Appointment\Application\Exceptions\PatientNotEligibleForAppointmentException;
 use App\Modules\Appointment\Application\Exceptions\SourceAdmissionNotEligibleForAppointmentException;
+use App\Modules\Appointment\Application\Support\AppointmentConflictMessageFormatter;
 use App\Modules\Appointment\Domain\Repositories\AppointmentAuditLogRepositoryInterface;
 use App\Modules\Appointment\Domain\Repositories\AppointmentRepositoryInterface;
 use App\Modules\Appointment\Domain\Services\ConsultationClassificationServiceInterface;
 use App\Modules\Appointment\Domain\Services\PatientLookupServiceInterface;
 use App\Modules\Appointment\Domain\ValueObjects\AppointmentStatus;
 use App\Modules\Admission\Domain\Repositories\AdmissionRepositoryInterface;
+use App\Modules\EmergencyTriage\Domain\Repositories\EmergencyTriageCaseRepositoryInterface;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use App\Support\FinancialCoverage;
@@ -25,6 +29,7 @@ class CreateAppointmentUseCase
         private readonly AppointmentAuditLogRepositoryInterface $auditLogRepository,
         private readonly PatientLookupServiceInterface $patientLookupService,
         private readonly AdmissionRepositoryInterface $admissionRepository,
+        private readonly EmergencyTriageCaseRepositoryInterface $emergencyTriageCaseRepository,
         private readonly ConsultationClassificationServiceInterface $consultationClassificationService,
         private readonly CurrentPlatformScopeContextInterface $platformScopeContext,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
@@ -45,9 +50,19 @@ class CreateAppointmentUseCase
             patientId: (string) $payload['patient_id'],
         );
 
+        $this->assertNoActivePatientEncounterConflict(
+            patientId: (string) $payload['patient_id'],
+        );
+
         $this->assertNoActiveSameDayConflict(
             patientId: (string) $payload['patient_id'],
             scheduledAt: (string) $payload['scheduled_at'],
+        );
+
+        $this->assertNoClinicianScheduleConflict(
+            clinicianUserId: isset($payload['clinician_user_id']) ? (int) $payload['clinician_user_id'] : null,
+            scheduledAt: (string) $payload['scheduled_at'],
+            durationMinutes: isset($payload['duration_minutes']) ? (int) $payload['duration_minutes'] : null,
         );
 
         $payload['status'] = AppointmentStatus::SCHEDULED->value;
@@ -100,22 +115,101 @@ class CreateAppointmentUseCase
             return;
         }
 
-        $appointmentNumber = (string) ($existing['appointment_number'] ?? 'existing appointment');
-        $department = trim((string) ($existing['department'] ?? ''));
-        $scheduledTime = isset($existing['scheduled_at'])
-            ? Carbon::parse((string) $existing['scheduled_at'])->format('d M Y H:i')
-            : $scheduledDate;
-        $departmentPart = $department !== '' ? sprintf(' in %s', $department) : '';
-
         throw new ActiveAppointmentConflictException(
             existingAppointment: $existing,
-            message: sprintf(
-                'Patient already has an active appointment (%s) on %s%s.',
-                $appointmentNumber,
-                $scheduledTime,
-                $departmentPart,
-            ),
+            message: AppointmentConflictMessageFormatter::activeSameDayConflict($existing),
         );
+    }
+
+    /**
+     * P7 of the Reception/Emergency/Admission/Bed-Management audit
+     * follow-through (deferred from P6): a patient with an active Emergency
+     * case or Admission can't be booked into a new appointment/walk-in —
+     * hard-blocked, matching every other conflict check in this use case,
+     * per the user's explicit decision. The follow-up-from-admission path
+     * (assertSourceAdmissionEligibility, above) already requires the source
+     * admission to be 'discharged', so it never collides with this check.
+     * Emergency is checked before Admission only because it's the more
+     * time-sensitive state to surface first when a patient happens to have
+     * both (shouldn't normally happen, since Emergency's own admit flow
+     * transitions the case to a terminal status).
+     */
+    private function assertNoActivePatientEncounterConflict(string $patientId): void
+    {
+        $activeCase = $this->emergencyTriageCaseRepository->findActiveForPatient($patientId);
+        if ($activeCase !== null) {
+            throw new PatientActiveEncounterConflictException(
+                conflictType: 'emergency_case',
+                existingRecord: $activeCase,
+                message: sprintf(
+                    'Patient has an active emergency case (%s, status: %s). Resolve or discharge the emergency visit before scheduling a new appointment.',
+                    (string) ($activeCase['case_number'] ?? 'existing case'),
+                    (string) ($activeCase['status'] ?? 'unknown'),
+                ),
+            );
+        }
+
+        $activeAdmission = $this->admissionRepository->findActiveForPatient($patientId);
+        if ($activeAdmission !== null) {
+            throw new PatientActiveEncounterConflictException(
+                conflictType: 'admission',
+                existingRecord: $activeAdmission,
+                message: sprintf(
+                    'Patient is currently admitted (%s). Coordinate with the inpatient team before scheduling a new appointment.',
+                    (string) ($activeAdmission['admission_number'] ?? 'existing admission'),
+                ),
+            );
+        }
+    }
+
+    /**
+     * Hard-blocks two appointments overlapping in time for the same
+     * clinician — added for the patient flow redesign's appointment
+     * workflow A3. Skipped when clinicianUserId is null (clinician
+     * assignment stays optional). Candidates are fetched within a window
+     * wide enough to catch any possible overlap (reference time +/- the max
+     * appointment duration, 480 minutes) and the exact overlap comparison
+     * happens here in PHP — see
+     * AppointmentRepositoryInterface::findActiveForClinicianInWindow()'s
+     * docblock for why.
+     */
+    private function assertNoClinicianScheduleConflict(
+        ?int $clinicianUserId,
+        string $scheduledAt,
+        ?int $durationMinutes,
+        ?string $excludeAppointmentId = null,
+    ): void {
+        if ($clinicianUserId === null) {
+            return;
+        }
+
+        $duration = $durationMinutes ?? 30;
+        $start = Carbon::parse($scheduledAt);
+        $end = $start->copy()->addMinutes($duration);
+
+        $candidates = $this->appointmentRepository->findActiveForClinicianInWindow(
+            clinicianUserId: $clinicianUserId,
+            windowStart: $start->copy()->subMinutes(480)->toDateTimeString(),
+            windowEnd: $end->copy()->addMinutes(480)->toDateTimeString(),
+            excludeAppointmentId: $excludeAppointmentId,
+        );
+
+        foreach ($candidates as $candidate) {
+            $candidateStart = Carbon::parse((string) $candidate['scheduled_at']);
+            $candidateEnd = $candidateStart->copy()->addMinutes((int) ($candidate['duration_minutes'] ?? 30));
+
+            if ($candidateStart->lt($end) && $start->lt($candidateEnd)) {
+                throw new ClinicianScheduleConflictException(
+                    existingAppointment: $candidate,
+                    message: sprintf(
+                        'This clinician already has an appointment (%s) from %s to %s.',
+                        (string) ($candidate['appointment_number'] ?? 'existing appointment'),
+                        $candidateStart->format('d M Y H:i'),
+                        $candidateEnd->format('H:i'),
+                    ),
+                );
+            }
+        }
     }
 
     /**

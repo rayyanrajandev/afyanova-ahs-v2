@@ -133,7 +133,7 @@ type StatusCounts = {
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Direct service queue', href: '/walk-in-service-requests' },
+    { title: 'Direct Service Queue (Legacy)', href: '/walk-in-service-requests' },
 ];
 
 const { hasPermission, scope } = usePlatformAccess();
@@ -1151,7 +1151,7 @@ onMounted(() => {
 </script>
 
 <template>
-    <Head title="Direct service queue" />
+    <Head title="Direct Service Queue (Legacy)" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto p-3 md:p-5 lg:p-6">
@@ -1163,7 +1163,7 @@ onMounted(() => {
                         </div>
                         <div class="min-w-0 space-y-0.5">
                             <div class="flex flex-wrap items-center gap-2">
-                                <h1 class="text-base font-semibold tracking-tight md:text-lg">Direct Service Queue</h1>
+                                <h1 class="text-base font-semibold tracking-tight md:text-lg">Direct Service Queue (Legacy)</h1>
                                 <Badge variant="secondary" class="h-5 px-1.5 text-[11px]">{{ statusCounts.total }} total</Badge>
                             </div>
                             <p class="truncate text-xs text-muted-foreground">

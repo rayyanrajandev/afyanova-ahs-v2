@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import SearchableSelectField from '@/components/forms/SearchableSelectField.vue';
+import { useDirectServiceDepartmentOptions } from '@/composables/directService/useDirectServiceDepartmentOptions';
 import { useDirectServiceRequest, type DirectServiceType } from '@/composables/patientsIndex/useDirectServiceRequest';
 
 /**
@@ -15,13 +17,21 @@ import { useDirectServiceRequest, type DirectServiceType } from '@/composables/p
  * constraint: only the modes that actually require administrative input
  * get a dialog — outpatient/emergency check-in do not, and are one-click
  * actions in PatientVisitActionsMenu.vue instead). A small Dialog, not a
- * Sheet: three fields is a "lightweight dialog," not a workspace.
+ * Sheet: four fields is a "lightweight dialog," not a workspace.
  *
  * `patient` is deliberately the minimal shape this component actually
  * uses (id + name, for the description text), not the full
  * PatientListItem — that keeps this usable from any caller that has
  * already resolved a patient, including reception/Queue.vue's own
  * PatientSearchResult (a narrower local type), not just IndexV2.vue.
+ *
+ * Department field added for the patient flow redesign's Direct Service
+ * workflow B4: department_id existed on service_requests but was never set
+ * here, making Direct Service Queue V2's per-department scoping impossible
+ * to populate from intake. Optional (an actor with
+ * service.requests.view-all-departments can leave it unset and pick it up
+ * from the queue's own department filter later) but expected in normal use
+ * so the ticket lands in the right department's queue immediately.
  */
 export type DirectServiceDialogPatient = {
     id: string;
@@ -40,9 +50,11 @@ const emit = defineEmits<{
 }>();
 
 const serviceType = ref<DirectServiceType>('laboratory');
+const departmentId = ref('');
 const priority = ref<'routine' | 'urgent'>('routine');
 const notes = ref('');
 const request = useDirectServiceRequest();
+const departmentOptions = useDirectServiceDepartmentOptions(serviceType);
 
 const canSubmit = computed(() => !request.isPending.value);
 
@@ -51,12 +63,14 @@ async function submit(): Promise<void> {
     const result = await request.mutateAsync({
         patientId: props.patient.id,
         serviceType: serviceType.value,
+        departmentId: departmentId.value || null,
         priority: priority.value,
         notes: notes.value,
     });
     emit('created', result.requestNumber);
     open.value = false;
     serviceType.value = 'laboratory';
+    departmentId.value = '';
     priority.value = 'routine';
     notes.value = '';
 }
@@ -88,6 +102,14 @@ async function submit(): Promise<void> {
                         </SelectContent>
                     </Select>
                 </div>
+                <SearchableSelectField
+                    v-model="departmentId"
+                    input-id="direct-service-department"
+                    label="Department (optional)"
+                    :options="departmentOptions.data.value ?? []"
+                    placeholder="Select a department"
+                    empty-text="No matching department found."
+                />
                 <div class="grid gap-2">
                     <Label for="direct-service-priority">Priority</Label>
                     <Select v-model="priority">

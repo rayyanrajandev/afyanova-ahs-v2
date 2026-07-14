@@ -680,6 +680,15 @@ function applyRecentSearch(value: string) {
 
 function handleSearchFocus() {
     if (props.disabled || accessDenied.value) return;
+    // A Dialog/Sheet auto-focuses its first focusable descendant as soon as
+    // it opens (Radix/reka-ui's standard behavior) — when this field is
+    // that descendant (AppointmentCreateSheet.vue and others), that focus
+    // event fired this handler before the user did anything, popping open
+    // the recent-patients dropdown on every sheet open. A real user focus
+    // can only happen after the browser has painted the dialog, so gating
+    // on isReadyForAutoOpen (armed one frame after mount) filters out the
+    // auto-focus without disabling keyboard accessibility.
+    if (!isReadyForAutoOpen.value) return;
 
     lookupError.value = null;
     if (!shouldOpenOnFocus.value) return;
@@ -749,7 +758,14 @@ watch(advancedSearchOpen, (value) => {
     advancedSearchPage.value = 1;
 });
 
-onMounted(loadRecentLookupActivity);
+const isReadyForAutoOpen = ref(false);
+
+onMounted(() => {
+    loadRecentLookupActivity();
+    requestAnimationFrame(() => {
+        isReadyForAutoOpen.value = true;
+    });
+});
 onBeforeUnmount(clearDebounce);
 </script>
 

@@ -94,7 +94,7 @@ it('renders the encounter workspace page shell', function (): void {
             ->where('encounterId', $encounter->id));
 });
 
-it('renders the legacy appointment encounter route shell', function (): void {
+it('resolves an appointment to its encounter and redirects to the v2 workspace route', function (): void {
     $user = makeEncounterPageUser([
         'medical.records.read',
         'medical.records.create',
@@ -102,13 +102,41 @@ it('renders the legacy appointment encounter route shell', function (): void {
     $patient = makeEncounterPagePatient();
     $appointment = makeEncounterPageAppointment($patient->id);
 
-    $this->actingAs($user)
+    $response = $this->actingAs($user)
         ->get('/encounters/by-appointment/'.$appointment->id)
+        ->assertRedirect();
+
+    $encounter = EncounterModel::query()->where('appointment_id', $appointment->id)->firstOrFail();
+    expect($response->headers->get('Location'))->toContain('/encounters/'.$encounter->id);
+
+    // Following the redirect lands on the v2 workspace shell, not the
+    // deleted pre-cutover encounters/Show.vue page.
+    $this->actingAs($user)
+        ->get('/encounters/'.$encounter->id)
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->component('encounters/Show')
-            ->where('legacyAppointmentId', $appointment->id)
-            ->missing('encounterId'));
+            ->component('encounters/WorkspaceV2')
+            ->where('encounterId', $encounter->id));
+});
+
+it('creates the encounter on first resolution and reuses it on a second visit', function (): void {
+    $user = makeEncounterPageUser([
+        'medical.records.read',
+        'medical.records.create',
+    ]);
+    $patient = makeEncounterPagePatient();
+    $appointment = makeEncounterPageAppointment($patient->id);
+
+    $first = $this->actingAs($user)
+        ->get('/encounters/by-appointment/'.$appointment->id)
+        ->assertRedirect();
+
+    $second = $this->actingAs($user)
+        ->get('/encounters/by-appointment/'.$appointment->id)
+        ->assertRedirect();
+
+    expect($second->headers->get('Location'))->toBe($first->headers->get('Location'));
+    expect(EncounterModel::query()->where('appointment_id', $appointment->id)->count())->toBe(1);
 });
 
 it('resolves an encounter for an appointment through the encounters api', function (): void {

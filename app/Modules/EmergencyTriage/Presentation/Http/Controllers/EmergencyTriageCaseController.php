@@ -3,7 +3,11 @@
 namespace App\Modules\EmergencyTriage\Presentation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Admission\Application\Exceptions\AppointmentNotEligibleForAdmissionException as AppointmentNotEligibleForAdmissionCreationException;
+use App\Modules\Admission\Application\Exceptions\InvalidAdmissionPlacementException;
+use App\Modules\Admission\Application\Exceptions\PatientNotEligibleForAdmissionException;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
+use App\Modules\EmergencyTriage\Application\Exceptions\ActiveEmergencyTriageCaseConflictException;
 use App\Modules\EmergencyTriage\Application\Exceptions\AdmissionNotEligibleForEmergencyTriageCaseException;
 use App\Modules\EmergencyTriage\Application\Exceptions\AppointmentNotEligibleForEmergencyTriageCaseException;
 use App\Modules\EmergencyTriage\Application\Exceptions\PatientNotEligibleForEmergencyTriageCaseException;
@@ -74,6 +78,15 @@ class EmergencyTriageCaseController extends Controller
             return $this->validationError('appointmentId', $exception->getMessage());
         } catch (AdmissionNotEligibleForEmergencyTriageCaseException $exception) {
             return $this->validationError('admissionId', $exception->getMessage());
+        } catch (ActiveEmergencyTriageCaseConflictException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => 'VALIDATION_ERROR',
+                'errors' => ['patientId' => [$exception->getMessage()]],
+                'context' => [
+                    'activeEmergencyCaseConflict' => EmergencyTriageCaseResponseTransformer::transform($exception->existingCase()),
+                ],
+            ], 422);
         }
 
         return response()->json([
@@ -128,9 +141,16 @@ class EmergencyTriageCaseController extends Controller
                 reason: $request->input('reason'),
                 dispositionNotes: $request->input('dispositionNotes'),
                 actorId: $request->user()?->id,
+                bedResourceId: $request->input('bedResourceId'),
             );
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return $this->tenantScopeRequiredError($exception->getMessage());
+        } catch (PatientNotEligibleForAdmissionException $exception) {
+            return $this->validationError('bedResourceId', $exception->getMessage());
+        } catch (AppointmentNotEligibleForAdmissionCreationException $exception) {
+            return $this->validationError('bedResourceId', $exception->getMessage());
+        } catch (InvalidAdmissionPlacementException $exception) {
+            return $this->validationError('bedResourceId', $exception->getMessage());
         }
 
         abort_if($case === null, 404, 'Emergency triage case not found.');

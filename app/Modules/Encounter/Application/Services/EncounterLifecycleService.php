@@ -3,6 +3,7 @@
 namespace App\Modules\Encounter\Application\Services;
 
 use App\Modules\Encounter\Application\Exceptions\EncounterCloseBlockedException;
+use App\Modules\Encounter\Application\Exceptions\EncounterOwnerConflictException;
 use App\Modules\Encounter\Application\Exceptions\InvalidEncounterStatusTransitionException;
 use App\Modules\Encounter\Application\UseCases\GetEncounterCloseReadinessUseCase;
 use App\Modules\Encounter\Domain\Repositories\EncounterAuditLogRepositoryInterface;
@@ -264,11 +265,14 @@ class EncounterLifecycleService
         bool $acknowledgeCloseGaps = false,
         ?string $disposition = null,
         ?string $dispositionNotes = null,
+        bool $isFacilitySuperAdmin = false,
     ): ?EncounterModel {
         $encounter = $this->findById($encounterId);
         if ($encounter === null) {
             return null;
         }
+
+        $this->assertEncounterOwnership($encounter, $actorId, $isFacilitySuperAdmin);
 
         $currentStatus = strtolower(trim((string) $encounter->status));
         if ($currentStatus === EncounterStatus::CLOSED->value) {
@@ -413,12 +417,18 @@ class EncounterLifecycleService
         return $outstanding;
     }
 
-    public function reopen(string $encounterId, string $reason, ?int $actorId): ?EncounterModel
-    {
+    public function reopen(
+        string $encounterId,
+        string $reason,
+        ?int $actorId,
+        bool $isFacilitySuperAdmin = false,
+    ): ?EncounterModel {
         $encounter = $this->findById($encounterId);
         if ($encounter === null) {
             return null;
         }
+
+        $this->assertEncounterOwnership($encounter, $actorId, $isFacilitySuperAdmin);
 
         $currentStatus = strtolower(trim((string) $encounter->status));
         if ($currentStatus !== EncounterStatus::CLOSED->value) {
@@ -452,6 +462,30 @@ class EncounterLifecycleService
         );
 
         return $encounter->fresh();
+    }
+
+    /**
+     * Mirrors AppointmentController's consultation-ownership pattern, using
+     * EncounterModel::primary_clinician_user_id as this module's own ownership
+     * field (already auto-assigned by close()/reopen() below). An unset owner
+     * means no one has claimed the encounter yet — anyone permitted may
+     * close/reopen it, same as the bootstrap case for a fresh consultation.
+     */
+    private function assertEncounterOwnership(
+        EncounterModel $encounter,
+        ?int $actorId,
+        bool $isFacilitySuperAdmin,
+    ): void {
+        if ($isFacilitySuperAdmin) {
+            return;
+        }
+
+        $ownerUserId = (int) ($encounter->primary_clinician_user_id ?? 0);
+        if ($ownerUserId <= 0 || $actorId === null || $ownerUserId === $actorId) {
+            return;
+        }
+
+        throw new EncounterOwnerConflictException($ownerUserId);
     }
 
     private function writeAudit(

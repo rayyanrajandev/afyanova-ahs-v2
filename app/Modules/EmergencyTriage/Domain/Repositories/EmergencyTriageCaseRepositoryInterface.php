@@ -14,6 +14,8 @@ interface EmergencyTriageCaseRepositoryInterface
 
     public function existsByAppointmentId(string $appointmentId): bool;
 
+    public function findActiveForPatient(string $patientId): ?array;
+
     public function search(
         ?string $query,
         ?string $patientId,

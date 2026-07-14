@@ -159,6 +159,50 @@ function makeAppointmentUser(): User
     return $user;
 }
 
+/**
+ * Facility super admin, per User::isFacilitySuperAdminAccess() -> hasUniversalAdminAccess()
+ * -> isFacilitySuperAdmin(): requires an active facility_user row with role = 'super_admin'.
+ */
+function makeFacilitySuperAdminUser(): User
+{
+    $user = User::factory()->create();
+    grantAppointmentWorkflowPermissions($user);
+
+    $tenantId = (string) Str::uuid();
+    DB::table('tenants')->insert([
+        'id' => $tenantId,
+        'code' => 'SA'.strtoupper(Str::random(6)),
+        'name' => 'Super Admin Test Tenant',
+        'country_code' => 'TZ',
+        'status' => 'active',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $facilityId = (string) Str::uuid();
+    DB::table('facilities')->insert([
+        'id' => $facilityId,
+        'tenant_id' => $tenantId,
+        'code' => 'SA'.strtoupper(Str::random(6)),
+        'name' => 'Super Admin Test Facility',
+        'status' => 'active',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    DB::table('facility_user')->insert([
+        'facility_id' => $facilityId,
+        'user_id' => $user->id,
+        'role' => 'super_admin',
+        'is_primary' => true,
+        'is_active' => true,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    return $user;
+}
+
 it('requires authentication for appointment creation', function (): void {
     $patient = makePatient();
 
@@ -722,6 +766,157 @@ it('blocks provider workflow updates when active consultation is owned by anothe
         ->assertJsonPath('code', 'CONSULTATION_OWNER_CONFLICT');
 });
 
+it('blocks the generic status endpoint from cancelling another clinician\'s active consultation', function (): void {
+    $creator = makeAppointmentUser();
+    $triageUser = User::factory()->create();
+    grantAppointmentTriagePermissions($triageUser);
+    $clinicianUser = User::factory()->create();
+    grantAppointmentClinicianPermissions($clinicianUser);
+    // A receptionist-style user: only holds appointments.update-status (needed for
+    // check-in/cancel), not any consultation-ownership-aware permission.
+    $receptionUser = makeAppointmentUser();
+    $patient = makePatient();
+
+    $created = $this->actingAs($creator)
+        ->postJson('/api/v1/appointments', appointmentPayload($patient->id))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($creator)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/status', [
+            'status' => 'waiting_triage',
+            'reason' => null,
+        ])
+        ->assertOk();
+
+    $this->actingAs($triageUser)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/triage', [
+            'triageVitalsSummary' => 'BP 118/74, Pulse 82, Temp 37.1 C',
+            'triageNotes' => 'Stable and ready for provider review.',
+        ])
+        ->assertOk();
+
+    $this->actingAs($clinicianUser)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/start-consultation')
+        ->assertOk();
+
+    $this->actingAs($receptionUser)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/status', [
+            'status' => 'cancelled',
+            'reason' => 'Patient requested cancellation',
+        ])
+        ->assertStatus(409)
+        ->assertJsonPath('code', 'CONSULTATION_OWNER_REQUIRED');
+
+    expect(AppointmentModel::query()->find($created['id']))->status->toBe('in_consultation');
+});
+
+it('lets the consultation owner cancel their own active consultation via the generic status endpoint', function (): void {
+    $creator = makeAppointmentUser();
+    $triageUser = User::factory()->create();
+    grantAppointmentTriagePermissions($triageUser);
+    $clinicianUser = User::factory()->create();
+    grantAppointmentClinicianPermissions($clinicianUser);
+    grantAppointmentWorkflowPermissions($clinicianUser);
+    $patient = makePatient();
+
+    $created = $this->actingAs($creator)
+        ->postJson('/api/v1/appointments', appointmentPayload($patient->id))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($creator)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/status', [
+            'status' => 'waiting_triage',
+            'reason' => null,
+        ])
+        ->assertOk();
+
+    $this->actingAs($triageUser)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/triage', [
+            'triageVitalsSummary' => 'BP 118/74, Pulse 82, Temp 37.1 C',
+            'triageNotes' => 'Stable and ready for provider review.',
+        ])
+        ->assertOk();
+
+    $this->actingAs($clinicianUser)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/start-consultation')
+        ->assertOk();
+
+    $this->actingAs($clinicianUser)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/status', [
+            'status' => 'cancelled',
+            'reason' => 'Clinician cancelled visit',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'cancelled');
+});
+
+it('lets a facility super admin cancel another clinician\'s active consultation via the generic status endpoint', function (): void {
+    $creator = makeAppointmentUser();
+    $triageUser = User::factory()->create();
+    grantAppointmentTriagePermissions($triageUser);
+    $clinicianUser = User::factory()->create();
+    grantAppointmentClinicianPermissions($clinicianUser);
+    $superAdmin = makeFacilitySuperAdminUser();
+    $patient = makePatient();
+
+    $created = $this->actingAs($creator)
+        ->postJson('/api/v1/appointments', appointmentPayload($patient->id))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($creator)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/status', [
+            'status' => 'waiting_triage',
+            'reason' => null,
+        ])
+        ->assertOk();
+
+    $this->actingAs($triageUser)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/triage', [
+            'triageVitalsSummary' => 'BP 118/74, Pulse 82, Temp 37.1 C',
+            'triageNotes' => 'Stable and ready for provider review.',
+        ])
+        ->assertOk();
+
+    $this->actingAs($clinicianUser)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/start-consultation')
+        ->assertOk();
+
+    $this->actingAs($superAdmin)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/status', [
+            'status' => 'cancelled',
+            'reason' => 'Administrative override',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'cancelled');
+});
+
+it('still allows cancelling a not-yet-claimed visit via the generic status endpoint', function (): void {
+    $creator = makeAppointmentUser();
+    $patient = makePatient();
+
+    $created = $this->actingAs($creator)
+        ->postJson('/api/v1/appointments', appointmentPayload($patient->id))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($creator)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/status', [
+            'status' => 'waiting_triage',
+            'reason' => null,
+        ])
+        ->assertOk();
+
+    $this->actingAs($creator)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/status', [
+            'status' => 'cancelled',
+            'reason' => 'No longer needed',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'cancelled');
+});
 
 it('returns provider session to triage with handoff reason', function (): void {
     $creator = makeAppointmentUser();
@@ -805,6 +1000,11 @@ it('returns active consultation to provider queue', function (): void {
         ->assertOk();
 
     $response->assertJsonPath('data.status', 'waiting_provider');
+
+    // consultation_started_at must survive this transition — it's the only
+    // signal that distinguishes "on hold" (already seen a provider) from
+    // "never yet seen a provider" once back at waiting_provider.
+    expect(AppointmentModel::query()->find($created['id'])->consultation_started_at)->not->toBeNull();
 });
 
 it('completes visit from active provider session', function (): void {
@@ -939,7 +1139,7 @@ it('rejects creating a second active appointment for the same patient on the sam
         ->assertCreated()
         ->json('data');
 
-    $this->actingAs($user)
+    $response = $this->actingAs($user)
         ->postJson('/api/v1/appointments', appointmentPayload($patient->id, [
             'scheduledAt' => $scheduledDate->copy()->setTime(14, 0, 0)->toDateTimeString(),
             'department' => 'Dental Clinic',
@@ -949,6 +1149,44 @@ it('rejects creating a second active appointment for the same patient on the sam
         ->assertJsonPath('context.activeAppointmentConflict.patientId', $patient->id)
         ->assertJsonPath('context.activeAppointmentConflict.appointmentNumber', $created['appointmentNumber'])
         ->assertJsonValidationErrors(['patientId', 'scheduledAt']);
+
+    // Still just `scheduled` — nothing has checked this patient in yet, so
+    // "has an appointment scheduled" is accurate wording.
+    expect($response->json('message'))->toContain('has an appointment')->toContain('scheduled');
+    expect($response->json('message'))->not->toContain('checked in');
+});
+
+it('describes the conflict as an active visit, not an appointment, once the patient has checked in', function (): void {
+    // Patient flow redesign: the conflict message previously said "already
+    // has an active appointment" regardless of the conflicting record's
+    // status — misleading once the patient has actually arrived and is
+    // being seen, not merely booked. See AppointmentConflictMessageFormatter.
+    $user = makeAppointmentUser();
+    $patient = makePatient();
+    $scheduledDate = now()->addDay()->setTime(9, 0, 0);
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/appointments', appointmentPayload($patient->id, [
+            'scheduledAt' => $scheduledDate->toDateTimeString(),
+            'department' => 'Emergency',
+        ]))
+        ->assertCreated()
+        ->json('data');
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/appointments/'.$created['id'].'/check-in', [])
+        ->assertOk();
+
+    $response = $this->actingAs($user)
+        ->postJson('/api/v1/appointments', appointmentPayload($patient->id, [
+            'scheduledAt' => $scheduledDate->copy()->setTime(14, 0, 0)->toDateTimeString(),
+        ]))
+        ->assertStatus(422);
+
+    expect($response->json('message'))
+        ->toContain('checked in')
+        ->toContain('Emergency')
+        ->not->toContain('has an appointment');
 });
 
 it('allows another appointment after the existing same-day appointment is cancelled', function (): void {

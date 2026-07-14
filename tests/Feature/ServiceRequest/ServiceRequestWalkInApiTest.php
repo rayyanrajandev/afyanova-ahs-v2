@@ -49,6 +49,13 @@ function makeWalkInPatient(string $suffix = ''): PatientModel
     ]);
 }
 
+/**
+ * Grants service.requests.view-all-departments so these generic
+ * create/list/status-transition tests aren't affected by Direct Service
+ * Queue V2's hard department enforcement (ServiceRequestDepartmentScope) —
+ * that behavior has its own dedicated coverage in
+ * ServiceRequestDepartmentScopeTest.php.
+ */
 function userWithWalkInRights(): User
 {
     $user = User::factory()->create();
@@ -60,6 +67,7 @@ function userWithWalkInRights(): User
             'service.requests.create',
             'service.requests.read',
             'service.requests.update-status',
+            'service.requests.view-all-departments',
         ] as $permission
     ) {
         $user->givePermissionTo($permission);

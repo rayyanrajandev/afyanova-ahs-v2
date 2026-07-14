@@ -9,8 +9,9 @@ uses(RefreshDatabase::class);
 
 /**
  * Post-cutover: /encounters/{id} renders the rebuilt workspace directly (no
- * config gate). /encounters/{id}/v2 stays as a working alias, and the
- * pre-cutover page is still reachable at /encounters/{id}/legacy for rollback.
+ * config gate). /encounters/{id}/v2 stays as a working alias. The
+ * pre-cutover page (encounters/Show.vue + encounters/Workspace.vue) reached
+ * full parity and was deleted outright — no /legacy rollback route kept.
  */
 it('renders the v2 workspace page at the canonical encounters/{id} route', function (): void {
     $user = makeUserWithRole(['medical.records.read', 'medical.records.create']);
@@ -48,7 +49,7 @@ it('renders the v2 workspace page at the /v2 alias', function (): void {
             ->where('encounterId', $encounterId));
 });
 
-it('renders the pre-cutover workspace page at the legacy route', function (): void {
+it('no longer serves the deleted pre-cutover page at the legacy route', function (): void {
     $user = makeUserWithRole(['medical.records.read', 'medical.records.create']);
 
     $this->withoutMiddleware([
@@ -60,8 +61,5 @@ it('renders the pre-cutover workspace page at the legacy route', function (): vo
 
     $this->actingAs($user)
         ->get('/encounters/'.$encounterId.'/legacy')
-        ->assertOk()
-        ->assertInertia(fn ($page) => $page
-            ->component('encounters/Show')
-            ->where('encounterId', $encounterId));
+        ->assertNotFound();
 });

@@ -81,6 +81,28 @@ class EloquentAppointmentRepository implements AppointmentRepositoryInterface
         return $query->first()?->toArray();
     }
 
+    public function findActiveForClinicianInWindow(
+        int $clinicianUserId,
+        string $windowStart,
+        string $windowEnd,
+        ?string $excludeAppointmentId = null,
+    ): array {
+        $query = AppointmentModel::query();
+        $this->applyPlatformScopeIfEnabled($query);
+
+        $query
+            ->where('clinician_user_id', $clinicianUserId)
+            ->whereBetween('scheduled_at', [$windowStart, $windowEnd])
+            ->whereIn('status', ['scheduled', 'waiting_triage', 'waiting_provider', 'in_consultation'])
+            ->when(
+                $excludeAppointmentId,
+                fn (Builder $builder, string $appointmentId) => $builder->where('id', '!=', $appointmentId),
+            )
+            ->orderBy('scheduled_at');
+
+        return $query->get()->map(fn (AppointmentModel $appointment): array => $appointment->toArray())->all();
+    }
+
     public function search(
         ?string $query,
         ?string $patientId,

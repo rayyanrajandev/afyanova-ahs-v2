@@ -6,8 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Notifications\AppointmentConsultationTakenOverNotification;
 use App\Modules\Appointment\Application\Exceptions\ActiveAppointmentConflictException;
+use App\Modules\Appointment\Application\Exceptions\ClinicianScheduleConflictException;
 use App\Modules\Appointment\Application\Exceptions\InvalidAppointmentReferralTargetFacilityException;
+use App\Modules\Appointment\Application\Exceptions\AppointmentConsultationOwnerRequiredException;
 use App\Modules\Appointment\Application\Exceptions\InvalidAppointmentStatusTransitionException;
+use App\Modules\Appointment\Application\Exceptions\PatientActiveEncounterConflictException;
 use App\Modules\Appointment\Application\Exceptions\PatientNotEligibleForAppointmentException;
 use App\Modules\Appointment\Application\Exceptions\SourceAdmissionNotEligibleForAppointmentException;
 use App\Modules\Appointment\Application\Exceptions\TriageClaimConflictException;
@@ -55,6 +58,8 @@ use App\Modules\Appointment\Presentation\Http\Transformers\AppointmentReferralAu
 use App\Modules\Appointment\Presentation\Http\Transformers\AppointmentReferralResponseTransformer;
 use App\Modules\Appointment\Presentation\Http\Transformers\AppointmentResponseTransformer;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
+use App\Modules\Admission\Presentation\Http\Transformers\AdmissionResponseTransformer;
+use App\Modules\EmergencyTriage\Presentation\Http\Transformers\EmergencyTriageCaseResponseTransformer;
 use App\Modules\MedicalRecord\Domain\Repositories\MedicalRecordRepositoryInterface;
 use App\Modules\Platform\Infrastructure\Support\PlatformScopeQueryApplier;
 use Illuminate\Http\JsonResponse;
@@ -117,6 +122,21 @@ class AppointmentController extends Controller
                     ),
                 ],
             );
+        } catch (ClinicianScheduleConflictException $exception) {
+            return $this->validationErrorResponse(
+                message: $exception->getMessage(),
+                errors: [
+                    'clinicianUserId' => [$exception->getMessage()],
+                    'scheduledAt' => [$exception->getMessage()],
+                ],
+                context: [
+                    'clinicianScheduleConflict' => AppointmentResponseTransformer::transform(
+                        $exception->existingAppointment(),
+                    ),
+                ],
+            );
+        } catch (PatientActiveEncounterConflictException $exception) {
+            return $this->patientActiveEncounterConflictResponse($exception);
         } catch (PatientNotEligibleForAppointmentException $exception) {
             return response()->json([
                 'message' => $exception->getMessage(),
@@ -207,6 +227,19 @@ class AppointmentController extends Controller
                 ],
                 context: [
                     'activeAppointmentConflict' => AppointmentResponseTransformer::transform(
+                        $exception->existingAppointment(),
+                    ),
+                ],
+            );
+        } catch (ClinicianScheduleConflictException $exception) {
+            return $this->validationErrorResponse(
+                message: $exception->getMessage(),
+                errors: [
+                    'clinicianUserId' => [$exception->getMessage()],
+                    'scheduledAt' => [$exception->getMessage()],
+                ],
+                context: [
+                    'clinicianScheduleConflict' => AppointmentResponseTransformer::transform(
                         $exception->existingAppointment(),
                     ),
                 ],
@@ -343,11 +376,14 @@ class AppointmentController extends Controller
                 status: $request->string('status')->value(),
                 reason: $request->input('reason'),
                 actorId: $request->user()?->id,
+                isFacilitySuperAdmin: $request->user()?->isFacilitySuperAdminAccess() ?? false,
             );
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return $this->tenantScopeRequiredResponse($exception->getMessage());
         } catch (InvalidAppointmentStatusTransitionException $exception) {
             return $this->invalidStatusTransitionResponse($exception);
+        } catch (AppointmentConsultationOwnerRequiredException $exception) {
+            return $this->consultationOwnerRequiredResponse($exception->ownerUserId);
         }
 
         abort_if($appointment === null, 404, 'Appointment not found.');
@@ -369,6 +405,20 @@ class AppointmentController extends Controller
                 'status' => [$exception->getMessage()],
             ],
         ], 422);
+    }
+
+    private function consultationOwnerRequiredResponse(int $ownerUserId): JsonResponse
+    {
+        return response()->json([
+            'message' => 'Only the consultation owner or a facility administrator can change this visit\'s status while it is in consultation.',
+            'code' => 'CONSULTATION_OWNER_REQUIRED',
+            'errors' => [
+                'status' => ['Only the consultation owner or a facility administrator can perform this action.'],
+            ],
+            'context' => [
+                'consultationOwnerUserId' => $ownerUserId,
+            ],
+        ], 409);
     }
 
     public function overrideConsultationType(
@@ -687,7 +737,17 @@ class AppointmentController extends Controller
                     'consultation_owner_assigned_at' => null,
                 ];
 
-                if ($targetStatus !== 'in_consultation') {
+                // Preserve consultation_started_at when returning to
+                // waiting_provider (sent out for labs, will return) — this is
+                // the signal GetActiveVisitJourneyUseCase uses to distinguish
+                // "on hold" (waiting_clinician_review) from "never yet seen a
+                // provider" (waiting_clinician). Previously this was nulled
+                // unconditionally on every exit from in_consultation, which
+                // meant that distinction could never actually fire in
+                // practice — only clear it when the visit leaves the
+                // provider-review flow entirely (sent back to triage) or
+                // closes (completed/cancelled).
+                if (! in_array($targetStatus, ['in_consultation', 'waiting_provider'], true)) {
                     $statusAttributes['consultation_started_at'] = null;
                 }
             }
@@ -1031,6 +1091,27 @@ class AppointmentController extends Controller
             'errors' => $errors,
             'context' => $context === [] ? null : $context,
         ], 422);
+    }
+
+    private function patientActiveEncounterConflictResponse(PatientActiveEncounterConflictException $exception): JsonResponse
+    {
+        $conflictType = $exception->conflictType();
+        $existingRecord = $exception->existingRecord();
+
+        return $this->validationErrorResponse(
+            message: $exception->getMessage(),
+            errors: [
+                'patientId' => [$exception->getMessage()],
+            ],
+            context: [
+                'activePatientEncounterConflict' => [
+                    'conflictType' => $conflictType,
+                    'record' => $conflictType === 'emergency_case'
+                        ? EmergencyTriageCaseResponseTransformer::transform($existingRecord)
+                        : AdmissionResponseTransformer::transform($existingRecord),
+                ],
+            ],
+        );
     }
 
     private function consultationOwnerConflictResponse(int $ownerUserId): JsonResponse

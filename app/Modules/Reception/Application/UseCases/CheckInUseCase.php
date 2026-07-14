@@ -95,6 +95,7 @@ class CheckInUseCase
                     patientId: (string) $appointment['patient_id'],
                     arrivalMode: $arrivalMode,
                     actorId: $actorId,
+                    facilityId: $appointment['facility_id'] ?? null,
                 ));
             });
 

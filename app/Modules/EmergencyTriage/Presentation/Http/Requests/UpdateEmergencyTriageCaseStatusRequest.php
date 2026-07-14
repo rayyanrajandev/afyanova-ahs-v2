@@ -22,6 +22,7 @@ class UpdateEmergencyTriageCaseStatusRequest extends FormRequest
             'status' => ['required', Rule::in(EmergencyTriageCaseStatus::values())],
             'reason' => ['nullable', 'string', 'max:255', 'required_if:status,cancelled'],
             'dispositionNotes' => ['nullable', 'string', 'max:5000', 'required_if:status,admitted,discharged'],
+            'bedResourceId' => ['nullable', 'uuid', 'required_if:status,admitted'],
         ];
     }
 }

@@ -2,10 +2,12 @@
 
 namespace App\Modules\EmergencyTriage\Application\UseCases;
 
+use App\Modules\Admission\Application\UseCases\CreateAdmissionUseCase;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
 use App\Modules\EmergencyTriage\Domain\Repositories\EmergencyTriageCaseAuditLogRepositoryInterface;
 use App\Modules\EmergencyTriage\Domain\Repositories\EmergencyTriageCaseRepositoryInterface;
 use App\Modules\EmergencyTriage\Domain\ValueObjects\EmergencyTriageCaseStatus;
+use Illuminate\Support\Facades\DB;
 
 class UpdateEmergencyTriageCaseStatusUseCase
 {
@@ -13,10 +15,17 @@ class UpdateEmergencyTriageCaseStatusUseCase
         private readonly EmergencyTriageCaseRepositoryInterface $emergencyTriageCaseRepository,
         private readonly EmergencyTriageCaseAuditLogRepositoryInterface $auditLogRepository,
         private readonly TenantIsolationWriteGuardInterface $tenantIsolationWriteGuard,
+        private readonly CreateAdmissionUseCase $createAdmissionUseCase,
     ) {}
 
-    public function execute(string $id, string $status, ?string $reason, ?string $dispositionNotes, ?int $actorId = null): ?array
-    {
+    public function execute(
+        string $id,
+        string $status,
+        ?string $reason,
+        ?string $dispositionNotes,
+        ?int $actorId = null,
+        ?string $bedResourceId = null,
+    ): ?array {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
 
         $existing = $this->emergencyTriageCaseRepository->findById($id);
@@ -47,7 +56,28 @@ class UpdateEmergencyTriageCaseStatusUseCase
             $payload['completed_at'] = null;
         }
 
-        $updated = $this->emergencyTriageCaseRepository->update($id, $payload);
+        $createsAdmission = $status === EmergencyTriageCaseStatus::ADMITTED->value
+            && ($existing['admission_id'] ?? null) === null;
+
+        $updated = $createsAdmission
+            ? DB::transaction(function () use ($id, $payload, $existing, $dispositionNotes, $bedResourceId, $actorId): ?array {
+                $admission = $this->createAdmissionUseCase->execute(
+                    payload: [
+                        'patient_id' => $existing['patient_id'],
+                        'attending_clinician_user_id' => $existing['assigned_clinician_user_id'] ?? null,
+                        'bed_resource_id' => $bedResourceId,
+                        'admitted_at' => now(),
+                        'admission_reason' => $dispositionNotes ?? $existing['chief_complaint'] ?? null,
+                    ],
+                    actorId: $actorId,
+                );
+
+                $payload['admission_id'] = $admission['id'];
+
+                return $this->emergencyTriageCaseRepository->update($id, $payload);
+            })
+            : $this->emergencyTriageCaseRepository->update($id, $payload);
+
         if (! $updated) {
             return null;
         }

@@ -86,6 +86,7 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
         int $page,
         int $perPage,
         string $sortDirection,
+        ?string $departmentId = null,
     ): array {
         $queryBuilder = ServiceRequestModel::query();
         $this->applyPlatformScopeIfEnabled($queryBuilder);
@@ -96,6 +97,7 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
             ->when($serviceType, fn (Builder $b, string $v) => $b->where('service_type', $v))
             ->when($status, fn (Builder $b, string $v) => $b->where('status', $v))
             ->when($priority, fn (Builder $b, string $v) => $b->where('priority', $v))
+            ->when($departmentId, fn (Builder $b, string $v) => $b->where('department_id', $v))
             ->when($fromDateTime, fn (Builder $b, string $v) => $b->where('requested_at', '>=', $v))
             ->when($toDateTime, fn (Builder $b, string $v) => $b->where('requested_at', '<=', $v))
             ->orderBy('requested_at', $sortDirection === 'asc' ? 'asc' : 'desc');
@@ -115,6 +117,7 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
         ?string $priority,
         ?string $fromDateTime,
         ?string $toDateTime,
+        ?string $departmentId = null,
     ): array {
         $queryBuilder = ServiceRequestModel::query();
         $this->applyPlatformScopeIfEnabled($queryBuilder);
@@ -122,6 +125,7 @@ class EloquentServiceRequestRepository implements ServiceRequestRepositoryInterf
         $queryBuilder
             ->when($serviceType, fn (Builder $b, string $v) => $b->where('service_type', $v))
             ->when($priority, fn (Builder $b, string $v) => $b->where('priority', $v))
+            ->when($departmentId, fn (Builder $b, string $v) => $b->where('department_id', $v))
             ->when($fromDateTime, fn (Builder $b, string $v) => $b->where('requested_at', '>=', $v))
             ->when($toDateTime, fn (Builder $b, string $v) => $b->where('requested_at', '<=', $v));
 

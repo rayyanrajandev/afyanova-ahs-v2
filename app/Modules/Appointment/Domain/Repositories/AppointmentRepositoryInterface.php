@@ -18,6 +18,25 @@ interface AppointmentRepositoryInterface
         ?string $excludeAppointmentId = null,
     ): ?array;
 
+    /**
+     * Candidate rows for a clinician-overlap check: same clinician,
+     * scheduled_at within [$windowStart, $windowEnd], non-terminal status.
+     * Callers do the exact time-range overlap comparison in PHP (not SQL)
+     * since "scheduled_at + duration" date arithmetic isn't portable across
+     * the sqlite test driver and production's DB engine. $windowStart/
+     * $windowEnd should be wide enough (e.g. the reference time +/- the max
+     * possible appointment duration) to guarantee no true overlap falls
+     * outside the window.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function findActiveForClinicianInWindow(
+        int $clinicianUserId,
+        string $windowStart,
+        string $windowEnd,
+        ?string $excludeAppointmentId = null,
+    ): array;
+
     public function search(
         ?string $query,
         ?string $patientId,

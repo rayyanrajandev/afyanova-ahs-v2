@@ -63,6 +63,18 @@ class EloquentEmergencyTriageCaseRepository implements EmergencyTriageCaseReposi
             ->exists();
     }
 
+    public function findActiveForPatient(string $patientId): ?array
+    {
+        $query = EmergencyTriageCaseModel::query()
+            ->where('patient_id', $patientId)
+            ->whereIn('status', ['waiting', 'triaged', 'in_treatment']);
+        $this->applyPlatformScopeIfEnabled($query);
+
+        $case = $query->orderBy('arrived_at')->first();
+
+        return $case?->toArray();
+    }
+
     public function search(
         ?string $query,
         ?string $patientId,
@@ -83,16 +95,7 @@ class EloquentEmergencyTriageCaseRepository implements EmergencyTriageCaseReposi
         $this->applyPlatformScopeIfEnabled($queryBuilder);
 
         $queryBuilder
-            ->when($query, function (Builder $builder, string $searchTerm): void {
-                $like = '%'.$searchTerm.'%';
-                $builder->where(function (Builder $nestedQuery) use ($like): void {
-                    $nestedQuery
-                        ->where('case_number', 'like', $like)
-                        ->orWhere('triage_level', 'like', $like)
-                        ->orWhere('chief_complaint', 'like', $like)
-                        ->orWhere('vitals_summary', 'like', $like);
-                });
-            })
+            ->when($query, fn (Builder $builder, string $searchTerm) => $builder->where(fn (Builder $nestedQuery) => $this->applyCaseInsensitiveSearch($nestedQuery, $searchTerm)))
             ->when($patientId, fn (Builder $builder, string $requestedPatientId) => $builder->where('patient_id', $requestedPatientId))
             ->when($status, fn (Builder $builder, string $requestedStatus) => $builder->where('status', $requestedStatus))
             ->when($triageLevel, fn (Builder $builder, string $requestedTriageLevel) => $builder->where('triage_level', $requestedTriageLevel))
@@ -121,16 +124,7 @@ class EloquentEmergencyTriageCaseRepository implements EmergencyTriageCaseReposi
         $this->applyPlatformScopeIfEnabled($queryBuilder);
 
         $queryBuilder
-            ->when($query, function (Builder $builder, string $searchTerm): void {
-                $like = '%'.$searchTerm.'%';
-                $builder->where(function (Builder $nestedQuery) use ($like): void {
-                    $nestedQuery
-                        ->where('case_number', 'like', $like)
-                        ->orWhere('triage_level', 'like', $like)
-                        ->orWhere('chief_complaint', 'like', $like)
-                        ->orWhere('vitals_summary', 'like', $like);
-                });
-            })
+            ->when($query, fn (Builder $builder, string $searchTerm) => $builder->where(fn (Builder $nestedQuery) => $this->applyCaseInsensitiveSearch($nestedQuery, $searchTerm)))
             ->when($patientId, fn (Builder $builder, string $requestedPatientId) => $builder->where('patient_id', $requestedPatientId))
             ->when($triageLevel, fn (Builder $builder, string $requestedTriageLevel) => $builder->where('triage_level', $requestedTriageLevel))
             ->when($fromDateTime, fn (Builder $builder, string $startDateTime) => $builder->where('arrived_at', '>=', $startDateTime))
@@ -166,6 +160,25 @@ class EloquentEmergencyTriageCaseRepository implements EmergencyTriageCaseReposi
         }
 
         return $counts;
+    }
+
+    /**
+     * Postgres's LIKE is case-sensitive (unlike SQLite, which the test
+     * suite runs on) — a plain where('chief_complaint', 'like', ...)
+     * silently missed mixed-case matches in production. Same fix and
+     * reasoning as EloquentFacilityResourceRepository::
+     * applyCaseInsensitiveSearch() (Reception/Emergency/Admission/
+     * Bed-Management audit follow-through).
+     */
+    private function applyCaseInsensitiveSearch(Builder $query, string $searchTerm): Builder
+    {
+        $like = '%'.strtolower($searchTerm).'%';
+
+        return $query
+            ->whereRaw('LOWER(case_number) LIKE ?', [$like])
+            ->orWhereRaw('LOWER(COALESCE(triage_level, \'\')) LIKE ?', [$like])
+            ->orWhereRaw('LOWER(COALESCE(chief_complaint, \'\')) LIKE ?', [$like])
+            ->orWhereRaw('LOWER(COALESCE(vitals_summary, \'\')) LIKE ?', [$like]);
     }
 
     private function applyPlatformScopeIfEnabled(Builder $query): void

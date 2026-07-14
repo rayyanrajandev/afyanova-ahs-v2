@@ -3,8 +3,26 @@ import { Badge } from '@/components/ui/badge';
 import PatientSummaryPopover from '@/components/patients/summary/PatientSummaryPopover.vue';
 import { type ReceptionQueueEntry } from '@/composables/reception/useReceptionQueue';
 
+/**
+ * Deliberately neutral and role-agnostic — a pure entries renderer, no
+ * baked-in action of any kind. It's consumed by both reception/Queue.vue
+ * (front-desk visibility) and triage/Queue.vue (nurse triage recording);
+ * whoever mounts it supplies row actions via the #actions scoped slot,
+ * rather than this component deciding what any particular role should be
+ * able to do. An earlier version baked a "Record triage" button directly
+ * into this component gated by a `stage` prop — reverted: that made a
+ * front-desk-named page ("Reception Queue") the place nurses record
+ * triage, conflating "this screen can show a queue segment" with "this
+ * screen should own that segment's actions." See
+ * reports/appointments-scheduling-workspace-modernization-plan.md's
+ * Phase 3 correction note for the full reasoning.
+ */
 defineProps<{
     entries: ReceptionQueueEntry[];
+}>();
+
+defineSlots<{
+    actions?: (props: { entry: ReceptionQueueEntry }) => unknown;
 }>();
 
 /**
@@ -21,7 +39,13 @@ function arrivalModeLabel(mode: string | null): string {
         case 'walk_in':
             return 'Walk-in';
         default:
-            return 'Unknown';
+            // No ArrivalEventModel row for this appointment — reached this
+            // stage without going through check-in (e.g. bounced between
+            // triage/provider a few times, or data older than arrival
+            // tracking). "Arrival unknown", not a bare "Unknown", so it
+            // reads as "we don't know how they arrived," not as some other
+            // kind of missing/broken data.
+            return 'Arrival unknown';
     }
 }
 
@@ -29,14 +53,33 @@ function arrivalModeVariant(mode: string | null) {
     return mode === 'emergency' ? ('destructive' as const) : ('outline' as const);
 }
 
-function waitLabel(minutes: number | null): string {
-    if (minutes === null) return 'Wait time unknown';
-    if (minutes < 1) return 'Just arrived';
-    if (minutes < 60) return `${minutes} min wait`;
+/**
+ * `status === 'in_consultation'` entries carry consultation duration in
+ * waitMinutes (see GetReceptionQueueUseCase's docblock), not a wait-for-
+ * something time — labeling that "46h 29m wait" is actively misleading, as
+ * if the patient were still waiting rather than already being seen. Every
+ * other stage (waiting_triage, waiting_provider) is a genuine wait.
+ */
+function waitLabel(rawMinutes: number | null, status: string | null, consultationStep: string | null = null): string {
+    const isConsultation = status === 'in_consultation';
+    // A diagnostic step (waiting_lab/in_lab/waiting_pharmacy) means the patient has
+    // stepped away from the clinician — "X in consultation" would directly contradict
+    // the "Waiting on lab" sub-label shown alongside it, so this drops the "in
+    // consultation" framing in favor of a neutral elapsed-time phrasing.
+    const awayFromClinician = isConsultation && consultationStep !== null;
+
+    if (rawMinutes === null) return isConsultation ? 'Consultation duration unknown' : 'Wait time unknown';
+    // Defensive floor, not just a display trust in the API's own (int) cast:
+    // a stray float here previously rendered as "16h 42.178472083333304m wait".
+    const minutes = Math.floor(rawMinutes);
+    const suffix = awayFromClinician ? 'since consultation started' : isConsultation ? 'in consultation' : 'wait';
+
+    if (minutes < 1) return isConsultation ? 'Just started' : 'Just arrived';
+    if (minutes < 60) return `${minutes} min ${suffix}`;
 
     const hours = Math.floor(minutes / 60);
     const remainder = minutes % 60;
-    return `${hours}h ${remainder}m wait`;
+    return `${hours}h ${remainder}m ${suffix}`;
 }
 </script>
 
@@ -85,8 +128,9 @@ function waitLabel(minutes: number | null): string {
                     {{ arrivalModeLabel(entry.arrivalMode) }}
                 </Badge>
                 <p class="text-[11px] text-muted-foreground">
-                    {{ waitLabel(entry.waitMinutes) }}
+                    {{ waitLabel(entry.waitMinutes, entry.status, entry.consultationStep) }}
                 </p>
+                <slot name="actions" :entry="entry" />
             </div>
         </li>
     </ul>

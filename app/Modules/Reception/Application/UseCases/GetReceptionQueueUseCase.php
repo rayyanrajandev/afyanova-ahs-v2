@@ -4,9 +4,12 @@ namespace App\Modules\Reception\Application\UseCases;
 
 use App\Modules\Appointment\Domain\ValueObjects\AppointmentStatus;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
+use App\Modules\MedicalRecord\Domain\Repositories\MedicalRecordRepositoryInterface;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
+use App\Modules\PatientFlow\Application\UseCases\ResolveConsultationDiagnosticStepsUseCase;
 use App\Modules\Reception\Domain\ValueObjects\ArrivalMode;
 use App\Modules\Reception\Infrastructure\Models\ArrivalEventModel;
+use Illuminate\Database\Eloquent\Builder;
 use InvalidArgumentException;
 
 /**
@@ -23,12 +26,24 @@ use InvalidArgumentException;
  * row in sync, or the queue silently drifts from reality. Reading live means
  * there is nothing to drift. A future acuity field slots in as an additional
  * ORDER BY tier ahead of arrival-mode, not an architecture change.
+ *
+ * P2+P5 of the Reception/Emergency/Admission/Bed-Management audit
+ * follow-through: `execute(array $filters)` now accepts `q`
+ * (appointment_number + patient name/MRN), `department`,
+ * `clinicianUserId`, `page`/`perPage` — mirroring ListEmergencyTriageCasesUseCase's
+ * shape (use case owns clamping/validation, controller is a passthrough).
+ * Deliberate exception to the SQL-pagination convention every other V2 list
+ * uses: the tier/wait ordering below has no SQL representation (arrival
+ * mode lives on a separate table with no FK column, resolved via a second
+ * batched query), so the final sorted PHP array is paginated with
+ * array_slice() rather than AppointmentModel::paginate().
  */
 class GetReceptionQueueUseCase
 {
     private const STAGES = [
         AppointmentStatus::WAITING_TRIAGE->value,
         AppointmentStatus::WAITING_PROVIDER->value,
+        AppointmentStatus::IN_CONSULTATION->value,
     ];
 
     private const ARRIVAL_MODE_TIERS = [
@@ -48,67 +63,41 @@ class GetReceptionQueueUseCase
      */
     private const UNKNOWN_ARRIVAL_MODE_TIER = 1;
 
+    public function __construct(
+        private readonly MedicalRecordRepositoryInterface $medicalRecordRepository,
+        private readonly ResolveConsultationDiagnosticStepsUseCase $consultationStepResolver,
+    ) {}
+
     /**
-     * @return array<int, array<string, mixed>>
+     * @param  array<string, mixed>  $filters
+     * @return array{data: array<int, array<string, mixed>>, meta: array<string, int>}
      */
-    public function execute(string $stage): array
+    public function execute(array $filters): array
     {
+        $stage = (string) ($filters['stage'] ?? '');
         if (! in_array($stage, self::STAGES, true)) {
             throw new InvalidArgumentException(sprintf('Unsupported reception queue stage: %s', $stage));
         }
 
-        $appointments = AppointmentModel::query()
-            ->where('status', $stage)
-            ->get();
+        $page = max((int) ($filters['page'] ?? 1), 1);
+        $perPage = min(max((int) ($filters['perPage'] ?? 20), 1), 100);
+
+        $query = isset($filters['q']) ? trim((string) $filters['q']) : null;
+        $query = $query === '' ? null : $query;
+
+        $department = isset($filters['department']) ? trim((string) $filters['department']) : null;
+        $department = $department === '' ? null : $department;
+
+        $clinicianUserId = isset($filters['clinicianUserId']) ? trim((string) $filters['clinicianUserId']) : null;
+        $clinicianUserId = $clinicianUserId === '' ? null : $clinicianUserId;
+
+        $appointments = $this->baseQuery($stage, $query, $department, $clinicianUserId)->get();
 
         if ($appointments->isEmpty()) {
-            return [];
+            return ['data' => [], 'meta' => ['currentPage' => $page, 'perPage' => $perPage, 'total' => 0, 'lastPage' => 1]];
         }
 
-        $appointmentIds = $appointments->pluck('id')->all();
-        $latestArrivalModeByAppointmentId = ArrivalEventModel::query()
-            ->whereIn('appointment_id', $appointmentIds)
-            ->orderByDesc('arrived_at')
-            ->get(['appointment_id', 'arrival_mode'])
-            ->unique('appointment_id')
-            ->pluck('arrival_mode', 'appointment_id');
-
-        // Batched, not per-row: a queue view showing only patientId (a UUID)
-        // is not usable by the front-desk/triage staff it's for.
-        $patientsById = PatientModel::query()
-            ->whereIn('id', $appointments->pluck('patient_id')->unique())
-            ->get(['id', 'patient_number', 'first_name', 'middle_name', 'last_name'])
-            ->keyBy('id');
-
-        $entries = $appointments->map(function (AppointmentModel $appointment) use ($stage, $latestArrivalModeByAppointmentId, $patientsById): array {
-            $arrivalMode = $latestArrivalModeByAppointmentId->get($appointment->id);
-            $waitStartedAt = $stage === AppointmentStatus::WAITING_PROVIDER->value
-                ? ($appointment->triaged_at ?? $appointment->checked_in_at)
-                : $appointment->checked_in_at;
-            $patient = $patientsById->get($appointment->patient_id);
-            $patientName = $patient !== null
-                ? implode(' ', array_filter([
-                    $patient->first_name,
-                    $patient->middle_name,
-                    $patient->last_name,
-                ], static fn (?string $part): bool => $part !== null && trim($part) !== ''))
-                : null;
-
-            return [
-                'appointmentId' => $appointment->id,
-                'patientId' => $appointment->patient_id,
-                'patientName' => $patientName !== '' ? $patientName : null,
-                'patientNumber' => $patient?->patient_number,
-                'department' => $appointment->department,
-                'clinicianUserId' => $appointment->clinician_user_id,
-                'arrivalMode' => $arrivalMode,
-                'tier' => $arrivalMode !== null
-                    ? (self::ARRIVAL_MODE_TIERS[$arrivalMode] ?? self::UNKNOWN_ARRIVAL_MODE_TIER)
-                    : self::UNKNOWN_ARRIVAL_MODE_TIER,
-                'waitStartedAt' => $waitStartedAt,
-                'waitMinutes' => $waitStartedAt !== null ? $waitStartedAt->diffInMinutes(now()) : null,
-            ];
-        })->all();
+        $entries = $this->buildEntries($stage, $appointments);
 
         // Explicit usort, not Collection::sortBy() with multiple criteria: that
         // method's multi-comparator form expects each element to itself be a
@@ -129,6 +118,135 @@ class GetReceptionQueueUseCase
             return $aTimestamp <=> $bTimestamp;
         });
 
-        return $entries;
+        $total = count($entries);
+        $lastPage = max((int) ceil($total / $perPage), 1);
+        $page = min($page, $lastPage);
+        $paged = array_slice($entries, ($page - 1) * $perPage, $perPage);
+
+        return [
+            'data' => $paged,
+            'meta' => ['currentPage' => $page, 'perPage' => $perPage, 'total' => $total, 'lastPage' => $lastPage],
+        ];
+    }
+
+    private function baseQuery(string $stage, ?string $query, ?string $department, ?string $clinicianUserId): Builder
+    {
+        return AppointmentModel::query()
+            ->where('status', $stage)
+            ->when($department, fn (Builder $builder, string $value) => $builder->where('department', $value))
+            ->when($clinicianUserId, fn (Builder $builder, string $value) => $builder->where('clinician_user_id', $value))
+            ->when($query, function (Builder $builder, string $searchTerm): void {
+                $like = '%'.strtolower($searchTerm).'%';
+                $matchingPatientIds = PatientModel::query()
+                    ->where(function (Builder $nested) use ($like): void {
+                        $nested->whereRaw('LOWER(first_name) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(last_name) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(patient_number) LIKE ?', [$like]);
+                    })
+                    ->pluck('id');
+
+                $builder->where(function (Builder $nested) use ($like, $matchingPatientIds): void {
+                    $nested->whereRaw('LOWER(appointment_number) LIKE ?', [$like])
+                        ->orWhereIn('patient_id', $matchingPatientIds);
+                });
+            });
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, AppointmentModel>  $appointments
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildEntries(string $stage, $appointments): array
+    {
+        $appointmentIds = $appointments->pluck('id')->all();
+        $latestArrivalModeByAppointmentId = ArrivalEventModel::query()
+            ->whereIn('appointment_id', $appointmentIds)
+            ->orderByDesc('arrived_at')
+            ->get(['appointment_id', 'arrival_mode'])
+            ->unique('appointment_id')
+            ->pluck('arrival_mode', 'appointment_id');
+
+        // Batched, not per-row: a queue view showing only patientId (a UUID)
+        // is not usable by the front-desk/triage staff it's for.
+        $patientsById = PatientModel::query()
+            ->whereIn('id', $appointments->pluck('patient_id')->unique())
+            ->get(['id', 'patient_number', 'first_name', 'middle_name', 'last_name'])
+            ->keyBy('id');
+
+        // Only meaningful for in_consultation — "is the consultation note
+        // already signed" answers whether documentation is done even though
+        // the appointment itself hasn't been formally completed yet (see
+        // reports/appointments-scheduling-workspace-modernization-plan.md's
+        // "queue vs. encounter sync audit" update). Skipped for the other
+        // two stages so this query never runs when it can't return anything
+        // true.
+        $signedNoteByAppointmentId = $stage === AppointmentStatus::IN_CONSULTATION->value
+            ? $this->medicalRecordRepository->hasSignedConsultationNoteForAppointments($appointmentIds)
+            : [];
+
+        // Same reasoning as the signed-note lookup above: only in_consultation
+        // rows can meaningfully be "waiting on a lab result" etc. — skipped
+        // for the other two stages. Reuses GetActiveVisitJourneyUseCase's own
+        // batched Laboratory/Pharmacy/Radiology lookups and precedence rules
+        // (extracted into ResolveConsultationDiagnosticStepsUseCase) rather
+        // than a second, potentially-drifting copy.
+        $consultationStepByAppointmentId = $stage === AppointmentStatus::IN_CONSULTATION->value
+            ? $this->consultationStepResolver->resolveForAppointmentIds($appointmentIds)
+            : [];
+
+        return $appointments->map(function (AppointmentModel $appointment) use (
+            $stage,
+            $latestArrivalModeByAppointmentId,
+            $patientsById,
+            $signedNoteByAppointmentId,
+            $consultationStepByAppointmentId,
+        ): array {
+            $arrivalMode = $latestArrivalModeByAppointmentId->get($appointment->id);
+            // in_consultation's "wait" is really "how long this leg of the
+            // consultation has been running" — consultation_started_at, not
+            // a wait-for-something timestamp. waiting_provider still prefers
+            // triaged_at (when it first became provider-ready) over
+            // checked_in_at, unchanged.
+            $waitStartedAt = match ($stage) {
+                AppointmentStatus::WAITING_PROVIDER->value => $appointment->triaged_at ?? $appointment->checked_in_at,
+                AppointmentStatus::IN_CONSULTATION->value => $appointment->consultation_started_at,
+                default => $appointment->checked_in_at,
+            };
+            $patient = $patientsById->get($appointment->patient_id);
+            $patientName = $patient !== null
+                ? implode(' ', array_filter([
+                    $patient->first_name,
+                    $patient->middle_name,
+                    $patient->last_name,
+                ], static fn (?string $part): bool => $part !== null && trim($part) !== ''))
+                : null;
+
+            return [
+                'appointmentId' => $appointment->id,
+                'appointmentNumber' => $appointment->appointment_number,
+                'status' => $appointment->status,
+                'patientId' => $appointment->patient_id,
+                'patientName' => $patientName !== '' ? $patientName : null,
+                'patientNumber' => $patient?->patient_number,
+                'department' => $appointment->department,
+                'clinicianUserId' => $appointment->clinician_user_id,
+                'triageOwnerUserId' => $appointment->triage_owner_user_id,
+                'triageOwnerAssignedAt' => $appointment->triage_owner_assigned_at,
+                'consultationOwnerUserId' => $appointment->consultation_owner_user_id,
+                'consultationStartedAt' => $appointment->consultation_started_at,
+                'hasSignedConsultationNote' => $signedNoteByAppointmentId[$appointment->id] ?? false,
+                'consultationStep' => $consultationStepByAppointmentId[$appointment->id]['step'] ?? null,
+                'arrivalMode' => $arrivalMode,
+                'tier' => $arrivalMode !== null
+                    ? (self::ARRIVAL_MODE_TIERS[$arrivalMode] ?? self::UNKNOWN_ARRIVAL_MODE_TIER)
+                    : self::UNKNOWN_ARRIVAL_MODE_TIER,
+                'waitStartedAt' => $waitStartedAt,
+                // (int) cast, not just diffInMinutes(): Carbon returns a
+                // float here (sub-minute precision), which without rounding
+                // surfaced as "16h 42.178472083333304m wait" on the frontend
+                // — a wait time is only ever meaningful to whole minutes.
+                'waitMinutes' => $waitStartedAt !== null ? (int) $waitStartedAt->diffInMinutes(now()) : null,
+            ];
+        })->all();
     }
 }

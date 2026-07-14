@@ -14,6 +14,7 @@ export type DirectServiceType = 'laboratory' | 'pharmacy' | 'radiology' | 'theat
 export type DirectServiceRequestVariables = {
     patientId: string;
     serviceType: DirectServiceType;
+    departmentId?: string | null;
     priority?: 'routine' | 'urgent';
     notes?: string | null;
 };
@@ -39,6 +40,7 @@ export function useDirectServiceRequest(): UseMutationReturnType<
                 body: {
                     patientId: variables.patientId,
                     serviceType: variables.serviceType,
+                    departmentId: variables.departmentId || null,
                     priority: variables.priority ?? 'routine',
                     notes: variables.notes?.trim() || null,
                 },

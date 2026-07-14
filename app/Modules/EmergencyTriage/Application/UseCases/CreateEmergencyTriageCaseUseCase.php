@@ -4,6 +4,7 @@ namespace App\Modules\EmergencyTriage\Application\UseCases;
 
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
+use App\Modules\EmergencyTriage\Application\Exceptions\ActiveEmergencyTriageCaseConflictException;
 use App\Modules\EmergencyTriage\Application\Exceptions\AdmissionNotEligibleForEmergencyTriageCaseException;
 use App\Modules\EmergencyTriage\Application\Exceptions\AppointmentNotEligibleForEmergencyTriageCaseException;
 use App\Modules\EmergencyTriage\Application\Exceptions\PatientNotEligibleForEmergencyTriageCaseException;
@@ -50,6 +51,18 @@ class CreateEmergencyTriageCaseUseCase
         if ($admissionId !== null && ! $this->admissionLookupService->isValidForPatient((string) $admissionId, $patientId)) {
             throw new AdmissionNotEligibleForEmergencyTriageCaseException(
                 'Admission is not valid for the selected patient.',
+            );
+        }
+
+        $existingActiveCase = $this->emergencyTriageCaseRepository->findActiveForPatient($patientId);
+        if ($existingActiveCase !== null) {
+            throw new ActiveEmergencyTriageCaseConflictException(
+                existingCase: $existingActiveCase,
+                message: sprintf(
+                    'Patient already has an active emergency case (%s) with status "%s". Complete or cancel it before creating a new one.',
+                    $existingActiveCase['case_number'] ?? 'unknown',
+                    $existingActiveCase['status'] ?? 'unknown',
+                ),
             );
         }
 

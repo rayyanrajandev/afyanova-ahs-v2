@@ -24,6 +24,7 @@ interface ServiceRequestRepositoryInterface
         int $page,
         int $perPage,
         string $sortDirection,
+        ?string $departmentId = null,
     ): array;
 
     public function statusCounts(
@@ -31,6 +32,7 @@ interface ServiceRequestRepositoryInterface
         ?string $priority,
         ?string $fromDateTime,
         ?string $toDateTime,
+        ?string $departmentId = null,
     ): array;
 
     /**

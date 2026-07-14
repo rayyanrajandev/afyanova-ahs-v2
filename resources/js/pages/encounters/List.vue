@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -7,12 +7,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     useEncounterList,
     useEncounterListFilters,
     useEncounterStatusCounts,
     type EncounterListItem,
 } from '@/composables/useEncounterList';
+import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
 import { medicalRecordNoteTypeLabel } from '@/pages/medical-records/noteTypes';
 import { type BreadcrumbItem } from '@/types';
 
@@ -22,7 +24,8 @@ import { type BreadcrumbItem } from '@/types';
  * record-centric (one row per note), not encounter-centric — so this is
  * built fresh against the GET /encounters + /encounters/status-counts
  * endpoints, TanStack Query from the start rather than hand-rolled loading
- * refs.
+ * refs. Brought to full V2 structural parity (bounded scroll container,
+ * sticky header, real Tabs status filter) to match every other V2 page.
  */
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'Encounters', href: '/encounters' },
@@ -33,7 +36,7 @@ const encounters = useEncounterList(filters);
 const statusCounts = useEncounterStatusCounts(filters);
 
 const statusOptions = [
-    { value: '', label: 'All' },
+    { value: 'all', label: 'All' },
     { value: 'opened', label: 'Opened' },
     { value: 'in_progress', label: 'In progress' },
     { value: 'ready_for_sign', label: 'Ready for sign' },
@@ -45,14 +48,16 @@ const statusOptions = [
 
 function statusCount(status: string): number {
     if (!statusCounts.data.value) return 0;
-    if (status === '') return statusCounts.data.value.total;
+    if (status === 'all') return statusCounts.data.value.total;
     return (statusCounts.data.value as Record<string, number>)[status] ?? 0;
 }
 
-function setStatusFilter(status: string): void {
-    filters.status = status;
+function setStatus(value: string | number): void {
+    filters.status = value === 'all' ? '' : String(value);
     filters.page = 1;
 }
+
+const { scrollContainerHeight } = useStickyScrollContainer();
 
 function encounterStatusVariant(status: string | null) {
     switch (status) {
@@ -105,54 +110,90 @@ function goToPage(page: number): void {
 </script>
 
 <template>
+    <Head title="Encounters" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="space-y-4 p-4 md:p-6">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                    <h1 class="text-lg font-semibold tracking-tight">
-                        Encounters
-                    </h1>
-                    <p class="text-sm text-muted-foreground">
-                        Every visit, regardless of whether a note has been
-                        started yet.
-                    </p>
+        <div
+            ref="scrollContainer"
+            class="flex flex-col gap-4 overflow-x-hidden overflow-y-auto rounded-lg"
+            :style="{ height: scrollContainerHeight }"
+        >
+            <Tabs :model-value="filters.status || 'all'" class="contents" @update:model-value="setStatus">
+            <div class="sticky top-0 z-10 bg-background/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0 space-y-0.5">
+                        <h1 class="text-lg font-bold tracking-tight md:text-xl">Encounters</h1>
+                        <p class="text-xs text-muted-foreground">Every visit, regardless of whether a note has been started yet.</p>
+                    </div>
+                    <div class="flex shrink-0 items-center gap-2">
+                        <Badge variant="secondary">{{ statusCount('all') }} encounters</Badge>
+                        <Button variant="outline" size="sm" class="h-8 gap-1.5" @click="resetFilters()">
+                            Clear filters
+                        </Button>
+                    </div>
                 </div>
-                <Button variant="outline" size="sm" @click="resetFilters()">
-                    Clear filters
-                </Button>
-            </div>
 
-            <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-                <button
-                    v-for="option in statusOptions"
-                    :key="option.value"
-                    type="button"
-                    class="rounded-md border px-2.5 py-1.5 text-left transition-colors"
-                    :class="
-                        filters.status === option.value
-                            ? 'border-primary/40 bg-primary/10 text-primary'
-                            : 'border-border bg-muted/20 text-muted-foreground hover:bg-muted/40'
-                    "
-                    @click="setStatusFilter(option.value)"
-                >
-                    <p class="text-[10px] font-medium tracking-wider uppercase">
+                <div class="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-8">
+                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Total</p>
+                        <p class="text-sm font-bold tabular-nums">{{ statusCount('all') }}</p>
+                    </div>
+                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Opened</p>
+                        <p class="text-sm font-bold tabular-nums">{{ statusCount('opened') }}</p>
+                    </div>
+                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">In progress</p>
+                        <p class="text-sm font-bold tabular-nums">{{ statusCount('in_progress') }}</p>
+                    </div>
+                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Ready for sign</p>
+                        <p class="text-sm font-bold tabular-nums">{{ statusCount('ready_for_sign') }}</p>
+                    </div>
+                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Signed</p>
+                        <p class="text-sm font-bold tabular-nums">{{ statusCount('signed') }}</p>
+                    </div>
+                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Closed</p>
+                        <p class="text-sm font-bold tabular-nums">{{ statusCount('closed') }}</p>
+                    </div>
+                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Amended</p>
+                        <p class="text-sm font-bold tabular-nums">{{ statusCount('amended') }}</p>
+                    </div>
+                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Cancelled</p>
+                        <p class="text-sm font-bold tabular-nums">{{ statusCount('cancelled') }}</p>
+                    </div>
+                </div>
+
+                <TabsList class="mt-3 grid w-full grid-cols-4 sm:grid-cols-8">
+                    <TabsTrigger
+                        v-for="option in statusOptions"
+                        :key="option.value"
+                        :value="option.value"
+                        class="inline-flex items-center gap-1.5"
+                    >
                         {{ option.label }}
-                    </p>
-                    <p class="text-sm font-bold tabular-nums">
-                        {{ statusCount(option.value) }}
-                    </p>
-                </button>
+                        <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
+                            {{ statusCount(option.value) }}
+                        </Badge>
+                    </TabsTrigger>
+                </TabsList>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2">
-                <Input
-                    v-model="filters.q"
-                    placeholder="Search by patient or encounter number…"
-                    class="h-9 w-72"
-                    @update:model-value="filters.page = 1"
-                />
+            <div class="space-y-4 px-6 pb-6">
+            <div class="flex flex-wrap items-start gap-2">
+                <div class="relative min-w-72 flex-1">
+                    <Input
+                        v-model="filters.q"
+                        placeholder="Search by patient or encounter number…"
+                        class="h-9"
+                        @update:model-value="filters.page = 1"
+                    />
+                </div>
                 <Input v-model="filters.from" type="date" class="h-9 w-40" />
-                <span class="text-xs text-muted-foreground">to</span>
+                <span class="text-xs text-muted-foreground self-center">to</span>
                 <Input v-model="filters.to" type="date" class="h-9 w-40" />
             </div>
 
@@ -251,6 +292,8 @@ function goToPage(page: number): void {
                     </Button>
                 </div>
             </div>
+            </div>
+            </Tabs>
         </div>
     </AppLayout>
 </template>

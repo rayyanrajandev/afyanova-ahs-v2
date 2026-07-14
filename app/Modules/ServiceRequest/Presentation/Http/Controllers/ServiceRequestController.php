@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
 use App\Modules\ServiceRequest\Application\Exceptions\ActiveServiceRequestAlreadyExistsException;
 use App\Modules\ServiceRequest\Application\Exceptions\PatientNotEligibleForServiceRequestException;
+use App\Modules\ServiceRequest\Application\Exceptions\ServiceRequestDepartmentScopeException;
 use App\Modules\ServiceRequest\Application\Exceptions\ServiceRequestStatusTransitionException;
+use App\Modules\ServiceRequest\Application\Services\ServiceRequestDepartmentScopeResolver;
 use App\Modules\ServiceRequest\Application\UseCases\CreateServiceRequestUseCase;
 use App\Modules\ServiceRequest\Application\UseCases\ExportServiceRequestsCsvUseCase;
 use App\Modules\ServiceRequest\Application\UseCases\GetServiceRequestUseCase;
@@ -31,13 +33,17 @@ class ServiceRequestController extends Controller
         'service_request.linked_order_created' => 'Clinical order linked',
     ];
 
-    public function index(Request $request, ListServiceRequestsUseCase $useCase): JsonResponse
-    {
-        $result = $useCase->execute($request->all());
+    public function index(
+        Request $request,
+        ListServiceRequestsUseCase $useCase,
+        ServiceRequestDepartmentScopeResolver $scopeResolver,
+    ): JsonResponse {
+        $scope = $scopeResolver->resolve($request->user());
+        $result = $useCase->execute($request->all(), $scope);
 
         return response()->json([
             'data' => array_map([ServiceRequestResponseTransformer::class, 'transform'], $result['data']),
-            'meta' => $result['meta'],
+            'meta' => array_merge($result['meta'], ['departmentScopeMissing' => $scope->hasNoAssignedDepartment()]),
         ]);
     }
 
@@ -75,12 +81,17 @@ class ServiceRequestController extends Controller
         ]);
     }
 
-    public function statusCounts(Request $request, ListServiceRequestStatusCountsUseCase $useCase): JsonResponse
-    {
-        $counts = $useCase->execute($request->all());
+    public function statusCounts(
+        Request $request,
+        ListServiceRequestStatusCountsUseCase $useCase,
+        ServiceRequestDepartmentScopeResolver $scopeResolver,
+    ): JsonResponse {
+        $scope = $scopeResolver->resolve($request->user());
+        $counts = $useCase->execute($request->all(), $scope);
 
         return response()->json([
             'data' => $counts,
+            'meta' => ['departmentScopeMissing' => $scope->hasNoAssignedDepartment()],
         ]);
     }
 
@@ -136,7 +147,8 @@ class ServiceRequestController extends Controller
     public function updateStatus(
         string $id,
         UpdateServiceRequestStatusRequest $request,
-        UpdateServiceRequestStatusUseCase $useCase
+        UpdateServiceRequestStatusUseCase $useCase,
+        ServiceRequestDepartmentScopeResolver $scopeResolver,
     ): JsonResponse {
         $validated = $request->validated();
 
@@ -144,11 +156,17 @@ class ServiceRequestController extends Controller
             $serviceRequest = $useCase->execute(
                 id: $id,
                 newStatus: (string) $validated['status'],
+                scope: $scopeResolver->resolve($request->user()),
                 actorId: $request->user()?->id,
                 statusReason: isset($validated['statusReason']) ? (string) $validated['statusReason'] : null,
             );
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return $this->tenantScopeRequiredError($exception->getMessage());
+        } catch (ServiceRequestDepartmentScopeException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => 'DEPARTMENT_SCOPE_FORBIDDEN',
+            ], 403);
         } catch (ServiceRequestStatusTransitionException $exception) {
             return $this->validationError('status', $exception->getMessage());
         }

@@ -4,6 +4,7 @@ namespace App\Modules\Encounter\Presentation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Encounter\Application\Exceptions\EncounterCloseBlockedException;
+use App\Modules\Encounter\Application\Exceptions\EncounterOwnerConflictException;
 use App\Modules\Encounter\Application\Exceptions\InvalidEncounterStatusTransitionException;
 use App\Modules\Encounter\Application\UseCases\GetEncounterUseCase;
 use App\Modules\Encounter\Application\UseCases\GetEncounterWorkspaceUseCase;
@@ -123,7 +124,19 @@ class EncounterController extends Controller
                 acknowledgeCloseGaps: (bool) $request->boolean('acknowledgeCloseGaps'),
                 disposition: $request->input('disposition'),
                 dispositionNotes: $request->input('dispositionNotes'),
+                isFacilitySuperAdmin: $request->user()?->isFacilitySuperAdminAccess() ?? false,
             );
+        } catch (EncounterOwnerConflictException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => 'ENCOUNTER_OWNER_REQUIRED',
+                'errors' => [
+                    'status' => ['Only the encounter\'s primary clinician or a facility administrator can perform this action.'],
+                ],
+                'context' => [
+                    'encounterOwnerUserId' => $exception->ownerUserId,
+                ],
+            ], 409);
         } catch (EncounterCloseBlockedException $exception) {
             return response()->json([
                 'message' => $exception->getMessage(),

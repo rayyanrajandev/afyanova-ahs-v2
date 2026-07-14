@@ -21,6 +21,7 @@ class UpdateEncounterStatusUseCase
         bool $acknowledgeCloseGaps = false,
         ?string $disposition = null,
         ?string $dispositionNotes = null,
+        bool $isFacilitySuperAdmin = false,
     ): ?array {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
 
@@ -34,11 +35,13 @@ class UpdateEncounterStatusUseCase
                 acknowledgeCloseGaps: $acknowledgeCloseGaps,
                 disposition: $disposition,
                 dispositionNotes: $dispositionNotes,
+                isFacilitySuperAdmin: $isFacilitySuperAdmin,
             ),
             'reopened', EncounterStatus::IN_PROGRESS->value => $this->encounterLifecycleService->reopen(
                 encounterId: $id,
                 reason: (string) $reason,
                 actorId: $actorId,
+                isFacilitySuperAdmin: $isFacilitySuperAdmin,
             ),
             default => null,
         };
