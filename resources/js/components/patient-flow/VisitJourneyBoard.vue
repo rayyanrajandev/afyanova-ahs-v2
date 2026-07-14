@@ -218,7 +218,7 @@ function columnStats(entries: VisitJourneyEntry[]): { averageLabel: string; long
             <div
                 v-for="entry in column.entries"
                 :key="entryKey(entry)"
-                class="rounded-md border bg-background px-2.5 py-2 shadow-sm transition-colors duration-1000"
+                class="rounded-md border bg-card px-2.5 py-2 shadow-sm transition-colors duration-1000"
                 :class="recentlyChangedKeys.has(entryKey(entry)) ? 'ring-2 ring-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/30' : ''"
             >
                 <div class="flex items-start justify-between gap-2">
