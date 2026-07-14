@@ -3,7 +3,9 @@ import { router } from '@inertiajs/vue3';
 
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import { Button } from '@/components/ui/button';
+import { Button, type ButtonVariants } from '@/components/ui/button';
+
+withDefaults(defineProps<{ variant?: ButtonVariants['variant'] }>(), { variant: 'outline' });
 import {
     CommandDialog,
     CommandEmpty,
@@ -942,15 +944,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown));
     <div class="flex items-center gap-2">
         <Button
             type="button"
-            variant="outline"
+            :variant="variant"
             size="sm"
             class="h-9 gap-2 px-2.5"
             @click="togglePalette"
         >
             <AppIcon name="activity" class="size-4" />
-            <span class="hidden xl:inline">Quick Switch</span>
-            <span class="hidden sm:inline xl:hidden">Switch</span>
-            <span class="sr-only sm:hidden">Quick Switch</span>
+            <span class="hidden xl:inline">Command Palette</span>
+            <span class="hidden sm:inline xl:hidden">Commands</span>
+            <span class="sr-only sm:hidden">Command Palette</span>
             <span class="hidden items-center gap-1 lg:inline-flex">
                 <Kbd>{{ isMac ? 'Cmd' : 'Ctrl' }}</Kbd>
                 <Kbd>K</Kbd>

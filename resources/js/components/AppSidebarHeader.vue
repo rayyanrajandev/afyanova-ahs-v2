@@ -19,6 +19,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Separator } from '@/components/ui/separator';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useActiveRole } from '@/composables/useActiveRole';
 import {
@@ -219,177 +220,164 @@ function selectScope(key: string) {
         </div>
 
         <div class="flex min-w-0 items-center gap-2">
-            <div class="header-btn-group flex items-center gap-0" role="group">
-                <DropdownMenu v-if="hasUniversalAdminAccess">
-                    <DropdownMenuTrigger as-child>
-                        <Button
-                            id="app-facility-scope-trigger"
-                            variant="outline"
-                            size="sm"
-                            class="h-9 max-w-[340px] gap-2 px-2.5 font-normal text-muted-foreground"
-                        >
-                            <AppIcon name="building-2" class="size-3.5 shrink-0" />
-                            <Badge :variant="scopeMode.variant" class="hidden shrink-0 px-1.5 py-0 text-[10px] font-medium sm:inline-flex">
+            <DropdownMenu v-if="hasUniversalAdminAccess">
+                <DropdownMenuTrigger as-child>
+                    <Button
+                        id="app-facility-scope-trigger"
+                        variant="ghost"
+                        size="sm"
+                        class="h-9 max-w-[340px] gap-2 px-2.5 font-normal text-muted-foreground"
+                    >
+                        <AppIcon name="building-2" class="size-3.5 shrink-0" />
+                        <Badge :variant="scopeMode.variant" class="hidden shrink-0 px-1.5 py-0 text-[10px] font-medium sm:inline-flex">
+                            {{ scopeMode.label }}
+                        </Badge>
+                        <span class="hidden max-w-[170px] truncate text-left sm:inline">{{ facilityTriggerLabel }}</span>
+                        <span class="sm:hidden">Facility</span>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" class="w-[320px]">
+                    <DropdownMenuLabel class="space-y-0.5">
+                        <span class="flex items-center justify-between gap-2">
+                            <span class="text-sm font-medium">Facility scope</span>
+                            <Badge :variant="scopeMode.variant" class="px-1.5 py-0 text-[10px] font-medium">
                                 {{ scopeMode.label }}
                             </Badge>
-                            <span class="hidden max-w-[170px] truncate text-left sm:inline">{{ facilityTriggerLabel }}</span>
-                            <span class="sm:hidden">Facility</span>
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" class="w-[320px]">
-                        <DropdownMenuLabel class="space-y-0.5">
-                            <span class="flex items-center justify-between gap-2">
-                                <span class="text-sm font-medium">Facility scope</span>
-                                <Badge :variant="scopeMode.variant" class="px-1.5 py-0 text-[10px] font-medium">
-                                    {{ scopeMode.label }}
-                                </Badge>
-                            </span>
-                            <span class="block text-xs font-normal text-muted-foreground">{{ scopeMode.description }} | {{ facilityTriggerMeta }}</span>
-                        </DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            class="cursor-pointer text-sm"
-                            :class="{ 'bg-accent': selectedScopeKey === 'auto' }"
-                            @select="selectScope('auto')"
-                        >
-                            <div class="flex min-w-0 items-center gap-2">
-                                <AppIcon :name="hasUniversalAdminAccess ? 'shield-check' : 'refresh-cw'" class="size-3.5 shrink-0 text-muted-foreground" />
-                                <div class="min-w-0">
-                                    <p class="text-sm font-medium">{{ hasUniversalAdminAccess ? 'Global admin / all facilities' : 'Auto-resolve' }}</p>
-                                    <p class="text-xs text-muted-foreground">
-                                        {{ hasUniversalAdminAccess ? 'Use platform-wide scope where pages support it.' : 'Use your primary assigned facility.' }}
-                                    </p>
-                                </div>
-                            </div>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            v-if="accessibleFacilities.length === 0"
-                            disabled
-                            class="text-sm text-muted-foreground"
-                        >
-                            No active facility assignments.
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            v-for="facility in accessibleFacilities"
-                            :key="facility.key"
-                            class="cursor-pointer text-sm"
-                            :class="{ 'bg-accent': selectedScopeKey === facility.key }"
-                            @select="selectScope(facility.key)"
-                        >
-                            <div class="flex min-w-0 items-center gap-2">
-                                <AppIcon name="map-pin" class="size-3.5 shrink-0 text-muted-foreground" />
-                                <div class="min-w-0">
-                                    <p class="truncate text-sm font-medium">{{ facility.facilityName }}</p>
-                                    <p class="truncate text-xs text-muted-foreground">
-                                        {{ facility.facilityCode }}{{ facility.isPrimary ? ' | Primary facility' : '' }}
-                                    </p>
-                                </div>
-                            </div>
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-
-                <OPDQuickCommandPalette />
-
-                <div class="hidden md:flex">
-                    <GlobalPatientSearch />
-                </div>
-
-                <div class="md:hidden">
-                    <GlobalPatientSearch />
-                </div>
-            </div>
-
-            <div class="header-btn-group flex items-center gap-0" role="group">
-                <DropdownMenu v-if="hasMultipleRoles">
-                    <DropdownMenuTrigger as-child>
-                        <Button
-                            id="app-role-switch-trigger"
-                            variant="outline"
-                            size="sm"
-                            class="h-9 gap-2 px-2.5 font-normal text-muted-foreground"
-                        >
-                            <AppIcon name="user" class="size-3.5 shrink-0" />
-                            <span class="hidden max-w-[130px] truncate text-left sm:inline">{{ activeRole?.label ?? 'All access' }}</span>
-                            <span class="sm:hidden">Role</span>
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" class="w-[240px]">
-                        <DropdownMenuLabel class="space-y-0.5">
-                            <span class="text-sm font-medium">Active role</span>
-                            <span class="block text-xs font-normal text-muted-foreground">Show sidebar for selected role</span>
-                        </DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            class="cursor-pointer text-sm"
-                            :class="{ 'bg-accent': !activeRole }"
-                            @select="setActiveRole(null)"
-                        >
-                            <div class="flex min-w-0 items-center gap-2">
-                                <AppIcon name="layout-grid" class="size-3.5 shrink-0 text-muted-foreground" />
-                                <div class="min-w-0">
-                                    <p class="text-sm font-medium">All access</p>
-                                    <p class="text-xs text-muted-foreground">Show all available modules</p>
-                                </div>
-                            </div>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            v-for="role in availableRoles"
-                            :key="role.code"
-                            class="cursor-pointer text-sm"
-                            :class="{ 'bg-accent': activeRole?.code === role.code }"
-                            @select="setActiveRole(role.code)"
-                        >
-                            <div class="flex min-w-0 items-center gap-2">
-                                <AppIcon name="shield-check" class="size-3.5 shrink-0 text-muted-foreground" />
-                                <div class="min-w-0">
-                                    <p class="text-sm font-medium">{{ role.label }}</p>
-                                    <p class="text-xs text-muted-foreground">{{ role.code }}</p>
-                                </div>
-                            </div>
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-
-                <DropdownMenu v-if="user">
-                    <DropdownMenuTrigger as-child>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            class="h-9 gap-2 px-2 font-normal text-muted-foreground"
-                        >
-                            <UserInfo :user="user" />
-                            <ChevronsUpDown class="size-4 shrink-0 text-muted-foreground/50" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                        class="w-(--reka-dropdown-menu-trigger-width) min-w-56 rounded-lg"
-                        align="end"
-                        :side-offset="4"
+                        </span>
+                        <span class="block text-xs font-normal text-muted-foreground">{{ scopeMode.description }} | {{ facilityTriggerMeta }}</span>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                        class="cursor-pointer text-sm"
+                        :class="{ 'bg-accent': selectedScopeKey === 'auto' }"
+                        @select="selectScope('auto')"
                     >
-                        <UserMenuContent
-                            :user="user"
-                            @open-settings="isSettingsDialogOpen = true"
-                        />
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                        <div class="flex min-w-0 items-center gap-2">
+                            <AppIcon :name="hasUniversalAdminAccess ? 'shield-check' : 'refresh-cw'" class="size-3.5 shrink-0 text-muted-foreground" />
+                            <div class="min-w-0">
+                                <p class="text-sm font-medium">{{ hasUniversalAdminAccess ? 'Global admin / all facilities' : 'Auto-resolve' }}</p>
+                                <p class="text-xs text-muted-foreground">
+                                    {{ hasUniversalAdminAccess ? 'Use platform-wide scope where pages support it.' : 'Use your primary assigned facility.' }}
+                                </p>
+                            </div>
+                        </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                        v-if="accessibleFacilities.length === 0"
+                        disabled
+                        class="text-sm text-muted-foreground"
+                    >
+                        No active facility assignments.
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                        v-for="facility in accessibleFacilities"
+                        :key="facility.key"
+                        class="cursor-pointer text-sm"
+                        :class="{ 'bg-accent': selectedScopeKey === facility.key }"
+                        @select="selectScope(facility.key)"
+                    >
+                        <div class="flex min-w-0 items-center gap-2">
+                            <AppIcon name="map-pin" class="size-3.5 shrink-0 text-muted-foreground" />
+                            <div class="min-w-0">
+                                <p class="truncate text-sm font-medium">{{ facility.facilityName }}</p>
+                                <p class="truncate text-xs text-muted-foreground">
+                                    {{ facility.facilityCode }}{{ facility.isPrimary ? ' | Primary facility' : '' }}
+                                </p>
+                            </div>
+                        </div>
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+
+            <OPDQuickCommandPalette variant="ghost" />
+
+            <Separator orientation="vertical" class="mx-1 !h-6" />
+
+            <div class="hidden md:flex">
+                <GlobalPatientSearch variant="ghost" />
             </div>
+
+            <div class="md:hidden">
+                <GlobalPatientSearch variant="ghost" />
+            </div>
+
+            <Separator orientation="vertical" class="mx-1 !h-6" />
+
+            <DropdownMenu v-if="hasMultipleRoles">
+                <DropdownMenuTrigger as-child>
+                    <Button
+                        id="app-role-switch-trigger"
+                        variant="ghost"
+                        size="sm"
+                        class="h-9 gap-2 px-2.5 font-normal text-muted-foreground"
+                    >
+                        <AppIcon name="user" class="size-3.5 shrink-0" />
+                        <span class="hidden max-w-[130px] truncate text-left sm:inline">{{ activeRole?.label ?? 'All access' }}</span>
+                        <span class="sm:hidden">Role</span>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" class="w-[240px]">
+                    <DropdownMenuLabel class="space-y-0.5">
+                        <span class="text-sm font-medium">Active role</span>
+                        <span class="block text-xs font-normal text-muted-foreground">Show sidebar for selected role</span>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                        class="cursor-pointer text-sm"
+                        :class="{ 'bg-accent': !activeRole }"
+                        @select="setActiveRole(null)"
+                    >
+                        <div class="flex min-w-0 items-center gap-2">
+                            <AppIcon name="layout-grid" class="size-3.5 shrink-0 text-muted-foreground" />
+                            <div class="min-w-0">
+                                <p class="text-sm font-medium">All access</p>
+                                <p class="text-xs text-muted-foreground">Show all available modules</p>
+                            </div>
+                        </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                        v-for="role in availableRoles"
+                        :key="role.code"
+                        class="cursor-pointer text-sm"
+                        :class="{ 'bg-accent': activeRole?.code === role.code }"
+                        @select="setActiveRole(role.code)"
+                    >
+                        <div class="flex min-w-0 items-center gap-2">
+                            <AppIcon name="shield-check" class="size-3.5 shrink-0 text-muted-foreground" />
+                            <div class="min-w-0">
+                                <p class="text-sm font-medium">{{ role.label }}</p>
+                                <p class="text-xs text-muted-foreground">{{ role.code }}</p>
+                            </div>
+                        </div>
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu v-if="user">
+                <DropdownMenuTrigger as-child>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        class="h-9 gap-2 px-2 font-normal text-muted-foreground"
+                    >
+                        <UserInfo :user="user" hide-avatar />
+                        <ChevronsUpDown class="size-4 shrink-0 text-muted-foreground/50" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                    class="w-(--reka-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+                    align="end"
+                    :side-offset="4"
+                >
+                    <UserMenuContent
+                        :user="user"
+                        @open-settings="isSettingsDialogOpen = true"
+                    />
+                </DropdownMenuContent>
+            </DropdownMenu>
         </div>
     </header>
     <AppSettingsDialog v-model:open="isSettingsDialogOpen" />
 </template>
-
-<style scoped>
-.header-btn-group > * + * button,
-.header-btn-group > * + * .inline-flex.items-center.justify-center {
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-}
-.header-btn-group > :not(:last-child) button,
-.header-btn-group > :not(:last-child) .inline-flex.items-center.justify-center {
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-}
-</style>

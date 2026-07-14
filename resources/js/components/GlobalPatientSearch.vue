@@ -3,7 +3,9 @@ import { router } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
+import { Button, type ButtonVariants } from '@/components/ui/button';
+
+withDefaults(defineProps<{ variant?: ButtonVariants['variant'] }>(), { variant: 'outline' });
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -397,7 +399,7 @@ onBeforeUnmount(() => {
     <div v-if="canSearchPatients" class="flex items-center">
         <Button
             type="button"
-            variant="outline"
+            :variant="variant"
             size="sm"
             class="h-9 w-9 justify-center gap-2 px-0 text-muted-foreground shadow-xs md:w-[240px] md:justify-start md:px-3 lg:w-[280px]"
             @click="toggleSearch"
