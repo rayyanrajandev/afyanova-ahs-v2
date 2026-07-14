@@ -25,6 +25,7 @@ class UpdateAdmissionStatusUseCase
         ?string $followUpPlan = null,
         ?string $receivingWard = null,
         ?string $receivingBed = null,
+        ?string $receivingBedResourceId = null,
         ?int $actorId = null,
     ): ?array
     {
@@ -41,16 +42,31 @@ class UpdateAdmissionStatusUseCase
         ];
 
         if ($status === AdmissionStatus::TRANSFERRED->value) {
-            $normalizedPlacement = $this->admissionPlacementLookupService->validatePlacement(
-                ward: $receivingWard,
-                bed: $receivingBed,
-                wardField: 'receivingWard',
-                bedField: 'receivingBed',
-                excludeAdmissionId: $id,
-            );
+            $normalizedReceivingBedResourceId = trim((string) $receivingBedResourceId);
 
-            $payload['ward'] = $normalizedPlacement['ward'];
-            $payload['bed'] = $normalizedPlacement['bed'];
+            if ($normalizedReceivingBedResourceId !== '') {
+                $normalizedPlacement = $this->admissionPlacementLookupService->validatePlacementByResource(
+                    bedResourceId: $normalizedReceivingBedResourceId,
+                    fieldName: 'receivingBedResourceId',
+                    excludeAdmissionId: $id,
+                );
+
+                $payload['bed_resource_id'] = $normalizedPlacement['bed_resource_id'];
+                $payload['ward'] = $normalizedPlacement['ward'];
+                $payload['bed'] = $normalizedPlacement['bed'];
+            } else {
+                $normalizedPlacement = $this->admissionPlacementLookupService->validatePlacement(
+                    ward: $receivingWard,
+                    bed: $receivingBed,
+                    wardField: 'receivingWard',
+                    bedField: 'receivingBed',
+                    excludeAdmissionId: $id,
+                );
+
+                $payload['bed_resource_id'] = null;
+                $payload['ward'] = $normalizedPlacement['ward'];
+                $payload['bed'] = $normalizedPlacement['bed'];
+            }
         }
 
         if ($status === AdmissionStatus::DISCHARGED->value) {
@@ -102,6 +118,10 @@ class UpdateAdmissionStatusUseCase
                 'bed' => [
                     'before' => $existing['bed'] ?? null,
                     'after' => $updated['bed'] ?? null,
+                ],
+                'bed_resource_id' => [
+                    'before' => $existing['bed_resource_id'] ?? null,
+                    'after' => $updated['bed_resource_id'] ?? null,
                 ],
             ],
             metadata: [

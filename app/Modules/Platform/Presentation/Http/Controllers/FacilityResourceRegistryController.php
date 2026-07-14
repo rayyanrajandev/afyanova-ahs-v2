@@ -3,6 +3,7 @@
 namespace App\Modules\Platform\Presentation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Admission\Domain\Repositories\AdmissionRepositoryInterface;
 use App\Modules\Platform\Application\Exceptions\DuplicateFacilityResourceCodeException;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
 use App\Modules\Platform\Application\UseCases\CreateFacilityResourceUseCase;
@@ -109,9 +110,37 @@ class FacilityResourceRegistryController extends Controller
         return $this->exportAuditLogsCsv(FacilityResourceType::SERVICE_POINT->value, 'service-point', $id, $request, $useCase);
     }
 
-    public function wardBeds(Request $request, ListFacilityResourcesUseCase $useCase): JsonResponse
-    {
-        return $this->listResources(FacilityResourceType::WARD_BED->value, $request, $useCase);
+    /**
+     * Unlike servicePoints()/listResources(), this doesn't go through the
+     * shared listing helper — ward/bed rows are joined with live admission
+     * occupancy so a facility admin can see (and, in updateWardBedStatus(),
+     * be blocked from deactivating) a bed that currently has a patient in
+     * it. Mirrors ListAvailableBedsUseCase's cross-module composition
+     * (Admission depending on Platform's FacilityResourceRepository); doing
+     * the join here instead keeps that generic use case free of
+     * Admission-specific knowledge, and keeps servicePoints() — which has no
+     * occupancy concept — on the plain shared path.
+     */
+    public function wardBeds(
+        Request $request,
+        ListFacilityResourcesUseCase $useCase,
+        AdmissionRepositoryInterface $admissionRepository,
+    ): JsonResponse {
+        $result = $useCase->execute(FacilityResourceType::WARD_BED->value, $request->all());
+
+        $bedIds = array_values(array_filter(array_map(
+            static fn (array $resource): ?string => $resource['id'] ?? null,
+            $result['data'],
+        )));
+        $occupancy = $bedIds === [] ? [] : $admissionRepository->activeAdmissionsByBedResourceIds($bedIds);
+
+        return response()->json([
+            'data' => array_map(
+                fn (array $resource): array => $this->withBedOccupancy($resource, $occupancy),
+                $result['data'],
+            ),
+            'meta' => $result['meta'],
+        ]);
     }
 
     public function wardBedStatusCounts(
@@ -139,9 +168,19 @@ class FacilityResourceRegistryController extends Controller
         );
     }
 
-    public function wardBed(string $id, GetFacilityResourceUseCase $useCase): JsonResponse
-    {
-        return $this->showResource(FacilityResourceType::WARD_BED->value, $id, $useCase);
+    public function wardBed(
+        string $id,
+        GetFacilityResourceUseCase $useCase,
+        AdmissionRepositoryInterface $admissionRepository,
+    ): JsonResponse {
+        $resource = $useCase->execute($id, FacilityResourceType::WARD_BED->value);
+        abort_if($resource === null, 404, 'Resource not found.');
+
+        $occupancy = $admissionRepository->activeAdmissionsByBedResourceIds([$id]);
+
+        return response()->json([
+            'data' => $this->withBedOccupancy($resource, $occupancy),
+        ]);
     }
 
     public function updateWardBed(
@@ -166,11 +205,33 @@ class FacilityResourceRegistryController extends Controller
         );
     }
 
+    /**
+     * Blocks deactivating a bed that currently has an active admission in
+     * it — unlike the booking conflicts elsewhere in this codebase, there's
+     * no legitimate reason to deactivate an occupied bed, so this is a hard
+     * block with no override, checked before the generic status use case
+     * runs (which has no notion of occupancy at all).
+     */
     public function updateWardBedStatus(
         string $id,
         UpdateFacilityResourceStatusRequest $request,
-        UpdateFacilityResourceStatusUseCase $useCase
+        UpdateFacilityResourceStatusUseCase $useCase,
+        AdmissionRepositoryInterface $admissionRepository,
     ): JsonResponse {
+        if ($request->string('status')->value() === 'inactive') {
+            $occupancy = $admissionRepository->activeAdmissionsByBedResourceIds([$id]);
+            $occupyingAdmission = $occupancy[$id] ?? null;
+            if ($occupyingAdmission !== null) {
+                return $this->validationError(
+                    'status',
+                    sprintf(
+                        'This bed is currently occupied by admission %s. Discharge or transfer the patient before deactivating it.',
+                        (string) ($occupyingAdmission['admission_number'] ?? 'an active admission'),
+                    ),
+                );
+            }
+        }
+
         return $this->updateResourceStatus(FacilityResourceType::WARD_BED->value, $id, $request, $useCase);
     }
 
@@ -188,6 +249,23 @@ class FacilityResourceRegistryController extends Controller
         ListFacilityResourceAuditLogsUseCase $useCase
     ): StreamedResponse {
         return $this->exportAuditLogsCsv(FacilityResourceType::WARD_BED->value, 'ward-bed', $id, $request, $useCase);
+    }
+
+    /**
+     * @param  array<string, mixed>  $resource
+     * @param  array<string, array<string, mixed>>  $occupancyByBedId
+     * @return array<string, mixed>
+     */
+    private function withBedOccupancy(array $resource, array $occupancyByBedId): array
+    {
+        $transformed = FacilityResourceResponseTransformer::transform($resource);
+        $occupyingAdmission = $occupancyByBedId[(string) ($resource['id'] ?? '')] ?? null;
+
+        $transformed['isOccupied'] = $occupyingAdmission !== null;
+        $transformed['occupiedByAdmissionId'] = $occupyingAdmission['id'] ?? null;
+        $transformed['occupiedByAdmissionNumber'] = $occupyingAdmission['admission_number'] ?? null;
+
+        return $transformed;
     }
 
     private function listResources(string $resourceType, Request $request, ListFacilityResourcesUseCase $useCase): JsonResponse

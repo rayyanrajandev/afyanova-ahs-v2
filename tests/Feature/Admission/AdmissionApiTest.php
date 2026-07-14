@@ -659,6 +659,42 @@ it('lists and filters admissions', function (): void {
         ->assertJsonPath('data.0.status', 'admitted');
 });
 
+/**
+ * Postgres's LIKE is case-sensitive (unlike SQLite, which this test suite
+ * runs on) — a plain where('admission_reason', 'like', ...) silently
+ * missed mixed-case matches in production. Fixed via
+ * EloquentAdmissionRepository::applyCaseInsensitiveSearch(). Can't
+ * reproduce the case-sensitivity bug itself on SQLite, but this documents
+ * and guards the intended case-insensitive behavior going forward.
+ */
+it('finds admissions by search term regardless of case', function (): void {
+    $user = makeAdmissionReadUser();
+    $patient = makeAdmissionPatient();
+
+    AdmissionModel::query()->create([
+        'admission_number' => 'ADM20260225CCCCCC',
+        'patient_id' => $patient->id,
+        'appointment_id' => null,
+        'attending_clinician_user_id' => null,
+        'ward' => 'Cardiology Ward',
+        'bed' => 'C-01',
+        'admitted_at' => now()->subHours(1)->toDateTimeString(),
+        'discharged_at' => null,
+        'admission_reason' => 'Chest pain observation',
+        'notes' => null,
+        'status' => 'admitted',
+        'status_reason' => null,
+    ]);
+
+    foreach (['cardiology', 'CARDIOLOGY', 'CaRdIoLoGy'] as $term) {
+        $this->actingAs($user)
+            ->getJson('/api/v1/admissions?q='.$term)
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.ward', 'Cardiology Ward');
+    }
+});
+
 it('forbids admission list without read permission', function (): void {
     $userWithoutRead = User::factory()->create();
     $patient = makeAdmissionPatient();
@@ -956,6 +992,167 @@ it('blocks admission status update in use case when tenant isolation is enabled 
         ])
         ->assertForbidden()
         ->assertJsonPath('code', 'TENANT_SCOPE_REQUIRED');
+});
+
+it('creates an admission linked to a real bed resource and returns it in the response', function (): void {
+    $user = makeAdmissionReadUser();
+    $patient = makeAdmissionPatient();
+    $bed = seedAdmissionWardBedRegistry('Ward D', 'D-01');
+
+    $response = $this->actingAs($user)
+        ->postJson('/api/v1/admissions', admissionPayload($patient->id, [
+            'ward' => null,
+            'bed' => null,
+            'bedResourceId' => $bed->id,
+        ]))
+        ->assertCreated()
+        ->assertJsonPath('data.bedResourceId', $bed->id)
+        ->assertJsonPath('data.bedResource.id', $bed->id)
+        ->assertJsonPath('data.bedResource.wardName', 'Ward D')
+        ->assertJsonPath('data.bedResource.bedNumber', 'D-01')
+        // ward/bed are derived FROM the resource, never trusted from client input.
+        ->assertJsonPath('data.ward', 'Ward D')
+        ->assertJsonPath('data.bed', 'D-01');
+
+    $record = AdmissionModel::query()->findOrFail($response->json('data.id'));
+    expect($record->bed_resource_id)->toBe($bed->id);
+});
+
+it('rejects admission creation when the bed resource is not active', function (): void {
+    $user = makeAdmissionReadUser();
+    $patient = makeAdmissionPatient();
+    $bed = seedAdmissionWardBedRegistry('Ward Inactive', 'I-01', status: 'inactive');
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/admissions', admissionPayload($patient->id, [
+            'ward' => null,
+            'bed' => null,
+            'bedResourceId' => $bed->id,
+        ]))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['bedResourceId']);
+});
+
+it('rejects admission creation when the bed resource is already occupied by another active admission', function (): void {
+    $user = makeAdmissionReadUser();
+    $occupyingPatient = makeAdmissionPatient();
+    $incomingPatient = makeAdmissionPatient([
+        'phone' => '+255700000211',
+        'first_name' => 'Bed',
+        'last_name' => 'Conflict',
+    ]);
+    $bed = seedAdmissionWardBedRegistry('Ward E', 'E-01');
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/admissions', admissionPayload($occupyingPatient->id, [
+            'ward' => null,
+            'bed' => null,
+            'bedResourceId' => $bed->id,
+        ]))
+        ->assertCreated();
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/admissions', admissionPayload($incomingPatient->id, [
+            'ward' => null,
+            'bed' => null,
+            'bedResourceId' => $bed->id,
+        ]))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['bedResourceId']);
+});
+
+it('transfers an admission to a real bed resource and clears the previous string placement', function (): void {
+    $user = makeAdmissionReadUser();
+    $patient = makeAdmissionPatient();
+    $destinationBed = seedAdmissionWardBedRegistry('Ward F', 'F-01');
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/admissions', admissionPayload($patient->id))
+        ->json('data');
+
+    expect($created['bedResourceId'])->toBeNull();
+
+    $response = $this->actingAs($user)
+        ->patchJson('/api/v1/admissions/'.$created['id'].'/status', [
+            'status' => 'transferred',
+            'reason' => 'Moved to a tracked bed',
+            'receivingBedResourceId' => $destinationBed->id,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'transferred')
+        ->assertJsonPath('data.bedResourceId', $destinationBed->id)
+        ->assertJsonPath('data.ward', 'Ward F')
+        ->assertJsonPath('data.bed', 'F-01');
+
+    expect($response->json('data.bedResourceId'))->toBe($destinationBed->id);
+});
+
+it('lists available beds with server-computed occupancy', function (): void {
+    $user = makeAdmissionReadUser();
+    $occupyingPatient = makeAdmissionPatient();
+    $occupiedBed = seedAdmissionWardBedRegistry('Ward G', 'G-01');
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/admissions', admissionPayload($occupyingPatient->id, [
+            'ward' => null,
+            'bed' => null,
+            'bedResourceId' => $occupiedBed->id,
+        ]))
+        ->assertCreated()
+        ->json('data');
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/admissions/available-beds')
+        ->assertOk();
+
+    $beds = collect($response->json('data'));
+    $occupiedRow = $beds->firstWhere('id', $occupiedBed->id);
+    $freeRow = $beds->firstWhere('wardName', 'Ward A');
+
+    expect($occupiedRow)->not->toBeNull();
+    expect($occupiedRow['isOccupied'])->toBeTrue();
+    expect($occupiedRow['occupiedByAdmissionNumber'])->not->toBeNull();
+    // No patient name exposed — the bed picker's job is showing what's free.
+    expect($occupiedRow)->not->toHaveKey('occupiedByPatientName');
+
+    expect($freeRow)->not->toBeNull();
+    expect($freeRow['isOccupied'])->toBeFalse();
+    expect($freeRow['occupiedByAdmissionId'])->toBeNull();
+});
+
+it('forbids available beds without read permission', function (): void {
+    $userWithoutRead = User::factory()->create();
+
+    $this->actingAs($userWithoutRead)
+        ->getJson('/api/v1/admissions/available-beds')
+        ->assertForbidden();
+});
+
+it('counts admissions discharged within a given range separately from admitted-at scoped counts', function (): void {
+    $user = makeAdmissionReadUser();
+    $patient = makeAdmissionPatient();
+
+    $created = $this->actingAs($user)
+        ->postJson('/api/v1/admissions', admissionPayload($patient->id, [
+            'admittedAt' => now()->subDays(5)->toDateTimeString(),
+        ]))
+        ->json('data');
+
+    $this->actingAs($user)
+        ->patchJson('/api/v1/admissions/'.$created['id'].'/status', [
+            'status' => 'discharged',
+            'reason' => 'Recovered',
+            'dischargeDestination' => 'Home',
+        ])
+        ->assertOk();
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/admissions/status-counts?dischargedFrom='.now()->startOfDay()->toDateTimeString().'&dischargedTo='.now()->endOfDay()->toDateTimeString())
+        ->assertOk();
+
+    // Admitted 5 days ago, so it wouldn't show as "admitted today" — but it
+    // WAS discharged today, and dischargedInRange must reflect that.
+    expect($response->json('data.dischargedInRange'))->toBe(1);
 });
 
 /**

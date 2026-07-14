@@ -6494,7 +6494,7 @@ const detailsSheetDownstreamActions = computed<LaboratoryDownstreamAction[]>(() 
             description: released
                 ? 'Continue medication workflow with the same patient context.'
                 : 'Use after release when medication changes depend on this result.',
-            href: orderDetailsWorkflowHref('/pharmacy-orders', order, {
+            href: orderDetailsWorkflowHref('/pharmacy-orders/legacy', order, {
                 includeTabNew: true,
             }),
             icon: 'pill',

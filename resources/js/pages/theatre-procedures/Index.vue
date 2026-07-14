@@ -5428,7 +5428,7 @@ onMounted(async () => {
                         as-child
                         class="gap-1.5"
                     >
-                        <Link :href="contextCreateHref('/laboratory-orders', { includeTabNew: true })"><AppIcon name="flask-conical" class="size-3.5" />Order Lab</Link>
+                        <Link :href="contextCreateHref('/laboratory-orders/legacy', { includeTabNew: true })"><AppIcon name="flask-conical" class="size-3.5" />Order Lab</Link>
                     </Button>
                     <Button
                         v-if="canCreatePharmacyOrders"
@@ -5437,7 +5437,7 @@ onMounted(async () => {
                         as-child
                         class="gap-1.5"
                     >
-                        <Link :href="contextCreateHref('/pharmacy-orders', { includeTabNew: true })"><AppIcon name="pill" class="size-3.5" />Order Pharmacy</Link>
+                        <Link :href="contextCreateHref('/pharmacy-orders/legacy', { includeTabNew: true })"><AppIcon name="pill" class="size-3.5" />Order Pharmacy</Link>
                     </Button>
                     <Button
                         v-if="canCreateRadiologyOrders"
@@ -5446,7 +5446,7 @@ onMounted(async () => {
                         as-child
                         class="gap-1.5"
                     >
-                        <Link :href="contextCreateHref('/radiology-orders', { includeTabNew: true })"><AppIcon name="scan-line" class="size-3.5" />Order Imaging</Link>
+                        <Link :href="contextCreateHref('/radiology-orders/legacy', { includeTabNew: true })"><AppIcon name="scan-line" class="size-3.5" />Order Imaging</Link>
                     </Button>
                     <Button
                         v-if="canReadBillingInvoices"
@@ -6197,7 +6197,7 @@ onMounted(async () => {
                                 as-child
                                 class="justify-start gap-1.5"
                             >
-                                <Link :href="procedureWorkflowHref('/laboratory-orders', detailsProcedure, { includeTabNew: true })">
+                                <Link :href="procedureWorkflowHref('/laboratory-orders/legacy', detailsProcedure, { includeTabNew: true })">
                                     <AppIcon name="flask-conical" class="size-3.5" />
                                     Order Lab
                                 </Link>
@@ -6209,7 +6209,7 @@ onMounted(async () => {
                                 as-child
                                 class="justify-start gap-1.5"
                             >
-                                <Link :href="procedureWorkflowHref('/pharmacy-orders', detailsProcedure, { includeTabNew: true })">
+                                <Link :href="procedureWorkflowHref('/pharmacy-orders/legacy', detailsProcedure, { includeTabNew: true })">
                                     <AppIcon name="pill" class="size-3.5" />
                                     Order Pharmacy
                                 </Link>
@@ -6221,7 +6221,7 @@ onMounted(async () => {
                                 as-child
                                 class="justify-start gap-1.5"
                             >
-                                <Link :href="procedureWorkflowHref('/radiology-orders', detailsProcedure, { includeTabNew: true })">
+                                <Link :href="procedureWorkflowHref('/radiology-orders/legacy', detailsProcedure, { includeTabNew: true })">
                                     <AppIcon name="scan-heart" class="size-3.5" />
                                     Order Imaging
                                 </Link>

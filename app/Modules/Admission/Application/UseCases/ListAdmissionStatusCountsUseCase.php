@@ -25,12 +25,20 @@ class ListAdmissionStatusCountsUseCase
         $toDateTime = isset($filters['to']) ? trim((string) $filters['to']) : null;
         $toDateTime = $toDateTime === '' ? null : $toDateTime;
 
+        $dischargedFrom = isset($filters['dischargedFrom']) ? trim((string) $filters['dischargedFrom']) : null;
+        $dischargedFrom = $dischargedFrom === '' ? null : $dischargedFrom;
+
+        $dischargedTo = isset($filters['dischargedTo']) ? trim((string) $filters['dischargedTo']) : null;
+        $dischargedTo = $dischargedTo === '' ? null : $dischargedTo;
+
         return $this->admissionRepository->statusCounts(
             query: $query,
             patientId: $patientId,
             ward: $ward,
             fromDateTime: $fromDateTime,
             toDateTime: $toDateTime,
+            dischargedFrom: $dischargedFrom,
+            dischargedTo: $dischargedTo,
         );
     }
 }

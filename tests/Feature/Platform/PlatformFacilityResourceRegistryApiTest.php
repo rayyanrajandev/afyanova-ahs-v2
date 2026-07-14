@@ -1,12 +1,15 @@
 <?php
 
 use App\Models\User;
+use App\Modules\Admission\Infrastructure\Models\AdmissionModel;
+use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Platform\Infrastructure\Models\FacilityModel;
 use App\Modules\Platform\Infrastructure\Models\FacilityResourceAuditLogModel;
 use App\Modules\Platform\Infrastructure\Models\FacilityResourceModel;
 use App\Modules\Platform\Infrastructure\Models\TenantModel;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
 
@@ -75,6 +78,36 @@ function seedFacilityResourceRecord(
     ];
 
     return FacilityResourceModel::query()->create(array_merge($defaults, $overrides));
+}
+
+function occupyWardBedWithActiveAdmission(FacilityResourceModel $wardBed, string $status = 'admitted'): AdmissionModel
+{
+    $patient = PatientModel::query()->create([
+        'patient_number' => 'PTWB'.now()->format('Ymd').strtoupper(Str::random(6)),
+        'first_name' => 'Ward',
+        'last_name' => 'Occupant',
+        'gender' => 'male',
+        'date_of_birth' => '1990-01-01',
+        'phone' => '+2557000003'.random_int(10, 99),
+        'country_code' => 'TZ',
+        'status' => 'active',
+    ]);
+
+    return AdmissionModel::query()->create([
+        'admission_number' => 'ADM'.strtoupper(Str::random(8)),
+        'patient_id' => $patient->id,
+        'appointment_id' => null,
+        'attending_clinician_user_id' => null,
+        'bed_resource_id' => $wardBed->id,
+        'ward' => $wardBed->ward_name,
+        'bed' => $wardBed->bed_number,
+        'admitted_at' => now()->subHours(4)->toDateTimeString(),
+        'discharged_at' => null,
+        'admission_reason' => 'Observation',
+        'notes' => null,
+        'status' => $status,
+        'status_reason' => null,
+    ]);
 }
 
 it('requires authentication for facility resource registry endpoints', function (): void {
@@ -293,4 +326,100 @@ it('lists and exports facility resource audit logs when authorized', function ()
     $csv = $response->streamedContent();
     expect($csv)->toContain('facility-resource.status.updated');
     expect($csv)->not->toContain('facility-resource.updated');
+});
+
+/**
+ * Ward-bed admin registry gained occupancy visibility as a follow-through
+ * to the Reception/Emergency/Admission/Bed-Management audit: it previously
+ * had zero knowledge of admissions, so a facility admin could deactivate,
+ * or lose track of, a bed that currently had a patient in it.
+ */
+/**
+ * Postgres's LIKE is case-sensitive (unlike SQLite, which this test suite
+ * runs on) — a plain where('name', 'like', ...) silently missed mixed-case
+ * matches like "Dental Recovery" for a "dental" search in production.
+ * Fixed via EloquentFacilityResourceRepository::applyCaseInsensitiveSearch()
+ * (LOWER() on both sides). This test can't reproduce the case-sensitivity
+ * bug itself on SQLite, but it documents and guards the intended
+ * case-insensitive behavior going forward.
+ */
+it('finds ward beds by search term regardless of case', function (): void {
+    $actor = makeFacilityResourceRegistryActor(['platform.resources.read']);
+    $context = makeFacilityResourceRegistryContext('TEN-WB-CASE', 'FAC-WB-CASE');
+    seedFacilityResourceRecord($context['facility'], 'ward_bed', 'WB-DEN-01', [
+        'name' => 'Dental Recovery - Bed 01',
+        'ward_name' => 'Dental Recovery',
+    ]);
+
+    foreach (['dental', 'DENTAL', 'DeNtAl'] as $term) {
+        $this->actingAs($actor)
+            ->getJson('/api/v1/platform/admin/ward-beds?q='.$term)
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.name', 'Dental Recovery - Bed 01');
+    }
+});
+
+it('surfaces occupancy on the ward-bed list and detail endpoints', function (): void {
+    $actor = makeFacilityResourceRegistryActor(['platform.resources.read']);
+    $context = makeFacilityResourceRegistryContext('TEN-WB-OCC', 'FAC-WB-OCC');
+    $occupiedBed = seedFacilityResourceRecord($context['facility'], 'ward_bed', 'WB-OCC-001');
+    $vacantBed = seedFacilityResourceRecord($context['facility'], 'ward_bed', 'WB-OCC-002', ['bed_number' => 'A-02']);
+    $admission = occupyWardBedWithActiveAdmission($occupiedBed);
+
+    $this->actingAs($actor)
+        ->getJson('/api/v1/platform/admin/ward-beds')
+        ->assertOk()
+        ->assertJsonPath('data.0.isOccupied', true)
+        ->assertJsonPath('data.0.occupiedByAdmissionId', $admission->id)
+        ->assertJsonPath('data.0.occupiedByAdmissionNumber', $admission->admission_number)
+        ->assertJsonPath('data.1.isOccupied', false)
+        ->assertJsonPath('data.1.occupiedByAdmissionId', null);
+
+    $this->actingAs($actor)
+        ->getJson('/api/v1/platform/admin/ward-beds/'.$occupiedBed->id)
+        ->assertOk()
+        ->assertJsonPath('data.isOccupied', true)
+        ->assertJsonPath('data.occupiedByAdmissionNumber', $admission->admission_number);
+
+    $this->actingAs($actor)
+        ->getJson('/api/v1/platform/admin/ward-beds/'.$vacantBed->id)
+        ->assertOk()
+        ->assertJsonPath('data.isOccupied', false);
+});
+
+it('blocks deactivating a ward bed that has an active admission', function (): void {
+    $actor = makeFacilityResourceRegistryActor(['platform.resources.manage-ward-beds']);
+    $context = makeFacilityResourceRegistryContext('TEN-WB-BLK', 'FAC-WB-BLK');
+    $wardBed = seedFacilityResourceRecord($context['facility'], 'ward_bed', 'WB-BLK-001');
+    $admission = occupyWardBedWithActiveAdmission($wardBed, 'transferred');
+
+    $response = $this->actingAs($actor)
+        ->patchJson('/api/v1/platform/admin/ward-beds/'.$wardBed->id.'/status', [
+            'status' => 'inactive',
+            'reason' => 'Attempting to deactivate an occupied bed',
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['status']);
+
+    expect($response->json('errors.status.0'))->toContain($admission->admission_number);
+
+    $wardBed->refresh();
+    expect($wardBed->status)->toBe('active');
+});
+
+it('allows deactivating a vacant ward bed once its admission is discharged', function (): void {
+    $actor = makeFacilityResourceRegistryActor(['platform.resources.manage-ward-beds']);
+    $context = makeFacilityResourceRegistryContext('TEN-WB-DIS', 'FAC-WB-DIS');
+    $wardBed = seedFacilityResourceRecord($context['facility'], 'ward_bed', 'WB-DIS-001');
+    $admission = occupyWardBedWithActiveAdmission($wardBed);
+    $admission->update(['status' => 'discharged', 'discharged_at' => now()]);
+
+    $this->actingAs($actor)
+        ->patchJson('/api/v1/platform/admin/ward-beds/'.$wardBed->id.'/status', [
+            'status' => 'inactive',
+            'reason' => 'Bed retired after discharge',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'inactive');
 });

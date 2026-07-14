@@ -100,18 +100,7 @@ class EloquentFacilityResourceRepository implements FacilityResourceRepositoryIn
         $this->applyPlatformScopeIfEnabled($queryBuilder);
 
         $queryBuilder
-            ->when($query, function (Builder $builder, string $searchTerm): void {
-                $like = '%'.$searchTerm.'%';
-                $builder->where(function (Builder $nestedQuery) use ($like): void {
-                    $nestedQuery
-                        ->where('code', 'like', $like)
-                        ->orWhere('name', 'like', $like)
-                        ->orWhere('service_point_type', 'like', $like)
-                        ->orWhere('ward_name', 'like', $like)
-                        ->orWhere('bed_number', 'like', $like)
-                        ->orWhere('location', 'like', $like);
-                });
-            })
+            ->when($query, fn (Builder $builder, string $searchTerm) => $builder->where(fn (Builder $nestedQuery) => $this->applyCaseInsensitiveSearch($nestedQuery, $searchTerm)))
             ->when($status, fn (Builder $builder, string $value) => $builder->where('status', $value))
             ->when($departmentId, fn (Builder $builder, string $value) => $builder->where('department_id', $value))
             ->when($subtype && $resourceType === 'service_point', fn (Builder $builder, string $value) => $builder->where('service_point_type', $value))
@@ -139,18 +128,7 @@ class EloquentFacilityResourceRepository implements FacilityResourceRepositoryIn
         $this->applyPlatformScopeIfEnabled($queryBuilder);
 
         $queryBuilder
-            ->when($query, function (Builder $builder, string $searchTerm): void {
-                $like = '%'.$searchTerm.'%';
-                $builder->where(function (Builder $nestedQuery) use ($like): void {
-                    $nestedQuery
-                        ->where('code', 'like', $like)
-                        ->orWhere('name', 'like', $like)
-                        ->orWhere('service_point_type', 'like', $like)
-                        ->orWhere('ward_name', 'like', $like)
-                        ->orWhere('bed_number', 'like', $like)
-                        ->orWhere('location', 'like', $like);
-                });
-            })
+            ->when($query, fn (Builder $builder, string $searchTerm) => $builder->where(fn (Builder $nestedQuery) => $this->applyCaseInsensitiveSearch($nestedQuery, $searchTerm)))
             ->when($departmentId, fn (Builder $builder, string $value) => $builder->where('department_id', $value))
             ->when($subtype && $resourceType === 'service_point', fn (Builder $builder, string $value) => $builder->where('service_point_type', $value))
             ->when($subtype && $resourceType === 'ward_bed', fn (Builder $builder, string $value) => $builder->where('ward_name', $value));
@@ -225,6 +203,28 @@ class EloquentFacilityResourceRepository implements FacilityResourceRepositoryIn
         }
 
         return $query->exists();
+    }
+
+    /**
+     * Postgres's `LIKE` is case-sensitive (unlike MySQL/SQLite's default
+     * collation), so a plain `where('name', 'like', "%{$term}%")` silently
+     * missed "Dental Recovery" for a "dental" search in production — the
+     * dev-DB test suite runs on SQLite, where that bug is invisible.
+     * whereRaw + LOWER() on both sides is portable across all three and
+     * matches the existing case-insensitive precedent in this same file
+     * (activeWardBedExistsInScope() below).
+     */
+    private function applyCaseInsensitiveSearch(Builder $query, string $searchTerm): Builder
+    {
+        $like = '%'.strtolower($searchTerm).'%';
+
+        return $query
+            ->whereRaw('LOWER(code) LIKE ?', [$like])
+            ->orWhereRaw('LOWER(name) LIKE ?', [$like])
+            ->orWhereRaw('LOWER(service_point_type) LIKE ?', [$like])
+            ->orWhereRaw('LOWER(ward_name) LIKE ?', [$like])
+            ->orWhereRaw('LOWER(bed_number) LIKE ?', [$like])
+            ->orWhereRaw('LOWER(location) LIKE ?', [$like]);
     }
 
     private function applyPlatformScopeIfEnabled(Builder $query): void

@@ -843,6 +843,71 @@ it('lists only active clinical staff for the clinician directory', function (): 
         ->assertJsonPath('data.0.department', 'General OPD')
         ->assertJsonPath('data.0.jobTitle', 'Clinical Officer');
 });
+
+it('narrows the clinical directory to physicians only when physicianOnly is requested', function (): void {
+    // Patient flow redesign: AppointmentCreateSheet.vue's clinician picker
+    // needs a narrower slice of the clinical directory than
+    // clinicalOnly=true alone provides — clinicalOnly deliberately includes
+    // lab/pharmacy/radiology/theatre staff for its original triage/
+    // referral-routing purpose, but an appointment's clinician should only
+    // be an actual provider who holds consultations.
+    $actor = User::factory()->create();
+    grantClinicalDirectoryReadPermission($actor);
+
+    $physician = StaffProfileModel::query()->create([
+        'user_id' => User::factory()->create(['name' => 'Dr. Furaha Ngonyani'])->id,
+        'employee_number' => 'STF-PHYS-001',
+        'department' => 'General OPD',
+        'job_title' => 'Medical Officer',
+        'professional_license_number' => 'MO-PHYS-001',
+        'license_type' => 'Medical Officer',
+        'phone_extension' => '221',
+        'employment_type' => 'full_time',
+        'status' => 'active',
+        'status_reason' => null,
+    ]);
+
+    StaffProfileModel::query()->create([
+        'user_id' => User::factory()->create(['name' => 'Hamza Suleiman'])->id,
+        'employee_number' => 'STF-PHYS-002',
+        'department' => 'Laboratory',
+        'job_title' => 'Lab Technician',
+        'professional_license_number' => 'LAB-PHYS-002',
+        'license_type' => 'Laboratory',
+        'phone_extension' => '222',
+        'employment_type' => 'full_time',
+        'status' => 'active',
+        'status_reason' => null,
+    ]);
+
+    StaffProfileModel::query()->create([
+        'user_id' => User::factory()->create(['name' => 'Zainab Kombe'])->id,
+        'employee_number' => 'STF-PHYS-003',
+        'department' => 'Main Pharmacy',
+        'job_title' => 'Pharmacist',
+        'professional_license_number' => 'PHM-PHYS-003',
+        'license_type' => 'Pharmacy',
+        'phone_extension' => '223',
+        'employment_type' => 'full_time',
+        'status' => 'active',
+        'status_reason' => null,
+    ]);
+
+    // Without physicianOnly, clinicalOnly alone still includes lab/pharmacy.
+    $this->actingAs($actor)
+        ->getJson('/api/v1/staff/clinical-directory')
+        ->assertOk()
+        ->assertJsonPath('meta.total', 3);
+
+    $response = $this->actingAs($actor)
+        ->getJson('/api/v1/staff/clinical-directory?physicianOnly=1')
+        ->assertOk()
+        ->assertJsonPath('meta.total', 1)
+        ->assertJsonPath('data.0.id', $physician->id);
+
+    expect(collect($response->json('data'))->pluck('jobTitle')->all())->toBe(['Medical Officer']);
+});
+
 it('returns the correct queue page for a carried staff profile under current filters', function (): void {
     $actor = makeStaffReadUser();
 

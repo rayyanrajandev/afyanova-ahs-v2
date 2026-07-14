@@ -3,6 +3,7 @@
 namespace App\Modules\Admission\Infrastructure\Models;
 
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
+use App\Modules\Platform\Infrastructure\Models\FacilityResourceModel;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -29,6 +30,7 @@ class AdmissionModel extends Model
         'attending_clinician_user_id',
         'ward',
         'bed',
+        'bed_resource_id',
         'admitted_at',
         'discharged_at',
         'admission_reason',
@@ -46,6 +48,11 @@ class AdmissionModel extends Model
     public function patient(): BelongsTo
     {
         return $this->belongsTo(PatientModel::class, 'patient_id');
+    }
+
+    public function bedResource(): BelongsTo
+    {
+        return $this->belongsTo(FacilityResourceModel::class, 'bed_resource_id');
     }
 
     /**

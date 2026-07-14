@@ -42,7 +42,7 @@ it('shares auth permissions and platform bootstrap scope in inertia payload', fu
     $this->actingAs($user)
         ->get('/patients')
         ->assertInertia(fn (Assert $page) => $page
-            ->component('patients/Index')
+            ->component('patients/IndexV2')
             ->has('auth.permissions')
             ->where('auth.permissions.0', 'patients.read')
             ->where('platform.scope.resolvedFrom', 'single_assignment')

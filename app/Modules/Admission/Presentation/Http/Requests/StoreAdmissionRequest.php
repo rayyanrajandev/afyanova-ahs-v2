@@ -22,6 +22,7 @@ class StoreAdmissionRequest extends FormRequest
             'patientId' => ['required', 'uuid'],
             'appointmentId' => ['nullable', 'uuid'],
             'attendingClinicianUserId' => ['nullable', 'integer', 'exists:users,id'],
+            'bedResourceId' => ['nullable', 'uuid'],
             'ward' => ['nullable', 'string', 'max:120', 'required_with:bed'],
             'bed' => ['nullable', 'string', 'max:40', 'required_with:ward'],
             'admittedAt' => ['required', 'date', 'before_or_equal:now'],

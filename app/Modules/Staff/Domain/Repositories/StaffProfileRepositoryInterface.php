@@ -49,7 +49,8 @@ interface StaffProfileRepositoryInterface
         int $page,
         int $perPage,
         ?string $sortBy,
-        string $sortDirection
+        string $sortDirection,
+        bool $physicianOnly = false
     ): array;
 
     public function statusCounts(

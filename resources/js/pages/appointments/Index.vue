@@ -3325,18 +3325,32 @@ async function submitStatusUpdate(): Promise<void> {
     statusSubmitting.value = true;
     statusErrors.value = {};
 
+    // Front-desk check-in (scheduled -> waiting_triage) is a real arrival
+    // event, not a generic status edit: it must go through Reception's
+    // CheckInUseCase (PATCH .../check-in), not the raw status endpoint, so
+    // the visit gets an ArrivalEvent audit row and fires AppointmentCheckedIn
+    // for downstream automation — both of which the generic status endpoint
+    // skips (reports/appointments-scheduling-model-audit.md §5.1). Returning
+    // to triage from the provider queue mid-visit (isProviderStatusDialog)
+    // is not an arrival and stays on provider-workflow/status as before.
+    const isFrontDeskCheckIn = !isProviderStatusDialog.value && nextStatus === 'waiting_triage';
+
     try {
-        const endpoint = isProviderStatusDialog.value
-            ? '/appointments/' + statusTargetAppointment.value.id + '/provider-workflow'
-            : '/appointments/' + statusTargetAppointment.value.id + '/status';
+        const endpoint = isFrontDeskCheckIn
+            ? '/appointments/' + statusTargetAppointment.value.id + '/check-in'
+            : isProviderStatusDialog.value
+                ? '/appointments/' + statusTargetAppointment.value.id + '/provider-workflow'
+                : '/appointments/' + statusTargetAppointment.value.id + '/status';
         const response = await apiRequest<ApiItemResponse<Appointment> & { billing_capture?: BillingCaptureResult }>(
             'PATCH',
             endpoint,
             {
-                body: {
-                    status: statusForm.status,
-                    reason: statusForm.reason || null,
-                },
+                body: isFrontDeskCheckIn
+                    ? { verificationNotes: statusForm.reason || null }
+                    : {
+                        status: statusForm.status,
+                        reason: statusForm.reason || null,
+                    },
             },
         );
 
@@ -5119,6 +5133,20 @@ onMounted(async () => {
         initialPatientId ? hydratePatientSummary(initialPatientId) : Promise.resolve(),
     ]);
     applyDefaultQueueForSignedInUser();
+
+    // A sidebar/dashboard link can set ?view=clinical without a
+    // clinicianUserId (a static href has no access to the viewer's id at
+    // config time — see appNavCatalog.ts's "Clinician queue" entry).
+    // applyDefaultQueueForSignedInUser()/openMyClinicalQueue() both already
+    // set clinicianUserId whenever they set queueMode themselves, so this
+    // only ever fills the one real gap: an explicit ?view=clinical with no
+    // clinicianUserId, which would otherwise silently show every
+    // clinician's waiting_provider appointments under the "My patients"
+    // label instead of just the signed-in user's.
+    if (isMyClinicalQueue.value && !searchForm.clinicianUserId.trim() && currentUserId.value !== null) {
+        searchForm.clinicianUserId = String(currentUserId.value);
+    }
+
     await loadQueue();
     if (initialCreateIntent && canCreate.value && !createPrefillApplied.value) {
         createPrefillApplied.value = true;

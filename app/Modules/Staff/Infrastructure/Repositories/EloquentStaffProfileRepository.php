@@ -49,6 +49,28 @@ class EloquentStaffProfileRepository implements StaffProfileRepositoryInterface
         'physiotherapist',
         'dentist',
     ];
+    /**
+     * A narrower subset of CLINICAL_ROLE_KEYWORDS, added for the appointment
+     * scheduling clinician picker (AppointmentCreateSheet.vue/
+     * AppointmentEditSheet.vue) — that field previously reused GET
+     * /staff/clinical-directory's clinicalOnly=true filter as-is, which
+     * deliberately includes lab/pharmacy/radiology/theatre staff (correct
+     * for that endpoint's original triage/referral-routing purpose, where
+     * any clinical-tier staff member is a legitimate target). An
+     * appointment's clinician is specifically the provider holding the
+     * consultation, so this excludes those non-physician clinical roles.
+     * Applied as an ADDITIONAL filter alongside clinicalOnly, not a
+     * replacement for it — every other clinicalOnly consumer is unaffected.
+     */
+    private const PHYSICIAN_ROLE_KEYWORDS = [
+        'doctor',
+        'surgeon',
+        'medical officer',
+        'clinical officer',
+        'anaesthetist',
+        'anesthetist',
+        'dentist',
+    ];
     private const SUPPORT_ROLE_KEYWORDS = [
         'medical records',
         'records officer',
@@ -185,7 +207,8 @@ class EloquentStaffProfileRepository implements StaffProfileRepositoryInterface
         int $page,
         int $perPage,
         ?string $sortBy,
-        string $sortDirection
+        string $sortDirection,
+        bool $physicianOnly = false
     ): array {
         $queryBuilder = $this->buildSearchQuery(
             query: $query,
@@ -195,6 +218,7 @@ class EloquentStaffProfileRepository implements StaffProfileRepositoryInterface
             clinicalOnly: $clinicalOnly,
             sortBy: $sortBy,
             sortDirection: $sortDirection,
+            physicianOnly: $physicianOnly,
         );
 
         $paginator = $queryBuilder->paginate(
@@ -336,7 +360,8 @@ class EloquentStaffProfileRepository implements StaffProfileRepositoryInterface
         ?string $employmentType,
         bool $clinicalOnly,
         ?string $sortBy,
-        string $sortDirection
+        string $sortDirection,
+        bool $physicianOnly = false
     ): Builder {
         $queryBuilder = $this->profileIdentityQuery();
 
@@ -346,6 +371,7 @@ class EloquentStaffProfileRepository implements StaffProfileRepositoryInterface
             ->when($department, fn (Builder $builder, string $requestedDepartment) => $this->applyDepartmentFilter($builder, $requestedDepartment))
             ->when($employmentType, fn (Builder $builder, string $requestedEmploymentType) => $builder->where('staff_profiles.employment_type', $requestedEmploymentType))
             ->when($clinicalOnly, fn (Builder $builder) => $this->applyClinicalRoleFilter($builder))
+            ->when($physicianOnly, fn (Builder $builder) => $this->applyPhysicianRoleFilter($builder))
             ->orderBy($this->resolveSortColumn($sortBy), $sortDirection)
             ->orderBy('staff_profiles.id', $sortDirection);
 
@@ -433,6 +459,21 @@ class EloquentStaffProfileRepository implements StaffProfileRepositoryInterface
                         ->whereRaw("LOWER(COALESCE(staff_profiles.department, '')) NOT LIKE ?", [$like]);
                 }
             });
+    }
+
+    private function applyPhysicianRoleFilter(Builder $query): void
+    {
+        $query->where(function (Builder $includeQuery): void {
+            foreach (self::PHYSICIAN_ROLE_KEYWORDS as $index => $keyword) {
+                $method = $index === 0 ? 'where' : 'orWhere';
+                $like = '%'.strtolower($keyword).'%';
+                $includeQuery->{$method}(function (Builder $matchQuery) use ($like): void {
+                    $matchQuery
+                        ->whereRaw("LOWER(COALESCE(staff_profiles.job_title, '')) LIKE ?", [$like])
+                        ->orWhereRaw("LOWER(COALESCE(staff_profiles.department, '')) LIKE ?", [$like]);
+                });
+            }
+        });
     }
 
     private function toProfileArray(?Model $profile): ?array

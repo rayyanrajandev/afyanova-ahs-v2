@@ -16,6 +16,10 @@ class AdmissionResponseTransformer
             'attendingClinicianUserId' => $admission['attending_clinician_user_id'] ?? null,
             'ward' => $admission['ward'] ?? null,
             'bed' => $admission['bed'] ?? null,
+            'bedResourceId' => $admission['bed_resource_id'] ?? null,
+            'bedResource' => self::bedResourceSummary(
+                is_array($admission['bed_resource'] ?? null) ? $admission['bed_resource'] : null,
+            ),
             'admittedAt' => $admission['admitted_at'] ?? null,
             'dischargedAt' => $admission['discharged_at'] ?? null,
             'admissionReason' => $admission['admission_reason'] ?? null,
@@ -32,6 +36,25 @@ class AdmissionResponseTransformer
             'followUpPlan' => $admission['follow_up_plan'] ?? null,
             'createdAt' => $admission['created_at'] ?? null,
             'updatedAt' => $admission['updated_at'] ?? null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $resource
+     * @return array{id: string, code: string|null, name: string|null, wardName: string|null, bedNumber: string|null}|null
+     */
+    private static function bedResourceSummary(?array $resource): ?array
+    {
+        if ($resource === null || ($resource['id'] ?? null) === null) {
+            return null;
+        }
+
+        return [
+            'id' => $resource['id'],
+            'code' => $resource['code'] ?? null,
+            'name' => $resource['name'] ?? null,
+            'wardName' => $resource['ward_name'] ?? null,
+            'bedNumber' => $resource['bed_number'] ?? null,
         ];
     }
 }

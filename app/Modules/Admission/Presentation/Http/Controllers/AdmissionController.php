@@ -12,6 +12,7 @@ use App\Modules\Admission\Application\UseCases\ListAdmissionAuditLogsUseCase;
 use App\Modules\Admission\Application\UseCases\ListAdmissionDischargeDestinationOptionsUseCase;
 use App\Modules\Admission\Application\UseCases\ListAdmissionStatusCountsUseCase;
 use App\Modules\Admission\Application\UseCases\ListAdmissionsUseCase;
+use App\Modules\Admission\Application\UseCases\ListAvailableBedsUseCase;
 use App\Modules\Admission\Application\UseCases\UpdateAdmissionStatusUseCase;
 use App\Modules\Admission\Application\UseCases\UpdateAdmissionUseCase;
 use App\Modules\Admission\Presentation\Http\Requests\StoreAdmissionRequest;
@@ -19,6 +20,7 @@ use App\Modules\Admission\Presentation\Http\Requests\UpdateAdmissionRequest;
 use App\Modules\Admission\Presentation\Http\Requests\UpdateAdmissionStatusRequest;
 use App\Modules\Admission\Presentation\Http\Transformers\AdmissionAuditLogResponseTransformer;
 use App\Modules\Admission\Presentation\Http\Transformers\AdmissionResponseTransformer;
+use App\Modules\Admission\Presentation\Http\Transformers\AvailableBedResponseTransformer;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -53,6 +55,16 @@ class AdmissionController extends Controller
     {
         return response()->json([
             'data' => $useCase->execute(),
+        ]);
+    }
+
+    public function availableBeds(Request $request, ListAvailableBedsUseCase $useCase): JsonResponse
+    {
+        $result = $useCase->execute($request->all());
+
+        return response()->json([
+            'data' => array_map([AvailableBedResponseTransformer::class, 'transform'], $result['data']),
+            'meta' => $result['meta'],
         ]);
     }
 
@@ -127,6 +139,7 @@ class AdmissionController extends Controller
                 followUpPlan: $request->input('followUpPlan'),
                 receivingWard: $request->input('receivingWard'),
                 receivingBed: $request->input('receivingBed'),
+                receivingBedResourceId: $request->input('receivingBedResourceId'),
                 actorId: $request->user()?->id,
             );
         } catch (TenantScopeRequiredForIsolationException $exception) {
@@ -224,6 +237,7 @@ class AdmissionController extends Controller
             'attendingClinicianUserId' => 'attending_clinician_user_id',
             'ward' => 'ward',
             'bed' => 'bed',
+            'bedResourceId' => 'bed_resource_id',
             'admittedAt' => 'admitted_at',
             'admissionReason' => 'admission_reason',
             'notes' => 'notes',

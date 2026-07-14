@@ -25,6 +25,7 @@ class ListStaffProfilesUseCase
         $employmentType = isset($filters['employmentType']) ? trim((string) $filters['employmentType']) : null;
         $employmentType = $employmentType === '' ? null : $employmentType;
         $clinicalOnly = filter_var($filters['clinicalOnly'] ?? false, FILTER_VALIDATE_BOOL);
+        $physicianOnly = filter_var($filters['physicianOnly'] ?? false, FILTER_VALIDATE_BOOL);
 
         $sortMap = [
             'employeeNumber' => 'employee_number',
@@ -52,6 +53,7 @@ class ListStaffProfilesUseCase
             perPage: $perPage,
             sortBy: $sortBy,
             sortDirection: $sortDirection,
+            physicianOnly: $physicianOnly,
         );
     }
 }

@@ -50,12 +50,22 @@ class CreateAdmissionUseCase
             );
         }
 
-        $normalizedPlacement = $this->admissionPlacementLookupService->validatePlacement(
-            ward: $payload['ward'] ?? null,
-            bed: $payload['bed'] ?? null,
-        );
-        $payload['ward'] = $normalizedPlacement['ward'];
-        $payload['bed'] = $normalizedPlacement['bed'];
+        $bedResourceId = isset($payload['bed_resource_id']) ? trim((string) $payload['bed_resource_id']) : '';
+        if ($bedResourceId !== '') {
+            $normalizedPlacement = $this->admissionPlacementLookupService->validatePlacementByResource(
+                bedResourceId: $bedResourceId,
+            );
+            $payload['bed_resource_id'] = $normalizedPlacement['bed_resource_id'];
+            $payload['ward'] = $normalizedPlacement['ward'];
+            $payload['bed'] = $normalizedPlacement['bed'];
+        } else {
+            $normalizedPlacement = $this->admissionPlacementLookupService->validatePlacement(
+                ward: $payload['ward'] ?? null,
+                bed: $payload['bed'] ?? null,
+            );
+            $payload['ward'] = $normalizedPlacement['ward'];
+            $payload['bed'] = $normalizedPlacement['bed'];
+        }
 
         $payload['status'] = AdmissionStatus::ADMITTED->value;
         $payload['admission_number'] = $this->generateAdmissionNumber();
@@ -105,6 +115,7 @@ class CreateAdmissionUseCase
             'attending_clinician_user_id',
             'ward',
             'bed',
+            'bed_resource_id',
             'admitted_at',
             'discharged_at',
             'admission_reason',

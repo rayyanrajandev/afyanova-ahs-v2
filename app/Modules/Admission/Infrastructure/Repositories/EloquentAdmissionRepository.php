@@ -22,13 +22,14 @@ class EloquentAdmissionRepository implements AdmissionRepositoryInterface
         $admission = new AdmissionModel();
         $admission->fill($attributes);
         $admission->save();
+        $admission->load('bedResource');
 
         return $admission->toArray();
     }
 
     public function findById(string $id): ?array
     {
-        $query = AdmissionModel::query();
+        $query = AdmissionModel::query()->with('bedResource');
         $this->applyPlatformScopeIfEnabled($query);
         $admission = $query->find($id);
 
@@ -46,6 +47,7 @@ class EloquentAdmissionRepository implements AdmissionRepositoryInterface
 
         $admission->fill($attributes);
         $admission->save();
+        $admission->load('bedResource');
 
         return $admission->toArray();
     }
@@ -55,6 +57,21 @@ class EloquentAdmissionRepository implements AdmissionRepositoryInterface
         return AdmissionModel::query()
             ->where('admission_number', $admissionNumber)
             ->exists();
+    }
+
+    public function findActiveForPatient(string $patientId): ?array
+    {
+        $query = AdmissionModel::query()
+            ->where('patient_id', $patientId)
+            ->whereIn('status', [
+                AdmissionStatus::ADMITTED->value,
+                AdmissionStatus::TRANSFERRED->value,
+            ]);
+        $this->applyPlatformScopeIfEnabled($query);
+
+        $admission = $query->orderBy('admitted_at')->first();
+
+        return $admission?->toArray();
     }
 
     public function hasActivePlacementConflict(
@@ -98,6 +115,65 @@ class EloquentAdmissionRepository implements AdmissionRepositoryInterface
         return $query->exists();
     }
 
+    public function hasActiveBedResourceConflict(
+        string $bedResourceId,
+        ?string $tenantId,
+        ?string $facilityId,
+        ?string $excludeAdmissionId = null
+    ): bool {
+        $query = AdmissionModel::query()
+            ->whereIn('status', [
+                AdmissionStatus::ADMITTED->value,
+                AdmissionStatus::TRANSFERRED->value,
+            ])
+            ->where('bed_resource_id', $bedResourceId);
+
+        if ($excludeAdmissionId !== null && trim($excludeAdmissionId) !== '') {
+            $query->where((new AdmissionModel())->getKeyName(), '!=', $excludeAdmissionId);
+        }
+
+        if ($tenantId === null) {
+            $query->whereNull('tenant_id');
+        } else {
+            $query->where('tenant_id', $tenantId);
+        }
+
+        if ($facilityId === null) {
+            $query->whereNull('facility_id');
+        } else {
+            $query->where('facility_id', $facilityId);
+        }
+
+        return $query->exists();
+    }
+
+    public function activeAdmissionsByBedResourceIds(array $bedResourceIds): array
+    {
+        $ids = array_values(array_unique(array_filter(
+            array_map(static fn (mixed $id): string => trim((string) $id), $bedResourceIds),
+            static fn (string $id): bool => $id !== '',
+        )));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $admissions = AdmissionModel::query()
+            ->whereIn('bed_resource_id', $ids)
+            ->whereIn('status', [
+                AdmissionStatus::ADMITTED->value,
+                AdmissionStatus::TRANSFERRED->value,
+            ])
+            ->get();
+
+        $result = [];
+        foreach ($admissions as $admission) {
+            $result[(string) $admission->bed_resource_id] = $admission->toArray();
+        }
+
+        return $result;
+    }
+
     public function search(
         ?string $query,
         ?string $patientId,
@@ -114,21 +190,11 @@ class EloquentAdmissionRepository implements AdmissionRepositoryInterface
             ? $sortBy
             : 'admitted_at';
 
-        $queryBuilder = AdmissionModel::query();
+        $queryBuilder = AdmissionModel::query()->with('bedResource');
         $this->applyPlatformScopeIfEnabled($queryBuilder);
 
         $queryBuilder
-            ->when($query, function (Builder $builder, string $searchTerm): void {
-                $like = '%'.$searchTerm.'%';
-
-                $builder->where(function (Builder $nestedQuery) use ($like): void {
-                    $nestedQuery
-                        ->where('admission_number', 'like', $like)
-                        ->orWhere('admission_reason', 'like', $like)
-                        ->orWhere('ward', 'like', $like)
-                        ->orWhere('bed', 'like', $like);
-                });
-            })
+            ->when($query, fn (Builder $builder, string $searchTerm) => $builder->where(fn (Builder $nestedQuery) => $this->applyCaseInsensitiveSearch($nestedQuery, $searchTerm)))
             ->when($patientId, fn (Builder $builder, string $requestedPatientId) => $builder->where('patient_id', $requestedPatientId))
             ->when($status, fn (Builder $builder, string $requestedStatus) => $builder->where('status', $requestedStatus))
             ->when($ward, fn (Builder $builder, string $requestedWard) => $builder->where('ward', $requestedWard))
@@ -151,23 +217,15 @@ class EloquentAdmissionRepository implements AdmissionRepositoryInterface
         ?string $patientId,
         ?string $ward,
         ?string $fromDateTime,
-        ?string $toDateTime
+        ?string $toDateTime,
+        ?string $dischargedFrom = null,
+        ?string $dischargedTo = null
     ): array {
         $queryBuilder = AdmissionModel::query();
         $this->applyPlatformScopeIfEnabled($queryBuilder);
 
         $queryBuilder
-            ->when($query, function (Builder $builder, string $searchTerm): void {
-                $like = '%'.$searchTerm.'%';
-
-                $builder->where(function (Builder $nestedQuery) use ($like): void {
-                    $nestedQuery
-                        ->where('admission_number', 'like', $like)
-                        ->orWhere('admission_reason', 'like', $like)
-                        ->orWhere('ward', 'like', $like)
-                        ->orWhere('bed', 'like', $like);
-                });
-            })
+            ->when($query, fn (Builder $builder, string $searchTerm) => $builder->where(fn (Builder $nestedQuery) => $this->applyCaseInsensitiveSearch($nestedQuery, $searchTerm)))
             ->when($patientId, fn (Builder $builder, string $requestedPatientId) => $builder->where('patient_id', $requestedPatientId))
             ->when($ward, fn (Builder $builder, string $requestedWard) => $builder->where('ward', $requestedWard))
             ->when($fromDateTime, fn (Builder $builder, string $startDateTime) => $builder->where('admitted_at', '>=', $startDateTime))
@@ -200,7 +258,40 @@ class EloquentAdmissionRepository implements AdmissionRepositoryInterface
             $counts['total'] += $aggregate;
         }
 
+        // Independent of the admitted_at-scoped counts above: a patient
+        // discharged today may have been admitted days ago, so this can't
+        // be derived from the same admitted_at-filtered query.
+        if ($dischargedFrom !== null || $dischargedTo !== null) {
+            $dischargedRangeQuery = AdmissionModel::query();
+            $this->applyPlatformScopeIfEnabled($dischargedRangeQuery);
+
+            $counts['dischargedInRange'] = (int) $dischargedRangeQuery
+                ->where('status', AdmissionStatus::DISCHARGED->value)
+                ->when($dischargedFrom, fn (Builder $builder, string $start) => $builder->where('discharged_at', '>=', $start))
+                ->when($dischargedTo, fn (Builder $builder, string $end) => $builder->where('discharged_at', '<=', $end))
+                ->count();
+        }
+
         return $counts;
+    }
+
+    /**
+     * Postgres's LIKE is case-sensitive (unlike SQLite, which the test
+     * suite runs on) — a plain where('admission_reason', 'like', ...)
+     * silently missed mixed-case matches in production. Same fix and
+     * reasoning as EloquentFacilityResourceRepository::
+     * applyCaseInsensitiveSearch() (Reception/Emergency/Admission/
+     * Bed-Management audit follow-through).
+     */
+    private function applyCaseInsensitiveSearch(Builder $query, string $searchTerm): Builder
+    {
+        $like = '%'.strtolower($searchTerm).'%';
+
+        return $query
+            ->whereRaw('LOWER(admission_number) LIKE ?', [$like])
+            ->orWhereRaw('LOWER(COALESCE(admission_reason, \'\')) LIKE ?', [$like])
+            ->orWhereRaw('LOWER(COALESCE(ward, \'\')) LIKE ?', [$like])
+            ->orWhereRaw('LOWER(COALESCE(bed, \'\')) LIKE ?', [$like]);
     }
 
     private function applyPlatformScopeIfEnabled(Builder $query): void

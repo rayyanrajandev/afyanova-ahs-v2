@@ -7,6 +7,7 @@ use App\Modules\Admission\Domain\Repositories\AdmissionRepositoryInterface;
 use App\Modules\Admission\Domain\Services\AdmissionPlacementLookupServiceInterface;
 use App\Modules\Platform\Domain\Repositories\FacilityResourceRepositoryInterface;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
+use App\Modules\Platform\Domain\ValueObjects\FacilityResourceType;
 
 class AdmissionPlacementLookupService implements AdmissionPlacementLookupServiceInterface
 {
@@ -87,6 +88,72 @@ class AdmissionPlacementLookupService implements AdmissionPlacementLookupService
             'ward' => $normalizedWard,
             'bed' => $normalizedBed,
         ];
+    }
+
+    public function validatePlacementByResource(
+        string $bedResourceId,
+        string $fieldName = 'bedResourceId',
+        ?string $excludeAdmissionId = null,
+    ): array {
+        $normalizedId = trim($bedResourceId);
+        if ($normalizedId === '') {
+            $message = 'A bed must be selected.';
+
+            throw new InvalidAdmissionPlacementException($message, [$fieldName => [$message]]);
+        }
+
+        $resource = $this->facilityResourceRepository->findById($normalizedId);
+        $tenantId = $this->platformScopeContext->tenantId();
+        $facilityId = $this->platformScopeContext->facilityId();
+
+        if (
+            $resource === null
+            || ($resource['resource_type'] ?? null) !== FacilityResourceType::WARD_BED->value
+            || ($resource['status'] ?? null) !== 'active'
+            || ! $this->resourceInScope($resource, $tenantId, $facilityId)
+        ) {
+            $message = 'Selected bed is not an active bed in this facility.';
+
+            throw new InvalidAdmissionPlacementException($message, [$fieldName => [$message]]);
+        }
+
+        $hasConflict = $this->admissionRepository->hasActiveBedResourceConflict(
+            bedResourceId: $normalizedId,
+            tenantId: $tenantId,
+            facilityId: $facilityId,
+            excludeAdmissionId: $excludeAdmissionId,
+        );
+
+        if ($hasConflict) {
+            $message = 'Selected bed is already occupied by another active admission.';
+
+            throw new InvalidAdmissionPlacementException($message, [$fieldName => [$message]]);
+        }
+
+        return [
+            'bed_resource_id' => $normalizedId,
+            'ward' => $this->normalize($resource['ward_name'] ?? null),
+            'bed' => $this->normalize($resource['bed_number'] ?? null),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $resource
+     */
+    private function resourceInScope(array $resource, ?string $tenantId, ?string $facilityId): bool
+    {
+        $resourceTenantId = $resource['tenant_id'] ?? null;
+        $resourceFacilityId = $resource['facility_id'] ?? null;
+
+        if ($tenantId !== null && $resourceTenantId !== null && $resourceTenantId !== $tenantId) {
+            return false;
+        }
+
+        if ($facilityId !== null && $resourceFacilityId !== null && $resourceFacilityId !== $facilityId) {
+            return false;
+        }
+
+        return true;
     }
 
     private function normalize(?string $value): ?string
