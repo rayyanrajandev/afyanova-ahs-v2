@@ -130,23 +130,23 @@
     --accent: hsl(180 58% 44%);
     --accent-foreground: hsl(0 0% 100%);
 
-    /* Destructive / Critical — Emergency Red */
-    --destructive: hsl(0 78% 55%);
+    /* Destructive / Critical — Emergency Red (darkened for 4.5:1+ contrast with white text) */
+    --destructive: hsl(0 78% 48%);
     --destructive-foreground: hsl(0 0% 100%);
-    --critical: hsl(0 78% 55%);
+    --critical: hsl(0 78% 48%);
     --critical-foreground: hsl(0 0% 100%);
 
     /* Warning — Amber */
     --warning: hsl(38 95% 50%);
     --warning-foreground: hsl(30 80% 12%);
 
-    /* Success — Verification Green */
+    /* Success — Verification Green (dark text for 4.5:1+ contrast; was white on green at 3.25:1) */
     --success: hsl(152 68% 38%);
-    --success-foreground: hsl(0 0% 100%);
+    --success-foreground: hsl(152 30% 10%);
 
-    /* Info — Sky */
+    /* Info — Sky (dark text for 4.5:1+ contrast; was white on sky at 2.93:1) */
     --info: hsl(200 90% 48%);
-    --info-foreground: hsl(0 0% 100%);
+    --info-foreground: hsl(200 60% 12%);
 
     /* Borders & Inputs */
     --border: hsl(214 18% 84%);
@@ -227,9 +227,10 @@
     --accent: hsl(174 62% 48%);
     --accent-foreground: hsl(224 24% 8%);
 
-    --destructive: hsl(0 80% 62%);
+    /* darkened for 4.5:1+ contrast with white text; was hsl(0 80% 62%) at 3.60:1 */
+    --destructive: hsl(0 80% 52%);
     --destructive-foreground: hsl(0 0% 100%);
-    --critical: hsl(0 80% 62%);
+    --critical: hsl(0 80% 52%);
     --critical-foreground: hsl(0 0% 100%);
 
     --warning: hsl(40 96% 58%);
@@ -238,8 +239,9 @@
     --success: hsl(152 72% 48%);
     --success-foreground: hsl(0 0% 5%);
 
+    /* dark text for 4.5:1+ contrast; was white on sky at 2.42:1 */
     --info: hsl(200 95% 55%);
-    --info-foreground: hsl(0 0% 100%);
+    --info-foreground: hsl(200 60% 8%);
 
     --border: hsl(240deg 7.55% 20.78%); /* hsl(224 14% 22%); */
     --input: hsl(224 14% 18%);

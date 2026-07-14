@@ -239,25 +239,25 @@ const shortId = helpers.shortId;
                             </Badge>
                         </div>
                         <div v-if="statusDialogInvoice" class="grid grid-cols-4 gap-2">
-                            <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                            <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                                 <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Total</p>
                                 <p class="text-sm font-bold tabular-nums text-foreground">
                                     {{ formatMoney(statusDialogInvoice.totalAmount, statusDialogInvoice.currencyCode) }}
                                 </p>
                             </div>
-                            <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                            <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                                 <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Paid</p>
                                 <p class="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
                                     {{ formatMoney(statusDialogInvoice.paidAmount, statusDialogInvoice.currencyCode) }}
                                 </p>
                             </div>
-                            <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                            <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                                 <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Outstanding</p>
                                 <p class="text-sm font-bold tabular-nums" :class="statusDialogOutstandingAmount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'">
                                     {{ formatMoney(statusDialogOutstandingAmount, statusDialogCurrencyCode) }}
                                 </p>
                             </div>
-                            <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                            <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                                 <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                                     {{ statusDialogInvoice.lastPaymentReference ? statusDialogLastActivityLabel : 'Currency' }}
                                 </p>

@@ -211,23 +211,23 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                 </div>
 
                 <div v-if="canRead" class="mt-3 grid grid-cols-5 gap-2">
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Scheduled</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusTabCount('scheduled') ?? '—' }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Completed</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusTabCount('completed') ?? '—' }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Cancelled</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusTabCount('cancelled') ?? '—' }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">No-show</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusTabCount('no_show') ?? '—' }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Total</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusTabCount('total') ?? '—' }}</p>
                     </div>
@@ -302,12 +302,12 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         <AlertDescription>{{ (list.error.value as Error | null)?.message ?? 'Unknown error.' }}</AlertDescription>
                     </Alert>
 
-                    <div v-else-if="appointments.length === 0" class="rounded-lg border border-dashed px-5 py-5">
+                    <div v-else-if="appointments.length === 0" class="rounded-lg border border-dashed bg-card px-5 py-5">
                         <p class="text-sm font-medium text-foreground">No appointments found</p>
                         <p class="mt-1 text-xs text-muted-foreground">Try adjusting the search query, status, or date range.</p>
                     </div>
 
-                    <div v-else class="overflow-x-auto rounded-lg border">
+                    <div v-else class="overflow-x-auto rounded-lg border bg-card">
                         <table class="w-full text-sm">
                             <thead class="border-b bg-muted/30 text-xs text-muted-foreground uppercase">
                                 <tr>

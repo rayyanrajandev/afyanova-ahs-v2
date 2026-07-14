@@ -288,7 +288,7 @@ function printCurrentInvoice(): void {
                     </Badge>
                 </div>
                 <div v-if="invoiceDetailsInvoice" class="grid grid-cols-4 gap-2">
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p
                             class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
                         >
@@ -303,7 +303,7 @@ function printCurrentInvoice(): void {
                             }}
                         </p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p
                             class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
                         >
@@ -324,7 +324,7 @@ function printCurrentInvoice(): void {
                             }}
                         </p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p
                             class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
                         >
@@ -349,7 +349,7 @@ function printCurrentInvoice(): void {
                             }}
                         </p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p
                             class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
                         >

@@ -469,25 +469,25 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                 </div>
 
                 <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Visits</p>
                         <p class="text-sm font-bold tabular-nums">{{ timeline.chartCounts.value.visits }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Active orders</p>
                         <p class="text-sm font-bold tabular-nums">
                             {{ timeline.careCounts.value.labActive + timeline.careCounts.value.imagingActive + timeline.careCounts.value.pharmacyActive + timeline.careCounts.value.procedureActive }}
                         </p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Consultation notes</p>
                         <p class="text-sm font-bold tabular-nums">{{ timeline.chartCounts.value.records }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Open invoices</p>
                         <p class="text-sm font-bold tabular-nums">{{ timeline.careCounts.value.billingOpen }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Timeline events</p>
                         <p class="text-sm font-bold tabular-nums">{{ timeline.chartCounts.value.timelineEvents }}</p>
                     </div>
@@ -753,7 +753,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                             </div>
                         </div>
 
-                        <div v-if="timeline.timelineEvents.value.length === 0" class="rounded-lg border border-dashed px-5 py-5">
+                        <div v-if="timeline.timelineEvents.value.length === 0" class="rounded-lg border border-dashed bg-card px-5 py-5">
                             <p class="text-base font-medium text-foreground">No timeline events recorded yet</p>
                             <p class="mt-1 text-sm text-muted-foreground">
                                 This chart will start building a patient story as visits, notes, results, medication, and billing items are recorded.
@@ -947,7 +947,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                             <AlertDescription>{{ (appointmentsQuery.error.value as Error | null)?.message ?? 'Unable to load visits.' }}</AlertDescription>
                         </Alert>
 
-                        <div v-else-if="appointments.length === 0" class="rounded-lg border border-dashed px-5 py-5">
+                        <div v-else-if="appointments.length === 0" class="rounded-lg border border-dashed bg-card px-5 py-5">
                             <p class="text-base font-medium text-foreground">No visits recorded for this patient yet</p>
                             <p class="mt-1 text-sm text-muted-foreground">Schedule the first appointment when this patient is entering the outpatient workflow.</p>
                         </div>
@@ -1616,7 +1616,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                             <AlertDescription>{{ (recordsQuery.error.value as Error | null)?.message ?? 'Unable to load records.' }}</AlertDescription>
                         </Alert>
 
-                        <div v-else-if="records.length === 0" class="rounded-lg border border-dashed px-5 py-5">
+                        <div v-else-if="records.length === 0" class="rounded-lg border border-dashed bg-card px-5 py-5">
                             <p class="text-base font-medium text-foreground">No consultation records yet</p>
                             <p class="mt-1 text-sm text-muted-foreground">Start the first consultation from this chart when you want the note to stay anchored to this patient workspace.</p>
                         </div>

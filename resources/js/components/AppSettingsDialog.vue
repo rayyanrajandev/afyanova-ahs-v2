@@ -1,10 +1,7 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { ref } from 'vue';
-import AppearanceTabs from '@/components/AppearanceTabs.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import {
     Sheet,
     SheetContent,
@@ -46,17 +43,7 @@ const emit = defineEmits<{
 
             <!-- Scrollable content -->
             <ScrollArea class="min-h-0 flex-1">
-                <div class="space-y-6 px-6 py-5">
-                    <section class="space-y-2.5">
-                        <div>
-                            <p class="text-sm font-semibold text-foreground">Appearance mode</p>
-                            <p class="text-xs text-muted-foreground">Switch between light, dark, or system.</p>
-                        </div>
-                        <AppearanceTabs />
-                    </section>
-
-                    <Separator />
-
+                <div class="px-6 py-5">
                     <UiPreferencesPanel />
                 </div>
             </ScrollArea>

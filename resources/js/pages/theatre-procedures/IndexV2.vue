@@ -366,19 +366,19 @@ function openAuditSheet(order: TheatreProcedure): void {
                     </div>
 
                     <div v-if="canRead" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                             <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Total</p>
                             <p class="text-sm font-bold tabular-nums">{{ statusCount('all') ?? '—' }}</p>
                         </div>
-                        <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                             <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Open</p>
                             <p class="text-sm font-bold tabular-nums">{{ openCount ?? '—' }}</p>
                         </div>
-                        <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                             <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Completed</p>
                             <p class="text-sm font-bold tabular-nums">{{ statusCount('completed') ?? '—' }}</p>
                         </div>
-                        <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                        <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                             <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Cancelled</p>
                             <p class="text-sm font-bold tabular-nums">{{ statusCount('cancelled') ?? '—' }}</p>
                         </div>
@@ -455,7 +455,7 @@ function openAuditSheet(order: TheatreProcedure): void {
                             <div
                                 v-for="order in orders"
                                 :key="order.id"
-                                class="rounded-lg border bg-background px-3.5 py-2.5 shadow-sm transition-colors"
+                                class="rounded-lg border bg-card px-3.5 py-2.5 shadow-sm transition-colors"
                             >
                                 <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                                     <button type="button" class="min-w-0 flex-1 space-y-1 text-left" @click="openDetail(order)">

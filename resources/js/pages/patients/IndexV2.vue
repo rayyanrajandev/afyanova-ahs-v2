@@ -276,15 +276,15 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                 </div>
 
                 <div v-if="canReadPatients" class="mt-3 grid grid-cols-3 gap-2">
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Active</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusTabCount('active') ?? '—' }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Inactive</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusTabCount('inactive') ?? '—' }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Total</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusTabCount('') ?? '—' }}</p>
                     </div>
@@ -362,12 +362,12 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         <AlertDescription>{{ (list.error.value as Error | null)?.message ?? 'Unknown error.' }}</AlertDescription>
                     </Alert>
 
-                    <div v-else-if="patients.length === 0" class="rounded-lg border border-dashed px-5 py-5">
+                    <div v-else-if="patients.length === 0" class="rounded-lg border border-dashed bg-card px-5 py-5">
                         <p class="text-sm font-medium text-foreground">No patients found</p>
                         <p class="mt-1 text-xs text-muted-foreground">Try adjusting the search query or status filter.</p>
                     </div>
 
-                    <div v-else class="overflow-x-auto rounded-lg border">
+                    <div v-else class="overflow-x-auto rounded-lg border bg-card">
                         <table class="w-full text-sm">
                             <thead class="border-b bg-muted/30 text-xs text-muted-foreground uppercase">
                                 <tr>

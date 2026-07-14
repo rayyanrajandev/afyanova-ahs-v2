@@ -212,19 +212,19 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                 </div>
 
                 <div v-if="canRead" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Pending</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.data.pending ?? '—' }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">In progress</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.data.in_progress ?? '—' }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Completed</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.data.completed ?? '—' }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Total</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.data.total ?? '—' }}</p>
                     </div>

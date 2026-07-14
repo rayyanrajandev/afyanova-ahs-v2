@@ -288,23 +288,23 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Medical Records', href: '/medic
                 </div>
 
                 <div v-if="canReadMedicalRecords" class="mt-3 grid grid-cols-5 gap-2">
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Total</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCount('all') ?? '—' }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Draft</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCount('draft') ?? '—' }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Finalized</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCount('finalized') ?? '—' }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Amended</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCount('amended') ?? '—' }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Archived</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCount('archived') ?? '—' }}</p>
                     </div>
@@ -388,12 +388,12 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Medical Records', href: '/medic
                     <AlertDescription>{{ (listQuery.error.value as Error | null)?.message ?? 'Unknown error.' }}</AlertDescription>
                 </Alert>
 
-                <div v-else-if="records.length === 0" class="rounded-lg border border-dashed px-5 py-5">
+                <div v-else-if="records.length === 0" class="rounded-lg border border-dashed bg-card px-5 py-5">
                     <p class="text-base font-medium text-foreground">No clinical notes match these filters</p>
                     <p class="mt-1 text-sm text-muted-foreground">Adjust the search, patient, or date range filters above.</p>
                 </div>
 
-                <div v-else class="overflow-x-auto rounded-lg border">
+                <div v-else class="overflow-x-auto rounded-lg border bg-card">
                     <table class="w-full text-sm">
                         <thead class="border-b bg-muted/30 text-xs text-muted-foreground uppercase">
                             <tr>

@@ -133,35 +133,35 @@ function goToPage(page: number): void {
                 </div>
 
                 <div class="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-8">
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Total</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCount('all') }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Opened</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCount('opened') }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">In progress</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCount('in_progress') }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Ready for sign</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCount('ready_for_sign') }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Signed</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCount('signed') }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Closed</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCount('closed') }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Amended</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCount('amended') }}</p>
                     </div>
-                    <div class="rounded-md bg-muted/30 px-2.5 py-1.5">
+                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Cancelled</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCount('cancelled') }}</p>
                     </div>

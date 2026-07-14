@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import AppearanceTabs from '@/components/AppearanceTabs.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useUiPreferences } from '@/composables/useUiPreferences';
+import type { AppIconName } from '@/lib/icons';
 import type {
     IconPack,
     UiFontFamily,
@@ -102,191 +105,226 @@ const scaleOptions: {
     { value: 'spacious', label: 'Spacious', shortLabel: '112%', stackClass: 'gap-2.5' },
 ];
 
-const iconPackOptions: { value: IconPack; label: string; previewIcon: string }[] = [
+const iconPackOptions: { value: IconPack; label: string; previewIcon: AppIconName }[] = [
     { value: 'lucide', label: 'Lucide', previewIcon: 'layout-grid' },
     { value: 'huge', label: 'HugeIcons', previewIcon: 'layout-grid' },
 ];
 </script>
 
 <template>
-    <div class="space-y-6">
-        <section class="space-y-3">
-            <div>
-                <p class="text-sm font-semibold text-foreground">Color scheme</p>
-                <p class="text-xs text-muted-foreground">Primary color used for actions, focus, and active states.</p>
-            </div>
+    <Tabs default-value="appearance">
+        <TabsList class="grid w-full grid-cols-3">
+            <TabsTrigger value="appearance" class="gap-1.5">
+                <AppIcon name="sliders-horizontal" class="size-3.5" />
+                Appearance
+            </TabsTrigger>
+            <TabsTrigger value="density" class="gap-1.5">
+                <AppIcon name="layout-grid" class="size-3.5" />
+                Density
+            </TabsTrigger>
+            <TabsTrigger value="icons" class="gap-1.5">
+                <AppIcon name="layout-list" class="size-3.5" />
+                Icons
+            </TabsTrigger>
+        </TabsList>
 
-            <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                <button
-                    v-for="option in colorSchemeOptions"
-                    :key="option.value"
-                    :class="[
-                        'group flex min-h-12 items-center gap-2 rounded-md border px-3 py-2 text-left text-sm font-medium transition-all',
-                        themePreset === option.value
-                            ? 'border-primary bg-primary/10 text-foreground shadow-sm'
-                            : 'border-border/60 bg-card text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground',
-                    ]"
-                    @click="updateThemePreset(option.value)"
-                >
-                    <span class="flex size-5 shrink-0 overflow-hidden rounded-full border shadow-inner">
-                        <span class="flex-1" :style="{ background: option.color }" />
-                        <span class="flex-1" :style="{ background: option.accent }" />
-                    </span>
-                    <span class="min-w-0 flex-1 truncate">{{ option.label }}</span>
-                    <AppIcon
-                        v-if="themePreset === option.value"
-                        name="check-circle"
-                        class="size-3.5 shrink-0 text-primary"
-                    />
-                </button>
-            </div>
-        </section>
+        <TabsContent value="appearance" class="space-y-6 pt-5">
+            <section class="space-y-3">
+                <div>
+                    <p class="text-sm font-semibold text-foreground">Light / dark mode</p>
+                    <p class="text-xs text-muted-foreground">Switch between light, dark, or system.</p>
+                </div>
+                <AppearanceTabs />
+            </section>
 
-        <section class="space-y-3 border-t border-border/40 pt-5">
-            <div>
-                <p class="text-sm font-semibold text-foreground">Font family</p>
-                <p class="text-xs text-muted-foreground">Choose the reading style for forms, tables, and dashboards.</p>
-            </div>
+            <section class="space-y-3 border-t border-border/40 pt-5">
+                <div>
+                    <p class="text-sm font-semibold text-foreground">Color scheme</p>
+                    <p class="text-xs text-muted-foreground">Primary color used for actions, focus, and active states.</p>
+                </div>
 
-            <div class="grid grid-cols-3 gap-2">
-                <button
-                    v-for="option in fontOptions"
-                    :key="option.value"
-                    :class="[
-                        'flex min-h-16 flex-col items-center justify-center gap-1 rounded-md border px-2 py-2 text-center text-sm font-medium transition-all',
-                        fontFamily === option.value
-                            ? 'border-primary bg-primary/10 text-foreground shadow-sm'
-                            : 'border-border/60 bg-card text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground',
-                    ]"
-                    @click="updateFontFamily(option.value)"
-                >
-                    <span
-                        class="text-2xl leading-none"
-                        :style="{ fontFamily: option.previewStyle }"
-                    >
-                        {{ option.sample }}
-                    </span>
-                    <span class="max-w-full truncate text-xs">{{ option.label }}</span>
-                </button>
-            </div>
-        </section>
-
-        <section class="space-y-3 border-t border-border/40 pt-5">
-            <div>
-                <p class="text-sm font-semibold text-foreground">Theme base</p>
-                <p class="text-xs text-muted-foreground">Neutral shade used for surfaces, borders, and sidebars.</p>
-            </div>
-
-            <div class="grid grid-cols-5 gap-2">
-                <button
-                    v-for="option in baseOptions"
-                    :key="option.value"
-                    :class="[
-                        'flex min-h-16 flex-col items-center gap-2 rounded-md border px-2 py-2 text-xs font-medium transition-all',
-                        themeBase === option.value
-                            ? 'border-primary bg-primary/10 text-foreground shadow-sm'
-                            : 'border-border/60 bg-card text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground',
-                    ]"
-                    @click="updateThemeBase(option.value)"
-                >
-                    <span class="flex h-7 w-full overflow-hidden rounded-sm border border-border/70">
-                        <span
-                            v-for="color in option.preview"
-                            :key="color"
-                            class="flex-1"
-                            :style="{ background: color }"
-                        />
-                    </span>
-                    <span class="truncate">{{ option.label }}</span>
-                </button>
-            </div>
-        </section>
-
-        <section class="space-y-3 border-t border-border/40 pt-5">
-            <div>
-                <p class="text-sm font-semibold text-foreground">Corner radius</p>
-                <p class="text-xs text-muted-foreground">Controls how sharp or soft buttons, sheets, and cards feel.</p>
-            </div>
-
-            <div class="grid grid-cols-5 gap-2">
-                <button
-                    v-for="option in radiusOptions"
-                    :key="option.value"
-                    :class="[
-                        'flex min-h-16 flex-col items-center justify-center gap-2 rounded-md border px-2 py-2 text-xs font-semibold transition-all',
-                        borderRadius === option.value
-                            ? 'border-primary bg-primary/10 text-foreground shadow-sm'
-                            : 'border-border/60 bg-card text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground',
-                    ]"
-                    @click="updateBorderRadius(option.value)"
-                >
-                    <span
-                        class="size-8 border-2 border-current bg-background"
-                        :style="{ borderRadius: option.radius }"
-                    />
-                    {{ option.label }}
-                </button>
-            </div>
-        </section>
-
-        <section class="space-y-3 border-t border-border/40 pt-5">
-            <div>
-                <p class="text-sm font-semibold text-foreground">Workspace density</p>
-                <p class="text-xs text-muted-foreground">Adjust how much clinical information fits on screen.</p>
-            </div>
-
-            <div class="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                <button
-                    v-for="option in scaleOptions"
-                    :key="option.value"
-                    :class="[
-                        'flex min-h-20 flex-col gap-2 rounded-md border px-2 py-2 text-left text-xs font-medium transition-all',
-                        uiScale === option.value
-                            ? 'border-primary bg-primary/10 text-foreground shadow-sm'
-                            : 'border-border/60 bg-card text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground',
-                    ]"
-                    @click="updateUiScale(option.value)"
-                >
-                    <span
+                <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    <button
+                        v-for="option in colorSchemeOptions"
+                        :key="option.value"
+                        type="button"
                         :class="[
-                            'flex h-9 flex-col justify-center rounded-sm border border-current/20 bg-background px-1.5 text-current',
-                            option.stackClass,
+                            'group flex min-h-12 items-center gap-2 rounded-md border px-3 py-2 text-left text-sm font-medium transition-all',
+                            themePreset === option.value
+                                ? 'border-primary bg-primary/10 text-foreground shadow-sm'
+                                : 'border-border/60 bg-card text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground',
                         ]"
+                        @click="updateThemePreset(option.value)"
                     >
-                        <span class="h-1 rounded-full bg-current/55" />
-                        <span class="h-1 rounded-full bg-current/35" />
-                        <span class="h-1 rounded-full bg-current/20" />
-                    </span>
-                    <span class="leading-tight">
-                        <span class="block">{{ option.shortLabel }}</span>
-                        <span class="block truncate text-muted-foreground">{{ option.label }}</span>
-                    </span>
-                </button>
-            </div>
-        </section>
+                        <span class="flex size-5 shrink-0 overflow-hidden rounded-full border shadow-inner">
+                            <span class="flex-1" :style="{ background: option.color }" />
+                            <span class="flex-1" :style="{ background: option.accent }" />
+                        </span>
+                        <span class="min-w-0 flex-1 truncate">{{ option.label }}</span>
+                        <AppIcon
+                            v-if="themePreset === option.value"
+                            name="check-circle"
+                            class="size-3.5 shrink-0 text-primary"
+                        />
+                    </button>
+                </div>
+            </section>
 
-        <section class="space-y-3 border-t border-border/40 pt-5">
-            <div>
-                <p class="text-sm font-semibold text-foreground">Icon style</p>
-                <p class="text-xs text-muted-foreground">Switch between lighter line icons and bolder clinical icons.</p>
-            </div>
+            <section class="space-y-3 border-t border-border/40 pt-5">
+                <div>
+                    <p class="text-sm font-semibold text-foreground">Theme base</p>
+                    <p class="text-xs text-muted-foreground">Neutral shade used for surfaces, borders, and sidebars.</p>
+                </div>
 
-            <div class="flex w-full items-center gap-1 rounded-md bg-muted/40 p-1">
-                <button
-                    v-for="option in iconPackOptions"
-                    :key="option.value"
-                    :class="[
-                        'flex flex-1 items-center justify-center gap-1.5 rounded-sm px-3 py-2 text-sm font-medium transition-all',
-                        iconPack === option.value
-                            ? 'bg-background text-foreground shadow-sm'
-                            : 'text-muted-foreground hover:text-foreground',
-                    ]"
-                    @click="updateIconPack(option.value)"
-                >
-                    <AppIcon :name="option.previewIcon" class="size-4" />
-                    {{ option.label }}
-                </button>
-            </div>
-        </section>
-    </div>
+                <div class="grid grid-cols-5 gap-2">
+                    <button
+                        v-for="option in baseOptions"
+                        :key="option.value"
+                        type="button"
+                        :class="[
+                            'flex min-h-16 flex-col items-center gap-2 rounded-md border px-2 py-2 text-xs font-medium transition-all',
+                            themeBase === option.value
+                                ? 'border-primary bg-primary/10 text-foreground shadow-sm'
+                                : 'border-border/60 bg-card text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground',
+                        ]"
+                        @click="updateThemeBase(option.value)"
+                    >
+                        <span class="flex h-7 w-full overflow-hidden rounded-sm border border-border/70">
+                            <span
+                                v-for="color in option.preview"
+                                :key="color"
+                                class="flex-1"
+                                :style="{ background: color }"
+                            />
+                        </span>
+                        <span class="truncate">{{ option.label }}</span>
+                    </button>
+                </div>
+            </section>
+
+            <section class="space-y-3 border-t border-border/40 pt-5">
+                <div>
+                    <p class="text-sm font-semibold text-foreground">Font family</p>
+                    <p class="text-xs text-muted-foreground">Choose the reading style for forms, tables, and dashboards.</p>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2">
+                    <button
+                        v-for="option in fontOptions"
+                        :key="option.value"
+                        type="button"
+                        :class="[
+                            'flex min-h-16 flex-col items-center justify-center gap-1 rounded-md border px-2 py-2 text-center text-sm font-medium transition-all',
+                            fontFamily === option.value
+                                ? 'border-primary bg-primary/10 text-foreground shadow-sm'
+                                : 'border-border/60 bg-card text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground',
+                        ]"
+                        @click="updateFontFamily(option.value)"
+                    >
+                        <span
+                            class="text-2xl leading-none"
+                            :style="{ fontFamily: option.previewStyle }"
+                        >
+                            {{ option.sample }}
+                        </span>
+                        <span class="max-w-full truncate text-xs">{{ option.label }}</span>
+                    </button>
+                </div>
+            </section>
+        </TabsContent>
+
+        <TabsContent value="density" class="space-y-6 pt-5">
+            <section class="space-y-3">
+                <div>
+                    <p class="text-sm font-semibold text-foreground">Workspace density</p>
+                    <p class="text-xs text-muted-foreground">Adjust how much clinical information fits on screen.</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    <button
+                        v-for="option in scaleOptions"
+                        :key="option.value"
+                        type="button"
+                        :class="[
+                            'flex min-h-20 flex-col gap-2 rounded-md border px-2 py-2 text-left text-xs font-medium transition-all',
+                            uiScale === option.value
+                                ? 'border-primary bg-primary/10 text-foreground shadow-sm'
+                                : 'border-border/60 bg-card text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground',
+                        ]"
+                        @click="updateUiScale(option.value)"
+                    >
+                        <span
+                            :class="[
+                                'flex h-9 flex-col justify-center rounded-sm border border-current/20 bg-background px-1.5 text-current',
+                                option.stackClass,
+                            ]"
+                        >
+                            <span class="h-1 rounded-full bg-current/55" />
+                            <span class="h-1 rounded-full bg-current/35" />
+                            <span class="h-1 rounded-full bg-current/20" />
+                        </span>
+                        <span class="leading-tight">
+                            <span class="block">{{ option.shortLabel }}</span>
+                            <span class="block truncate text-muted-foreground">{{ option.label }}</span>
+                        </span>
+                    </button>
+                </div>
+            </section>
+
+            <section class="space-y-3 border-t border-border/40 pt-5">
+                <div>
+                    <p class="text-sm font-semibold text-foreground">Corner radius</p>
+                    <p class="text-xs text-muted-foreground">Controls how sharp or soft buttons, sheets, and cards feel.</p>
+                </div>
+
+                <div class="grid grid-cols-5 gap-2">
+                    <button
+                        v-for="option in radiusOptions"
+                        :key="option.value"
+                        type="button"
+                        :class="[
+                            'flex min-h-16 flex-col items-center justify-center gap-2 rounded-md border px-2 py-2 text-xs font-semibold transition-all',
+                            borderRadius === option.value
+                                ? 'border-primary bg-primary/10 text-foreground shadow-sm'
+                                : 'border-border/60 bg-card text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground',
+                        ]"
+                        @click="updateBorderRadius(option.value)"
+                    >
+                        <span
+                            class="size-8 border-2 border-current bg-background"
+                            :style="{ borderRadius: option.radius }"
+                        />
+                        {{ option.label }}
+                    </button>
+                </div>
+            </section>
+        </TabsContent>
+
+        <TabsContent value="icons" class="space-y-6 pt-5">
+            <section class="space-y-3">
+                <div>
+                    <p class="text-sm font-semibold text-foreground">Icon style</p>
+                    <p class="text-xs text-muted-foreground">Switch between lighter line icons and bolder clinical icons.</p>
+                </div>
+
+                <div class="flex w-full items-center gap-1 rounded-md bg-muted/40 p-1">
+                    <button
+                        v-for="option in iconPackOptions"
+                        :key="option.value"
+                        type="button"
+                        :class="[
+                            'flex flex-1 items-center justify-center gap-1.5 rounded-sm px-3 py-2 text-sm font-medium transition-all',
+                            iconPack === option.value
+                                ? 'bg-background text-foreground shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground',
+                        ]"
+                        @click="updateIconPack(option.value)"
+                    >
+                        <AppIcon :name="option.previewIcon" class="size-4" />
+                        {{ option.label }}
+                    </button>
+                </div>
+            </section>
+        </TabsContent>
+    </Tabs>
 </template>
