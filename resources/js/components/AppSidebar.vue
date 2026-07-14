@@ -28,6 +28,7 @@ import {
     navSubGroupLabels,
     type NavSectionKey,
 } from '@/config/appNavCatalog';
+import { useActiveRole } from '@/composables/useActiveRole';
 import { filterSidebarNavCatalogItems } from '@/lib/routeAccess';
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
@@ -43,6 +44,7 @@ const { permissionNames, hasUniversalAdminAccess, facilityEntitlementNames } =
     usePlatformAccess();
 const { toggleFavorite, getFavorites } = useSidebarFavorites();
 const { recentItems, recordVisit } = useSidebarHistory();
+const { activeSections } = useActiveRole();
 
 const searchQuery = ref('');
 
@@ -59,6 +61,13 @@ const visibleNavItems = computed(() =>
         facilityEntitlementNames.value,
     ),
 );
+
+const roleFilteredNavItems = computed(() => {
+    const items = visibleNavItems.value;
+    if (!activeSections.value) return items;
+    const allowed = new Set(activeSections.value);
+    return items.filter((item) => allowed.has(item.section));
+});
 
 const homeItems = computed<NavItem[]>(() => [
     {
@@ -78,7 +87,7 @@ const homeItems = computed<NavItem[]>(() => [
 const allNavItems = computed<NavItem[]>(() => {
     const items: NavItem[] = [];
     for (const key of navSectionOrder) {
-        const sectionItems = visibleNavItems.value
+        const sectionItems = roleFilteredNavItems.value
             .filter((item) => item.section === key)
             .map(({ id, title, href, iconName, section, subGroup }) => ({
                 id: id ?? `${key}:${href}`,
@@ -120,7 +129,7 @@ const navSections = computed<NavSection[]>(() =>
         .map((key) => ({
             key,
             label: navSectionLabels[key],
-            items: visibleNavItems.value
+            items: roleFilteredNavItems.value
                 .filter((item) => item.section === key)
                 .map(({ id, title, href, iconName, section, subGroup }) => ({
                     id: id ?? `${key}:${href}`,
@@ -185,7 +194,7 @@ function emitSidebarNavigationEvent(item: NavItem) {
 function sectionHasMatches(key: NavSectionKey): boolean {
     if (!searchQuery.value) return true;
     const q = searchQuery.value.toLowerCase();
-    return visibleNavItems.value
+    return roleFilteredNavItems.value
         .filter((item) => item.section === key)
         .some((item) => item.title.toLowerCase().includes(q));
 }
