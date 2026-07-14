@@ -106,6 +106,7 @@ class UpdateLaboratoryOrderStatusUseCase
                         appointmentId: $updated['appointment_id'] ?? null,
                         orderedByUserId: $updated['ordered_by_user_id'] ?? null,
                         actorId: $actorId,
+                        facilityId: $updated['facility_id'] ?? null,
                     ));
                 });
             }

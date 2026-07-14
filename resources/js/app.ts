@@ -1,4 +1,5 @@
 import { createInertiaApp } from '@inertiajs/vue3';
+import { configureEcho } from '@laravel/echo-vue';
 import { VueQueryPlugin } from '@tanstack/vue-query';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createPinia } from 'pinia';
@@ -12,6 +13,14 @@ import { initializeUiPreferences } from './composables/useUiPreferences';
 import { buildDocumentTitle, syncClientBranding } from './lib/branding';
 import { purgeKnownSensitiveBrowserStorage } from './lib/browserStoragePolicy';
 import { createAppQueryClient } from './lib/queryClient';
+
+// Patient-Flow Board live updates (Phase 2): reads VITE_REVERB_* env vars and
+// the existing <meta name="csrf-token"> tag by default — no custom
+// authorizer needed, this app's session-cookie auth is exactly what Echo's
+// default Reverb/Pusher-protocol authorizer already expects.
+configureEcho({
+    broadcaster: 'reverb',
+});
 
 syncClientBranding(
     typeof window !== 'undefined' ? window.__AFYANOVA_BRANDING__ : undefined,

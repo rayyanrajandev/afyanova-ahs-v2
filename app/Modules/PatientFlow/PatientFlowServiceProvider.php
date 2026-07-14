@@ -2,10 +2,14 @@
 
 namespace App\Modules\PatientFlow;
 
+use App\Modules\Appointment\Domain\Events\AppointmentStatusChanged;
 use App\Modules\Laboratory\Domain\Events\LaboratoryOrderCompleted;
+use App\Modules\PatientFlow\Application\Listeners\BroadcastPatientFlowBoardUpdate;
 use App\Modules\PatientFlow\Application\Listeners\LogOrderCompletionForOrderingClinician;
 use App\Modules\Pharmacy\Domain\Events\PharmacyOrderDispensed;
 use App\Modules\Radiology\Domain\Events\RadiologyOrderCompleted;
+use App\Modules\Reception\Domain\Events\AppointmentCheckedIn;
+use App\Modules\ServiceRequest\Domain\Events\ServiceRequestStatusChanged;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
@@ -28,6 +32,34 @@ class PatientFlowServiceProvider extends ServiceProvider
         Event::listen(
             RadiologyOrderCompleted::class,
             [LogOrderCompletionForOrderingClinician::class, 'handleRadiologyOrderCompleted'],
+        );
+
+        // Patient-Flow Board Phase 2/3 — translates 6 cross-module domain
+        // events into the board's own single PatientFlowBoardUpdated
+        // broadcast (see BroadcastPatientFlowBoardUpdate's docblock).
+        Event::listen(
+            AppointmentCheckedIn::class,
+            [BroadcastPatientFlowBoardUpdate::class, 'handleAppointmentCheckedIn'],
+        );
+        Event::listen(
+            AppointmentStatusChanged::class,
+            [BroadcastPatientFlowBoardUpdate::class, 'handleAppointmentStatusChanged'],
+        );
+        Event::listen(
+            LaboratoryOrderCompleted::class,
+            [BroadcastPatientFlowBoardUpdate::class, 'handleLaboratoryOrderCompleted'],
+        );
+        Event::listen(
+            PharmacyOrderDispensed::class,
+            [BroadcastPatientFlowBoardUpdate::class, 'handlePharmacyOrderDispensed'],
+        );
+        Event::listen(
+            RadiologyOrderCompleted::class,
+            [BroadcastPatientFlowBoardUpdate::class, 'handleRadiologyOrderCompleted'],
+        );
+        Event::listen(
+            ServiceRequestStatusChanged::class,
+            [BroadcastPatientFlowBoardUpdate::class, 'handleServiceRequestStatusChanged'],
         );
     }
 }

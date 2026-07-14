@@ -20,6 +20,11 @@ class VisitJourneyEntryResponseTransformer
             'clinicianUserId' => $entry['clinicianUserId'] ?? null,
             'appointmentStatus' => $entry['appointmentStatus'] ?? null,
             'step' => $entry['step'] ?? null,
+            'stepEnteredAt' => $entry['stepEnteredAt'] ?? null,
+            'priority' => $entry['priority'] ?? null,
+            'openOrders' => $entry['openOrders'] ?? [],
+            'allergies' => $entry['allergies'] ?? [],
+            'billingStatus' => $entry['billingStatus'] ?? null,
         ];
     }
 }

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Modules\Staff\Infrastructure\Models\StaffProfileModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -52,6 +53,53 @@ it('forbids the board without appointments.read', function (): void {
 
     $this->actingAs($user)
         ->getJson('/api/v1/patient-flow/board')
+        ->assertForbidden();
+});
+
+it('filters the board via department/clinicianUserId/q query params', function (): void {
+    $user = makePatientFlowUser();
+    $clinician = User::factory()->create();
+    $patient = makePatientFlowPatient();
+    $appointment = makePatientFlowAppointment($patient->id, [
+        'status' => 'waiting_provider',
+        'department' => 'Emergency',
+        'clinician_user_id' => $clinician->id,
+    ]);
+    makePatientFlowAppointment($patient->id, ['status' => 'waiting_triage', 'department' => 'Outpatient']);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/patient-flow/board?department=Emergency&clinicianUserId='.$clinician->id.'&q=furaha')
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.appointmentId', $appointment->id);
+});
+
+it('returns the clinician directory for the board doctor lookup', function (): void {
+    $user = makePatientFlowUser();
+    $clinicianUser = User::factory()->create(['name' => 'Dr. Amani Shirima']);
+    $profile = StaffProfileModel::query()->create([
+        'user_id' => $clinicianUser->id,
+        'employee_number' => 'STF-PF-001',
+        'department' => 'Outpatient',
+        'job_title' => 'Medical Officer',
+        'professional_license_number' => 'MO-PF-001',
+        'license_type' => 'Medical Officer',
+        'employment_type' => 'full_time',
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/patient-flow/clinician-directory')
+        ->assertOk()
+        ->assertJsonPath('data.0.id', $profile->id)
+        ->assertJsonPath('data.0.userName', 'Dr. Amani Shirima');
+});
+
+it('forbids the clinician directory without appointments.read', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/patient-flow/clinician-directory')
         ->assertForbidden();
 });
 

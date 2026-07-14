@@ -7,10 +7,14 @@ namespace App\Modules\Laboratory\Domain\Events;
  * dispatched by UpdateLaboratoryOrderStatusUseCase after its transaction
  * commits (DB::afterCommit(), mirroring AppointmentCheckedIn in the
  * Reception module), so a listener never reacts to a result that ultimately
- * rolled back. No listener consumes this yet — this event only exists so the
- * visit-journey read-model and later automation (Phases 1-5 of that plan)
- * have something to build on, per the audit finding that zero cross-module
- * events exist outside Reception (reports/queue-based-workflow-audit.md §3).
+ * rolled back. Consumed by LogOrderCompletionForOrderingClinician (shadow
+ * logging) and, since Patient-Flow Board Phase 2,
+ * BroadcastPatientFlowBoardUpdate.
+ *
+ * $facilityId is carried purely so BroadcastPatientFlowBoardUpdate knows
+ * which facility-scoped channel to re-broadcast on — this event itself
+ * stays a plain, non-broadcasting domain event; Laboratory has no opinion
+ * about the board's transport.
  */
 class LaboratoryOrderCompleted
 {
@@ -20,5 +24,6 @@ class LaboratoryOrderCompleted
         public readonly ?string $appointmentId,
         public readonly ?int $orderedByUserId,
         public readonly ?int $actorId,
+        public readonly ?string $facilityId = null,
     ) {}
 }

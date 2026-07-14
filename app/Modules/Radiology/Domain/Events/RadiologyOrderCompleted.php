@@ -7,7 +7,14 @@ namespace App\Modules\Radiology\Domain\Events;
  * dispatched by UpdateRadiologyOrderStatusUseCase after its transaction
  * commits (DB::afterCommit(), mirroring AppointmentCheckedIn in the
  * Reception module), so a listener never reacts to a report that ultimately
- * rolled back. No listener consumes this yet.
+ * rolled back. Consumed by LogOrderCompletionForOrderingClinician (shadow
+ * logging) and, since Patient-Flow Board Phase 2,
+ * BroadcastPatientFlowBoardUpdate.
+ *
+ * $facilityId is carried purely so BroadcastPatientFlowBoardUpdate knows
+ * which facility-scoped channel to re-broadcast on — this event itself
+ * stays a plain, non-broadcasting domain event; Radiology has no opinion
+ * about the board's transport.
  */
 class RadiologyOrderCompleted
 {
@@ -17,5 +24,6 @@ class RadiologyOrderCompleted
         public readonly ?string $appointmentId,
         public readonly ?int $orderedByUserId,
         public readonly ?int $actorId,
+        public readonly ?string $facilityId = null,
     ) {}
 }

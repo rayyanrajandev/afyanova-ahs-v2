@@ -2,7 +2,9 @@
 
 use App\Models\User;
 use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
+use App\Modules\Billing\Infrastructure\Models\BillingInvoiceModel;
 use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
+use App\Modules\Patient\Infrastructure\Models\PatientAllergyModel;
 use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\PatientFlow\Application\UseCases\GetActiveVisitJourneyUseCase;
 use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
@@ -102,6 +104,8 @@ function makePatientFlowServiceRequest(
     ?string $appointmentId = null,
     ?string $linkedOrderId = null,
     string $serviceType = 'laboratory',
+    ?\Illuminate\Support\Carbon $requestedAt = null,
+    ?\Illuminate\Support\Carbon $acknowledgedAt = null,
 ): ServiceRequestModel {
     return ServiceRequestModel::query()->create([
         'request_number' => 'SR'.now()->format('Ymd').strtoupper(Str::random(6)),
@@ -110,9 +114,33 @@ function makePatientFlowServiceRequest(
         'service_type' => $serviceType,
         'priority' => 'routine',
         'status' => $status,
-        'requested_at' => now(),
+        'requested_at' => $requestedAt ?? now(),
+        'acknowledged_at' => $acknowledgedAt,
         'linked_order_id' => $linkedOrderId,
     ]);
+}
+
+function makePatientFlowAllergy(string $patientId, array $overrides = []): PatientAllergyModel
+{
+    return PatientAllergyModel::query()->create(array_merge([
+        'patient_id' => $patientId,
+        'substance_name' => 'Penicillin',
+        'severity' => 'severe',
+        'status' => 'active',
+    ], $overrides));
+}
+
+function makePatientFlowInvoice(string $patientId, array $overrides = []): BillingInvoiceModel
+{
+    return BillingInvoiceModel::query()->create(array_merge([
+        'invoice_number' => 'INV'.now()->format('Ymd').strtoupper(Str::random(6)),
+        'patient_id' => $patientId,
+        'invoice_date' => now(),
+        'subtotal_amount' => 100,
+        'total_amount' => 100,
+        'balance_amount' => 100,
+        'status' => 'issued',
+    ], $overrides));
 }
 
 it('maps waiting_triage appointments to the waiting_triage step', function (): void {
@@ -218,7 +246,7 @@ it('prefers waiting_lab over in_lab when both an unstarted and an in-progress or
     expect($entries[0]['step'])->toBe('waiting_lab');
 });
 
-it('maps in_consultation with a scheduled radiology order to waiting_lab', function (): void {
+it('maps in_consultation with a scheduled radiology order to waiting_imaging', function (): void {
     $patient = makePatientFlowPatient();
     $appointment = makePatientFlowAppointment($patient->id, [
         'status' => 'in_consultation',
@@ -228,7 +256,34 @@ it('maps in_consultation with a scheduled radiology order to waiting_lab', funct
 
     $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
 
-    expect($entries[0]['step'])->toBe('waiting_lab');
+    expect($entries[0]['step'])->toBe('waiting_imaging');
+});
+
+it('maps in_consultation with an in-progress radiology order to in_imaging', function (): void {
+    $patient = makePatientFlowPatient();
+    $appointment = makePatientFlowAppointment($patient->id, [
+        'status' => 'in_consultation',
+        'consultation_started_at' => now(),
+    ]);
+    makePatientFlowRadiologyOrder($patient->id, $appointment->id, 'in_progress');
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries[0]['step'])->toBe('in_imaging');
+});
+
+it('maps in_consultation with both an unstarted lab order and an unstarted radiology order to waiting_lab_and_imaging', function (): void {
+    $patient = makePatientFlowPatient();
+    $appointment = makePatientFlowAppointment($patient->id, [
+        'status' => 'in_consultation',
+        'consultation_started_at' => now(),
+    ]);
+    makePatientFlowLabOrder($patient->id, $appointment->id, 'ordered');
+    makePatientFlowRadiologyOrder($patient->id, $appointment->id, 'scheduled');
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries[0]['step'])->toBe('waiting_lab_and_imaging');
 });
 
 it('maps in_consultation with only an open pharmacy order to waiting_pharmacy', function (): void {
@@ -257,6 +312,107 @@ it('ignores completed lab orders when deriving the step', function (): void {
     expect($entries[0]['step'])->toBe('with_clinician');
 });
 
+it('sources stepEnteredAt from checked_in_at for waiting_triage', function (): void {
+    $patient = makePatientFlowPatient();
+    $checkedInAt = now()->subMinutes(15)->startOfSecond();
+    makePatientFlowAppointment($patient->id, [
+        'status' => 'waiting_triage',
+        'checked_in_at' => $checkedInAt,
+    ]);
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries[0]['stepEnteredAt'])->toBe($checkedInAt->toISOString());
+});
+
+it('sources stepEnteredAt from triage_owner_assigned_at for in_triage', function (): void {
+    $patient = makePatientFlowPatient();
+    $nurse = User::factory()->create();
+    $claimedAt = now()->subMinutes(5)->startOfSecond();
+    makePatientFlowAppointment($patient->id, [
+        'status' => 'waiting_triage',
+        'triage_owner_user_id' => $nurse->id,
+        'triage_owner_assigned_at' => $claimedAt,
+    ]);
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries[0]['stepEnteredAt'])->toBe($claimedAt->toISOString());
+});
+
+it('leaves stepEnteredAt null for waiting_clinician, honestly, since no column marks it', function (): void {
+    $patient = makePatientFlowPatient();
+    makePatientFlowAppointment($patient->id, [
+        'status' => 'waiting_provider',
+        'consultation_started_at' => null,
+    ]);
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries[0]['step'])->toBe('waiting_clinician');
+    expect($entries[0]['stepEnteredAt'])->toBeNull();
+});
+
+it('leaves stepEnteredAt null for waiting_clinician_review, honestly, since no column marks it', function (): void {
+    $patient = makePatientFlowPatient();
+    makePatientFlowAppointment($patient->id, [
+        'status' => 'waiting_provider',
+        'consultation_started_at' => now()->subMinutes(20),
+    ]);
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries[0]['step'])->toBe('waiting_clinician_review');
+    expect($entries[0]['stepEnteredAt'])->toBeNull();
+});
+
+it('sources stepEnteredAt from consultation_started_at for with_clinician', function (): void {
+    $patient = makePatientFlowPatient();
+    $startedAt = now()->subMinutes(10)->startOfSecond();
+    makePatientFlowAppointment($patient->id, [
+        'status' => 'in_consultation',
+        'consultation_started_at' => $startedAt,
+    ]);
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries[0]['step'])->toBe('with_clinician');
+    expect($entries[0]['stepEnteredAt'])->toBe($startedAt->toISOString());
+});
+
+it('sources stepEnteredAt from the earliest open lab order for waiting_lab', function (): void {
+    $patient = makePatientFlowPatient();
+    $appointment = makePatientFlowAppointment($patient->id, [
+        'status' => 'in_consultation',
+        'consultation_started_at' => now(),
+    ]);
+    $earlierOrder = makePatientFlowLabOrder($patient->id, $appointment->id, 'ordered');
+    $earlierOrder->forceFill(['ordered_at' => now()->subMinutes(40)])->save();
+    $laterOrder = makePatientFlowLabOrder($patient->id, $appointment->id, 'ordered');
+    $laterOrder->forceFill(['ordered_at' => now()->subMinutes(5)])->save();
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries[0]['step'])->toBe('waiting_lab');
+    expect($entries[0]['stepEnteredAt'])->toBe($earlierOrder->fresh()->ordered_at->toISOString());
+});
+
+it('sources stepEnteredAt from the earliest open pharmacy order for waiting_pharmacy', function (): void {
+    $patient = makePatientFlowPatient();
+    $appointment = makePatientFlowAppointment($patient->id, [
+        'status' => 'in_consultation',
+        'consultation_started_at' => now(),
+    ]);
+    $order = makePatientFlowPharmacyOrder($patient->id, $appointment->id, 'pending');
+    $orderedAt = now()->subMinutes(25)->startOfSecond();
+    $order->forceFill(['ordered_at' => $orderedAt])->save();
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries[0]['step'])->toBe('waiting_pharmacy');
+    expect($entries[0]['stepEnteredAt'])->toBe($orderedAt->toISOString());
+});
+
 it('maps a pending, unlinked service request to waiting_direct_service with no appointment', function (): void {
     $patient = makePatientFlowPatient();
     $serviceRequest = makePatientFlowServiceRequest($patient->id, 'pending');
@@ -279,6 +435,34 @@ it('maps an in-progress service request to in_direct_service', function (): void
 
     expect($entries[0]['step'])->toBe('in_direct_service');
     expect($entries[0]['department'])->toBe('Pharmacy');
+});
+
+it('sources stepEnteredAt from requested_at for waiting_direct_service', function (): void {
+    $patient = makePatientFlowPatient();
+    $requestedAt = now()->subMinutes(12)->startOfSecond();
+    makePatientFlowServiceRequest($patient->id, 'pending', requestedAt: $requestedAt);
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries[0]['step'])->toBe('waiting_direct_service');
+    expect($entries[0]['stepEnteredAt'])->toBe($requestedAt->toISOString());
+});
+
+it('sources stepEnteredAt from acknowledged_at (not requested_at) for in_direct_service', function (): void {
+    $patient = makePatientFlowPatient();
+    $requestedAt = now()->subMinutes(30)->startOfSecond();
+    $acknowledgedAt = now()->subMinutes(8)->startOfSecond();
+    makePatientFlowServiceRequest(
+        $patient->id,
+        'in_progress',
+        requestedAt: $requestedAt,
+        acknowledgedAt: $acknowledgedAt,
+    );
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries[0]['step'])->toBe('in_direct_service');
+    expect($entries[0]['stepEnteredAt'])->toBe($acknowledgedAt->toISOString());
 });
 
 it('excludes a service request already linked to a real order', function (): void {
@@ -313,6 +497,106 @@ it('shows a service request tied to an appointment alongside the appointment ent
     expect($steps)->toContain('waiting_direct_service');
 });
 
+it('carries the open lab/radiology/pharmacy orders as openOrders regardless of which one determines the step', function (): void {
+    $patient = makePatientFlowPatient();
+    $appointment = makePatientFlowAppointment($patient->id, [
+        'status' => 'in_consultation',
+        'consultation_started_at' => now(),
+    ]);
+    makePatientFlowLabOrder($patient->id, $appointment->id, 'ordered');
+    makePatientFlowRadiologyOrder($patient->id, $appointment->id, 'scheduled');
+    makePatientFlowPharmacyOrder($patient->id, $appointment->id, 'pending');
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    expect($entries[0]['step'])->toBe('waiting_lab_and_imaging');
+    expect($entries[0]['openOrders'])->toHaveCount(3);
+    expect(array_column($entries[0]['openOrders'], 'type'))->toEqualCanonicalizing(['lab', 'imaging', 'pharmacy']);
+    expect(array_column($entries[0]['openOrders'], 'label'))->toEqualCanonicalizing([
+        'Complete Blood Count', 'Chest X-Ray (PA)', 'Paracetamol 500mg',
+    ]);
+});
+
+it('carries the appointment triage_category through as priority, null for service requests', function (): void {
+    $patient = makePatientFlowPatient();
+    makePatientFlowAppointment($patient->id, ['status' => 'waiting_triage', 'triage_category' => 'P2']);
+    makePatientFlowServiceRequest($patient->id, 'pending');
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute();
+
+    $byStep = collect($entries)->keyBy('step');
+    expect($byStep['waiting_triage']['priority'])->toBe('P2');
+    expect($byStep['waiting_direct_service']['priority'])->toBeNull();
+});
+
+it('surfaces active allergies for a patient, empty array when none', function (): void {
+    $withAllergy = makePatientFlowPatient();
+    makePatientFlowAppointment($withAllergy->id, ['status' => 'waiting_triage']);
+    makePatientFlowAllergy($withAllergy->id, ['substance_name' => 'Penicillin', 'severity' => 'severe']);
+    makePatientFlowAllergy($withAllergy->id, ['substance_name' => 'Old resolved allergy', 'status' => 'inactive']);
+
+    $withoutAllergy = makePatientFlowPatient(['phone' => '+255700000097']);
+    makePatientFlowAppointment($withoutAllergy->id, ['status' => 'waiting_triage']);
+
+    $entries = collect(app(GetActiveVisitJourneyUseCase::class)->execute())->keyBy('patientId');
+
+    expect($entries[$withAllergy->id]['allergies'])->toBe([
+        ['substanceName' => 'Penicillin', 'severity' => 'severe'],
+    ]);
+    expect($entries[$withoutAllergy->id]['allergies'])->toBe([]);
+});
+
+it('flags billingStatus pending only for issued/partially_paid invoices, not draft/paid/cancelled/voided', function (): void {
+    $pending = makePatientFlowPatient();
+    makePatientFlowAppointment($pending->id, ['status' => 'waiting_triage']);
+    makePatientFlowInvoice($pending->id, ['status' => 'partially_paid']);
+
+    $settled = makePatientFlowPatient(['phone' => '+255700000096']);
+    makePatientFlowAppointment($settled->id, ['status' => 'waiting_triage']);
+    makePatientFlowInvoice($settled->id, ['status' => 'paid']);
+
+    $entries = collect(app(GetActiveVisitJourneyUseCase::class)->execute())->keyBy('patientId');
+
+    expect($entries[$pending->id]['billingStatus'])->toBe('pending');
+    expect($entries[$settled->id]['billingStatus'])->toBeNull();
+});
+
+it('filters the board by department, pushed into the query', function (): void {
+    $patient = makePatientFlowPatient();
+    makePatientFlowAppointment($patient->id, ['status' => 'waiting_triage', 'department' => 'Outpatient']);
+    makePatientFlowAppointment($patient->id, ['status' => 'waiting_provider', 'department' => 'Emergency']);
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute(department: 'Emergency');
+
+    expect($entries)->toHaveCount(1);
+    expect($entries[0]['department'])->toBe('Emergency');
+});
+
+it('filters the board by clinicianUserId, excluding service requests entirely since they have none', function (): void {
+    $clinician = User::factory()->create();
+    $patient = makePatientFlowPatient();
+    makePatientFlowAppointment($patient->id, ['status' => 'waiting_provider', 'clinician_user_id' => $clinician->id]);
+    makePatientFlowAppointment($patient->id, ['status' => 'waiting_provider', 'clinician_user_id' => null]);
+    makePatientFlowServiceRequest($patient->id, 'pending');
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute(clinicianUserId: $clinician->id);
+
+    expect($entries)->toHaveCount(1);
+    expect($entries[0]['clinicianUserId'])->toBe($clinician->id);
+});
+
+it('filters the board by a patient name/number search term, in memory', function (): void {
+    $match = makePatientFlowPatient(['first_name' => 'Amina', 'last_name' => 'Juma']);
+    $other = makePatientFlowPatient(['first_name' => 'Baraka', 'last_name' => 'Mwakalinga', 'phone' => '+255700000095']);
+    makePatientFlowAppointment($match->id, ['status' => 'waiting_triage']);
+    makePatientFlowAppointment($other->id, ['status' => 'waiting_triage']);
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute(q: 'amina');
+
+    expect($entries)->toHaveCount(1);
+    expect($entries[0]['patientId'])->toBe($match->id);
+});
+
 it('runs a bounded, N-independent number of queries regardless of active-visit volume', function (): void {
     // Direct answer to the plan's own §2.2/§6 requirement: measure this
     // before trusting it, per the encounter-state-machine-design/02 lesson
@@ -337,7 +621,10 @@ it('runs a bounded, N-independent number of queries regardless of active-visit v
     DB::disableQueryLog();
 
     expect($entries)->toHaveCount(150);
-    expect($queryCount)->toBeLessThanOrEqual(6);
+    // Ceiling bumped from 6 to 8 for the Phase 1 card-enrichment pass: one
+    // more batched query each for allergies and pending-invoice lookups,
+    // still one query per data source regardless of visit volume.
+    expect($queryCount)->toBeLessThanOrEqual(8);
 });
 
 it('excludes completed, cancelled, and no_show appointments entirely', function (): void {

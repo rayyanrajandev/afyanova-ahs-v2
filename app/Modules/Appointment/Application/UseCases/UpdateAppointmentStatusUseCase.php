@@ -2,12 +2,15 @@
 
 namespace App\Modules\Appointment\Application\UseCases;
 
+use App\Modules\Appointment\Application\Exceptions\AppointmentConsultationOwnerRequiredException;
 use App\Modules\Appointment\Application\Exceptions\InvalidAppointmentStatusTransitionException;
+use App\Modules\Appointment\Domain\Events\AppointmentStatusChanged;
 use App\Modules\Appointment\Domain\Repositories\AppointmentAuditLogRepositoryInterface;
 use App\Modules\Appointment\Domain\Repositories\AppointmentRepositoryInterface;
 use App\Modules\Appointment\Domain\ValueObjects\AppointmentStatus;
 use App\Modules\Billing\Application\UseCases\AutoCaptureConsultationFeeUseCase;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class UpdateAppointmentStatusUseCase
@@ -33,6 +36,7 @@ class UpdateAppointmentStatusUseCase
         ?int $actorId = null,
         array $statusAttributes = [],
         array $auditMetadata = [],
+        bool $isFacilitySuperAdmin = false,
     ): ?array
     {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
@@ -44,6 +48,23 @@ class UpdateAppointmentStatusUseCase
 
         $currentStatus = strtolower(trim((string) ($existing['status'] ?? '')));
         $requestedStatus = strtolower(trim($status));
+
+        // Scoped to transitions leaving in_consultation (e.g. cancel/complete via the
+        // generic status endpoint) — never to in_consultation itself, since that target
+        // is only ever requested by startConsultation()'s own claim/takeover flow, which
+        // already performs its own, more specific ownership arbitration before calling
+        // here (dialog-confirmed takeover, or claiming a session with no explicit owner).
+        if (
+            $currentStatus === AppointmentStatus::IN_CONSULTATION->value
+            && $requestedStatus !== AppointmentStatus::IN_CONSULTATION->value
+            && ! $isFacilitySuperAdmin
+            && $actorId !== null
+            && ($ownerUserId = $this->resolvedConsultationOwnerUserId($existing)) !== null
+            && $ownerUserId !== $actorId
+        ) {
+            throw new AppointmentConsultationOwnerRequiredException($ownerUserId);
+        }
+
         $currentStatusEnum = AppointmentStatus::tryFrom($currentStatus);
         if ($currentStatusEnum !== null && ! $currentStatusEnum->canTransitionTo($requestedStatus)) {
             throw new InvalidAppointmentStatusTransitionException($currentStatus, $requestedStatus);
@@ -115,6 +136,47 @@ class UpdateAppointmentStatusUseCase
             ], $auditMetadata),
         );
 
+        DB::afterCommit(function () use ($existing, $updated, $actorId): void {
+            event(new AppointmentStatusChanged(
+                appointmentId: (string) $updated['id'],
+                patientId: (string) $updated['patient_id'],
+                oldStatus: (string) ($existing['status'] ?? ''),
+                newStatus: (string) ($updated['status'] ?? ''),
+                actorId: $actorId,
+                facilityId: $updated['facility_id'] ?? null,
+            ));
+        });
+
         return $updated;
+    }
+
+    private function normalizeOwnerUserId(mixed $value): ?int
+    {
+        $normalized = (int) $value;
+
+        return $normalized > 0 ? $normalized : null;
+    }
+
+    /**
+     * Mirrors AppointmentController::resolvedConsultationOwnerUserId() — legacy
+     * active consultations may not have explicit ownership stored yet, so the
+     * assigned clinician is treated as the effective owner until the record is
+     * touched again and the ownership field is repaired.
+     *
+     * @param  array<string, mixed>  $appointment
+     */
+    private function resolvedConsultationOwnerUserId(array $appointment): ?int
+    {
+        $explicitOwnerUserId = $this->normalizeOwnerUserId($appointment['consultation_owner_user_id'] ?? null);
+        if ($explicitOwnerUserId !== null) {
+            return $explicitOwnerUserId;
+        }
+
+        $status = strtolower(trim((string) ($appointment['status'] ?? '')));
+        if ($status !== AppointmentStatus::IN_CONSULTATION->value) {
+            return null;
+        }
+
+        return $this->normalizeOwnerUserId($appointment['clinician_user_id'] ?? null);
     }
 }

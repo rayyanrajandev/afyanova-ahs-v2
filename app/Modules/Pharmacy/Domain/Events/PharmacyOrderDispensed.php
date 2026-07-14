@@ -10,7 +10,13 @@ namespace App\Modules\Pharmacy\Domain\Events;
  * ultimately rolled back. Fired only on the DISPENSED transition, not
  * PARTIALLY_DISPENSED — whether a partial dispense should also notify is an
  * open question the plan defers (§5), not resolved by this event's shape.
- * No listener consumes this yet.
+ * Consumed by LogOrderCompletionForOrderingClinician (shadow logging) and,
+ * since Patient-Flow Board Phase 2, BroadcastPatientFlowBoardUpdate.
+ *
+ * $facilityId is carried purely so BroadcastPatientFlowBoardUpdate knows
+ * which facility-scoped channel to re-broadcast on — this event itself
+ * stays a plain, non-broadcasting domain event; Pharmacy has no opinion
+ * about the board's transport.
  */
 class PharmacyOrderDispensed
 {
@@ -20,5 +26,6 @@ class PharmacyOrderDispensed
         public readonly ?string $appointmentId,
         public readonly ?int $orderedByUserId,
         public readonly ?int $actorId,
+        public readonly ?string $facilityId = null,
     ) {}
 }
