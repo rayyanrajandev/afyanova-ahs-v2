@@ -1451,11 +1451,11 @@ async function loadMedicalRecordPermissions() {
             'medical-records.view-audit-logs',
         );
         canReadLaboratoryOrders.value = names.has('laboratory.orders.read');
-        canCreateLaboratoryOrders.value = names.has('laboratory.orders.create');
+        canCreateLaboratoryOrders.value = names.has('lab.order');
         canReadPharmacyOrders.value = names.has('pharmacy.orders.read');
-        canCreatePharmacyOrders.value = names.has('pharmacy.orders.create');
+        canCreatePharmacyOrders.value = names.has('medication.prescribe');
         canReadRadiologyOrders.value = names.has('radiology.orders.read');
-        canCreateRadiologyOrders.value = names.has('radiology.orders.create');
+        canCreateRadiologyOrders.value = names.has('imaging.order');
         canReadTheatreProcedures.value = names.has('theatre.procedures.read');
         canCreateTheatreProcedures.value = names.has('theatre.procedures.create');
         canReadBillingInvoices.value = names.has('billing.invoices.read');

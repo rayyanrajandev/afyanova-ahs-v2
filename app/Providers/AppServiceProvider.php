@@ -160,7 +160,7 @@ class AppServiceProvider extends ServiceProvider
             return $this->allowsAppointmentProviderSession($user);
         });
 
-        Gate::define('medical-records.update-draft', function ($user, string $recordId): bool {
+        Gate::define('medical.records.draft.update', function ($user, string $recordId): bool {
             if ($this->isFacilitySuperAdmin($user)) {
                 return true;
             }

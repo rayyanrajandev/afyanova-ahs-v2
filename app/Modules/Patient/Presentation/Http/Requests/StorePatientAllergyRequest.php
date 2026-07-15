@@ -9,7 +9,7 @@ class StorePatientAllergyRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('patients.update') ?? false;
+        return $this->user()?->can('patient.allergies.manage') ?? false;
     }
 
     public function rules(): array

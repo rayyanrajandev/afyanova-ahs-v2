@@ -480,28 +480,28 @@ const canCreateAppointments = computed(
     () => isFacilitySuperAdmin.value || hasPermission('appointments.create'),
 );
 const canUpdateAppointmentsStatus = computed(
-    () => isFacilitySuperAdmin.value || hasPermission('appointments.update-status'),
+    () => isFacilitySuperAdmin.value || hasPermission('appointment.check-in'),
 );
 const canUpdatePatients = computed(
-    () => isFacilitySuperAdmin.value || hasPermission('patients.update'),
+    () => isFacilitySuperAdmin.value || hasPermission('patient.demographics.update'),
 );
 const canReadLaboratoryOrders = computed(
     () => isFacilitySuperAdmin.value || hasPermission('laboratory.orders.read'),
 );
 const canCreateLaboratoryOrders = computed(
-    () => isFacilitySuperAdmin.value || hasPermission('laboratory.orders.create'),
+    () => isFacilitySuperAdmin.value || hasPermission('lab.order'),
 );
 const canReadPharmacyOrders = computed(
     () => isFacilitySuperAdmin.value || hasPermission('pharmacy.orders.read'),
 );
 const canCreatePharmacyOrders = computed(
-    () => isFacilitySuperAdmin.value || hasPermission('pharmacy.orders.create'),
+    () => isFacilitySuperAdmin.value || hasPermission('medication.prescribe'),
 );
 const canReadRadiologyOrders = computed(
     () => isFacilitySuperAdmin.value || hasPermission('radiology.orders.read'),
 );
 const canCreateRadiologyOrders = computed(
-    () => isFacilitySuperAdmin.value || hasPermission('radiology.orders.create'),
+    () => isFacilitySuperAdmin.value || hasPermission('imaging.order'),
 );
 const canReadTheatreProcedures = computed(
     () => isFacilitySuperAdmin.value || hasPermission('theatre.procedures.read'),
@@ -4745,7 +4745,7 @@ onMounted(() => {
                                         class="text-xs text-muted-foreground"
                                     >
                                         Recording allergies and current medication entries requires
-                                        <code>patients.update</code>.
+                                        <code>patient.demographics.update</code>.
                                     </p>
 
                                     <div class="grid gap-6 xl:grid-cols-3">

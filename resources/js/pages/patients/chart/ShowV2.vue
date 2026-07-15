@@ -121,12 +121,12 @@ const canReadPharmacyOrders = computed(() => hasAccess('pharmacy.orders.read'));
 const canReadRadiologyOrders = computed(() => hasAccess('radiology.orders.read'));
 const canReadTheatreProcedures = computed(() => hasAccess('theatre.procedures.read'));
 const canReadBillingInvoices = computed(() => hasAccess('billing.invoices.read'));
-const canCreateLaboratoryOrders = computed(() => hasAccess('laboratory.orders.create'));
-const canCreatePharmacyOrders = computed(() => hasAccess('pharmacy.orders.create'));
-const canCreateRadiologyOrders = computed(() => hasAccess('radiology.orders.create'));
+const canCreateLaboratoryOrders = computed(() => hasAccess('lab.order'));
+const canCreatePharmacyOrders = computed(() => hasAccess('medication.prescribe'));
+const canCreateRadiologyOrders = computed(() => hasAccess('imaging.order'));
 const canCreateTheatreProcedures = computed(() => hasAccess('theatre.procedures.create'));
 const canCreateBillingInvoices = computed(() => hasAccess('billing.invoices.create'));
-const canUpdatePatients = computed(() => hasAccess('patients.update'));
+const canUpdatePatients = computed(() => hasAccess('patient.demographics.update'));
 const canRecordOpdTriage = computed(() => isFacilitySuperAdmin.value || hasPermission('emergency.triage.create') || hasPermission('emergency.triage.update-status'));
 const canStartConsultation = computed(() => hasAccess('appointments.start-consultation'));
 const hasOrdersAndResultsAccess = computed(
@@ -1353,7 +1353,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         </div>
 
                         <p v-if="!canUpdatePatients" class="text-xs text-muted-foreground">
-                            Recording allergies and current medication entries requires <code>patients.update</code>.
+                            Recording allergies and current medication entries requires <code>patient.demographics.update</code>.
                         </p>
 
                         <div class="grid gap-6 xl:grid-cols-3">

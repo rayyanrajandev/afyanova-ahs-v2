@@ -289,8 +289,8 @@ const {
 } = usePlatformAccess();
 
 const canRead = ref(permissionState('radiology.orders.read') === 'allowed');
-const canCreate = ref(permissionState('radiology.orders.create') === 'allowed');
-const canUpdateStatus = ref(permissionState('radiology.orders.update-status') === 'allowed');
+const canCreate = ref(permissionState('imaging.order') === 'allowed');
+const canUpdateStatus = ref(permissionState('imaging.perform') === 'allowed');
 const canViewAudit = ref(
     permissionState('radiology.orders.view-audit-logs') === 'allowed' ||
     permissionState('radiology-orders.view-audit-logs') === 'allowed',
@@ -2774,8 +2774,8 @@ async function loadPermissions() {
         const names = new Set((response.data ?? []).map((permission) => permission.name?.trim()).filter((name): name is string => Boolean(name)));
         const hasSuperAdminAccess = isFacilitySuperAdmin.value;
         canRead.value = hasSuperAdminAccess || names.has('radiology.orders.read');
-        canCreate.value = hasSuperAdminAccess || names.has('radiology.orders.create');
-        canUpdateStatus.value = hasSuperAdminAccess || names.has('radiology.orders.update-status');
+        canCreate.value = hasSuperAdminAccess || names.has('imaging.order');
+        canUpdateStatus.value = hasSuperAdminAccess || names.has('imaging.perform');
         canViewAudit.value = hasSuperAdminAccess || names.has('radiology.orders.view-audit-logs') || names.has('radiology-orders.view-audit-logs');
         canReadAppointments.value = hasSuperAdminAccess || names.has('appointments.read');
         canReadAdmissions.value = hasSuperAdminAccess || names.has('admissions.read');
@@ -5953,7 +5953,7 @@ onMounted(async () => {
                                 Create access restricted
                             </AlertTitle>
                             <AlertDescription>
-                                Request <code>radiology.orders.create</code> permission to open the radiology ordering workspace.
+                                Request <code>imaging.order</code> permission to open the radiology ordering workspace.
                             </AlertDescription>
                         </Alert>
                     </CardContent>

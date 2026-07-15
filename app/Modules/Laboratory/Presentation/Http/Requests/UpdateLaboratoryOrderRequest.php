@@ -22,7 +22,7 @@ class UpdateLaboratoryOrderRequest extends FormRequest
 
     public function authorize(): bool
     {
-        return $this->user()?->can('laboratory.orders.create') ?? false;
+        return $this->user()?->can('lab.order') ?? false;
     }
 
     /**

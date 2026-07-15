@@ -68,8 +68,8 @@ function hasAccess(permission: string): boolean {
 
 const canRead = computed(() => hasAccess('appointments.read'));
 const canCreate = computed(() => hasAccess('appointments.create'));
-const canUpdate = computed(() => hasAccess('appointments.update'));
-const canUpdateStatus = computed(() => hasAccess('appointments.update-status'));
+const canUpdate = computed(() => hasAccess('appointment.reschedule'));
+const canUpdateStatus = computed(() => hasAccess('appointment.check-in'));
 const canShowRowActions = computed(() => canUpdate.value || canUpdateStatus.value);
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [

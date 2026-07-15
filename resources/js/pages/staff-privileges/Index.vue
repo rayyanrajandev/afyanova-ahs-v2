@@ -167,7 +167,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const { permissionState, scope } = usePlatformAccess();
 const staffReadPermission = computed(() => permissionState('staff.read'));
-const staffUpdatePermission = computed(() => permissionState('staff.update'));
+const staffUpdatePermission = computed(() => permissionState('staff.employment.update'));
 const staffUpdateStatusPermission = computed(() => permissionState('staff.update-status'));
 const privilegeReadPermission = computed(() => permissionState('staff.privileges.read'));
 const privilegeCreatePermission = computed(() => permissionState('staff.privileges.create'));

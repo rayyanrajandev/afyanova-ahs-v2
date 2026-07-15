@@ -103,11 +103,11 @@ const canRecordTriage = computed(() => hasAccess('appointments.record-triage'));
 /**
  * Cancel reuses appointments/IndexV2.vue's own gate — `appointments.update-status`
  * — not `appointments.record-triage`, matching UpdateAppointmentStatusRequest's
- * real authorization (`can('appointments.update-status')`). A nurse without
+ * real authorization (`can('appointment.check-in')`). A nurse without
  * this permission simply won't see the button; that's the role boundary
  * already enforced server-side, not a new restriction invented here.
  */
-const canCancelVisit = computed(() => hasAccess('appointments.update-status'));
+const canCancelVisit = computed(() => hasAccess('appointment.check-in'));
 
 const page = usePage<{
     auth?: {

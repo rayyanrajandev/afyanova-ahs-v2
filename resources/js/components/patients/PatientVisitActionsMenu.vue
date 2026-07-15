@@ -60,7 +60,7 @@ const { hasPermission, isFacilitySuperAdmin } = usePlatformAccess();
 function hasAccess(permission: string): boolean {
     return isFacilitySuperAdmin.value || hasPermission(permission);
 }
-const canStartVisit = computed(() => hasAccess('appointments.create') && hasAccess('appointments.update-status'));
+const canStartVisit = computed(() => hasAccess('appointments.create') && hasAccess('appointment.check-in'));
 const canCreateServiceRequest = computed(() => hasAccess('service.requests.create'));
 const canCreateInvoice = computed(() => hasAccess('billing.invoices.create'));
 const canShowMenu = computed(() => canStartVisit.value || canCreateServiceRequest.value || canCreateInvoice.value);

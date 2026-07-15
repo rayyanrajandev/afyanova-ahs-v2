@@ -2890,9 +2890,9 @@ async function loadPermissions() {
         canUpdateMedicalRecords.value = names.has('medical.records.update');
         canReadAppointments.value = names.has('appointments.read');
         canReadAdmissions.value = names.has('admissions.read');
-        canCreateLaboratoryOrders.value = names.has('laboratory.orders.create');
-        canCreatePharmacyOrders.value = names.has('pharmacy.orders.create');
-        canCreateRadiologyOrders.value = names.has('radiology.orders.create');
+        canCreateLaboratoryOrders.value = names.has('lab.order');
+        canCreatePharmacyOrders.value = names.has('medication.prescribe');
+        canCreateRadiologyOrders.value = names.has('imaging.order');
         canReadBillingInvoices.value = names.has('billing.invoices.read');
         canManageResources.value = names.has('theatre.procedures.manage-resources');
         canViewResourceAudit.value = names.has('theatre.procedures.view-resource-audit-logs');

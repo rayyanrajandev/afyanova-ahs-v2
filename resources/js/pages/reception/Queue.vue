@@ -150,7 +150,7 @@ const canReadAppointments = computed(() => hasAccess('appointments.read'));
 // /reception/walk-ins both creates the appointment and advances it straight
 // to waiting_triage/waiting_provider in one atomic write, so both
 // permissions are required, not just appointments.create.
-const canStartVisit = computed(() => hasAccess('appointments.create') && hasAccess('appointments.update-status'));
+const canStartVisit = computed(() => hasAccess('appointments.create') && hasAccess('appointment.check-in'));
 const canCreateServiceRequest = computed(() => hasAccess('service.requests.create'));
 const canCreateAppointment = computed(() => hasAccess('appointments.create'));
 const canCreatePatients = computed(() => hasAccess('patients.create'));

@@ -10,7 +10,7 @@ class UpdateRadiologyOrderStatusRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('radiology.orders.update-status') ?? false;
+        return $this->user()?->can('imaging.perform') ?? false;
     }
 
     /**

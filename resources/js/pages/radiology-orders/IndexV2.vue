@@ -59,9 +59,9 @@ function hasAccess(permission: string): boolean {
 }
 
 const canRead = computed(() => hasAccess('radiology.orders.read'));
-const canUpdateStatus = computed(() => hasAccess('radiology.orders.update-status'));
-const canApplyLifecycleAction = computed(() => hasAccess('radiology.orders.create'));
-const canCreate = computed(() => hasAccess('radiology.orders.create'));
+const canUpdateStatus = computed(() => hasAccess('imaging.perform'));
+const canApplyLifecycleAction = computed(() => hasAccess('imaging.order'));
+const canCreate = computed(() => hasAccess('imaging.order'));
 const canViewAuditLogs = computed(() => hasAccess('radiology.orders.view-audit-logs'));
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [

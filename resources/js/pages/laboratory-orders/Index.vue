@@ -568,13 +568,13 @@ const laboratoryReadPermissionState = ref<PermissionState>(
     permissionState('laboratory.orders.read'),
 );
 const laboratoryCreatePermissionState = ref<PermissionState>(
-    permissionState('laboratory.orders.create'),
+    permissionState('lab.order'),
 );
 const laboratoryUpdateStatusPermissionState = ref<PermissionState>(
-    permissionState('laboratory.orders.update-status'),
+    permissionState('lab.sample.collect'),
 );
 const laboratoryVerifyResultPermissionState = ref<PermissionState>(
-    permissionState('laboratory.orders.verify-result'),
+    permissionState('lab.result.verify'),
 );
 const medicalRecordsReadPermissionState = ref<PermissionState>(
     permissionState('medical.records.read'),
@@ -589,7 +589,7 @@ const pharmacyReadPermissionState = ref<PermissionState>(
     permissionState('pharmacy.orders.read'),
 );
 const pharmacyCreatePermissionState = ref<PermissionState>(
-    permissionState('pharmacy.orders.create'),
+    permissionState('medication.prescribe'),
 );
 const billingReadPermissionState = ref<PermissionState>(
     permissionState('billing.invoices.read'),
@@ -2227,15 +2227,15 @@ async function loadLaboratoryPermissions() {
                 ? 'allowed'
                 : 'denied';
         laboratoryCreatePermissionState.value =
-            hasSuperAdminAccess || names.has('laboratory.orders.create')
+            hasSuperAdminAccess || names.has('lab.order')
                 ? 'allowed'
                 : 'denied';
         laboratoryUpdateStatusPermissionState.value =
-            hasSuperAdminAccess || names.has('laboratory.orders.update-status')
+            hasSuperAdminAccess || names.has('lab.sample.collect')
                 ? 'allowed'
                 : 'denied';
         laboratoryVerifyResultPermissionState.value =
-            hasSuperAdminAccess || names.has('laboratory.orders.verify-result')
+            hasSuperAdminAccess || names.has('lab.result.verify')
                 ? 'allowed'
                 : 'denied';
         medicalRecordsReadPermissionState.value =
@@ -2255,7 +2255,7 @@ async function loadLaboratoryPermissions() {
                 ? 'allowed'
                 : 'denied';
         pharmacyCreatePermissionState.value =
-            hasSuperAdminAccess || names.has('pharmacy.orders.create')
+            hasSuperAdminAccess || names.has('medication.prescribe')
                 ? 'allowed'
                 : 'denied';
         billingReadPermissionState.value =
@@ -2283,7 +2283,7 @@ async function loadLaboratoryPermissions() {
             names.has('laboratory-orders.view-audit-logs') ||
             names.has('laboratory.orders.view-audit-logs');
 
-        if (!(hasSuperAdminAccess || names.has('laboratory.orders.create')) && laboratoryWorkspaceView.value === 'new') {
+        if (!(hasSuperAdminAccess || names.has('lab.order')) && laboratoryWorkspaceView.value === 'new') {
             laboratoryWorkspaceView.value = 'queue';
             syncLaboratoryWorkspaceViewToUrl('queue');
         }

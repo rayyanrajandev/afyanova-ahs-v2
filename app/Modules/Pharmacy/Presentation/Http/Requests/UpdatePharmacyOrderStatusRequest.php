@@ -10,7 +10,7 @@ class UpdatePharmacyOrderStatusRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('pharmacy.orders.update-status') ?? false;
+        return $this->user()?->can('medication.dispense') ?? false;
     }
 
     /**

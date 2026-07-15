@@ -356,7 +356,7 @@ const staffStatusCounts = ref<StaffStatusCounts | null>(null);
 const pagination = ref<StaffListResponse['meta'] | null>(null);
 const canReadStaff = ref(initialPermissionNames.has('staff.read'));
 const canCreateStaff = ref(initialPermissionNames.has('staff.create'));
-const canUpdateStaff = ref(initialPermissionNames.has('staff.update'));
+const canUpdateStaff = ref(initialPermissionNames.has('staff.employment.update'));
 const canUpdateStaffStatus = ref(initialPermissionNames.has('staff.update-status'));
 const canReadDepartments = ref(initialPermissionNames.has('departments.read'));
 const canReadStaffCredentialing = ref(initialPermissionNames.has('staff.credentialing.read'));
@@ -1247,7 +1247,7 @@ function staffSpecialtyLabel(assignment: StaffSpecialtyAssignment | null): strin
 function applyPermissionFlags(permissionNames: Set<string>) {
     canReadStaff.value = permissionNames.has('staff.read');
     canCreateStaff.value = permissionNames.has('staff.create');
-    canUpdateStaff.value = permissionNames.has('staff.update');
+    canUpdateStaff.value = permissionNames.has('staff.employment.update');
     canUpdateStaffStatus.value = permissionNames.has('staff.update-status');
     canReadDepartments.value = permissionNames.has('departments.read');
     canReadStaffCredentialing.value = permissionNames.has('staff.credentialing.read');

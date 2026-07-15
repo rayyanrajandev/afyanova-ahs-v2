@@ -126,7 +126,7 @@ function hasAccess(permission: string): boolean {
 const canRead = computed(() => hasAccess('appointments.read'));
 const canStartConsultation = computed(() => hasAccess('appointments.start-consultation'));
 const canManageProviderSession = computed(() => hasAccess('appointments.manage-provider-session'));
-const canCancelVisit = computed(() => hasAccess('appointments.update-status'));
+const canCancelVisit = computed(() => hasAccess('appointment.check-in'));
 /**
  * Matches the legacy appointments/Index.vue's own gate exactly
  * (canManageReferrals, Index.vue:762) — a pure permission check, not tied

@@ -10,7 +10,7 @@ class StorePharmacyOrderRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('pharmacy.orders.create') ?? false;
+        return $this->user()?->can('medication.prescribe') ?? false;
     }
 
     /**

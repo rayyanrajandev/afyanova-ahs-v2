@@ -693,9 +693,9 @@ class PharmacyOrderController extends Controller
         foreach ([
             'platform.clinical-catalog.read',
             'pharmacy.orders.read',
-            'pharmacy.orders.create',
+            'medication.prescribe',
             'pharmacy.orders.manage-policy',
-            'pharmacy.orders.update-status',
+            'medication.dispense',
             'pharmacy.orders.verify-dispense',
             'pharmacy.orders.reconcile',
         ] as $permission) {

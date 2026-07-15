@@ -64,12 +64,12 @@ function hasAccess(permission: string): boolean {
 }
 
 const canRead = computed(() => hasAccess('pharmacy.orders.read'));
-const canUpdateStatus = computed(() => hasAccess('pharmacy.orders.update-status'));
+const canUpdateStatus = computed(() => hasAccess('medication.dispense'));
 const canVerifyDispense = computed(() => hasAccess('pharmacy.orders.verify-dispense'));
 const canManagePolicy = computed(() => hasAccess('pharmacy.orders.manage-policy'));
 const canReconcile = computed(() => hasAccess('pharmacy.orders.reconcile'));
-const canApplyLifecycleAction = computed(() => hasAccess('pharmacy.orders.create'));
-const canCreate = computed(() => hasAccess('pharmacy.orders.create'));
+const canApplyLifecycleAction = computed(() => hasAccess('medication.prescribe'));
+const canCreate = computed(() => hasAccess('medication.prescribe'));
 const canViewAuditLogs = computed(() => hasAccess('pharmacy-orders.view-audit-logs'));
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [

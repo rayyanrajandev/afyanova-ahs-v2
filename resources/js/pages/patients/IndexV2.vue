@@ -68,13 +68,13 @@ function hasAccess(permission: string): boolean {
 
 const canReadPatients = computed(() => hasAccess('patients.read'));
 const canCreatePatients = computed(() => hasAccess('patients.create'));
-const canUpdatePatients = computed(() => hasAccess('patients.update'));
+const canUpdatePatients = computed(() => hasAccess('patient.demographics.update'));
 const canUpdatePatientStatus = computed(() => hasAccess('patients.update-status'));
 const canExportPatients = computed(() => hasAccess('patients.export'));
 const canImportPatients = computed(() => hasAccess('patients.import'));
 const canShowVisitActions = computed(
     () =>
-        (hasAccess('appointments.create') && hasAccess('appointments.update-status')) ||
+        (hasAccess('appointments.create') && hasAccess('appointment.check-in')) ||
         hasAccess('service.requests.create') ||
         hasAccess('billing.invoices.create'),
 );

@@ -702,7 +702,7 @@ const canViewPatientAudit = ref(hasPermission('patients.view-audit-logs'));
 const canReadAppointments = ref(hasPermission('appointments.read'));
 const canCreateAppointments = ref(hasPermission('appointments.create'));
 const canUpdateAppointmentsStatus = ref(
-    hasPermission('appointments.update-status'),
+    hasPermission('appointment.check-in'),
 );
 const canReadAdmissions = ref(hasPermission('admissions.read'));
 const canReadMedicalRecords = ref(hasPermission('medical.records.read'));
@@ -714,7 +714,7 @@ const canFetchMedicalRecordsForTimeline = computed(
 );
 const canCreateBillingInvoices = ref(hasPermission('billing.invoices.create'));
 const canCreatePatients = ref(hasPermission('patients.create'));
-const canUpdatePatients = ref(hasPermission('patients.update'));
+const canUpdatePatients = ref(hasPermission('patient.demographics.update'));
 const canUpdatePatientStatus = ref(hasPermission('patients.update-status'));
 const canReadPatientInsurance = ref(hasPermission('patients.insurance.read'));
 const canManagePatientInsurance = ref(
@@ -728,10 +728,10 @@ const canRecordOpdTriage = ref(
         hasPermission('emergency.triage.update-status'),
 );
 const canCreateLaboratoryOrders = ref(
-    hasPermission('laboratory.orders.create'),
+    hasPermission('lab.order'),
 );
-const canCreatePharmacyOrders = ref(hasPermission('pharmacy.orders.create'));
-const canCreateRadiologyOrders = ref(hasPermission('radiology.orders.create'));
+const canCreatePharmacyOrders = ref(hasPermission('medication.prescribe'));
+const canCreateRadiologyOrders = ref(hasPermission('imaging.order'));
 const canCreateTheatreProcedures = ref(
     hasPermission('theatre.procedures.create'),
 );
@@ -3641,13 +3641,13 @@ async function loadPatientPermissions() {
         canReadAppointments.value = names.has('appointments.read');
         canCreateAppointments.value = names.has('appointments.create');
         canUpdateAppointmentsStatus.value = names.has(
-            'appointments.update-status',
+            'appointment.check-in',
         );
         canReadAdmissions.value = names.has('admissions.read');
         canReadMedicalRecords.value = names.has('medical.records.read');
         canCreateBillingInvoices.value = names.has('billing.invoices.create');
         canCreatePatients.value = names.has('patients.create');
-        canUpdatePatients.value = names.has('patients.update');
+        canUpdatePatients.value = names.has('patient.demographics.update');
         canUpdatePatientStatus.value = names.has('patients.update-status');
         canReadPatientInsurance.value = names.has('patients.insurance.read');
         canManagePatientInsurance.value = names.has(
@@ -3659,9 +3659,9 @@ async function loadPatientPermissions() {
         canRecordOpdTriage.value =
             names.has('emergency.triage.create') ||
             names.has('emergency.triage.update-status');
-        canCreateLaboratoryOrders.value = names.has('laboratory.orders.create');
-        canCreatePharmacyOrders.value = names.has('pharmacy.orders.create');
-        canCreateRadiologyOrders.value = names.has('radiology.orders.create');
+        canCreateLaboratoryOrders.value = names.has('lab.order');
+        canCreatePharmacyOrders.value = names.has('medication.prescribe');
+        canCreateRadiologyOrders.value = names.has('imaging.order');
         canCreateTheatreProcedures.value = names.has(
             'theatre.procedures.create',
         );

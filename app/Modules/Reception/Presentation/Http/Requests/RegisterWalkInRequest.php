@@ -14,7 +14,7 @@ class RegisterWalkInRequest extends FormRequest
 
         return $user !== null
             && $user->can('appointments.create')
-            && $user->can('appointments.update-status');
+            && $user->can('appointment.check-in');
     }
 
     /**

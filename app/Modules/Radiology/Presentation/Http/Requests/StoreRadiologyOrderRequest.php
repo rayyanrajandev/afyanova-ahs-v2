@@ -9,7 +9,7 @@ class StoreRadiologyOrderRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('radiology.orders.create') ?? false;
+        return $this->user()?->can('imaging.order') ?? false;
     }
 
     /**

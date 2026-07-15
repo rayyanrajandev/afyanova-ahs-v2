@@ -8,7 +8,7 @@ class VerifyLaboratoryOrderResultRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('laboratory.orders.verify-result') ?? false;
+        return $this->user()?->can('lab.result.verify') ?? false;
     }
 
     /**

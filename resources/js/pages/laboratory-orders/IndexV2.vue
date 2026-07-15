@@ -61,11 +61,11 @@ function hasAccess(permission: string): boolean {
 }
 
 const canRead = computed(() => hasAccess('laboratory.orders.read'));
-const canUpdateStatus = computed(() => hasAccess('laboratory.orders.update-status'));
-const canVerifyResult = computed(() => hasAccess('laboratory.orders.verify-result'));
-const canApplyLifecycleAction = computed(() => hasAccess('laboratory.orders.create'));
-const canCreate = computed(() => hasAccess('laboratory.orders.create'));
-const canViewAuditLogs = computed(() => hasAccess('laboratory-orders.view-audit-logs'));
+const canUpdateStatus = computed(() => hasAccess('lab.sample.collect'));
+const canVerifyResult = computed(() => hasAccess('lab.result.verify'));
+const canApplyLifecycleAction = computed(() => hasAccess('lab.order'));
+const canCreate = computed(() => hasAccess('lab.order'));
+const canViewAuditLogs = computed(() => hasAccess('laboratory.orders.audit-logs.view'));
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'Laboratory worklist', href: '/laboratory-orders' },

@@ -34,7 +34,7 @@ class UpdateMedicalRecordRequest extends FormRequest
     public function authorize(): bool
     {
         return $this->user()?->can(
-            'medical-records.update-draft',
+            'medical.records.draft.update',
             (string) $this->route('id'),
         ) ?? false;
     }

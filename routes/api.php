@@ -595,7 +595,7 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware(['can:patients.read', 'facility.entitlement:patients.search'])
         ->name('patients.show');
     Route::patch('patients/{id}', [PatientController::class, 'update'])
-        ->middleware(['can:patients.update', 'facility.entitlement:patients.demographics'])
+        ->middleware(['can:patient.demographics.update', 'facility.entitlement:patients.demographics'])
         ->name('patients.update');
     Route::patch('patients/{id}/status', [PatientController::class, 'updateStatus'])
         ->middleware(['can:patients.update-status', 'facility.entitlement:patients.demographics'])
@@ -634,19 +634,19 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware(['can:patients.read', 'facility.entitlement:patients.search'])
         ->name('patients.allergies.index');
     Route::post('patients/{id}/allergies', [PatientMedicationSafetyController::class, 'storeAllergy'])
-        ->middleware(['can:patients.update', 'facility.entitlement:patients.demographics'])
+        ->middleware(['can:patient.allergies.manage', 'facility.entitlement:patients.demographics'])
         ->name('patients.allergies.store');
     Route::patch('patients/{id}/allergies/{allergyId}', [PatientMedicationSafetyController::class, 'updateAllergy'])
-        ->middleware(['can:patients.update', 'facility.entitlement:patients.demographics'])
+        ->middleware(['can:patient.allergies.manage', 'facility.entitlement:patients.demographics'])
         ->name('patients.allergies.update');
     Route::get('patients/{id}/medication-profile', [PatientMedicationSafetyController::class, 'medicationProfile'])
         ->middleware(['can:patients.read', 'facility.entitlement:patients.search'])
         ->name('patients.medication-profile.index');
     Route::post('patients/{id}/medication-profile', [PatientMedicationSafetyController::class, 'storeMedicationProfile'])
-        ->middleware(['can:patients.update', 'facility.entitlement:patients.demographics'])
+        ->middleware(['can:patient.medications.manage', 'facility.entitlement:patients.demographics'])
         ->name('patients.medication-profile.store');
     Route::patch('patients/{id}/medication-profile/{medicationId}', [PatientMedicationSafetyController::class, 'updateMedicationProfile'])
-        ->middleware(['can:patients.update', 'facility.entitlement:patients.demographics'])
+        ->middleware(['can:patient.medications.manage', 'facility.entitlement:patients.demographics'])
         ->name('patients.medication-profile.update');
     Route::get('patients/{id}/medication-safety-summary', [PatientMedicationSafetyController::class, 'medicationSafetySummary'])
         ->middleware(['can:patients.read', 'facility.entitlement:patients.search'])
@@ -680,7 +680,7 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware(['can:medical.records.read', 'can:medical.records.create'])
         ->name('appointments.encounter');
     Route::patch('appointments/{id}', [AppointmentController::class, 'update'])
-        ->middleware('can:appointments.update')
+        ->middleware('can:appointment.reschedule')
         ->name('appointments.update');
     Route::patch('appointments/{id}/triage', [AppointmentController::class, 'recordTriage'])
         ->middleware('can:appointments.record-triage')
@@ -698,13 +698,13 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:appointments.manage-provider-session')
         ->name('appointments.manage-provider-session');
     Route::patch('appointments/{id}/status', [AppointmentController::class, 'updateStatus'])
-        ->middleware('can:appointments.update-status')
+        ->middleware('can:appointment.check-in')
         ->name('appointments.update-status');
     Route::patch('appointments/{id}/check-in', [ReceptionController::class, 'checkIn'])
-        ->middleware('can:appointments.update-status')
+        ->middleware('can:appointment.check-in')
         ->name('appointments.check-in');
     Route::post('reception/walk-ins', [ReceptionController::class, 'registerWalkIn'])
-        ->middleware(['can:appointments.create', 'can:appointments.update-status'])
+        ->middleware(['can:appointments.create', 'can:appointment.check-in'])
         ->name('reception.walk-ins.store');
     Route::get('reception/queue', [ReceptionController::class, 'queue'])
         ->middleware('can:appointments.read')
@@ -731,7 +731,7 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:appointments.read')
         ->name('patient-flow.clinician-directory');
     Route::patch('appointments/{id}/consultation-type', [AppointmentController::class, 'overrideConsultationType'])
-        ->middleware('can:appointments.update')
+        ->middleware('can:appointment.reschedule')
         ->name('appointments.override-consultation-type');
     Route::get('appointments/analytics/consultation-type-summary', [AppointmentController::class, 'consultationTypeSummary'])
         ->middleware('can:appointments.read')
@@ -808,15 +808,15 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:medical.records.read')
         ->name('medical-records.show');
     Route::patch('medical-records/{id}', [MedicalRecordController::class, 'update'])
-        ->middleware('can:medical-records.update-draft,id')
+        ->middleware('can:medical.records.draft.update,id')
         ->name('medical-records.update');
     Route::patch('medical-records/{id}/status', [MedicalRecordController::class, 'updateStatus'])
         ->name('medical-records.update-status');
     Route::get('medical-records/{id}/audit-logs/export', [MedicalRecordController::class, 'exportAuditLogsCsv'])
-        ->middleware('can:medical-records.view-audit-logs')
+        ->middleware('can:medical.records.audit-logs.view')
         ->name('medical-records.audit-logs.export');
     Route::get('medical-records/{id}/audit-logs', [MedicalRecordController::class, 'auditLogs'])
-        ->middleware('can:medical-records.view-audit-logs')
+        ->middleware('can:medical.records.audit-logs.view')
         ->name('medical-records.audit-logs');
     Route::get('medical-records/{id}/versions', [MedicalRecordController::class, 'versions'])
         ->middleware('can:medical.records.read')
@@ -853,10 +853,10 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::patch('encounters/{id}/status', [EncounterController::class, 'updateStatus'])
         ->name('encounters.update-status');
     Route::get('encounters/{id}/audit-logs/export', [EncounterController::class, 'exportAuditLogsCsv'])
-        ->middleware('can:medical-records.view-audit-logs')
+        ->middleware('can:medical.records.audit-logs.view')
         ->name('encounters.audit-logs.export');
     Route::get('encounters/{id}/audit-logs', [EncounterController::class, 'auditLogs'])
-        ->middleware('can:medical-records.view-audit-logs')
+        ->middleware('can:medical.records.audit-logs.view')
         ->name('encounters.audit-logs');
     Route::get('encounters/{id}/clinical-documents', [EncounterClinicalAttachmentController::class, 'index'])
         ->middleware('can:medical.records.read')
@@ -917,25 +917,25 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:lab.result.verify')
         ->name('laboratory-orders.verify-result');
     Route::post('laboratory-orders/{id}/audit-logs/export-jobs', [LaboratoryOrderController::class, 'createAuditLogsCsvExportJob'])
-        ->middleware('can:laboratory-orders.view-audit-logs')
+        ->middleware('can:laboratory.orders.audit-logs.view')
         ->name('laboratory-orders.audit-logs.export-jobs.create');
     Route::get('laboratory-orders/{id}/audit-logs/export-jobs', [LaboratoryOrderController::class, 'auditLogsCsvExportJobs'])
-        ->middleware('can:laboratory-orders.view-audit-logs')
+        ->middleware('can:laboratory.orders.audit-logs.view')
         ->name('laboratory-orders.audit-logs.export-jobs.index');
     Route::get('laboratory-orders/{id}/audit-logs/export-jobs/{jobId}', [LaboratoryOrderController::class, 'auditLogsCsvExportJob'])
-        ->middleware('can:laboratory-orders.view-audit-logs')
+        ->middleware('can:laboratory.orders.audit-logs.view')
         ->name('laboratory-orders.audit-logs.export-jobs.show');
     Route::post('laboratory-orders/{id}/audit-logs/export-jobs/{jobId}/retry', [LaboratoryOrderController::class, 'retryAuditLogsCsvExportJob'])
-        ->middleware('can:laboratory-orders.view-audit-logs')
+        ->middleware('can:laboratory.orders.audit-logs.view')
         ->name('laboratory-orders.audit-logs.export-jobs.retry');
     Route::get('laboratory-orders/{id}/audit-logs/export-jobs/{jobId}/download', [LaboratoryOrderController::class, 'downloadAuditLogsCsvExportJob'])
-        ->middleware('can:laboratory-orders.view-audit-logs')
+        ->middleware('can:laboratory.orders.audit-logs.view')
         ->name('laboratory-orders.audit-logs.export-jobs.download');
     Route::get('laboratory-orders/{id}/audit-logs/export', [LaboratoryOrderController::class, 'exportAuditLogsCsv'])
-        ->middleware('can:laboratory-orders.view-audit-logs')
+        ->middleware('can:laboratory.orders.audit-logs.view')
         ->name('laboratory-orders.audit-logs.export');
     Route::get('laboratory-orders/{id}/audit-logs', [LaboratoryOrderController::class, 'auditLogs'])
-        ->middleware('can:laboratory-orders.view-audit-logs')
+        ->middleware('can:laboratory.orders.audit-logs.view')
         ->name('laboratory-orders.audit-logs');
 
     Route::get('billing-invoices', [BillingInvoiceController::class, 'index'])
@@ -996,34 +996,34 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.payments');
     Route::post('billing-invoices/{id}/audit-logs/export-jobs', [BillingInvoiceController::class, 'createAuditLogsCsvExportJob'])
-        ->middleware('can:billing-invoices.view-audit-logs')
+        ->middleware('can:billing.invoices.audit-logs.view')
         ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.audit-logs.export-jobs.create');
     Route::get('billing-invoices/{id}/audit-logs/export-jobs', [BillingInvoiceController::class, 'auditLogsCsvExportJobs'])
-        ->middleware('can:billing-invoices.view-audit-logs')
+        ->middleware('can:billing.invoices.audit-logs.view')
         ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.audit-logs.export-jobs.index');
     Route::get('billing-invoices/{id}/audit-logs/export-jobs/{jobId}', [BillingInvoiceController::class, 'auditLogsCsvExportJob'])
-        ->middleware('can:billing-invoices.view-audit-logs')
+        ->middleware('can:billing.invoices.audit-logs.view')
         ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->where('jobId', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.audit-logs.export-jobs.show');
     Route::post('billing-invoices/{id}/audit-logs/export-jobs/{jobId}/retry', [BillingInvoiceController::class, 'retryAuditLogsCsvExportJob'])
-        ->middleware('can:billing-invoices.view-audit-logs')
+        ->middleware('can:billing.invoices.audit-logs.view')
         ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->where('jobId', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.audit-logs.export-jobs.retry');
     Route::get('billing-invoices/{id}/audit-logs/export-jobs/{jobId}/download', [BillingInvoiceController::class, 'downloadAuditLogsCsvExportJob'])
-        ->middleware('can:billing-invoices.view-audit-logs')
+        ->middleware('can:billing.invoices.audit-logs.view')
         ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->where('jobId', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.audit-logs.export-jobs.download');
     Route::get('billing-invoices/{id}/audit-logs/export', [BillingInvoiceController::class, 'exportAuditLogsCsv'])
-        ->middleware('can:billing-invoices.view-audit-logs')
+        ->middleware('can:billing.invoices.audit-logs.view')
         ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.audit-logs.export');
     Route::get('billing-invoices/{id}/audit-logs', [BillingInvoiceController::class, 'auditLogs'])
-        ->middleware('can:billing-invoices.view-audit-logs')
+        ->middleware('can:billing.invoices.audit-logs.view')
         ->where('id', '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9]+')
         ->name('billing-invoices.audit-logs');
 
@@ -1257,10 +1257,10 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('auth')
         ->name('pharmacy-orders.approved-medicines-catalog');
     Route::get('pharmacy-orders/duplicate-check', [PharmacyOrderController::class, 'duplicateCheck'])
-        ->middleware('can:pharmacy.orders.create')
+        ->middleware('can:medication.prescribe')
         ->name('pharmacy-orders.duplicate-check');
     Route::post('pharmacy-orders', [PharmacyOrderController::class, 'store'])
-        ->middleware('can:pharmacy.orders.create')
+        ->middleware('can:medication.prescribe')
         ->name('pharmacy-orders.store');
     Route::get('pharmacy-orders/{id}', [PharmacyOrderController::class, 'show'])
         ->middleware('can:pharmacy.orders.read')
@@ -1269,19 +1269,19 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:pharmacy.orders.read')
         ->name('pharmacy-orders.safety-review');
     Route::patch('pharmacy-orders/{id}', [PharmacyOrderController::class, 'update'])
-        ->middleware('can:pharmacy.orders.create')
+        ->middleware('can:medication.prescribe')
         ->name('pharmacy-orders.update');
     Route::post('pharmacy-orders/{id}/sign', [PharmacyOrderController::class, 'sign'])
-        ->middleware('can:pharmacy.orders.create')
+        ->middleware('can:medication.prescribe')
         ->name('pharmacy-orders.sign');
     Route::delete('pharmacy-orders/{id}/draft', [PharmacyOrderController::class, 'discardDraft'])
-        ->middleware('can:pharmacy.orders.create')
+        ->middleware('can:medication.prescribe')
         ->name('pharmacy-orders.discard-draft');
     Route::patch('pharmacy-orders/{id}/status', [PharmacyOrderController::class, 'updateStatus'])
-        ->middleware('can:pharmacy.orders.update-status')
+        ->middleware('can:medication.dispense')
         ->name('pharmacy-orders.update-status');
     Route::post('pharmacy-orders/{id}/lifecycle', [PharmacyOrderController::class, 'applyLifecycleAction'])
-        ->middleware('can:pharmacy.orders.create')
+        ->middleware('can:medication.prescribe')
         ->name('pharmacy-orders.lifecycle');
     Route::patch('pharmacy-orders/{id}/policy', [PharmacyOrderController::class, 'updatePolicy'])
         ->middleware('can:pharmacy.orders.manage-policy')
@@ -1293,25 +1293,25 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:pharmacy.orders.verify-dispense')
         ->name('pharmacy-orders.verify-dispense');
     Route::post('pharmacy-orders/{id}/audit-logs/export-jobs', [PharmacyOrderController::class, 'createAuditLogsCsvExportJob'])
-        ->middleware('can:pharmacy-orders.view-audit-logs')
+        ->middleware('can:pharmacy.orders.audit-logs.view')
         ->name('pharmacy-orders.audit-logs.export-jobs.create');
     Route::get('pharmacy-orders/{id}/audit-logs/export-jobs', [PharmacyOrderController::class, 'auditLogsCsvExportJobs'])
-        ->middleware('can:pharmacy-orders.view-audit-logs')
+        ->middleware('can:pharmacy.orders.audit-logs.view')
         ->name('pharmacy-orders.audit-logs.export-jobs.index');
     Route::get('pharmacy-orders/{id}/audit-logs/export-jobs/{jobId}', [PharmacyOrderController::class, 'auditLogsCsvExportJob'])
-        ->middleware('can:pharmacy-orders.view-audit-logs')
+        ->middleware('can:pharmacy.orders.audit-logs.view')
         ->name('pharmacy-orders.audit-logs.export-jobs.show');
     Route::post('pharmacy-orders/{id}/audit-logs/export-jobs/{jobId}/retry', [PharmacyOrderController::class, 'retryAuditLogsCsvExportJob'])
-        ->middleware('can:pharmacy-orders.view-audit-logs')
+        ->middleware('can:pharmacy.orders.audit-logs.view')
         ->name('pharmacy-orders.audit-logs.export-jobs.retry');
     Route::get('pharmacy-orders/{id}/audit-logs/export-jobs/{jobId}/download', [PharmacyOrderController::class, 'downloadAuditLogsCsvExportJob'])
-        ->middleware('can:pharmacy-orders.view-audit-logs')
+        ->middleware('can:pharmacy.orders.audit-logs.view')
         ->name('pharmacy-orders.audit-logs.export-jobs.download');
     Route::get('pharmacy-orders/{id}/audit-logs/export', [PharmacyOrderController::class, 'exportAuditLogsCsv'])
-        ->middleware('can:pharmacy-orders.view-audit-logs')
+        ->middleware('can:pharmacy.orders.audit-logs.view')
         ->name('pharmacy-orders.audit-logs.export');
     Route::get('pharmacy-orders/{id}/audit-logs', [PharmacyOrderController::class, 'auditLogs'])
-        ->middleware('can:pharmacy-orders.view-audit-logs')
+        ->middleware('can:pharmacy.orders.audit-logs.view')
         ->name('pharmacy-orders.audit-logs');
 
     Route::get('radiology-orders', [RadiologyOrderController::class, 'index'])
@@ -1321,10 +1321,10 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:radiology.orders.read')
         ->name('radiology-orders.status-counts');
     Route::get('radiology-orders/duplicate-check', [RadiologyOrderController::class, 'duplicateCheck'])
-        ->middleware('can:radiology.orders.create')
+        ->middleware('can:imaging.order')
         ->name('radiology-orders.duplicate-check');
     Route::post('radiology-orders', [RadiologyOrderController::class, 'store'])
-        ->middleware('can:radiology.orders.create')
+        ->middleware('can:imaging.order')
         ->name('radiology-orders.store');
     Route::get('radiology-orders/{id}', [RadiologyOrderController::class, 'show'])
         ->middleware('can:radiology.orders.read')
@@ -1333,16 +1333,16 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:radiology.orders.update')
         ->name('radiology-orders.update');
     Route::post('radiology-orders/{id}/sign', [RadiologyOrderController::class, 'sign'])
-        ->middleware('can:radiology.orders.create')
+        ->middleware('can:imaging.order')
         ->name('radiology-orders.sign');
     Route::delete('radiology-orders/{id}/draft', [RadiologyOrderController::class, 'discardDraft'])
-        ->middleware('can:radiology.orders.create')
+        ->middleware('can:imaging.order')
         ->name('radiology-orders.discard-draft');
     Route::patch('radiology-orders/{id}/status', [RadiologyOrderController::class, 'updateStatus'])
-        ->middleware('can:radiology.orders.update-status')
+        ->middleware('can:imaging.perform')
         ->name('radiology-orders.update-status');
     Route::post('radiology-orders/{id}/lifecycle', [RadiologyOrderController::class, 'applyLifecycleAction'])
-        ->middleware('can:radiology.orders.create')
+        ->middleware('can:imaging.order')
         ->name('radiology-orders.lifecycle');
     Route::get('radiology-orders/{id}/audit-logs/export', [RadiologyOrderController::class, 'exportAuditLogsCsv'])
         ->middleware('can:radiology.orders.view-audit-logs')
@@ -2015,7 +2015,7 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:staff.read')
         ->name('staff.show');
     Route::patch('staff/{id}', [StaffProfileController::class, 'update'])
-        ->middleware('can:staff.update')
+        ->middleware('can:staff.employment.update')
         ->name('staff.update');
     Route::patch('staff/{id}/status', [StaffProfileController::class, 'updateStatus'])
         ->middleware('can:staff.update-status')

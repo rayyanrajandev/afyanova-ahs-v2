@@ -842,14 +842,14 @@ const patientDirectory = ref<Record<string, PatientSummary>>({});
 const appointmentDirectory = ref<Record<string, AppointmentSummary>>({});
 const admissionDirectory = ref<Record<string, AdmissionSummary>>({});
 const canReadPharmacyOrders = ref(permissionState('pharmacy.orders.read') === 'allowed');
-const canCreatePharmacyOrders = ref(permissionState('pharmacy.orders.create') === 'allowed');
+const canCreatePharmacyOrders = ref(permissionState('medication.prescribe') === 'allowed');
 const canReadApprovedMedicinesCatalog = ref(
     [
         'platform.clinical-catalog.read',
         'pharmacy.orders.read',
-        'pharmacy.orders.create',
+        'medication.prescribe',
         'pharmacy.orders.manage-policy',
-        'pharmacy.orders.update-status',
+        'medication.dispense',
         'pharmacy.orders.verify-dispense',
         'pharmacy.orders.reconcile',
     ].some((permission) => permissionState(permission) === 'allowed'),
@@ -862,7 +862,7 @@ const canReadLaboratoryOrders = ref(permissionState('laboratory.orders.read') ==
 const canReadTheatreProcedures = ref(permissionState('theatre.procedures.read') === 'allowed');
 const canCreateTheatreProcedures = ref(permissionState('theatre.procedures.create') === 'allowed');
 const canReadBillingInvoices = ref(permissionState('billing.invoices.read') === 'allowed');
-const canUpdatePharmacyOrderStatus = ref(permissionState('pharmacy.orders.update-status') === 'allowed');
+const canUpdatePharmacyOrderStatus = ref(permissionState('medication.dispense') === 'allowed');
 const canVerifyPharmacyDispense = ref(permissionState('pharmacy.orders.verify-dispense') === 'allowed');
 const canUpdateServiceRequestStatus = ref(permissionState('service.requests.update-status') === 'allowed');
 const pharmacyWalkInPanelRef = ref<InstanceType<
@@ -3599,14 +3599,14 @@ async function loadPharmacyPermissions() {
         );
         const hasSuperAdminAccess = isFacilitySuperAdmin.value;
         canReadPharmacyOrders.value = hasSuperAdminAccess || names.has('pharmacy.orders.read');
-        canCreatePharmacyOrders.value = hasSuperAdminAccess || names.has('pharmacy.orders.create');
+        canCreatePharmacyOrders.value = hasSuperAdminAccess || names.has('medication.prescribe');
         canReadApprovedMedicinesCatalog.value =
             hasSuperAdminAccess ||
             names.has('platform.clinical-catalog.read') ||
             names.has('pharmacy.orders.read') ||
-            names.has('pharmacy.orders.create') ||
+            names.has('medication.prescribe') ||
             names.has('pharmacy.orders.manage-policy') ||
-            names.has('pharmacy.orders.update-status') ||
+            names.has('medication.dispense') ||
             names.has('pharmacy.orders.verify-dispense') ||
             names.has('pharmacy.orders.reconcile');
         canReadInventoryProcurement.value = hasSuperAdminAccess || names.has(
@@ -3619,7 +3619,7 @@ async function loadPharmacyPermissions() {
         canReadTheatreProcedures.value = hasSuperAdminAccess || names.has('theatre.procedures.read');
         canCreateTheatreProcedures.value = hasSuperAdminAccess || names.has('theatre.procedures.create');
         canReadBillingInvoices.value = hasSuperAdminAccess || names.has('billing.invoices.read');
-        canUpdatePharmacyOrderStatus.value = hasSuperAdminAccess || names.has('pharmacy.orders.update-status');
+        canUpdatePharmacyOrderStatus.value = hasSuperAdminAccess || names.has('medication.dispense');
         canVerifyPharmacyDispense.value = hasSuperAdminAccess || names.has('pharmacy.orders.verify-dispense');
         isApprovedMedicinesCatalogReadPermissionResolved.value = true;
         approvedMedicinesCatalogAccessDenied.value = false;
@@ -11097,7 +11097,7 @@ onMounted(async () => {
                         >
                             <AlertTitle>Create access restricted</AlertTitle>
                             <AlertDescription>
-                                Request <code>pharmacy.orders.create</code> permission to place a pharmacy order from this handoff.
+                                Request <code>medication.prescribe</code> permission to place a pharmacy order from this handoff.
                             </AlertDescription>
                         </Alert>
                         <Alert

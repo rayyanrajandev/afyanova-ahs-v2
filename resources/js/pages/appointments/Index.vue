@@ -749,13 +749,13 @@ const canRead = computed(() => isFacilitySuperAdmin.value || hasPermission('appo
 const canCreate = computed(() => isFacilitySuperAdmin.value || hasPermission('appointments.create'));
 const canReadRoutingOptions = computed(() => isFacilitySuperAdmin.value
     || hasPermission('appointments.create')
-    || hasPermission('appointments.update')
-    || hasPermission('appointments.update-status')
+    || hasPermission('appointment.reschedule')
+    || hasPermission('appointment.check-in')
     || hasPermission('emergency.triage.create')
     || hasPermission('emergency.triage.update')
     || hasPermission('emergency.triage.update-status'));
 const canReadClinicianDirectory = computed(() => isFacilitySuperAdmin.value || hasPermission('staff.clinical-directory.read'));
-const canUpdateStatus = computed(() => isFacilitySuperAdmin.value || hasPermission('appointments.update-status'));
+const canUpdateStatus = computed(() => isFacilitySuperAdmin.value || hasPermission('appointment.check-in'));
 const canRecordOpdTriage = computed(() => isFacilitySuperAdmin.value
     || hasPermission('emergency.triage.create')
     || hasPermission('emergency.triage.update-status'));
@@ -781,13 +781,13 @@ const canReadLaboratory = computed(() => isFacilitySuperAdmin.value || hasPermis
 const canReadPharmacy = computed(() => isFacilitySuperAdmin.value || hasPermission('pharmacy.orders.read'));
 const canReadRadiology = computed(() => isFacilitySuperAdmin.value || hasPermission('radiology.orders.read'));
 const canReadTheatre = computed(() => isFacilitySuperAdmin.value || hasPermission('theatre.procedures.read'));
-const canCreateLaboratory = computed(() => isFacilitySuperAdmin.value || hasPermission('laboratory.orders.create'));
-const canCreatePharmacy = computed(() => isFacilitySuperAdmin.value || hasPermission('pharmacy.orders.create'));
-const canCreateRadiology = computed(() => isFacilitySuperAdmin.value || hasPermission('radiology.orders.create'));
+const canCreateLaboratory = computed(() => isFacilitySuperAdmin.value || hasPermission('lab.order'));
+const canCreatePharmacy = computed(() => isFacilitySuperAdmin.value || hasPermission('medication.prescribe'));
+const canCreateRadiology = computed(() => isFacilitySuperAdmin.value || hasPermission('imaging.order'));
 const canCreateTheatre = computed(() => isFacilitySuperAdmin.value || hasPermission('theatre.procedures.create'));
 const canReadBilling = computed(() => isFacilitySuperAdmin.value || hasPermission('billing.invoices.read'));
 const canReadBillingPayerContracts = computed(() => isFacilitySuperAdmin.value || hasPermission('billing.payer-contracts.read'));
-const canOverrideConsultationType = computed(() => isFacilitySuperAdmin.value || hasPermission('appointments.update'));
+const canOverrideConsultationType = computed(() => isFacilitySuperAdmin.value || hasPermission('appointment.reschedule'));
 const currentUserId = computed<number | null>(() => {
     const raw = page.props.auth?.user?.id;
     const normalized = Number(raw ?? 0);

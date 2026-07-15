@@ -51,7 +51,7 @@ class PatientVitalSetController extends Controller
      */
     public function storeForChart(StorePatientVitalSetRequest $request): JsonResponse
     {
-        abort_unless(Gate::any(['patients.update', 'emergency.triage.create', 'emergency.triage.update-status']), 403);
+        abort_unless(Gate::any(['patient.vitals.record', 'emergency.triage.create', 'emergency.triage.update-status']), 403);
 
         $validated = $request->validated();
 
@@ -97,7 +97,7 @@ class PatientVitalSetController extends Controller
      */
     public function update(UpdatePatientVitalSetRequest $request, string $id): JsonResponse
     {
-        abort_unless(Gate::any(['patients.update', 'emergency.triage.create', 'emergency.triage.update-status']), 403);
+        abort_unless(Gate::any(['patient.vitals.record', 'emergency.triage.create', 'emergency.triage.update-status']), 403);
 
         $vitalSet = PatientVitalSetModel::where('id', $id)
             ->where('entry_state', 'active')
