@@ -33,6 +33,8 @@ const { hasPermission, isFacilitySuperAdmin } = usePlatformAccess();
 
 const canView = (perm: string) => isFacilitySuperAdmin.value || hasPermission(perm);
 
+const isAdmin = computed(() => isFacilitySuperAdmin.value || hasPermission('platform.users.read') || hasPermission('platform.rbac.read') || hasPermission('platform.settings.manage-branding'));
+
 const categoryOptions = computed(() => {
     const options: { value: string; label: string }[] = [{ value: 'all', label: 'All categories' }];
     if (canView('appointments.read') || canView('emergency.triage.read')) {
@@ -47,8 +49,10 @@ const categoryOptions = computed(() => {
     if (canView('billing.invoices.read')) {
         options.push({ value: 'billing', label: 'Billing' });
     }
-    options.push({ value: 'administration', label: 'Administration' });
-    options.push({ value: 'system', label: 'System' });
+    if (isAdmin.value) {
+        options.push({ value: 'administration', label: 'Administration' });
+        options.push({ value: 'system', label: 'System' });
+    }
     return options;
 });
 
