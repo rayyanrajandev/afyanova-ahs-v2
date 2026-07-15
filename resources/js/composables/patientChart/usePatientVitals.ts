@@ -18,13 +18,23 @@ export type PatientVitalSet = {
     updatedAt: string | null;
 };
 
-export function usePatientLatestVitals(patientId: Ref<string>) {
-    return useQuery({
-        queryKey: ['patient-latest-vitals', patientId],
+type PatientVitalsResponse = {
+    latest: PatientVitalSet | null;
+    history: PatientVitalSet[];
+};
+
+export function usePatientVitals(patientId: Ref<string>) {
+    const query = useQuery({
+        queryKey: ['patient-vitals', patientId],
         queryFn: () =>
-            apiGet<{ data: PatientVitalSet | null }>(`/patient-vitals/patient/${patientId.value}`).then((r) => r.data),
+            apiGet<{ data: PatientVitalsResponse }>(`/patient-vitals/patient/${patientId.value}`).then((r) => r.data),
         enabled: computed(() => patientId.value.trim() !== ''),
     });
+
+    const latest = computed(() => query.data.value?.latest ?? null);
+    const history = computed(() => query.data.value?.history ?? []);
+
+    return { query, latest, history };
 }
 
 export function useVitalSetCreate(patientId: Ref<string>) {
@@ -34,7 +44,7 @@ export function useVitalSetCreate(patientId: Ref<string>) {
         mutationFn: (body: Record<string, unknown>) =>
             apiPost<{ data: PatientVitalSet }>('/patient-vitals/chart', { body }).then((r) => r.data),
         onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: ['patient-latest-vitals', patientId] });
+            void queryClient.invalidateQueries({ queryKey: ['patient-vitals', patientId] });
         },
     });
 }
@@ -46,7 +56,7 @@ export function useVitalSetUpdate(patientId: Ref<string>) {
         mutationFn: (params: { vitalSetId: string; body: Record<string, unknown> }) =>
             apiPatch<{ data: PatientVitalSet }>(`/patient-vitals/${params.vitalSetId}`, { body: params.body }).then((r) => r.data),
         onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: ['patient-latest-vitals', patientId] });
+            void queryClient.invalidateQueries({ queryKey: ['patient-vitals', patientId] });
         },
     });
 }

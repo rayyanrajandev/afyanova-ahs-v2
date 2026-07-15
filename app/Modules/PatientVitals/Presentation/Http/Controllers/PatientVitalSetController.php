@@ -70,20 +70,21 @@ class PatientVitalSetController extends Controller
     }
 
     /**
-     * Get the latest active vital set for a patient.
+     * Get all active vital sets for a patient, newest first, plus the latest shortcut.
      */
     public function latestForPatient(string $patientId): JsonResponse
     {
-        $vitalSet = PatientVitalSetModel::where('patient_id', $patientId)
+        $all = PatientVitalSetModel::where('patient_id', $patientId)
             ->where('entry_state', 'active')
             ->latest('recorded_at')
-            ->first();
+            ->get()
+            ->map(fn (PatientVitalSetModel $m) => $this->transform($m))
+            ->values();
 
-        if (!$vitalSet) {
-            return response()->json(['data' => null]);
-        }
-
-        return response()->json(['data' => $this->transform($vitalSet)]);
+        return response()->json(['data' => [
+            'latest'  => $all->first(),
+            'history' => $all->slice(1)->values(),
+        ]]);
     }
 
     /**

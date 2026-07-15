@@ -82,7 +82,7 @@ import {
     theatreProcedureCardViewModel,
 } from '@/composables/patientChart/patientChartOrderCardViewModel';
 import { patientChartModuleHref } from '@/composables/patientChart/patientChartModuleHref';
-import { usePatientLatestVitals } from '@/composables/patientChart/usePatientVitals';
+import { usePatientVitals } from '@/composables/patientChart/usePatientVitals';
 import type {
     PatientChartLaboratoryOrder,
     PatientChartLaboratoryOrderStatusCounts,
@@ -139,9 +139,14 @@ const canManagePatientInsurance = computed(() => hasAccess('patients.insurance.m
 const canVerifyPatientInsurance = computed(() => hasAccess('patients.insurance.verify'));
 const canViewPatientAuditLogs = computed(() => hasAccess('patients.view-audit-logs'));
 
-const structuredVitalsQuery = usePatientLatestVitals(patientIdRef);
-const structuredVitals = computed(() => structuredVitalsQuery.data.value ?? null);
+const patientIdRef = computed(() => props.patientId);
+
+const vitalsQuery = usePatientVitals(patientIdRef);
+const structuredVitals = computed(() => vitalsQuery.latest.value);
+const vitalsHistory = computed(() => vitalsQuery.history.value);
 const editVitalsOpen = ref(false);
+const recordVitalsOpen = ref(false);
+const showVitalsHistory = ref(false);
 
 const vitalsLine = computed(() => {
     if (structuredVitals.value) return vitalsSummaryLine(structuredVitals.value);
@@ -154,7 +159,7 @@ const vitalsRows = computed(() => {
 });
 
 function onVitalsUpdated(): void {
-    void structuredVitalsQuery.refetch();
+    void vitalsQuery.query.refetch();
 }
 
 type Patient = {
@@ -187,8 +192,6 @@ type Patient = {
         linkedOrderNumber?: string | null;
     }[];
 };
-
-const patientIdRef = computed(() => props.patientId);
 
 const patientQuery = useQuery({
     queryKey: ['patient-chart-patient', patientIdRef],
@@ -728,24 +731,50 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                     </div>
                                 </div>
 
-                                <div v-if="timeline.primaryVisit.value?.triageVitalsSummary || structuredVitals" class="mt-3 rounded-lg border-l-4 border-l-info bg-muted/20 px-4 py-3">
+                                <div class="mt-3 rounded-lg border-l-4 border-l-info bg-muted/20 px-4 py-3">
                                     <div class="flex items-center justify-between gap-2">
                                         <div class="flex items-center gap-2 text-sm font-semibold text-foreground">
                                             <AppIcon name="activity" class="size-4 text-info" aria-hidden="true" />
                                             Vitals
                                         </div>
-                                        <Button v-if="canUpdatePatients" size="sm" variant="ghost" class="h-6 gap-1 px-1.5 text-xs" @click="editVitalsOpen = true">
-                                            <AppIcon name="pencil" class="size-3" />Edit
-                                        </Button>
-                                    </div>
-                                    <div v-if="structuredVitals" class="mt-2 grid grid-cols-3 gap-x-4 gap-y-1 sm:grid-cols-6">
-                                        <div v-for="row in vitalsRows" :key="row.label" class="space-y-0">
-                                            <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">{{ row.label }}</p>
-                                            <p class="text-sm font-semibold tabular-nums text-foreground">{{ row.value ?? '—' }} <span class="text-xs font-normal text-muted-foreground">{{ row.unit }}</span></p>
+                                        <div v-if="canRecordOpdTriage" class="flex items-center gap-1">
+                                            <Button v-if="structuredVitals" size="sm" variant="ghost" class="h-6 gap-1 px-1.5 text-xs" @click="editVitalsOpen = true">
+                                                <AppIcon name="pencil" class="size-3" />Edit
+                                            </Button>
+                                            <Button size="sm" variant="outline" class="h-6 gap-1 px-1.5 text-xs" @click="recordVitalsOpen = true">
+                                                <AppIcon name="plus" class="size-3" />Record vitals
+                                            </Button>
                                         </div>
                                     </div>
-                                    <p v-else class="mt-1 text-sm text-foreground">{{ vitalsLine }}</p>
+                                    <template v-if="structuredVitals">
+                                        <div class="mt-2 grid grid-cols-3 gap-x-4 gap-y-1 sm:grid-cols-6">
+                                            <div v-for="row in vitalsRows" :key="row.label" class="space-y-0">
+                                                <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">{{ row.label }}</p>
+                                                <p class="text-sm font-semibold tabular-nums text-foreground">{{ row.value ?? '—' }} <span class="text-xs font-normal text-muted-foreground">{{ row.unit }}</span></p>
+                                            </div>
+                                        </div>
+                                        <p class="mt-1 text-[10px] text-muted-foreground">{{ formatDateTime(structuredVitals.recordedAt) }}</p>
+                                        <div v-if="vitalsHistory.length" class="mt-2">
+                                            <button class="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground" @click="showVitalsHistory = !showVitalsHistory">
+                                                <AppIcon :name="showVitalsHistory ? 'chevron-down' : 'chevron-right'" class="size-3" />
+                                                {{ vitalsHistory.length }} previous set{{ vitalsHistory.length === 1 ? '' : 's' }}
+                                            </button>
+                                            <div v-if="showVitalsHistory" class="mt-2 space-y-2">
+                                                <div v-for="set in vitalsHistory" :key="set.id" class="rounded-md border bg-muted/10 px-3 py-2">
+                                                    <div class="grid grid-cols-3 gap-x-4 gap-y-1 sm:grid-cols-6">
+                                                        <div v-for="row in vitalsDisplayRows(set)" :key="row.label" class="space-y-0">
+                                                            <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">{{ row.label }}</p>
+                                                            <p class="text-xs font-semibold tabular-nums text-foreground">{{ row.value ?? '—' }} <span class="text-[10px] font-normal text-muted-foreground">{{ row.unit }}</span></p>
+                                                        </div>
+                                                    </div>
+                                                    <p class="mt-1 text-[10px] text-muted-foreground">{{ formatDateTime(set.recordedAt) }}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <p v-else class="mt-1 text-sm text-muted-foreground">{{ vitalsLine || 'No vitals recorded yet.' }}</p>
                                 </div>
+
                             </CardContent>
                         </Card>
 
@@ -2101,5 +2130,6 @@ const { scrollContainerHeight } = useStickyScrollContainer();
 
         <PatientEditSheet v-model:open="editSheetOpen" :patient="patient" @updated="onPatientUpdated" />
         <VitalsEditSheet v-model:open="editVitalsOpen" :patient-id="props.patientId" :vitals="structuredVitals" @updated="onVitalsUpdated" />
+        <VitalsEditSheet v-model:open="recordVitalsOpen" :patient-id="props.patientId" :vitals="null" @updated="onVitalsUpdated" />
     </AppLayout>
 </template>
