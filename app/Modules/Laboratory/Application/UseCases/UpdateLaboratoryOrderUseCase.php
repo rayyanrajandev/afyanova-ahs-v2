@@ -79,8 +79,8 @@ class UpdateLaboratoryOrderUseCase
     }
 
     /**
-     * @param array<string, mixed> $payload
-     * @param array<string, mixed> $incomingPayload
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, mixed>  $incomingPayload
      */
     private function applyCatalogManagedLabTestSelection(array &$payload, array $incomingPayload): void
     {
@@ -131,9 +131,9 @@ class UpdateLaboratoryOrderUseCase
     }
 
     /**
-     * @param array<string, mixed> $before
-     * @param array<string, mixed> $after
-     * @param array<int, string> $fields
+     * @param  array<string, mixed>  $before
+     * @param  array<string, mixed>  $after
+     * @param  array<int, string>  $fields
      * @return array<string, array<string, mixed>>
      */
     private function collectChanges(array $before, array $after, array $fields): array

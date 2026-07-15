@@ -22,8 +22,14 @@ class UpdateLaboratoryOrderStatusUseCase
         private readonly ClinicalCatalogRecipeStockConsumptionService $recipeStockConsumptionService,
     ) {}
 
-    public function execute(string $id, string $status, ?string $reason, ?string $resultSummary, ?int $actorId = null): ?array
-    {
+    public function execute(
+        string $id,
+        string $status,
+        ?string $reason,
+        ?string $resultSummary,
+        ?int $actorId = null,
+        ?array $resultParameters = null,
+    ): ?array {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
 
         return DB::transaction(function () use ($id, $status, $reason, $resultSummary, $actorId): ?array {
@@ -52,6 +58,10 @@ class UpdateLaboratoryOrderStatusUseCase
 
             if ($resultSummary !== null) {
                 $payload['result_summary'] = $resultSummary;
+            }
+
+            if ($resultParameters !== null) {
+                $payload['result_parameters'] = $resultParameters;
             }
 
             if ($status === LaboratoryOrderStatus::COMPLETED->value) {
@@ -90,6 +100,10 @@ class UpdateLaboratoryOrderStatusUseCase
                     'result_summary' => [
                         'before' => $existing['result_summary'] ?? null,
                         'after' => $updated['result_summary'] ?? null,
+                    ],
+                    'result_parameters' => [
+                        'before' => $existing['result_parameters'] ?? null,
+                        'after' => $updated['result_parameters'] ?? null,
                     ],
                     'resulted_at' => [
                         'before' => $existing['resulted_at'] ?? null,

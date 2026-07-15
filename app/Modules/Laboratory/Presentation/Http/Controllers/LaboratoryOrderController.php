@@ -2,8 +2,8 @@
 
 namespace App\Modules\Laboratory\Presentation\Http\Controllers;
 
-use App\Jobs\GenerateAuditExportCsvJob;
 use App\Http\Controllers\Controller;
+use App\Jobs\GenerateAuditExportCsvJob;
 use App\Modules\Laboratory\Application\Exceptions\AdmissionNotEligibleForLaboratoryOrderException;
 use App\Modules\Laboratory\Application\Exceptions\AppointmentNotEligibleForLaboratoryOrderException;
 use App\Modules\Laboratory\Application\Exceptions\LaboratoryOrderTestCatalogItemNotEligibleException;
@@ -15,22 +15,22 @@ use App\Modules\Laboratory\Application\UseCases\CreateLaboratoryOrderUseCase;
 use App\Modules\Laboratory\Application\UseCases\DiscardLaboratoryOrderDraftUseCase;
 use App\Modules\Laboratory\Application\UseCases\GetLaboratoryOrderUseCase;
 use App\Modules\Laboratory\Application\UseCases\ListLaboratoryOrderAuditLogsUseCase;
-use App\Modules\Laboratory\Application\UseCases\ListLaboratoryOrdersUseCase;
 use App\Modules\Laboratory\Application\UseCases\ListLaboratoryOrderStatusCountsUseCase;
+use App\Modules\Laboratory\Application\UseCases\ListLaboratoryOrdersUseCase;
 use App\Modules\Laboratory\Application\UseCases\SignLaboratoryOrderUseCase;
-use App\Modules\Laboratory\Application\UseCases\VerifyLaboratoryOrderResultUseCase;
 use App\Modules\Laboratory\Application\UseCases\UpdateLaboratoryOrderStatusUseCase;
 use App\Modules\Laboratory\Application\UseCases\UpdateLaboratoryOrderUseCase;
-use App\Modules\Laboratory\Presentation\Http\Requests\VerifyLaboratoryOrderResultRequest;
+use App\Modules\Laboratory\Application\UseCases\VerifyLaboratoryOrderResultUseCase;
 use App\Modules\Laboratory\Presentation\Http\Requests\StoreLaboratoryOrderRequest;
 use App\Modules\Laboratory\Presentation\Http\Requests\UpdateLaboratoryOrderRequest;
 use App\Modules\Laboratory\Presentation\Http\Requests\UpdateLaboratoryOrderStatusRequest;
+use App\Modules\Laboratory\Presentation\Http\Requests\VerifyLaboratoryOrderResultRequest;
 use App\Modules\Laboratory\Presentation\Http\Transformers\LaboratoryOrderAuditLogResponseTransformer;
 use App\Modules\Laboratory\Presentation\Http\Transformers\LaboratoryOrderResponseTransformer;
-use App\Support\ClinicalOrders\ClinicalOrderPatientSummaryEnricher;
-use App\Support\ClinicalOrders\ClinicalOrderUserSummaryEnricher;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
 use App\Modules\Platform\Infrastructure\Models\AuditExportJobModel;
+use App\Support\ClinicalOrders\ClinicalOrderPatientSummaryEnricher;
+use App\Support\ClinicalOrders\ClinicalOrderUserSummaryEnricher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -191,6 +191,7 @@ class LaboratoryOrderController extends Controller
                 reason: $request->input('reason'),
                 resultSummary: $request->input('resultSummary'),
                 actorId: $request->user()?->id,
+                resultParameters: $request->input('resultParameters'),
             );
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return $this->tenantScopeRequiredError($exception->getMessage());

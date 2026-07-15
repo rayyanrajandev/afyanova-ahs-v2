@@ -14,4 +14,3 @@ interface LabTestCatalogLookupServiceInterface
      */
     public function findActiveByCode(string $code): ?array;
 }
-

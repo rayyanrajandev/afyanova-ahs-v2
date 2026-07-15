@@ -63,4 +63,3 @@ class LabTestCatalogLookupService implements LabTestCatalogLookupServiceInterfac
             || $this->featureFlagResolver->isEnabled('platform.multi_tenant_isolation');
     }
 }
-

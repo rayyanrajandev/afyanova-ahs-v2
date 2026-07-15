@@ -38,6 +38,7 @@ class LaboratoryOrderModel extends Model
         'specimen_type',
         'clinical_notes',
         'result_summary',
+        'result_parameters',
         'resulted_at',
         'verified_at',
         'verified_by_user_id',
@@ -59,6 +60,7 @@ class LaboratoryOrderModel extends Model
     protected function casts(): array
     {
         return [
+            'result_parameters' => 'array',
             'ordered_at' => 'datetime',
             'resulted_at' => 'datetime',
             'verified_at' => 'datetime',

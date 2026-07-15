@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { Badge } from '@/components/ui/badge';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+} from '@/components/ui/sheet';
 import type { LaboratoryOrder } from '@/composables/laboratoryOrders/useLaboratoryOrders';
 import { formatEnumLabel } from '@/lib/labels';
 
@@ -27,85 +33,249 @@ function formatDateTime(value: string | null): string {
 <template>
     <Sheet :open="open" @update:open="(value) => (open = value)">
         <SheetContent v-if="order" side="right" variant="form" size="lg">
-            <SheetHeader class="shrink-0 border-b bg-background/95 px-6 py-4 text-left backdrop-blur supports-[backdrop-filter]:bg-background/80">
-                <SheetTitle>{{ order.testName || order.testCode || 'Laboratory order' }}</SheetTitle>
-                <SheetDescription>{{ order.orderNumber || order.id }}</SheetDescription>
+            <SheetHeader
+                class="shrink-0 border-b bg-background/95 px-6 py-4 text-left backdrop-blur supports-[backdrop-filter]:bg-background/80"
+            >
+                <SheetTitle>{{
+                    order.testName || order.testCode || 'Laboratory order'
+                }}</SheetTitle>
+                <SheetDescription>{{
+                    order.orderNumber || order.id
+                }}</SheetDescription>
             </SheetHeader>
 
             <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
                 <div class="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">{{ formatEnumLabel(order.status) }}</Badge>
-                    <Badge v-if="order.priority" variant="secondary">{{ formatEnumLabel(order.priority) }}</Badge>
-                    <Badge v-if="order.entryState" variant="secondary">{{ formatEnumLabel(order.entryState) }}</Badge>
-                    <Badge v-if="order.currentCare?.hasCriticalResult" variant="destructive">Critical result</Badge>
-                    <Badge v-else-if="order.currentCare?.hasAbnormalResult" class="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                    <Badge variant="outline">{{
+                        formatEnumLabel(order.status)
+                    }}</Badge>
+                    <Badge v-if="order.priority" variant="secondary">{{
+                        formatEnumLabel(order.priority)
+                    }}</Badge>
+                    <Badge v-if="order.entryState" variant="secondary">{{
+                        formatEnumLabel(order.entryState)
+                    }}</Badge>
+                    <Badge
+                        v-if="order.currentCare?.hasCriticalResult"
+                        variant="destructive"
+                        >Critical result</Badge
+                    >
+                    <Badge
+                        v-else-if="order.currentCare?.hasAbnormalResult"
+                        class="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                    >
                         Abnormal result
                     </Badge>
                 </div>
 
                 <div class="rounded-lg border bg-muted/10 p-3">
-                    <p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Test</p>
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Test
+                    </p>
                     <dl class="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
                         <div>
-                            <dt class="text-xs text-muted-foreground">Test code</dt>
+                            <dt class="text-xs text-muted-foreground">
+                                Test code
+                            </dt>
                             <dd>{{ order.testCode || '—' }}</dd>
                         </div>
                         <div>
-                            <dt class="text-xs text-muted-foreground">Specimen type</dt>
+                            <dt class="text-xs text-muted-foreground">
+                                Specimen type
+                            </dt>
                             <dd>{{ order.specimenType || '—' }}</dd>
                         </div>
                         <div class="col-span-2">
-                            <dt class="text-xs text-muted-foreground">Clinical notes</dt>
+                            <dt class="text-xs text-muted-foreground">
+                                Clinical notes
+                            </dt>
                             <dd>{{ order.clinicalNotes || '—' }}</dd>
                         </div>
                     </dl>
                 </div>
 
                 <div class="rounded-lg border bg-muted/10 p-3">
-                    <p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Result</p>
-                    <dl class="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
-                        <div class="col-span-2">
-                            <dt class="text-xs text-muted-foreground">Result summary</dt>
-                            <dd class="whitespace-pre-line">{{ order.resultSummary || '—' }}</dd>
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Result
+                    </p>
+
+                    <template
+                        v-if="
+                            order.resultParameters &&
+                            order.resultParameters.length > 0
+                        "
+                    >
+                        <div class="mt-2 divide-y rounded-md border">
+                            <div
+                                class="grid grid-cols-12 gap-2 bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground"
+                            >
+                                <div class="col-span-3">Parameter</div>
+                                <div class="col-span-3">Value</div>
+                                <div class="col-span-2">Flag</div>
+                                <div class="col-span-4">Reference range</div>
+                            </div>
+                            <div
+                                v-for="param in order.resultParameters"
+                                :key="param.code"
+                                class="grid grid-cols-12 gap-2 px-3 py-2 text-sm"
+                            >
+                                <div
+                                    class="col-span-3 font-medium text-foreground"
+                                >
+                                    {{ param.name }}
+                                </div>
+                                <div class="col-span-3">
+                                    {{ param.value }}
+                                    <span
+                                        v-if="param.unit"
+                                        class="text-xs text-muted-foreground"
+                                        >{{ param.unit }}</span
+                                    >
+                                </div>
+                                <div class="col-span-2">
+                                    <Badge
+                                        v-if="param.flag === 'critical'"
+                                        variant="destructive"
+                                        class="text-[10px]"
+                                    >
+                                        Critical
+                                    </Badge>
+                                    <Badge
+                                        v-else-if="param.flag === 'abnormal'"
+                                        class="bg-amber-100 text-[10px] text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                                    >
+                                        Abnormal
+                                    </Badge>
+                                    <span
+                                        v-else-if="param.flag === 'normal'"
+                                        class="text-xs text-green-600 dark:text-green-400"
+                                        >Normal</span
+                                    >
+                                    <span
+                                        v-else
+                                        class="text-xs text-muted-foreground"
+                                        >—</span
+                                    >
+                                </div>
+                                <div
+                                    class="col-span-4 text-xs text-muted-foreground"
+                                >
+                                    {{ param.referenceRange || '—' }}
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <dl
+                        v-if="order.resultSummary"
+                        class="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-sm"
+                    >
+                        <div
+                            v-if="!order.resultParameters?.length"
+                            class="col-span-2"
+                        >
+                            <dt class="text-xs text-muted-foreground">
+                                Result summary
+                            </dt>
+                            <dd class="whitespace-pre-line">
+                                {{ order.resultSummary }}
+                            </dd>
                         </div>
                         <div>
-                            <dt class="text-xs text-muted-foreground">Resulted at</dt>
+                            <dt class="text-xs text-muted-foreground">
+                                Resulted at
+                            </dt>
                             <dd>{{ formatDateTime(order.resultedAt) }}</dd>
                         </div>
                         <div>
-                            <dt class="text-xs text-muted-foreground">Verified at</dt>
+                            <dt class="text-xs text-muted-foreground">
+                                Verified at
+                            </dt>
                             <dd>{{ formatDateTime(order.verifiedAt) }}</dd>
                         </div>
                         <div v-if="order.verificationNote" class="col-span-2">
-                            <dt class="text-xs text-muted-foreground">Verification note</dt>
+                            <dt class="text-xs text-muted-foreground">
+                                Verification note
+                            </dt>
+                            <dd>{{ order.verificationNote }}</dd>
+                        </div>
+                    </dl>
+
+                    <dl
+                        v-else
+                        class="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-sm"
+                    >
+                        <div class="col-span-2">
+                            <dt class="text-xs text-muted-foreground">
+                                Result summary
+                            </dt>
+                            <dd class="whitespace-pre-line">—</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs text-muted-foreground">
+                                Resulted at
+                            </dt>
+                            <dd>{{ formatDateTime(order.resultedAt) }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs text-muted-foreground">
+                                Verified at
+                            </dt>
+                            <dd>{{ formatDateTime(order.verifiedAt) }}</dd>
+                        </div>
+                        <div v-if="order.verificationNote" class="col-span-2">
+                            <dt class="text-xs text-muted-foreground">
+                                Verification note
+                            </dt>
                             <dd>{{ order.verificationNote }}</dd>
                         </div>
                     </dl>
                 </div>
 
                 <div class="rounded-lg border bg-muted/10 p-3">
-                    <p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Order</p>
+                    <p
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Order
+                    </p>
                     <dl class="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
                         <div>
-                            <dt class="text-xs text-muted-foreground">Ordered by</dt>
+                            <dt class="text-xs text-muted-foreground">
+                                Ordered by
+                            </dt>
                             <dd>{{ order.orderedBy?.name || '—' }}</dd>
                         </div>
                         <div>
-                            <dt class="text-xs text-muted-foreground">Ordered at</dt>
+                            <dt class="text-xs text-muted-foreground">
+                                Ordered at
+                            </dt>
                             <dd>{{ formatDateTime(order.orderedAt) }}</dd>
                         </div>
                         <div>
-                            <dt class="text-xs text-muted-foreground">Patient</dt>
+                            <dt class="text-xs text-muted-foreground">
+                                Patient
+                            </dt>
                             <dd>
                                 {{
-                                    [order.patient?.firstName, order.patient?.lastName].filter(Boolean).join(' ')
-                                        || order.patient?.patientNumber
-                                        || '—'
+                                    [
+                                        order.patient?.firstName,
+                                        order.patient?.lastName,
+                                    ]
+                                        .filter(Boolean)
+                                        .join(' ') ||
+                                    order.patient?.patientNumber ||
+                                    '—'
                                 }}
                             </dd>
                         </div>
                         <div>
-                            <dt class="text-xs text-muted-foreground">Status reason</dt>
+                            <dt class="text-xs text-muted-foreground">
+                                Status reason
+                            </dt>
                             <dd>{{ order.statusReason || '—' }}</dd>
                         </div>
                     </dl>

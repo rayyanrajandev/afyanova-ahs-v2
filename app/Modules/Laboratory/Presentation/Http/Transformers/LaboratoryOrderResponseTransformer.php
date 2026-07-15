@@ -3,12 +3,16 @@
 namespace App\Modules\Laboratory\Presentation\Http\Transformers;
 
 use App\Modules\Platform\Application\Services\ClinicalCatalogRecipeStockConsumptionService;
+use App\Modules\Platform\Domain\ValueObjects\ClinicalCatalogType;
+use App\Modules\Platform\Infrastructure\Models\ClinicalCatalogItemModel;
 use App\Support\ClinicalOrders\ClinicalCurrentCare;
 
 class LaboratoryOrderResponseTransformer
 {
     public static function transform(array $order, bool $includeStockPrecheck = false): array
     {
+        $catalog = self::loadCatalogItem($order['lab_test_catalog_item_id'] ?? null);
+
         return [
             'id' => $order['id'] ?? null,
             'orderNumber' => $order['order_number'] ?? null,
@@ -28,6 +32,9 @@ class LaboratoryOrderResponseTransformer
             'specimenType' => $order['specimen_type'] ?? null,
             'clinicalNotes' => $order['clinical_notes'] ?? null,
             'resultSummary' => $order['result_summary'] ?? null,
+            'resultParameters' => $order['result_parameters'] ?? null,
+            'catalogUnit' => $catalog['unit'],
+            'catalogParameters' => $catalog['parameters'],
             'resultedAt' => $order['resulted_at'] ?? null,
             'verifiedAt' => $order['verified_at'] ?? null,
             'verifiedByUserId' => $order['verified_by_user_id'] ?? null,
@@ -54,6 +61,43 @@ class LaboratoryOrderResponseTransformer
      * @param  array<string, mixed>  $order
      * @return array<string, mixed>
      */
+    /**
+     * @param  array<string, mixed>  $order
+     * @return array{unit: string|null, parameters: array<int, mixed>}
+     */
+    private static function loadCatalogItem(?string $catalogItemId): array
+    {
+        static $cache = [];
+
+        if ($catalogItemId === null || trim($catalogItemId) === '') {
+            return ['unit' => null, 'parameters' => []];
+        }
+
+        $key = 'lab_test_catalog:'.$catalogItemId;
+
+        if (array_key_exists($key, $cache)) {
+            return $cache[$key];
+        }
+
+        $item = ClinicalCatalogItemModel::query()
+            ->where('catalog_type', ClinicalCatalogType::LAB_TEST->value)
+            ->find($catalogItemId);
+
+        if (! $item) {
+            $cache[$key] = ['unit' => null, 'parameters' => []];
+
+            return $cache[$key];
+        }
+
+        $metadata = $item->metadata ?? [];
+        $cache[$key] = [
+            'unit' => $item->unit,
+            'parameters' => $metadata['parameters'] ?? [],
+        ];
+
+        return $cache[$key];
+    }
+
     private static function stockPrecheck(array $order): array
     {
         static $cache = [];

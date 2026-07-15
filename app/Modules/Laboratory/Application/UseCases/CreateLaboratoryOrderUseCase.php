@@ -233,7 +233,7 @@ class CreateLaboratoryOrderUseCase
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     private function resolveClinicalOrderSessionId(array $payload, ?int $actorId): string
     {
@@ -257,7 +257,7 @@ class CreateLaboratoryOrderUseCase
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     private function applyLifecycleLinkage(array &$payload): void
     {

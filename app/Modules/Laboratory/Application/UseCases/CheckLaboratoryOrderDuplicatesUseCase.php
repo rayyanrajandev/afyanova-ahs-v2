@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 class CheckLaboratoryOrderDuplicatesUseCase
 {
     /**
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      * @return array{severity: string, messages: array<int, string>, sameEncounterDuplicates: array<int, array<string, mixed>>, recentPatientDuplicates: array<int, array<string, mixed>>}
      */
     public function execute(array $filters): array
@@ -92,6 +92,7 @@ class CheckLaboratoryOrderDuplicatesUseCase
             ->where(function (Builder $query) use ($catalogItemId, $testCode): void {
                 if ($catalogItemId !== '') {
                     $query->where('lab_test_catalog_item_id', $catalogItemId);
+
                     return;
                 }
 

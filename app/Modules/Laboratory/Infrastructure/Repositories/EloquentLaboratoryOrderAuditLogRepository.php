@@ -36,8 +36,7 @@ class EloquentLaboratoryOrderAuditLogRepository implements LaboratoryOrderAuditL
         ?int $actorId,
         ?string $fromDateTime,
         ?string $toDateTime,
-    ): array
-    {
+    ): array {
         $paginator = LaboratoryOrderAuditLogModel::query()
             ->where('laboratory_order_id', $laboratoryOrderId)
             ->when($query, fn (Builder $builder, string $value) => $builder->whereRaw('LOWER(action) LIKE ?', ['%'.strtolower($value).'%']))

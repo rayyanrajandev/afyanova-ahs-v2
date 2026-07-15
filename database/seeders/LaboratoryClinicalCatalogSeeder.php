@@ -17,7 +17,8 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
      *     category: string,
      *     unit: string,
      *     sampleType: string,
-     *     description: string
+     *     description: string,
+     *     parameters?: array<int, array{code: string, name: string, unit: string, referenceRangeLow: string, referenceRangeHigh: string}>
      * }>
      */
     private const LAB_TEST_BLUEPRINTS = [
@@ -28,6 +29,16 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
             'unit' => 'panel',
             'sampleType' => 'blood',
             'description' => 'Common hematology panel for anemia, infection, and general review.',
+            'parameters' => [
+                ['code' => 'WBC', 'name' => 'White Blood Cells', 'unit' => 'x10^9/L', 'referenceRangeLow' => '4.0', 'referenceRangeHigh' => '11.0'],
+                ['code' => 'RBC', 'name' => 'Red Blood Cells', 'unit' => 'x10^12/L', 'referenceRangeLow' => '4.5', 'referenceRangeHigh' => '6.0'],
+                ['code' => 'HGB', 'name' => 'Hemoglobin', 'unit' => 'g/dL', 'referenceRangeLow' => '13.5', 'referenceRangeHigh' => '17.5'],
+                ['code' => 'HCT', 'name' => 'Hematocrit', 'unit' => '%', 'referenceRangeLow' => '38.3', 'referenceRangeHigh' => '48.6'],
+                ['code' => 'MCV', 'name' => 'Mean Corpuscular Volume', 'unit' => 'fL', 'referenceRangeLow' => '80', 'referenceRangeHigh' => '100'],
+                ['code' => 'MCH', 'name' => 'Mean Corpuscular Hemoglobin', 'unit' => 'pg', 'referenceRangeLow' => '27', 'referenceRangeHigh' => '32'],
+                ['code' => 'MCHC', 'name' => 'Mean Corpuscular Hemoglobin Concentration', 'unit' => 'g/dL', 'referenceRangeLow' => '32', 'referenceRangeHigh' => '36'],
+                ['code' => 'PLT', 'name' => 'Platelet Count', 'unit' => 'x10^9/L', 'referenceRangeLow' => '150', 'referenceRangeHigh' => '450'],
+            ],
         ],
         [
             'code' => 'LAB-HB-001',
@@ -108,6 +119,14 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
             'unit' => 'panel',
             'sampleType' => 'serum',
             'description' => 'Renal and electrolyte panel for dehydration, renal disease, and admissions.',
+            'parameters' => [
+                ['code' => 'UREA', 'name' => 'Urea', 'unit' => 'mmol/L', 'referenceRangeLow' => '2.5', 'referenceRangeHigh' => '7.5'],
+                ['code' => 'CREA', 'name' => 'Creatinine', 'unit' => 'umol/L', 'referenceRangeLow' => '60', 'referenceRangeHigh' => '110'],
+                ['code' => 'NA', 'name' => 'Sodium', 'unit' => 'mmol/L', 'referenceRangeLow' => '135', 'referenceRangeHigh' => '145'],
+                ['code' => 'K', 'name' => 'Potassium', 'unit' => 'mmol/L', 'referenceRangeLow' => '3.5', 'referenceRangeHigh' => '5.0'],
+                ['code' => 'CL', 'name' => 'Chloride', 'unit' => 'mmol/L', 'referenceRangeLow' => '95', 'referenceRangeHigh' => '108'],
+                ['code' => 'HCO3', 'name' => 'Bicarbonate', 'unit' => 'mmol/L', 'referenceRangeLow' => '22', 'referenceRangeHigh' => '29'],
+            ],
         ],
         [
             'code' => 'LAB-LFT-001',
@@ -116,6 +135,15 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
             'unit' => 'panel',
             'sampleType' => 'serum',
             'description' => 'Baseline liver profile for hepatitis, medication review, and inpatient workup.',
+            'parameters' => [
+                ['code' => 'TBIL', 'name' => 'Total Bilirubin', 'unit' => 'umol/L', 'referenceRangeLow' => '0', 'referenceRangeHigh' => '21'],
+                ['code' => 'ALP', 'name' => 'Alkaline Phosphatase', 'unit' => 'U/L', 'referenceRangeLow' => '44', 'referenceRangeHigh' => '147'],
+                ['code' => 'ALT', 'name' => 'Alanine Transaminase', 'unit' => 'U/L', 'referenceRangeLow' => '5', 'referenceRangeHigh' => '40'],
+                ['code' => 'AST', 'name' => 'Aspartate Transaminase', 'unit' => 'U/L', 'referenceRangeLow' => '8', 'referenceRangeHigh' => '33'],
+                ['code' => 'GGT', 'name' => 'Gamma-Glutamyl Transferase', 'unit' => 'U/L', 'referenceRangeLow' => '5', 'referenceRangeHigh' => '40'],
+                ['code' => 'ALB', 'name' => 'Albumin', 'unit' => 'g/dL', 'referenceRangeLow' => '3.5', 'referenceRangeHigh' => '5.0'],
+                ['code' => 'TPROT', 'name' => 'Total Protein', 'unit' => 'g/dL', 'referenceRangeLow' => '6.0', 'referenceRangeHigh' => '8.3'],
+            ],
         ],
         [
             'code' => 'LAB-CRP-001',
@@ -132,6 +160,24 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
             'unit' => 'panel',
             'sampleType' => 'urine',
             'description' => 'Routine urine analysis for infection, pregnancy follow-up, and renal screening.',
+            'parameters' => [
+                ['code' => 'COLOR', 'name' => 'Color', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+                ['code' => 'APPEAR', 'name' => 'Appearance', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+                ['code' => 'SG', 'name' => 'Specific Gravity', 'unit' => '', 'referenceRangeLow' => '1.005', 'referenceRangeHigh' => '1.030'],
+                ['code' => 'PH', 'name' => 'pH', 'unit' => '', 'referenceRangeLow' => '4.5', 'referenceRangeHigh' => '8.0'],
+                ['code' => 'PROT', 'name' => 'Protein', 'unit' => 'g/L', 'referenceRangeLow' => '0', 'referenceRangeHigh' => '0.15'],
+                ['code' => 'GLU', 'name' => 'Glucose', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+                ['code' => 'KET', 'name' => 'Ketones', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+                ['code' => 'BIL', 'name' => 'Bilirubin', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+                ['code' => 'UBG', 'name' => 'Urobilinogen', 'unit' => 'mg/dL', 'referenceRangeLow' => '0.1', 'referenceRangeHigh' => '1.0'],
+                ['code' => 'NIT', 'name' => 'Nitrites', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+                ['code' => 'BLOOD', 'name' => 'Blood', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+                ['code' => 'LEUK', 'name' => 'Leukocytes', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+                ['code' => 'WBC_UA', 'name' => 'White Blood Cells', 'unit' => '/HPF', 'referenceRangeLow' => '0', 'referenceRangeHigh' => '5'],
+                ['code' => 'RBC_UA', 'name' => 'Red Blood Cells', 'unit' => '/HPF', 'referenceRangeLow' => '0', 'referenceRangeHigh' => '3'],
+                ['code' => 'EPI', 'name' => 'Epithelial Cells', 'unit' => '/HPF', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+                ['code' => 'BACT', 'name' => 'Bacteria', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+            ],
         ],
         [
             'code' => 'LAB-UPT-001',
@@ -148,6 +194,19 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
             'unit' => 'panel',
             'sampleType' => 'stool',
             'description' => 'Common stool examination for ova, parasites, and gastrointestinal complaints.',
+            'parameters' => [
+                ['code' => 'CONSIST', 'name' => 'Consistency', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+                ['code' => 'COLOR_STOOL', 'name' => 'Color', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+                ['code' => 'MUCUS', 'name' => 'Mucus', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+                ['code' => 'BLOOD_STOOL', 'name' => 'Blood', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+                ['code' => 'WBC_STOOL', 'name' => 'White Blood Cells', 'unit' => '/HPF', 'referenceRangeLow' => '0', 'referenceRangeHigh' => '0'],
+                ['code' => 'RBC_STOOL', 'name' => 'Red Blood Cells', 'unit' => '/HPF', 'referenceRangeLow' => '0', 'referenceRangeHigh' => '0'],
+                ['code' => 'OVA', 'name' => 'Ova', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+                ['code' => 'PARASITES', 'name' => 'Parasites', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+                ['code' => 'CYSTS', 'name' => 'Cysts', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+                ['code' => 'FAT', 'name' => 'Fat Globules', 'unit' => '/HPF', 'referenceRangeLow' => '0', 'referenceRangeHigh' => '2'],
+                ['code' => 'YEAST', 'name' => 'Yeast Cells', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+            ],
         ],
         [
             'code' => 'LAB-HIV-001',
@@ -235,6 +294,7 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
                     'metadata' => [
                         'sampleType' => $blueprint['sampleType'],
                         'countryContext' => 'TZ',
+                        'parameters' => $blueprint['parameters'] ?? [],
                     ],
                     'status' => ClinicalCatalogItemStatus::ACTIVE->value,
                     'status_reason' => null,

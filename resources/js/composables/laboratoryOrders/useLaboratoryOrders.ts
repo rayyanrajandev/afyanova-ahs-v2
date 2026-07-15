@@ -10,9 +10,31 @@ import type { LaboratoryOrderFilters } from './useLaboratoryOrderFilters';
  * ClinicalOrderPatientSummaryEnricher/ClinicalOrderUserSummaryEnricher on
  * list responses (app/Support/ClinicalOrders/*Enricher.php).
  */
-export type LaboratoryOrderStatus = 'ordered' | 'collected' | 'in_progress' | 'completed' | 'cancelled';
+export type LaboratoryOrderStatus =
+    | 'ordered'
+    | 'collected'
+    | 'in_progress'
+    | 'completed'
+    | 'cancelled';
 
 export type LaboratoryOrderPriority = 'routine' | 'urgent' | 'stat';
+
+export type LabResultParameter = {
+    code: string;
+    name: string;
+    value: string | null;
+    unit: string | null;
+    flag: string | null;
+    referenceRange: string | null;
+};
+
+export type CatalogParameter = {
+    code: string;
+    name: string;
+    unit: string;
+    referenceRangeLow: string;
+    referenceRangeHigh: string;
+};
 
 export type LaboratoryOrderPatientSummary = {
     id: string;
@@ -77,6 +99,9 @@ export type LaboratoryOrder = {
     specimenType: string | null;
     clinicalNotes: string | null;
     resultSummary: string | null;
+    resultParameters: LabResultParameter[] | null;
+    catalogUnit: string | null;
+    catalogParameters: CatalogParameter[] | null;
     resultedAt: string | null;
     verifiedAt: string | null;
     verifiedByUserId: number | null;
@@ -100,7 +125,12 @@ export type LaboratoryOrder = {
 
 type LaboratoryOrderListResponse = {
     data: LaboratoryOrder[];
-    meta: { currentPage: number; perPage: number; total: number; lastPage: number };
+    meta: {
+        currentPage: number;
+        perPage: number;
+        total: number;
+        lastPage: number;
+    };
 };
 
 function filterQuery(filters: LaboratoryOrderFilters) {
@@ -115,7 +145,9 @@ function filterQuery(filters: LaboratoryOrderFilters) {
     };
 }
 
-export function useLaboratoryOrders(filters: LaboratoryOrderFilters): UseQueryReturnType<LaboratoryOrderListResponse, Error> {
+export function useLaboratoryOrders(
+    filters: LaboratoryOrderFilters,
+): UseQueryReturnType<LaboratoryOrderListResponse, Error> {
     return useQuery({
         queryKey: ['laboratory-orders-index', computed(() => ({ ...filters }))],
         queryFn: () =>

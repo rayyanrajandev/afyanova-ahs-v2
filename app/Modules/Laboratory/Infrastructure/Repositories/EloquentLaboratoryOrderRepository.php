@@ -20,7 +20,7 @@ class EloquentLaboratoryOrderRepository implements LaboratoryOrderRepositoryInte
 
     public function create(array $attributes): array
     {
-        $order = new LaboratoryOrderModel();
+        $order = new LaboratoryOrderModel;
         $order->fill($attributes);
         $order->save();
 
