@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class SyncRolesFromConfig extends Command
 {
@@ -60,7 +61,7 @@ class SyncRolesFromConfig extends Command
             unset($roleDef['permissions']);
 
             $departmentId = null;
-            if (($roleDef['scope_type'] ?? null) === 'department' && $facilityId !== null) {
+            if (($roleDef['scope_type'] ?? null) === 'own_department' && $facilityId !== null) {
                 $departmentId = $this->resolveDepartmentId($facilityId, $roleKey);
             }
 
@@ -85,6 +86,7 @@ class SyncRolesFromConfig extends Command
                 ]);
             } else {
                 DB::table('roles')->insert(array_merge($attributes, [
+                    'id' => Str::orderedUuid()->toString(),
                     'name' => $roleDef['name'],
                     'description' => $roleDef['description'] ?? null,
                     'access_level' => $roleDef['access_level'] ?? null,

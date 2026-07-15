@@ -137,7 +137,7 @@ return [
         'name' => 'Laboratory Technologist',
         'description' => 'Performs lab tests, enters results. Cannot order tests.',
         'access_level' => 'request',
-        'scope_type' => 'department',
+        'scope_type' => 'own_department',
         'is_system' => true,
         'status' => 'active',
         'permissions' => [
@@ -155,7 +155,7 @@ return [
         'name' => 'Chief Laboratory Technologist',
         'description' => 'Supervises lab staff. Verifies and releases results.',
         'access_level' => 'approve',
-        'scope_type' => 'department',
+        'scope_type' => 'own_department',
         'is_system' => true,
         'status' => 'active',
         'permissions' => [
@@ -176,7 +176,7 @@ return [
         'name' => 'Laboratory Manager',
         'description' => 'Manages laboratory operations, quality control, and staffing.',
         'access_level' => 'manage',
-        'scope_type' => 'department',
+        'scope_type' => 'own_department',
         'is_system' => true,
         'status' => 'active',
         'permissions' => [
@@ -197,7 +197,7 @@ return [
         'name' => 'Dispenser',
         'description' => 'Diploma pharmaceutical technician. Dispenses medications under supervision.',
         'access_level' => 'request',
-        'scope_type' => 'department',
+        'scope_type' => 'own_department',
         'is_system' => true,
         'status' => 'active',
         'permissions' => [
@@ -212,7 +212,7 @@ return [
         'name' => 'Pharmacist-in-Charge',
         'description' => 'Degree pharmacist. Verifies prescriptions, manages pharmacy.',
         'access_level' => 'approve',
-        'scope_type' => 'department',
+        'scope_type' => 'own_department',
         'is_system' => true,
         'status' => 'active',
         'permissions' => [
@@ -232,7 +232,7 @@ return [
         'name' => 'Radiographer',
         'description' => 'Performs X-ray and imaging procedures.',
         'access_level' => 'request',
-        'scope_type' => 'department',
+        'scope_type' => 'own_department',
         'is_system' => true,
         'status' => 'active',
         'permissions' => [
@@ -248,7 +248,7 @@ return [
         'name' => 'Senior Radiographer',
         'description' => 'Supervises radiology staff. Verifies imaging reports.',
         'access_level' => 'approve',
-        'scope_type' => 'department',
+        'scope_type' => 'own_department',
         'is_system' => true,
         'status' => 'active',
         'permissions' => [
@@ -514,7 +514,7 @@ return [
         'name' => 'Storekeeper',
         'description' => 'Manages stock, inventory movements, and warehouse operations.',
         'access_level' => 'request',
-        'scope_type' => 'department',
+        'scope_type' => 'own_department',
         'is_system' => true,
         'status' => 'active',
         'permissions' => [
@@ -530,7 +530,7 @@ return [
         'name' => 'Senior Storekeeper',
         'description' => 'Supervises store operations, approves requisitions.',
         'access_level' => 'approve',
-        'scope_type' => 'department',
+        'scope_type' => 'own_department',
         'is_system' => true,
         'status' => 'active',
         'permissions' => [
@@ -549,7 +549,7 @@ return [
         'name' => 'Procurement Officer',
         'description' => 'Manages procurement, supplier relationships, and budget controls.',
         'access_level' => 'manage',
-        'scope_type' => 'department',
+        'scope_type' => 'own_department',
         'is_system' => true,
         'status' => 'active',
         'permissions' => [
@@ -572,7 +572,7 @@ return [
         'name' => 'Theatre Nurse',
         'description' => 'Assists in surgical procedures, manages theatre resources.',
         'access_level' => 'request',
-        'scope_type' => 'department',
+        'scope_type' => 'own_department',
         'is_system' => true,
         'status' => 'active',
         'permissions' => [
@@ -586,7 +586,7 @@ return [
         'name' => 'Theatre Nurse-in-Charge',
         'description' => 'Supervises theatre operations, schedules procedures.',
         'access_level' => 'approve',
-        'scope_type' => 'department',
+        'scope_type' => 'own_department',
         'is_system' => true,
         'status' => 'active',
         'permissions' => [
@@ -603,7 +603,7 @@ return [
         'name' => 'Theatre Manager',
         'description' => 'Manages theatre department, resource planning, and quality.',
         'access_level' => 'manage',
-        'scope_type' => 'department',
+        'scope_type' => 'own_department',
         'is_system' => true,
         'status' => 'active',
         'permissions' => [
