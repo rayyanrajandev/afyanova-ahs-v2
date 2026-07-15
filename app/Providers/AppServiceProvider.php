@@ -100,7 +100,7 @@ class AppServiceProvider extends ServiceProvider
                 'patient.demographics.update' => 'patients.update',
                 'patient.allergies.manage' => 'patients.update',
                 'patient.medications.manage' => 'patients.update',
-                'patient.vitals.record' => 'patients.update',
+                'patient.vitals.record' => ['patients.update', 'emergency.triage.create', 'emergency.triage.update-status'],
                 'appointment.reschedule' => 'appointments.update',
                 'appointment.cancel' => 'appointments.update',
                 'appointment.check-in' => 'appointments.update-status',

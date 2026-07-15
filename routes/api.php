@@ -890,31 +890,31 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->middleware('can:laboratory.orders.read')
         ->name('laboratory-orders.status-counts');
     Route::get('laboratory-orders/duplicate-check', [LaboratoryOrderController::class, 'duplicateCheck'])
-        ->middleware('can:laboratory.orders.create')
+        ->middleware('can:lab.order')
         ->name('laboratory-orders.duplicate-check');
     Route::post('laboratory-orders', [LaboratoryOrderController::class, 'store'])
-        ->middleware('can:laboratory.orders.create')
+        ->middleware('can:lab.order')
         ->name('laboratory-orders.store');
     Route::get('laboratory-orders/{id}', [LaboratoryOrderController::class, 'show'])
         ->middleware('can:laboratory.orders.read')
         ->name('laboratory-orders.show');
     Route::patch('laboratory-orders/{id}', [LaboratoryOrderController::class, 'update'])
-        ->middleware('can:laboratory.orders.create')
+        ->middleware('can:lab.order')
         ->name('laboratory-orders.update');
     Route::post('laboratory-orders/{id}/sign', [LaboratoryOrderController::class, 'sign'])
-        ->middleware('can:laboratory.orders.create')
+        ->middleware('can:lab.order')
         ->name('laboratory-orders.sign');
     Route::delete('laboratory-orders/{id}/draft', [LaboratoryOrderController::class, 'discardDraft'])
-        ->middleware('can:laboratory.orders.create')
+        ->middleware('can:lab.order')
         ->name('laboratory-orders.discard-draft');
     Route::patch('laboratory-orders/{id}/status', [LaboratoryOrderController::class, 'updateStatus'])
-        ->middleware('can:laboratory.orders.update-status')
+        ->middleware('can:lab.sample.collect')
         ->name('laboratory-orders.update-status');
     Route::post('laboratory-orders/{id}/lifecycle', [LaboratoryOrderController::class, 'applyLifecycleAction'])
-        ->middleware('can:laboratory.orders.create')
+        ->middleware('can:lab.order')
         ->name('laboratory-orders.lifecycle');
     Route::patch('laboratory-orders/{id}/verify', [LaboratoryOrderController::class, 'verifyResult'])
-        ->middleware('can:laboratory.orders.verify-result')
+        ->middleware('can:lab.result.verify')
         ->name('laboratory-orders.verify-result');
     Route::post('laboratory-orders/{id}/audit-logs/export-jobs', [LaboratoryOrderController::class, 'createAuditLogsCsvExportJob'])
         ->middleware('can:laboratory-orders.view-audit-logs')
