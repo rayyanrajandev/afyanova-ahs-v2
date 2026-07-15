@@ -42,6 +42,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'status',
         'status_reason',
         'deactivated_at',
+        'is_platform_admin',
     ];
 
     /**
@@ -68,6 +69,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
             'deactivated_at' => 'datetime',
+            'is_platform_admin' => 'boolean',
         ];
     }
 
@@ -242,34 +244,24 @@ class User extends Authenticatable implements MustVerifyEmail
 
     private function isPlatformSuperAdmin(): bool
     {
+        if ($this->is_platform_admin) {
+            return true;
+        }
+
         if ($this->relationLoaded('roles')) {
-            $hasRole = $this->roles->contains(function (mixed $role): bool {
+            return $this->roles->contains(function (mixed $role): bool {
                 $code = strtoupper(trim((string) ($role->code ?? '')));
                 $status = strtolower(trim((string) ($role->status ?? 'active')));
 
                 return $status === 'active'
                     && in_array($code, self::PLATFORM_SUPER_ADMIN_ROLE_CODES, true);
             });
-
-            if ($hasRole) {
-                return true;
-            }
         }
 
         try {
-            $hasRole = $this->roles()
+            return $this->roles()
                 ->whereIn('code', self::PLATFORM_SUPER_ADMIN_ROLE_CODES)
                 ->where('status', 'active')
-                ->exists();
-
-            if ($hasRole) {
-                return true;
-            }
-
-            return DB::table('facility_user')
-                ->where('user_id', $this->id)
-                ->where('is_active', true)
-                ->where('role', 'super_admin')
                 ->exists();
         } catch (QueryException) {
             return false;
