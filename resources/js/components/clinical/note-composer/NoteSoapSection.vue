@@ -1,25 +1,20 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import AppIcon from '@/components/AppIcon.vue';
+import { Button } from '@/components/ui/button';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
 import RichTextEditorField from '@/components/editor/RichTextEditorField.vue';
 import {
     type MedicalRecordNarrativeSectionKey,
     medicalRecordNoteTypeSectionLabel,
+    medicalRecordNoteTypeSectionSample,
     medicalRecordNoteTypeSectionUi,
 } from '@/pages/medical-records/noteTypes';
 
-/**
- * One SOAP narrative section, reused per section rather than duplicated four
- * times. Label/placeholder/description come from the note-type metadata
- * (noteTypes.ts) so e.g. a procedure_note shows "Indication / Procedure details
- * / Outcome / Recovery plan" instead of the generic S/O/A/P — preserving the
- * behavior documented in reports/clinical-note-audit/06 §6.5.
- *
- * Uses the existing, proven RichTextEditorField (TipTap: bold/italic/bullet/
- * numbered list/undo/redo), the same component the old Workspace.vue used for
- * these exact fields — not rebuilt, just reused. Content is stored as HTML;
- * the backend's subjective/objective/assessment/plan fields already accept
- * any string with no format restriction, so this is a pure frontend change.
- */
 const props = defineProps<{
     noteType: string;
     section: MedicalRecordNarrativeSectionKey;
@@ -35,14 +30,42 @@ const label = computed(() =>
 const ui = computed(() =>
     medicalRecordNoteTypeSectionUi(props.noteType, props.section),
 );
+const sample = computed(() =>
+    medicalRecordNoteTypeSectionSample(props.noteType, props.section),
+);
 const fieldId = computed(() => `note-section-${props.section}`);
 </script>
 
 <template>
     <div class="space-y-1.5">
-        <p v-if="ui.description" class="text-xs text-muted-foreground">
-            {{ ui.description }}
-        </p>
+        <div class="flex items-start justify-between gap-2">
+            <p v-if="ui.description" class="text-xs text-muted-foreground">
+                {{ ui.description }}
+            </p>
+            <Popover>
+                <PopoverTrigger as-child>
+                    <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        class="shrink-0 size-5"
+                        :title="`View sample ${label}`"
+                    >
+                        <AppIcon name="info" class="size-3" />
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                    align="end"
+                    class="w-80 space-y-1.5 text-xs"
+                >
+                    <p class="text-sm font-medium">
+                        Sample {{ label }}
+                    </p>
+                    <p class="whitespace-pre-line text-muted-foreground">
+                        {{ sample }}
+                    </p>
+                </PopoverContent>
+            </Popover>
+        </div>
         <RichTextEditorField
             :input-id="fieldId"
             :model-value="modelValue"

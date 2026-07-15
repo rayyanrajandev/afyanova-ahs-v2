@@ -368,6 +368,90 @@ const MEDICAL_RECORD_NOTE_TYPE_SECTION_LABELS: Partial<
     },
 };
 
+const SOAP_SAMPLE_DEFAULT: Record<MedicalRecordNarrativeSectionKey, string> = {
+    subjective:
+        'A 34-year-old female presents with a 2-day history of lower abdominal pain and burning on urination. Reports increased frequency and urgency. No fever, flank pain, or vaginal discharge. No significant past medical history. No known drug allergies.',
+    objective:
+        'Temp 37.2\u00b0C, HR 76, BP 118/72, RR 16, SpO\u2082 98%. Abdomen: soft, mild suprapubic tenderness, no rebound. CVS: S1 S2 normal. Respiratory: clear.',
+    assessment:
+        'Uncomplicated lower urinary tract infection. Differential: cystitis vs urethritis.',
+    plan:
+        '1. Urinalysis + culture with sensitivity\n2. Nitrofurantoin 100 mg BID \u00d7 5 days\n3. Increase oral fluid intake\n4. Return if fever, flank pain, or vomiting develops\n5. Review in 48 hours',
+};
+
+const SOAP_SAMPLES: Partial<Record<MedicalRecordNoteType, Partial<Record<MedicalRecordNarrativeSectionKey, string>>>> = {
+    consultation_note: {
+        subjective:
+            'A 58-year-old male with known hypertension and type 2 diabetes presents with a 1-week history of progressive shortness of breath on exertion and orthopnea. Reports 2-pillow orthopnea, paroxysmal nocturnal dyspnea, and bilateral ankle swelling. No chest pain or palpitations. Adherent to amlodipine 5 mg and metformin 1 g daily.',
+        objective:
+            'Temp 36.8\u00b0C, HR 92, BP 148/92, RR 22, SpO\u2082 91% on room air. JVP elevated at 6 cm. Bilateral basal crackles on auscultation. Lower limb pitting edema to mid-shin. ECG: sinus tachycardia, no acute ischemic changes.',
+        assessment:
+            'Acute decompensated heart failure (ADHF) with volume overload. Ejection fraction unknown \u2014 likely heart failure with reduced ejection fraction (HFrEF). Hypertension and diabetes suboptimally controlled. NYHA functional class III.',
+        plan:
+            '1. Supplemental oxygen to target SpO\u2082 \u226594%\n2. IV furosemide 40 mg stat, then reassess\n3. Chest X-ray, troponin, BNP, renal function, ECG\n4. Echocardiogram to assess LV function\n5. Optimize oral diuretics, start ACE inhibitor if renal function permits\n6. Strict intake-output charting, daily weight\n7. Cardiology referral for ongoing HF management\n8. Review in 24 hours or earlier if deteriorating',
+    },
+    admission_note: {
+        subjective:
+            'A 72-year-old male brought in by family with a 5-day history of confusion, fever, and productive cough with greenish sputum. Reported poor oral intake for 2 days. History of COPD, hypertension. No known allergies. Immunizations up to date.',
+        objective:
+            'Temp 38.9\u00b0C, HR 104, BP 100/65, RR 26, SpO\u2082 87% on room air. GCS 14/15 (E4 V4 M6). Chest: reduced breath sounds right base with bronchial breathing and crackles. Consolidation suspected right lower lobe. Capillary refill 3 seconds, dry mucous membranes.',
+        assessment:
+            'Severe community-acquired pneumonia (CAP) with sepsis. CURB-65 score: 3 (confusion, urea >7, age \u226565) \u2014 recommend admission for IV antibiotics and close monitoring. Acute kidney injury likely due to dehydration. Background COPD.',
+        plan:
+            '1. Admit to medical ward under isolation precautions\n2. IV ceftriaxone 2 g daily + azithromycin 500 mg daily\n3. IV fluids 0.9% normal saline 1 L stat, then 100 mL/hr\n4. Sputum culture, blood culture \u00d7 2, full blood count, CRP, renal function, chest X-ray\n5. Oxygen to target SpO\u2082 \u226592%\n6. Monitor GCS, urine output, vitals 4-hourly\n7. Escalate to ICU if SpO\u2082 <90% despite O\u2082 or GCS drops\n8. Review daily at morning ward round',
+    },
+    progress_note: {
+        subjective:
+            'Patient reports significant improvement in breathing overnight. No new chest pain or palpitations. Voiding well. Reports mild headache, which resolved after paracetamol.',
+        objective:
+            'Temp 36.9\u00b0C, HR 80, BP 130/82, RR 18, SpO\u2082 95% on 2 L nasal cannula. JVP now 3 cm. Chest: reduced crackles bilaterally. Urine output 1,200 mL over 12 hours. Weight down 1.5 kg from admission.',
+        assessment:
+            'Improving. Good diuretic response. Heart failure compensation progressing well. Renal function stable.',
+        plan:
+            '1. Continue IV furosemide 40 mg BID, review for oral switch\n2. Continue oxygen wean \u2014 trial on room air tomorrow AM\n3. Continue strict I/O chart and daily weight\n4. Start lisinopril 2.5 mg daily if creatinine stable\n5. Repeat electrolytes and creatinine tomorrow\n6. Plan discharge if stable for 24 hours on oral therapy',
+    },
+    discharge_note: {
+        subjective:
+            'Patient feels well and ready to go home. No shortness of breath at rest. Can walk to bathroom without assistance. No chest pain, palpitations, or leg swelling.',
+        objective:
+            'Temp 36.6\u00b0C, HR 74, BP 124/78, RR 16, SpO\u2082 97% on room air. Chest clear. No peripheral edema. Weight stable for 24 hours. ECG: sinus rhythm, no significant change.',
+        assessment:
+            'ADHF successfully treated. Ejection fraction 40% on echocardiogram. Hypertension controlled. Now NYHA class I. Stable for discharge.',
+        plan:
+            '1. Furosemide 40 mg PO daily \u00d7 14 days\n2. Lisinopril 5 mg PO daily, titrate as tolerated\n3. Carvedilol 3.125 mg BID (start after 48 hours without decompensation)\n4. Follow-up at medical outpatient clinic in 2 weeks\n5. Daily weight monitoring at home \u2014 return if >2 kg gain in 2 days\n6. Low-sodium diet \u22642 g/day, fluid restriction 1.5 L/day\n7. Return immediately if worsening SOB, chest pain, or confusion',
+    },
+    referral_note: {
+        subjective:
+            'Request for surgical evaluation of a 45-year-old female with a 3-day history of right iliac fossa pain, nausea, and anorexia. Pain migrated from periumbilical area to RIF. No vomiting or diarrhea. Last menstrual period 2 weeks ago.',
+        objective:
+            'Temp 37.8\u00b0C, HR 92, BP 124/76, RR 18. Abdomen: tenderness and guarding in RIF, positive Rovsing and psoas signs. Rebound tenderness present. WBC 14.5 \u00d7 10\u2079/L, neutrophils 85%. Urine dip: negative for infection.',
+        assessment:
+            'Acute appendicitis (Alvarado score 7/10). Differential: right ovarian pathology \u2014 pelvic ultrasound requested.',
+        plan:
+            'Refer to surgical team for urgent review. Keep nil by mouth. IV Ringer\u2019s lactate 100 mL/hr. Analgesia: IV paracetamol 1 g PRN. Escort patient with vitals monitoring.',
+    },
+    nursing_note: {
+        subjective:
+            'Patient reports pain at surgical wound site rated 5/10. States nausea is improved. Requested assistance to use commode.',
+        objective:
+            'Temp 37.1\u00b0C, HR 78, BP 126/80, RR 18, SpO\u2082 97%. Wound: clean, dry, intact, no erythema or discharge. Dressing changed per protocol. Urine output 300 mL past 4 hours. IV line patent, site clean.',
+        assessment:
+            'Recovering post-operatively. Pain controlled with current regimen. Wound healing well. Mobilising with assistance.',
+        plan:
+            '1. Continue IV paracetamol 1 g Q6H, transition to oral when tolerating diet\n2. Assist with mobilisation TID\n3. Monitor wound site each shift\n4. Encourage oral intake, record I/O\n5. Escalate to medical team if pain >6/10 or wound changes',
+    },
+    procedure_note: {
+        subjective:
+            'Indication: Diagnostic laparoscopy for a 32-year-old female with chronic pelvic pain and suspected endometriosis. Failed medical management with NSAIDs and combined oral contraceptive. Informed consent obtained.',
+        objective:
+            'Procedure: Diagnostic laparoscopy under general anaesthesia. Findings: Stage II endometriosis lesions noted on bilateral uterosacral ligaments and right ovarian fossa. Pelvic washings taken. No adhesions or tubal blockage. Estimated blood loss <20 mL. Duration: 45 minutes.',
+        assessment:
+            'Endometriosis confirmed (Stage II rASRM classification). Procedure uneventful. Specimens sent for histology.',
+        plan:
+            '1. Observe in recovery for 2 hours\n2. Paracetamol 1 g IV Q6H PRN for pain\n3. Resume normal diet when tolerating fluids\n4. Wound care: keep incisions dry for 48 hours\n5. Follow-up in surgical outpatient clinic in 2 weeks with histology results\n6. Discuss long-term hormonal suppression options at follow-up\n7. Return if fever, wound redness, or excessive bleeding',
+    },
+};
+
 export const DEFAULT_MEDICAL_RECORD_NOTE_TYPE: MedicalRecordNoteType = 'consultation_note';
 
 export function sanitizeMedicalRecordNoteType(value: string | null | undefined): MedicalRecordNoteType {
@@ -430,5 +514,17 @@ export function medicalRecordNoteTypeSectionLabel(
     return (
         MEDICAL_RECORD_NOTE_TYPE_SECTION_LABELS[normalized]?.[section]
         ?? DEFAULT_SECTION_LABELS[section]
+    );
+}
+
+export function medicalRecordNoteTypeSectionSample(
+    value: string | null | undefined,
+    section: MedicalRecordNarrativeSectionKey,
+): string {
+    const normalized = sanitizeMedicalRecordNoteType(value);
+
+    return (
+        SOAP_SAMPLES[normalized]?.[section]
+        ?? SOAP_SAMPLE_DEFAULT[section]
     );
 }

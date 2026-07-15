@@ -8,6 +8,7 @@ use App\Modules\PatientVitals\Presentation\Http\Requests\StorePatientVitalSetReq
 use App\Modules\PatientVitals\Presentation\Http\Requests\UpdatePatientVitalSetRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class PatientVitalSetController extends Controller
 {
@@ -45,10 +46,13 @@ class PatientVitalSetController extends Controller
     }
 
     /**
-     * Create a vital set from the patient chart context (gated by patients.update).
+     * Create a vital set from the patient chart context.
+     * Requires: patients.update OR emergency.triage.create OR emergency.triage.update-status.
      */
     public function storeForChart(StorePatientVitalSetRequest $request): JsonResponse
     {
+        abort_unless(Gate::any(['patients.update', 'emergency.triage.create', 'emergency.triage.update-status']), 403);
+
         $validated = $request->validated();
 
         $vitalSet = PatientVitalSetModel::create([
@@ -89,9 +93,12 @@ class PatientVitalSetController extends Controller
 
     /**
      * Update an existing vital set.
+     * Requires: patients.update OR emergency.triage.create OR emergency.triage.update-status.
      */
     public function update(UpdatePatientVitalSetRequest $request, string $id): JsonResponse
     {
+        abort_unless(Gate::any(['patients.update', 'emergency.triage.create', 'emergency.triage.update-status']), 403);
+
         $vitalSet = PatientVitalSetModel::where('id', $id)
             ->where('entry_state', 'active')
             ->firstOrFail();
