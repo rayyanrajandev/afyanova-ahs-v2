@@ -17,10 +17,13 @@ use App\Modules\MedicalRecord\Application\Exceptions\InvalidMedicalRecordVersion
 use App\Modules\MedicalRecord\Application\Exceptions\MedicalRecordSignerAttestationNotAllowedException;
 use App\Modules\MedicalRecord\Application\Exceptions\PatientNotEligibleForMedicalRecordException;
 use App\Modules\MedicalRecord\Application\Exceptions\TheatreProcedureNotEligibleForMedicalRecordException;
+use App\Modules\MedicalRecord\Application\UseCases\AcceptMedicalRecordHandoffUseCase;
+use App\Modules\MedicalRecord\Application\UseCases\CancelMedicalRecordHandoffUseCase;
 use App\Modules\MedicalRecord\Application\UseCases\CreateMedicalRecordSignerAttestationUseCase;
 use App\Modules\MedicalRecord\Application\UseCases\CreateMedicalRecordUseCase;
 use App\Modules\MedicalRecord\Application\UseCases\GetMedicalRecordUseCase;
 use App\Modules\MedicalRecord\Application\UseCases\GetMedicalRecordVersionDiffUseCase;
+use App\Modules\MedicalRecord\Application\UseCases\InitiateMedicalRecordHandoffUseCase;
 use App\Modules\MedicalRecord\Application\UseCases\ListMedicalRecordAuditLogsUseCase;
 use App\Modules\MedicalRecord\Application\UseCases\ListMedicalRecordsUseCase;
 use App\Modules\MedicalRecord\Application\UseCases\ListMedicalRecordSignerAttestationsUseCase;
@@ -29,6 +32,8 @@ use App\Modules\MedicalRecord\Application\UseCases\ListMedicalRecordVersionsUseC
 use App\Modules\MedicalRecord\Application\UseCases\UpdateMedicalRecordStatusUseCase;
 use App\Modules\MedicalRecord\Application\UseCases\UpdateMedicalRecordUseCase;
 use App\Modules\MedicalRecord\Presentation\Http\Requests\ShowMedicalRecordVersionDiffRequest;
+use App\Modules\MedicalRecord\Presentation\Http\Requests\AcceptMedicalRecordHandoffRequest;
+use App\Modules\MedicalRecord\Presentation\Http\Requests\HandoffMedicalRecordRequest;
 use App\Modules\MedicalRecord\Presentation\Http\Requests\StoreMedicalRecordSignerAttestationRequest;
 use App\Modules\MedicalRecord\Presentation\Http\Requests\StoreMedicalRecordRequest;
 use App\Modules\MedicalRecord\Presentation\Http\Requests\UpdateMedicalRecordRequest;
@@ -284,6 +289,78 @@ class MedicalRecordController extends Controller
         return response()->json([
             'data' => MedicalRecordSignerAttestationResponseTransformer::transform($created),
         ], 201);
+    }
+
+    public function handoff(
+        string $id,
+        HandoffMedicalRecordRequest $request,
+        InitiateMedicalRecordHandoffUseCase $useCase
+    ): JsonResponse {
+        try {
+            $record = $useCase->execute(
+                id: $id,
+                targetUserId: (int) $request->integer('targetUserId'),
+                note: $request->input('note'),
+                actorId: (int) $request->user()?->id,
+            );
+        } catch (TenantScopeRequiredForIsolationException $exception) {
+            return $this->tenantScopeRequiredError($exception->getMessage());
+        } catch (MedicalRecordContentLockedException $exception) {
+            return $this->validationError('handoff', $exception->getMessage());
+        }
+
+        abort_if($record === null, 404, 'Medical record not found.');
+
+        return response()->json([
+            'data' => MedicalRecordResponseTransformer::transform($record),
+        ]);
+    }
+
+    public function acceptHandoff(
+        string $id,
+        AcceptMedicalRecordHandoffRequest $request,
+        AcceptMedicalRecordHandoffUseCase $useCase
+    ): JsonResponse {
+        try {
+            $record = $useCase->execute(
+                id: $id,
+                action: $request->string('action')->value(),
+                actorId: (int) $request->user()?->id,
+            );
+        } catch (TenantScopeRequiredForIsolationException $exception) {
+            return $this->tenantScopeRequiredError($exception->getMessage());
+        } catch (MedicalRecordContentLockedException $exception) {
+            return $this->validationError('handoff', $exception->getMessage());
+        }
+
+        abort_if($record === null, 404, 'Medical record not found.');
+
+        return response()->json([
+            'data' => MedicalRecordResponseTransformer::transform($record),
+        ]);
+    }
+
+    public function cancelHandoff(
+        string $id,
+        Request $request,
+        CancelMedicalRecordHandoffUseCase $useCase
+    ): JsonResponse {
+        try {
+            $record = $useCase->execute(
+                id: $id,
+                actorId: (int) $request->user()?->id,
+            );
+        } catch (TenantScopeRequiredForIsolationException $exception) {
+            return $this->tenantScopeRequiredError($exception->getMessage());
+        } catch (MedicalRecordContentLockedException $exception) {
+            return $this->validationError('handoff', $exception->getMessage());
+        }
+
+        abort_if($record === null, 404, 'Medical record not found.');
+
+        return response()->json([
+            'data' => MedicalRecordResponseTransformer::transform($record),
+        ]);
     }
 
     public function exportAuditLogsCsv(

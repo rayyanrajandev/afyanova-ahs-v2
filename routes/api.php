@@ -830,6 +830,13 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::post('medical-records/{id}/signer-attestations', [MedicalRecordController::class, 'storeSignerAttestation'])
         ->middleware('can:medical.records.attest')
         ->name('medical-records.signer-attestations.store');
+    Route::post('medical-records/{id}/handoff', [MedicalRecordController::class, 'handoff'])
+        ->middleware('can:medical.records.create')
+        ->name('medical-records.handoff');
+    Route::post('medical-records/{id}/handoff/accept', [MedicalRecordController::class, 'acceptHandoff'])
+        ->name('medical-records.handoff.accept');
+    Route::post('medical-records/{id}/handoff/cancel', [MedicalRecordController::class, 'cancelHandoff'])
+        ->name('medical-records.handoff.cancel');
 
     Route::get('encounters', [EncounterController::class, 'index'])
         ->middleware('can:medical.records.read')

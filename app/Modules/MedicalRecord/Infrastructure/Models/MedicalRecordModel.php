@@ -31,6 +31,11 @@ class MedicalRecordModel extends Model
         'appointment_referral_id',
         'theatre_procedure_id',
         'author_user_id',
+        'handed_off_to_user_id',
+        'handoff_initiated_by_user_id',
+        'handoff_status',
+        'handoff_note',
+        'handed_off_at',
         'encounter_at',
         'record_type',
         'subjective',
@@ -52,6 +57,7 @@ class MedicalRecordModel extends Model
         return [
             'encounter_at' => 'datetime',
             'signed_at' => 'datetime',
+            'handed_off_at' => 'datetime',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
@@ -65,5 +71,15 @@ class MedicalRecordModel extends Model
     public function authorUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'author_user_id');
+    }
+
+    public function handedOffToUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'handed_off_to_user_id');
+    }
+
+    public function handoffInitiatedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'handoff_initiated_by_user_id');
     }
 }

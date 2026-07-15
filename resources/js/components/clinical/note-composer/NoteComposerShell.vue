@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { usePage } from '@inertiajs/vue3';
+import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useMedicalRecordDraft } from '@/composables/clinical/useMedicalRecordDraft';
+import { useMedicalRecordHandoff } from '@/composables/clinical/useMedicalRecordHandoff';
 import { useMedicalRecordLifecycle } from '@/composables/clinical/useMedicalRecordLifecycle';
 import { useNoteAutosave } from '@/composables/clinical/useNoteAutosave';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
@@ -17,6 +20,7 @@ import {
     type MedicalRecordResponse,
     type MedicalRecordVisitContext,
 } from '@/types/medicalRecord';
+import NoteHandoffSheet from './NoteHandoffSheet.vue';
 import NoteLifecycleActions from './NoteLifecycleActions.vue';
 import NoteSoapSection from './NoteSoapSection.vue';
 import NoteTypeSelector from './NoteTypeSelector.vue';
@@ -73,6 +77,11 @@ const draft = useMedicalRecordDraft({
 
 const lifecycle = useMedicalRecordLifecycle();
 
+const currentUser = computed(() => {
+    const auth = usePage().props.auth as { user?: { id: number } } | undefined;
+    return auth?.user ?? null;
+});
+
 const status = computed(() => draft.record.value?.status ?? 'draft');
 const isLocked = computed(
     () => draft.record.value !== null && status.value !== 'draft',
@@ -80,6 +89,97 @@ const isLocked = computed(
 const heading = computed(() =>
     medicalRecordNoteTypeNarrativeHeading(recordType.value),
 );
+
+const handoffOpen = ref(false);
+const { respondToHandoff, cancelHandoff } = useMedicalRecordHandoff();
+
+const record = computed(() => draft.record.value);
+const handoffStatus = computed(() => record.value?.handoffStatus ?? null);
+const isPendingHandoffRecipient = computed(
+    () =>
+        handoffStatus.value === 'pending' &&
+        record.value?.handedOffToUserId === currentUser.value?.id,
+);
+const isPendingHandoffInitiator = computed(
+    () =>
+        handoffStatus.value === 'pending' &&
+        record.value?.handoffInitiatedByUserId === currentUser.value?.id,
+);
+const isAcceptedHandoffRecipient = computed(
+    () =>
+        handoffStatus.value === 'accepted' &&
+        record.value?.handedOffToUserId === currentUser.value?.id &&
+        record.value?.authorUserId === currentUser.value?.id,
+);
+const canHandoff = computed(
+    () =>
+        record.value !== null &&
+        status.value === 'draft' &&
+        record.value?.authorUserId === currentUser.value?.id &&
+        !handoffStatus.value,
+);
+const isHandedOffLocked = computed(
+    () =>
+        record.value !== null &&
+        handoffStatus.value === 'accepted' &&
+        record.value?.authorUserId !== currentUser.value?.id,
+);
+
+async function handleAcceptHandoff(): Promise<void> {
+    if (!record.value) return;
+    try {
+        await respondToHandoff.mutateAsync({
+            medicalRecordId: record.value.id,
+            action: 'accept',
+        });
+        draft.record.value = {
+            ...record.value,
+            handoffStatus: 'accepted',
+            authorUserId: currentUser.value?.id ?? record.value.authorUserId,
+            handedOffToUserId: currentUser.value?.id ?? null,
+        };
+        if (draft.lastSavedContent.value) {
+            Object.assign(content, draft.lastSavedContent.value);
+        }
+    } catch {
+        // handled in composable
+    }
+}
+
+async function handleDeclineHandoff(): Promise<void> {
+    if (!record.value) return;
+    try {
+        await respondToHandoff.mutateAsync({
+            medicalRecordId: record.value.id,
+            action: 'decline',
+        });
+        draft.record.value = {
+            ...record.value,
+            handoffStatus: 'declined',
+            handedOffToUserId: null,
+        };
+        // keep editing as original author
+    } catch {
+        // handled in composable
+    }
+}
+
+async function handleCancelHandoff(): Promise<void> {
+    if (!record.value) return;
+    try {
+        await cancelHandoff.mutateAsync(record.value.id);
+        draft.record.value = {
+            ...record.value,
+            handoffStatus: null,
+            handedOffToUserId: null,
+            handoffInitiatedByUserId: null,
+            handoffNote: null,
+            handedOffAt: null,
+        };
+    } catch {
+        // handled in composable
+    }
+}
 
 function contentSignature(value: MedicalRecordDraftContent): string {
     return JSON.stringify([
@@ -259,7 +359,19 @@ const syncLabel = computed(() => {
 <template>
     <section class="space-y-4">
         <header class="space-y-1">
-            <h2 class="text-lg font-semibold">{{ heading.title }}</h2>
+            <div class="flex items-center justify-between gap-2">
+                <h2 class="text-lg font-semibold">{{ heading.title }}</h2>
+                <Button
+                    v-if="canHandoff"
+                    variant="ghost"
+                    size="sm"
+                    class="gap-1.5 text-muted-foreground"
+                    @click="handoffOpen = true"
+                >
+                    <AppIcon name="user-plus" class="size-3.5" />
+                    Hand off
+                </Button>
+            </div>
             <p class="text-sm text-muted-foreground">{{ heading.subtitle }}</p>
         </header>
 
@@ -287,13 +399,94 @@ const syncLabel = computed(() => {
         </Alert>
 
         <Alert
-            v-if="isLocked"
+            v-if="isLocked && !isHandedOffLocked"
             class="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
         >
             <AlertTitle>This note is {{ status }}</AlertTitle>
             <AlertDescription>
                 Finalized notes are read-only. Use Amend to reopen it for
                 editing.
+            </AlertDescription>
+        </Alert>
+
+        <Alert
+            v-if="isHandedOffLocked"
+            class="border-sky-200 bg-sky-50 text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100"
+        >
+            <AlertTitle class="flex items-center gap-1.5">
+                <AppIcon name="lock" class="size-3.5" />
+                Transferred to {{ record?.handedOffToUserName ?? 'another clinician' }}
+            </AlertTitle>
+            <AlertDescription>
+                This note was handed off and is now locked to the accepting
+                clinician.
+            </AlertDescription>
+        </Alert>
+
+        <Alert
+            v-if="isPendingHandoffRecipient"
+            class="border-blue-200 bg-blue-50 text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100"
+        >
+            <AlertTitle class="flex items-center gap-1.5">
+                <AppIcon name="user-plus" class="size-3.5" />
+                Note handed off to you
+            </AlertTitle>
+            <AlertDescription class="space-y-2">
+                <p>
+                    {{ record?.handoffInitiatedByUserName ?? 'A clinician' }}
+                    has handed this note to you.
+                    <span v-if="record?.handoffNote" class="italic">
+                        &ldquo;{{ record.handoffNote }}&rdquo;
+                    </span>
+                </p>
+                <div class="flex gap-2">
+                    <Button
+                        size="sm"
+                        @click="handleAcceptHandoff"
+                        :disabled="respondToHandoff.isPending.value"
+                    >
+                        <AppIcon
+                            v-if="respondToHandoff.isPending.value"
+                            name="loader"
+                            class="size-3.5 animate-spin"
+                        />
+                        <template v-else>Accept</template>
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        @click="handleDeclineHandoff"
+                        :disabled="respondToHandoff.isPending.value"
+                    >
+                        Decline
+                    </Button>
+                </div>
+            </AlertDescription>
+        </Alert>
+
+        <Alert
+            v-if="isPendingHandoffInitiator"
+            class="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
+        >
+            <AlertTitle class="flex items-center gap-1.5">
+                <AppIcon name="clock" class="size-3.5" />
+                Handoff pending
+            </AlertTitle>
+            <AlertDescription class="space-y-2">
+                <p>
+                    Waiting for
+                    {{ record?.handedOffToUserName ?? 'the recipient' }} to
+                    accept the handoff. You can still edit the note in the
+                    meantime.
+                </p>
+                <Button
+                    size="sm"
+                    variant="outline"
+                    @click="handleCancelHandoff"
+                    :disabled="cancelHandoff.isPending.value"
+                >
+                    Cancel handoff
+                </Button>
             </AlertDescription>
         </Alert>
 
@@ -382,9 +575,21 @@ const syncLabel = computed(() => {
         <footer
             class="flex flex-wrap items-center justify-between gap-3 border-t pt-3"
         >
-            <p class="text-xs text-muted-foreground" role="status">
-                {{ syncLabel }}
-            </p>
+            <div class="flex items-center gap-2">
+                <Button
+                    v-if="canHandoff"
+                    variant="ghost"
+                    size="sm"
+                    class="gap-1.5 text-muted-foreground"
+                    @click="handoffOpen = true"
+                >
+                    <AppIcon name="user-plus" class="size-3.5" />
+                    Hand off
+                </Button>
+                <p class="text-xs text-muted-foreground" role="status">
+                    {{ syncLabel }}
+                </p>
+            </div>
             <div class="flex items-center gap-2">
                 <Button
                     v-if="!isLocked"
@@ -408,4 +613,11 @@ const syncLabel = computed(() => {
             </div>
         </footer>
     </section>
+
+    <NoteHandoffSheet
+        v-if="record?.id"
+        v-model:open="handoffOpen"
+        :medical-record-id="record.id"
+        @handed-off="loadContentFrom(record)"
+    />
 </template>

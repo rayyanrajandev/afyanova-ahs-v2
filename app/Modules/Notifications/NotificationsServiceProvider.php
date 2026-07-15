@@ -4,6 +4,8 @@ namespace App\Modules\Notifications;
 
 use App\Modules\Appointment\Domain\Events\AppointmentStatusChanged;
 use App\Modules\Laboratory\Domain\Events\LaboratoryOrderCompleted;
+use App\Modules\MedicalRecord\Domain\Events\MedicalRecordHandoffAccepted;
+use App\Modules\MedicalRecord\Domain\Events\MedicalRecordHandoffInitiated;
 use App\Modules\Notifications\Application\Listeners\RouteNotificationsFromDomainEvents;
 use App\Modules\Pharmacy\Domain\Events\PharmacyOrderDispensed;
 use App\Modules\Radiology\Domain\Events\RadiologyOrderCompleted;
@@ -39,6 +41,14 @@ class NotificationsServiceProvider extends ServiceProvider
         Event::listen(
             RadiologyOrderCompleted::class,
             [RouteNotificationsFromDomainEvents::class, 'handleRadiologyOrderCompleted'],
+        );
+        Event::listen(
+            MedicalRecordHandoffInitiated::class,
+            [RouteNotificationsFromDomainEvents::class, 'handleMedicalRecordHandoffInitiated'],
+        );
+        Event::listen(
+            MedicalRecordHandoffAccepted::class,
+            [RouteNotificationsFromDomainEvents::class, 'handleMedicalRecordHandoffAccepted'],
         );
     }
 }

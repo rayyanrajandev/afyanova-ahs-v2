@@ -108,6 +108,7 @@ import {
     Trash2,
     Undo2,
     User,
+    UserPlus,
     UserX,
     Users,
     UtensilsCrossed,
@@ -190,6 +191,7 @@ export type AppIconName =
     | 'utensils-crossed'
     | 'warehouse'
     | 'user'
+    | 'user-plus'
     | 'user-x'
     | 'users'
     | 'x';
@@ -267,6 +269,7 @@ const LUCIDE_ICON_MAP: Record<AppIconName, Component> = {
     'utensils-crossed': UtensilsCrossed,
     warehouse: Warehouse,
     user: User,
+    'user-plus': UserPlus,
     'user-x': UserX,
     users: Users,
     x: X,
@@ -344,6 +347,7 @@ const HUGE_ICON_MAP = {
     'utensils-crossed': SpoonAndForkIcon,
     warehouse: Building01Icon,
     user: UserIcon,
+    'user-plus': UserIcon,
     'user-x': UserRemove01Icon,
     users: UserGroupIcon,
     x: CancelCircleIcon,

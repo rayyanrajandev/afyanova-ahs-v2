@@ -5,6 +5,8 @@ namespace App\Modules\Notifications\Application\Listeners;
 use App\Modules\Appointment\Domain\Events\AppointmentStatusChanged;
 use App\Modules\Appointment\Domain\Repositories\AppointmentRepositoryInterface;
 use App\Modules\Laboratory\Domain\Events\LaboratoryOrderCompleted;
+use App\Modules\MedicalRecord\Domain\Events\MedicalRecordHandoffAccepted;
+use App\Modules\MedicalRecord\Domain\Events\MedicalRecordHandoffInitiated;
 use App\Modules\Pharmacy\Domain\Events\PharmacyOrderDispensed;
 use App\Modules\Radiology\Domain\Events\RadiologyOrderCompleted;
 use App\Modules\Reception\Domain\Events\AppointmentCheckedIn;
@@ -154,6 +156,45 @@ class RouteNotificationsFromDomainEvents
             actionLabel: 'View report',
             contextType: 'radiology_order',
             contextId: $event->radiologyOrderId,
+        );
+    }
+
+    public function handleMedicalRecordHandoffInitiated(MedicalRecordHandoffInitiated $event): void
+    {
+        $this->dispatchInAppNotification->handle(
+            userId: $event->targetUserId,
+            category: 'clinical',
+            priority: 'high',
+            title: 'Clinical note handed off to you',
+            body: sprintf(
+                '%s has handed off note %s to you. %s',
+                $event->initiatorName,
+                $event->recordNumber,
+                $event->note ?? 'Please review and continue.',
+            ),
+            actionUrl: sprintf('/medical-records/%s/edit?handoff=accept', $event->medicalRecordId),
+            actionLabel: 'Review note',
+            contextType: 'medical_record',
+            contextId: $event->medicalRecordId,
+        );
+    }
+
+    public function handleMedicalRecordHandoffAccepted(MedicalRecordHandoffAccepted $event): void
+    {
+        $this->dispatchInAppNotification->handle(
+            userId: $event->previousOwnerUserId,
+            category: 'clinical',
+            priority: 'normal',
+            title: 'Handoff accepted',
+            body: sprintf(
+                '%s has accepted the handoff for note %s.',
+                $event->newOwnerName,
+                $event->recordNumber,
+            ),
+            actionUrl: sprintf('/medical-records/%s', $event->medicalRecordId),
+            actionLabel: 'View note',
+            contextType: 'medical_record',
+            contextId: $event->medicalRecordId,
         );
     }
 }

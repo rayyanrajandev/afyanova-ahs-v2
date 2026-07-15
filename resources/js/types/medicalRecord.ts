@@ -8,6 +8,8 @@ import type { MedicalRecordNoteType } from '@/pages/medical-records/noteTypes';
  */
 export type MedicalRecordStatus = 'draft' | 'finalized' | 'amended' | 'archived';
 
+export type MedicalRecordHandoffStatus = 'pending' | 'accepted' | 'declined' | null;
+
 export type MedicalRecordResponse = {
     id: string;
     recordNumber: string;
@@ -18,6 +20,13 @@ export type MedicalRecordResponse = {
     appointmentReferralId: string | null;
     theatreProcedureId: string | null;
     authorUserId: number | null;
+    handedOffToUserId: number | null;
+    handoffInitiatedByUserId: number | null;
+    handoffStatus: MedicalRecordHandoffStatus;
+    handoffNote: string | null;
+    handedOffAt: string | null;
+    handedOffToUserName: string | null;
+    handoffInitiatedByUserName: string | null;
     encounterAt: string;
     recordType: MedicalRecordNoteType | string;
     subjective: string | null;

@@ -2,11 +2,13 @@
 
 namespace App\Providers;
 
+use App\Modules\MedicalRecord\Application\Listeners\SendMedicalRecordHandoffEmail;
+use App\Modules\MedicalRecord\Domain\Events\MedicalRecordHandoffInitiated;
+use App\Modules\MedicalRecord\Domain\ValueObjects\MedicalRecordStatus;
+use App\Modules\MedicalRecord\Infrastructure\Models\MedicalRecordModel;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\DefaultCurrencyResolverInterface;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
-use App\Modules\MedicalRecord\Domain\ValueObjects\MedicalRecordStatus;
-use App\Modules\MedicalRecord\Infrastructure\Models\MedicalRecordModel;
 use App\Modules\Platform\Infrastructure\Services\RequestCurrentPlatformScopeContext;
 use App\Modules\Platform\Infrastructure\Services\RequestScopedDefaultCurrencyResolver;
 use App\Modules\Platform\Infrastructure\Services\RequestScopedFeatureFlagResolver;
@@ -19,6 +21,7 @@ use App\Support\ApprovalWorkflow\ApprovalWorkflowEngine;
 use App\Support\ApprovalWorkflow\SegregationOfDutiesValidator;
 use App\Support\Branding\SystemBrandingManager;
 use Illuminate\Contracts\Auth\Access\Gate as GateContract;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -135,25 +138,37 @@ class AppServiceProvider extends ServiceProvider
             }
 
             $record = MedicalRecordModel::query()
-                ->select(['id', 'tenant_id', 'facility_id', 'author_user_id', 'status'])
+                ->select(['id', 'tenant_id', 'facility_id', 'author_user_id', 'handed_off_to_user_id', 'handoff_status', 'status'])
                 ->find($recordId);
 
-            if (
-                $record === null
-                || $record->status !== MedicalRecordStatus::DRAFT->value
-                || (int) $record->author_user_id !== (int) $user->id
-            ) {
+            if ($record === null || $record->status !== MedicalRecordStatus::DRAFT->value) {
                 return false;
             }
 
-            /** @var CurrentPlatformScopeContextInterface $scopeContext */
-            $scopeContext = app(CurrentPlatformScopeContextInterface::class);
-            $tenantId = $scopeContext->tenantId();
-            $facilityId = $scopeContext->facilityId();
+            // Author can always edit their own draft
+            if ((int) $record->author_user_id === (int) $user->id) {
+                /** @var CurrentPlatformScopeContextInterface $scopeContext */
+                $scopeContext = app(CurrentPlatformScopeContextInterface::class);
+                return $this->matchesScope($record, $scopeContext);
+            }
 
-            return ($tenantId === null || (string) $record->tenant_id === $tenantId)
-                && ($facilityId === null || (string) $record->facility_id === $facilityId);
+            // Handoff recipient can edit after accepting
+            if (
+                $record->handoff_status === 'accepted'
+                && (int) $record->handed_off_to_user_id === (int) $user->id
+            ) {
+                /** @var CurrentPlatformScopeContextInterface $scopeContext */
+                $scopeContext = app(CurrentPlatformScopeContextInterface::class);
+                return $this->matchesScope($record, $scopeContext);
+            }
+
+            return false;
         });
+
+        Event::listen(
+            MedicalRecordHandoffInitiated::class,
+            [SendMedicalRecordHandoffEmail::class, 'handle'],
+        );
     }
 
     private function allowsAppointmentProviderSession(mixed $user): bool
@@ -198,6 +213,15 @@ class AppServiceProvider extends ServiceProvider
                 : null,
             'mail.markdown.theme' => SystemBrandingManager::MAIL_MARKDOWN_THEME,
         ]);
+    }
+
+    private function matchesScope(MedicalRecordModel $record, CurrentPlatformScopeContextInterface $scopeContext): bool
+    {
+        $tenantId = $scopeContext->tenantId();
+        $facilityId = $scopeContext->facilityId();
+
+        return ($tenantId === null || (string) $record->tenant_id === $tenantId)
+            && ($facilityId === null || (string) $record->facility_id === $facilityId);
     }
 
     private function bindModuleContracts(): void
