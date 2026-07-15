@@ -77,7 +77,50 @@ class AppServiceProvider extends ServiceProvider
                 return null;
             }
 
-            return $user->hasPermissionTo($ability) ? true : null;
+            if ($user->hasPermissionTo($ability)) {
+                return true;
+            }
+
+            // Backward-compatibility: check if the ability maps to an old broad permission
+            $backwardCompat = [
+                'lab.order' => 'laboratory.orders.create',
+                'lab.sample.collect' => ['laboratory.orders.create', 'laboratory.orders.update-status'],
+                'lab.sample.reject' => 'laboratory.orders.update-status',
+                'lab.test.perform' => 'laboratory.orders.create',
+                'lab.result.enter' => ['laboratory.orders.create', 'laboratory.orders.update-status'],
+                'lab.result.verify' => ['laboratory.orders.verify-result', 'laboratory.orders.update-status'],
+                'lab.result.release' => 'laboratory.orders.update-status',
+                'medication.prescribe' => 'pharmacy.orders.create',
+                'medication.dispense' => ['pharmacy.orders.create', 'pharmacy.orders.update-status'],
+                'dispense.cancel' => 'pharmacy.orders.update-status',
+                'imaging.order' => 'radiology.orders.create',
+                'imaging.perform' => 'radiology.orders.create',
+                'imaging.result.enter' => 'radiology.orders.update-status',
+                'imaging.result.verify' => 'radiology.orders.update-status',
+                'patient.demographics.update' => 'patients.update',
+                'patient.allergies.manage' => 'patients.update',
+                'patient.medications.manage' => 'patients.update',
+                'patient.vitals.record' => 'patients.update',
+                'appointment.reschedule' => 'appointments.update',
+                'appointment.cancel' => 'appointments.update',
+                'appointment.check-in' => 'appointments.update-status',
+                'appointment.check-out' => 'appointments.update-status',
+                'staff.employment.update' => 'staff.update',
+                'staff.status.update' => 'staff.update',
+            ];
+
+            if (isset($backwardCompat[$ability])) {
+                $oldPerms = is_array($backwardCompat[$ability])
+                    ? $backwardCompat[$ability]
+                    : [$backwardCompat[$ability]];
+                foreach ($oldPerms as $oldPerm) {
+                    if ($user->hasPermissionTo($oldPerm)) {
+                        return true;
+                    }
+                }
+            }
+
+            return null;
         });
 
         Gate::define('appointments.record-triage', function ($user): bool {

@@ -11,9 +11,35 @@ final class EffectivePermissionNameResolver
      * @var array<int, string>
      */
     private const RESOLVED_ABILITIES = [
+        // Composite abilities (no DB permission, computed via Gate closures)
         'appointments.record-triage',
         'appointments.start-consultation',
         'appointments.manage-provider-session',
+        // New granular permissions with backward-compat fallback in Gate::before()
+        'lab.order',
+        'lab.sample.collect',
+        'lab.sample.reject',
+        'lab.test.perform',
+        'lab.result.enter',
+        'lab.result.verify',
+        'lab.result.release',
+        'medication.prescribe',
+        'medication.dispense',
+        'dispense.cancel',
+        'imaging.order',
+        'imaging.perform',
+        'imaging.result.enter',
+        'imaging.result.verify',
+        'patient.demographics.update',
+        'patient.allergies.manage',
+        'patient.medications.manage',
+        'patient.vitals.record',
+        'appointment.reschedule',
+        'appointment.cancel',
+        'appointment.check-in',
+        'appointment.check-out',
+        'staff.employment.update',
+        'staff.status.update',
     ];
 
     /**

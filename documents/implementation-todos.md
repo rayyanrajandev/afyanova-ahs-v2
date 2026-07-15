@@ -35,9 +35,9 @@ SELECT name FROM permissions WHERE name LIKE 'lab.%'     -- lab.order, lab.sampl
 
 | # | Task | Status |
 |---|------|--------|
-| 2.1 | Add backward-compat Gates in `AppServiceProvider.php` (lab, pharmacy, radiology, patients, appointments, staff) | 🔴 |
-| 2.2 | Update `EffectivePermissionNameResolver.php` with new composite abilities | 🔴 |
-| 2.3 | Verify `$user->can('patient.demographics.update')` returns true for user with only `patients.update` | 🔴 |
+| 2.1 | Add backward-compat Gates in `AppServiceProvider.php` (lab, pharmacy, radiology, patients, appointments, staff) | 🟢 |
+| 2.2 | Update `EffectivePermissionNameResolver.php` with new composite abilities | 🟢 |
+| 2.3 | Verify `$user->can('patient.demographics.update')` returns true for user with only `patients.update` | 🟢 |
 
 **Files to modify:** `app/Providers/AppServiceProvider.php`, `app/Support/Auth/EffectivePermissionNameResolver.php`
 
