@@ -95,25 +95,25 @@ SELECT name FROM permissions WHERE name LIKE 'lab.%'     -- lab.order, lab.sampl
 
 | # | Task | Status |
 |---|------|--------|
-| 6a.1 | PatientPolicy — `updateDemographics`: clinician only own active encounters, reception any | 🔴 |
-| 6a.2 | PatientPolicy — `view`: cashier only billing-relevant patients | 🔴 |
-| 6a.3 | PatientPolicy — `recordVitals`: nurse only own ward admitted patients | 🔴 |
-| 6b.1 | LaboratoryOrderPolicy — `order`: clinician only own active encounters | 🔴 |
-| 6b.2 | LaboratoryOrderPolicy — `performTest`: specimen assigned to this lab | 🔴 |
-| 6b.3 | LaboratoryOrderPolicy — `verifyResult`: cannot verify own entry | 🔴 |
-| 6b.4 | LaboratoryOrderPolicy — `enterResult`: only if specimen collected | 🔴 |
-| 6b.5 | PharmacyOrderPolicy — `dispense`: only verified, non-expired prescriptions | 🔴 |
-| 6b.6 | PharmacyOrderPolicy — `cancel`: supervisor only | 🔴 |
-| 6c.1 | RadiologyOrderPolicy — `perform`: assigned to this department | 🔴 |
-| 6c.2 | RadiologyOrderPolicy — `verify`: cannot verify own entry | 🔴 |
-| 6c.3 | AppointmentPolicy — `reschedule`: only future appointments | 🔴 |
-| 6c.4 | AppointmentPolicy — `cancel`: only future appointments | 🔴 |
-| 6c.5 | AppointmentPolicy — `checkIn`: only scheduled appointments | 🔴 |
-| 6c.6 | AppointmentPolicy — `checkOut`: only checked-in appointments | 🔴 |
-| 6d.1 | InventoryPolicy — `createRequisition`: department scope | 🔴 |
-| 6d.2 | InventoryPolicy — `approveRequisition`: SOD (not own), high-value, controlled substances | 🔴 |
-| 6d.3 | InventoryPolicy — `viewRequisition`: own department or own requests | 🔴 |
-| 6e.1 | MedicalRecordPolicy — `updateDraft`: only draft, author or handoff recipient, scope | 🔴 |
+| 6a.1 | PatientPolicy — `updateDemographics`: clinician only own active encounters, reception any | 🟢 |
+| 6a.2 | PatientPolicy — `view`: cashier only billing-relevant patients | 🟢 |
+| 6a.3 | PatientPolicy — `recordVitals`: nurse only own ward admitted patients | 🟢 |
+| 6b.1 | LaboratoryOrderPolicy — `order`: clinician only own active encounters | 🟢 |
+| 6b.2 | LaboratoryOrderPolicy — `performTest`: specimen assigned to this lab | 🟢 |
+| 6b.3 | LaboratoryOrderPolicy — `verifyResult`: cannot verify own entry | 🟢 |
+| 6b.4 | LaboratoryOrderPolicy — `enterResult`: only if specimen collected | 🟢 |
+| 6b.5 | PharmacyOrderPolicy — `dispense`: only verified, non-expired prescriptions | 🟢 |
+| 6b.6 | PharmacyOrderPolicy — `cancel`: supervisor only | 🟢 |
+| 6c.1 | RadiologyOrderPolicy — `perform`: assigned to this department | 🟢 |
+| 6c.2 | RadiologyOrderPolicy — `verify`: cannot verify own entry | 🟢 |
+| 6c.3 | AppointmentPolicy — `reschedule`: only future appointments | 🟢 |
+| 6c.4 | AppointmentPolicy — `cancel`: only future appointments | 🟢 |
+| 6c.5 | AppointmentPolicy — `checkIn`: only scheduled appointments | 🟢 |
+| 6c.6 | AppointmentPolicy — `checkOut`: only checked-in appointments | 🟢 |
+| 6d.1 | InventoryPolicy — `createRequisition`: department scope | 🟢 |
+| 6d.2 | InventoryPolicy — `approveRequisition`: SOD (not own), high-value, controlled substances | 🟢 |
+| 6d.3 | InventoryPolicy — `viewRequisition`: own department or own requests | 🟢 |
+| 6e.1 | MedicalRecordPolicy — `updateDraft`: only draft, author or handoff recipient, scope | 🟢 |
 
 ---
 
@@ -177,7 +177,7 @@ SELECT name FROM permissions WHERE name LIKE 'lab.%'     -- lab.order, lab.sampl
 | 3 | Switch code to new perms | 5 | 1 | 🟢 |
 | 4 | Policy files (empty) | 8 | 1 | 🟢 |
 | 5 | Controller → policy swap | 7 | 1 | 🟢 |
-| 6 | Business logic in policies | 18 | 5 | 🔴 |
+| 6 | Business logic in policies | 18 | 5 | 🟢 |
 | 7 | Eliminate dual RBAC | 3 | 1 | 🔴 |
 | 8 | Config-driven roles | 4 | 1 | 🔴 |
 | 9 | Tanzania role names | 3 | 1 | 🔴 |
