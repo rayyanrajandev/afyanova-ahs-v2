@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useNotifications } from '@/composables/useNotifications';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
@@ -15,6 +15,8 @@ import type { BreadcrumbItem } from '@/types';
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Notifications', href: '/notifications' },
 ];
+
+const { isLive } = useNotifications();
 
 const {
     notifications,
@@ -26,7 +28,7 @@ const {
     refresh,
 } = useNotifications();
 
-const activeTab = ref<'all' | 'unread'>('all');
+const selectedTab = ref<'all' | 'unread'>('all');
 const categoryFilter = ref<string>('all');
 const searchQuery = ref('');
 
@@ -46,10 +48,19 @@ const categoryIconMap: Record<string, string> = {
     system: 'shield-check',
 };
 
+const criticalCount = computed(() => notifications.value.filter((n) => n.priority === 'critical').length);
+const highCount = computed(() => notifications.value.filter((n) => n.priority === 'high').length);
+
+const kpis = computed(() => [
+    { label: 'Critical', count: criticalCount.value, variant: 'destructive' as const },
+    { label: 'High', count: highCount.value, variant: 'default' as const },
+    { label: 'Unread', count: unreadCount.value, variant: 'secondary' as const },
+]);
+
 const filtered = computed(() => {
     let items = [...notifications.value];
 
-    if (activeTab.value === 'unread') {
+    if (selectedTab.value === 'unread') {
         items = items.filter((n) => !n.readAt);
     }
 
@@ -95,176 +106,261 @@ function priorityBadgeClass(p: string): string {
 <template>
     <Head title="Notifications" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-4 p-4 sm:p-6">
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <h1 class="text-2xl font-bold tracking-tight">Notifications</h1>
-                    <p class="text-sm text-muted-foreground">
-                        {{ unreadCount }} unread · {{ notifications.length }} total
-                    </p>
-                </div>
-                <div class="flex items-center gap-2">
-                    <Button
-                        v-if="unreadCount > 0"
-                        variant="outline"
-                        size="sm"
-                        @click="markAllAsRead()"
-                    >
-                        <AppIcon name="check" class="mr-1.5 size-3.5" />
-                        Mark all as read
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        @click="refresh()"
-                    >
-                        <AppIcon name="refresh-cw" class="mr-1.5 size-3.5" />
-                        Refresh
-                    </Button>
-                </div>
-            </div>
-
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <Tabs
-                    v-model="activeTab"
-                    class="w-full sm:w-auto"
-                >
-                    <TabsList>
-                        <TabsTrigger value="all">
-                            All
-                            <Badge
-                                v-if="notifications.length > 0"
-                                variant="secondary"
-                                class="ml-1.5 px-1 py-0 text-[10px]"
+        <div class="flex flex-col gap-4 overflow-x-hidden overflow-y-auto rounded-lg">
+            <Tabs v-model="selectedTab" class="contents">
+                <div class="sticky top-0 z-10 bg-background/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                    <div class="flex items-center justify-between">
+                        <div class="min-w-0 space-y-0.5">
+                            <div class="flex items-center gap-2">
+                                <h1 class="text-lg font-bold tracking-tight md:text-xl">Notifications</h1>
+                                <span class="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                                    <span class="size-1.5 rounded-full" :class="isLive ? 'bg-emerald-500' : 'bg-muted-foreground/40'" aria-hidden="true" />
+                                    {{ isLive ? 'Live' : 'Polling' }}
+                                </span>
+                            </div>
+                            <p class="text-xs text-muted-foreground">
+                                Prioritised alerts from clinical, lab, pharmacy, and system workflows.
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <Button
+                                v-if="unreadCount > 0"
+                                variant="outline"
+                                size="sm"
+                                @click="markAllAsRead()"
                             >
+                                <AppIcon name="check" class="mr-1.5 size-3.5" />
+                                Mark all as read
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                @click="refresh()"
+                            >
+                                <AppIcon name="refresh-cw" class="mr-1.5 size-3.5" />
+                                Refresh
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 grid grid-cols-3 gap-2">
+                        <div
+                            v-for="kpi in kpis"
+                            :key="kpi.label"
+                            class="rounded-md border bg-muted/50 px-2.5 py-1.5"
+                            :class="kpi.variant === 'destructive' ? 'border-destructive/30' : ''"
+                        >
+                            <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">{{ kpi.label }}</p>
+                            <p class="text-sm font-bold tabular-nums">{{ kpi.count }}</p>
+                        </div>
+                    </div>
+
+                    <TabsList class="mt-3 grid w-full grid-cols-2">
+                        <TabsTrigger value="all" class="inline-flex items-center gap-1.5">
+                            All
+                            <Badge v-if="notifications.length" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
                                 {{ notifications.length }}
                             </Badge>
                         </TabsTrigger>
-                        <TabsTrigger value="unread">
+                        <TabsTrigger value="unread" class="inline-flex items-center gap-1.5">
                             Unread
-                            <Badge
-                                v-if="unreadCount > 0"
-                                variant="default"
-                                class="ml-1.5 px-1 py-0 text-[10px]"
-                            >
+                            <Badge v-if="unreadCount" variant="secondary" class="h-4 min-w-4 px-1 text-[10px]">
                                 {{ unreadCount }}
                             </Badge>
                         </TabsTrigger>
                     </TabsList>
-                </Tabs>
-
-                <div class="flex flex-1 items-center gap-2">
-                    <div class="relative flex-1">
-                        <AppIcon
-                            name="search"
-                            class="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
-                        />
-                        <Input
-                            v-model="searchQuery"
-                            placeholder="Search notifications..."
-                            class="h-8 pl-8 text-sm"
-                        />
-                    </div>
-                    <Select v-model="categoryFilter">
-                        <SelectTrigger class="h-8 w-[140px] text-sm">
-                            <SelectValue placeholder="Category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All categories</SelectItem>
-                            <SelectItem value="clinical">Clinical</SelectItem>
-                            <SelectItem value="laboratory">Laboratory</SelectItem>
-                            <SelectItem value="pharmacy">Pharmacy</SelectItem>
-                            <SelectItem value="billing">Billing</SelectItem>
-                            <SelectItem value="administration">Administration</SelectItem>
-                            <SelectItem value="system">System</SelectItem>
-                        </SelectContent>
-                    </Select>
                 </div>
-            </div>
 
-            <div class="rounded-lg border">
-                <template v-if="isLoading">
-                    <div class="space-y-2 p-4">
-                        <Skeleton v-for="i in 5" :key="i" class="h-16 w-full" />
-                    </div>
-                </template>
-
-                <template v-else-if="filtered.length === 0">
-                    <div class="flex flex-col items-center gap-2 px-4 py-16 text-center">
-                        <AppIcon name="bell" class="size-10 text-muted-foreground/30" />
-                        <p class="text-sm font-medium text-muted-foreground">
-                            {{ activeTab === 'unread' ? 'No unread notifications' : 'No notifications' }}
-                        </p>
-                        <p class="text-xs text-muted-foreground/60">
-                            <template v-if="searchQuery || categoryFilter !== 'all'">
-                                Try adjusting your filters.
-                            </template>
-                            <template v-else>
-                                Notifications will appear here when something needs your attention.
-                            </template>
-                        </p>
-                    </div>
-                </template>
-
-                <template v-else>
-                    <div class="divide-y">
-                        <div
-                            v-for="n in filtered"
-                            :key="n.id"
-                            class="group relative flex cursor-pointer gap-3 px-4 py-3.5 transition-colors hover:bg-accent/30"
-                            :class="{ 'bg-muted/15': !n.readAt }"
-                            @click="handleClick(n)"
-                        >
-                            <AppIcon
-                                :name="categoryIconMap[n.category] ?? 'bell'"
-                                class="mt-0.5 size-4 shrink-0 text-muted-foreground"
-                            />
-                            <div class="min-w-0 flex-1">
-                                <div class="flex items-start justify-between gap-2">
-                                    <p
-                                        class="truncate text-sm"
-                                        :class="n.readAt ? 'text-muted-foreground' : 'font-medium text-foreground'"
-                                    >
-                                        {{ n.title }}
-                                    </p>
-                                    <div class="flex shrink-0 items-center gap-1.5">
-                                        <Badge
-                                            variant="outline"
-                                            class="px-1.5 py-0 text-[10px] font-normal capitalize"
-                                            :class="priorityBadgeClass(n.priority)"
-                                        >
-                                            {{ n.priority }}
-                                        </Badge>
-                                        <Badge
-                                            variant="secondary"
-                                            class="px-1.5 py-0 text-[10px] font-normal"
-                                        >
-                                            {{ n.category }}
-                                        </Badge>
-                                    </div>
-                                </div>
-                                <p v-if="n.body" class="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-                                    {{ n.body }}
-                                </p>
-                                <p class="mt-0.5 text-[10px] text-muted-foreground/50">
-                                    {{ new Date(n.createdAt).toLocaleString() }}
-                                </p>
-                            </div>
-                            <button
-                                class="absolute top-2 right-2 hidden size-5 items-center justify-center rounded-sm text-muted-foreground/40 hover:text-muted-foreground group-hover:flex"
-                                title="Dismiss"
-                                @click.stop="dismiss(n.id)"
-                            >
-                                <AppIcon name="x" class="size-3.5" />
-                            </button>
-                            <span
-                                v-if="!n.readAt"
-                                class="absolute top-3.5 right-3 size-2 rounded-full bg-blue-500"
+                <div class="space-y-4 px-6 pb-6">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <div class="relative min-w-72 flex-1">
+                            <AppIcon name="search" class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                v-model="searchQuery"
+                                placeholder="Search notifications…"
+                                class="h-9 pl-9"
                             />
                         </div>
+                        <Select v-model="categoryFilter">
+                            <SelectTrigger class="h-9 w-44">
+                                <SelectValue placeholder="Category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All categories</SelectItem>
+                                <SelectItem value="clinical">Clinical</SelectItem>
+                                <SelectItem value="laboratory">Laboratory</SelectItem>
+                                <SelectItem value="pharmacy">Pharmacy</SelectItem>
+                                <SelectItem value="billing">Billing</SelectItem>
+                                <SelectItem value="administration">Administration</SelectItem>
+                                <SelectItem value="system">System</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
-                </template>
-            </div>
+
+                    <TabsContent value="all">
+                        <template v-if="isLoading">
+                            <div class="space-y-2">
+                                <Skeleton v-for="i in 5" :key="i" class="h-16 w-full" />
+                            </div>
+                        </template>
+
+                        <template v-else-if="filtered.length === 0">
+                            <div class="flex flex-col items-center gap-2 py-16 text-center">
+                                <AppIcon name="bell" class="size-10 text-muted-foreground/30" />
+                                <p class="text-sm font-medium text-muted-foreground">No notifications</p>
+                                <p class="text-xs text-muted-foreground/60">
+                                    <template v-if="searchQuery || categoryFilter !== 'all'">
+                                        Try adjusting your filters.
+                                    </template>
+                                    <template v-else>
+                                        Notifications will appear here when something needs your attention.
+                                    </template>
+                                </p>
+                            </div>
+                        </template>
+
+                        <template v-else>
+                            <div class="rounded-lg border">
+                                <div class="divide-y">
+                                    <div
+                                        v-for="n in filtered"
+                                        :key="n.id"
+                                        class="group relative flex cursor-pointer gap-3 px-4 py-3.5 transition-colors hover:bg-accent/30"
+                                        :class="{ 'bg-muted/15': !n.readAt }"
+                                        @click="handleClick(n)"
+                                    >
+                                        <AppIcon
+                                            :name="categoryIconMap[n.category] ?? 'bell'"
+                                            class="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                                        />
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-start justify-between gap-2">
+                                                <p
+                                                    class="truncate text-sm"
+                                                    :class="n.readAt ? 'text-muted-foreground' : 'font-medium text-foreground'"
+                                                >
+                                                    {{ n.title }}
+                                                </p>
+                                                <div class="flex shrink-0 items-center gap-1.5">
+                                                    <Badge
+                                                        variant="outline"
+                                                        class="px-1.5 py-0 text-[10px] font-normal capitalize"
+                                                        :class="priorityBadgeClass(n.priority)"
+                                                    >
+                                                        {{ n.priority }}
+                                                    </Badge>
+                                                    <Badge
+                                                        variant="secondary"
+                                                        class="px-1.5 py-0 text-[10px] font-normal"
+                                                    >
+                                                        {{ n.category }}
+                                                    </Badge>
+                                                </div>
+                                            </div>
+                                            <p v-if="n.body" class="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                                                {{ n.body }}
+                                            </p>
+                                            <p class="mt-0.5 text-[10px] text-muted-foreground/50">
+                                                {{ new Date(n.createdAt).toLocaleString() }}
+                                            </p>
+                                        </div>
+                                        <button
+                                            class="absolute top-2 right-2 hidden size-5 items-center justify-center rounded-sm text-muted-foreground/40 hover:text-muted-foreground group-hover:flex"
+                                            title="Dismiss"
+                                            @click.stop="dismiss(n.id)"
+                                        >
+                                            <AppIcon name="x" class="size-3.5" />
+                                        </button>
+                                        <span
+                                            v-if="!n.readAt"
+                                            class="absolute top-3.5 right-3 size-2 rounded-full bg-blue-500"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </TabsContent>
+
+                    <TabsContent value="unread">
+                        <template v-if="isLoading">
+                            <div class="space-y-2">
+                                <Skeleton v-for="i in 5" :key="i" class="h-16 w-full" />
+                            </div>
+                        </template>
+
+                        <template v-else-if="filtered.length === 0">
+                            <div class="flex flex-col items-center gap-2 py-16 text-center">
+                                <AppIcon name="bell" class="size-10 text-muted-foreground/30" />
+                                <p class="text-sm font-medium text-muted-foreground">No unread notifications</p>
+                                <p class="text-xs text-muted-foreground/60">
+                                    You're all caught up.
+                                </p>
+                            </div>
+                        </template>
+
+                        <template v-else>
+                            <div class="rounded-lg border">
+                                <div class="divide-y">
+                                    <div
+                                        v-for="n in filtered"
+                                        :key="n.id"
+                                        class="group relative flex cursor-pointer gap-3 px-4 py-3.5 transition-colors hover:bg-accent/30"
+                                        :class="{ 'bg-muted/15': !n.readAt }"
+                                        @click="handleClick(n)"
+                                    >
+                                        <AppIcon
+                                            :name="categoryIconMap[n.category] ?? 'bell'"
+                                            class="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                                        />
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-start justify-between gap-2">
+                                                <p
+                                                    class="truncate text-sm"
+                                                    :class="n.readAt ? 'text-muted-foreground' : 'font-medium text-foreground'"
+                                                >
+                                                    {{ n.title }}
+                                                </p>
+                                                <div class="flex shrink-0 items-center gap-1.5">
+                                                    <Badge
+                                                        variant="outline"
+                                                        class="px-1.5 py-0 text-[10px] font-normal capitalize"
+                                                        :class="priorityBadgeClass(n.priority)"
+                                                    >
+                                                        {{ n.priority }}
+                                                    </Badge>
+                                                    <Badge
+                                                        variant="secondary"
+                                                        class="px-1.5 py-0 text-[10px] font-normal"
+                                                    >
+                                                        {{ n.category }}
+                                                    </Badge>
+                                                </div>
+                                            </div>
+                                            <p v-if="n.body" class="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                                                {{ n.body }}
+                                            </p>
+                                            <p class="mt-0.5 text-[10px] text-muted-foreground/50">
+                                                {{ new Date(n.createdAt).toLocaleString() }}
+                                            </p>
+                                        </div>
+                                        <button
+                                            class="absolute top-2 right-2 hidden size-5 items-center justify-center rounded-sm text-muted-foreground/40 hover:text-muted-foreground group-hover:flex"
+                                            title="Dismiss"
+                                            @click.stop="dismiss(n.id)"
+                                        >
+                                            <AppIcon name="x" class="size-3.5" />
+                                        </button>
+                                        <span
+                                            v-if="!n.readAt"
+                                            class="absolute top-3.5 right-3 size-2 rounded-full bg-blue-500"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </TabsContent>
+                </div>
+            </Tabs>
         </div>
     </AppLayout>
 </template>
