@@ -74,17 +74,17 @@ export function shouldShowAppointmentCareAction(appointment: PatientChartAppoint
     return Boolean(appointment && activeVisitStatuses.includes(appointment.status || ''));
 }
 
-export function appointmentActionLabel(appointment: PatientChartAppointment | null): string {
-    switch (appointment?.status) {
-        case 'in_consultation':
-            return 'Resume consultation';
-        case 'waiting_provider':
-            return 'Start consultation';
-        case 'waiting_triage':
-            return 'Open triage';
-        default:
-            return appointment?.status === 'scheduled' ? 'Open scheduled visit' : 'Open visit';
+export function appointmentActionLabel(
+    appointment: PatientChartAppointment | null,
+    canRecordOpdTriage: boolean,
+    canStartConsultation: boolean,
+): string {
+    const action = appointmentWorkflowAction(appointment, canRecordOpdTriage, canStartConsultation);
+    if (action === 'triage') return 'Open triage';
+    if (action === 'consultation') {
+        return appointment?.status === 'in_consultation' ? 'Resume consultation' : 'Start consultation';
     }
+    return appointment?.status === 'scheduled' ? 'Open scheduled visit' : 'Open visit';
 }
 
 export function appointmentPrimaryActionHref(
@@ -97,8 +97,14 @@ export function appointmentPrimaryActionHref(
         : appointmentDetailsHref(appointment);
 }
 
-export function appointmentPrimaryActionLabel(appointment: PatientChartAppointment): string {
-    return shouldShowAppointmentCareAction(appointment) ? appointmentActionLabel(appointment) : 'Open visit';
+export function appointmentPrimaryActionLabel(
+    appointment: PatientChartAppointment,
+    canRecordOpdTriage: boolean,
+    canStartConsultation: boolean,
+): string {
+    return shouldShowAppointmentCareAction(appointment)
+        ? appointmentActionLabel(appointment, canRecordOpdTriage, canStartConsultation)
+        : 'Open visit';
 }
 
 export function appointmentPrimaryActionIcon(

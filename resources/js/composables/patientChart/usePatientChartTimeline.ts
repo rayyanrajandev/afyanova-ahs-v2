@@ -276,7 +276,9 @@ export function usePatientChartTimeline(params: UsePatientChartTimelineParams) {
             : appointmentDetailsHref(primaryVisit.value);
     });
     const visitPrimaryActionLabel = computed(() =>
-        !hasOpenVisitInChart.value || !primaryVisit.value ? 'Schedule appointment' : appointmentPrimaryActionLabel(primaryVisit.value),
+        !hasOpenVisitInChart.value || !primaryVisit.value
+            ? 'Schedule appointment'
+            : appointmentPrimaryActionLabel(primaryVisit.value, params.canRecordOpdTriage.value, params.canStartConsultation.value),
     );
     const visitPrimaryActionIcon = computed(() =>
         !hasOpenVisitInChart.value || !primaryVisit.value

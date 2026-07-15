@@ -985,7 +985,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                         <Button v-if="focusedAppointmentId" size="sm" variant="ghost" @click="focusedAppointmentId = ''">Auto-select</Button>
                                         <Button size="sm" class="gap-1.5" as-child>
                                             <Link :href="appointmentPrimaryActionHref(timeline.primaryVisit.value, canRecordOpdTriage, canStartConsultation)">
-                                                <AppIcon :name="appointmentPrimaryActionIcon(timeline.primaryVisit.value, canRecordOpdTriage, canStartConsultation)" class="size-3.5" />{{ appointmentPrimaryActionLabel(timeline.primaryVisit.value) }}
+                                                <AppIcon :name="appointmentPrimaryActionIcon(timeline.primaryVisit.value, canRecordOpdTriage, canStartConsultation)" class="size-3.5" />{{ appointmentPrimaryActionLabel(timeline.primaryVisit.value, canRecordOpdTriage, canStartConsultation) }}
                                             </Link>
                                         </Button>
                                     </div>
@@ -1022,7 +1022,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                         </Button>
                                         <Button size="sm" variant="outline" class="gap-1.5" as-child>
                                             <Link :href="appointmentPrimaryActionHref(appointment, canRecordOpdTriage, canStartConsultation)">
-                                                <AppIcon :name="appointmentPrimaryActionIcon(appointment, canRecordOpdTriage, canStartConsultation)" class="size-3.5" />{{ appointmentPrimaryActionLabel(appointment) }}
+                                                <AppIcon :name="appointmentPrimaryActionIcon(appointment, canRecordOpdTriage, canStartConsultation)" class="size-3.5" />{{ appointmentPrimaryActionLabel(appointment, canRecordOpdTriage, canStartConsultation) }}
                                             </Link>
                                         </Button>
                                     </div>
