@@ -40,37 +40,36 @@ class DepartmentScopedPermissionResolver
         ?DepartmentModel $targetDepartment = null,
         ?InventoryWarehouseModel $warehouse = null
     ): bool {
-        // Get user's own department assignment
-        $userDepartment = $this->getUserDepartment($user);
-        if (!$userDepartment) {
-            return false; // User not assigned to department
+        // Standard RBAC check (covers super admin bypass and direct permission grants)
+        if ($user->hasPermissionTo($permission)) {
+            return true;
         }
 
-        // If checking other department, validate access scope
+        $userDepartment = $this->getUserDepartment($user);
+        if (!$userDepartment) {
+            return false;
+        }
+
         if ($targetDepartment && $targetDepartment->id !== $userDepartment->id) {
             if (!$this->canAccessOtherDepartment($user, $targetDepartment)) {
                 return false;
             }
-            // Use user's own department to find roles that grant cross-department access
             $departmentToCheck = $userDepartment;
         } else {
             $departmentToCheck = $userDepartment;
         }
 
-        // Get all active inventory access roles for this user in this department
         $activeRoles = $user->inventoryAccessRoles()
             ->where('department_id', $departmentToCheck->id)
-            ->active() // Uses scope defined in RoleModel
+            ->active()
             ->get();
 
         if ($activeRoles->isEmpty()) {
             return false;
         }
 
-        // Check if any role has this permission
         foreach ($activeRoles as $role) {
             if ($this->roleHasPermission($role, $permission)) {
-                // Check warehouse scope if applicable
                 if ($warehouse && !$this->canAccessWarehouse($role, $warehouse)) {
                     continue;
                 }
@@ -133,46 +132,7 @@ class DepartmentScopedPermissionResolver
      */
     private function roleHasPermission(RoleModel $role, string $permission): bool
     {
-        // Permission matrix based on access_level
-        $permissionMatrix = [
-            'view' => [
-                'inventory.view-own-items',
-                'inventory.view-warehouse-own-department',
-                'inventory.view-requisition-own',
-            ],
-            'request' => [
-                'inventory.view-own-items',
-                'inventory.create-requisition-own-department',
-                'inventory.view-requisition-own',
-                'inventory.view-warehouse-own-department',
-            ],
-            'approve' => [
-                'inventory.view-own-items',
-                'inventory.view-department-items',
-                'inventory.create-requisition-own-department',
-                'inventory.approve-requisition-own-department',
-                'inventory.execute-warehouse-transfer-own-department',
-                'inventory.authorize-warehouse-transfer-receiving-department',
-                'inventory.view-warehouse-own-department',
-                'inventory.view-requisition-own',
-            ],
-            'manage' => [
-                'inventory.view-own-items',
-                'inventory.view-department-items',
-                'inventory.create-requisition-own-department',
-                'inventory.create-requisition-cross-department',
-                'inventory.approve-requisition-own-department',
-                'inventory.manage-warehouse-own-department',
-                'inventory.execute-warehouse-transfer-own-department',
-                'inventory.authorize-warehouse-transfer-receiving-department',
-                'inventory.dispose-items-own-department',
-                'inventory.view-warehouse-own-department',
-                'inventory.view-requisition-own',
-            ],
-        ];
-
-        $allowedPerms = $permissionMatrix[$role->access_level] ?? [];
-        return in_array($permission, $allowedPerms);
+        return $role->permissions()->where('name', $permission)->exists();
     }
 
     /**
@@ -208,45 +168,8 @@ class DepartmentScopedPermissionResolver
             ->active()
             ->get();
 
-        $permissionMatrix = [
-            'view' => [
-                'inventory.view-own-items',
-                'inventory.view-warehouse-own-department',
-                'inventory.view-requisition-own',
-            ],
-            'request' => [
-                'inventory.view-own-items',
-                'inventory.create-requisition-own-department',
-                'inventory.view-requisition-own',
-                'inventory.view-warehouse-own-department',
-            ],
-            'approve' => [
-                'inventory.view-own-items',
-                'inventory.view-department-items',
-                'inventory.create-requisition-own-department',
-                'inventory.approve-requisition-own-department',
-                'inventory.execute-warehouse-transfer-own-department',
-                'inventory.authorize-warehouse-transfer-receiving-department',
-                'inventory.view-warehouse-own-department',
-                'inventory.view-requisition-own',
-            ],
-            'manage' => [
-                'inventory.view-own-items',
-                'inventory.view-department-items',
-                'inventory.create-requisition-own-department',
-                'inventory.create-requisition-cross-department',
-                'inventory.approve-requisition-own-department',
-                'inventory.manage-warehouse-own-department',
-                'inventory.execute-warehouse-transfer-own-department',
-                'inventory.authorize-warehouse-transfer-receiving-department',
-                'inventory.dispose-items-own-department',
-                'inventory.view-warehouse-own-department',
-                'inventory.view-requisition-own',
-            ],
-        ];
-
         foreach ($activeRoles as $role) {
-            $rolePerms = $permissionMatrix[$role->access_level] ?? [];
+            $rolePerms = $role->permissions()->pluck('name')->toArray();
             $permissions = array_unique(array_merge($permissions, $rolePerms));
         }
 

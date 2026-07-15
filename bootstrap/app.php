@@ -42,7 +42,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'agent.token' => App\Http\Middleware\EnsureValidAgentToken::class,
             'facility.entitlement' => EnsureFacilitySubscriptionEntitlement::class,
             'facility.entitlement.any' => EnsureFacilitySubscriptionEntitlementAny::class,
-            'inventory.access' => InventoryAccessMiddleware::class,
+            'inventory.access' => InventoryAccessMiddleware::class, // @deprecated Phase 7 — replaced by can: + InventoryPolicy
             'user.has-role' => EnsureUserHasActiveRole::class,
         ]);
 
