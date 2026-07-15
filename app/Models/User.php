@@ -265,11 +265,21 @@ class User extends Authenticatable implements MustVerifyEmail
     private function isFacilitySuperAdmin(): bool
     {
         try {
-            return DB::table('facility_user')
+            $hasPivotFlag = DB::table('facility_user')
                 ->where('user_id', $this->id)
                 ->where('is_active', true)
                 ->where('role', 'super_admin')
                 ->exists();
+
+            if ($hasPivotFlag) {
+                return true;
+            }
+
+            $hasAdminRole = $this->roles()
+                ->where('code', 'ADMIN.FACILITY')
+                ->exists();
+
+            return $hasAdminRole;
         } catch (QueryException) {
             return false;
         }
