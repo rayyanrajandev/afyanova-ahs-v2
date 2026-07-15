@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Link } from '@inertiajs/vue3';
 import NotificationItemRow from '@/components/NotificationItem.vue';
 import type { NotificationItem } from '@/composables/useNotifications';
 
@@ -30,12 +31,12 @@ const emit = defineEmits<{
             <p class="text-xs">You'll see notifications here when something needs your attention.</p>
         </div>
         <div class="border-t p-2">
-            <a
+            <Link
                 href="/notifications"
                 class="flex items-center justify-center rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             >
                 View all notifications
-            </a>
+            </Link>
         </div>
     </div>
 </template>

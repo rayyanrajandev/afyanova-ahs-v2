@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { router } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import type { NotificationItem } from '@/composables/useNotifications';
@@ -40,7 +41,7 @@ function handleClick() {
         emit('mark-read', props.notification.id);
     }
     if (props.notification.actionUrl) {
-        window.location.href = props.notification.actionUrl;
+        router.visit(props.notification.actionUrl);
     }
 }
 </script>
