@@ -243,19 +243,33 @@ class User extends Authenticatable implements MustVerifyEmail
     private function isPlatformSuperAdmin(): bool
     {
         if ($this->relationLoaded('roles')) {
-            return $this->roles->contains(function (mixed $role): bool {
+            $hasRole = $this->roles->contains(function (mixed $role): bool {
                 $code = strtoupper(trim((string) ($role->code ?? '')));
                 $status = strtolower(trim((string) ($role->status ?? 'active')));
 
                 return $status === 'active'
                     && in_array($code, self::PLATFORM_SUPER_ADMIN_ROLE_CODES, true);
             });
+
+            if ($hasRole) {
+                return true;
+            }
         }
 
         try {
-            return $this->roles()
+            $hasRole = $this->roles()
                 ->whereIn('code', self::PLATFORM_SUPER_ADMIN_ROLE_CODES)
                 ->where('status', 'active')
+                ->exists();
+
+            if ($hasRole) {
+                return true;
+            }
+
+            return DB::table('facility_user')
+                ->where('user_id', $this->id)
+                ->where('is_active', true)
+                ->where('role', 'super_admin')
                 ->exists();
         } catch (QueryException) {
             return false;
