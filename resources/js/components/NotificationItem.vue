@@ -29,9 +29,9 @@ const categoryIcon = computed(() => {
 
 const priorityBorderClass = computed(() => {
     switch (props.notification.priority) {
-        case 'critical': return 'border-l-destructive';
-        case 'high': return 'border-l-orange-500';
-        case 'normal': return 'border-l-blue-500';
+        case 'critical': return 'border-l-critical';
+        case 'high': return 'border-l-warning';
+        case 'normal': return 'border-l-info';
         default: return 'border-l-muted';
     }
 });
@@ -82,7 +82,7 @@ function handleClick() {
         </button>
         <span
             v-if="isUnread"
-            class="absolute top-3 right-3 size-2 rounded-full bg-blue-500"
+            class="absolute top-3 right-3 size-2 rounded-full bg-info"
         />
     </div>
 </template>
