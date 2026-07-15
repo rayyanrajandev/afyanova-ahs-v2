@@ -22,19 +22,37 @@ class SyncRolesFromConfig extends Command
             return self::FAILURE;
         }
 
-        $facilities = DB::table('facilities')->get();
+        $platformRoles = array_filter($roles, fn (array $def): bool =>
+            ($def['scope_type'] ?? null) === 'cross_facility');
+
+        $facilityRoles = array_filter($roles, fn (array $def): bool =>
+            ($def['scope_type'] ?? null) !== 'cross_facility');
+
         $tenants = DB::table('tenants')->get();
+        $tenantId = $tenants->first()?->id;
+
+        // Platform roles — created once, no facility_id
+        if (! empty($platformRoles)) {
+            foreach ($platformRoles as $roleKey => $roleDef) {
+                $this->syncPlatformRole($roleDef, $tenantId);
+            }
+            $this->line('Synced platform roles.');
+        }
+
+        // Facility roles — created per facility
+        $facilities = DB::table('facilities')->get();
 
         if ($facilities->isEmpty()) {
-            $this->warn('No facilities found. Creating roles without facility scoping...');
+            $this->warn('No facilities found. Skipping facility roles.');
 
-            return $this->syncRolesForFacility(null, $roles);
+            return self::SUCCESS;
         }
 
         foreach ($facilities as $facility) {
-            $tenantId = $facility->tenant_id ?? $tenants->first()?->id;
-
-            $this->syncRolesForFacility($facility, $roles, $tenantId);
+            foreach ($facilityRoles as $roleKey => $roleDef) {
+                $this->syncFacilityRole($roleDef, $roleKey, $facility, $tenantId);
+            }
+            $this->line('Synced roles for facility: '.($facility->name ?? $facility->id));
         }
 
         $this->info('All roles synced from config/roles.php.');
@@ -43,87 +61,106 @@ class SyncRolesFromConfig extends Command
     }
 
     /**
-     * @param  object|null  $facility
-     * @param  array<string, array<string, mixed>>  $roles
+     * @param  array<string, mixed>  $roleDef
      */
-    private function syncRolesForFacility(?object $facility, array $roles, ?string $tenantId = null): void
+    private function syncPlatformRole(array $roleDef, ?string $tenantId): void
     {
-        $facilityId = $facility?->id;
-        $facilityName = $facility?->name ?? 'global';
+        $code = $roleDef['code'];
 
-        foreach ($roles as $roleKey => $roleDef) {
-            $code = $roleDef['code'] ?? null;
-            if ($code === null) {
-                continue;
-            }
+        $perms = $roleDef['permissions'] ?? [];
+        unset($roleDef['permissions']);
 
-            $perms = $roleDef['permissions'] ?? [];
-            unset($roleDef['permissions']);
+        $attributes = [
+            'tenant_id' => $tenantId,
+            'facility_id' => null,
+            'department_id' => null,
+            'code' => $code,
+        ];
 
-            $departmentId = null;
-            if (($roleDef['scope_type'] ?? null) === 'own_department' && $facilityId !== null) {
-                $departmentId = $this->resolveDepartmentId($facilityId, $roleKey);
-            }
+        $this->upsertRole($attributes, $roleDef, $perms);
+    }
 
-            $attributes = [
-                'tenant_id' => $tenantId,
-                'facility_id' => $facilityId,
-                'department_id' => $departmentId,
-                'code' => $code,
-            ];
+    /**
+     * @param  array<string, mixed>  $roleDef
+     */
+    private function syncFacilityRole(array $roleDef, string $roleKey, object $facility, ?string $tenantId): void
+    {
+        $code = $roleDef['code'];
 
-            $existing = DB::table('roles')->where($attributes)->first();
+        $perms = $roleDef['permissions'] ?? [];
+        unset($roleDef['permissions']);
 
-            if ($existing) {
-                DB::table('roles')->where($attributes)->update([
-                    'name' => $roleDef['name'],
-                    'description' => $roleDef['description'] ?? null,
-                    'access_level' => $roleDef['access_level'] ?? null,
-                    'scope_type' => $roleDef['scope_type'] ?? null,
-                    'is_system' => $roleDef['is_system'] ?? false,
-                    'status' => 'active',
-                    'updated_at' => now(),
-                ]);
-            } else {
-                DB::table('roles')->insert(array_merge($attributes, [
-                    'id' => Str::orderedUuid()->toString(),
-                    'name' => $roleDef['name'],
-                    'description' => $roleDef['description'] ?? null,
-                    'access_level' => $roleDef['access_level'] ?? null,
-                    'scope_type' => $roleDef['scope_type'] ?? null,
-                    'is_system' => $roleDef['is_system'] ?? false,
-                    'status' => 'active',
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]));
-            }
-
-            if (empty($perms)) {
-                continue;
-            }
-
-            $roleId = DB::table('roles')->where($attributes)->value('id');
-            if (! $roleId) {
-                continue;
-            }
-
-            $permIds = DB::table('permissions')
-                ->whereIn('name', $perms)
-                ->pluck('id');
-
-            DB::table('permission_role')
-                ->where('role_id', $roleId)
-                ->whereNotIn('permission_id', $permIds)
-                ->delete();
-
-            foreach ($permIds as $permId) {
-                DB::table('permission_role')->updateOrInsert(
-                    ['permission_id' => $permId, 'role_id' => $roleId],
-                );
-            }
+        $departmentId = null;
+        if (($roleDef['scope_type'] ?? null) === 'own_department') {
+            $departmentId = $this->resolveDepartmentId($facility->id, $roleKey);
         }
 
-        $this->line("Synced roles for facility: {$facilityName}");
+        $attributes = [
+            'tenant_id' => $tenantId,
+            'facility_id' => $facility->id,
+            'department_id' => $departmentId,
+            'code' => $code,
+        ];
+
+        $this->upsertRole($attributes, $roleDef, $perms);
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  array<string, mixed>  $roleDef
+     * @param  array<int, string>  $perms
+     */
+    private function upsertRole(array $attributes, array $roleDef, array $perms): void
+    {
+        $existing = DB::table('roles')->where($attributes)->first();
+
+        if ($existing) {
+            DB::table('roles')->where($attributes)->update([
+                'name' => $roleDef['name'],
+                'description' => $roleDef['description'] ?? null,
+                'access_level' => $roleDef['access_level'] ?? null,
+                'scope_type' => $roleDef['scope_type'] ?? null,
+                'is_system' => $roleDef['is_system'] ?? false,
+                'status' => 'active',
+                'updated_at' => now(),
+            ]);
+        } else {
+            DB::table('roles')->insert(array_merge($attributes, [
+                'id' => Str::orderedUuid()->toString(),
+                'name' => $roleDef['name'],
+                'description' => $roleDef['description'] ?? null,
+                'access_level' => $roleDef['access_level'] ?? null,
+                'scope_type' => $roleDef['scope_type'] ?? null,
+                'is_system' => $roleDef['is_system'] ?? false,
+                'status' => 'active',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]));
+        }
+
+        if (empty($perms)) {
+            return;
+        }
+
+        $roleId = DB::table('roles')->where($attributes)->value('id');
+        if (! $roleId) {
+            return;
+        }
+
+        $permIds = DB::table('permissions')
+            ->whereIn('name', $perms)
+            ->pluck('id');
+
+        DB::table('permission_role')
+            ->where('role_id', $roleId)
+            ->whereNotIn('permission_id', $permIds)
+            ->delete();
+
+        foreach ($permIds as $permId) {
+            DB::table('permission_role')->updateOrInsert(
+                ['permission_id' => $permId, 'role_id' => $roleId],
+            );
+        }
     }
 
     private function resolveDepartmentId(string $facilityId, string $roleKey): ?string

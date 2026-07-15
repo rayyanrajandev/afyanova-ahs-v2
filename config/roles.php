@@ -1,6 +1,50 @@
 <?php
 
 return [
+    'platform-super-admin' => [
+        'code' => 'PLATFORM.SUPER.ADMIN',
+        'name' => 'System Administrator',
+        'description' => 'Ministry of Health ICT. Full platform access across all facilities.',
+        'access_level' => 'manage',
+        'scope_type' => 'cross_facility',
+        'is_system' => true,
+        'status' => 'active',
+        'permissions' => [],
+    ],
+
+    'platform-user-admin' => [
+        'code' => 'PLATFORM.USER.ADMIN',
+        'name' => 'Platform User Administrator',
+        'description' => 'Manages user accounts and facility assignments across the platform.',
+        'access_level' => 'manage',
+        'scope_type' => 'cross_facility',
+        'is_system' => true,
+        'status' => 'active',
+        'permissions' => [],
+    ],
+
+    'platform-rbac-admin' => [
+        'code' => 'PLATFORM.RBAC.ADMIN',
+        'name' => 'Platform RBAC Administrator',
+        'description' => 'Manages roles, permissions, and access policies across the platform.',
+        'access_level' => 'manage',
+        'scope_type' => 'cross_facility',
+        'is_system' => true,
+        'status' => 'active',
+        'permissions' => [],
+    ],
+
+    'platform-subscription-admin' => [
+        'code' => 'PLATFORM.SUBSCRIPTION.ADMIN',
+        'name' => 'Subscription Administrator',
+        'description' => 'Manages facility subscriptions, plans, and entitlements.',
+        'access_level' => 'manage',
+        'scope_type' => 'cross_facility',
+        'is_system' => true,
+        'status' => 'active',
+        'permissions' => [],
+    ],
+
     'clinical-officer' => [
         'code' => 'CLINICAL.GENERAL',
         'name' => 'Clinical Officer',
