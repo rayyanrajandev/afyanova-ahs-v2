@@ -154,6 +154,7 @@ const canStartVisit = computed(() => hasAccess('appointments.create') && hasAcce
 const canCreateServiceRequest = computed(() => hasAccess('service.requests.create'));
 const canCreateAppointment = computed(() => hasAccess('appointments.create'));
 const canCreatePatients = computed(() => hasAccess('patients.create'));
+const canRecordTriage = computed(() => hasAccess('appointments.record-triage'));
 
 const queryClient = useQueryClient();
 
@@ -601,7 +602,17 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                             </Alert>
 
                             <template v-else>
-                                <ReceptionQueueList :entries="triageQueue.data.value?.data ?? []" />
+                                <ReceptionQueueList :entries="triageQueue.data.value?.data ?? []">
+                                    <template #actions="{ entry }">
+                                        <Link
+                                            v-if="canRecordTriage"
+                                            :href="`/triage/queue?triage=${entry.appointmentId}`"
+                                            class="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent"
+                                        >
+                                            Record triage
+                                        </Link>
+                                    </template>
+                                </ReceptionQueueList>
                                 <div
                                     v-if="triageQueue.data.value && triageQueue.data.value.meta.lastPage > 1"
                                     class="mt-2 flex items-center justify-between text-sm text-muted-foreground"

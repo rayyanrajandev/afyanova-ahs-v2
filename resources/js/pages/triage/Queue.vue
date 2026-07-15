@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, usePage } from '@inertiajs/vue3';
 import { useQueryClient } from '@tanstack/vue-query';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -202,6 +202,23 @@ const queryClient = useQueryClient();
 function openTriageSheet(entry: ReceptionQueueEntry): void {
     triageTargetEntry.value = entry;
     triageSheetOpen.value = true;
+}
+
+// Auto-open triage sheet from ?triage=appointmentId query param
+const triageParam = new URLSearchParams(window.location.search).get('triage');
+if (triageParam) {
+    const unwatch = watch(queue.data, (result) => {
+        if (!result) return;
+        const match = result.data.find((entry) => entry.appointmentId === triageParam);
+        if (match) {
+            openTriageSheet(match);
+            unwatch();
+            // Clean URL without reload
+            const url = new URL(window.location.href);
+            url.searchParams.delete('triage');
+            window.history.replaceState({}, '', url.toString());
+        }
+    }, { immediate: true });
 }
 
 async function invalidateQueueAndCounts(): Promise<void> {
