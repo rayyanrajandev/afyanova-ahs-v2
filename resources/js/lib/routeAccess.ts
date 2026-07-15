@@ -250,6 +250,10 @@ const routeAccessRules: RouteAccessRule[] = [
         pathPrefix: '/admissions',
         requiredPermissions: ['admissions.read'],
     },
+    {
+        pathPrefix: '/notifications',
+        requiredPermissions: [],
+    },
 ];
 
 function normalizePath(href: string): string {

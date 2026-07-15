@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useNotifications } from '@/composables/useNotifications';
+import { usePlatformAccess } from '@/composables/usePlatformAccess';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 
@@ -27,6 +28,29 @@ const {
     dismiss,
     refresh,
 } = useNotifications();
+
+const { hasPermission, isFacilitySuperAdmin } = usePlatformAccess();
+
+const canView = (perm: string) => isFacilitySuperAdmin.value || hasPermission(perm);
+
+const categoryOptions = computed(() => {
+    const options: { value: string; label: string }[] = [{ value: 'all', label: 'All categories' }];
+    if (canView('appointments.read') || canView('emergency.triage.read')) {
+        options.push({ value: 'clinical', label: 'Clinical' });
+    }
+    if (canView('laboratory.orders.read')) {
+        options.push({ value: 'laboratory', label: 'Laboratory' });
+    }
+    if (canView('pharmacy.orders.read')) {
+        options.push({ value: 'pharmacy', label: 'Pharmacy' });
+    }
+    if (canView('billing.invoices.read')) {
+        options.push({ value: 'billing', label: 'Billing' });
+    }
+    options.push({ value: 'administration', label: 'Administration' });
+    options.push({ value: 'system', label: 'System' });
+    return options;
+});
 
 const selectedTab = ref<'all' | 'unread'>('all');
 const categoryFilter = ref<string>('all');
@@ -186,13 +210,9 @@ function priorityBadgeClass(p: string): string {
                                 <SelectValue placeholder="Category" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="all">All categories</SelectItem>
-                                <SelectItem value="clinical">Clinical</SelectItem>
-                                <SelectItem value="laboratory">Laboratory</SelectItem>
-                                <SelectItem value="pharmacy">Pharmacy</SelectItem>
-                                <SelectItem value="billing">Billing</SelectItem>
-                                <SelectItem value="administration">Administration</SelectItem>
-                                <SelectItem value="system">System</SelectItem>
+                                <SelectItem v-for="opt in categoryOptions" :key="opt.value" :value="opt.value">
+                                    {{ opt.label }}
+                                </SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
