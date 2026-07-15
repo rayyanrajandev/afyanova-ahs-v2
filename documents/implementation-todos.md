@@ -79,13 +79,13 @@ SELECT name FROM permissions WHERE name LIKE 'lab.%'     -- lab.order, lab.sampl
 
 | # | Task | Status |
 |---|------|--------|
-| 5.1 | Update PatientController — call `$this->authorize()` instead of FormRequest-only | 🔴 |
-| 5.2 | Update LabOrderController — call `$this->authorize()` per action | 🔴 |
-| 5.3 | Update PharmacyOrderController | 🔴 |
-| 5.4 | Update RadiologyOrderController | 🔴 |
-| 5.5 | Update AppointmentController | 🔴 |
-| 5.6 | Update MedicalRecordController | 🔴 |
-| 5.7 | Update Inventory/RequisitionController | 🔴 |
+| 5.1 | Update PatientController — call `$this->authorize()` instead of FormRequest-only | 🟢 |
+| 5.2 | Update LabOrderController — call `$this->authorize()` per action | 🟢 |
+| 5.3 | Update PharmacyOrderController | 🟢 |
+| 5.4 | Update RadiologyOrderController | 🟢 |
+| 5.5 | Update AppointmentController | 🟢 |
+| 5.6 | Update MedicalRecordController | 🟢 |
+| 5.7 | Update Inventory/RequisitionController | 🟢 |
 
 **Files to modify:** All controllers in `app/Modules/*/Presentation/Http/Controllers/`
 
@@ -176,7 +176,7 @@ SELECT name FROM permissions WHERE name LIKE 'lab.%'     -- lab.order, lab.sampl
 | 2 | Backward-compat gates | 3 | 1 | 🟢 |
 | 3 | Switch code to new perms | 5 | 1 | 🟢 |
 | 4 | Policy files (empty) | 8 | 1 | 🟢 |
-| 5 | Controller → policy swap | 7 | 1 | 🔴 |
+| 5 | Controller → policy swap | 7 | 1 | 🟢 |
 | 6 | Business logic in policies | 18 | 5 | 🔴 |
 | 7 | Eliminate dual RBAC | 3 | 1 | 🔴 |
 | 8 | Config-driven roles | 4 | 1 | 🔴 |
