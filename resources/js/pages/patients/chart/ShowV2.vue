@@ -82,6 +82,7 @@ import {
     theatreProcedureCardViewModel,
 } from '@/composables/patientChart/patientChartOrderCardViewModel';
 import { patientChartModuleHref } from '@/composables/patientChart/patientChartModuleHref';
+import { usePatientLatestVitals } from '@/composables/patientChart/usePatientVitals';
 import type {
     PatientChartLaboratoryOrder,
     PatientChartLaboratoryOrderStatusCounts,
@@ -93,6 +94,8 @@ import type {
     PatientChartTheatreProcedureStatusCounts,
 } from '@/composables/patientChart/patientChartOrderTypes';
 import { type BreadcrumbItem } from '@/types';
+import VitalsEditSheet from '@/components/patient-chart/VitalsEditSheet.vue';
+import { vitalsDisplayRows, vitalsSummaryLine } from '@/lib/vitalsDisplay';
 
 /**
  * Full Patient Chart rebuild (reports/patient-chart-rebuild-plan.md):
@@ -135,6 +138,24 @@ const canReadPatientInsurance = computed(() => hasAccess('patients.insurance.rea
 const canManagePatientInsurance = computed(() => hasAccess('patients.insurance.manage'));
 const canVerifyPatientInsurance = computed(() => hasAccess('patients.insurance.verify'));
 const canViewPatientAuditLogs = computed(() => hasAccess('patients.view-audit-logs'));
+
+const structuredVitalsQuery = usePatientLatestVitals(patientIdRef);
+const structuredVitals = computed(() => structuredVitalsQuery.data.value ?? null);
+const editVitalsOpen = ref(false);
+
+const vitalsLine = computed(() => {
+    if (structuredVitals.value) return vitalsSummaryLine(structuredVitals.value);
+    return timeline.primaryVisit.value?.triageVitalsSummary ?? null;
+});
+
+const vitalsRows = computed(() => {
+    if (!structuredVitals.value) return [];
+    return vitalsDisplayRows(structuredVitals.value);
+});
+
+function onVitalsUpdated(): void {
+    void structuredVitalsQuery.refetch();
+}
 
 type Patient = {
     id: string;
@@ -707,12 +728,23 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                     </div>
                                 </div>
 
-                                <div v-if="timeline.primaryVisit.value?.triageVitalsSummary" class="mt-3 rounded-lg border-l-4 border-l-info bg-muted/20 px-4 py-3">
-                                    <div class="flex items-center gap-2 text-sm font-semibold text-foreground">
-                                        <AppIcon name="activity" class="size-4 text-info" aria-hidden="true" />
-                                        Triage vitals
+                                <div v-if="timeline.primaryVisit.value?.triageVitalsSummary || structuredVitals" class="mt-3 rounded-lg border-l-4 border-l-info bg-muted/20 px-4 py-3">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <div class="flex items-center gap-2 text-sm font-semibold text-foreground">
+                                            <AppIcon name="activity" class="size-4 text-info" aria-hidden="true" />
+                                            Vitals
+                                        </div>
+                                        <Button v-if="canUpdatePatients" size="sm" variant="ghost" class="h-6 gap-1 px-1.5 text-xs" @click="editVitalsOpen = true">
+                                            <AppIcon name="pencil" class="size-3" />Edit
+                                        </Button>
                                     </div>
-                                    <p class="mt-1 text-sm text-foreground">{{ timeline.primaryVisit.value.triageVitalsSummary }}</p>
+                                    <div v-if="structuredVitals" class="mt-2 grid grid-cols-3 gap-x-4 gap-y-1 sm:grid-cols-6">
+                                        <div v-for="row in vitalsRows" :key="row.label" class="space-y-0">
+                                            <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">{{ row.label }}</p>
+                                            <p class="text-sm font-semibold tabular-nums text-foreground">{{ row.value ?? '—' }} <span class="text-xs font-normal text-muted-foreground">{{ row.unit }}</span></p>
+                                        </div>
+                                    </div>
+                                    <p v-else class="mt-1 text-sm text-foreground">{{ vitalsLine }}</p>
                                 </div>
                             </CardContent>
                         </Card>
@@ -2068,5 +2100,6 @@ const { scrollContainerHeight } = useStickyScrollContainer();
         </div>
 
         <PatientEditSheet v-model:open="editSheetOpen" :patient="patient" @updated="onPatientUpdated" />
+        <VitalsEditSheet v-model:open="editVitalsOpen" :patient-id="props.patientId" :vitals="structuredVitals" @updated="onVitalsUpdated" />
     </AppLayout>
 </template>

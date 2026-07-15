@@ -1847,6 +1847,15 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
     Route::post('patient-vitals', [PatientVitalSetController::class, 'store'])
         ->middleware('can:inpatient.ward.create')
         ->name('patient-vitals.store');
+    Route::get('patient-vitals/patient/{patientId}', [PatientVitalSetController::class, 'latestForPatient'])
+        ->middleware('can:patients.read')
+        ->name('patient-vitals.latest-for-patient');
+    Route::post('patient-vitals/chart', [PatientVitalSetController::class, 'storeForChart'])
+        ->middleware('can:patients.update')
+        ->name('patient-vitals.store-for-chart');
+    Route::patch('patient-vitals/{id}', [PatientVitalSetController::class, 'update'])
+        ->middleware('can:patients.update')
+        ->name('patient-vitals.update');
 
     Route::get('inpatient-ward/census', [InpatientWardController::class, 'census'])
         ->middleware('can:inpatient.ward.read')

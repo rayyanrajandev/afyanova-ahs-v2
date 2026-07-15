@@ -5,6 +5,7 @@ namespace App\Modules\PatientVitals\Presentation\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\PatientVitals\Infrastructure\Models\PatientVitalSetModel;
 use App\Modules\PatientVitals\Presentation\Http\Requests\StorePatientVitalSetRequest;
+use App\Modules\PatientVitals\Presentation\Http\Requests\UpdatePatientVitalSetRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
@@ -41,6 +42,74 @@ class PatientVitalSetController extends Controller
             'patientId'  => $vitalSet->patient_id,
             'recordedAt' => $vitalSet->recorded_at?->toIso8601String(),
         ]], 201);
+    }
+
+    /**
+     * Create a vital set from the patient chart context (gated by patients.update).
+     */
+    public function storeForChart(StorePatientVitalSetRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+
+        $vitalSet = PatientVitalSetModel::create([
+            'patient_id'            => $validated['patientId'],
+            'appointment_id'        => $validated['appointmentId'] ?? null,
+            'recorded_by_user_id'   => $request->user()?->id,
+            'recorded_at'           => now()->toDateTimeString(),
+            'temperature_c'         => $validated['temperatureC'] ?? null,
+            'heart_rate_bpm'        => $validated['heartRateBpm'] ?? null,
+            'systolic_bp_mmhg'      => $validated['systolicBpMmhg'] ?? null,
+            'diastolic_bp_mmhg'     => $validated['diastolicBpMmhg'] ?? null,
+            'oxygen_saturation_pct' => $validated['oxygenSaturationPct'] ?? null,
+            'respiratory_rate_bpm'  => $validated['respiratoryRateBpm'] ?? null,
+            'weight_kg'             => $validated['weightKg'] ?? null,
+            'entry_state'           => 'active',
+        ]);
+
+        return response()->json(['data' => $this->transform($vitalSet)], 201);
+    }
+
+    /**
+     * Get the latest active vital set for a patient.
+     */
+    public function latestForPatient(string $patientId): JsonResponse
+    {
+        $vitalSet = PatientVitalSetModel::where('patient_id', $patientId)
+            ->where('entry_state', 'active')
+            ->latest('recorded_at')
+            ->first();
+
+        if (!$vitalSet) {
+            return response()->json(['data' => null]);
+        }
+
+        return response()->json(['data' => $this->transform($vitalSet)]);
+    }
+
+    /**
+     * Update an existing vital set.
+     */
+    public function update(UpdatePatientVitalSetRequest $request, string $id): JsonResponse
+    {
+        $vitalSet = PatientVitalSetModel::where('id', $id)
+            ->where('entry_state', 'active')
+            ->firstOrFail();
+
+        $validated = $request->validated();
+
+        $vitalSet->update([
+            'temperature_c'         => array_key_exists('temperatureC', $validated) ? $validated['temperatureC'] : $vitalSet->temperature_c,
+            'heart_rate_bpm'        => array_key_exists('heartRateBpm', $validated) ? $validated['heartRateBpm'] : $vitalSet->heart_rate_bpm,
+            'systolic_bp_mmhg'      => array_key_exists('systolicBpMmhg', $validated) ? $validated['systolicBpMmhg'] : $vitalSet->systolic_bp_mmhg,
+            'diastolic_bp_mmhg'     => array_key_exists('diastolicBpMmhg', $validated) ? $validated['diastolicBpMmhg'] : $vitalSet->diastolic_bp_mmhg,
+            'oxygen_saturation_pct' => array_key_exists('oxygenSaturationPct', $validated) ? $validated['oxygenSaturationPct'] : $vitalSet->oxygen_saturation_pct,
+            'respiratory_rate_bpm'  => array_key_exists('respiratoryRateBpm', $validated) ? $validated['respiratoryRateBpm'] : $vitalSet->respiratory_rate_bpm,
+            'weight_kg'             => array_key_exists('weightKg', $validated) ? $validated['weightKg'] : $vitalSet->weight_kg,
+        ]);
+
+        $vitalSet->refresh();
+
+        return response()->json(['data' => $this->transform($vitalSet)]);
     }
 
     /**
@@ -86,5 +155,27 @@ class PatientVitalSetController extends Controller
             'threshold_hours' => $thresholdHours,
             'total_admitted'  => $totalAdmitted,
         ]]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function transform(PatientVitalSetModel $vitalSet): array
+    {
+        return [
+            'id'                  => $vitalSet->id,
+            'patientId'           => $vitalSet->patient_id,
+            'recordedByUserId'    => $vitalSet->recorded_by_user_id,
+            'recordedAt'          => $vitalSet->recorded_at?->toIso8601String(),
+            'temperatureC'        => $vitalSet->temperature_c,
+            'heartRateBpm'        => $vitalSet->heart_rate_bpm,
+            'systolicBpMmhg'      => $vitalSet->systolic_bp_mmhg,
+            'diastolicBpMmhg'     => $vitalSet->diastolic_bp_mmhg,
+            'oxygenSaturationPct' => $vitalSet->oxygen_saturation_pct,
+            'respiratoryRateBpm'  => $vitalSet->respiratory_rate_bpm,
+            'weightKg'            => $vitalSet->weight_kg,
+            'entryState'          => $vitalSet->entry_state,
+            'updatedAt'           => $vitalSet->updated_at?->toIso8601String(),
+        ];
     }
 }
