@@ -43,10 +43,7 @@ return new class extends Migration
                     'updated_at' => now(),
                 ]));
             } else {
-                DB::table('roles')->insert(array_merge($roleDef, [
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]));
+                continue;
             }
 
             $roleId = DB::table('roles')->where('code', $code)->value('id');

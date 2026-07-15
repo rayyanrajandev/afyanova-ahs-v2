@@ -19,25 +19,27 @@ return new class extends Migration
 
             $roleDef['updated_at'] = now();
 
-            $existing = DB::table('roles')->where('code', $roleDef['code'])->first();
+            $existingRole = DB::table('roles')->where('code', $roleDef['code'])->first();
 
-            if ($existing) {
-                DB::table('roles')->where('code', $roleDef['code'])->update(array_merge($roleDef, [
-                    'created_at' => $existing->created_at,
-                ]));
-            } else {
-                $roleDef['created_at'] = now();
-                DB::table('roles')->insert($roleDef);
-            }
-
-            $roleId = DB::table('roles')->where('code', $roleDef['code'])->value('id');
-            if (! $roleId) {
+            if (! $existingRole) {
                 continue;
             }
+
+            DB::table('roles')
+                ->where('code', $roleDef['code'])
+                ->update(array_merge($roleDef, [
+                    'created_at' => $existingRole->created_at ?? now(),
+                ]));
+
+            $roleId = $existingRole->id;
 
             $permIds = DB::table('permissions')
                 ->whereIn('name', $perms)
                 ->pluck('id');
+
+            if ($permIds->isEmpty()) {
+                continue;
+            }
 
             DB::table('permission_role')
                 ->where('role_id', $roleId)
