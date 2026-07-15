@@ -277,9 +277,22 @@ class RoleHierarchySeeder extends Seeder
 
     private function createRole(TenantModel $tenant, FacilityModel $facility, ?DepartmentModel $department, string $code): void
     {
-        $meta = self::ROLE_META[$code] ?? [];
-        $displayName = self::DISPLAY_NAMES[$code] ?? $code;
-        $description = self::DESCRIPTIONS[$code] ?? null;
+        $configRole = $this->findConfigRole($code);
+
+        if ($configRole !== null) {
+            $displayName = $configRole['name'];
+            $description = $configRole['description'] ?? null;
+            $accessLevel = $configRole['access_level'] ?? null;
+            $scopeType = $configRole['scope_type'] ?? null;
+            $isSystem = $configRole['is_system'] ?? false;
+        } else {
+            $meta = self::ROLE_META[$code] ?? [];
+            $displayName = self::DISPLAY_NAMES[$code] ?? $code;
+            $description = self::DESCRIPTIONS[$code] ?? null;
+            $accessLevel = $meta['access_level'] ?? null;
+            $scopeType = $meta['scope_type'] ?? null;
+            $isSystem = false;
+        }
 
         $role = RoleModel::updateOrCreate(
             [
@@ -292,20 +305,33 @@ class RoleHierarchySeeder extends Seeder
                 'name' => $displayName,
                 'status' => 'active',
                 'description' => $description,
-                'is_system' => false,
-                'access_level' => $meta['access_level'] ?? null,
-                'scope_type' => $meta['scope_type'] ?? null,
+                'is_system' => $isSystem,
+                'access_level' => $accessLevel,
+                'scope_type' => $scopeType,
                 'effective_from' => now(),
                 'effective_until' => null,
             ]
         );
 
-        // Sync permissions
-        $permissions = $this->permissionsForRole($code, $department);
+        $permissions = $configRole['permissions'] ?? $this->permissionsForRole($code, $department);
         if (!empty($permissions)) {
             $permissionIds = Permission::whereIn('name', $permissions)->pluck('id');
             $role->permissions()->syncWithoutDetaching($permissionIds);
         }
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function findConfigRole(string $code): ?array
+    {
+        foreach (config('roles', []) as $roleDef) {
+            if (($roleDef['code'] ?? null) === $code) {
+                return $roleDef;
+            }
+        }
+
+        return null;
     }
 
     private function createPlatformRoles(TenantModel $tenant): void
