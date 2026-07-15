@@ -13,44 +13,6 @@ use Illuminate\Support\Str;
 class RoleHierarchySeeder extends Seeder
 {
     /**
-     * Maps old role codes → new role codes for user migration.
-     */
-    private const OLD_TO_NEW = [
-        'HOSPITAL.FACILITY.ADMIN' => 'ADMIN.FACILITY',
-        'HOSPITAL.DEPARTMENT.HEAD' => null, // Replaced by dept-specific MANAGER roles
-        'HOSPITAL.REGISTRATION.CLERK' => 'ADMIN.REGISTRATION',
-        'HOSPITAL.MEDICAL.RECORDS.OFFICER' => 'ADMIN.MEDICAL.RECORDS',
-        'HOSPITAL.STAFF.ADMIN' => 'ADMIN.HR',
-        'HOSPITAL.CREDENTIALING.OFFICER' => 'ADMIN.HR',
-        'HOSPITAL.PRIVILEGING.REVIEWER' => 'ADMIN.HR',
-        'HOSPITAL.PRIVILEGING.APPROVER' => 'ADMIN.HR',
-        'HOSPITAL.CLINICAL.USER' => 'CLINICAL.GENERAL',
-        'HOSPITAL.CLINICIAN.ORDERING' => 'CLINICAL.PHYSICIAN',
-        'HOSPITAL.NURSING.USER' => 'CLINICAL.NURSE',
-        'HOSPITAL.EMERGENCY.USER' => 'CLINICAL.EMERGENCY',
-        'HOSPITAL.LABORATORY.USER' => 'LAB.STAFF',
-        'HOSPITAL.PHARMACY.USER' => 'PHARMACY.STAFF',
-        'HOSPITAL.PHARMACY.SUPERVISOR' => 'PHARMACY.SUPERVISOR',
-        'HOSPITAL.PHARMACY.MANAGER' => 'PHARMACY.MANAGER',
-        'HOSPITAL.RADIOLOGY.USER' => 'RADIOLOGY.STAFF',
-        'HOSPITAL.RADIOLOGY.SUPERVISOR' => 'RADIOLOGY.SUPERVISOR',
-        'HOSPITAL.RADIOLOGY.MANAGER' => 'RADIOLOGY.MANAGER',
-        'HOSPITAL.THEATRE.USER' => 'THEATRE.STAFF',
-        'HOSPITAL.THEATRE.SUPERVISOR' => 'THEATRE.SUPERVISOR',
-        'HOSPITAL.THEATRE.MANAGER' => 'THEATRE.MANAGER',
-        'HOSPITAL.INVENTORY.STOREKEEPER' => 'INVENTORY.STAFF',
-        'HOSPITAL.INVENTORY.SUPERVISOR' => 'INVENTORY.SUPERVISOR',
-        'HOSPITAL.INVENTORY.MANAGER' => 'INVENTORY.MANAGER',
-        'HOSPITAL.BILLING.CASHIER' => 'FINANCE.CASHIER',
-        'HOSPITAL.BILLING.OFFICER' => 'FINANCE.OFFICER',
-        'HOSPITAL.FINANCE.CONTROLLER' => 'FINANCE.CONTROLLER',
-        'HOSPITAL.CLAIMS.USER' => 'FINANCE.CLAIMS',
-        'LAB.TECH' => 'LAB.STAFF',
-        'LAB.SUPERVISOR' => 'LAB.SUPERVISOR',
-        'LAB.MANAGER' => 'LAB.MANAGER',
-    ];
-
-    /**
      * Role display names.
      */
     private const DISPLAY_NAMES = [
@@ -199,12 +161,6 @@ class RoleHierarchySeeder extends Seeder
         foreach (FacilityModel::all() as $facility) {
             $this->seedFacilityRoles($tenant, $facility);
         }
-
-        // Migrate users from old roles to new
-        $this->migrateOldRoles($tenant);
-
-        // Clean up deactivated old roles
-        $this->deleteOldRoles();
 
         $this->command->info('Role hierarchy seeded successfully!');
     }
@@ -365,69 +321,6 @@ class RoleHierarchySeeder extends Seeder
                 $permissionIds = Permission::whereIn('name', $permissions)->pluck('id');
             $role->permissions()->sync($permissionIds);
             }
-        }
-    }
-
-    private function migrateOldRoles(TenantModel $tenant): void
-    {
-        $migrated = 0;
-        foreach (self::OLD_TO_NEW as $oldCode => $newCode) {
-            if ($newCode === null) {
-                // Mark old role as inactive (no replacement)
-                RoleModel::where('code', $oldCode)->update(['status' => 'inactive']);
-                continue;
-            }
-
-            // Skip self-mapping (old and new codes are the same — no migration needed)
-            if ($oldCode === $newCode) {
-                continue;
-            }
-
-            $oldRoles = RoleModel::where('code', $oldCode)->get();
-            foreach ($oldRoles as $oldRole) {
-                $users = $oldRole->users;
-
-                // Find matching new role (same tenant/facility/department)
-                $newRoleQuery = RoleModel::where('tenant_id', $oldRole->tenant_id)
-                    ->where('facility_id', $oldRole->facility_id)
-                    ->where('code', $newCode);
-
-                if ($oldRole->department_id) {
-                    $newRoleQuery->where('department_id', $oldRole->department_id);
-                }
-
-                $newRole = $newRoleQuery->first();
-                if (!$newRole) {
-                    continue;
-                }
-
-                foreach ($users as $user) {
-                    // Avoid duplicate assignment
-                    if (!$user->roles()->where('role_id', $newRole->id)->exists()) {
-                        $user->roles()->attach($newRole->id);
-                        $migrated++;
-                    }
-                }
-
-                // Deactivate old role
-                $oldRole->update(['status' => 'inactive']);
-            }
-        }
-
-        if ($migrated > 0) {
-            $this->command->info("Migrated {$migrated} user assignments to new roles.");
-        }
-    }
-
-    private function deleteOldRoles(): void
-    {
-        $oldCodes = array_keys(self::OLD_TO_NEW);
-        $deleted = RoleModel::whereIn('code', $oldCodes)
-            ->where('status', 'inactive')
-            ->delete();
-
-        if ($deleted > 0) {
-            $this->command->info("Deleted {$deleted} deactivated old roles.");
         }
     }
 
