@@ -190,6 +190,8 @@ class RadiologyOrderController extends Controller
 
         abort_if($order === null, 404, 'Radiology order not found.');
 
+        $this->authorize('perform', $order);
+
         return response()->json([
             'data' => RadiologyOrderResponseTransformer::transform($order),
         ]);

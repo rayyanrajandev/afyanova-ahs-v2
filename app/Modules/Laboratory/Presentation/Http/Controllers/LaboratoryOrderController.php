@@ -467,6 +467,8 @@ class LaboratoryOrderController extends Controller
 
         abort_if($order === null, 404, 'Laboratory order not found.');
 
+        $this->authorize('verifyResult', $order);
+
         return response()->json([
             'data' => LaboratoryOrderResponseTransformer::transform($order),
         ]);

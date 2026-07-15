@@ -47,11 +47,11 @@ SELECT name FROM permissions WHERE name LIKE 'lab.%'     -- lab.order, lab.sampl
 
 | # | Task | Status |
 |---|------|--------|
-| 3.1 | Update `routes/api.php` — all `can:` middleware to new permission names | 🔴 |
-| 3.2 | Update all FormRequest `authorize()` methods to check new permissions | 🔴 |
-| 3.3 | Update all controller `$user->can()` / `Gate::any()` calls to new permissions | 🔴 |
-| 3.4 | Update all frontend `hasPermission()` / `hasAccess()` calls in Vue files | 🔴 |
-| 3.5 | Verify all routes load without 403 for users with correct roles | 🔴 |
+| 3.1 | Update `routes/api.php` — all `can:` middleware to new permission names | 🟢 |
+| 3.2 | Update all FormRequest `authorize()` methods to check new permissions | 🟢 |
+| 3.3 | Update all controller `$user->can()` / `Gate::any()` calls to new permissions | 🟢 |
+| 3.4 | Update all frontend `hasPermission()` / `hasAccess()` calls in Vue files | 🟢 |
+| 3.5 | Verify all routes load without 403 for users with correct roles | 🟢 |
 
 **Files to modify:** `routes/api.php`, `app/Modules/*/Presentation/Http/Requests/*.php`, `app/Modules/*/Presentation/Http/Controllers/*.php`, `resources/js/pages/**/*.vue`
 
@@ -61,14 +61,14 @@ SELECT name FROM permissions WHERE name LIKE 'lab.%'     -- lab.order, lab.sampl
 
 | # | Task | Status |
 |---|------|--------|
-| 4.1 | Create `app/Policies/PatientPolicy.php` (all methods return true) | 🔴 |
-| 4.2 | Create `app/Policies/LaboratoryOrderPolicy.php` | 🔴 |
-| 4.3 | Create `app/Policies/PharmacyOrderPolicy.php` | 🔴 |
-| 4.4 | Create `app/Policies/RadiologyOrderPolicy.php` | 🔴 |
-| 4.5 | Create `app/Policies/AppointmentPolicy.php` | 🔴 |
-| 4.6 | Create `app/Policies/MedicalRecordPolicy.php` | 🔴 |
-| 4.7 | Create `app/Policies/InventoryPolicy.php` | 🔴 |
-| 4.8 | Register all policies in `AuthServiceProvider.php` | 🔴 |
+| 4.1 | Create `app/Policies/PatientPolicy.php` (all methods return true) | 🟢 |
+| 4.2 | Create `app/Policies/LaboratoryOrderPolicy.php` | 🟢 |
+| 4.3 | Create `app/Policies/PharmacyOrderPolicy.php` | 🟢 |
+| 4.4 | Create `app/Policies/RadiologyOrderPolicy.php` | 🟢 |
+| 4.5 | Create `app/Policies/AppointmentPolicy.php` | 🟢 |
+| 4.6 | Create `app/Policies/MedicalRecordPolicy.php` | 🟢 |
+| 4.7 | Create `app/Policies/InventoryPolicy.php` | 🟢 |
+| 4.8 | Register all policies in `AppServiceProvider.php` (Laravel 12, no AuthServiceProvider) | 🟢 |
 
 **Files to create:** `app/Policies/*.php`
 **Files to modify:** `app/Providers/AuthServiceProvider.php`
@@ -172,14 +172,14 @@ SELECT name FROM permissions WHERE name LIKE 'lab.%'     -- lab.order, lab.sampl
 
 | Phase | Description | Items | Est. Pushes |
 |-------|-------------|-------|-------------|
-| 1 | Permission rename + insert | 3 | 1 |
-| 2 | Backward-compat gates | 3 | 1 |
-| 3 | Switch code to new perms | 5 | 1 |
-| 4 | Policy files (empty) | 8 | 1 |
-| 5 | Controller → policy swap | 7 | 1 |
-| 6 | Business logic in policies | 18 | 5 |
-| 7 | Eliminate dual RBAC | 3 | 1 |
-| 8 | Config-driven roles | 4 | 1 |
-| 9 | Tanzania role names | 3 | 1 |
-| 10 | Cleanup | 4 | 1 |
+| 1 | Permission rename + insert | 3 | 1 | 🟢 |
+| 2 | Backward-compat gates | 3 | 1 | 🟢 |
+| 3 | Switch code to new perms | 5 | 1 | 🟢 |
+| 4 | Policy files (empty) | 8 | 1 | 🟢 |
+| 5 | Controller → policy swap | 7 | 1 | 🔴 |
+| 6 | Business logic in policies | 18 | 5 | 🔴 |
+| 7 | Eliminate dual RBAC | 3 | 1 | 🔴 |
+| 8 | Config-driven roles | 4 | 1 | 🔴 |
+| 9 | Tanzania role names | 3 | 1 | 🔴 |
+| 10 | Cleanup | 4 | 1 | 🔴 |
 | **Total** | | **58** | **14 pushes** |

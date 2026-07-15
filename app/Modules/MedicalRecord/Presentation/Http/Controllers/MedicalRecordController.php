@@ -170,6 +170,8 @@ class MedicalRecordController extends Controller
 
         abort_if($record === null, 404, 'Medical record not found.');
 
+        $this->authorize('updateDraft', $record);
+
         return response()->json([
             'data' => MedicalRecordResponseTransformer::transform($record),
         ]);

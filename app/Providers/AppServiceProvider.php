@@ -6,6 +6,19 @@ use App\Modules\MedicalRecord\Application\Listeners\SendMedicalRecordHandoffEmai
 use App\Modules\MedicalRecord\Domain\Events\MedicalRecordHandoffInitiated;
 use App\Modules\MedicalRecord\Domain\ValueObjects\MedicalRecordStatus;
 use App\Modules\MedicalRecord\Infrastructure\Models\MedicalRecordModel;
+use App\Policies\AppointmentPolicy;
+use App\Policies\InventoryPolicy;
+use App\Policies\LaboratoryOrderPolicy;
+use App\Policies\MedicalRecordPolicy;
+use App\Policies\PatientPolicy;
+use App\Policies\PharmacyOrderPolicy;
+use App\Policies\RadiologyOrderPolicy;
+use App\Modules\Appointment\Infrastructure\Models\AppointmentModel;
+use App\Modules\InventoryProcurement\Infrastructure\Models\InventoryDepartmentRequisitionModel;
+use App\Modules\Laboratory\Infrastructure\Models\LaboratoryOrderModel;
+use App\Modules\Patient\Infrastructure\Models\PatientModel;
+use App\Modules\Pharmacy\Infrastructure\Models\PharmacyOrderModel;
+use App\Modules\Radiology\Infrastructure\Models\RadiologyOrderModel;
 use App\Modules\Platform\Domain\Services\CurrentPlatformScopeContextInterface;
 use App\Modules\Platform\Domain\Services\DefaultCurrencyResolverInterface;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
@@ -66,6 +79,15 @@ class AppServiceProvider extends ServiceProvider
 
         // Register custom notification channels
         $this->app->make('config')->set('notifications.channels.webhook', WebhookChannel::class);
+
+        // Policy registration
+        Gate::policy(PatientModel::class, PatientPolicy::class);
+        Gate::policy(MedicalRecordModel::class, MedicalRecordPolicy::class);
+        Gate::policy(LaboratoryOrderModel::class, LaboratoryOrderPolicy::class);
+        Gate::policy(PharmacyOrderModel::class, PharmacyOrderPolicy::class);
+        Gate::policy(RadiologyOrderModel::class, RadiologyOrderPolicy::class);
+        Gate::policy(AppointmentModel::class, AppointmentPolicy::class);
+        Gate::policy(InventoryDepartmentRequisitionModel::class, InventoryPolicy::class);
 
         Gate::before(function ($user, string $ability): ?bool {
             if (! method_exists($user, 'hasPermissionTo')) {

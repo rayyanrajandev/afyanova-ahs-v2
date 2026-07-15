@@ -378,6 +378,8 @@ class PharmacyOrderController extends Controller
 
         abort_if($order === null, 404, 'Pharmacy order not found.');
 
+        $this->authorize('dispense', $order);
+
         return response()->json([
             'data' => PharmacyOrderResponseTransformer::transform($order),
         ]);

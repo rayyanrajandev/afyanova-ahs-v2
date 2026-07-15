@@ -25,6 +25,7 @@ use App\Modules\Patient\Presentation\Http\Transformers\PatientActivityFeedEventR
 use App\Modules\Patient\Presentation\Http\Transformers\PatientAuditLogResponseTransformer;
 use App\Modules\Patient\Presentation\Http\Transformers\PatientResponseTransformer;
 use App\Modules\Patient\Presentation\Http\Transformers\PatientSummaryResponseTransformer;
+use App\Modules\Patient\Infrastructure\Models\PatientModel;
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
 use App\Modules\Platform\Domain\Services\FeatureFlagResolverInterface;
 use App\Modules\ServiceRequest\Application\UseCases\ListActiveWalkInsForPatientIdsUseCase;
@@ -221,6 +222,12 @@ class PatientController extends Controller
 
     public function update(string $id, UpdatePatientRequest $request, UpdatePatientUseCase $useCase): JsonResponse
     {
+        $patient = PatientModel::find($id);
+        if ($patient === null) {
+            abort(404, 'Patient not found.');
+        }
+        $this->authorize('updateDemographics', $patient);
+
         try {
             $result = $useCase->execute(
                 id: $id,

@@ -256,6 +256,8 @@ class AppointmentController extends Controller
 
         abort_if($appointment === null, 404, 'Appointment not found.');
 
+        $this->authorize('reschedule', $appointment);
+
         return response()->json([
             'data' => AppointmentResponseTransformer::transform($appointment),
         ]);
@@ -387,6 +389,8 @@ class AppointmentController extends Controller
         }
 
         abort_if($appointment === null, 404, 'Appointment not found.');
+
+        $this->authorize('checkIn', $appointment);
 
         $billingCapture = $useCase->getLastAutoCaptureResult();
 
