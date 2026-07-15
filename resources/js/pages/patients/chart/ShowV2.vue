@@ -480,8 +480,8 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         </p>
                     </div>
                     <div class="flex items-center gap-2">
-                        <Button v-if="canUpdatePatients" variant="outline" size="sm" @click="editSheetOpen = true">
-                            Edit
+                        <Button v-if="canUpdatePatients" variant="outline" size="sm" class="gap-1.5" @click="editSheetOpen = true">
+                            <AppIcon name="pencil" class="size-3.5" />Update Profile
                         </Button>
                         <Badge v-if="patient.status" variant="outline">{{ formatEnumLabel(patient.status) }}</Badge>
                     </div>
@@ -706,18 +706,14 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                         </div>
                                     </div>
                                 </div>
-                            </CardContent>
-                        </Card>
 
-                        <Card v-if="timeline.primaryVisit.value?.triageVitalsSummary" class="rounded-lg border-l-4 border-l-info">
-                            <CardHeader class="px-4 pt-4 pb-2">
-                                <CardTitle class="flex items-center gap-2 text-base">
-                                    <AppIcon name="activity" class="size-4 text-info" aria-hidden="true" />
-                                    Triage vitals
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent class="px-4 pb-4">
-                                <p class="text-sm text-foreground">{{ timeline.primaryVisit.value.triageVitalsSummary }}</p>
+                                <div v-if="timeline.primaryVisit.value?.triageVitalsSummary" class="mt-3 rounded-lg border-l-4 border-l-info bg-muted/20 px-4 py-3">
+                                    <div class="flex items-center gap-2 text-sm font-semibold text-foreground">
+                                        <AppIcon name="activity" class="size-4 text-info" aria-hidden="true" />
+                                        Triage vitals
+                                    </div>
+                                    <p class="mt-1 text-sm text-foreground">{{ timeline.primaryVisit.value.triageVitalsSummary }}</p>
+                                </div>
                             </CardContent>
                         </Card>
 
