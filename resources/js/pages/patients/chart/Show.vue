@@ -655,14 +655,14 @@ const visitPrimaryActionHref = computed(() =>
         : scheduleAppointmentHref.value,
 );
 const visitPrimaryActionLabel = computed(() => {
-    if (!hasOpenVisitInChart.value || !primaryVisit.value) return 'Schedule appointment';
-
-    return appointmentPrimaryActionLabel(primaryVisit.value);
+    if (!primaryVisit.value) return 'Schedule appointment';
+    if (hasOpenVisitInChart.value) return appointmentPrimaryActionLabel(primaryVisit.value);
+    return 'Open visit';
 });
 const visitPrimaryActionIcon = computed(() => {
-    if (!hasOpenVisitInChart.value || !primaryVisit.value) return 'calendar-plus-2';
-
-    return appointmentPrimaryActionIcon(primaryVisit.value);
+    if (!primaryVisit.value) return 'calendar-plus-2';
+    if (hasOpenVisitInChart.value) return appointmentPrimaryActionIcon(primaryVisit.value);
+    return 'calendar-clock';
 });
 const visitWorkspaceActionLabel = computed(() =>
     hasOpenVisitInChart.value ? 'Open visit workspace' : 'Open visits',

@@ -275,16 +275,20 @@ export function usePatientChartTimeline(params: UsePatientChartTimelineParams) {
             ? appointmentPrimaryActionHref(primaryVisit.value, params.canRecordOpdTriage.value, params.canStartConsultation.value)
             : appointmentDetailsHref(primaryVisit.value);
     });
-    const visitPrimaryActionLabel = computed(() =>
-        !hasOpenVisitInChart.value || !primaryVisit.value
-            ? 'Schedule appointment'
-            : appointmentPrimaryActionLabel(primaryVisit.value, params.canRecordOpdTriage.value, params.canStartConsultation.value),
-    );
-    const visitPrimaryActionIcon = computed(() =>
-        !hasOpenVisitInChart.value || !primaryVisit.value
-            ? 'calendar-plus-2'
-            : appointmentPrimaryActionIcon(primaryVisit.value, params.canRecordOpdTriage.value, params.canStartConsultation.value),
-    );
+    const visitPrimaryActionLabel = computed(() => {
+        if (!primaryVisit.value) return 'Schedule appointment';
+        if (hasOpenVisitInChart.value) {
+            return appointmentPrimaryActionLabel(primaryVisit.value, params.canRecordOpdTriage.value, params.canStartConsultation.value);
+        }
+        return 'Open visit';
+    });
+    const visitPrimaryActionIcon = computed(() => {
+        if (!primaryVisit.value) return 'calendar-plus-2';
+        if (hasOpenVisitInChart.value) {
+            return appointmentPrimaryActionIcon(primaryVisit.value, params.canRecordOpdTriage.value, params.canStartConsultation.value);
+        }
+        return 'calendar-clock';
+    });
 
     /** Mirrors the old page's careCounts exactly — derived from the server status-counts responses, not from the (perPage-truncated) list items. */
     const careCounts = computed(() => ({
