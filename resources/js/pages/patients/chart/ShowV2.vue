@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayout from '@/layouts/AppLayout.vue';
 import EncounterLifecycleDialog from '@/components/domain/clinical/EncounterLifecycleDialog.vue';
 import PatientChartOrdersDomainSection from '@/components/patient-chart/PatientChartOrdersDomainSection.vue';
+import PatientEditSheet from '@/components/patients/PatientEditSheet.vue';
 import { apiGet } from '@/lib/apiClient';
 import { formatEnumLabel } from '@/lib/labels';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
@@ -145,10 +146,17 @@ type Patient = {
     dateOfBirth: string | null;
     phone: string | null;
     email: string | null;
+    nationalId: string | null;
+    countryCode: string | null;
     region: string | null;
     district: string | null;
     addressLine: string | null;
+    nextOfKinName: string | null;
+    nextOfKinPhone: string | null;
     status: string | null;
+    statusReason: string | null;
+    createdAt: string | null;
+    updatedAt: string | null;
     activeRoutingTickets?: {
         id: string;
         requestNumber: string | null;
@@ -168,6 +176,12 @@ const patientQuery = useQuery({
 const patient = computed(() => patientQuery.data.value ?? null);
 
 const focusedAppointmentId = ref('');
+
+const editSheetOpen = ref(false);
+
+function onPatientUpdated(): void {
+    void patientQuery.refetch();
+}
 
 const recordsQuery = usePatientMedicalRecords(patientIdRef, canReadMedicalRecords);
 const records = computed(() => recordsQuery.data.value?.data ?? []);
@@ -465,7 +479,12 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                             {{ timeline.primaryVisit.value ? `Focused: ${timeline.primaryVisit.value.appointmentNumber || 'Current visit'}` : 'Longitudinal patient chart' }}
                         </p>
                     </div>
-                    <Badge v-if="patient.status" variant="outline">{{ formatEnumLabel(patient.status) }}</Badge>
+                    <div class="flex items-center gap-2">
+                        <Button v-if="canUpdatePatients" variant="outline" size="sm" @click="editSheetOpen = true">
+                            Edit
+                        </Button>
+                        <Badge v-if="patient.status" variant="outline">{{ formatEnumLabel(patient.status) }}</Badge>
+                    </div>
                 </div>
 
                 <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
@@ -2051,5 +2070,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
             </div>
             </Tabs>
         </div>
+
+        <PatientEditSheet v-model:open="editSheetOpen" :patient="patient" @updated="onPatientUpdated" />
     </AppLayout>
 </template>

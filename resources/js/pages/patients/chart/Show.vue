@@ -3,6 +3,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import ClinicalContextBanner from '@/components/domain/clinical/ClinicalContextBanner.vue';
+import PatientEditSheet from '@/components/patients/PatientEditSheet.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -61,10 +62,16 @@ type Patient = {
     phone: string | null;
     email: string | null;
     nationalId: string | null;
+    countryCode: string | null;
     region: string | null;
     district: string | null;
     addressLine: string | null;
+    nextOfKinName: string | null;
+    nextOfKinPhone: string | null;
     status: string | null;
+    statusReason: string | null;
+    createdAt: string | null;
+    updatedAt: string | null;
     routingHandoffSummary?: string | null;
     activeRoutingTickets?: ActiveRoutingTicket[];
 };
@@ -435,6 +442,11 @@ const { hasPermission, isFacilitySuperAdmin, scope } = usePlatformAccess();
 const patient = ref<Patient | null>(null);
 const patientLoading = ref(true);
 const patientError = ref<string | null>(null);
+const editSheetOpen = ref(false);
+
+function onPatientUpdated(): void {
+    void loadPatient();
+}
 
 const records = ref<MedicalRecord[]>([]);
 const recordsTotal = ref(0);
@@ -4023,6 +4035,9 @@ onMounted(() => {
                         </div>
                     </div>
                     <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+                        <Button v-if="canUpdatePatients" size="sm" variant="outline" class="h-8 gap-1.5" @click="editSheetOpen = true">
+                            <AppIcon name="pencil" class="size-3.5" />Edit
+                        </Button>
                         <Button size="sm" class="h-8 gap-1.5" @click="openPatientVisitHandoff">
                             <AppIcon name="clipboard-list" class="size-3.5" />Start handoff / visit
                         </Button>
@@ -6884,6 +6899,8 @@ onMounted(() => {
                 </SheetContent>
             </Sheet>
         </div>
+
+        <PatientEditSheet v-model:open="editSheetOpen" :patient="patient" @updated="onPatientUpdated" />
     </AppLayout>
 </template>
 
