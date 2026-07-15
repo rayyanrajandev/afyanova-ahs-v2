@@ -1055,6 +1055,7 @@ Artisan::command('app:bootstrap-super-admin {--email=admin@local.test} {--name=}
             $user->password = $resolvedPassword;
         }
         $user->email_verified_at = now();
+        $user->is_platform_admin = true;
         $user->save();
 
         foreach ($allPermissions as $permissionName) {
