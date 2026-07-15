@@ -60,11 +60,30 @@ const BADGE_HREF_MAP: Record<string, string> = {
     '/billing-invoices': 'billing-invoices',
 };
 
+const BADGE_CLASS_MAP: Record<string, string> = {
+    'reception-queue': 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    'triage-queue': 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    'clinician-queue': 'bg-red-500/10 text-red-600 dark:text-red-400',
+    'emergency-queue': 'bg-red-500/10 text-red-600 dark:text-red-400',
+    laboratory: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+    radiology: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+    pharmacy: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+    'billing-invoices': 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+};
+
 function badgeForHref(href: string): number | undefined {
     const key = BADGE_HREF_MAP[href];
     if (!key) return undefined;
     const count = badges.value[key];
     return count && count > 0 ? count : undefined;
+}
+
+function badgeClassForHref(href: string): string | undefined {
+    const key = BADGE_HREF_MAP[href];
+    if (!key) return undefined;
+    const count = badges.value[key];
+    if (!count || count <= 0) return undefined;
+    return BADGE_CLASS_MAP[key];
 }
 
 const searchQuery = ref('');
@@ -124,6 +143,7 @@ const allNavItems = computed<NavItem[]>(() => {
                     ? (navSubGroupIcons[section]?.[subGroup] ?? 'folder')
                     : undefined,
                 badge: badgeForHref(href as string),
+                badgeClass: badgeClassForHref(href as string),
             }));
         items.push(...sectionItems);
     }
@@ -156,6 +176,7 @@ const navSections = computed<NavSection[]>(() =>
                         ? (navSubGroupIcons[section]?.[subGroup] ?? 'folder')
                         : undefined,
                     badge: badgeForHref(href as string),
+                    badgeClass: badgeClassForHref(href as string),
                 })),
         }))
         .filter((section) => section.items.length > 0),

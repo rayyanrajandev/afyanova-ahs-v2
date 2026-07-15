@@ -20,4 +20,5 @@ export type NavItem = {
     subGroupIcon?: AppIconName;
     isActive?: boolean;
     badge?: string | number;
+    badgeClass?: string;
 };

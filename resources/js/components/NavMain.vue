@@ -159,7 +159,7 @@ const navBlocks = computed<NavBlock[]>(() => {
                             <span class="truncate">{{ block.item.title }}</span>
                             <SidebarMenuBadge
                                 v-if="block.item.badge"
-                                class="ml-auto"
+                                :class="cn('ml-auto', block.item.badgeClass)"
                             >
                                 {{ block.item.badge }}
                             </SidebarMenuBadge>
@@ -252,7 +252,7 @@ const navBlocks = computed<NavBlock[]>(() => {
                                             }}</span>
                                             <SidebarMenuBadge
                                                 v-if="item.badge"
-                                                class="ml-auto"
+                                                :class="cn('ml-auto', item.badgeClass)"
                                             >
                                                 {{ item.badge }}
                                             </SidebarMenuBadge>
