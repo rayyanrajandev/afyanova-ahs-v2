@@ -2,10 +2,12 @@
 
 namespace App\Modules\Appointment\Application\UseCases;
 
+use App\Modules\Appointment\Domain\Events\AppointmentStatusChanged;
 use App\Modules\Appointment\Domain\Repositories\AppointmentAuditLogRepositoryInterface;
 use App\Modules\Appointment\Domain\Repositories\AppointmentRepositoryInterface;
 use App\Modules\Appointment\Domain\ValueObjects\AppointmentStatus;
 use App\Modules\Platform\Domain\Services\TenantIsolationWriteGuardInterface;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class RecordAppointmentTriageUseCase
@@ -98,6 +100,17 @@ class RecordAppointmentTriageUseCase
                 ],
             );
         }
+
+        DB::afterCommit(function () use ($updated, $existing, $actorId): void {
+            event(new AppointmentStatusChanged(
+                appointmentId: (string) $updated['id'],
+                patientId: (string) $updated['patient_id'],
+                oldStatus: (string) ($existing['status'] ?? ''),
+                newStatus: (string) ($updated['status'] ?? ''),
+                actorId: $actorId,
+                facilityId: $updated['facility_id'] ?? null,
+            ));
+        });
 
         return $updated;
     }
