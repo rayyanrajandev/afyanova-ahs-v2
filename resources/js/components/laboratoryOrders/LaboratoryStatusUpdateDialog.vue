@@ -240,6 +240,7 @@ function submit(): void {
                   unit: r.unit || null,
                   flag: r.flag || null,
                   referenceRange: r.referenceRange || null,
+                  section: null,
               }))
         : null;
 

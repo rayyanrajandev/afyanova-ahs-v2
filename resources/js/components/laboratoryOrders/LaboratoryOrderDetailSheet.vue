@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -9,7 +10,10 @@ import {
     SheetHeader,
     SheetTitle,
 } from '@/components/ui/sheet';
-import type { LaboratoryOrder } from '@/composables/laboratoryOrders/useLaboratoryOrders';
+import type {
+    LabResultParameter,
+    LaboratoryOrder,
+} from '@/composables/laboratoryOrders/useLaboratoryOrders';
 import { formatEnumLabel } from '@/lib/labels';
 
 const props = defineProps<{
@@ -44,6 +48,31 @@ function formatDateTime(value: string | null): string {
         minute: '2-digit',
     }).format(date);
 }
+
+/**
+ * Groups by ResultTemplate section (Macroscopic Examination, Occult Blood,
+ * ...) in first-seen order when the result came from a structured template.
+ * Non-templated results (CBC, U&E, ...) have no section on any parameter,
+ * so this returns null and the caller falls back to one flat table.
+ */
+const groupedResultParameters = computed((): Array<{
+    section: string | null;
+    params: LabResultParameter[];
+}> | null => {
+    const params = props.order?.resultParameters ?? [];
+    if (params.length === 0 || !params.some((p) => p.section)) return null;
+
+    const groups: Array<{ section: string | null; params: LabResultParameter[] }> = [];
+    for (const param of params) {
+        let group = groups.find((g) => g.section === param.section);
+        if (!group) {
+            group = { section: param.section, params: [] };
+            groups.push(group);
+        }
+        group.params.push(param);
+    }
+    return groups;
+});
 </script>
 
 <template>
@@ -125,7 +154,81 @@ function formatDateTime(value: string | null): string {
                             order.resultParameters.length > 0
                         "
                     >
-                        <div class="mt-2 divide-y rounded-md border">
+                        <template v-if="groupedResultParameters">
+                            <div
+                                v-for="group in groupedResultParameters"
+                                :key="group.section ?? '__ungrouped'"
+                                class="mt-2"
+                            >
+                                <p
+                                    v-if="group.section"
+                                    class="mb-1 text-xs font-semibold text-foreground"
+                                >
+                                    {{ group.section }}
+                                </p>
+                                <div class="divide-y rounded-md border">
+                                    <div
+                                        class="grid grid-cols-12 gap-2 bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground"
+                                    >
+                                        <div class="col-span-3">Parameter</div>
+                                        <div class="col-span-3">Value</div>
+                                        <div class="col-span-2">Flag</div>
+                                        <div class="col-span-4">Reference range</div>
+                                    </div>
+                                    <div
+                                        v-for="param in group.params"
+                                        :key="param.code"
+                                        class="grid grid-cols-12 gap-2 px-3 py-2 text-sm"
+                                    >
+                                        <div
+                                            class="col-span-3 font-medium text-foreground"
+                                        >
+                                            {{ param.name }}
+                                        </div>
+                                        <div class="col-span-3">
+                                            {{ param.value }}
+                                            <span
+                                                v-if="param.unit"
+                                                class="text-xs text-muted-foreground"
+                                                >{{ param.unit }}</span
+                                            >
+                                        </div>
+                                        <div class="col-span-2">
+                                            <Badge
+                                                v-if="param.flag === 'critical'"
+                                                variant="destructive"
+                                                class="text-[10px]"
+                                            >
+                                                Critical
+                                            </Badge>
+                                            <Badge
+                                                v-else-if="param.flag === 'abnormal'"
+                                                class="bg-amber-100 text-[10px] text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                                            >
+                                                Abnormal
+                                            </Badge>
+                                            <span
+                                                v-else-if="param.flag === 'normal'"
+                                                class="text-xs text-green-600 dark:text-green-400"
+                                                >Normal</span
+                                            >
+                                            <span
+                                                v-else
+                                                class="text-xs text-muted-foreground"
+                                                >—</span
+                                            >
+                                        </div>
+                                        <div
+                                            class="col-span-4 text-xs text-muted-foreground"
+                                        >
+                                            {{ param.referenceRange || '—' }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <div v-else class="mt-2 divide-y rounded-md border">
                             <div
                                 class="grid grid-cols-12 gap-2 bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground"
                             >

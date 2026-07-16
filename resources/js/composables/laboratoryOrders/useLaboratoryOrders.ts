@@ -27,6 +27,9 @@ export type LabResultParameter = {
     unit: string | null;
     flag: string | null;
     referenceRange: string | null;
+    /** Section label from the source ResultTemplate (e.g. "Macroscopic
+     * Examination"), null for non-templated results (CBC, U&E, ...). */
+    section: string | null;
 };
 
 export type CatalogParameter = {

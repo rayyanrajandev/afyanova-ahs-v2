@@ -67,11 +67,23 @@ export function buildResultSummaryFromTemplate(
     return lines.join('\n');
 }
 
+export interface TemplateResultParameter {
+    code: string;
+    name: string;
+    value: string;
+    unit: string | null;
+    flag: string | null;
+    referenceRange: string | null;
+    section: string | null;
+}
+
+export const REMARKS_IMPRESSION_SECTION_LABEL = 'Remarks & Impression';
+
 export function buildResultParametersFromTemplate(
     sections: ResultTemplateSection[],
     values: Record<string, string | string[]>,
-): Array<{ code: string; name: string; value: string; unit?: string }> {
-    const params: Array<{ code: string; name: string; value: string; unit?: string }> = [];
+): TemplateResultParameter[] {
+    const params: TemplateResultParameter[] = [];
 
     for (const section of sections) {
         for (const field of section.fields) {
@@ -82,19 +94,38 @@ export function buildResultParametersFromTemplate(
                 code: field.code,
                 name: field.label,
                 value: Array.isArray(value) ? value.join(', ') : String(value),
-                unit: field.unit,
+                unit: field.unit ?? null,
+                flag: null,
+                referenceRange: null,
+                section: section.label,
             });
         }
     }
 
     const remarks = values[REMARKS_FIELD_CODE];
     if (typeof remarks === 'string' && remarks.trim() !== '') {
-        params.push({ code: REMARKS_FIELD_CODE, name: 'Remarks', value: remarks.trim() });
+        params.push({
+            code: REMARKS_FIELD_CODE,
+            name: 'Remarks',
+            value: remarks.trim(),
+            unit: null,
+            flag: null,
+            referenceRange: null,
+            section: REMARKS_IMPRESSION_SECTION_LABEL,
+        });
     }
 
     const impression = values[IMPRESSION_FIELD_CODE];
     if (typeof impression === 'string' && impression.trim() !== '') {
-        params.push({ code: IMPRESSION_FIELD_CODE, name: 'Impression', value: impression.trim() });
+        params.push({
+            code: IMPRESSION_FIELD_CODE,
+            name: 'Impression',
+            value: impression.trim(),
+            unit: null,
+            flag: null,
+            referenceRange: null,
+            section: REMARKS_IMPRESSION_SECTION_LABEL,
+        });
     }
 
     return params;
