@@ -712,6 +712,7 @@ defineExpose({ submitOrder, submitLoading, canSubmit });
                     </p>
                 </div>
             </template>
+            </div>
 
             <ConfirmationDialog
             :open="confirmationDialogState.open"
