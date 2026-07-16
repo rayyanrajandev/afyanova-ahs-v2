@@ -341,7 +341,10 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
                 ->where('tenant_id', $tenantId)
                 ->where('facility_id', $facilityId)
                 ->where('catalog_type', ClinicalCatalogType::LAB_TEST->value)
-                ->where('code', $blueprint['code'])
+                ->where(function ($query) use ($blueprint) {
+                    $query->where('code', $blueprint['code'])
+                        ->orWhere('name', $blueprint['name']);
+                })
                 ->first();
 
             $metadata = $existing
@@ -355,26 +358,32 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
                     'resultTemplate' => $blueprint['resultTemplate'] ?? null,
                 ];
 
-            ClinicalCatalogItemModel::query()->updateOrCreate(
-                [
-                    'tenant_id' => $tenantId,
-                    'facility_id' => $facilityId,
-                    'catalog_type' => ClinicalCatalogType::LAB_TEST->value,
-                    'code' => $blueprint['code'],
-                ],
-                [
+            if ($existing) {
+                $existing->update([
                     'name' => $blueprint['name'],
                     'department_id' => null,
                     'category' => $blueprint['category'],
                     'unit' => $blueprint['unit'],
                     'description' => $blueprint['description'],
                     'metadata' => $metadata,
-                    'status' => $existing
-                        ? $existing->status
-                        : ClinicalCatalogItemStatus::ACTIVE->value,
                     'status_reason' => null,
-                ],
-            );
+                ]);
+            } else {
+                ClinicalCatalogItemModel::query()->create([
+                    'tenant_id' => $tenantId,
+                    'facility_id' => $facilityId,
+                    'catalog_type' => ClinicalCatalogType::LAB_TEST->value,
+                    'code' => $blueprint['code'],
+                    'name' => $blueprint['name'],
+                    'department_id' => null,
+                    'category' => $blueprint['category'],
+                    'unit' => $blueprint['unit'],
+                    'description' => $blueprint['description'],
+                    'metadata' => $metadata,
+                    'status' => ClinicalCatalogItemStatus::ACTIVE->value,
+                    'status_reason' => null,
+                ]);
+            }
 
             $seededCount++;
         }
