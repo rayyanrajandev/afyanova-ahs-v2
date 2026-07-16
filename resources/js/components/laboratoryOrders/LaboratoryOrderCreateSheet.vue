@@ -16,10 +16,12 @@ import {
     catalogItemLabel,
     checkLaboratoryDuplicate,
     duplicateCheckDetails,
+    encounterInlineOrderModeLabel,
     fetchLabTestCatalog,
     labTestCatalogSpecimenType,
     laboratoryPriorityOptions,
     type ClinicalCatalogItem,
+    type EncounterInlineOrderLinkageContext,
 } from '@/lib/encounterInlineOrders';
 import { messageFromUnknown, notifyError } from '@/lib/notify';
 
@@ -36,12 +38,35 @@ import { messageFromUnknown, notifyError } from '@/lib/notify';
  * Submits directly via apiPost rather than createLaboratoryInlineOrder()
  * (which hardcodes entryMode:'active') to avoid touching that shared
  * function's behavior for the encounter workflow.
+ *
+ * Reorder/add-on (closing the audit gap found before legacy deletion):
+ * rather than copying the legacy page's own detail-view buttons verbatim,
+ * this Sheet accepts an optional `linkage` prop — LaboratoryOrderDetailSheet
+ * emits it, IndexV2.vue pre-fills this same create Sheet instead of a
+ * separate UI surface. One creation form either way; linkage just tags the
+ * new order to the source via replacesOrderId/addOnToOrderId.
  */
+const props = defineProps<{
+    initialPatientId?: string | null;
+    linkage?: EncounterInlineOrderLinkageContext | null;
+}>();
+
 const open = defineModel<boolean>('open', { required: true });
 
 const emit = defineEmits<{
     created: [orderNumber: string];
 }>();
+
+const linkageModeLabel = computed(() => encounterInlineOrderModeLabel(props.linkage?.mode ?? 'new'));
+const linkageDescription = computed(() => {
+    if (props.linkage?.mode === 'reorder') {
+        return `This creates a replacement linked to ${props.linkage.sourceLabel}.`;
+    }
+    if (props.linkage?.mode === 'add_on') {
+        return `This creates an add-on linked to ${props.linkage.sourceLabel}.`;
+    }
+    return null;
+});
 
 const {
     confirmationDialogState,
@@ -109,6 +134,9 @@ async function loadCatalog(): Promise<void> {
 watch(open, (isOpen) => {
     if (!isOpen) return;
     resetForm();
+    if (props.initialPatientId) {
+        patientId.value = props.initialPatientId;
+    }
     void loadCatalog();
 });
 
@@ -204,6 +232,8 @@ async function submit(): Promise<void> {
                 admissionId: null,
                 serviceRequestId: null,
                 entryMode: 'draft',
+                replacesOrderId: props.linkage?.mode === 'reorder' ? props.linkage.sourceOrderId : null,
+                addOnToOrderId: props.linkage?.mode === 'add_on' ? props.linkage.sourceOrderId : null,
                 labTestCatalogItemId: payload.labTestCatalogItemId,
                 testCode: payload.testCode || null,
                 testName: payload.testName || null,
@@ -237,8 +267,8 @@ async function submit(): Promise<void> {
     <Sheet :open="open" @update:open="(value) => (open = value)">
         <SheetContent side="right" variant="form" size="2xl" @open-auto-focus="(event: Event) => event.preventDefault()">
             <SheetHeader class="shrink-0 border-b bg-background/95 px-6 py-4 text-left backdrop-blur supports-[backdrop-filter]:bg-background/80">
-                <SheetTitle>Create laboratory order</SheetTitle>
-                <SheetDescription>Place a laboratory test order for a patient.</SheetDescription>
+                <SheetTitle>{{ linkage ? linkageModeLabel : 'Create laboratory order' }}</SheetTitle>
+                <SheetDescription>{{ linkageDescription ?? 'Place a laboratory test order for a patient.' }}</SheetDescription>
             </SheetHeader>
 
             <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">

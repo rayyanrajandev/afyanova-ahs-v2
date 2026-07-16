@@ -1,14 +1,29 @@
 <script setup lang="ts">
 import { Badge } from '@/components/ui/badge';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { RadiologyOrder } from '@/composables/radiologyOrders/useRadiologyOrders';
 import { formatEnumLabel } from '@/lib/labels';
 
-defineProps<{
+const props = defineProps<{
     order: RadiologyOrder | null;
+    canCreate?: boolean;
+}>();
+
+const emit = defineEmits<{
+    reorder: [order: RadiologyOrder];
+    addOn: [order: RadiologyOrder];
 }>();
 
 const open = defineModel<boolean>('open', { required: true });
+
+function requestReorder(): void {
+    if (props.order) emit('reorder', props.order);
+}
+
+function requestAddOn(): void {
+    if (props.order) emit('addOn', props.order);
+}
 
 function formatDateTime(value: string | null): string {
     if (!value) return '—';
@@ -103,6 +118,11 @@ function formatDateTime(value: string | null): string {
                     </dl>
                 </div>
             </div>
+
+            <SheetFooter v-if="canCreate" class="shrink-0 flex-row justify-end gap-2 border-t px-6 py-3">
+                <Button variant="outline" size="sm" @click="requestAddOn">Add linked study</Button>
+                <Button variant="outline" size="sm" @click="requestReorder">Reorder</Button>
+            </SheetFooter>
         </SheetContent>
     </Sheet>
 </template>

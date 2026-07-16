@@ -153,6 +153,12 @@ function onOrderCreated(orderNumber: string): void {
     notifySuccess(`Placed ${orderNumber}.`);
 }
 
+function openCreateSheet(): void {
+    linkagePatientId.value = null;
+    linkage.value = null;
+    createSheetOpen.value = true;
+}
+
 const patientSearchQuery = ref('');
 
 function onPatientSelected(patient: PatientQuickSearchResult | null): void {
@@ -270,6 +276,30 @@ const detailOpen = ref(false);
 function openDetail(order: LaboratoryOrder): void {
     detailOrder.value = order;
     detailOpen.value = true;
+}
+
+/* Reorder / add-on — reuses the same create Sheet instead of the legacy
+ * page's separate detail-view buttons; see reports/order-creation-v2-modernization-plan.md. */
+const linkagePatientId = ref<string | null>(null);
+const linkage = ref<{ mode: 'reorder' | 'add_on'; sourceOrderId: string; sourceLabel: string } | null>(null);
+
+function sourceLabelFor(order: LaboratoryOrder): string {
+    return order.testName?.trim() || order.testCode?.trim() || order.orderNumber?.trim() || 'this laboratory order';
+}
+
+function openLinkedCreate(order: LaboratoryOrder, mode: 'reorder' | 'add_on'): void {
+    detailOpen.value = false;
+    linkagePatientId.value = order.patientId;
+    linkage.value = { mode, sourceOrderId: order.id, sourceLabel: sourceLabelFor(order) };
+    createSheetOpen.value = true;
+}
+
+function onReorder(order: LaboratoryOrder): void {
+    openLinkedCreate(order, 'reorder');
+}
+
+function onAddOn(order: LaboratoryOrder): void {
+    openLinkedCreate(order, 'add_on');
 }
 
 if (focusOrderId) {
@@ -433,7 +463,7 @@ function openAuditSheet(order: LaboratoryOrder): void {
                             <Button variant="outline" size="sm" class="h-8 gap-1.5" @click="resetFilters">
                                 Clear filters
                             </Button>
-                            <Button v-if="canCreate" variant="outline" size="sm" class="h-8 gap-1.5" @click="createSheetOpen = true">
+                            <Button v-if="canCreate" variant="outline" size="sm" class="h-8 gap-1.5" @click="openCreateSheet">
                                 <AppIcon name="plus" class="size-3.5" />
                                 Create order
                             </Button>
@@ -613,9 +643,20 @@ function openAuditSheet(order: LaboratoryOrder): void {
             </Tabs>
         </div>
 
-        <LaboratoryOrderCreateSheet v-model:open="createSheetOpen" @created="onOrderCreated" />
+        <LaboratoryOrderCreateSheet
+            v-model:open="createSheetOpen"
+            :initial-patient-id="linkagePatientId"
+            :linkage="linkage"
+            @created="onOrderCreated"
+        />
 
-        <LaboratoryOrderDetailSheet v-model:open="detailOpen" :order="detailOrder" />
+        <LaboratoryOrderDetailSheet
+            v-model:open="detailOpen"
+            :order="detailOrder"
+            :can-create="canCreate"
+            @reorder="onReorder"
+            @add-on="onAddOn"
+        />
 
         <LaboratoryStatusUpdateDialog
             :open="statusDialogOpen"

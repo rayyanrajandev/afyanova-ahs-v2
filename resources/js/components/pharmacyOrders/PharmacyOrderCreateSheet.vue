@@ -17,9 +17,11 @@ import {
     checkPharmacyDuplicate,
     createPharmacyInlineOrder,
     duplicateCheckDetails,
+    encounterInlineOrderModeLabel,
     fetchApprovedMedicinesCatalog,
     fetchPatientMedicationSafetySummary,
     type ClinicalCatalogItem,
+    type EncounterInlineOrderLinkageContext,
     type MedicationSafetyContinuationDecision,
 } from '@/lib/encounterInlineOrders';
 import { messageFromUnknown, notifyError } from '@/lib/notify';
@@ -42,12 +44,32 @@ import { messageFromUnknown, notifyError } from '@/lib/notify';
  * PharmacyPolicyDialog.vue on the worklist page — not part of creation
  * itself (confirmed: CreatePharmacyOrderUseCase/StorePharmacyOrderRequest
  * have no policy-review concept at all).
+ *
+ * Reorder/add-on: see LaboratoryOrderCreateSheet.vue's docblock — same
+ * `linkage` prop shape, PharmacyOrderDetailSheet emits it instead of a
+ * separate legacy-style detail-view button set.
  */
+const props = defineProps<{
+    initialPatientId?: string | null;
+    linkage?: EncounterInlineOrderLinkageContext | null;
+}>();
+
 const open = defineModel<boolean>('open', { required: true });
 
 const emit = defineEmits<{
     created: [orderNumber: string];
 }>();
+
+const linkageModeLabel = computed(() => encounterInlineOrderModeLabel(props.linkage?.mode ?? 'new'));
+const linkageDescription = computed(() => {
+    if (props.linkage?.mode === 'reorder') {
+        return `This creates a replacement linked to ${props.linkage.sourceLabel}.`;
+    }
+    if (props.linkage?.mode === 'add_on') {
+        return `This creates an add-on linked to ${props.linkage.sourceLabel}.`;
+    }
+    return null;
+});
 
 const {
     confirmationDialogState,
@@ -120,6 +142,9 @@ async function loadCatalog(): Promise<void> {
 watch(open, (isOpen) => {
     if (!isOpen) return;
     resetForm();
+    if (props.initialPatientId) {
+        patientId.value = props.initialPatientId;
+    }
     void loadCatalog();
 });
 
@@ -244,7 +269,11 @@ async function submit(): Promise<void> {
             return;
         }
 
-        const response = await createPharmacyInlineOrder(context, payload, { safetyDecision });
+        const response = await createPharmacyInlineOrder(context, payload, {
+            safetyDecision,
+            replacesOrderId: props.linkage?.mode === 'reorder' ? props.linkage.sourceOrderId : null,
+            addOnToOrderId: props.linkage?.mode === 'add_on' ? props.linkage.sourceOrderId : null,
+        });
         const orderNumber = (response.data.orderNumber as string | null | undefined)?.trim() || 'pharmacy order';
 
         emit('created', orderNumber);
@@ -271,8 +300,8 @@ async function submit(): Promise<void> {
     <Sheet :open="open" @update:open="(value) => (open = value)">
         <SheetContent side="right" variant="form" size="2xl" @open-auto-focus="(event: Event) => event.preventDefault()">
             <SheetHeader class="shrink-0 border-b bg-background/95 px-6 py-4 text-left backdrop-blur supports-[backdrop-filter]:bg-background/80">
-                <SheetTitle>Create pharmacy order</SheetTitle>
-                <SheetDescription>Place a medication order for a patient.</SheetDescription>
+                <SheetTitle>{{ linkage ? linkageModeLabel : 'Create pharmacy order' }}</SheetTitle>
+                <SheetDescription>{{ linkageDescription ?? 'Place a medication order for a patient.' }}</SheetDescription>
             </SheetHeader>
 
             <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">

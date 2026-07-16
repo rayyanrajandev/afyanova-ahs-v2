@@ -279,6 +279,34 @@ function openDetail(order: PharmacyOrder): void {
     detailOpen.value = true;
 }
 
+const linkagePatientId = ref<string | null>(null);
+const linkage = ref<{ mode: 'reorder' | 'add_on'; sourceOrderId: string; sourceLabel: string } | null>(null);
+
+function sourceLabelFor(order: PharmacyOrder): string {
+    return order.medicationName?.trim() || order.medicationCode?.trim() || order.orderNumber?.trim() || 'this pharmacy order';
+}
+
+function openLinkedCreate(order: PharmacyOrder, mode: 'reorder' | 'add_on'): void {
+    detailOpen.value = false;
+    linkagePatientId.value = order.patientId;
+    linkage.value = { mode, sourceOrderId: order.id, sourceLabel: sourceLabelFor(order) };
+    createSheetOpen.value = true;
+}
+
+function onReorder(order: PharmacyOrder): void {
+    openLinkedCreate(order, 'reorder');
+}
+
+function onAddOn(order: PharmacyOrder): void {
+    openLinkedCreate(order, 'add_on');
+}
+
+function openCreateSheet(): void {
+    linkagePatientId.value = null;
+    linkage.value = null;
+    createSheetOpen.value = true;
+}
+
 if (focusOrderId) {
     const stopFocusWatch = watch(orders, (list) => {
         const match = list.find((order) => order.id === focusOrderId);
@@ -512,7 +540,7 @@ function openAuditSheet(order: PharmacyOrder): void {
                             <Button variant="outline" size="sm" class="h-8 gap-1.5" @click="resetFilters">
                                 Clear filters
                             </Button>
-                            <Button v-if="canCreate" variant="outline" size="sm" class="h-8 gap-1.5" @click="createSheetOpen = true">
+                            <Button v-if="canCreate" variant="outline" size="sm" class="h-8 gap-1.5" @click="openCreateSheet">
                                 <AppIcon name="plus" class="size-3.5" />
                                 Create order
                             </Button>
@@ -691,9 +719,20 @@ function openAuditSheet(order: PharmacyOrder): void {
             </Tabs>
         </div>
 
-        <PharmacyOrderCreateSheet v-model:open="createSheetOpen" @created="onOrderCreated" />
+        <PharmacyOrderCreateSheet
+            v-model:open="createSheetOpen"
+            :initial-patient-id="linkagePatientId"
+            :linkage="linkage"
+            @created="onOrderCreated"
+        />
 
-        <PharmacyOrderDetailSheet v-model:open="detailOpen" :order="detailOrder" />
+        <PharmacyOrderDetailSheet
+            v-model:open="detailOpen"
+            :order="detailOrder"
+            :can-create="canCreate"
+            @reorder="onReorder"
+            @add-on="onAddOn"
+        />
 
         <PharmacyDispenseDialog
             :open="dispenseDialogOpen"

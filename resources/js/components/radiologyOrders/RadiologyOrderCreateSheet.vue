@@ -16,9 +16,11 @@ import {
     checkRadiologyDuplicate,
     createRadiologyInlineOrder,
     duplicateCheckDetails,
+    encounterInlineOrderModeLabel,
     fetchRadiologyProcedureCatalog,
     radiologyModalityOptions,
     type ClinicalCatalogItem,
+    type EncounterInlineOrderLinkageContext,
 } from '@/lib/encounterInlineOrders';
 import { messageFromUnknown, notifyError } from '@/lib/notify';
 
@@ -40,12 +42,32 @@ import { messageFromUnknown, notifyError } from '@/lib/notify';
  * a specific visit) is a fully valid, real use case, not a stub. Context
  * linking can be added later without changing this component's shape if a
  * real need for it shows up once this ships.
+ *
+ * Reorder/add-on: see LaboratoryOrderCreateSheet.vue's docblock — same
+ * `linkage` prop shape, RadiologyOrderDetailSheet emits it instead of a
+ * separate legacy-style detail-view button set.
  */
+const props = defineProps<{
+    initialPatientId?: string | null;
+    linkage?: EncounterInlineOrderLinkageContext | null;
+}>();
+
 const open = defineModel<boolean>('open', { required: true });
 
 const emit = defineEmits<{
     created: [orderNumber: string];
 }>();
+
+const linkageModeLabel = computed(() => encounterInlineOrderModeLabel(props.linkage?.mode ?? 'new'));
+const linkageDescription = computed(() => {
+    if (props.linkage?.mode === 'reorder') {
+        return `This creates a replacement linked to ${props.linkage.sourceLabel}.`;
+    }
+    if (props.linkage?.mode === 'add_on') {
+        return `This creates an add-on linked to ${props.linkage.sourceLabel}.`;
+    }
+    return null;
+});
 
 const {
     confirmationDialogState,
@@ -111,6 +133,9 @@ async function loadCatalog(): Promise<void> {
 watch(open, (isOpen) => {
     if (!isOpen) return;
     resetForm();
+    if (props.initialPatientId) {
+        patientId.value = props.initialPatientId;
+    }
     void loadCatalog();
 });
 
@@ -183,7 +208,10 @@ async function submit(): Promise<void> {
             }
         }
 
-        const response = await createRadiologyInlineOrder(context, payload);
+        const response = await createRadiologyInlineOrder(context, payload, {
+            replacesOrderId: props.linkage?.mode === 'reorder' ? props.linkage.sourceOrderId : null,
+            addOnToOrderId: props.linkage?.mode === 'add_on' ? props.linkage.sourceOrderId : null,
+        });
         const orderNumber = (response.data.orderNumber as string | null | undefined)?.trim() || 'imaging order';
 
         emit('created', orderNumber);
@@ -210,8 +238,8 @@ async function submit(): Promise<void> {
     <Sheet :open="open" @update:open="(value) => (open = value)">
         <SheetContent side="right" variant="form" size="2xl" @open-auto-focus="(event: Event) => event.preventDefault()">
             <SheetHeader class="shrink-0 border-b bg-background/95 px-6 py-4 text-left backdrop-blur supports-[backdrop-filter]:bg-background/80">
-                <SheetTitle>Create radiology order</SheetTitle>
-                <SheetDescription>Place an imaging order for a patient.</SheetDescription>
+                <SheetTitle>{{ linkage ? linkageModeLabel : 'Create radiology order' }}</SheetTitle>
+                <SheetDescription>{{ linkageDescription ?? 'Place an imaging order for a patient.' }}</SheetDescription>
             </SheetHeader>
 
             <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
