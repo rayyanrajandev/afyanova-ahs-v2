@@ -2,7 +2,9 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useNow } from '@vueuse/core';
 import { Link } from '@inertiajs/vue3';
+import AppIcon from '@/components/AppIcon.vue';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import ElapsedTimeBadge from '@/components/shared/ElapsedTimeBadge.vue';
 import { elapsedMinutesSince, formatMinutes } from '@/composables/useElapsedTime';
 import { usePatientFlowClinicianDirectory } from '@/composables/patient-flow/usePatientFlowClinicianDirectory';
@@ -243,13 +245,29 @@ function columnStats(entries: VisitJourneyEntry[]): { averageLabel: string; long
                     {{ entry.department ?? 'No department set' }}
                 </p>
 
-                <Link
-                    v-if="entry.clinicianUserId !== null"
-                    :href="`/clinician/queue?clinicianUserId=${entry.clinicianUserId}`"
-                    class="mt-1 block truncate text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                >
-                    {{ clinicianLabel(entry.clinicianUserId) }}
-                </Link>
+                <div v-if="entry.clinicianUserId !== null" class="mt-1 flex min-w-0 items-center gap-1">
+                    <Link
+                        :href="`/clinician/queue?clinicianUserId=${entry.clinicianUserId}`"
+                        class="block truncate text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    >
+                        {{ clinicianLabel(entry.clinicianUserId) }}
+                    </Link>
+                    <TooltipProvider v-if="entry.consultationTakeoverCount > 0">
+                        <Tooltip>
+                            <TooltipTrigger as-child>
+                                <span class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                                    <AppIcon name="refresh-cw" class="size-2.5" />
+                                    {{ entry.consultationTakeoverCount }}
+                                </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                Consultation taken over
+                                {{ entry.consultationTakeoverCount === 1 ? 'once' : `${entry.consultationTakeoverCount} times` }}
+                                — showing current owner
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                </div>
 
                 <p
                     v-if="entry.allergies.length > 0"

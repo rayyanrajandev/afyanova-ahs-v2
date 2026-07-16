@@ -585,6 +585,41 @@ it('filters the board by clinicianUserId, excluding service requests entirely si
     expect($entries[0]['clinicianUserId'])->toBe($clinician->id);
 });
 
+it('shows the current consultation owner instead of the originally scheduled clinician after a takeover', function (): void {
+    $originalClinician = User::factory()->create();
+    $replacementClinician = User::factory()->create();
+    $patient = makePatientFlowPatient();
+    $appointment = makePatientFlowAppointment($patient->id, [
+        'status' => 'in_consultation',
+        'clinician_user_id' => $originalClinician->id,
+        'consultation_owner_user_id' => $replacementClinician->id,
+        'consultation_takeover_count' => 1,
+    ]);
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute(patientId: $patient->id);
+
+    $entry = collect($entries)->firstWhere('appointmentId', $appointment->id);
+    expect($entry['clinicianUserId'])->toBe($replacementClinician->id);
+    expect($entry['consultationTakeoverCount'])->toBe(1);
+});
+
+it('falls back to the originally scheduled clinician when no consultation owner has been assigned yet', function (): void {
+    $clinician = User::factory()->create();
+    $patient = makePatientFlowPatient();
+    $appointment = makePatientFlowAppointment($patient->id, [
+        'status' => 'waiting_provider',
+        'clinician_user_id' => $clinician->id,
+        'consultation_owner_user_id' => null,
+        'consultation_takeover_count' => 0,
+    ]);
+
+    $entries = app(GetActiveVisitJourneyUseCase::class)->execute(patientId: $patient->id);
+
+    $entry = collect($entries)->firstWhere('appointmentId', $appointment->id);
+    expect($entry['clinicianUserId'])->toBe($clinician->id);
+    expect($entry['consultationTakeoverCount'])->toBe(0);
+});
+
 it('filters the board by a patient name/number search term, in memory', function (): void {
     $match = makePatientFlowPatient(['first_name' => 'Amina', 'last_name' => 'Juma']);
     $other = makePatientFlowPatient(['first_name' => 'Baraka', 'last_name' => 'Mwakalinga', 'phone' => '+255700000095']);

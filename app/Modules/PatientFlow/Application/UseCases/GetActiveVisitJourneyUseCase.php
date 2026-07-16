@@ -203,7 +203,17 @@ class GetActiveVisitJourneyUseCase
                     'patientName' => $this->patientName($patientsById, $appointment->patient_id),
                     'patientNumber' => $patientsById->get($appointment->patient_id)?->patient_number,
                     'department' => $appointment->department,
-                    'clinicianUserId' => $appointment->clinician_user_id,
+                    /**
+                     * consultation_owner_user_id (current owner, updated on every
+                     * takeover) takes priority over clinician_user_id (the
+                     * originally scheduled clinician) — falls back to it only
+                     * before a consultation has actually started, when no owner
+                     * has been assigned yet. Showing clinician_user_id alone
+                     * after a takeover would display the replaced doctor, not
+                     * who's actually seeing the patient.
+                     */
+                    'clinicianUserId' => $appointment->consultation_owner_user_id ?? $appointment->clinician_user_id,
+                    'consultationTakeoverCount' => (int) ($appointment->consultation_takeover_count ?? 0),
                     'appointmentStatus' => $appointment->status,
                     'step' => $step,
                     'stepEnteredAt' => $stepEnteredAt,
@@ -231,6 +241,7 @@ class GetActiveVisitJourneyUseCase
                     'patientNumber' => $patientsById->get($serviceRequest->patient_id)?->patient_number,
                     'department' => self::SERVICE_TYPE_LABELS[$serviceRequest->service_type] ?? $serviceRequest->service_type,
                     'clinicianUserId' => null,
+                    'consultationTakeoverCount' => 0,
                     'appointmentStatus' => null,
                     'step' => $isInProgress ? 'in_direct_service' : 'waiting_direct_service',
                     // acknowledged_at is set precisely on the PENDING -> IN_PROGRESS

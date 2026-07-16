@@ -29,6 +29,7 @@ function makeEntry(overrides: Partial<VisitJourneyEntry> = {}): VisitJourneyEntr
         patientNumber: 'PT001',
         department: 'Outpatient',
         clinicianUserId: null,
+        consultationTakeoverCount: 0,
         appointmentStatus: 'in_consultation',
         step: 'with_clinician',
         stepEnteredAt: null,

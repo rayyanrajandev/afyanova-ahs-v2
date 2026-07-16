@@ -28,7 +28,10 @@ export type VisitJourneyEntry = {
     patientName: string | null;
     patientNumber: string | null;
     department: string | null;
+    /** Current consultation owner (updated on every takeover) when set, falling back to the originally scheduled clinician otherwise. */
     clinicianUserId: number | null;
+    /** How many times ownership has changed hands via a forced takeover; 0 for direct-service walk-ins (no ownership concept). */
+    consultationTakeoverCount: number;
     appointmentStatus: string | null;
     step: VisitJourneyStep;
     /**

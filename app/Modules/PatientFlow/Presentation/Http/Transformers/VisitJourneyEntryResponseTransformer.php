@@ -18,6 +18,7 @@ class VisitJourneyEntryResponseTransformer
             'patientNumber' => $entry['patientNumber'] ?? null,
             'department' => $entry['department'] ?? null,
             'clinicianUserId' => $entry['clinicianUserId'] ?? null,
+            'consultationTakeoverCount' => $entry['consultationTakeoverCount'] ?? 0,
             'appointmentStatus' => $entry['appointmentStatus'] ?? null,
             'step' => $entry['step'] ?? null,
             'stepEnteredAt' => $entry['stepEnteredAt'] ?? null,
