@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head } from '@inertiajs/vue3';
 import { useQueryClient } from '@tanstack/vue-query';
 import { computed, ref, watch } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -16,6 +16,7 @@ import { type PatientQuickSearchResult } from '@/composables/patients/usePatient
 import PatientOrderGroupList from '@/components/orders/PatientOrderGroupList.vue';
 import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycleActionDialog.vue';
 import AuditLogSheet from '@/components/shared/AuditLogSheet.vue';
+import PharmacyOrderCreateSheet from '@/components/pharmacyOrders/PharmacyOrderCreateSheet.vue';
 import PharmacyOrderDetailSheet from '@/components/pharmacyOrders/PharmacyOrderDetailSheet.vue';
 import PharmacyDispenseDialog from '@/components/pharmacyOrders/PharmacyDispenseDialog.vue';
 import PharmacyVerifyDispenseDialog from '@/components/pharmacyOrders/PharmacyVerifyDispenseDialog.vue';
@@ -40,16 +41,18 @@ import { type BreadcrumbItem } from '@/types';
 /**
  * Pharmacy worklist V2 — first of four planned order-domain V2 builds
  * (lab/pharmacy/imaging/theatre), replacing pharmacy-orders/Index.vue
- * (16,765 lines) for the WORKLIST slice only: search/filter, status tabs,
+ * (16,765 lines) for the WORKLIST slice: search/filter, status tabs,
  * KPI tiles, and the dispense/verify/policy/reconciliation/lifecycle
- * actions pharmacy staff take on existing orders. Order creation
- * (including the walk-in intake panel and the formulary
- * policy-review-required governance tier) deliberately stays on the
- * legacy page — it already reuses the same backend endpoints via the
- * Encounter Workspace's inline order panel
- * (resources/js/components/domain/clinical/EncounterInlineOrderPanel.vue)
- * for the common clinician-in-an-encounter case. See this build's plan
- * for the full scope rationale.
+ * actions pharmacy staff take on existing orders. The legacy page's
+ * "formulary policy-review-required governance tier" is a separate,
+ * post-creation lifecycle step, already ported to V2 via
+ * PharmacyPolicyDialog.vue above — not part of order creation itself.
+ *
+ * Order creation (Phase 2 of reports/order-creation-v2-modernization-plan.md):
+ * PharmacyOrderCreateSheet.vue, reusing the same duplicate-check/
+ * medication-safety/create endpoints EncounterInlineOrderPanel.vue already
+ * calls from an active encounter — this is the standalone-page entry point
+ * for the same backend, not a second implementation.
  *
  * Reuses usePatientOrderGroups + PatientOrderGroupList (both already built
  * for exactly this shape: DirectServiceModuleKey === 'pharmacy') rather
@@ -97,6 +100,14 @@ const focusPatientId = computed(() => filters.patientId);
 const list = usePharmacyOrders(filters);
 const statusCounts = usePharmacyOrderStatusCounts(filters);
 const queryClient = useQueryClient();
+
+const createSheetOpen = ref(false);
+
+function onOrderCreated(orderNumber: string): void {
+    void queryClient.invalidateQueries({ queryKey: ['pharmacy-orders-index'] });
+    void queryClient.invalidateQueries({ queryKey: ['sidebar-pharmacy-order-status-counts'] });
+    notifySuccess(`Placed ${orderNumber}.`);
+}
 
 const orders = computed<PharmacyOrder[]>(() => list.data.value?.data ?? []);
 
@@ -501,11 +512,9 @@ function openAuditSheet(order: PharmacyOrder): void {
                             <Button variant="outline" size="sm" class="h-8 gap-1.5" @click="resetFilters">
                                 Clear filters
                             </Button>
-                            <Button v-if="canCreate" as-child variant="outline" size="sm" class="h-8 gap-1.5">
-                                <Link href="/pharmacy-orders/legacy">
-                                    <AppIcon name="plus" class="size-3.5" />
-                                    Create order
-                                </Link>
+                            <Button v-if="canCreate" variant="outline" size="sm" class="h-8 gap-1.5" @click="createSheetOpen = true">
+                                <AppIcon name="plus" class="size-3.5" />
+                                Create order
                             </Button>
                         </div>
                     </div>
@@ -681,6 +690,8 @@ function openAuditSheet(order: PharmacyOrder): void {
                 </div>
             </Tabs>
         </div>
+
+        <PharmacyOrderCreateSheet v-model:open="createSheetOpen" @created="onOrderCreated" />
 
         <PharmacyOrderDetailSheet v-model:open="detailOpen" :order="detailOrder" />
 
