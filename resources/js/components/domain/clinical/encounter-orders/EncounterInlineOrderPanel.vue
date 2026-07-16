@@ -549,25 +549,13 @@ async function submitOrder() {
 </script>
 
 <template>
-    <section class="rounded-lg border border-primary/20 bg-primary/5 p-4">
-        <div class="mb-4 space-y-1">
-            <p class="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {{ panelModeLabel }} in encounter
-            </p>
-            <p class="text-sm font-medium text-foreground">
-                {{ panelTitle }}
-            </p>
-            <p class="text-xs text-muted-foreground">
-                {{ panelDescription }}
-            </p>
-        </div>
-
-        <Alert v-if="catalogError" variant="destructive" class="mb-4">
+    <div class="space-y-4">
+        <Alert v-if="catalogError" variant="destructive">
             <AlertTitle>Catalog unavailable</AlertTitle>
             <AlertDescription>{{ catalogError }}</AlertDescription>
         </Alert>
 
-        <Alert v-else-if="formError" variant="destructive" class="mb-4">
+        <Alert v-else-if="formError" variant="destructive">
             <AlertTitle>Order needs attention</AlertTitle>
             <AlertDescription>{{ formError }}</AlertDescription>
         </Alert>
@@ -733,14 +721,6 @@ async function submitOrder() {
                     />
                     {{ submitButtonLabel }}
                 </Button>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    :disabled="submitLoading"
-                    @click="emit('close')"
-                >
-                    Cancel
-                </Button>
             </div>
         </div>
 
@@ -756,5 +736,5 @@ async function submitOrder() {
             @update:open="updateConfirmationDialogOpen"
             @confirm="confirmDialogAction()"
         />
-    </section>
+    </div>
 </template>
