@@ -51,8 +51,24 @@ class EloquentUserFacilityAssignmentRepository implements UserFacilityAssignment
 
     private function hasUniversalSuperAdminAccess(int $userId): bool
     {
-        return $this->hasActiveSuperAdminAssignment($userId)
+        return $this->hasPlatformAdminFlag($userId)
+            || $this->hasActiveSuperAdminAssignment($userId)
             || $this->hasActivePlatformSuperAdminRole($userId);
+    }
+
+    /**
+     * users.is_platform_admin is the single source of truth for platform-admin
+     * status (User::isPlatformSuperAdmin()) — checked here too so an account
+     * bootstrapped via that flag alone (no legacy facility_user.role/role_user
+     * row) still gets the full facility list instead of falling through to the
+     * per-assignment query below.
+     */
+    private function hasPlatformAdminFlag(int $userId): bool
+    {
+        return DB::table('users')
+            ->where('id', $userId)
+            ->where('is_platform_admin', true)
+            ->exists();
     }
 
     private function hasActiveSuperAdminAssignment(int $userId): bool

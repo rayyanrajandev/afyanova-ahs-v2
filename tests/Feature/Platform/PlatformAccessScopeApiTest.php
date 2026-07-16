@@ -175,6 +175,49 @@ it('lets system super admin switch across all active facilities without facility
         ->assertJsonPath('data.facility.code', 'DSK-DISP');
 });
 
+it('lets a platform admin (is_platform_admin only, no legacy role assignment) switch across all active facilities', function (): void {
+    $user = User::factory()->create(['is_platform_admin' => true]);
+
+    seedTenantAndFacility(
+        tenantCode: 'TZH',
+        tenantName: 'Tanzania Health Network',
+        countryCode: 'TZ',
+        facilityCode: 'DAR-MAIN',
+        facilityName: 'Dar Main Hospital',
+    );
+
+    $secondFacility = seedTenantAndFacility(
+        tenantCode: 'TZH',
+        tenantName: 'Tanzania Health Network',
+        countryCode: 'TZ',
+        facilityCode: 'DSK-DISP',
+        facilityName: 'DSK Dispensary',
+    );
+
+    // No facility_user row and no role_user row at all — is_platform_admin
+    // alone must be sufficient, matching User::isPlatformSuperAdmin()'s logic.
+    expect(DB::table('facility_user')->where('user_id', $user->id)->exists())->toBeFalse();
+    expect(DB::table('role_user')->where('user_id', $user->id)->exists())->toBeFalse();
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/platform/access-scope')
+        ->assertOk()
+        ->assertJsonPath('data.userAccess.accessibleFacilityCount', 2)
+        ->assertJsonPath('data.userAccess.facilities.0.code', 'DAR-MAIN')
+        ->assertJsonPath('data.userAccess.facilities.1.code', 'DSK-DISP');
+
+    $this->actingAs($user)
+        ->withHeaders([
+            'X-Tenant-Code' => 'TZH',
+            'X-Facility-Code' => 'DSK-DISP',
+        ])
+        ->getJson('/api/v1/platform/access-scope')
+        ->assertOk()
+        ->assertJsonPath('data.resolvedFrom', 'headers')
+        ->assertJsonPath('data.facility.id', $secondFacility[1])
+        ->assertJsonPath('data.facility.code', 'DSK-DISP');
+});
+
 it('treats blank scope headers as absent and falls back to single-assignment resolution', function (): void {
     $user = User::factory()->create();
 
