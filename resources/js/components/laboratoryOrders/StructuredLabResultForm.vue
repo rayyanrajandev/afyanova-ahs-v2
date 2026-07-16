@@ -80,7 +80,7 @@ const hasAnyValue = computed(() =>
             v-for="(section, sectionIdx) in template.sections"
             :key="sectionIdx"
             :value="`section-${sectionIdx}`"
-            class="overflow-hidden rounded-lg border"
+            class="overflow-hidden rounded-lg border last:border-b"
         >
             <AccordionTrigger class="px-4 py-2.5 hover:bg-muted/40">
                 <div class="space-y-0.5">
@@ -248,7 +248,7 @@ const hasAnyValue = computed(() =>
             </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="remarks-impression" class="overflow-hidden rounded-lg border">
+        <AccordionItem value="remarks-impression" class="overflow-hidden rounded-lg border last:border-b">
             <AccordionTrigger class="px-4 py-2.5 hover:bg-muted/40">
                 <h4 class="text-sm font-semibold text-foreground">Remarks & Impression</h4>
             </AccordionTrigger>

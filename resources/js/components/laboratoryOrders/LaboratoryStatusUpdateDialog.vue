@@ -290,7 +290,7 @@ function submit(): void {
             </DialogHeader>
 
             <div class="min-h-0 flex-1 overflow-y-auto">
-            <div class="space-y-3 px-6 py-3">
+            <div class="space-y-3 px-6 pt-3 pb-6">
                 <template v-if="intent === 'complete'">
                     <template v-if="hasResultTemplate && order?.catalogResultTemplate">
                         <StructuredLabResultForm
