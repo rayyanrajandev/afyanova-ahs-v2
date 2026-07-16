@@ -261,11 +261,13 @@ Route::get('encounters/{id}/pdf', [EncounterDocumentController::class, 'download
     ->middleware(['auth', 'verified', 'can:medical.records.read', 'facility.entitlement:medical_records.core'])
     ->name('encounters.pdf.download');
 
-// Cut over to the rebuilt worklist (collect/process/complete result/verify/
-// lifecycle actions on existing orders). Order creation — the "new" view,
-// duplicate-check, walk-in intake — isn't in the V2 build yet, so the old
-// page remains reachable at laboratory-orders/legacy for that, same
-// precedent pharmacy-orders/legacy established.
+// Legacy page deleted — order creation, reorder/add-on, and safety-override
+// parity all shipped in V2 (reports/order-creation-v2-modernization-plan.md).
+// /legacy kept as an alias to V2, not removed outright: several other pages
+// (encounter workflow, patient chart, theatre) still link to it with
+// reorderOfId/addOnToOrderId/includeTabNew params V2 doesn't read yet —
+// rewiring those is a separate, deliberately deferred pass. This alias just
+// keeps those existing links from 404ing in the meantime.
 Route::get('laboratory-orders', function () {
     return Inertia::render('laboratory-orders/IndexV2');
 })->middleware(['auth', 'verified', 'can:laboratory.orders.read', 'facility.entitlement:laboratory.orders'])->name('laboratory-orders.page');
@@ -274,20 +276,15 @@ Route::get('laboratory-orders/v2', function () {
     return Inertia::render('laboratory-orders/IndexV2');
 })->middleware(['auth', 'verified', 'can:laboratory.orders.read', 'facility.entitlement:laboratory.orders'])->name('laboratory-orders.page.v2');
 
-// Rollback path — the pre-cutover page, unchanged. Also the only place
-// order creation (including walk-in intake) currently lives.
 Route::get('laboratory-orders/legacy', function () {
-    return Inertia::render('laboratory-orders/Index');
+    return Inertia::render('laboratory-orders/IndexV2');
 })->middleware(['auth', 'verified', 'can:laboratory.orders.read', 'facility.entitlement:laboratory.orders'])->name('laboratory-orders.page.legacy');
 
-// Cut over to the rebuilt worklist (dispense/verify/policy/reconciliation/
-// lifecycle actions on existing orders). Order creation — the "new" view,
-// walk-in intake panel, formulary policy-review-required governance tier —
-// isn't in the V2 build yet, so the old page remains reachable at
-// pharmacy-orders/legacy for that, same precedent patients/legacy and
-// patients/{id}/chart/legacy established during those rebuilds. Both
-// creation paths hit the same backend endpoints as the Encounter
-// Workspace's inline order panel either way.
+// Legacy page deleted — order creation, reorder/add-on, and safety-override
+// parity all shipped in V2 (reports/order-creation-v2-modernization-plan.md).
+// /legacy kept as an alias to V2, not removed outright — see laboratory-orders'
+// route block above for why (other pages still link to it with params V2
+// doesn't read yet; a separate, deliberately deferred pass).
 Route::get('pharmacy-orders', function () {
     return Inertia::render('pharmacy-orders/IndexV2');
 })->middleware(['auth', 'verified', 'can:pharmacy.orders.read', 'facility.entitlement:pharmacy.orders'])->name('pharmacy-orders.page');
@@ -296,10 +293,8 @@ Route::get('pharmacy-orders/v2', function () {
     return Inertia::render('pharmacy-orders/IndexV2');
 })->middleware(['auth', 'verified', 'can:pharmacy.orders.read', 'facility.entitlement:pharmacy.orders'])->name('pharmacy-orders.page.v2');
 
-// Rollback path — the pre-cutover page, unchanged. Also the only place
-// order creation (including walk-in intake) currently lives.
 Route::get('pharmacy-orders/legacy', function () {
-    return Inertia::render('pharmacy-orders/Index');
+    return Inertia::render('pharmacy-orders/IndexV2');
 })->middleware(['auth', 'verified', 'can:pharmacy.orders.read', 'facility.entitlement:pharmacy.orders'])->name('pharmacy-orders.page.legacy');
 
 Route::get('walk-in-service-requests', function () {
@@ -512,11 +507,11 @@ Route::get('platform/admin/clinical-catalogs/{catalog?}', function (?string $cat
     ->middleware(['auth', 'verified', 'can:platform.clinical-catalog.read'])
     ->name('platform-admin-clinical-catalogs.page');
 
-// Cut over to the rebuilt worklist (schedule/start imaging/complete
-// report/lifecycle actions on existing orders). Order creation — the
-// duplicate-check, draft/sign flow — isn't in the V2 build yet, so the
-// old page remains reachable at radiology-orders/legacy, same precedent
-// laboratory-orders/legacy and pharmacy-orders/legacy established.
+// Legacy page deleted — order creation, reorder/add-on parity shipped in V2
+// (reports/order-creation-v2-modernization-plan.md). /legacy kept as an
+// alias to V2, not removed outright — see laboratory-orders' route block
+// above for why (other pages still link to it with params V2 doesn't read
+// yet; a separate, deliberately deferred pass).
 Route::get('radiology-orders', function () {
     return Inertia::render('radiology-orders/IndexV2');
 })->middleware(['auth', 'verified', 'can:radiology.orders.read', 'facility.entitlement:radiology.orders'])->name('radiology-orders.page');
@@ -525,10 +520,8 @@ Route::get('radiology-orders/v2', function () {
     return Inertia::render('radiology-orders/IndexV2');
 })->middleware(['auth', 'verified', 'can:radiology.orders.read', 'facility.entitlement:radiology.orders'])->name('radiology-orders.page.v2');
 
-// Rollback path — the pre-cutover page, unchanged. Also the only place
-// order creation currently lives.
 Route::get('radiology-orders/legacy', function () {
-    return Inertia::render('radiology-orders/Index');
+    return Inertia::render('radiology-orders/IndexV2');
 })->middleware(['auth', 'verified', 'can:radiology.orders.read', 'facility.entitlement:radiology.orders'])->name('radiology-orders.page.legacy');
 
 // P0 of the Reception/Emergency/Admission/Bed-Management audit
