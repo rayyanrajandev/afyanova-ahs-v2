@@ -68,16 +68,8 @@ class LaboratoryOrderResponseTransformer
      */
     private static function loadCatalogItem(?string $catalogItemId): array
     {
-        static $cache = [];
-
         if ($catalogItemId === null || trim($catalogItemId) === '') {
             return ['unit' => null, 'parameters' => [], 'resultTemplate' => null];
-        }
-
-        $key = 'lab_test_catalog:'.$catalogItemId;
-
-        if (array_key_exists($key, $cache)) {
-            return $cache[$key];
         }
 
         $item = ClinicalCatalogItemModel::query()
@@ -85,19 +77,16 @@ class LaboratoryOrderResponseTransformer
             ->find($catalogItemId);
 
         if (! $item) {
-            $cache[$key] = ['unit' => null, 'parameters' => [], 'resultTemplate' => null];
-
-            return $cache[$key];
+            return ['unit' => null, 'parameters' => [], 'resultTemplate' => null];
         }
 
         $metadata = $item->metadata ?? [];
-        $cache[$key] = [
+
+        return [
             'unit' => $item->unit,
             'parameters' => $metadata['parameters'] ?? [],
             'resultTemplate' => $metadata['resultTemplate'] ?? null,
         ];
-
-        return $cache[$key];
     }
 
     private static function stockPrecheck(array $order): array
