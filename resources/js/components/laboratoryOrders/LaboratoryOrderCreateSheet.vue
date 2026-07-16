@@ -274,29 +274,31 @@ async function submit(): Promise<void> {
                         required
                     />
 
-                    <div class="space-y-1.5">
-                        <Label for="laboratory-order-create-priority">Priority</Label>
-                        <Select v-model="form.priority">
-                            <SelectTrigger id="laboratory-order-create-priority" class="w-full">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem v-for="option in laboratoryPriorityOptions" :key="option.value" :value="option.value">
-                                    {{ option.label }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="grid gap-2">
+                            <Label for="laboratory-order-create-priority">Priority</Label>
+                            <Select v-model="form.priority">
+                                <SelectTrigger id="laboratory-order-create-priority" class="w-full">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem v-for="option in laboratoryPriorityOptions" :key="option.value" :value="option.value">
+                                        {{ option.label }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div class="grid gap-2">
+                            <Label for="laboratory-order-create-specimen">Specimen type</Label>
+                            <Input id="laboratory-order-create-specimen" v-model="form.specimenType" placeholder="Blood, urine, swab…" />
+                            <p v-if="fieldError('specimenType')" class="text-xs text-destructive">{{ fieldError('specimenType') }}</p>
+                        </div>
                     </div>
 
-                    <div class="space-y-1.5">
-                        <Label for="laboratory-order-create-specimen">Specimen type</Label>
-                        <Input id="laboratory-order-create-specimen" v-model="form.specimenType" placeholder="Blood, urine, swab…" />
-                        <p v-if="fieldError('specimenType')" class="text-sm text-destructive">{{ fieldError('specimenType') }}</p>
-                    </div>
-
-                    <div class="space-y-1.5">
+                    <div class="grid gap-2">
                         <Label for="laboratory-order-create-notes">Clinical indication</Label>
-                        <Textarea id="laboratory-order-create-notes" v-model="form.clinicalNotes" rows="3" placeholder="Reason for test or clinical question" />
+                        <Textarea id="laboratory-order-create-notes" v-model="form.clinicalNotes" class="min-h-20" placeholder="Reason for test or clinical question…" />
                     </div>
                 </template>
             </div>

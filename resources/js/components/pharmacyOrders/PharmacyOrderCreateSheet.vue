@@ -308,22 +308,24 @@ async function submit(): Promise<void> {
                         required
                     />
 
-                    <div class="space-y-1.5">
-                        <Label for="pharmacy-order-create-dose">Dosage instruction</Label>
-                        <Input id="pharmacy-order-create-dose" v-model="form.dosageInstruction" placeholder="1 tablet orally twice daily" />
-                        <p v-if="fieldError('dosageInstruction')" class="text-sm text-destructive">{{ fieldError('dosageInstruction') }}</p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="grid gap-2">
+                            <Label for="pharmacy-order-create-dose">Dosage instruction</Label>
+                            <Input id="pharmacy-order-create-dose" v-model="form.dosageInstruction" placeholder="1 tablet orally twice daily" />
+                            <p v-if="fieldError('dosageInstruction')" class="text-xs text-destructive">{{ fieldError('dosageInstruction') }}</p>
+                        </div>
+
+                        <div class="grid gap-2">
+                            <Label for="pharmacy-order-create-qty">Quantity prescribed</Label>
+                            <Input id="pharmacy-order-create-qty" v-model="form.quantityPrescribed" type="number" min="1" step="1" />
+                            <p v-if="fieldError('quantityPrescribed')" class="text-xs text-destructive">{{ fieldError('quantityPrescribed') }}</p>
+                        </div>
                     </div>
 
-                    <div class="space-y-1.5">
-                        <Label for="pharmacy-order-create-qty">Quantity prescribed</Label>
-                        <Input id="pharmacy-order-create-qty" v-model="form.quantityPrescribed" type="number" min="1" step="1" />
-                        <p v-if="fieldError('quantityPrescribed')" class="text-sm text-destructive">{{ fieldError('quantityPrescribed') }}</p>
-                    </div>
-
-                    <div class="space-y-1.5">
+                    <div class="grid gap-2">
                         <Label for="pharmacy-order-create-indication">Clinical indication</Label>
-                        <Textarea id="pharmacy-order-create-indication" v-model="form.clinicalIndication" rows="3" placeholder="Diagnosis or treatment reason" />
-                        <p v-if="fieldError('clinicalIndication')" class="text-sm text-destructive">{{ fieldError('clinicalIndication') }}</p>
+                        <Textarea id="pharmacy-order-create-indication" v-model="form.clinicalIndication" class="min-h-20" placeholder="Diagnosis or treatment reason…" />
+                        <p v-if="fieldError('clinicalIndication')" class="text-xs text-destructive">{{ fieldError('clinicalIndication') }}</p>
                     </div>
 
                     <EncounterMedicationSafetyPanel
@@ -336,9 +338,9 @@ async function submit(): Promise<void> {
                         :quantity-prescribed="form.quantityPrescribed"
                     />
 
-                    <div class="space-y-1.5">
+                    <div class="grid gap-2">
                         <Label for="pharmacy-order-create-notes">Dispensing notes (optional)</Label>
-                        <Textarea id="pharmacy-order-create-notes" v-model="form.dispensingNotes" rows="2" placeholder="Optional pharmacy notes" />
+                        <Textarea id="pharmacy-order-create-notes" v-model="form.dispensingNotes" class="min-h-16" placeholder="Optional pharmacy notes…" />
                     </div>
                 </template>
             </div>

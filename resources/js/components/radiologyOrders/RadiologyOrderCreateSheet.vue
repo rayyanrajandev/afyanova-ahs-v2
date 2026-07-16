@@ -247,7 +247,7 @@ async function submit(): Promise<void> {
                         required
                     />
 
-                    <div class="space-y-1.5">
+                    <div class="grid gap-2">
                         <Label for="radiology-order-create-modality">Modality</Label>
                         <Select v-model="form.modality">
                             <SelectTrigger id="radiology-order-create-modality" class="w-full">
@@ -261,10 +261,10 @@ async function submit(): Promise<void> {
                         </Select>
                     </div>
 
-                    <div class="space-y-1.5">
+                    <div class="grid gap-2">
                         <Label for="radiology-order-create-indication">Clinical indication</Label>
-                        <Textarea id="radiology-order-create-indication" v-model="form.clinicalIndication" rows="3" placeholder="Reason for imaging" />
-                        <p v-if="fieldError('clinicalIndication')" class="text-sm text-destructive">{{ fieldError('clinicalIndication') }}</p>
+                        <Textarea id="radiology-order-create-indication" v-model="form.clinicalIndication" class="min-h-20" placeholder="Reason for imaging…" />
+                        <p v-if="fieldError('clinicalIndication')" class="text-xs text-destructive">{{ fieldError('clinicalIndication') }}</p>
                     </div>
                 </template>
             </div>
