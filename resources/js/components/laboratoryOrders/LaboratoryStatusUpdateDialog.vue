@@ -75,7 +75,7 @@ const hasResultTemplate = computed(
 
 const templateValues = ref<Record<string, string | string[]>>({});
 
-const resultFlag = ref<ResultFlag>('');
+const resultFlag = ref<ResultFlag | undefined>(undefined);
 const resultValue = ref('');
 const resultUnit = ref('');
 const referenceRange = ref('');
