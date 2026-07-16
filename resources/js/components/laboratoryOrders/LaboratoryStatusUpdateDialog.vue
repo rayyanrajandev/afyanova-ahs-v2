@@ -261,35 +261,36 @@ function submit(): void {
             variant="form"
             :size="isPanel && intent === 'complete' ? 'xl' : 'lg'"
         >
-            <DialogHeader class="shrink-0 px-6 pt-6 pb-4">
+            <DialogHeader class="shrink-0 gap-1 px-6 pt-4 pb-3">
                 <DialogTitle>{{ config.title }}</DialogTitle>
                 <DialogDescription>{{ config.description }}</DialogDescription>
 
-                <div class="mt-1 rounded-lg border bg-muted/20 p-3 text-left">
-                    <p
-                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                <div
+                    class="mt-1 flex flex-wrap items-baseline gap-x-1.5 rounded-md border bg-muted/20 px-2.5 py-1.5 text-left"
+                >
+                    <span
+                        class="text-[10px] font-medium tracking-wide text-muted-foreground uppercase"
+                        >Order</span
                     >
-                        Order
-                    </p>
-                    <p class="mt-2 text-sm font-medium text-foreground">
+                    <span class="text-sm font-medium text-foreground">
                         {{
                             order?.testName ||
                             order?.testCode ||
                             'Laboratory order'
                         }}
-                    </p>
-                    <p
+                    </span>
+                    <span
                         v-if="isPanel"
-                        class="mt-1 text-xs text-muted-foreground"
+                        class="text-xs text-muted-foreground"
                     >
-                        Panel test —
+                        — Panel test,
                         {{ order?.catalogParameters?.length }} parameters
-                    </p>
+                    </span>
                 </div>
             </DialogHeader>
 
             <div class="min-h-0 flex-1 overflow-y-auto">
-            <div class="space-y-4 px-6 py-4">
+            <div class="space-y-3 px-6 py-3">
                 <template v-if="intent === 'complete'">
                     <template v-if="hasResultTemplate && order?.catalogResultTemplate">
                         <StructuredLabResultForm
@@ -497,7 +498,7 @@ function submit(): void {
             </div>
             </div>
 
-            <DialogFooter class="shrink-0 border-t px-6 py-4">
+            <DialogFooter class="shrink-0 border-t px-6 py-3">
                 <Button
                     variant="outline"
                     :disabled="loading"

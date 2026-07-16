@@ -75,14 +75,14 @@ const hasAnyValue = computed(() =>
 </script>
 
 <template>
-    <Accordion type="single" collapsible class="space-y-4">
+    <Accordion type="single" collapsible class="space-y-2">
         <AccordionItem
             v-for="(section, sectionIdx) in template.sections"
             :key="sectionIdx"
             :value="`section-${sectionIdx}`"
             class="overflow-hidden rounded-lg border"
         >
-            <AccordionTrigger class="px-4 py-3 hover:bg-muted/40">
+            <AccordionTrigger class="px-4 py-2.5 hover:bg-muted/40">
                 <div class="space-y-0.5">
                     <h4 class="text-sm font-semibold text-foreground">{{ section.label }}</h4>
                     <p v-if="section.description" class="text-xs text-muted-foreground">
@@ -249,7 +249,7 @@ const hasAnyValue = computed(() =>
         </AccordionItem>
 
         <AccordionItem value="remarks-impression" class="overflow-hidden rounded-lg border">
-            <AccordionTrigger class="px-4 py-3 hover:bg-muted/40">
+            <AccordionTrigger class="px-4 py-2.5 hover:bg-muted/40">
                 <h4 class="text-sm font-semibold text-foreground">Remarks & Impression</h4>
             </AccordionTrigger>
 
