@@ -3,8 +3,14 @@ import { computed, reactive, watch } from 'vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { type ResultTemplate, type ResultTemplateSection } from '@/lib/resultTemplate';
+import {
+    IMPRESSION_FIELD_CODE,
+    REMARKS_FIELD_CODE,
+    type ResultTemplate,
+    type ResultTemplateSection,
+} from '@/lib/resultTemplate';
 
 const props = defineProps<{
     template: ResultTemplate;
@@ -28,6 +34,8 @@ function buildInitial(sections: ResultTemplateSection[]): Record<string, string 
             }
         }
     }
+    initial[REMARKS_FIELD_CODE] = '';
+    initial[IMPRESSION_FIELD_CODE] = '';
     return initial;
 }
 
@@ -195,6 +203,17 @@ const hasAnyValue = computed(() =>
                         />
                     </div>
 
+                    <!-- Multi-line text -->
+                    <div v-else-if="field.type === 'textarea'" class="grid gap-1.5">
+                        <Label :for="`result-field-${field.code}`">{{ field.label }}</Label>
+                        <Textarea
+                            :id="`result-field-${field.code}`"
+                            v-model="(values[field.code] as string)"
+                            :placeholder="field.placeholder ?? ''"
+                            rows="3"
+                        />
+                    </div>
+
                     <!-- Multi-select tags -->
                     <div v-else-if="field.type === 'multiselect'" class="grid gap-1.5">
                         <Label>{{ field.label }}</Label>
@@ -220,6 +239,32 @@ const hasAnyValue = computed(() =>
                         </div>
                     </div>
                 </template>
+            </div>
+        </div>
+
+        <div class="rounded-lg border p-4">
+            <div class="mb-3 space-y-0.5">
+                <h4 class="text-sm font-semibold text-foreground">Remarks & Impression</h4>
+            </div>
+
+            <div class="space-y-3">
+                <div class="grid gap-1.5">
+                    <Label for="result-field-remarks">Remarks</Label>
+                    <Textarea
+                        id="result-field-remarks"
+                        v-model="(values[REMARKS_FIELD_CODE] as string)"
+                        placeholder="e.g. Suggest stool culture if clinically indicated."
+                        rows="3"
+                    />
+                </div>
+                <div class="grid gap-1.5">
+                    <Label for="result-field-impression">Impression / Conclusion</Label>
+                    <Input
+                        id="result-field-impression"
+                        v-model="(values[IMPRESSION_FIELD_CODE] as string)"
+                        placeholder="e.g. Normal stool microscopy."
+                    />
+                </div>
             </div>
         </div>
     </div>

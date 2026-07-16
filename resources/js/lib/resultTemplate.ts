@@ -1,11 +1,26 @@
 export interface ResultTemplateField {
     code: string;
     label: string;
-    type: 'select' | 'multiselect' | 'text' | 'number' | 'positive-negative' | 'not-done';
+    type:
+        | 'select'
+        | 'multiselect'
+        | 'text'
+        | 'number'
+        | 'positive-negative'
+        | 'not-done'
+        | 'textarea';
     options?: string[];
     placeholder?: string;
     unit?: string;
 }
+
+/**
+ * Always rendered by StructuredLabResultForm.vue, outside any template
+ * section — every templated test gets Remarks/Impression with no catalog
+ * data changes required.
+ */
+export const REMARKS_FIELD_CODE = 'remarks';
+export const IMPRESSION_FIELD_CODE = 'impression';
 
 export interface ResultTemplateSection {
     label: string;
@@ -36,6 +51,19 @@ export function buildResultSummaryFromTemplate(
         }
     }
 
+    const remarks = values[REMARKS_FIELD_CODE];
+    const impression = values[IMPRESSION_FIELD_CODE];
+    const hasRemarks = typeof remarks === 'string' && remarks.trim() !== '';
+    const hasImpression = typeof impression === 'string' && impression.trim() !== '';
+
+    if (hasRemarks || hasImpression) {
+        lines.push('');
+        lines.push('Remarks & Impression');
+        lines.push('-'.repeat('Remarks & Impression'.length));
+        if (hasRemarks) lines.push(`Remarks: ${(remarks as string).trim()}`);
+        if (hasImpression) lines.push(`Impression: ${(impression as string).trim()}`);
+    }
+
     return lines.join('\n');
 }
 
@@ -57,6 +85,16 @@ export function buildResultParametersFromTemplate(
                 unit: field.unit,
             });
         }
+    }
+
+    const remarks = values[REMARKS_FIELD_CODE];
+    if (typeof remarks === 'string' && remarks.trim() !== '') {
+        params.push({ code: REMARKS_FIELD_CODE, name: 'Remarks', value: remarks.trim() });
+    }
+
+    const impression = values[IMPRESSION_FIELD_CODE];
+    if (typeof impression === 'string' && impression.trim() !== '') {
+        params.push({ code: IMPRESSION_FIELD_CODE, name: 'Impression', value: impression.trim() });
     }
 
     return params;
