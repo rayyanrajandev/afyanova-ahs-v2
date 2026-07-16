@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head } from '@inertiajs/vue3';
 import { useQueryClient } from '@tanstack/vue-query';
 import { computed, ref, watch } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -17,6 +17,7 @@ import { type PatientQuickSearchResult } from '@/composables/patients/usePatient
 import PatientOrderGroupList from '@/components/orders/PatientOrderGroupList.vue';
 import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycleActionDialog.vue';
 import AuditLogSheet from '@/components/shared/AuditLogSheet.vue';
+import LaboratoryOrderCreateSheet from '@/components/laboratoryOrders/LaboratoryOrderCreateSheet.vue';
 import LaboratoryOrderDetailSheet from '@/components/laboratoryOrders/LaboratoryOrderDetailSheet.vue';
 import LaboratoryStatusUpdateDialog from '@/components/laboratoryOrders/LaboratoryStatusUpdateDialog.vue';
 import LaboratoryVerifyResultDialog from '@/components/laboratoryOrders/LaboratoryVerifyResultDialog.vue';
@@ -42,11 +43,16 @@ import { type BreadcrumbItem } from '@/types';
 /**
  * Laboratory worklist V2 — second of four planned order-domain V2 builds
  * (lab/pharmacy/imaging/theatre), mirroring pharmacy-orders/IndexV2.vue's
- * shape. Replaces laboratory-orders/Index.vue for the WORKLIST slice only:
+ * shape. Replaces laboratory-orders/Index.vue for the WORKLIST slice:
  * search/filter, status tabs, KPI tiles, and the collect/process/complete
- * result/verify/lifecycle actions lab staff take on existing orders. Order
- * creation (duplicate-check, walk-in intake, draft/sign) deliberately stays
- * on the legacy page — see this build's plan for the full scope rationale.
+ * result/verify/lifecycle actions lab staff take on existing orders.
+ *
+ * Order creation (Phase 4 of reports/order-creation-v2-modernization-plan.md):
+ * LaboratoryOrderCreateSheet.vue preserves the legacy page's draft->sign
+ * two-step (one user-facing "Place order" action, two backend calls under
+ * the hood) rather than collapsing it to one step — a deliberate decision,
+ * not an oversight, since that's real existing behavior. No basket mode
+ * (multi-test queueing) yet — scoped as a separate fast-follow phase.
  *
  * Unlike pharmacy, ClinicalCurrentCare::laboratory()'s nextAction has no
  * hidden gate to layer on top — it's consumed directly, no effectiveNextAction
@@ -138,6 +144,13 @@ async function invalidateLaboratoryQueries(): Promise<void> {
         queryClient.invalidateQueries({ queryKey: ['laboratory-orders-index'] }),
         queryClient.invalidateQueries({ queryKey: ['laboratory-orders-status-counts'] }),
     ]);
+}
+
+const createSheetOpen = ref(false);
+
+function onOrderCreated(orderNumber: string): void {
+    void invalidateLaboratoryQueries();
+    notifySuccess(`Placed ${orderNumber}.`);
 }
 
 const patientSearchQuery = ref('');
@@ -420,11 +433,9 @@ function openAuditSheet(order: LaboratoryOrder): void {
                             <Button variant="outline" size="sm" class="h-8 gap-1.5" @click="resetFilters">
                                 Clear filters
                             </Button>
-                            <Button v-if="canCreate" as-child variant="outline" size="sm" class="h-8 gap-1.5">
-                                <Link href="/laboratory-orders/legacy">
-                                    <AppIcon name="plus" class="size-3.5" />
-                                    Create order
-                                </Link>
+                            <Button v-if="canCreate" variant="outline" size="sm" class="h-8 gap-1.5" @click="createSheetOpen = true">
+                                <AppIcon name="plus" class="size-3.5" />
+                                Create order
                             </Button>
                         </div>
                     </div>
@@ -601,6 +612,8 @@ function openAuditSheet(order: LaboratoryOrder): void {
                 </div>
             </Tabs>
         </div>
+
+        <LaboratoryOrderCreateSheet v-model:open="createSheetOpen" @created="onOrderCreated" />
 
         <LaboratoryOrderDetailSheet v-model:open="detailOpen" :order="detailOrder" />
 
