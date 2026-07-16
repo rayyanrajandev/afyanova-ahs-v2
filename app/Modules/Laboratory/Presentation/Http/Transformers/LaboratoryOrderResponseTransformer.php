@@ -35,6 +35,7 @@ class LaboratoryOrderResponseTransformer
             'resultParameters' => $order['result_parameters'] ?? null,
             'catalogUnit' => $catalog['unit'],
             'catalogParameters' => $catalog['parameters'],
+            'catalogResultTemplate' => $catalog['resultTemplate'],
             'resultedAt' => $order['resulted_at'] ?? null,
             'verifiedAt' => $order['verified_at'] ?? null,
             'verifiedByUserId' => $order['verified_by_user_id'] ?? null,
@@ -70,7 +71,7 @@ class LaboratoryOrderResponseTransformer
         static $cache = [];
 
         if ($catalogItemId === null || trim($catalogItemId) === '') {
-            return ['unit' => null, 'parameters' => []];
+            return ['unit' => null, 'parameters' => [], 'resultTemplate' => null];
         }
 
         $key = 'lab_test_catalog:'.$catalogItemId;
@@ -84,7 +85,7 @@ class LaboratoryOrderResponseTransformer
             ->find($catalogItemId);
 
         if (! $item) {
-            $cache[$key] = ['unit' => null, 'parameters' => []];
+            $cache[$key] = ['unit' => null, 'parameters' => [], 'resultTemplate' => null];
 
             return $cache[$key];
         }
