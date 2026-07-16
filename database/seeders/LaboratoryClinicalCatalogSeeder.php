@@ -58,28 +58,12 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
             'description' => 'Inflammation marker commonly used in follow-up and chronic disease review.',
         ],
         [
-            'code' => 'LAB-BGRH-001',
-            'name' => 'Blood Group and Rh',
-            'category' => 'transfusion',
-            'unit' => 'test',
-            'sampleType' => 'blood',
-            'description' => 'ABO grouping and Rh typing for transfusion and maternity workflows.',
-        ],
-        [
             'code' => 'LAB-SICKLE-001',
             'name' => 'Sickle Cell Screen',
             'category' => 'hematology',
             'unit' => 'test',
             'sampleType' => 'blood',
             'description' => 'Screening test for sickle cell disease and trait.',
-        ],
-        [
-            'code' => 'LAB-MPS-001',
-            'name' => 'Malaria Parasite Smear',
-            'category' => 'parasitology',
-            'unit' => 'test',
-            'sampleType' => 'blood',
-            'description' => 'Microscopy-based malaria parasite assessment.',
         ],
         [
             'code' => 'LAB-MRDT-001',
@@ -228,14 +212,6 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
                 ['code' => 'FAT', 'name' => 'Fat Globules', 'unit' => '/HPF', 'referenceRangeLow' => '0', 'referenceRangeHigh' => '2'],
                 ['code' => 'YEAST', 'name' => 'Yeast Cells', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
             ],
-        ],
-        [
-            'code' => 'LAB-HIV-001',
-            'name' => 'HIV 1/2 Rapid Test',
-            'category' => 'serology',
-            'unit' => 'test',
-            'sampleType' => 'whole blood',
-            'description' => 'Rapid HIV screening test used in routine counseling and clinical workflows.',
         ],
         [
             'code' => 'LAB-HBSAG-001',
