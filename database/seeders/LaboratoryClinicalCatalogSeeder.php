@@ -337,6 +337,24 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
         $seededCount = 0;
 
         foreach (self::LAB_TEST_BLUEPRINTS as $blueprint) {
+            $existing = ClinicalCatalogItemModel::query()
+                ->where('tenant_id', $tenantId)
+                ->where('facility_id', $facilityId)
+                ->where('catalog_type', ClinicalCatalogType::LAB_TEST->value)
+                ->where('code', $blueprint['code'])
+                ->first();
+
+            $metadata = $existing
+                ? array_merge((array) $existing->metadata, [
+                    'resultTemplate' => $blueprint['resultTemplate'] ?? null,
+                ])
+                : [
+                    'sampleType' => $blueprint['sampleType'],
+                    'countryContext' => 'TZ',
+                    'parameters' => $blueprint['parameters'] ?? [],
+                    'resultTemplate' => $blueprint['resultTemplate'] ?? null,
+                ];
+
             ClinicalCatalogItemModel::query()->updateOrCreate(
                 [
                     'tenant_id' => $tenantId,
@@ -350,13 +368,10 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
                     'category' => $blueprint['category'],
                     'unit' => $blueprint['unit'],
                     'description' => $blueprint['description'],
-                    'metadata' => [
-                        'sampleType' => $blueprint['sampleType'],
-                        'countryContext' => 'TZ',
-                        'parameters' => $blueprint['parameters'] ?? [],
-                        'resultTemplate' => $blueprint['resultTemplate'] ?? null,
-                    ],
-                    'status' => ClinicalCatalogItemStatus::ACTIVE->value,
+                    'metadata' => $metadata,
+                    'status' => $existing
+                        ? $existing->status
+                        : ClinicalCatalogItemStatus::ACTIVE->value,
                     'status_reason' => null,
                 ],
             );
