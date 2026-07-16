@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/tooltip';
 import NoteComposerShell from '@/components/clinical/note-composer/NoteComposerShell.vue';
 import EncounterOrdersCommandCenter from '@/components/domain/clinical/EncounterOrdersCommandCenter.vue';
+import EncounterOrderDialog from '@/components/domain/clinical/EncounterOrderDialog.vue';
 import EncounterWorkflowCareStreams from '@/components/domain/clinical/EncounterWorkflowCareStreams.vue';
 import EncounterLifecycleDialog from '@/components/domain/clinical/EncounterLifecycleDialog.vue';
 import EncounterCloseChecklistDialog from '@/components/domain/clinical/EncounterCloseChecklistDialog.vue';
@@ -1050,15 +1051,6 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                                         ordering.careActiveCount.value
                                     "
                                     :summaries="ordering.careSummaries.value"
-                                    :inline-order-type="
-                                        ordering.inlineOrderType.value
-                                    "
-                                    :inline-order-linkage="
-                                        ordering.inlineOrderLinkage.value
-                                    "
-                                    :inline-order-context="
-                                        ordering.inlineOrderContext.value
-                                    "
                                     :can-use-inline-orders="
                                         ordering.canUseInlineOrders()
                                     "
@@ -1085,14 +1077,17 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                                         theatreInlineOrderOpen
                                     "
                                     :hide-billing-link="true"
-                                    @close-inline-order="
-                                        ordering.closeInlineOrder()
-                                    "
-                                    @created-inline-order="
-                                        handleInlineOrderCreated($event)
-                                    "
                                     @open-inline-order="openInlineOrder($event)"
                                     @open-theatre-inline="openTheatreInline()"
+                                />
+
+                                <EncounterOrderDialog
+                                    :open="ordering.inlineOrderType.value !== null"
+                                    :order-type="ordering.inlineOrderType.value"
+                                    :linkage="ordering.inlineOrderLinkage.value"
+                                    :context="ordering.inlineOrderContext.value"
+                                    @close="ordering.closeInlineOrder()"
+                                    @created="handleInlineOrderCreated($event)"
                                 />
 
                                 <TheatreInlineOrderForm

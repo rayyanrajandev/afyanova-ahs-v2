@@ -2,13 +2,11 @@
 import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
-import EncounterInlineOrderPanel from '@/components/domain/clinical/encounter-orders/EncounterInlineOrderPanel.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type {
     EncounterInlineOrderLinkageContext,
     EncounterInlineOrderType,
-    EncounterOrderContext,
 } from '@/lib/encounterInlineOrders';
 import {
     encounterCareStateVariant,
@@ -24,9 +22,6 @@ const props = defineProps<{
     careCountLabel: string;
     activeStreamCount: number;
     summaries: CreateEncounterCareSummary[];
-    inlineOrderType: EncounterInlineOrderType | null;
-    inlineOrderLinkage: EncounterInlineOrderLinkageContext | null;
-    inlineOrderContext: EncounterOrderContext;
     canUseInlineOrders: boolean;
     canOpenLaboratoryWorkflow: boolean;
     canOpenPharmacyWorkflow: boolean;
@@ -60,8 +55,6 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-    closeInlineOrder: [];
-    createdInlineOrder: [type: EncounterInlineOrderType];
     openInlineOrder: [
         type: EncounterInlineOrderType,
         linkage?: EncounterInlineOrderLinkageContext | null,
@@ -145,17 +138,8 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
             </div>
         </div>
 
-        <EncounterInlineOrderPanel
-            v-if="inlineOrderType && canUseInlineOrders"
-            :order-type="inlineOrderType"
-            :linkage="inlineOrderLinkage"
-            :context="inlineOrderContext"
-            @close="emit('closeInlineOrder')"
-            @created="emit('createdInlineOrder', $event)"
-        />
-
         <div
-            v-if="!inlineOrderType && !theatreInlineOpen && hasWorkflowActions"
+            v-if="!theatreInlineOpen && hasWorkflowActions"
             :class="[
                 'grid gap-2',
                 compact
@@ -528,7 +512,7 @@ function careSummaryBadgeVariant(id: CreateEncounterCareSectionId) {
         </div>
 
         <p
-            v-if="canUseInlineOrders && !inlineOrderType && !compact"
+            v-if="canUseInlineOrders && !compact"
             class="text-[11px] leading-5 text-muted-foreground"
         >
             Lab, pharmacy, and imaging open inline. Duplicate checks and
