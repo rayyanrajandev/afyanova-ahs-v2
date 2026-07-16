@@ -25,8 +25,8 @@ type AuditLogListEnvelope = {
  * Mirrors useLaboratoryOrderAuditLog.ts, hitting GET /radiology-orders/{id}/audit-logs
  * + .../audit-logs/export, so the shared AuditLogSheet.vue serves this
  * domain via the AuditLogQueryResult contract. Permission:
- * radiology.orders.view-audit-logs (dot-separated, unlike lab's hyphenated
- * laboratory-orders.view-audit-logs). Radiology has no async CSV
+ * radiology.orders.audit-logs.view (matching lab/pharmacy convention).
+ * Radiology has no async CSV
  * export-job routes (unlike lab/pharmacy) — exportCsv() only ever opens
  * the synchronous export URL, so nothing here needed adjusting for that.
  */

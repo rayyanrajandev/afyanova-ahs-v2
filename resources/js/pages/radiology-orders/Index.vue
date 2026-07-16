@@ -293,7 +293,8 @@ const canCreate = ref(permissionState('imaging.order') === 'allowed');
 const canUpdateStatus = ref(permissionState('imaging.perform') === 'allowed');
 const canViewAudit = ref(
     permissionState('radiology.orders.view-audit-logs') === 'allowed' ||
-    permissionState('radiology-orders.view-audit-logs') === 'allowed',
+    permissionState('radiology-orders.view-audit-logs') === 'allowed' ||
+    permissionState('radiology.orders.audit-logs.view') === 'allowed',
 );
 const canReadAppointments = ref(permissionState('appointments.read') === 'allowed');
 const canReadAdmissions = ref(permissionState('admissions.read') === 'allowed');
@@ -2776,7 +2777,7 @@ async function loadPermissions() {
         canRead.value = hasSuperAdminAccess || names.has('radiology.orders.read');
         canCreate.value = hasSuperAdminAccess || names.has('imaging.order');
         canUpdateStatus.value = hasSuperAdminAccess || names.has('imaging.perform');
-        canViewAudit.value = hasSuperAdminAccess || names.has('radiology.orders.view-audit-logs') || names.has('radiology-orders.view-audit-logs');
+        canViewAudit.value = hasSuperAdminAccess || names.has('radiology.orders.view-audit-logs') || names.has('radiology-orders.view-audit-logs') || names.has('radiology.orders.audit-logs.view');
         canReadAppointments.value = hasSuperAdminAccess || names.has('appointments.read');
         canReadAdmissions.value = hasSuperAdminAccess || names.has('admissions.read');
         canReadMedicalRecords.value = hasSuperAdminAccess || names.has('medical.records.read');

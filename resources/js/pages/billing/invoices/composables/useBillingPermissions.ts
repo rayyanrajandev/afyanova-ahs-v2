@@ -136,10 +136,10 @@ export function useBillingPermissions() {
             canReadAdmissions.value = names.has('admissions.read');
             canReadMedicalRecords.value = names.has('medical.records.read');
             canCreateLaboratoryOrders.value = names.has(
-                'laboratory.orders.create',
+                'lab.order',
             );
             canCreatePharmacyOrders.value = names.has(
-                'pharmacy.orders.create',
+                'medication.prescribe',
             );
             canCreateTheatreProcedures.value = names.has(
                 'theatre.procedures.create',

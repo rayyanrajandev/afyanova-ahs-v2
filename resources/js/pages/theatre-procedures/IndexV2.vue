@@ -60,7 +60,7 @@ const canRead = computed(() => hasAccess('theatre.procedures.read'));
 const canUpdateStatus = computed(() => hasAccess('theatre.procedures.update-status'));
 const canApplyLifecycleAction = computed(() => hasAccess('theatre.procedures.create'));
 const canCreate = computed(() => hasAccess('theatre.procedures.create'));
-const canViewAuditLogs = computed(() => hasAccess('theatre.procedures.view-audit-logs'));
+const canViewAuditLogs = computed(() => hasAccess('theatre.procedures.view-resource-audit-logs'));
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'Theatre worklist', href: '/theatre-procedures' },

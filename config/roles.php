@@ -310,6 +310,7 @@ return [
             'imaging.perform',
             'imaging.result.enter',
             'imaging.result.verify',
+            'radiology.orders.audit-logs.view',
         ],
     ],
 

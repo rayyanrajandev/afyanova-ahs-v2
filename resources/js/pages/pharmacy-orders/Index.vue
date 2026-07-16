@@ -949,7 +949,8 @@ const detailsSheetAuditExportJobsFilters = reactive<DetailsAuditExportJobsFilter
 });
 const canViewPharmacyOrderAuditLogs = ref(
     permissionState('pharmacy-orders.view-audit-logs') === 'allowed' ||
-    permissionState('pharmacy.orders.view-audit-logs') === 'allowed',
+    permissionState('pharmacy.orders.view-audit-logs') === 'allowed' ||
+    permissionState('pharmacy.orders.audit-logs.view') === 'allowed',
 );
 const canOperatePharmacyWorkflow = computed(
     () =>
@@ -3628,7 +3629,8 @@ async function loadPharmacyPermissions() {
         canViewPharmacyOrderAuditLogs.value =
             hasSuperAdminAccess ||
             names.has('pharmacy-orders.view-audit-logs') ||
-            names.has('pharmacy.orders.view-audit-logs');
+            names.has('pharmacy.orders.view-audit-logs') ||
+            names.has('pharmacy.orders.audit-logs.view');
         canUpdateServiceRequestStatus.value = hasSuperAdminAccess || names.has('service.requests.update-status');
 
     } catch {

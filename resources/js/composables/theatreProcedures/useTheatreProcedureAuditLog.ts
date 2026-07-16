@@ -28,7 +28,7 @@ type AuditLogListEnvelope = {
 /**
  * Mirrors useRadiologyOrderAuditLog.ts (sync export only — theatre has no
  * async CSV export-job routes, same as radiology). Permission:
- * theatre.procedures.view-audit-logs.
+ * theatre.procedures.view-resource-audit-logs.
  */
 export function useTheatreProcedureAuditLog(
     orderId: MaybeRefOrGetter<string | null | undefined>,

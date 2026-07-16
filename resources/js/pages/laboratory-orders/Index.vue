@@ -2281,7 +2281,8 @@ async function loadLaboratoryPermissions() {
         canViewLaboratoryOrderAuditLogs.value =
             hasSuperAdminAccess ||
             names.has('laboratory-orders.view-audit-logs') ||
-            names.has('laboratory.orders.view-audit-logs');
+            names.has('laboratory.orders.view-audit-logs') ||
+            names.has('laboratory.orders.audit-logs.view');
 
         if (!(hasSuperAdminAccess || names.has('lab.order')) && laboratoryWorkspaceView.value === 'new') {
             laboratoryWorkspaceView.value = 'queue';

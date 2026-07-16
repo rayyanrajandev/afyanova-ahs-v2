@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head } from '@inertiajs/vue3';
 import { useQueryClient } from '@tanstack/vue-query';
 import { computed, ref, watch } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -17,6 +17,7 @@ import { type PatientQuickSearchResult } from '@/composables/patients/usePatient
 import PatientOrderGroupList from '@/components/orders/PatientOrderGroupList.vue';
 import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycleActionDialog.vue';
 import AuditLogSheet from '@/components/shared/AuditLogSheet.vue';
+import RadiologyOrderCreateSheet from '@/components/radiologyOrders/RadiologyOrderCreateSheet.vue';
 import RadiologyOrderDetailSheet from '@/components/radiologyOrders/RadiologyOrderDetailSheet.vue';
 import RadiologyStatusUpdateDialog from '@/components/radiologyOrders/RadiologyStatusUpdateDialog.vue';
 import { usePatientOrderGroups } from '@/composables/usePatientOrderGroups';
@@ -41,10 +42,15 @@ import { type BreadcrumbItem } from '@/types';
  * Radiology/imaging worklist V2 — third of four planned order-domain V2
  * builds (lab/pharmacy shipped+live, imaging, theatre/procedures next),
  * mirroring laboratory-orders/IndexV2.vue's shape. Replaces
- * radiology-orders/Index.vue for the WORKLIST slice only: search/filter,
+ * radiology-orders/Index.vue for the WORKLIST slice: search/filter,
  * status tabs, KPI tiles, and the schedule/start/complete/lifecycle
- * actions imaging staff take on existing orders. Order creation
- * (duplicate-check, draft/sign) deliberately stays on the legacy page.
+ * actions imaging staff take on existing orders.
+ *
+ * Order creation (Phase 1 of reports/order-creation-v2-modernization-plan.md):
+ * RadiologyOrderCreateSheet.vue, reusing the same duplicate-check/create
+ * endpoints EncounterInlineOrderPanel.vue already calls from an active
+ * encounter — this is the standalone-page entry point for the same backend,
+ * not a second implementation.
  *
  * Unlike lab, there is no verify step at all for radiology — completing an
  * order with a report IS the release step (UpdateRadiologyOrderStatusUseCase
@@ -62,7 +68,7 @@ const canRead = computed(() => hasAccess('radiology.orders.read'));
 const canUpdateStatus = computed(() => hasAccess('imaging.perform'));
 const canApplyLifecycleAction = computed(() => hasAccess('imaging.order'));
 const canCreate = computed(() => hasAccess('imaging.order'));
-const canViewAuditLogs = computed(() => hasAccess('radiology.orders.view-audit-logs'));
+const canViewAuditLogs = computed(() => hasAccess('radiology.orders.audit-logs.view'));
 
 const breadcrumbs = computed<BreadcrumbItem[]>(() => [
     { title: 'Radiology worklist', href: '/radiology-orders' },
@@ -87,6 +93,14 @@ const focusPatientId = computed(() => filters.patientId);
 const list = useRadiologyOrders(filters);
 const statusCounts = useRadiologyOrderStatusCounts(filters);
 const queryClient = useQueryClient();
+
+const createSheetOpen = ref(false);
+
+function onOrderCreated(orderNumber: string): void {
+    void queryClient.invalidateQueries({ queryKey: ['radiology-orders-index'] });
+    void queryClient.invalidateQueries({ queryKey: ['radiology-orders-status-counts'] });
+    notifySuccess(`Placed ${orderNumber}.`);
+}
 
 const orders = computed<RadiologyOrder[]>(() => list.data.value?.data ?? []);
 
@@ -369,11 +383,9 @@ function openAuditSheet(order: RadiologyOrder): void {
                             <Button variant="outline" size="sm" class="h-8 gap-1.5" @click="resetFilters">
                                 Clear filters
                             </Button>
-                            <Button v-if="canCreate" as-child variant="outline" size="sm" class="h-8 gap-1.5">
-                                <Link href="/radiology-orders/legacy">
-                                    <AppIcon name="plus" class="size-3.5" />
-                                    Create order
-                                </Link>
+                            <Button v-if="canCreate" variant="outline" size="sm" class="h-8 gap-1.5" @click="createSheetOpen = true">
+                                <AppIcon name="plus" class="size-3.5" />
+                                Create order
                             </Button>
                         </div>
                     </div>
@@ -550,6 +562,8 @@ function openAuditSheet(order: RadiologyOrder): void {
                 </div>
             </Tabs>
         </div>
+
+        <RadiologyOrderCreateSheet v-model:open="createSheetOpen" @created="onOrderCreated" />
 
         <RadiologyOrderDetailSheet v-model:open="detailOpen" :order="detailOrder" />
 
