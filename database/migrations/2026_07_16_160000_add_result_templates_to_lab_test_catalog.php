@@ -189,7 +189,7 @@ return new class extends Migration
 
             if ($driver === 'pgsql') {
                 $metadataExpr = "COALESCE(metadata::jsonb, '{}'::jsonb) || '{$templateJson}'::jsonb";
-                $resultTemplateNullCheck = "(metadata->>'resultTemplate' IS NULL OR metadata->'resultTemplate' = 'null'::jsonb OR jsonb_array_length(metadata->'resultTemplate') = 0)";
+                $resultTemplateNullCheck = "metadata::jsonb->'resultTemplate' IS NULL";
             } else {
                 $metadataExpr = "JSON_MERGE_PATCH(COALESCE(metadata, '{}'), '{$templateJson}')";
                 $resultTemplateNullCheck = "(JSON_EXTRACT(metadata, '$.resultTemplate') IS NULL OR JSON_LENGTH(metadata, '$.resultTemplate') = 0)";
@@ -207,11 +207,17 @@ return new class extends Migration
 
     public function down(): void
     {
+        $driver = DB::connection()->getDriverName();
+
+        $removeExpr = $driver === 'pgsql'
+            ? "metadata::jsonb - 'resultTemplate'"
+            : "JSON_REMOVE(metadata, '$.resultTemplate')";
+
         DB::table('platform_clinical_catalog_items')
             ->where('catalog_type', 'lab_test')
             ->whereNotNull(DB::raw("metadata->>'resultTemplate'"))
             ->update([
-                'metadata' => DB::raw("metadata - 'resultTemplate'"),
+                'metadata' => DB::raw($removeExpr),
             ]);
     }
 };
