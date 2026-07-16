@@ -550,28 +550,16 @@ async function submitOrder() {
 
 <template>
     <section class="rounded-lg border border-primary/20 bg-primary/5 p-4">
-        <div class="mb-4 flex items-start justify-between gap-3">
-            <div class="min-w-0 space-y-1">
-                <p class="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    {{ panelModeLabel }} in encounter
-                </p>
-                <p class="text-sm font-medium text-foreground">
-                    {{ panelTitle }}
-                </p>
-                <p class="text-xs text-muted-foreground">
-                    {{ panelDescription }}
-                </p>
-            </div>
-            <Button
-                variant="ghost"
-                size="sm"
-                class="h-8 w-8 shrink-0 p-0"
-                :disabled="submitLoading"
-                @click="emit('close')"
-            >
-                <AppIcon name="x" class="size-4" />
-                <span class="sr-only">Close inline order form</span>
-            </Button>
+        <div class="mb-4 space-y-1">
+            <p class="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {{ panelModeLabel }} in encounter
+            </p>
+            <p class="text-sm font-medium text-foreground">
+                {{ panelTitle }}
+            </p>
+            <p class="text-xs text-muted-foreground">
+                {{ panelDescription }}
+            </p>
         </div>
 
         <Alert v-if="catalogError" variant="destructive" class="mb-4">

@@ -25,9 +25,8 @@ const emit = defineEmits<{
         <SheetContent
             side="right"
             variant="form"
-            size="xl"
-            show-close-button
-            @escape-key-down="emit('close')"
+            size="2xl"
+            @open-auto-focus="(event: Event) => event.preventDefault()"
         >
             <EncounterInlineOrderPanel
                 v-if="orderType"
