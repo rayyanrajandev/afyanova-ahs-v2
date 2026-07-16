@@ -58,11 +58,11 @@ export function useEncounterOrdering(options: {
     const permissions = usePermissions();
 
     const canReadLaboratoryOrders = computed(() => permissions.has('laboratory.orders.read'));
-    const canCreateLaboratoryOrders = computed(() => permissions.has('laboratory.orders.create'));
+    const canCreateLaboratoryOrders = computed(() => permissions.has('lab.order'));
     const canReadPharmacyOrders = computed(() => permissions.has('pharmacy.orders.read'));
-    const canCreatePharmacyOrders = computed(() => permissions.has('pharmacy.orders.create'));
+    const canCreatePharmacyOrders = computed(() => permissions.has('medication.prescribe'));
     const canReadRadiologyOrders = computed(() => permissions.has('radiology.orders.read'));
-    const canCreateRadiologyOrders = computed(() => permissions.has('radiology.orders.create'));
+    const canCreateRadiologyOrders = computed(() => permissions.has('imaging.order'));
     const canReadTheatreProcedures = computed(() => permissions.has('theatre.procedures.read'));
     const canCreateTheatreProcedures = computed(() => permissions.has('theatre.procedures.create'));
     const canReadBillingInvoices = computed(() => permissions.has('billing.invoices.read'));

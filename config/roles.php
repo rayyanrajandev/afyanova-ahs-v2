@@ -69,6 +69,9 @@ return [
             'lab.order',
             'medication.prescribe',
             'imaging.order',
+            'laboratory.orders.read',
+            'pharmacy.orders.read',
+            'radiology.orders.read',
         ],
     ],
 
@@ -98,6 +101,9 @@ return [
             'medication.prescribe',
             'imaging.order',
             'admissions.update-status',
+            'laboratory.orders.read',
+            'pharmacy.orders.read',
+            'radiology.orders.read',
         ],
     ],
 
@@ -128,6 +134,9 @@ return [
             'theatre.procedures.read',
             'theatre.procedures.create',
             'theatre.procedures.update-status',
+            'laboratory.orders.read',
+            'pharmacy.orders.read',
+            'radiology.orders.read',
         ],
     ],
 

@@ -102,7 +102,7 @@ describe('useEncounterOrdering', () => {
 
     it('opens the laboratory workflow when both read and create are granted', async () => {
         const { ordering } = await mountOrdering(
-            ['laboratory.orders.read', 'laboratory.orders.create'],
+            ['laboratory.orders.read', 'lab.order'],
             (state) => useEncounterOrdering(baseOptions({ laboratoryOrders: () => state.laboratoryOrders })),
         );
 
