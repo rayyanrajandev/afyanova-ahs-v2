@@ -304,10 +304,8 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->name('platform.admin.clinical-catalogs.type-counts');
 
     Route::get('platform/admin/clinical-catalogs/lab-tests', [PlatformClinicalCatalogController::class, 'labTests'])
-        ->middleware('can:platform.clinical-catalog.read')
         ->name('platform.admin.clinical-catalogs.lab-tests.index');
     Route::get('platform/admin/clinical-catalogs/lab-tests/status-counts', [PlatformClinicalCatalogController::class, 'labTestStatusCounts'])
-        ->middleware('can:platform.clinical-catalog.read')
         ->name('platform.admin.clinical-catalogs.lab-tests.status-counts');
     Route::get('platform/admin/clinical-catalogs/lab-tests/consumption-inventory-options', [PlatformClinicalCatalogController::class, 'labTestConsumptionInventoryOptions'])
         ->middleware('can:platform.clinical-catalog.read')
@@ -350,10 +348,8 @@ Route::middleware(['web', 'auth', ResolvePlatformScopeContext::class, EnforceTen
         ->name('platform.admin.clinical-catalogs.lab-tests.audit-logs');
 
     Route::get('platform/admin/clinical-catalogs/radiology-procedures', [PlatformClinicalCatalogController::class, 'radiologyProcedures'])
-        ->middleware('can:platform.clinical-catalog.read')
         ->name('platform.admin.clinical-catalogs.radiology-procedures.index');
     Route::get('platform/admin/clinical-catalogs/radiology-procedures/status-counts', [PlatformClinicalCatalogController::class, 'radiologyProcedureStatusCounts'])
-        ->middleware('can:platform.clinical-catalog.read')
         ->name('platform.admin.clinical-catalogs.radiology-procedures.status-counts');
     Route::get('platform/admin/clinical-catalogs/radiology-procedures/consumption-inventory-options', [PlatformClinicalCatalogController::class, 'radiologyConsumptionInventoryOptions'])
         ->middleware('can:platform.clinical-catalog.read')
