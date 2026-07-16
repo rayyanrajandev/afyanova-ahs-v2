@@ -1152,16 +1152,15 @@ async function loadRoles() {
 
     try {
         const response = await apiRequest<PlatformRoleListResponse>('GET', '/platform/admin/roles', {
-            query: { page: 1, perPage: 100, sortBy: 'name', sortDir: 'asc' },
+            query: {
+                page: 1,
+                perPage: 100,
+                sortBy: 'name',
+                sortDir: 'asc',
+                ...(scopedFacilityId.value ? { facilityId: scopedFacilityId.value } : {}),
+            },
         });
-        const allRoles = (response.data ?? []).filter((entry) => entry.id !== null);
-        if (scopedFacilityId.value) {
-            roles.value = allRoles.filter(
-                (role) => !role.facilityId || role.facilityId === scopedFacilityId.value,
-            );
-        } else {
-            roles.value = allRoles;
-        }
+        roles.value = (response.data ?? []).filter((entry) => entry.id !== null);
         roleAssignmentPolicy.value = response.meta?.roleAssignmentPolicy === 'hospital_operational' ? 'hospital_operational' : 'full';
     } catch {
         roles.value = [];
