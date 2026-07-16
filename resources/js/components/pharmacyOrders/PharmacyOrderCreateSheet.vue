@@ -2,8 +2,10 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
@@ -23,6 +25,7 @@ import {
     type ClinicalCatalogItem,
     type EncounterInlineOrderLinkageContext,
     type MedicationSafetyContinuationDecision,
+    type PatientMedicationSafetySummary,
 } from '@/lib/encounterInlineOrders';
 import { messageFromUnknown, notifyError } from '@/lib/notify';
 
@@ -48,6 +51,18 @@ import { messageFromUnknown, notifyError } from '@/lib/notify';
  * Reorder/add-on: see LaboratoryOrderCreateSheet.vue's docblock — same
  * `linkage` prop shape, PharmacyOrderDetailSheet emits it instead of a
  * separate legacy-style detail-view button set.
+ *
+ * Safety override (closing a real gap found in the pre-deletion audit):
+ * when fetchPatientMedicationSafetySummary reports blockers, this used to
+ * just error out and tell the user to "open the pharmacy orders module" —
+ * pointing at the exact legacy page this whole plan exists to retire, and
+ * with no way to actually proceed. The legacy page's own creation flow
+ * lets a clinician pick a documented override category
+ * (summary.overrideOptions, e.g. "clinical judgment override") plus a
+ * written reason and continue anyway — replicated here via a small Dialog
+ * (not the full multi-tab safety-review dashboard the legacy page has;
+ * blockers/warnings/override fields only, matching this Sheet's existing
+ * scope elsewhere).
  */
 const props = defineProps<{
     initialPatientId?: string | null;
@@ -77,6 +92,52 @@ const {
     updateConfirmationDialogOpen,
     confirmDialogAction,
 } = useConfirmationDialog();
+
+const overrideDialogOpen = ref(false);
+const overrideSummary = ref<PatientMedicationSafetySummary | null>(null);
+const overrideCode = ref('');
+const overrideReason = ref('');
+const overrideError = ref<string | null>(null);
+let overrideResolver: ((decision: MedicationSafetyContinuationDecision | null) => void) | null = null;
+
+function requestSafetyOverride(summary: PatientMedicationSafetySummary): Promise<MedicationSafetyContinuationDecision | null> {
+    overrideSummary.value = summary;
+    overrideCode.value = '';
+    overrideReason.value = '';
+    overrideError.value = null;
+    overrideDialogOpen.value = true;
+
+    return new Promise((resolve) => {
+        overrideResolver = resolve;
+    });
+}
+
+function cancelSafetyOverride(): void {
+    overrideDialogOpen.value = false;
+    const resolver = overrideResolver;
+    overrideResolver = null;
+    resolver?.(null);
+}
+
+function confirmSafetyOverride(): void {
+    const code = overrideCode.value.trim();
+    const reason = overrideReason.value.trim();
+
+    if (!code) {
+        overrideError.value = 'Select a clinical override category for the active safety blockers.';
+        return;
+    }
+
+    if (!reason) {
+        overrideError.value = 'Enter a clinical override reason for the active safety blockers.';
+        return;
+    }
+
+    overrideDialogOpen.value = false;
+    const resolver = overrideResolver;
+    overrideResolver = null;
+    resolver?.({ acknowledged: true, overrideCode: code, overrideReason: reason });
+}
 
 const patientId = ref('');
 const catalogLoading = ref(false);
@@ -175,9 +236,7 @@ async function resolveSafetyDecision(payload: {
     }
 
     if (summary.blockers.length > 0) {
-        formError.value = `Medication safety blockers detected: ${summary.blockers.join(' ')} Open the pharmacy orders module to apply a clinical override.`;
-        notifyError(formError.value);
-        return null;
+        return requestSafetyOverride(summary);
     }
 
     if (summary.warnings.length === 0) {
@@ -394,5 +453,60 @@ async function submit(): Promise<void> {
             @update:open="updateConfirmationDialogOpen"
             @confirm="confirmDialogAction()"
         />
+
+        <Dialog :open="overrideDialogOpen" @update:open="(value) => { if (!value) cancelSafetyOverride(); }">
+            <DialogContent size="md">
+                <DialogHeader>
+                    <DialogTitle>Medication safety blockers detected</DialogTitle>
+                    <DialogDescription>
+                        This order can't be placed as-is. Select a clinical override category and document why it's
+                        appropriate to continue anyway.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div class="grid gap-4 py-2">
+                    <Alert variant="destructive">
+                        <AlertTitle>Safety blockers</AlertTitle>
+                        <AlertDescription>
+                            <ul class="list-disc space-y-1 pl-4">
+                                <li v-for="(blocker, index) in overrideSummary?.blockers ?? []" :key="index">{{ blocker }}</li>
+                            </ul>
+                        </AlertDescription>
+                    </Alert>
+
+                    <div class="space-y-1.5">
+                        <Label for="pharmacy-order-override-code">Override category</Label>
+                        <Select v-model="overrideCode">
+                            <SelectTrigger id="pharmacy-order-override-code" class="w-full">
+                                <SelectValue placeholder="Select an override category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem
+                                    v-for="option in overrideSummary?.overrideOptions ?? []"
+                                    :key="option.code"
+                                    :value="option.code"
+                                >
+                                    {{ option.label }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <Label for="pharmacy-order-override-reason">Override reason</Label>
+                        <Textarea id="pharmacy-order-override-reason" v-model="overrideReason" rows="3" placeholder="Clinical justification for overriding this blocker" />
+                    </div>
+
+                    <Alert v-if="overrideError" variant="destructive">
+                        <AlertDescription>{{ overrideError }}</AlertDescription>
+                    </Alert>
+                </div>
+
+                <DialogFooter>
+                    <Button variant="outline" @click="cancelSafetyOverride">Cancel</Button>
+                    <Button variant="destructive" @click="confirmSafetyOverride">Override and place order</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </Sheet>
 </template>

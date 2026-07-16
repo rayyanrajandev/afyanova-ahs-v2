@@ -55,9 +55,17 @@ export type MedicationSafetyContinuationDecision = {
     overrideReason: string | null;
 };
 
+export type MedicationSafetyOverrideOption = {
+    code: string;
+    label: string;
+    description: string;
+};
+
 export type PatientMedicationSafetySummary = {
     blockers: string[];
     warnings: string[];
+    /** Only meaningful when blockers.length > 0 — the valid override categories a clinician can pick from to proceed anyway. */
+    overrideOptions: MedicationSafetyOverrideOption[];
 };
 
 type PatientMedicationSafetySummaryResponse = {
