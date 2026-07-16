@@ -158,26 +158,46 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
             'code' => 'LAB-UA-001',
             'name' => 'Urinalysis',
             'category' => 'urinalysis',
-            'unit' => 'panel',
+            'unit' => 'test',
             'sampleType' => 'urine',
-            'description' => 'Routine urine analysis for infection, pregnancy follow-up, and renal screening.',
-            'parameters' => [
-                ['code' => 'COLOR', 'name' => 'Color', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
-                ['code' => 'APPEAR', 'name' => 'Appearance', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
-                ['code' => 'SG', 'name' => 'Specific Gravity', 'unit' => '', 'referenceRangeLow' => '1.005', 'referenceRangeHigh' => '1.030'],
-                ['code' => 'PH', 'name' => 'pH', 'unit' => '', 'referenceRangeLow' => '4.5', 'referenceRangeHigh' => '8.0'],
-                ['code' => 'PROT', 'name' => 'Protein', 'unit' => 'g/L', 'referenceRangeLow' => '0', 'referenceRangeHigh' => '0.15'],
-                ['code' => 'GLU', 'name' => 'Glucose', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
-                ['code' => 'KET', 'name' => 'Ketones', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
-                ['code' => 'BIL', 'name' => 'Bilirubin', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
-                ['code' => 'UBG', 'name' => 'Urobilinogen', 'unit' => 'mg/dL', 'referenceRangeLow' => '0.1', 'referenceRangeHigh' => '1.0'],
-                ['code' => 'NIT', 'name' => 'Nitrites', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
-                ['code' => 'BLOOD', 'name' => 'Blood', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
-                ['code' => 'LEUK', 'name' => 'Leukocytes', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
-                ['code' => 'WBC_UA', 'name' => 'White Blood Cells', 'unit' => '/HPF', 'referenceRangeLow' => '0', 'referenceRangeHigh' => '5'],
-                ['code' => 'RBC_UA', 'name' => 'Red Blood Cells', 'unit' => '/HPF', 'referenceRangeLow' => '0', 'referenceRangeHigh' => '3'],
-                ['code' => 'EPI', 'name' => 'Epithelial Cells', 'unit' => '/HPF', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
-                ['code' => 'BACT', 'name' => 'Bacteria', 'unit' => '', 'referenceRangeLow' => '', 'referenceRangeHigh' => ''],
+            'description' => 'Routine urine analysis — macroscopic, dipstick, and microscopy.',
+            'resultTemplate' => [
+                'sections' => [
+                    [
+                        'label' => 'Physical Examination',
+                        'fields' => [
+                            ['code' => 'color', 'label' => 'Color', 'type' => 'select', 'options' => ['Pale Yellow', 'Yellow', 'Dark Yellow', 'Amber', 'Red', 'Brown', 'Colourless', 'Cloudy']],
+                            ['code' => 'appearance', 'label' => 'Appearance', 'type' => 'select', 'options' => ['Clear', 'Slightly Cloudy', 'Cloudy', 'Turbid']],
+                        ],
+                    ],
+                    [
+                        'label' => 'Dipstick',
+                        'fields' => [
+                            ['code' => 'specific_gravity', 'label' => 'Specific Gravity', 'type' => 'text', 'placeholder' => 'e.g. 1.015'],
+                            ['code' => 'ph', 'label' => 'pH', 'type' => 'number', 'placeholder' => 'e.g. 6.0'],
+                            ['code' => 'protein', 'label' => 'Protein', 'type' => 'select', 'options' => ['Negative', 'Trace', '+', '++', '+++']],
+                            ['code' => 'glucose', 'label' => 'Glucose', 'type' => 'select', 'options' => ['Negative', 'Trace', '+', '++', '+++']],
+                            ['code' => 'ketones', 'label' => 'Ketones', 'type' => 'select', 'options' => ['Negative', 'Trace', '+', '++', '+++']],
+                            ['code' => 'bilirubin', 'label' => 'Bilirubin', 'type' => 'select', 'options' => ['Negative', '+', '++', '+++']],
+                            ['code' => 'urobilinogen', 'label' => 'Urobilinogen', 'type' => 'select', 'options' => ['Normal', '+', '++', '+++']],
+                            ['code' => 'nitrites', 'label' => 'Nitrites', 'type' => 'positive-negative'],
+                            ['code' => 'blood', 'label' => 'Blood', 'type' => 'select', 'options' => ['Negative', 'Trace', '+', '++', '+++']],
+                            ['code' => 'leukocytes', 'label' => 'Leukocytes', 'type' => 'select', 'options' => ['Negative', 'Trace', '+', '++', '+++']],
+                        ],
+                    ],
+                    [
+                        'label' => 'Microscopy',
+                        'fields' => [
+                            ['code' => 'wbc', 'label' => 'White Blood Cells', 'type' => 'text', 'placeholder' => 'e.g. 0–5/HPF'],
+                            ['code' => 'rbc', 'label' => 'Red Blood Cells', 'type' => 'text', 'placeholder' => 'e.g. 0–3/HPF'],
+                            ['code' => 'epithelial_cells', 'label' => 'Epithelial Cells', 'type' => 'text', 'placeholder' => 'e.g. Few, Moderate, Many'],
+                            ['code' => 'casts', 'label' => 'Casts', 'type' => 'select', 'options' => ['None Seen', 'Hyaline', 'Granular', 'Cellular', 'Waxy']],
+                            ['code' => 'crystals', 'label' => 'Crystals', 'type' => 'select', 'options' => ['None Seen', 'Calcium Oxalate', 'Uric Acid', 'Triple Phosphate', 'Amorphous']],
+                            ['code' => 'bacteria', 'label' => 'Bacteria', 'type' => 'select', 'options' => ['None Seen', 'Few', 'Moderate', 'Many']],
+                            ['code' => 'yeast', 'label' => 'Yeast Cells', 'type' => 'select', 'options' => ['None Seen', 'Few', 'Moderate']],
+                        ],
+                    ],
+                ],
             ],
         ],
         [
@@ -189,7 +209,7 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
             'description' => 'Rapid pregnancy screening test.',
         ],
         [
-            'code' => 'LAB-STOOL-001',
+            'code' => 'LAB-STOOL-MICRO-001',
             'name' => 'Stool Microscopy',
             'category' => 'parasitology',
             'unit' => 'panel',
@@ -286,6 +306,125 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
                         'fields' => [
                             ['code' => 'ph', 'label' => 'pH', 'type' => 'number', 'placeholder' => 'e.g. 6.5'],
                             ['code' => 'reducing_substance', 'label' => 'Reducing Substance', 'type' => 'positive-negative'],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'code' => 'LAB-MPS-001',
+            'name' => 'Malaria Parasite Smear',
+            'category' => 'parasitology',
+            'unit' => 'test',
+            'sampleType' => 'blood',
+            'description' => 'Thick and thin film microscopy for malaria parasites.',
+            'resultTemplate' => [
+                'sections' => [
+                    [
+                        'label' => 'Parasite Identification',
+                        'fields' => [
+                            ['code' => 'species', 'label' => 'Species', 'type' => 'multiselect', 'options' => ['None Seen', 'Plasmodium falciparum', 'Plasmodium vivax', 'Plasmodium ovale', 'Plasmodium malariae', 'Mixed infection']],
+                            ['code' => 'stage', 'label' => 'Stage Seen', 'type' => 'multiselect', 'options' => ['Rings (Trophozoites)', 'Schizonts', 'Gametocytes']],
+                            ['code' => 'parasite_density', 'label' => 'Parasite Density', 'type' => 'select', 'options' => ['+ (1-10 parasites / 100 HPF)', '++ (11-100 parasites / 100 HPF)', '+++ (1-10 parasites / HPF)', '++++ (>10 parasites / HPF)']],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'code' => 'LAB-HIV-001',
+            'name' => 'HIV 1/2 Rapid Test',
+            'category' => 'serology',
+            'unit' => 'test',
+            'sampleType' => 'whole blood',
+            'description' => 'Rapid HIV screening test used in routine counseling and clinical workflows.',
+            'resultTemplate' => [
+                'sections' => [
+                    [
+                        'label' => 'Test Result',
+                        'fields' => [
+                            ['code' => 'result', 'label' => 'Result', 'type' => 'select', 'options' => ['Non-Reactive', 'Reactive', 'Invalid']],
+                            ['code' => 'kit_name', 'label' => 'Kit Used', 'type' => 'select', 'options' => ['Determine HIV-1/2', 'SD Bioline HIV-1/2', 'Uni-Gold HIV', 'Stat-Pak HIV-1/2', 'Other']],
+                            ['code' => 'kit_lot', 'label' => 'Kit Lot Number', 'type' => 'text', 'placeholder' => 'e.g. LOT-12345'],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'code' => 'LAB-BGRH-001',
+            'name' => 'Blood Group and Rh',
+            'category' => 'transfusion',
+            'unit' => 'test',
+            'sampleType' => 'blood',
+            'description' => 'ABO grouping and Rh typing for transfusion and maternity workflows.',
+            'resultTemplate' => [
+                'sections' => [
+                    [
+                        'label' => 'Blood Group',
+                        'fields' => [
+                            ['code' => 'abo_group', 'label' => 'ABO Group', 'type' => 'select', 'options' => ['A', 'B', 'AB', 'O']],
+                            ['code' => 'rh_type', 'label' => 'Rh Type', 'type' => 'select', 'options' => ['Positive', 'Negative']],
+                            ['code' => 'method', 'label' => 'Method', 'type' => 'select', 'options' => ['Slide Method', 'Tube Method', 'Gel Card']],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'code' => 'LAB-SPUTUM-001',
+            'name' => 'Sputum Analysis',
+            'category' => 'microbiology',
+            'unit' => 'test',
+            'sampleType' => 'sputum',
+            'description' => 'Sputum microscopy for AFB, Gram stain, and routine examination.',
+            'resultTemplate' => [
+                'sections' => [
+                    [
+                        'label' => 'Macroscopic',
+                        'fields' => [
+                            ['code' => 'colour', 'label' => 'Colour', 'type' => 'select', 'options' => ['Mucoid', 'Purulent', 'Mucopurulent', 'Blood-stained', 'Rusty', 'Frothy']],
+                            ['code' => 'consistency', 'label' => 'Consistency', 'type' => 'select', 'options' => ['Thin', 'Thick', 'Viscous']],
+                            ['code' => 'saliva', 'label' => 'Saliva (non-representative)', 'type' => 'not-done'],
+                        ],
+                    ],
+                    [
+                        'label' => 'Gram Stain',
+                        'fields' => [
+                            ['code' => 'gram_epi', 'label' => 'Epithelial Cells', 'type' => 'text', 'placeholder' => 'e.g. Few /LPF'],
+                            ['code' => 'gram_wbc', 'label' => 'White Blood Cells', 'type' => 'text', 'placeholder' => 'e.g. Many /HPF'],
+                            ['code' => 'gram_pos_cocci', 'label' => 'Gram Positive Cocci', 'type' => 'select', 'options' => ['None Seen', 'Few', 'Moderate', 'Many']],
+                            ['code' => 'gram_neg_rods', 'label' => 'Gram Negative Rods', 'type' => 'select', 'options' => ['None Seen', 'Few', 'Moderate', 'Many']],
+                            ['code' => 'gram_yeast', 'label' => 'Yeast Cells', 'type' => 'select', 'options' => ['None Seen', 'Few', 'Moderate']],
+                        ],
+                    ],
+                    [
+                        'label' => 'ZN Stain (AFB)',
+                        'fields' => [
+                            ['code' => 'afb_result', 'label' => 'AFB Result', 'type' => 'select', 'options' => ['Negative', 'Scanty (1-9 AFB / 100 HPF)', '+ (10-99 AFB / 100 HPF)', '++ (1-10 AFB / HPF)', '+++ (>10 AFB / HPF)']],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'code' => 'LAB-WIDAL-001',
+            'name' => 'Widal Test',
+            'category' => 'serology',
+            'unit' => 'test',
+            'sampleType' => 'serum',
+            'description' => 'Slide agglutination test for enteric fever (typhoid) screening.',
+            'resultTemplate' => [
+                'sections' => [
+                    [
+                        'label' => 'Agglutination Titres',
+                        'fields' => [
+                            ['code' => 'to_h', 'label' => 'Salmonella Typhi O', 'type' => 'select', 'options' => ['<1:20', '1:20', '1:40', '1:80', '1:160', '1:320', '1:640']],
+                            ['code' => 'th_h', 'label' => 'Salmonella Typhi H', 'type' => 'select', 'options' => ['<1:20', '1:20', '1:40', '1:80', '1:160', '1:320', '1:640']],
+                            ['code' => 'pa_o', 'label' => 'Salmonella Paratyphi A O', 'type' => 'select', 'options' => ['<1:20', '1:20', '1:40', '1:80', '1:160', '1:320', '1:640']],
+                            ['code' => 'pa_h', 'label' => 'Salmonella Paratyphi A H', 'type' => 'select', 'options' => ['<1:20', '1:20', '1:40', '1:80', '1:160', '1:320', '1:640']],
+                            ['code' => 'pb_o', 'label' => 'Salmonella Paratyphi B O', 'type' => 'select', 'options' => ['<1:20', '1:20', '1:40', '1:80', '1:160', '1:320', '1:640']],
+                            ['code' => 'pb_h', 'label' => 'Salmonella Paratyphi B H', 'type' => 'select', 'options' => ['<1:20', '1:20', '1:40', '1:80', '1:160', '1:320', '1:640']],
                         ],
                     ],
                 ],
