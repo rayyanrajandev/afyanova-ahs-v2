@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import EncounterInlineOrderPanel from '@/components/domain/clinical/encounter-orders/EncounterInlineOrderPanel.vue';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import type {
     EncounterInlineOrderLinkageContext,
     EncounterInlineOrderType,
@@ -21,10 +21,12 @@ const emit = defineEmits<{
 </script>
 
 <template>
-    <Dialog :open="open && orderType !== null" @update:open="(value) => { if (!value) emit('close'); }">
-        <DialogContent
+    <Sheet :open="open && orderType !== null" @update:open="(value) => { if (!value) emit('close'); }">
+        <SheetContent
+            side="right"
             variant="form"
             size="xl"
+            show-close-button
             @escape-key-down="emit('close')"
         >
             <EncounterInlineOrderPanel
@@ -35,6 +37,6 @@ const emit = defineEmits<{
                 @close="emit('close')"
                 @created="emit('created', $event)"
             />
-        </DialogContent>
-    </Dialog>
+        </SheetContent>
+    </Sheet>
 </template>

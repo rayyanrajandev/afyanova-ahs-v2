@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/tooltip';
 import NoteComposerShell from '@/components/clinical/note-composer/NoteComposerShell.vue';
 import EncounterOrdersCommandCenter from '@/components/domain/clinical/EncounterOrdersCommandCenter.vue';
-import EncounterOrderDialog from '@/components/domain/clinical/EncounterOrderDialog.vue';
+import EncounterOrderSheet from '@/components/domain/clinical/EncounterOrderSheet.vue';
 import EncounterWorkflowCareStreams from '@/components/domain/clinical/EncounterWorkflowCareStreams.vue';
 import EncounterLifecycleDialog from '@/components/domain/clinical/EncounterLifecycleDialog.vue';
 import EncounterCloseChecklistDialog from '@/components/domain/clinical/EncounterCloseChecklistDialog.vue';
@@ -1081,7 +1081,7 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                                     @open-theatre-inline="openTheatreInline()"
                                 />
 
-                                <EncounterOrderDialog
+                                <EncounterOrderSheet
                                     :open="ordering.inlineOrderType.value !== null"
                                     :order-type="ordering.inlineOrderType.value"
                                     :linkage="ordering.inlineOrderLinkage.value"
