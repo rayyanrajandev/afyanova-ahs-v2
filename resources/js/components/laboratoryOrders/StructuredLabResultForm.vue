@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import {
     IMPRESSION_FIELD_CODE,
     REMARKS_FIELD_CODE,
@@ -74,20 +75,24 @@ const hasAnyValue = computed(() =>
 </script>
 
 <template>
-    <div class="space-y-6">
-        <div
+    <Accordion type="single" collapsible class="space-y-4">
+        <AccordionItem
             v-for="(section, sectionIdx) in template.sections"
             :key="sectionIdx"
-            class="rounded-lg border p-4"
+            :value="`section-${sectionIdx}`"
+            class="overflow-hidden rounded-lg border"
         >
-            <div class="mb-3 space-y-0.5">
-                <h4 class="text-sm font-semibold text-foreground">{{ section.label }}</h4>
-                <p v-if="section.description" class="text-xs text-muted-foreground">
-                    {{ section.description }}
-                </p>
-            </div>
+            <AccordionTrigger class="px-4 py-3 hover:bg-muted/40">
+                <div class="space-y-0.5">
+                    <h4 class="text-sm font-semibold text-foreground">{{ section.label }}</h4>
+                    <p v-if="section.description" class="text-xs text-muted-foreground">
+                        {{ section.description }}
+                    </p>
+                </div>
+            </AccordionTrigger>
 
-            <div class="space-y-3">
+            <AccordionContent class="px-4 pb-4">
+            <div class="space-y-3 border-t pt-3">
                 <template v-for="field in section.fields" :key="field.code">
                     <!-- Select dropdown -->
                     <div v-if="field.type === 'select'" class="grid gap-1.5">
@@ -240,14 +245,16 @@ const hasAnyValue = computed(() =>
                     </div>
                 </template>
             </div>
-        </div>
+            </AccordionContent>
+        </AccordionItem>
 
-        <div class="rounded-lg border p-4">
-            <div class="mb-3 space-y-0.5">
+        <AccordionItem value="remarks-impression" class="overflow-hidden rounded-lg border">
+            <AccordionTrigger class="px-4 py-3 hover:bg-muted/40">
                 <h4 class="text-sm font-semibold text-foreground">Remarks & Impression</h4>
-            </div>
+            </AccordionTrigger>
 
-            <div class="space-y-3">
+            <AccordionContent class="px-4 pb-4">
+            <div class="space-y-3 border-t pt-3">
                 <div class="grid gap-1.5">
                     <Label for="result-field-remarks">Remarks</Label>
                     <Textarea
@@ -266,6 +273,7 @@ const hasAnyValue = computed(() =>
                     />
                 </div>
             </div>
-        </div>
-    </div>
+            </AccordionContent>
+        </AccordionItem>
+    </Accordion>
 </template>
