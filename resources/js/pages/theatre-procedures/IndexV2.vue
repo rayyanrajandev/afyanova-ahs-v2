@@ -16,6 +16,7 @@ import { type PatientQuickSearchResult } from '@/composables/patients/usePatient
 import ClinicalLifecycleActionDialog from '@/components/orders/ClinicalLifecycleActionDialog.vue';
 import AuditLogSheet from '@/components/shared/AuditLogSheet.vue';
 import PatientSummaryPopover from '@/components/patients/summary/PatientSummaryPopover.vue';
+import TheatreProcedureCreateSheet from '@/components/theatreProcedures/TheatreProcedureCreateSheet.vue';
 import TheatreProcedureDetailSheet from '@/components/theatreProcedures/TheatreProcedureDetailSheet.vue';
 import TheatreProcedureStatusUpdateDialog from '@/components/theatreProcedures/TheatreProcedureStatusUpdateDialog.vue';
 import { usePlatformAccess } from '@/composables/usePlatformAccess';
@@ -34,13 +35,19 @@ import { type BreadcrumbItem } from '@/types';
 /**
  * Theatre/procedure worklist V2 — fourth and final of the planned
  * order-domain V2 builds (lab/pharmacy/radiology shipped+live). Replaces
- * theatre-procedures/Index.vue for the WORKLIST slice only: search/filter,
+ * theatre-procedures/Index.vue for the WORKLIST slice: search/filter,
  * status tabs, KPI tiles, and the pre-op/start/complete/lifecycle actions
- * theatre staff take on existing procedures. Scheduling (creation, OR room
- * booking, resource allocation with conflict checking) deliberately stays
- * on the legacy page — this domain has a whole separate resource-booking
- * sub-system with no analogue in lab/pharmacy/radiology, explicitly
- * excluded from this build per a user-confirmed scope decision.
+ * theatre staff take on existing procedures.
+ *
+ * Order creation (Phase 3 of reports/order-creation-v2-modernization-plan.md):
+ * TheatreProcedureCreateSheet.vue is deliberately quick-booking scope only
+ * (procedure, operating clinician, schedule, free-text room name — no
+ * conflict checking), matching TheatreInlineOrderForm.vue's own scope
+ * exactly. Full OR room-registry booking with resource-conflict checking is
+ * a whole separate sub-system with no analogue in lab/pharmacy/radiology —
+ * per an explicit user decision, that stays on the legacy page ("Full
+ * scheduling" link) even after this ships; unlike the other three order
+ * types, this Sheet alone doesn't unblock deleting theatre's legacy page.
  *
  * Unlike the other three, there is no nested `patient` object on the
  * order (patient info arrives pre-flattened as patientLabel/patientNumber)
@@ -85,6 +92,14 @@ const list = useTheatreProcedures(filters);
 const statusCounts = useTheatreProcedureStatusCounts(filters);
 const { nameById: clinicianNameById } = useTheatreClinicianDirectory();
 const queryClient = useQueryClient();
+
+const createSheetOpen = ref(false);
+
+function onProcedureCreated(procedureNumber: string): void {
+    void queryClient.invalidateQueries({ queryKey: ['theatre-procedures-index'] });
+    void queryClient.invalidateQueries({ queryKey: ['theatre-procedures-status-counts'] });
+    notifySuccess(`Booked ${procedureNumber}.`);
+}
 
 const orders = computed<TheatreProcedure[]>(() => list.data.value?.data ?? []);
 
@@ -356,11 +371,14 @@ function openAuditSheet(order: TheatreProcedure): void {
                             <Button variant="outline" size="sm" class="h-8 gap-1.5" @click="resetFilters">
                                 Clear filters
                             </Button>
-                            <Button v-if="canCreate" as-child variant="outline" size="sm" class="h-8 gap-1.5">
+                            <Button v-if="canCreate" as-child variant="ghost" size="sm" class="h-8 gap-1.5 text-muted-foreground">
                                 <Link href="/theatre-procedures/legacy">
-                                    <AppIcon name="plus" class="size-3.5" />
-                                    Schedule procedure
+                                    Full scheduling
                                 </Link>
+                            </Button>
+                            <Button v-if="canCreate" variant="outline" size="sm" class="h-8 gap-1.5" @click="createSheetOpen = true">
+                                <AppIcon name="plus" class="size-3.5" />
+                                Schedule procedure
                             </Button>
                         </div>
                     </div>
@@ -532,6 +550,8 @@ function openAuditSheet(order: TheatreProcedure): void {
                 </div>
             </Tabs>
         </div>
+
+        <TheatreProcedureCreateSheet v-model:open="createSheetOpen" @created="onProcedureCreated" />
 
         <TheatreProcedureDetailSheet v-model:open="detailOpen" :order="detailOrder" :clinician-name-by-id="clinicianNameById" />
 

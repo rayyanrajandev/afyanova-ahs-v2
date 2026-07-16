@@ -60,12 +60,12 @@ The encounter-workflow forms never need a patient/context picker — they alread
 
 | Phase | Content | Depends on | Status |
 |---|---|---|---|
-| **1 — Radiology creation Sheet** | New `RadiologyOrderCreateSheet.vue`, patient/context picker, fields extracted from `EncounterInlineOrderPanel.vue`'s radiology branch. Wired into `radiology-orders/IndexV2.vue`, replacing the legacy-link button. | — | Not started |
-| **2 — Pharmacy creation Sheet** | Same pattern, plus embedded `EncounterMedicationSafetyPanel` and safety-override fields. | 1 | Not started |
-| **3 — Theatre creation Sheet** | Same pattern, extracted from `TheatreInlineOrderForm.vue` (clinician/anesthetist/room fields). | 1 | Not started |
+| **1 — Radiology creation Sheet** | New `RadiologyOrderCreateSheet.vue`, patient/context picker, fields extracted from `EncounterInlineOrderPanel.vue`'s radiology branch. Wired into `radiology-orders/IndexV2.vue`, replacing the legacy-link button. | — | **Done** |
+| **2 — Pharmacy creation Sheet** | Same pattern, plus embedded `EncounterMedicationSafetyPanel` and safety-override fields. | 1 | **Done** |
+| **3 — Theatre creation Sheet** | Same pattern, extracted from `TheatreInlineOrderForm.vue` (clinician/anesthetist/room fields). **Scope decision made after starting**: quick-booking only, matching `TheatreInlineOrderForm.vue` exactly — no OR room-registry/conflict-checking. `theatre-procedures/Index.vue` stays reachable via a "Full scheduling" link alongside the new Sheet; unlike radiology/pharmacy, this phase does **not** unblock deleting theatre's legacy page. | 1 | **Done** |
 | **4 — Laboratory creation Sheet** | Same pattern, plus the draft→sign two-step (single order at a time — no basket yet). | 1 | Not started |
 | **5 — Laboratory basket mode** | Multi-test queueing before one submit, ported from legacy `createOrderBasket`. | 4 | Not started — fast-follow, not a blocker for legacy deletion |
-| **6 — Legacy deletion** | Delete `laboratory-orders/Index.vue`, `pharmacy-orders/Index.vue`, `radiology-orders/Index.vue`, `theatre-procedures/Index.vue` and their `/legacy` routes, once phases 1-4 (or 1-5, per the basket-mode decision) are live and verified. Separate plan/pass — not this document's job. | 1-4 | Not started |
+| **6 — Legacy deletion** | Delete `laboratory-orders/Index.vue`, `pharmacy-orders/Index.vue`, `radiology-orders/Index.vue` and their `/legacy` routes once phases 1-4 (or 1-5) are live and verified. **Theatre's legacy page is excluded** — it stays for full resource booking regardless of this plan's other phases (see Phase 3). Separate plan/pass — not this document's job. | 1-4 | Not started |
 
 ## 8. Non-goals
 
