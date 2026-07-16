@@ -18,7 +18,8 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
      *     unit: string,
      *     sampleType: string,
      *     description: string,
-     *     parameters?: array<int, array{code: string, name: string, unit: string, referenceRangeLow: string, referenceRangeHigh: string}>
+     *     parameters?: array<int, array{code: string, name: string, unit: string, referenceRangeLow: string, referenceRangeHigh: string}>,
+     *     resultTemplate?: array<string, mixed>
      * }>
      */
     private const LAB_TEST_BLUEPRINTS = [
@@ -232,6 +233,64 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
             'sampleType' => 'serum',
             'description' => 'Common syphilis screening test used in ANC and general care.',
         ],
+        [
+            'code' => 'LAB-STOOL-001',
+            'name' => 'Stool Analysis',
+            'category' => 'parasitology',
+            'unit' => 'test',
+            'sampleType' => 'stool',
+            'description' => 'Routine stool microscopy for ova, parasites, and macroscopic examination.',
+            'resultTemplate' => [
+                'sections' => [
+                    [
+                        'label' => 'Macroscopic Examination',
+                        'fields' => [
+                            ['code' => 'colour', 'label' => 'Colour', 'type' => 'select', 'options' => ['Brown', 'Yellow', 'Green', 'Black', 'Red', 'Pale', 'Other']],
+                            ['code' => 'consistency', 'label' => 'Consistency', 'type' => 'select', 'options' => ['Formed', 'Soft', 'Loose', 'Watery', 'Mucoid']],
+                            ['code' => 'mucus', 'label' => 'Mucus', 'type' => 'not-done'],
+                            ['code' => 'blood_visible', 'label' => 'Blood (visible)', 'type' => 'not-done'],
+                            ['code' => 'pus', 'label' => 'Pus', 'type' => 'not-done'],
+                            ['code' => 'worms_segments', 'label' => 'Worms / Segments', 'type' => 'not-done'],
+                            ['code' => 'adult_parasites', 'label' => 'Adult Parasites Seen', 'type' => 'text', 'placeholder' => 'e.g. Ascaris worm…'],
+                        ],
+                    ],
+                    [
+                        'label' => 'Microscopic Examination',
+                        'fields' => [
+                            ['code' => 'rbc', 'label' => 'Red Blood Cells (RBC)', 'type' => 'text', 'placeholder' => 'e.g. 0–2/HPF'],
+                            ['code' => 'wbc', 'label' => 'White Blood Cells (WBC/Pus cells)', 'type' => 'text', 'placeholder' => 'e.g. 3–5/HPF'],
+                            ['code' => 'epithelial_cells', 'label' => 'Epithelial Cells', 'type' => 'text', 'placeholder' => 'e.g. Few, Moderate, Many'],
+                            ['code' => 'yeast_cells', 'label' => 'Yeast Cells', 'type' => 'text', 'placeholder' => 'e.g. None, Few, Moderate'],
+                            ['code' => 'fat_globules', 'label' => 'Fat Globules', 'type' => 'select', 'options' => ['Absent', 'Few', 'Moderate', 'Many']],
+                            ['code' => 'starch_granules', 'label' => 'Starch Granules', 'type' => 'select', 'options' => ['Absent', 'Few', 'Moderate', 'Many']],
+                            ['code' => 'muscle_fibres', 'label' => 'Muscle Fibres', 'type' => 'select', 'options' => ['Absent', 'Few', 'Moderate', 'Many']],
+                        ],
+                    ],
+                    [
+                        'label' => 'Ova and Parasites',
+                        'fields' => [
+                            ['code' => 'ova_seen', 'label' => 'Ova Seen', 'type' => 'multiselect', 'options' => ['None Seen', 'Ascaris lumbricoides', 'Hookworm', 'Trichuris trichiura', 'Taenia spp.', 'Schistosoma mansoni', 'Hymenolepis nana', 'Other']],
+                            ['code' => 'cysts_seen', 'label' => 'Cysts Seen', 'type' => 'multiselect', 'options' => ['None Seen', 'Giardia lamblia', 'Entamoeba histolytica', 'Entamoeba coli', 'Other']],
+                            ['code' => 'trophozoites_seen', 'label' => 'Trophozoites Seen', 'type' => 'multiselect', 'options' => ['None Seen', 'Giardia lamblia', 'Entamoeba histolytica', 'Other']],
+                            ['code' => 'larvae_seen', 'label' => 'Larvae Seen', 'type' => 'multiselect', 'options' => ['None Seen', 'Strongyloides stercoralis', 'Other']],
+                        ],
+                    ],
+                    [
+                        'label' => 'Occult Blood',
+                        'fields' => [
+                            ['code' => 'occult_blood', 'label' => 'Occult Blood', 'type' => 'positive-negative'],
+                        ],
+                    ],
+                    [
+                        'label' => 'Additional Tests',
+                        'fields' => [
+                            ['code' => 'ph', 'label' => 'pH', 'type' => 'number', 'placeholder' => 'e.g. 6.5'],
+                            ['code' => 'reducing_substance', 'label' => 'Reducing Substance', 'type' => 'positive-negative'],
+                        ],
+                    ],
+                ],
+            ],
+        ],
     ];
 
     public function run(): void
@@ -295,6 +354,7 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
                         'sampleType' => $blueprint['sampleType'],
                         'countryContext' => 'TZ',
                         'parameters' => $blueprint['parameters'] ?? [],
+                        'resultTemplate' => $blueprint['resultTemplate'] ?? null,
                     ],
                     'status' => ClinicalCatalogItemStatus::ACTIVE->value,
                     'status_reason' => null,

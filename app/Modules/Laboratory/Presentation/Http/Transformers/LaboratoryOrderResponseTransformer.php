@@ -93,6 +93,7 @@ class LaboratoryOrderResponseTransformer
         $cache[$key] = [
             'unit' => $item->unit,
             'parameters' => $metadata['parameters'] ?? [],
+            'resultTemplate' => $metadata['resultTemplate'] ?? null,
         ];
 
         return $cache[$key];

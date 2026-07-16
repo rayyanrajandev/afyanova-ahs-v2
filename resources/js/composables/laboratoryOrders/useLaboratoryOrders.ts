@@ -1,6 +1,7 @@
 import { useQuery, type UseQueryReturnType } from '@tanstack/vue-query';
 import { computed } from 'vue';
 import { apiGet } from '@/lib/apiClient';
+import { type ResultTemplate } from '@/lib/resultTemplate';
 import type { LaboratoryOrderFilters } from './useLaboratoryOrderFilters';
 
 /**
@@ -102,6 +103,7 @@ export type LaboratoryOrder = {
     resultParameters: LabResultParameter[] | null;
     catalogUnit: string | null;
     catalogParameters: CatalogParameter[] | null;
+    catalogResultTemplate: ResultTemplate | null;
     resultedAt: string | null;
     verifiedAt: string | null;
     verifiedByUserId: number | null;

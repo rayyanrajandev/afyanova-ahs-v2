@@ -20,6 +20,11 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import StructuredLabResultForm from '@/components/laboratoryOrders/StructuredLabResultForm.vue';
+import {
+    buildResultSummaryFromTemplate,
+    buildResultParametersFromTemplate,
+} from '@/lib/resultTemplate';
 import type {
     CatalogParameter,
     LabResultParameter,
@@ -60,6 +65,15 @@ const isPanel = computed(
         props.order?.catalogUnit === 'panel' &&
         (props.order?.catalogParameters?.length ?? 0) > 0,
 );
+
+const hasResultTemplate = computed(
+    () =>
+        props.intent === 'complete' &&
+        props.order?.catalogResultTemplate != null &&
+        (props.order.catalogResultTemplate.sections?.length ?? 0) > 0,
+);
+
+const templateValues = ref<Record<string, string | string[]>>({});
 
 const resultFlag = ref<ResultFlag>('');
 const resultValue = ref('');
@@ -197,6 +211,25 @@ function submit(): void {
         return;
     }
 
+    if (hasResultTemplate.value && props.order?.catalogResultTemplate) {
+        const template = props.order.catalogResultTemplate;
+        const summary = buildResultSummaryFromTemplate(
+            props.order.testName || 'Laboratory result',
+            template.sections,
+            templateValues.value,
+        );
+        const params = buildResultParametersFromTemplate(
+            template.sections,
+            templateValues.value,
+        );
+        emit('submit', {
+            status: 'completed',
+            resultSummary: summary,
+            resultParameters: params.length > 0 ? params : null,
+        });
+        return;
+    }
+
     const resultParameters: LabResultParameter[] | null = isPanel.value
         ? parameterRows.value
               .filter((r) => r.value.trim())
@@ -256,7 +289,13 @@ function submit(): void {
                 </div>
 
                 <template v-if="intent === 'complete'">
-                    <template v-if="isPanel">
+                    <template v-if="hasResultTemplate && order?.catalogResultTemplate">
+                        <StructuredLabResultForm
+                            :template="order.catalogResultTemplate"
+                            @update:values="(values) => (templateValues = values)"
+                        />
+                    </template>
+                    <template v-else-if="isPanel">
                         <div class="grid gap-2">
                             <Label for="lab-status-result-flag-panel"
                                 >Result flag</Label
