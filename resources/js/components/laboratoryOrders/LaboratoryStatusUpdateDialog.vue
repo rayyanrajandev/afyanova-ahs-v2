@@ -94,7 +94,7 @@ interface ParameterRow {
 const parameterRows = ref<ParameterRow[]>([]);
 
 function resetForm(): void {
-    resultFlag.value = '';
+    resultFlag.value = undefined;
     resultValue.value = '';
     resultUnit.value = '';
     referenceRange.value = '';
@@ -107,7 +107,7 @@ function resetForm(): void {
         name: p.name,
         value: '',
         unit: p.unit,
-        flag: '' as ResultFlag,
+        flag: undefined as ResultFlag | undefined,
         referenceRange: [p.referenceRangeLow, p.referenceRangeHigh]
             .filter(Boolean)
             .join('-'),
