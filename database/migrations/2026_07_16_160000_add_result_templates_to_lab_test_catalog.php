@@ -182,16 +182,25 @@ return new class extends Migration
 
     public function up(): void
     {
+        $driver = DB::connection()->getDriverName();
+
         foreach ($this->templates() as $nameContains => $template) {
+            $templateJson = json_encode(['resultTemplate' => $template], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+            if ($driver === 'pgsql') {
+                $metadataExpr = "COALESCE(metadata::jsonb, '{}'::jsonb) || '{$templateJson}'::jsonb";
+                $resultTemplateNullCheck = "(metadata->>'resultTemplate' IS NULL OR metadata->'resultTemplate' = 'null'::jsonb OR jsonb_array_length(metadata->'resultTemplate') = 0)";
+            } else {
+                $metadataExpr = "JSON_MERGE_PATCH(COALESCE(metadata, '{}'), '{$templateJson}')";
+                $resultTemplateNullCheck = "(JSON_EXTRACT(metadata, '$.resultTemplate') IS NULL OR JSON_LENGTH(metadata, '$.resultTemplate') = 0)";
+            }
+
             DB::table('platform_clinical_catalog_items')
                 ->where('catalog_type', 'lab_test')
                 ->whereRaw('LOWER(name) LIKE ?', ['%'.$nameContains.'%'])
-                ->where(function ($query) {
-                    $query->whereNull('metadata->resultTemplate')
-                        ->orWhereJsonLength('metadata->resultTemplate', 0);
-                })
+                ->whereRaw($resultTemplateNullCheck)
                 ->update([
-                    'metadata' => DB::raw("JSON_MERGE_PATCH(COALESCE(metadata, '{}'), '".json_encode(['resultTemplate' => $template], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)."')"),
+                    'metadata' => DB::raw($metadataExpr),
                 ]);
         }
     }
@@ -200,9 +209,9 @@ return new class extends Migration
     {
         DB::table('platform_clinical_catalog_items')
             ->where('catalog_type', 'lab_test')
-            ->whereNotNull('metadata->resultTemplate')
+            ->whereNotNull(DB::raw("metadata->>'resultTemplate'"))
             ->update([
-                'metadata' => DB::raw("JSON_REMOVE(metadata, '$.resultTemplate')"),
+                'metadata' => DB::raw("metadata - 'resultTemplate'"),
             ]);
     }
 };
