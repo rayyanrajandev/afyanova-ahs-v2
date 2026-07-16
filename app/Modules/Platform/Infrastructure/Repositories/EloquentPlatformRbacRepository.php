@@ -61,6 +61,8 @@ class EloquentPlatformRbacRepository implements PlatformRbacRepositoryInterface
         $queryBuilder = RoleModel::query()->withCount(['users', 'permissions']);
         $this->applyRoleScopeIfEnabled($queryBuilder);
 
+        $effectiveFacilityId = $facilityId ?? $this->platformScopeContext->facilityId();
+
         $queryBuilder
             ->when($query, function (Builder $builder, string $searchTerm): void {
                 $like = '%'.$searchTerm.'%';
@@ -72,7 +74,7 @@ class EloquentPlatformRbacRepository implements PlatformRbacRepositoryInterface
                 });
             })
             ->when($status, fn (Builder $builder, string $value) => $builder->where('status', $value))
-            ->when($facilityId, fn (Builder $builder, string $value) => $builder->where('facility_id', $value))
+            ->when($effectiveFacilityId, fn (Builder $builder, string $value) => $builder->where('facility_id', $value))
             ->when($assignableOnly, function (Builder $builder): void {
                 $builder->where(function (Builder $q): void {
                     $q->where('code', 'NOT LIKE', 'PLATFORM.%')

@@ -32,7 +32,7 @@ class UpdateLaboratoryOrderStatusUseCase
     ): ?array {
         $this->tenantIsolationWriteGuard->assertTenantScopeForWrite();
 
-        return DB::transaction(function () use ($id, $status, $reason, $resultSummary, $actorId): ?array {
+        return DB::transaction(function () use ($id, $status, $reason, $resultSummary, $actorId, $resultParameters): ?array {
             $existing = $this->laboratoryOrderRepository->findById($id);
             if (! $existing) {
                 return null;
