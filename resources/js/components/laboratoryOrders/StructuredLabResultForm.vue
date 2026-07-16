@@ -21,6 +21,8 @@ function buildInitial(sections: ResultTemplateSection[]): Record<string, string 
         for (const field of section.fields) {
             if (field.type === 'multiselect') {
                 initial[field.code] = [];
+            } else if (field.type === 'select') {
+                initial[field.code] = undefined as unknown as string;
             } else {
                 initial[field.code] = '';
             }
