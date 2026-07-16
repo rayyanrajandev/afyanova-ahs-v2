@@ -112,10 +112,18 @@ class SyncRolesFromConfig extends Command
      */
     private function upsertRole(array $attributes, array $roleDef, array $perms): void
     {
-        $existing = DB::table('roles')->where($attributes)->first();
+        $query = DB::table('roles');
+        foreach ($attributes as $column => $value) {
+            if ($value === null) {
+                $query->whereNull($column);
+            } else {
+                $query->where($column, $value);
+            }
+        }
+        $existing = $query->first();
 
         if ($existing) {
-            DB::table('roles')->where($attributes)->update([
+            DB::table('roles')->where('id', $existing->id)->update([
                 'name' => $roleDef['name'],
                 'description' => $roleDef['description'] ?? null,
                 'access_level' => $roleDef['access_level'] ?? null,
