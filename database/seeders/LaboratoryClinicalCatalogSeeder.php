@@ -432,6 +432,28 @@ class LaboratoryClinicalCatalogSeeder extends Seeder
         ],
     ];
 
+    /**
+     * Single source of truth for lab-test resultTemplate JSON, keyed by
+     * catalog code. Consumed by this seeder's own blueprint data above and
+     * by database/migrations/2026_07_16_160000_add_result_templates_to_lab_test_catalog.php
+     * (which backfills existing rows on environments where this seeder
+     * hasn't been re-run — see that migration for why both exist).
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public static function resultTemplates(): array
+    {
+        $templates = [];
+
+        foreach (self::LAB_TEST_BLUEPRINTS as $blueprint) {
+            if (isset($blueprint['resultTemplate'])) {
+                $templates[$blueprint['code']] = $blueprint['resultTemplate'];
+            }
+        }
+
+        return $templates;
+    }
+
     public function run(): void
     {
         $facilities = FacilityModel::query()
