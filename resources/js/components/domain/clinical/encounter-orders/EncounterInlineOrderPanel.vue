@@ -546,6 +546,12 @@ async function submitOrder() {
         submitLoading.value = false;
     }
 }
+
+const canSubmit = computed(
+    () => !submitLoading.value && !catalogLoading.value && selectedCatalogItem.value !== null,
+);
+
+defineExpose({ submitOrder, submitLoading, canSubmit });
 </script>
 
 <template>
@@ -707,24 +713,7 @@ async function submitOrder() {
                 </div>
             </template>
 
-            <div class="flex flex-wrap items-center gap-2 pt-1">
-                <Button
-                    size="sm"
-                    class="gap-1.5"
-                    :disabled="submitLoading || Boolean(catalogError)"
-                    @click="void submitOrder()"
-                >
-                    <AppIcon
-                        :name="submitLoading ? 'loader-circle' : 'plus'"
-                        class="size-3.5"
-                        :class="{ 'animate-spin': submitLoading }"
-                    />
-                    {{ submitButtonLabel }}
-                </Button>
-            </div>
-        </div>
-
-        <ConfirmationDialog
+            <ConfirmationDialog
             :open="confirmationDialogState.open"
             :title="confirmationDialogState.title"
             :description="confirmationDialogState.description"

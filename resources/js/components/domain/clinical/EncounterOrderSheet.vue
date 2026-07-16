@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, useTemplateRef } from 'vue';
+import AppIcon from '@/components/AppIcon.vue';
 import EncounterInlineOrderPanel from '@/components/domain/clinical/encounter-orders/EncounterInlineOrderPanel.vue';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,8 @@ const emit = defineEmits<{
     created: [type: EncounterInlineOrderType];
 }>();
 
+const panelRef = useTemplateRef<InstanceType<typeof EncounterInlineOrderPanel>>('panel');
+
 const title = computed(() => {
     if (!props.orderType) return 'New order';
     const label = encounterInlineOrderTypeLabel(props.orderType);
@@ -35,6 +38,13 @@ const description = computed(() => {
     if (props.linkage?.mode === 'add_on') return `Add-on linked to ${props.linkage.sourceLabel}.`;
     return 'Order is linked to this encounter. Duplicate checks run before placement.';
 });
+
+const canSubmit = computed(() => panelRef.value?.canSubmit ?? false);
+const submitLoading = computed(() => panelRef.value?.submitLoading ?? false);
+
+function handleSubmit(): void {
+    panelRef.value?.submitOrder();
+}
 </script>
 
 <template>
@@ -53,6 +63,7 @@ const description = computed(() => {
             <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
                 <EncounterInlineOrderPanel
                     v-if="orderType"
+                    ref="panel"
                     :order-type="orderType"
                     :linkage="linkage"
                     :context="context"
@@ -63,6 +74,14 @@ const description = computed(() => {
 
             <SheetFooter class="shrink-0 border-t bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
                 <Button variant="outline" @click="emit('close')">Cancel</Button>
+                <Button :disabled="!canSubmit" @click="handleSubmit">
+                    <AppIcon
+                        :name="submitLoading ? 'loader-circle' : 'plus'"
+                        class="size-3.5"
+                        :class="{ 'animate-spin': submitLoading }"
+                    />
+                    {{ submitLoading ? 'Placing order…' : 'Place order' }}
+                </Button>
             </SheetFooter>
         </SheetContent>
     </Sheet>
