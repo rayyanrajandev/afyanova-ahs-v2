@@ -33,7 +33,7 @@ import type {
 } from '@/composables/laboratoryOrders/useLaboratoryOrders';
 
 type Intent = 'collect' | 'start_processing' | 'complete' | null;
-type ResultFlag = '' | 'normal' | 'abnormal' | 'critical' | 'inconclusive';
+type ResultFlag = 'normal' | 'abnormal' | 'critical' | 'inconclusive';
 
 const props = withDefaults(
     defineProps<{
@@ -87,7 +87,7 @@ interface ParameterRow {
     name: string;
     value: string;
     unit: string;
-    flag: ResultFlag;
+    flag: ResultFlag | undefined;
     referenceRange: string;
 }
 
@@ -362,9 +362,6 @@ function submit(): void {
                                                 <SelectValue placeholder="—" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value=""
-                                                    >—</SelectItem
-                                                >
                                                 <SelectItem
                                                     v-for="option in resultFlagOptions"
                                                     :key="option.value"
