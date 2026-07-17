@@ -12,6 +12,7 @@ import {
 import AppIcon from '@/components/AppIcon.vue';
 import AuditTimelineList from '@/components/audit/AuditTimelineList.vue';
 import DateRangeFilterPopover from '@/components/filters/DateRangeFilterPopover.vue';
+import LabResultSummaryPopover from '@/components/laboratoryOrders/LabResultSummaryPopover.vue';
 import PatientLookupField from '@/components/patients/PatientLookupField.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -5187,7 +5188,11 @@ onMounted(() => {
                                                             </DropdownMenuContent>
                                                         </DropdownMenu>
                                                     </div>
-                                                    <p v-if="order.resultSummary || order.priority" class="mt-1 text-xs text-muted-foreground">{{ laboratoryOrderSummaryText(order) }}</p>
+                                                    <div v-if="(order.resultSummary ?? '').trim() !== ''" class="mt-1 flex flex-wrap items-center gap-2">
+                                                        <LabResultSummaryPopover :result-summary="order.resultSummary" />
+                                                        <span v-if="order.resultedAt" class="text-[11px] text-muted-foreground">Resulted {{ formatDateTime(order.resultedAt) }}</span>
+                                                    </div>
+                                                    <p v-else-if="order.priority" class="mt-1 text-xs text-muted-foreground">{{ laboratoryOrderSummaryText(order) }}</p>
                                                     <p v-if="lifecycleLinkageText(order, 'laboratory order')" class="mt-0.5 text-[11px] text-muted-foreground">{{ lifecycleLinkageText(order, 'laboratory order') }}</p>
                                                 </div>
                                             </div>

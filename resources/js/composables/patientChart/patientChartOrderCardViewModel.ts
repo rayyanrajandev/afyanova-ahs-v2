@@ -47,6 +47,10 @@ export type PatientChartOrderCardViewModel = {
     signal: ClinicalSignalDescriptor | null;
     surfaceClass: string;
     summary: string;
+    /** Untruncated laboratory resultSummary, for LabResultSummaryPopover —
+     * `summary` above is truncated for the plain-text teaser line. Null for
+     * every non-laboratory kind and for lab orders with no result yet. */
+    rawLabResultSummary: string | null;
     linkageText: string | null;
     workflowHint: string | null;
     nextActionLabel: string | null;
@@ -97,6 +101,7 @@ export function laboratoryOrderCardViewModel(order: PatientChartLaboratoryOrder,
         signal,
         surfaceClass: signal.surfaceClass,
         summary: order.resultSummary ? truncatePlainText(order.resultSummary, 220) : 'Awaiting result entry or verification.',
+        rawLabResultSummary: order.resultSummary,
         linkageText: encounterLifecycleLinkageText(order, 'laboratory order'),
         workflowHint: currentCareWorkflowHint(order),
         nextActionLabel: canRead ? nextAction?.label ?? null : null,
@@ -135,6 +140,7 @@ export function radiologyOrderCardViewModel(order: PatientChartRadiologyOrder, c
         signal,
         surfaceClass: signal.surfaceClass,
         summary: order.reportSummary ? truncatePlainText(order.reportSummary, 220) : 'Awaiting report entry.',
+        rawLabResultSummary: null,
         linkageText: encounterLifecycleLinkageText(order, 'imaging order'),
         workflowHint: currentCareWorkflowHint(order),
         nextActionLabel: canRead ? nextAction?.label ?? null : null,
@@ -173,6 +179,7 @@ export function pharmacyOrderCardViewModel(order: PatientChartPharmacyOrder, ctx
         signal: null,
         surfaceClass: 'border-border bg-background',
         summary: truncatePlainText(order.dosageInstruction, 220) || 'Medication instructions not recorded.',
+        rawLabResultSummary: null,
         linkageText: encounterLifecycleLinkageText(order, 'pharmacy order'),
         workflowHint: currentCareWorkflowHint(order),
         nextActionLabel: canRead ? nextAction?.label ?? null : null,
@@ -214,6 +221,7 @@ export function theatreProcedureCardViewModel(procedure: PatientChartTheatreProc
             truncatePlainText(procedure.notes, 220) ||
             truncatePlainText(procedure.statusReason, 220) ||
             (procedure.theatreRoomName ? `Room: ${procedure.theatreRoomName}` : 'Awaiting theatre progression.'),
+        rawLabResultSummary: null,
         linkageText: encounterLifecycleLinkageText(procedure, 'procedure booking'),
         workflowHint: currentCareWorkflowHint(procedure),
         nextActionLabel: canRead ? nextAction?.label ?? null : null,

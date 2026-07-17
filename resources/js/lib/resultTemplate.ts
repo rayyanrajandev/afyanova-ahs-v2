@@ -137,3 +137,77 @@ function formatFieldValue(field: ResultTemplateField, value: string | string[] |
     if (field.type === 'positive-negative') return value as string;
     return String(value);
 }
+
+export interface ParsedResultSummaryField {
+    label: string;
+    value: string;
+}
+
+export interface ParsedResultSummarySection {
+    label: string;
+    fields: ParsedResultSummaryField[];
+}
+
+/**
+ * Parses a resultSummary produced by buildResultSummaryFromTemplate back
+ * into sections/fields, dropping unset ("—") fields and any section left
+ * with nothing filled — for compact display (e.g. a popover) where every
+ * blank field is just noise. Detects sections by their dashed-underline
+ * format (`lines.push('-'.repeat(section.label.length))`); a summary with
+ * no such underlines isn't a templated one, so this returns null rather
+ * than risk garbling a format it doesn't recognize — callers should fall
+ * back to showing the raw string in that case.
+ */
+export function parseFilledResultSummarySections(summary: string): ParsedResultSummarySection[] | null {
+    const lines = summary.split('\n');
+    const sections: ParsedResultSummarySection[] = [];
+    let current: ParsedResultSummarySection | null = null;
+    let sawAnySection = false;
+
+    function flush(): void {
+        if (current !== null && current.fields.length > 0) sections.push(current);
+        current = null;
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const nextLine = lines[i + 1] ?? '';
+        const isSectionHeader =
+            line.trim() !== '' &&
+            /^-+$/.test(nextLine) &&
+            nextLine.length === line.length;
+
+        if (isSectionHeader) {
+            flush();
+            current = { label: line, fields: [] };
+            sawAnySection = true;
+            i++; // skip the dashed underline line
+            continue;
+        }
+        if (line.trim() === '' || current === null) continue;
+
+        const match = line.match(/^(.+?): (.*)$/);
+        if (match && match[2] !== '—') {
+            current.fields.push({ label: match[1], value: match[2] });
+        }
+    }
+    flush();
+
+    return sawAnySection ? sections : null;
+}
+
+/**
+ * String-output convenience wrapper around parseFilledResultSummarySections
+ * for plain-text display contexts. Returns the input unchanged for
+ * non-templated summaries (see parseFilledResultSummarySections).
+ */
+export function filterResultSummaryToFilledFields(summary: string): string {
+    const sections = parseFilledResultSummarySections(summary);
+    if (sections === null) return summary;
+
+    return sections
+        .map((section) =>
+            [section.label, ...section.fields.map((field) => `${field.label}: ${field.value}`)].join('\n'),
+        )
+        .join('\n\n');
+}

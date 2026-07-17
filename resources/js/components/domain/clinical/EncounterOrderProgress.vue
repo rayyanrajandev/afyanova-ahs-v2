@@ -16,15 +16,22 @@ const props = defineProps<{
     formatDateTime: (value: string | null | undefined) => string;
 }>();
 
-const resultPreview = computed(() =>
-    encounterOrderResultPreview(
+const resultPreview = computed(() => {
+    // Laboratory results get their own compact, color-coded popover in the
+    // parent list row (LabResultSummaryPopover) — showing the raw
+    // resultSummary text again here duplicated it verbatim right below.
+    // Pharmacy/radiology/theatre don't have that treatment yet, so their
+    // preview stays as-is.
+    if (props.orderType === 'laboratory') return null;
+
+    return encounterOrderResultPreview(
         props.orderType,
         props.order as {
             resultSummary?: string | null;
             reportSummary?: string | null;
         },
-    ),
-);
+    );
+});
 
 const steps = computed<EncounterOrderProgressStep[]>(() => {
     const order = props.order as {

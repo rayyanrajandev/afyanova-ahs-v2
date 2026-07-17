@@ -21,6 +21,8 @@ import EncounterWorkflowCareStreams from '@/components/domain/clinical/Encounter
 import EncounterLifecycleDialog from '@/components/domain/clinical/EncounterLifecycleDialog.vue';
 import EncounterCloseChecklistDialog from '@/components/domain/clinical/EncounterCloseChecklistDialog.vue';
 import EncounterHistorySheet from '@/components/clinical/panels/EncounterHistorySheet.vue';
+import LaboratoryOrderDetailSheet from '@/components/laboratoryOrders/LaboratoryOrderDetailSheet.vue';
+import LabResultSummaryPopover from '@/components/laboratoryOrders/LabResultSummaryPopover.vue';
 import TheatreInlineOrderForm from '@/components/clinical/panels/TheatreInlineOrderForm.vue';
 import ReferralManagementSheet from '@/components/clinician/ReferralManagementSheet.vue';
 import { useEncounterWorkspace } from '@/composables/useEncounterWorkspace';
@@ -32,6 +34,7 @@ import {
 import { useEncounterClose } from '@/composables/clinical/useEncounterClose';
 import { useEncounterDiagnoses } from '@/composables/clinical/useEncounterDiagnoses';
 import { useEncounterNotes } from '@/composables/clinical/useEncounterNotes';
+import { useLaboratoryOrder } from '@/composables/laboratoryOrders/useLaboratoryOrder';
 import { useEncounterCharges } from '@/composables/clinical/useEncounterCharges';
 import { useAppointmentReferrals } from '@/composables/clinician/useAppointmentReferrals';
 import { useStickyScrollContainer } from '@/composables/useStickyScrollContainer';
@@ -343,6 +346,19 @@ const pendingResultCount = computed(
         resultedLabOrders.value.length +
         (radiologyOrders.value.length - reportedRadiologyOrders.value.length),
 );
+
+// "View full result" opens the same structured detail sheet used on the
+// Laboratory Orders list and Patient Chart — the resultSummary shown inline
+// above is just the flattened narrative; the sectioned/structured result
+// (if the test used one) only lives behind this fetch.
+const reviewLabOrderId = ref<string | null>(null);
+const reviewLabSheetOpen = ref(false);
+const reviewLabOrderQuery = useLaboratoryOrder(reviewLabOrderId);
+
+function openLabResultReview(id: string): void {
+    reviewLabOrderId.value = id;
+    reviewLabSheetOpen.value = true;
+}
 
 // Medications: pharmacy orders are combined prescription+dispense records.
 // "Active" is derived from status (no dedicated active-meds concept exists).
@@ -1281,7 +1297,12 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                                                 <span v-if="order.resultedAt" class="text-xs text-muted-foreground">{{ formatDateTime(order.resultedAt) }}</span>
                                             </div>
                                         </div>
-                                        <p class="mt-1 text-sm whitespace-pre-line">{{ order.resultSummary }}</p>
+                                        <div class="mt-2 flex items-center gap-3">
+                                            <LabResultSummaryPopover :result-summary="order.resultSummary" />
+                                            <Button variant="link" size="sm" class="h-auto px-0 text-xs" @click="openLabResultReview(order.id)">
+                                                View full result
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1472,6 +1493,14 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                 :record-id="activeRecordId"
                 :can-create-attestation="canAttestActiveRecord"
                 :can-view-audit-logs="canViewAuditLogs"
+            />
+
+            <LaboratoryOrderDetailSheet
+                v-model:open="reviewLabSheetOpen"
+                :order="reviewLabOrderQuery.data.value?.data ?? null"
+                :loading="reviewLabOrderQuery.isPending.value"
+                :load-error="reviewLabOrderQuery.isError.value ? ((reviewLabOrderQuery.error.value as Error | null)?.message ?? 'Unable to load this result.') : null"
+                :can-create="false"
             />
 
             <ReferralManagementSheet

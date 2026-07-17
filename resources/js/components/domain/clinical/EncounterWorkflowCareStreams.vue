@@ -2,6 +2,7 @@
 import { Link } from '@inertiajs/vue3';
 import AppIcon from '@/components/AppIcon.vue';
 import EncounterOrderProgress from '@/components/domain/clinical/EncounterOrderProgress.vue';
+import LabResultSummaryPopover from '@/components/laboratoryOrders/LabResultSummaryPopover.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -216,7 +217,16 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                                 {{ formatEnumLabel(order.status || 'ordered') }}
                             </Badge>
                         </div>
-                        <p class="mt-1 text-xs text-muted-foreground">
+                        <div
+                            v-if="(order.resultSummary ?? '').trim() !== ''"
+                            class="mt-1 flex flex-wrap items-center gap-2"
+                        >
+                            <LabResultSummaryPopover :result-summary="order.resultSummary" />
+                            <span v-if="order.resultedAt" class="text-[11px] text-muted-foreground">
+                                Resulted {{ formatDateTime(order.resultedAt) }}
+                            </span>
+                        </div>
+                        <p v-else class="mt-1 text-xs text-muted-foreground">
                             {{ laboratoryOrderSummaryText(order, formatDateTime) }}
                         </p>
                         <EncounterOrderProgress

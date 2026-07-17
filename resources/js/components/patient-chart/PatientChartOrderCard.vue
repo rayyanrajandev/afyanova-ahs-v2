@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import type { EncounterLifecycleAction, EncounterLifecycleTargetKind } from '@/lib/encounterWorkspaceLifecycle';
 import type { PatientChartOrderCardViewModel } from '@/composables/patientChart/patientChartOrderCardViewModel';
+import LabResultSummaryPopover from '@/components/laboratoryOrders/LabResultSummaryPopover.vue';
 
 const props = defineProps<{
     card: PatientChartOrderCardViewModel;
@@ -55,7 +56,15 @@ const opensInline = computed(
             <Badge :variant="card.signal.variant">{{ card.signal.label }}</Badge>
         </div>
 
-        <p class="mt-2 text-xs text-muted-foreground">{{ card.summary }}</p>
+        <!-- The popover below replaces this teaser for lab results that
+             have one — showing both is the same raw text twice. -->
+        <p v-if="!card.rawLabResultSummary" class="mt-2 text-xs text-muted-foreground">{{ card.summary }}</p>
+
+        <LabResultSummaryPopover
+            v-if="card.rawLabResultSummary"
+            :result-summary="card.rawLabResultSummary"
+            trigger-class="mt-2"
+        />
 
         <p v-if="card.linkageText" class="mt-1 text-xs text-muted-foreground">{{ card.linkageText }}</p>
 

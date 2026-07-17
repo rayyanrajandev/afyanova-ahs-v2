@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     buildResultParametersFromTemplate,
     buildResultSummaryFromTemplate,
+    filterResultSummaryToFilledFields,
     IMPRESSION_FIELD_CODE,
     REMARKS_FIELD_CODE,
     REMARKS_IMPRESSION_SECTION_LABEL,
@@ -160,5 +161,45 @@ describe('buildResultParametersFromTemplate', () => {
 
         expect(params.some((p) => p.code === REMARKS_FIELD_CODE)).toBe(false);
         expect(params.some((p) => p.code === IMPRESSION_FIELD_CODE)).toBe(false);
+    });
+});
+
+describe('filterResultSummaryToFilledFields', () => {
+    it('drops "—" field lines and sections left with nothing filled', () => {
+        const summary = buildResultSummaryFromTemplate('Stool Analysis', stoolSections, {
+            colour: 'Black',
+            occult_blood: 'Positive',
+        });
+
+        const filtered = filterResultSummaryToFilledFields(summary);
+
+        expect(filtered).toContain('Macroscopic Examination');
+        expect(filtered).toContain('Colour: Black');
+        expect(filtered).not.toContain('Mucus: —');
+        expect(filtered).not.toContain('Adult Parasites Seen: —');
+        // Microscopic Examination has only 'rbc', unset here — the whole
+        // section should be dropped, not shown with a lone "—" line.
+        expect(filtered).not.toContain('Microscopic Examination');
+        expect(filtered).toContain('Occult Blood: Positive');
+    });
+
+    it('drops the leading title line (the card already shows the test name)', () => {
+        const summary = buildResultSummaryFromTemplate('Stool Analysis', stoolSections, {
+            colour: 'Brown',
+        });
+
+        expect(filterResultSummaryToFilledFields(summary)).not.toContain('STOOL ANALYSIS');
+    });
+
+    it('returns non-templated summaries unchanged (no section-header markers to detect)', () => {
+        const plain = 'Measured Result: 6.2\nReference Range: 3.5-5.5\nInterpretation: Elevated';
+
+        expect(filterResultSummaryToFilledFields(plain)).toBe(plain);
+    });
+
+    it('returns an empty-looking string when every field is unset', () => {
+        const summary = buildResultSummaryFromTemplate('Stool Analysis', stoolSections, {});
+
+        expect(filterResultSummaryToFilledFields(summary).trim()).toBe('');
     });
 });

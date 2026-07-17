@@ -83,18 +83,21 @@ const groupedResultParameters = computed((): Array<{
 
 <template>
     <Sheet :open="open" @update:open="(value) => (open = value)">
-        <SheetContent v-if="order" side="right" variant="form" size="lg">
+        <SheetContent side="right" variant="form" size="lg">
             <SheetHeader
                 class="shrink-0 border-b bg-background/95 px-6 py-4 text-left backdrop-blur supports-[backdrop-filter]:bg-background/80"
             >
                 <SheetTitle>{{
-                    order.testName || order.testCode || 'Laboratory order'
+                    order
+                        ? order.testName || order.testCode || 'Laboratory order'
+                        : 'Laboratory result'
                 }}</SheetTitle>
-                <SheetDescription>{{
+                <SheetDescription v-if="order">{{
                     order.orderNumber || order.id
                 }}</SheetDescription>
             </SheetHeader>
 
+            <template v-if="order">
             <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
                 <div class="flex flex-wrap items-center gap-2">
                     <Badge variant="outline">{{
@@ -390,13 +393,9 @@ const groupedResultParameters = computed((): Array<{
                 <Button variant="outline" size="sm" @click="requestAddOn">Add linked test</Button>
                 <Button variant="outline" size="sm" @click="requestReorder">Reorder</Button>
             </SheetFooter>
-        </SheetContent>
+            </template>
 
-        <SheetContent v-else side="right" variant="form" size="lg">
-            <SheetHeader class="shrink-0 border-b px-6 py-4 text-left">
-                <SheetTitle>Laboratory result</SheetTitle>
-            </SheetHeader>
-            <div class="flex min-h-0 flex-1 items-center justify-center p-6 text-center text-sm">
+            <div v-else class="flex min-h-0 flex-1 items-center justify-center p-6 text-center text-sm">
                 <p v-if="loadError" class="text-destructive">{{ loadError }}</p>
                 <p v-else class="text-muted-foreground">Loading result…</p>
             </div>
