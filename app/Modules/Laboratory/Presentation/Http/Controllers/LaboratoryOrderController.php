@@ -33,7 +33,6 @@ use App\Support\ClinicalOrders\ClinicalOrderPatientSummaryEnricher;
 use App\Support\ClinicalOrders\ClinicalOrderUserSummaryEnricher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -469,19 +468,23 @@ class LaboratoryOrderController extends Controller
                 verificationNote: $request->input('verificationNote'),
                 actorId: $request->user()?->id,
             );
+
+            abort_if($order === null, 404, 'Laboratory order not found.');
+
+            if (($order['ordered_by_user_id'] ?? null) === $request->user()?->id) {
+                return $this->validationError('verification', 'You cannot verify your own laboratory order.');
+            }
+
+            return response()->json([
+                'data' => LaboratoryOrderResponseTransformer::transform($order),
+            ]);
         } catch (TenantScopeRequiredForIsolationException $exception) {
             return $this->tenantScopeRequiredError($exception->getMessage());
         } catch (LaboratoryOrderVerificationNotAllowedException $exception) {
             return $this->validationError('verification', $exception->getMessage());
+        } catch (ValidationException $exception) {
+            return $this->validationExceptionResponse($exception);
         }
-
-        abort_if($order === null, 404, 'Laboratory order not found.');
-
-        Gate::authorize('verifyResult', $order);
-
-        return response()->json([
-            'data' => LaboratoryOrderResponseTransformer::transform($order),
-        ]);
     }
 
     private function validationError(string $field, string $message): JsonResponse
