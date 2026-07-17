@@ -46,7 +46,8 @@ import { type BreadcrumbItem } from '@/types';
  * across this codebase's queue pages is the PATTERN, not shared runtime
  * code.
  *
- * KPI cards: Admitted / Discharged today / Transferred / Total.
+ * KPI card: Discharged today (Admitted/Transferred/Total were removed as
+ * duplicates of the tab badges below; this is the only KPI card kept).
  * "Discharged today" is a genuinely separate, discharged_at-scoped count
  * (dischargedInRange) from the admitted_at-scoped `discharged` count the
  * same endpoint also returns — a patient discharged today may have been
@@ -283,22 +284,10 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     </div>
                 </div>
 
-                <div v-if="canRead" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Admitted</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.admitted ?? '—' }}</p>
-                    </div>
+                <div v-if="canRead" class="mt-3 grid grid-cols-1 gap-2 sm:max-w-xs">
                     <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Discharged today</p>
                         <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.dischargedInRange ?? '—' }}</p>
-                    </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Transferred</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.transferred ?? '—' }}</p>
-                    </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Total</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.total ?? '—' }}</p>
                     </div>
                 </div>
 

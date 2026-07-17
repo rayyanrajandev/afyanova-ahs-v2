@@ -127,13 +127,6 @@ function statusCount(status: LaboratoryOrderStatus | 'all'): number | null {
     return statusCounts.data.value[status] ?? null;
 }
 
-// status-counts has no derived buckets (unlike pharmacy's reconciliation
-// counts) — Open is summed client-side from the three open statuses.
-const openCount = computed<number | null>(() => {
-    if (!statusCounts.data.value) return null;
-    return statusCounts.data.value.ordered + statusCounts.data.value.collected + statusCounts.data.value.in_progress;
-});
-
 function setStatus(value: string | number): void {
     filters.status = value === 'all' ? '' : String(value);
     filters.page = 1;
@@ -475,25 +468,6 @@ function openAuditSheet(order: LaboratoryOrder): void {
                                 <AppIcon name="plus" class="size-3.5" />
                                 Create order
                             </Button>
-                        </div>
-                    </div>
-
-                    <div v-if="canRead" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                            <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Total</p>
-                            <p class="text-sm font-bold tabular-nums">{{ statusCount('all') ?? '—' }}</p>
-                        </div>
-                        <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                            <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Open</p>
-                            <p class="text-sm font-bold tabular-nums">{{ openCount ?? '—' }}</p>
-                        </div>
-                        <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                            <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Completed</p>
-                            <p class="text-sm font-bold tabular-nums">{{ statusCount('completed') ?? '—' }}</p>
-                        </div>
-                        <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                            <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Cancelled</p>
-                            <p class="text-sm font-bold tabular-nums">{{ statusCount('cancelled') ?? '—' }}</p>
                         </div>
                     </div>
 
