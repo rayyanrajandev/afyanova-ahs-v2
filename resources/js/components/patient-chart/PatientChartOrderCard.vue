@@ -49,7 +49,19 @@ const opensInline = computed(
                 <p class="truncate text-sm font-medium text-foreground">{{ card.title }}</p>
                 <p class="mt-1 text-xs text-muted-foreground">{{ card.metaLine }}</p>
             </div>
-            <Badge :variant="card.statusVariant">{{ card.statusLabel }}</Badge>
+            <!-- Result entry point sits on the status row to keep the card
+                 compact: one popover trigger (color-coded glance + in-popover
+                 "View full result" link) next to the status chip, instead of
+                 a full-width button row of its own below. -->
+            <div class="flex shrink-0 items-center gap-2">
+                <LabResultSummaryPopover
+                    v-if="card.rawLabResultSummary || opensInline"
+                    :result-summary="card.rawLabResultSummary"
+                    show-view-full
+                    @view-full-result="emit('review-lab-result', card.id)"
+                />
+                <Badge :variant="card.statusVariant">{{ card.statusLabel }}</Badge>
+            </div>
         </div>
 
         <!-- Only surface the clinical signal when it adds meaning beyond the
@@ -60,32 +72,22 @@ const opensInline = computed(
             <Badge :variant="card.signal.variant">{{ card.signal.label }}</Badge>
         </div>
 
-        <!-- The popover below replaces this teaser for lab results that
-             have one — showing both is the same raw text twice. -->
+        <!-- Teaser only for orders with no lab result to glance at (non-lab
+             kinds, or a lab order still awaiting a result). -->
         <p v-if="!card.rawLabResultSummary" class="mt-2 text-xs text-muted-foreground">{{ card.summary }}</p>
-
-        <LabResultSummaryPopover
-            v-if="card.rawLabResultSummary"
-            :result-summary="card.rawLabResultSummary"
-            trigger-class="mt-2"
-        />
 
         <p v-if="card.linkageText" class="mt-1 text-xs text-muted-foreground">{{ card.linkageText }}</p>
 
         <div
-            v-if="card.nextActionLabel || card.reorderHref || card.addOnHref || card.moreActions.length > 0"
+            v-if="(card.nextActionLabel && !opensInline) || card.reorderHref || card.addOnHref || card.moreActions.length > 0"
             class="mt-3 flex flex-wrap items-center gap-2"
         >
-            <Button
-                v-if="card.nextActionLabel && card.nextActionHref && opensInline"
-                size="sm"
-                :variant="card.nextActionVariant"
-                class="h-9 gap-1.5 px-2.5 text-xs"
-                @click="emit('review-lab-result', card.id)"
-            >
-                <AppIcon :name="card.nextActionIcon" class="size-3.5" />{{ card.nextActionLabel }}
-            </Button>
-            <Button v-else-if="card.nextActionLabel && card.nextActionHref" size="sm" :variant="card.nextActionVariant" as-child class="h-9 gap-1.5 px-2.5 text-xs">
+            <!-- opensInline (a resulted lab order) is handled entirely by the
+                 result popover + its "View full result" link above, so no
+                 separate action button is rendered for it here. Every other
+                 nextAction (Review order, Verify, radiology/pharmacy/theatre)
+                 still navigates. -->
+            <Button v-if="card.nextActionLabel && card.nextActionHref && !opensInline" size="sm" :variant="card.nextActionVariant" as-child class="h-9 gap-1.5 px-2.5 text-xs">
                 <Link :href="card.nextActionHref"><AppIcon :name="card.nextActionIcon" class="size-3.5" />{{ card.nextActionLabel }}</Link>
             </Button>
             <Button v-if="card.reorderHref" size="sm" variant="outline" as-child class="h-9 gap-1.5 px-2.5 text-xs">

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,9 +11,14 @@ import { parseFilledResultSummarySections } from '@/lib/resultTemplate';
  * text every result surface already has (order lists, patient chart,
  * encounter workspace, ...), rendered as filled-fields-only with
  * color-coded badges on binary findings (Positive/Present in red,
- * Negative/Absent/None Seen in green) instead of a raw text dump. Use
- * anywhere a quick read on a result matters more than the full sectioned
- * report (LaboratoryOrderDetailSheet.vue remains the source for that).
+ * Negative/Absent/None Seen in green) instead of a raw text dump.
+ *
+ * This is the single result entry point on a card: the glance lives in
+ * the popover, and when `showViewFull` is set a "View full result" link
+ * at the bottom emits `view-full-result` so the parent can open the
+ * complete sectioned report (LaboratoryOrderDetailSheet.vue) — one
+ * button, progressive disclosure, instead of a separate "Review result"
+ * button sitting next to this one.
  */
 const props = withDefaults(
     defineProps<{
@@ -23,12 +28,28 @@ const props = withDefaults(
          * element of its own, so plain attribute fallthrough from a
          * parent's `class="..."` wouldn't reach the visible trigger. */
         triggerClass?: string;
+        /** Show the in-popover "View full result" link. Only surfaces that
+         * wire a detail sheet (patient chart, encounter workspace) pass
+         * this; list/summary surfaces without a sheet leave it off. */
+        showViewFull?: boolean;
     }>(),
     {
         triggerLabel: 'Result summary',
         triggerClass: '',
+        showViewFull: false,
     },
 );
+
+const emit = defineEmits<{ 'view-full-result': [] }>();
+
+const open = ref(false);
+
+function viewFullResult(): void {
+    // Close the glance before the sheet animates in — leaving the popover
+    // mounted behind the sheet overlay reads as a stuck layer.
+    open.value = false;
+    emit('view-full-result');
+}
 
 const parsedSections = computed(() =>
     props.resultSummary ? parseFilledResultSummarySections(props.resultSummary) : null,
@@ -53,7 +74,7 @@ function valueBadgeClass(value: string): string {
 </script>
 
 <template>
-    <Popover>
+    <Popover v-model:open="open">
         <PopoverTrigger as-child>
             <Button variant="outline" size="sm" :class="['h-7 gap-1.5 px-2 text-xs', triggerClass]">
                 <AppIcon name="file-text" class="size-3" />
@@ -87,6 +108,17 @@ function valueBadgeClass(value: string): string {
                 </div>
             </div>
             <p v-else class="whitespace-pre-line">{{ resultSummary }}</p>
+
+            <div v-if="showViewFull" class="mt-3 border-t pt-2">
+                <button
+                    type="button"
+                    class="flex w-full items-center justify-between gap-2 rounded-sm px-1 py-1 text-xs font-medium text-primary hover:bg-muted"
+                    @click="viewFullResult"
+                >
+                    View full result
+                    <AppIcon name="arrow-right" class="size-3.5" />
+                </button>
+            </div>
         </PopoverContent>
     </Popover>
 </template>

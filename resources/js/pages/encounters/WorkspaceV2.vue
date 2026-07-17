@@ -1297,11 +1297,12 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                                                 <span v-if="order.resultedAt" class="text-xs text-muted-foreground">{{ formatDateTime(order.resultedAt) }}</span>
                                             </div>
                                         </div>
-                                        <div class="mt-2 flex items-center gap-3">
-                                            <LabResultSummaryPopover :result-summary="order.resultSummary" />
-                                            <Button variant="link" size="sm" class="h-auto px-0 text-xs" @click="openLabResultReview(order.id)">
-                                                View full result
-                                            </Button>
+                                        <div class="mt-2">
+                                            <LabResultSummaryPopover
+                                                :result-summary="order.resultSummary"
+                                                show-view-full
+                                                @view-full-result="openLabResultReview(order.id)"
+                                            />
                                         </div>
                                     </div>
                                 </div>
