@@ -162,6 +162,10 @@ function verificationLabel(user: PlatformUser): string {
     return user.emailVerifiedAt ? 'Email verified' : 'Verification pending';
 }
 
+function isUserActive(user: PlatformUser): boolean {
+    return (user.status ?? '').toLowerCase() === 'active';
+}
+
 function formatDate(value: string | null): string {
     if (!value) return '—';
     const date = new Date(value);
@@ -592,18 +596,25 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                         <div class="flex items-center justify-end gap-1">
                                             <PlatformUserRowActionsMenu
                                                 :user="user"
-                                                :can-update="canUpdate"
-                                                :can-update-status="canUpdateStatus"
                                                 :can-reset-password="canResetPassword"
                                                 :can-read-approval-cases="canReadApprovalCases"
                                                 :can-create-linked-staff-profile="canCreateLinkedStaffProfile"
-                                                @view-details="openDetails(user)"
-                                                @edit="openEditSheet(user)"
-                                                @status-change="(status) => openStatusDialog(user, status)"
                                                 @credential-link="sendCredentialLink(user)"
                                                 @approval-cases="openApprovalCases(user)"
                                                 @create-staff-profile="openCreateStaffProfile(user)"
                                             />
+                                            <Button v-if="canUpdate" size="sm" variant="ghost" class="h-7 gap-1 px-2 text-xs" @click="openEditSheet(user)">
+                                                <AppIcon name="pencil" class="size-3.5" />Edit
+                                            </Button>
+                                            <Button
+                                                v-if="canUpdateStatus"
+                                                size="sm"
+                                                variant="ghost"
+                                                class="h-7 gap-1 px-2 text-xs"
+                                                @click="openStatusDialog(user, isUserActive(user) ? 'inactive' : 'active')"
+                                            >
+                                                <AppIcon name="refresh-cw" class="size-3.5" />{{ isUserActive(user) ? 'Deactivate' : 'Activate' }}
+                                            </Button>
                                         </div>
                                     </td>
                                 </tr>
