@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import { apiPatch } from '@/lib/apiClient';
+import { apiPatch, isApiClientError } from '@/lib/apiClient';
 import { type EncounterCloseReadiness } from '@/lib/encounterCloseReadiness';
 import { messageFromUnknown, notifyError, notifySuccess } from '@/lib/notify';
 
@@ -34,12 +34,14 @@ export function useEncounterClose(options: {
     const dispositionNotes = ref('');
     const error = ref<string | null>(null);
     const submitting = ref(false);
+    const blockedReadiness = ref<EncounterCloseReadiness | null>(null);
 
     function openDialog(): void {
         reason.value = '';
         disposition.value = '';
         dispositionNotes.value = '';
         error.value = null;
+        blockedReadiness.value = null;
         dialogOpen.value = true;
     }
 
@@ -124,6 +126,17 @@ export function useEncounterClose(options: {
             );
         } catch (err) {
             error.value = messageFromUnknown(err, 'Unable to close this encounter right now.');
+            if (
+                isApiClientError(err)
+                && err.payload
+                && typeof err.payload === 'object'
+                && (err.payload as Record<string, unknown>).code === 'ENCOUNTER_CLOSE_BLOCKED'
+            ) {
+                const payload = err.payload as { data?: { closeReadiness?: EncounterCloseReadiness } };
+                if (payload.data?.closeReadiness) {
+                    blockedReadiness.value = payload.data.closeReadiness;
+                }
+            }
         } finally {
             submitting.value = false;
         }
@@ -136,6 +149,7 @@ export function useEncounterClose(options: {
         dispositionNotes,
         error,
         submitting,
+        blockedReadiness,
         requestClose,
         closeDialog,
         submitDialog,

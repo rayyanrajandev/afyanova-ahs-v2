@@ -1523,7 +1523,7 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
 
             <EncounterCloseChecklistDialog
                 :open="encounterClose.dialogOpen.value"
-                :readiness="closeReadiness"
+                :readiness="encounterClose.blockedReadiness.value ?? closeReadiness"
                 :reason="encounterClose.reason.value"
                 :disposition="encounterClose.disposition.value"
                 :disposition-notes="encounterClose.dispositionNotes.value"
