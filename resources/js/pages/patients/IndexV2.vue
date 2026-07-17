@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { useQueryClient } from '@tanstack/vue-query';
 import { computed, ref } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -396,9 +396,9 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                                         </button>
                                                     </template>
                                                     <template #actions>
-                                                        <a :href="`/patients/${patient.id}/chart`" class="text-xs font-medium text-primary hover:underline">
+                                                        <Link :href="`/patients/${patient.id}/chart`" class="text-xs font-medium text-primary hover:underline">
                                                             View chart
-                                                        </a>
+                                                        </Link>
                                                         <PatientVisitActionsMenu :patient="patient" />
                                                     </template>
                                                 </PatientSummaryPopover>
