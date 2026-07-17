@@ -113,19 +113,6 @@ const EARLIER_STAGE_STEPS: VisitJourneyStep[] = [
     'waiting_clinician',
     'waiting_clinician_review',
 ];
-const BOARD_STEPS: VisitJourneyStep[] = [
-    'with_clinician',
-    'waiting_lab',
-    'waiting_imaging',
-    'waiting_lab_and_imaging',
-    'in_lab',
-    'in_imaging',
-    'in_lab_and_imaging',
-    'waiting_pharmacy',
-    'waiting_direct_service',
-    'in_direct_service',
-];
-
 /**
  * Client-side quick filter, not sent to the server — unlike
  * department/clinicianUserId/q, "urgent" isn't a concept the backend knows
@@ -178,31 +165,6 @@ watch(
     },
 );
 
-const KPI_LABELS: Record<VisitJourneyStep, string> = {
-    waiting_triage: 'Waiting for triage',
-    in_triage: 'In triage',
-    waiting_clinician: 'Waiting for clinician',
-    waiting_clinician_review: 'Waiting for clinician review',
-    with_clinician: 'With clinician',
-    waiting_lab: 'Waiting for lab',
-    waiting_imaging: 'Waiting for imaging',
-    waiting_lab_and_imaging: 'Waiting for lab and imaging',
-    in_lab: 'In lab',
-    in_imaging: 'In imaging',
-    in_lab_and_imaging: 'In lab and imaging',
-    waiting_pharmacy: 'Waiting for pharmacy',
-    waiting_direct_service: 'Waiting (direct service)',
-    in_direct_service: 'In progress (direct service)',
-};
-
-const kpis = computed(() =>
-    BOARD_STEPS.map((step) => ({
-        step,
-        label: KPI_LABELS[step],
-        count: entries.value.filter((entry) => entry.step === step).length,
-    })),
-);
-
 function formatCompletedAt(value: string | null): string {
     if (!value) return '';
     return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -241,13 +203,6 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     >
                         {{ earlierStageCount }} waiting for triage/clinician — open reception queue
                     </Link>
-                </div>
-
-                <div v-if="canReadAppointments" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-                    <div v-for="kpi in kpis" :key="kpi.step" class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">{{ kpi.label }}</p>
-                        <p class="text-sm font-bold tabular-nums">{{ kpi.count }}</p>
-                    </div>
                 </div>
             </div>
 

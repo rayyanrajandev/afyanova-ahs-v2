@@ -2177,18 +2177,13 @@ const wardBedGroups = computed(() => {
 const boardSummaryCards = computed(() => {
     const openTasks = tasks.value.filter((task) => taskIsOpen(task));
     const overdueCount = openTasks.filter((task) => taskIsOverdue(task)).length;
-    const escalatedCount = openTasks.filter((task) => normalizeTaskStatusValue(task) === 'escalated').length;
+    const escalatedCount = taskCounts.value?.escalated ?? 0;
     const unassignedCount = openTasks.filter((task) => !task.assignedToUserId).length;
-    const blockedCount = checklists.value.filter((checklist) => String(checklist.status ?? '').trim().toLowerCase() === 'blocked').length;
-    const readyCount = checklists.value.filter((checklist) => checklist.isReadyForDischarge).length;
 
     return [
-        { id: 'open', title: 'Open tasks', helper: 'Bedside work still active in the current ward scope.', value: openTasks.length, icon: 'clipboard-list', tone: 'default' },
         { id: 'overdue', title: 'Overdue', helper: 'Open tasks past due and needing immediate follow-through.', value: overdueCount, icon: 'clock-3', tone: overdueCount > 0 ? 'warning' : 'neutral' },
         { id: 'escalated', title: 'Escalated', helper: 'Items needing ward leadership or urgent clinical attention.', value: escalatedCount, icon: 'triangle-alert', tone: escalatedCount > 0 ? 'danger' : 'neutral' },
         { id: 'unassigned', title: 'Unassigned', helper: 'Open tasks without a responsible ward owner.', value: unassignedCount, icon: 'user-round-minus', tone: unassignedCount > 0 ? 'warning' : 'neutral' },
-        { id: 'blocked', title: 'Blocked discharge', helper: 'Checklist records actively blocked from discharge progression.', value: blockedCount, icon: 'ban', tone: blockedCount > 0 ? 'danger' : 'neutral' },
-        { id: 'ready', title: 'Ready for discharge', helper: 'Admissions with discharge readiness completed.', value: readyCount, icon: 'check-check', tone: readyCount > 0 ? 'success' : 'neutral' },
     ];
 });
 
@@ -2550,7 +2545,7 @@ async function refreshWardPage(): Promise<void> {
                             </div>
                         </CardHeader>
                         <CardContent class='space-y-4'>
-                            <div class='grid gap-3 md:grid-cols-2 xl:grid-cols-3'>
+                            <div class='grid gap-3 md:grid-cols-3'>
                                 <div v-for='card in boardSummaryCards' :key='card.id' :class="[
                                     'rounded-lg border px-4 py-3',
                                     card.tone === 'danger'
