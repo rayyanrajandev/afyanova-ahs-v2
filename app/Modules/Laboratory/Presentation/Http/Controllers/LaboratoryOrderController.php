@@ -103,8 +103,17 @@ class LaboratoryOrderController extends Controller
         $order = $useCase->execute($id);
         abort_if($order === null, 404, 'Laboratory order not found.');
 
+        $transformed = LaboratoryOrderResponseTransformer::transform($order, true);
+        $withPatient = ClinicalOrderPatientSummaryEnricher::attachToTransformedOrders(
+            [$order],
+            [$transformed],
+        );
+
         return response()->json([
-            'data' => LaboratoryOrderResponseTransformer::transform($order, true),
+            'data' => ClinicalOrderUserSummaryEnricher::attachOrderingClinicianToTransformedOrders(
+                [$order],
+                $withPatient,
+            )[0],
         ]);
     }
 

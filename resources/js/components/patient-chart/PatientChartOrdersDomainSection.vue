@@ -31,6 +31,7 @@ defineProps<{
 
 defineEmits<{
     'lifecycle-action': [kind: EncounterLifecycleTargetKind, id: string, action: EncounterLifecycleAction, defaultReason: string | null];
+    'review-lab-result': [id: string];
 }>();
 </script>
 
@@ -80,6 +81,7 @@ defineEmits<{
                                 :key="`chart-order-${card.kind}-${card.id}`"
                                 :card="card"
                                 @lifecycle-action="(...args) => $emit('lifecycle-action', ...args)"
+                                @review-lab-result="(id) => $emit('review-lab-result', id)"
                             />
                         </div>
                     </div>

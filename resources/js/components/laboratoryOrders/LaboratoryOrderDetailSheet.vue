@@ -19,6 +19,12 @@ import { formatEnumLabel } from '@/lib/labels';
 const props = defineProps<{
     order: LaboratoryOrder | null;
     canCreate?: boolean;
+    /** Set while a caller is fetching `order` by id (e.g. from the patient
+     * chart, which doesn't already have it loaded) — shows a placeholder
+     * instead of an empty sheet. Unused by callers that already hold the
+     * order (list-page usage never has order null while open). */
+    loading?: boolean;
+    loadError?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -155,6 +161,17 @@ const groupedResultParameters = computed((): Array<{
                         "
                     >
                         <template v-if="groupedResultParameters">
+                            <!--
+                                Structured-template results never populate
+                                flag/referenceRange (see
+                                buildResultParametersFromTemplate) — those
+                                are panel/numeric-result concepts. Showing
+                                those columns here would just be two
+                                permanently-empty "—" columns on every row,
+                                so this branch uses a simpler
+                                Parameter/Value layout instead of the
+                                4-column one below.
+                            -->
                             <div
                                 v-for="group in groupedResultParameters"
                                 :key="group.section ?? '__ungrouped'"
@@ -170,10 +187,8 @@ const groupedResultParameters = computed((): Array<{
                                     <div
                                         class="grid grid-cols-12 gap-2 bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground"
                                     >
-                                        <div class="col-span-3">Parameter</div>
-                                        <div class="col-span-3">Value</div>
-                                        <div class="col-span-2">Flag</div>
-                                        <div class="col-span-4">Reference range</div>
+                                        <div class="col-span-5">Parameter</div>
+                                        <div class="col-span-7">Value</div>
                                     </div>
                                     <div
                                         v-for="param in group.params"
@@ -181,47 +196,17 @@ const groupedResultParameters = computed((): Array<{
                                         class="grid grid-cols-12 gap-2 px-3 py-2 text-sm"
                                     >
                                         <div
-                                            class="col-span-3 font-medium text-foreground"
+                                            class="col-span-5 font-medium text-foreground"
                                         >
                                             {{ param.name }}
                                         </div>
-                                        <div class="col-span-3">
+                                        <div class="col-span-7">
                                             {{ param.value }}
                                             <span
                                                 v-if="param.unit"
                                                 class="text-xs text-muted-foreground"
                                                 >{{ param.unit }}</span
                                             >
-                                        </div>
-                                        <div class="col-span-2">
-                                            <Badge
-                                                v-if="param.flag === 'critical'"
-                                                variant="destructive"
-                                                class="text-[10px]"
-                                            >
-                                                Critical
-                                            </Badge>
-                                            <Badge
-                                                v-else-if="param.flag === 'abnormal'"
-                                                class="bg-amber-100 text-[10px] text-amber-800 dark:bg-amber-900 dark:text-amber-200"
-                                            >
-                                                Abnormal
-                                            </Badge>
-                                            <span
-                                                v-else-if="param.flag === 'normal'"
-                                                class="text-xs text-green-600 dark:text-green-400"
-                                                >Normal</span
-                                            >
-                                            <span
-                                                v-else
-                                                class="text-xs text-muted-foreground"
-                                                >—</span
-                                            >
-                                        </div>
-                                        <div
-                                            class="col-span-4 text-xs text-muted-foreground"
-                                        >
-                                            {{ param.referenceRange || '—' }}
                                         </div>
                                     </div>
                                 </div>
@@ -405,6 +390,16 @@ const groupedResultParameters = computed((): Array<{
                 <Button variant="outline" size="sm" @click="requestAddOn">Add linked test</Button>
                 <Button variant="outline" size="sm" @click="requestReorder">Reorder</Button>
             </SheetFooter>
+        </SheetContent>
+
+        <SheetContent v-else side="right" variant="form" size="lg">
+            <SheetHeader class="shrink-0 border-b px-6 py-4 text-left">
+                <SheetTitle>Laboratory result</SheetTitle>
+            </SheetHeader>
+            <div class="flex min-h-0 flex-1 items-center justify-center p-6 text-center text-sm">
+                <p v-if="loadError" class="text-destructive">{{ loadError }}</p>
+                <p v-else class="text-muted-foreground">Loading result…</p>
+            </div>
         </SheetContent>
     </Sheet>
 </template>

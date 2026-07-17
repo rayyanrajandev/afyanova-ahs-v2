@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayout from '@/layouts/AppLayout.vue';
 import EncounterLifecycleDialog from '@/components/domain/clinical/EncounterLifecycleDialog.vue';
+import LaboratoryOrderDetailSheet from '@/components/laboratoryOrders/LaboratoryOrderDetailSheet.vue';
 import PatientChartOrdersDomainSection from '@/components/patient-chart/PatientChartOrdersDomainSection.vue';
 import PatientEditSheet from '@/components/patients/PatientEditSheet.vue';
 import { apiGet } from '@/lib/apiClient';
@@ -40,6 +41,7 @@ import { usePatientMedicationProfileDialog } from '@/composables/patientChart/us
 import { usePatientMedicationReconciliation } from '@/composables/patientChart/usePatientMedicationReconciliation';
 import { useVisitScope } from '@/composables/patientChart/useVisitScope';
 import { usePatientChartOrderLifecycle } from '@/composables/patientChart/usePatientChartOrderLifecycle';
+import { useLaboratoryOrder } from '@/composables/laboratoryOrders/useLaboratoryOrder';
 import { usePatientInsuranceRecords } from '@/composables/patientChart/usePatientInsuranceRecords';
 import { usePatientInsuranceDialog } from '@/composables/patientChart/usePatientInsuranceDialog';
 import { exportPatientAuditLogsCsv, usePatientAuditLogs } from '@/composables/patientChart/usePatientAuditLogs';
@@ -329,6 +331,18 @@ const orderLifecycle = usePatientChartOrderLifecycle({
         void theatre.counts.refetch();
     },
 });
+
+// Inline "review result" — opens LaboratoryOrderDetailSheet.vue directly
+// on this page instead of navigating to the Laboratory Orders module (the
+// nextActionHref path every other order kind/action here still uses).
+const reviewLabOrderId = ref<string | null>(null);
+const reviewLabSheetOpen = ref(false);
+const reviewLabOrderQuery = useLaboratoryOrder(reviewLabOrderId);
+
+function openLabResultReview(id: string): void {
+    reviewLabOrderId.value = id;
+    reviewLabSheetOpen.value = true;
+}
 
 const viewModelContext = computed(() => ({
     patientId: props.patientId,
@@ -1193,6 +1207,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                     create-label="Order lab"
                                     create-icon="flask-conical"
                                     @lifecycle-action="(...args) => orderLifecycle.openDialog(...args)"
+                                    @review-lab-result="openLabResultReview"
                                 />
                             </TabsContent>
 
@@ -2128,6 +2143,13 @@ const { scrollContainerHeight } = useStickyScrollContainer();
             </Tabs>
         </div>
 
+        <LaboratoryOrderDetailSheet
+            v-model:open="reviewLabSheetOpen"
+            :order="reviewLabOrderQuery.data.value?.data ?? null"
+            :loading="reviewLabOrderQuery.isPending.value"
+            :load-error="reviewLabOrderQuery.isError.value ? ((reviewLabOrderQuery.error.value as Error | null)?.message ?? 'Unable to load this result.') : null"
+            :can-create="false"
+        />
         <PatientEditSheet v-model:open="editSheetOpen" :patient="patient" @updated="onPatientUpdated" />
         <VitalsEditSheet v-model:open="editVitalsOpen" :patient-id="props.patientId" :vitals="structuredVitals" @updated="onVitalsUpdated" />
         <VitalsEditSheet v-model:open="recordVitalsOpen" :patient-id="props.patientId" :vitals="null" @updated="onVitalsUpdated" />
