@@ -743,17 +743,7 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                     </div>
                 </div>
 
-                <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p
-                            class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase"
-                        >
-                            Active orders
-                        </p>
-                        <p class="text-sm font-bold tabular-nums">
-                            {{ ordering.careActiveCount.value }}
-                        </p>
-                    </div>
+                <div class="mt-3 grid grid-cols-2 gap-2">
                     <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
                         <p
                             class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase"
@@ -762,26 +752,6 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                         </p>
                         <p class="text-sm font-bold tabular-nums">
                             {{ pendingResultCount }}
-                        </p>
-                    </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p
-                            class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase"
-                        >
-                            Medications
-                        </p>
-                        <p class="text-sm font-bold tabular-nums">
-                            {{ activeMedications.length }}
-                        </p>
-                    </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p
-                            class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase"
-                        >
-                            Diagnoses
-                        </p>
-                        <p class="text-sm font-bold tabular-nums">
-                            {{ diagnoses.length }}
                         </p>
                     </div>
                     <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
@@ -902,26 +872,10 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                         </div>
 
                         <!-- Counts -->
-                        <div class="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
-                            <button type="button" class="rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" @click="activeTab = 'notes'">
-                                <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Notes</p>
-                                <p class="text-lg font-bold tabular-nums">{{ encounterNoteRecords.length }}</p>
-                            </button>
-                            <button type="button" class="rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" @click="activeTab = 'orders'">
-                                <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Orders</p>
-                                <p class="text-lg font-bold tabular-nums">{{ laboratoryOrders.length + radiologyOrders.length + theatreProcedures.length }}</p>
-                            </button>
+                        <div class="grid gap-3 sm:grid-cols-2">
                             <button type="button" class="rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" @click="activeTab = 'results'">
                                 <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Results</p>
                                 <p class="text-lg font-bold tabular-nums">{{ resultedLabOrders.length + reportedRadiologyOrders.length }}<span v-if="pendingResultCount > 0" class="text-xs font-normal text-muted-foreground"> · {{ pendingResultCount }} pending</span></p>
-                            </button>
-                            <button type="button" class="rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" @click="activeTab = 'medications'">
-                                <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Medications</p>
-                                <p class="text-lg font-bold tabular-nums">{{ activeMedications.length }}</p>
-                            </button>
-                            <button type="button" class="rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" @click="activeTab = 'diagnoses'">
-                                <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Diagnoses</p>
-                                <p class="text-lg font-bold tabular-nums">{{ diagnoses.length }}</p>
                             </button>
                             <button v-if="canViewCharges" type="button" class="rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" @click="activeTab = 'charges'">
                                 <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Charges</p>
@@ -964,22 +918,6 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                                     </li>
                                 </ul>
                             </div>
-                        </div>
-
-                        <!-- Close readiness -->
-                        <div class="rounded-lg border bg-card p-4">
-                            <p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">Close readiness</p>
-                            <div class="mt-2 flex items-center gap-3">
-                                <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                                    <div class="h-full rounded-full transition-all" :class="closeReadinessBarClass" :style="{ width: `${closeReadinessPercent}%` }" />
-                                </div>
-                                <span class="text-xs font-bold tabular-nums">{{ closeReadinessPercent }}%</span>
-                            </div>
-                            <p class="mt-2 text-xs text-muted-foreground">
-                                {{ closeReadiness?.canClose ? 'Ready to close.' : 'Not ready to close yet.' }}
-                                <span v-if="closeReadiness && closeReadiness.blockingCount > 0">{{ closeReadiness.blockingCount }} blocking item(s).</span>
-                                <span v-else-if="closeReadiness && closeReadiness.warningCount > 0">{{ closeReadiness.warningCount }} warning(s) to acknowledge.</span>
-                            </p>
                         </div>
                     </TabsContent>
 
