@@ -92,6 +92,7 @@ const emit = defineEmits<{
             linkage: EncounterInlineOrderLinkageContext;
         },
     ];
+    viewLabResult: [orderId: string];
 }>();
 
 function emitLifecycle(
@@ -221,7 +222,11 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                             v-if="(order.resultSummary ?? '').trim() !== ''"
                             class="mt-1 flex flex-wrap items-center gap-2"
                         >
-                            <LabResultSummaryPopover :result-summary="order.resultSummary" />
+                            <LabResultSummaryPopover
+                                :result-summary="order.resultSummary"
+                                show-view-full
+                                @view-full-result="emit('viewLabResult', order.id)"
+                            />
                             <span v-if="order.resultedAt" class="text-[11px] text-muted-foreground">
                                 Resulted {{ formatDateTime(order.resultedAt) }}
                             </span>
@@ -248,6 +253,11 @@ function summaryIncludes(id: CreateEncounterCareSummary['id']): boolean {
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" class="w-48">
+                                    <DropdownMenuItem @select="emit('viewLabResult', order.id)">
+                                        <AppIcon name="file-text" class="size-4" />
+                                        View details
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
                                     <DropdownMenuItem
                                         v-if="canUseInlineOrders"
                                         @select="emitInlineOrder('laboratory', 'reorder', order.id, orderActionLabel(order.orderNumber, order.testName))"

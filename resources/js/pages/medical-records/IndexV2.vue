@@ -7,6 +7,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
     Dialog,
     DialogContent,
     DialogDescription,
@@ -409,7 +415,18 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Medical Records', href: '/medic
                         </thead>
                         <tbody>
                             <tr v-for="record in records" :key="record.id" class="border-b last:border-b-0 hover:bg-muted/20">
-                                <td class="px-3 py-2 font-medium text-foreground">{{ record.recordNumber || 'Pending number' }}</td>
+                                <td class="px-3 py-2">
+                                    <!-- The record number is the primary identifier — it opens the
+                                         same history/detail sheet the old standalone "History" button
+                                         did, so that button is gone rather than duplicating this. -->
+                                    <button
+                                        type="button"
+                                        class="font-medium text-primary hover:underline"
+                                        @click="openHistorySheet(record)"
+                                    >
+                                        {{ record.recordNumber || 'Pending number' }}
+                                    </button>
+                                </td>
                                 <td class="px-3 py-2">{{ patientLabel(record.patientId) }}</td>
                                 <td class="px-3 py-2 text-muted-foreground">{{ medicalRecordNoteTypeLabel(record.recordType ?? '') }}</td>
                                 <td class="px-3 py-2">
@@ -419,10 +436,7 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Medical Records', href: '/medic
                                 <td class="px-3 py-2 text-muted-foreground">{{ record.diagnosisCode || 'N/A' }}</td>
                                 <td class="px-3 py-2 text-muted-foreground">{{ record.authorUserName || 'Unknown' }}</td>
                                 <td class="px-3 py-2">
-                                    <div class="flex flex-wrap gap-1.5">
-                                        <Button size="sm" variant="outline" class="h-7 px-2 text-xs" @click="openHistorySheet(record)">
-                                            History
-                                        </Button>
+                                    <div class="flex flex-wrap items-center gap-1.5">
                                         <Button
                                             v-if="record.encounterId || record.appointmentId"
                                             size="sm"
@@ -452,15 +466,20 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Medical Records', href: '/medic
                                         >
                                             Amend
                                         </Button>
-                                        <Button
-                                            v-if="statusAction.canApply('archived', record)"
-                                            size="sm"
-                                            variant="outline"
-                                            class="h-7 px-2 text-xs"
-                                            @click="statusAction.openDialog(record, 'archived')"
-                                        >
-                                            Archive
-                                        </Button>
+                                        <!-- Archive is the lowest-frequency, most terminal action on this
+                                             row — demoted to an overflow menu rather than a fourth/fifth
+                                             standalone button, matching the pattern used across the other
+                                             V2 worklists (Appointments, Admissions, Pharmacy). -->
+                                        <DropdownMenu v-if="statusAction.canApply('archived', record)">
+                                            <DropdownMenuTrigger as-child>
+                                                <Button size="sm" variant="outline" class="h-7 px-2 text-xs">More</Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" class="w-36">
+                                                <DropdownMenuItem class="cursor-pointer text-sm" @select="statusAction.openDialog(record, 'archived')">
+                                                    Archive
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
                                     </div>
                                 </td>
                             </tr>

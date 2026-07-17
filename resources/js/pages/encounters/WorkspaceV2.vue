@@ -628,28 +628,19 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                             v-if="patientName"
                             class="flex flex-wrap items-baseline gap-2"
                         >
-                            <h1
-                                class="text-lg font-bold tracking-tight md:text-xl"
-                            >
-                                {{ patientName }}
+                            <!-- The patient's name is the primary identifier for this
+                                 workspace — it carries the navigation to their chart
+                                 itself rather than sitting inert next to a separate
+                                 "View chart" button. -->
+                            <h1 class="text-lg font-bold tracking-tight md:text-xl">
+                                <Link v-if="patientChartHref" :href="patientChartHref" class="hover:underline">{{ patientName }}</Link>
+                                <template v-else>{{ patientName }}</template>
                             </h1>
                             <span
                                 v-if="patientDemographics"
                                 class="text-xs text-muted-foreground"
                                 >{{ patientDemographics }}</span
                             >
-                            <Button
-                                v-if="patientChartHref"
-                                variant="ghost"
-                                size="sm"
-                                class="h-6 gap-1 px-2 text-xs"
-                                as-child
-                            >
-                                <Link :href="patientChartHref">
-                                    <AppIcon name="file-text" class="size-3" />
-                                    View chart
-                                </Link>
-                            </Button>
                         </div>
                         <div class="flex flex-wrap items-center gap-2">
                             <component
@@ -912,27 +903,27 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
 
                         <!-- Counts -->
                         <div class="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
-                            <button type="button" class="rounded-lg border bg-card p-3 text-left transition-colors hover:bg-muted/30" @click="activeTab = 'notes'">
+                            <button type="button" class="rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" @click="activeTab = 'notes'">
                                 <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Notes</p>
                                 <p class="text-lg font-bold tabular-nums">{{ encounterNoteRecords.length }}</p>
                             </button>
-                            <button type="button" class="rounded-lg border bg-card p-3 text-left transition-colors hover:bg-muted/30" @click="activeTab = 'orders'">
+                            <button type="button" class="rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" @click="activeTab = 'orders'">
                                 <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Orders</p>
                                 <p class="text-lg font-bold tabular-nums">{{ laboratoryOrders.length + radiologyOrders.length + theatreProcedures.length }}</p>
                             </button>
-                            <button type="button" class="rounded-lg border bg-card p-3 text-left transition-colors hover:bg-muted/30" @click="activeTab = 'results'">
+                            <button type="button" class="rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" @click="activeTab = 'results'">
                                 <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Results</p>
                                 <p class="text-lg font-bold tabular-nums">{{ resultedLabOrders.length + reportedRadiologyOrders.length }}<span v-if="pendingResultCount > 0" class="text-xs font-normal text-muted-foreground"> · {{ pendingResultCount }} pending</span></p>
                             </button>
-                            <button type="button" class="rounded-lg border bg-card p-3 text-left transition-colors hover:bg-muted/30" @click="activeTab = 'medications'">
+                            <button type="button" class="rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" @click="activeTab = 'medications'">
                                 <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Medications</p>
                                 <p class="text-lg font-bold tabular-nums">{{ activeMedications.length }}</p>
                             </button>
-                            <button type="button" class="rounded-lg border bg-card p-3 text-left transition-colors hover:bg-muted/30" @click="activeTab = 'diagnoses'">
+                            <button type="button" class="rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" @click="activeTab = 'diagnoses'">
                                 <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Diagnoses</p>
                                 <p class="text-lg font-bold tabular-nums">{{ diagnoses.length }}</p>
                             </button>
-                            <button v-if="canViewCharges" type="button" class="rounded-lg border bg-card p-3 text-left transition-colors hover:bg-muted/30" @click="activeTab = 'charges'">
+                            <button v-if="canViewCharges" type="button" class="rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" @click="activeTab = 'charges'">
                                 <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Charges</p>
                                 <p class="text-lg font-bold tabular-nums">{{ chargesCurrency }} {{ chargesTotal.toLocaleString() }}</p>
                             </button>
@@ -1270,6 +1261,7 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                                                 $event.linkage,
                                             )
                                         "
+                                        @view-lab-result="openLabResultReview($event)"
                                     />
                                 </section>
                     </TabsContent>
@@ -1328,7 +1320,10 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                     <TabsContent value="medications" class="space-y-3">
                         <div class="rounded-lg border bg-card p-4">
                             <p class="text-sm font-medium">Medications</p>
-                            <p class="mt-0.5 text-xs text-muted-foreground">Prescriptions and dispensing for this encounter. Manage in the Pharmacy workflow.</p>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                Prescriptions and dispensing for this encounter. Manage in the
+                                <button type="button" class="font-medium text-primary hover:underline" @click="activeTab = 'orders'">Pharmacy workflow</button>.
+                            </p>
                             <p v-if="pharmacyOrders.length === 0" class="mt-3 text-sm text-muted-foreground">No medications prescribed for this encounter yet.</p>
                             <div v-else class="mt-3 space-y-2">
                                 <div v-for="med in pharmacyOrders" :key="med.id" class="rounded-md border bg-muted/20 p-3">
@@ -1381,6 +1376,7 @@ const { scrollContainerHeight } = useStickyScrollContainer('100dvh');
                                         v-if="canManageDiagnoses"
                                         type="button"
                                         class="text-muted-foreground hover:text-destructive"
+                                        :aria-label="`Remove diagnosis ${diagnosis.diagnosisCode}`"
                                         :disabled="encounterDiagnoses.removingId.value === diagnosis.id"
                                         @click="encounterDiagnoses.removeDiagnosis(diagnosis.id)"
                                     >
