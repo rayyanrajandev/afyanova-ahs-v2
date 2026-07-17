@@ -35,6 +35,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -226,7 +227,7 @@ class PatientController extends Controller
         if ($patient === null) {
             abort(404, 'Patient not found.');
         }
-        $this->authorize('updateDemographics', $patient);
+        Gate::authorize('updateDemographics', $patient);
 
         try {
             $result = $useCase->execute(

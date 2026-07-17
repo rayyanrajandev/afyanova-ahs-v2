@@ -28,6 +28,7 @@ use App\Support\ClinicalOrders\ClinicalOrderPatientSummaryEnricher;
 use App\Support\ClinicalOrders\ClinicalOrderUserSummaryEnricher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -190,7 +191,7 @@ class RadiologyOrderController extends Controller
 
         abort_if($order === null, 404, 'Radiology order not found.');
 
-        $this->authorize('perform', $order);
+        Gate::authorize('perform', $order);
 
         return response()->json([
             'data' => RadiologyOrderResponseTransformer::transform($order),

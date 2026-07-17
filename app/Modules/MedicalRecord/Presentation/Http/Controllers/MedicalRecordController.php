@@ -46,6 +46,7 @@ use App\Modules\MedicalRecord\Presentation\Http\Transformers\MedicalRecordVersio
 use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MedicalRecordController extends Controller
@@ -170,7 +171,7 @@ class MedicalRecordController extends Controller
 
         abort_if($record === null, 404, 'Medical record not found.');
 
-        $this->authorize('updateDraft', $record);
+        Gate::authorize('updateDraft', $record);
 
         return response()->json([
             'data' => MedicalRecordResponseTransformer::transform($record),

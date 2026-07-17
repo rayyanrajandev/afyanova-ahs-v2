@@ -53,6 +53,7 @@ use App\Modules\Platform\Application\Exceptions\TenantScopeRequiredForIsolationE
 use App\Modules\Platform\Infrastructure\Models\AuditExportJobModel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -378,7 +379,7 @@ class PharmacyOrderController extends Controller
 
         abort_if($order === null, 404, 'Pharmacy order not found.');
 
-        $this->authorize('dispense', $order);
+        Gate::authorize('dispense', $order);
 
         return response()->json([
             'data' => PharmacyOrderResponseTransformer::transform($order),

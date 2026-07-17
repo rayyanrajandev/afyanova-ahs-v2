@@ -66,6 +66,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AppointmentController extends Controller
@@ -256,7 +257,7 @@ class AppointmentController extends Controller
 
         abort_if($appointment === null, 404, 'Appointment not found.');
 
-        $this->authorize('reschedule', $appointment);
+        Gate::authorize('reschedule', $appointment);
 
         return response()->json([
             'data' => AppointmentResponseTransformer::transform($appointment),
@@ -390,7 +391,7 @@ class AppointmentController extends Controller
 
         abort_if($appointment === null, 404, 'Appointment not found.');
 
-        $this->authorize('checkIn', $appointment);
+        Gate::authorize('checkIn', $appointment);
 
         $billingCapture = $useCase->getLastAutoCaptureResult();
 
