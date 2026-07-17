@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { useQueryClient } from '@tanstack/vue-query';
 import { computed, ref } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -8,6 +8,12 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdmissionAdtTimelinePanel from '@/components/admissions/AdmissionAdtTimelinePanel.vue';
@@ -203,6 +209,16 @@ function availableTransitions(status: string | null): Transition[] {
     return [];
 }
 
+// Discharge is the common-case action for an admitted/transferred row —
+// keep it as the single visible button; Transfer/Cancel move into a
+// "More" overflow rather than three simultaneous row buttons.
+function primaryTransition(status: string | null): Transition | null {
+    return availableTransitions(status)[0] ?? null;
+}
+function secondaryTransitions(status: string | null): Transition[] {
+    return availableTransitions(status).slice(1);
+}
+
 const queryClient = useQueryClient();
 
 async function invalidateQueueAndCounts(): Promise<void> {
@@ -337,15 +353,19 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                     <div v-for="group in wardBedGroups" :key="group.wardName" class="space-y-1.5">
                                         <p class="text-xs font-semibold text-foreground">{{ group.wardName }}</p>
                                         <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                                            <div
+                                            <component
+                                                :is="bed.isOccupied && bed.occupiedByAdmissionId ? 'button' : 'div'"
                                                 v-for="bed in group.beds"
                                                 :key="bed.id"
-                                                :role="bed.isOccupied && bed.occupiedByAdmissionId ? 'button' : undefined"
-                                                :tabindex="bed.isOccupied && bed.occupiedByAdmissionId ? 0 : undefined"
-                                                class="rounded-md border px-2.5 py-1.5"
+                                                :type="bed.isOccupied && bed.occupiedByAdmissionId ? 'button' : undefined"
+                                                class="rounded-md border px-2.5 py-1.5 text-left"
                                                 :class="[bedCardClass(bed), bed.isOccupied && bed.occupiedByAdmissionId ? 'cursor-pointer transition-colors hover:bg-primary/10' : '']"
+                                                :aria-label="
+                                                    bed.isOccupied && bed.occupiedByAdmissionId
+                                                        ? `Go to admission ${bed.occupiedByAdmissionNumber ?? ''} occupying bed ${bed.bedNumber}`
+                                                        : undefined
+                                                "
                                                 @click="bed.isOccupied && bed.occupiedByAdmissionId ? goToOccupyingAdmission(bed) : undefined"
-                                                @keydown.enter="bed.isOccupied && bed.occupiedByAdmissionId ? goToOccupyingAdmission(bed) : undefined"
                                             >
                                                 <p class="text-xs font-medium text-foreground">{{ bed.bedNumber }}</p>
                                                 <p class="text-[11px] text-muted-foreground">
@@ -353,7 +373,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                                     <template v-else-if="bed.isOccupied">{{ bed.occupiedByAdmissionNumber ?? 'Occupied' }}</template>
                                                     <template v-else>Available</template>
                                                 </p>
-                                            </div>
+                                            </component>
                                         </div>
                                     </div>
                                 </template>
@@ -409,17 +429,30 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                     </div>
                                 </CollapsibleTrigger>
 
-                                <div v-if="canUpdateStatus" class="flex shrink-0 flex-wrap items-center justify-end gap-1">
+                                <div v-if="canUpdateStatus && primaryTransition(item.status)" class="flex shrink-0 flex-wrap items-center justify-end gap-1">
                                     <Button
-                                        v-for="transition in availableTransitions(item.status)"
-                                        :key="transition.target"
                                         size="sm"
-                                        :variant="transition.destructive ? 'ghost' : 'outline'"
-                                        :class="['h-7 px-2 text-xs', transition.destructive ? 'text-destructive hover:text-destructive' : '']"
-                                        @click="openStatusDialog(item, transition.target)"
+                                        :variant="primaryTransition(item.status)?.destructive ? 'ghost' : 'outline'"
+                                        :class="['h-7 px-2 text-xs', primaryTransition(item.status)?.destructive ? 'text-destructive hover:text-destructive' : '']"
+                                        @click="openStatusDialog(item, primaryTransition(item.status)!.target)"
                                     >
-                                        {{ transition.label }}
+                                        {{ primaryTransition(item.status)?.label }}
                                     </Button>
+                                    <DropdownMenu v-if="secondaryTransitions(item.status).length > 0">
+                                        <DropdownMenuTrigger as-child>
+                                            <Button size="sm" variant="ghost" class="h-7 px-2 text-xs">More</Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" class="w-40">
+                                            <DropdownMenuItem
+                                                v-for="transition in secondaryTransitions(item.status)"
+                                                :key="transition.target"
+                                                :class="['cursor-pointer text-sm', transition.destructive ? 'text-destructive' : '']"
+                                                @select="openStatusDialog(item, transition.target)"
+                                            >
+                                                {{ transition.label }}
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                 </div>
                             </div>
 
@@ -433,14 +466,14 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                                 </button>
                                             </template>
                                             <template #actions>
-                                                <a :href="`/patients/${item.patientId}/chart`" class="text-xs font-medium text-primary hover:underline">
+                                                <Link :href="`/patients/${item.patientId}/chart`" class="text-xs font-medium text-primary hover:underline">
                                                     View chart
-                                                </a>
+                                                </Link>
                                             </template>
                                         </PatientSummaryPopover>
-                                        <a v-if="item.appointmentId" :href="`/appointments/${item.appointmentId}`" class="text-xs font-medium text-primary hover:underline">
+                                        <Link v-if="item.appointmentId" :href="`/appointments/${item.appointmentId}`" class="text-xs font-medium text-primary hover:underline">
                                             View linked appointment
-                                        </a>
+                                        </Link>
                                         <button
                                             v-if="canViewAuditLogs"
                                             type="button"
