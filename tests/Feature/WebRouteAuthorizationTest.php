@@ -57,5 +57,5 @@ it('allows the platform users page when the user has platform users read permiss
 
     $this->actingAs($user)
         ->get('/platform/admin/users')
-        ->assertInertia(fn (Assert $page) => $page->component('platform/admin/users/Index'));
+        ->assertInertia(fn (Assert $page) => $page->component('platform/admin/users/IndexV2'));
 });

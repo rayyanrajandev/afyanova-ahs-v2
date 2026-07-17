@@ -429,9 +429,16 @@ Route::get('staff-privileges', function () {
     return Inertia::render('staff-privileges/Index');
 })->middleware(['auth', 'verified', 'can:staff.privileges.read', 'facility.entitlement:staff.privileges'])->name('staff-privileges.page');
 
+// Cut over to the rebuilt page (V2 architecture, matching patients/admissions) —
+// legacy Index.vue reached full parity and was deleted outright, no /legacy
+// rollback route kept, per the standing "no legacy patches, ever" directive.
 Route::get('platform/admin/users', function () {
-    return Inertia::render('platform/admin/users/Index');
+    return Inertia::render('platform/admin/users/IndexV2');
 })->middleware(['auth', 'verified', 'can:platform.users.read'])->name('platform-admin-users.page');
+
+Route::get('platform/admin/users/v2', function () {
+    return Inertia::render('platform/admin/users/IndexV2');
+})->middleware(['auth', 'verified', 'can:platform.users.read'])->name('platform-admin-users.page.v2');
 
 Route::get('platform/admin/user-approval-cases', function () {
     return Inertia::render('platform/admin/user-approval-cases/Index');
