@@ -86,7 +86,7 @@ function submit(): void {
                     </p>
                 </div>
 
-                <div v-if="hasParameters" class="max-h-60 overflow-y-auto rounded-lg border">
+                <div v-if="hasParameters" class="max-h-72 overflow-y-auto rounded-lg border">
                     <div class="grid grid-cols-3 gap-2 p-3">
                         <div
                             v-for="param in parameters"
@@ -109,7 +109,7 @@ function submit(): void {
                     </div>
                 </div>
 
-                <div v-else-if="order?.resultSummary" class="max-h-60 overflow-y-auto rounded-lg border bg-muted/20 p-3">
+                <div v-else-if="order?.resultSummary" class="max-h-72 overflow-y-auto rounded-lg border bg-muted/20 p-3">
                     <p class="whitespace-pre-line text-xs text-muted-foreground">
                         {{ order.resultSummary }}
                     </p>
