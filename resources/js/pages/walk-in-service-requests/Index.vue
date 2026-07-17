@@ -231,6 +231,23 @@ async function loadStatusCounts(): Promise<void> {
     }
 }
 
+function statusTabCount(value: string): number {
+    switch (value) {
+        case 'pending':
+            return statusCounts.value.pending;
+        case 'in_progress':
+            return statusCounts.value.in_progress;
+        case 'completed':
+            return statusCounts.value.completed;
+        case 'cancelled':
+            return statusCounts.value.cancelled;
+        case 'all':
+            return statusCounts.value.total;
+        default:
+            return 0;
+    }
+}
+
 // ─── Pagination helper ────────────────────────────────────────────────────────
 
 function buildPageList(current: number, last: number): (number | '...')[] {
@@ -1164,7 +1181,6 @@ onMounted(() => {
                         <div class="min-w-0 space-y-0.5">
                             <div class="flex flex-wrap items-center gap-2">
                                 <h1 class="text-base font-semibold tracking-tight md:text-lg">Direct Service Queue (Legacy)</h1>
-                                <Badge variant="secondary" class="h-5 px-1.5 text-[11px]">{{ statusCounts.total }} total</Badge>
                             </div>
                             <p class="truncate text-xs text-muted-foreground">
                                 Manage patients sent straight to laboratory, pharmacy, imaging, and procedure desks.
@@ -1202,50 +1218,6 @@ onMounted(() => {
                 </div>
             </section>
 
-            <!-- Status count bar -->
-            <div class="flex min-h-9 flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-4 py-2">
-                <span class="text-xs font-medium text-muted-foreground">Queue overview:</span>
-                <button
-                    type="button"
-                    class="flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-muted/60"
-                    :class="activeTab === 'pending' ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30' : 'border-border'"
-                    @click="activeTab = 'pending'"
-                >
-                    <span class="font-medium text-foreground">{{ statusCounts.pending }}</span>
-                    <span class="text-muted-foreground">Waiting</span>
-                </button>
-                <button
-                    type="button"
-                    class="flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-muted/60"
-                    :class="activeTab === 'in_progress' ? 'border-blue-300 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30' : 'border-border'"
-                    @click="activeTab = 'in_progress'"
-                >
-                    <span class="font-medium text-foreground">{{ statusCounts.in_progress }}</span>
-                    <span class="text-muted-foreground">Accepted</span>
-                </button>
-                <button
-                    type="button"
-                    class="flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-muted/60"
-                    :class="activeTab === 'completed' ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30' : 'border-border'"
-                    @click="activeTab = 'completed'"
-                >
-                    <span class="font-medium text-foreground">{{ statusCounts.completed }}</span>
-                    <span class="text-muted-foreground">Closed</span>
-                </button>
-                <button
-                    type="button"
-                    class="flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-muted/60"
-                    :class="activeTab === 'cancelled' ? 'border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30' : 'border-border'"
-                    @click="activeTab = 'cancelled'"
-                >
-                    <span class="font-medium text-foreground">{{ statusCounts.cancelled }}</span>
-                    <span class="text-muted-foreground">Cancelled</span>
-                </button>
-                <span class="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
-                    <span class="font-medium text-foreground">{{ statusCounts.total }}</span> total
-                </span>
-            </div>
-
             <!-- Error alert -->
             <Alert v-if="loadError" variant="destructive">
                 <AlertTitle class="flex items-center gap-2">
@@ -1261,6 +1233,7 @@ onMounted(() => {
                     <TabsTrigger v-for="tab in STATUS_TABS" :key="tab.value" :value="tab.value" class="gap-1.5">
                         <AppIcon :name="tab.icon" class="size-3.5" />
                         {{ tab.label }}
+                        <Badge variant="secondary" class="h-4 min-w-4 px-1 text-[11px]">{{ statusTabCount(tab.value) }}</Badge>
                     </TabsTrigger>
                 </TabsList>
 
