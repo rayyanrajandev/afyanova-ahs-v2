@@ -82,7 +82,6 @@ const highCount = computed(() => notifications.value.filter((n) => n.priority ==
 const kpis = computed(() => [
     { label: 'Critical', count: criticalCount.value, variant: 'destructive' as const },
     { label: 'High', count: highCount.value, variant: 'default' as const },
-    { label: 'Unread', count: unreadCount.value, variant: 'secondary' as const },
 ]);
 
 const filtered = computed(() => {
@@ -171,7 +170,7 @@ function priorityBadgeClass(p: string): string {
                         </div>
                     </div>
 
-                    <div class="mt-3 grid grid-cols-3 gap-2">
+                    <div class="mt-3 grid grid-cols-2 gap-2">
                         <div
                             v-for="kpi in kpis"
                             :key="kpi.label"

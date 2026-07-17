@@ -643,13 +643,8 @@ const selectedStaffSnapshotCards = computed(() => {
 
     return [
         {
-            label: 'Readiness',
-            value: credentialingStateLabel(summary.value.credentialingState, summary.value.blockingReasons),
-            tone: selectedStaffCredentialingComplete.value ? 'text-emerald-600' : 'text-amber-600',
-        },
-        {
             label: 'Registrations',
-            value: `${summary.value.registrationSummary.verified} verified / ${summary.value.registrationSummary.pendingVerification} pending`,
+            value: `${summary.value.registrationSummary.verified} verified`,
             tone: summary.value.registrationSummary.pendingVerification > 0 ? 'text-amber-600' : 'text-muted-foreground',
         },
         {

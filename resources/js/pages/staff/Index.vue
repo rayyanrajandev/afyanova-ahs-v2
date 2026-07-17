@@ -3321,7 +3321,7 @@ onMounted(refreshPage);
                             <div class="shrink-0 border-b bg-background px-4 py-2 sm:px-5">
                                 <div class="space-y-2.5">
                                     <div
-                                        class="grid gap-y-2 rounded-md bg-muted/20 px-3 py-2 text-xs sm:grid-cols-3 sm:divide-x sm:divide-border/50"
+                                        class="grid gap-y-2 rounded-md bg-muted/20 px-3 py-2 text-xs sm:grid-cols-2 sm:divide-x sm:divide-border/50"
                                     >
                                         <div class="min-w-0 sm:pr-3">
                                             <p class="font-medium tracking-[0.14em] text-muted-foreground uppercase">
@@ -3334,7 +3334,7 @@ onMounted(refreshPage);
                                                 {{ employmentTypeLabel(detailsSheetStaff.employmentType) }}
                                             </p>
                                         </div>
-                                        <div class="min-w-0 sm:px-3">
+                                        <div class="min-w-0 sm:pl-3">
                                             <p class="font-medium tracking-[0.14em] text-muted-foreground uppercase">
                                                 Credentialing
                                             </p>
@@ -3349,17 +3349,6 @@ onMounted(refreshPage);
                                             </p>
                                             <p class="truncate text-muted-foreground">
                                                 {{ linkedUserVerificationLabel(detailsSheetStaff) }}
-                                            </p>
-                                        </div>
-                                        <div class="min-w-0 sm:pl-3">
-                                            <p class="font-medium tracking-[0.14em] text-muted-foreground uppercase">
-                                                Records
-                                            </p>
-                                            <p class="mt-1 truncate text-sm font-medium text-foreground">
-                                                {{ detailsDocumentMeta?.total ?? detailsDocuments.length }} documents
-                                            </p>
-                                            <p class="truncate text-muted-foreground">
-                                                {{ detailsAuditMeta?.total ?? detailsAuditLogs.length }} audit events
                                             </p>
                                         </div>
                                     </div>
