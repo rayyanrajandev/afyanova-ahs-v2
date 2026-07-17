@@ -85,6 +85,16 @@ describe('laboratoryClinicalSignal', () => {
     it('labels a pending order as Pending result', () => {
         expect(laboratoryClinicalSignal(labOrder({ status: 'ordered' })).label).toBe('Pending result');
     });
+
+    it('marks Critical/Abnormal results as notable but a plain completed result as not notable', () => {
+        // Notable signals carry meaning the "Completed" status chip doesn't —
+        // cards render a second badge only for these.
+        expect(laboratoryClinicalSignal(labOrder({ status: 'completed', resultSummary: 'Result flag: critical' })).notable).toBe(true);
+        expect(laboratoryClinicalSignal(labOrder({ status: 'completed', resultSummary: 'Result flag: abnormal' })).notable).toBe(true);
+        // A normal completed result just restates the status — suppress the duplicate badge.
+        expect(laboratoryClinicalSignal(labOrder({ status: 'completed', resultSummary: 'Result flag: normal' })).notable).toBe(false);
+        expect(laboratoryClinicalSignal(labOrder({ status: 'ordered' })).notable).toBe(false);
+    });
 });
 
 describe('radiologyClinicalSignal', () => {

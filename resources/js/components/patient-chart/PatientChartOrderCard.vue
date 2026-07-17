@@ -52,7 +52,11 @@ const opensInline = computed(
             <Badge :variant="card.statusVariant">{{ card.statusLabel }}</Badge>
         </div>
 
-        <div v-if="card.signal" class="mt-2 flex flex-wrap items-center gap-2">
+        <!-- Only surface the clinical signal when it adds meaning beyond the
+             "Completed" status chip (Critical / Abnormal / Inconclusive). The
+             non-notable "Result complete" case just restated the status — the
+             soft surface tint already conveys "in and normal". -->
+        <div v-if="card.signal?.notable" class="mt-2 flex flex-wrap items-center gap-2">
             <Badge :variant="card.signal.variant">{{ card.signal.label }}</Badge>
         </div>
 

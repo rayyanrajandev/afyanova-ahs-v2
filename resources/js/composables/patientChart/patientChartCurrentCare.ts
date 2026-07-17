@@ -50,6 +50,14 @@ export type ClinicalSignalDescriptor = {
     label: string;
     variant: 'default' | 'secondary' | 'outline' | 'destructive';
     surfaceClass: string;
+    /**
+     * True only when the signal carries clinical meaning the plain status
+     * badge doesn't already convey — Critical / Abnormal / Inconclusive.
+     * "Result complete" / "Report complete" / "Pending" / cancelled just
+     * restate (or read worse than) the status chip, so cards suppress the
+     * duplicate badge for those and keep the soft surface tint instead.
+     */
+    notable: boolean;
 };
 
 function workflowStatusVariantFallback(status: string | null | undefined): 'default' | 'secondary' | 'outline' | 'destructive' {
@@ -88,27 +96,28 @@ export function laboratoryClinicalSignal(order: PatientChartLaboratoryOrder): Cl
 
     if (status === 'completed') {
         if (resultFlag === 'critical') {
-            return { label: 'Critical result', variant: 'destructive', surfaceClass: 'border-destructive/30 bg-destructive/5' };
+            return { label: 'Critical result', variant: 'destructive', surfaceClass: 'border-destructive/30 bg-destructive/5', notable: true };
         }
         if (resultFlag === 'abnormal' || resultFlag === 'inconclusive') {
             return {
                 label: resultFlag === 'inconclusive' ? 'Inconclusive result' : 'Abnormal result',
                 variant: 'secondary',
                 surfaceClass: 'border-amber-500/30 bg-amber-500/5',
+                notable: true,
             };
         }
-        return { label: 'Result complete', variant: 'default', surfaceClass: 'border-emerald-500/25 bg-emerald-500/5' };
+        return { label: 'Result complete', variant: 'default', surfaceClass: 'border-emerald-500/25 bg-emerald-500/5', notable: false };
     }
 
     if (['ordered', 'collected', 'in_progress'].includes(status)) {
-        return { label: 'Pending result', variant: 'secondary', surfaceClass: 'border-border bg-background' };
+        return { label: 'Pending result', variant: 'secondary', surfaceClass: 'border-border bg-background', notable: false };
     }
 
     if (status === 'cancelled' || status === 'entered_in_error') {
-        return { label: status, variant: 'destructive', surfaceClass: 'border-destructive/20 bg-destructive/5' };
+        return { label: status, variant: 'destructive', surfaceClass: 'border-destructive/20 bg-destructive/5', notable: false };
     }
 
-    return { label: 'In workflow', variant: workflowStatusVariantFallback(order.status), surfaceClass: 'border-border bg-background' };
+    return { label: 'In workflow', variant: workflowStatusVariantFallback(order.status), surfaceClass: 'border-border bg-background', notable: false };
 }
 
 export function radiologyClinicalSignal(order: PatientChartRadiologyOrder): ClinicalSignalDescriptor {
@@ -122,7 +131,7 @@ export function radiologyClinicalSignal(order: PatientChartRadiologyOrder): Clin
             summary.includes('immediate clinical action') ||
             summary.includes('escalate')
         ) {
-            return { label: 'Critical report', variant: 'destructive', surfaceClass: 'border-destructive/30 bg-destructive/5' };
+            return { label: 'Critical report', variant: 'destructive', surfaceClass: 'border-destructive/30 bg-destructive/5', notable: true };
         }
 
         if (summary !== '') {
@@ -133,23 +142,23 @@ export function radiologyClinicalSignal(order: PatientChartRadiologyOrder): Clin
                 summary.includes('unremarkable');
 
             if (looksNormal) {
-                return { label: 'Report complete', variant: 'default', surfaceClass: 'border-emerald-500/25 bg-emerald-500/5' };
+                return { label: 'Report complete', variant: 'default', surfaceClass: 'border-emerald-500/25 bg-emerald-500/5', notable: false };
             }
-            return { label: 'Abnormal report', variant: 'secondary', surfaceClass: 'border-amber-500/30 bg-amber-500/5' };
+            return { label: 'Abnormal report', variant: 'secondary', surfaceClass: 'border-amber-500/30 bg-amber-500/5', notable: true };
         }
 
-        return { label: 'Report complete', variant: 'default', surfaceClass: 'border-emerald-500/25 bg-emerald-500/5' };
+        return { label: 'Report complete', variant: 'default', surfaceClass: 'border-emerald-500/25 bg-emerald-500/5', notable: false };
     }
 
     if (['ordered', 'scheduled', 'in_progress'].includes(status)) {
-        return { label: 'Pending report', variant: 'secondary', surfaceClass: 'border-border bg-background' };
+        return { label: 'Pending report', variant: 'secondary', surfaceClass: 'border-border bg-background', notable: false };
     }
 
     if (status === 'cancelled' || status === 'entered_in_error') {
-        return { label: status, variant: 'destructive', surfaceClass: 'border-destructive/20 bg-destructive/5' };
+        return { label: status, variant: 'destructive', surfaceClass: 'border-destructive/20 bg-destructive/5', notable: false };
     }
 
-    return { label: 'In workflow', variant: workflowStatusVariantFallback(order.status), surfaceClass: 'border-border bg-background' };
+    return { label: 'In workflow', variant: workflowStatusVariantFallback(order.status), surfaceClass: 'border-border bg-background', notable: false };
 }
 
 export function isCurrentLaboratoryOrder(order: PatientChartLaboratoryOrder): boolean {
