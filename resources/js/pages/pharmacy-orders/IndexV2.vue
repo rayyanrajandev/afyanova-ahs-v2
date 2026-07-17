@@ -7,6 +7,12 @@ import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -679,26 +685,36 @@ function openAuditSheet(order: PharmacyOrder): void {
                                             >
                                                 {{ effectiveNextAction(order)?.label }}
                                             </Button>
-                                            <Button
-                                                v-if="canManagePolicy && effectiveNextAction(order)?.key !== 'review_policy'"
-                                                size="sm"
-                                                variant="outline"
-                                                class="h-7 px-2 text-xs"
-                                                :disabled="actionLoadingId === order.id"
-                                                @click="openPolicyDialog(order)"
+                                            <!-- Policy + Cancel/Discontinue are lower-frequency than the
+                                                 primary action — folded into one overflow menu so this row
+                                                 doesn't run denser than Lab/Radiology's equivalent (max 3
+                                                 visible controls: primary action, More, audit log). -->
+                                            <DropdownMenu
+                                                v-if="
+                                                    (canManagePolicy && effectiveNextAction(order)?.key !== 'review_policy') ||
+                                                    (canApplyLifecycleAction && order.status !== 'cancelled' && order.status !== 'dispensed' && !order.enteredInErrorAt)
+                                                "
                                             >
-                                                Policy
-                                            </Button>
-                                            <Button
-                                                v-if="canApplyLifecycleAction && order.status !== 'cancelled' && !order.enteredInErrorAt"
-                                                size="sm"
-                                                variant="outline"
-                                                class="h-7 px-2 text-xs"
-                                                :disabled="actionLoadingId === order.id"
-                                                @click="openLifecycleDialog(order, order.quantityDispensed && order.quantityDispensed > 0 ? 'discontinue' : 'cancel')"
-                                            >
-                                                {{ order.quantityDispensed && order.quantityDispensed > 0 ? 'Discontinue' : 'Cancel' }}
-                                            </Button>
+                                                <DropdownMenuTrigger as-child>
+                                                    <Button size="sm" variant="outline" class="h-7 px-2 text-xs" :disabled="actionLoadingId === order.id">More</Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" class="w-44">
+                                                    <DropdownMenuItem
+                                                        v-if="canManagePolicy && effectiveNextAction(order)?.key !== 'review_policy'"
+                                                        class="cursor-pointer text-sm"
+                                                        @select="openPolicyDialog(order)"
+                                                    >
+                                                        Policy
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        v-if="canApplyLifecycleAction && order.status !== 'cancelled' && order.status !== 'dispensed' && !order.enteredInErrorAt"
+                                                        class="cursor-pointer text-sm text-destructive"
+                                                        @select="openLifecycleDialog(order, order.quantityDispensed && order.quantityDispensed > 0 ? 'discontinue' : 'cancel')"
+                                                    >
+                                                        {{ order.quantityDispensed && order.quantityDispensed > 0 ? 'Discontinue' : 'Cancel' }}
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                             <Button
                                                 v-if="canViewAuditLogs"
                                                 size="sm"

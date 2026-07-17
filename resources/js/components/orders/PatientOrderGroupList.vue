@@ -1,11 +1,8 @@
 <script setup lang="ts" generic="T extends DirectServiceOrderLike">
+import { Link } from '@inertiajs/vue3';
 import AppIcon from '@/components/AppIcon.vue';
 import { Badge } from '@/components/ui/badge';
-import {
-    Collapsible,
-    CollapsibleContent,
-    CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import PatientSummaryPopover from '@/components/patients/summary/PatientSummaryPopover.vue';
 import type { DirectServiceOrderLike, PatientOrderGroup } from '@/lib/directServicePatientWorklist';
 
@@ -33,28 +30,39 @@ const emit = defineEmits<{
             class="overflow-hidden rounded-lg border bg-background"
             @update:open="(open) => emit('update:expanded', group.patientId, open)"
         >
-            <CollapsibleTrigger
-                class="flex w-full items-start justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/40 [&[data-state=open]>div>.chevron]:rotate-180"
+            <!--
+                Not CollapsibleTrigger: that renders one real <button> around
+                everything inside it, and the patient-name popover trigger
+                needs to be its own independently-focusable control in the
+                same header — nesting a role="button" span inside a real
+                <button> is invalid and unreliable for AT/keyboard users
+                (see reports/v2-navigation-actions-ux-audit.md §8.1). Instead
+                the header is a plain clickable div (mouse convenience only —
+                not required for a11y) with two real, sibling <button>s: the
+                patient name (opens the popover) and the chevron (toggles
+                expansion, with aria-expanded/aria-controls wired manually
+                since Collapsible's own trigger isn't used).
+            -->
+            <div
+                class="flex w-full cursor-pointer items-start justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/40"
+                @click="emit('update:expanded', group.patientId, !isExpanded(group.patientId))"
             >
                 <div class="min-w-0 space-y-1">
                     <div class="flex flex-wrap items-center gap-2">
                         <PatientSummaryPopover :patient-id="group.patientId">
                             <template #trigger>
-                                <span
-                                    role="button"
-                                    tabindex="0"
+                                <button
+                                    type="button"
                                     class="text-sm font-semibold text-foreground hover:underline"
                                     @click.stop
-                                    @keydown.enter.stop
-                                    @keydown.space.stop.prevent
                                 >
                                     {{ group.patientLabel }}
-                                </span>
+                                </button>
                             </template>
                             <template #actions>
-                                <a :href="`/patients/${group.patientId}/chart`" class="text-xs font-medium text-primary hover:underline">
+                                <Link :href="`/patients/${group.patientId}/chart`" class="text-xs font-medium text-primary hover:underline">
                                     View chart
-                                </a>
+                                </Link>
                             </template>
                         </PatientSummaryPopover>
                         <Badge variant="secondary" class="tabular-nums">
@@ -72,14 +80,21 @@ const emit = defineEmits<{
                         {{ group.summarySubtitle }}
                     </p>
                 </div>
-                <div class="flex shrink-0 items-center pt-0.5">
+                <button
+                    type="button"
+                    class="flex shrink-0 items-center pt-0.5"
+                    :aria-expanded="isExpanded(group.patientId)"
+                    :aria-controls="`patient-order-group-${group.patientId}`"
+                    :aria-label="isExpanded(group.patientId) ? 'Collapse patient orders' : 'Expand patient orders'"
+                    @click.stop="emit('update:expanded', group.patientId, !isExpanded(group.patientId))"
+                >
                     <AppIcon
                         name="chevron-down"
-                        class="chevron size-4 text-muted-foreground transition-transform duration-200"
+                        :class="['chevron size-4 text-muted-foreground transition-transform duration-200', isExpanded(group.patientId) ? 'rotate-180' : '']"
                     />
-                </div>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
+                </button>
+            </div>
+            <CollapsibleContent :id="`patient-order-group-${group.patientId}`">
                 <div
                     class="space-y-2 border-t bg-muted/10 p-2"
                     :class="compact ? 'space-y-2' : 'space-y-3'"
