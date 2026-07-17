@@ -222,6 +222,30 @@ const allEntries = computed<ReceptionQueueEntry[]>(() => [
 ]);
 const totalInQueue = computed(() => allEntries.value.length);
 
+/**
+ * Replaces the "Completed today" card (removed — it duplicated no tab, but was
+ * still just a status count) with a real operational KPI: average time currently-
+ * waiting patients have been waiting, using the same server-computed `waitMinutes`
+ * ReceptionQueueList.vue already displays per-row.
+ */
+const avgWaitMinutes = computed(() => {
+    const waitingEntries = (waitingProviderQueue.data.value?.data ?? []).filter(
+        (entry) => !entry.consultationStartedAt && entry.waitMinutes !== null,
+    );
+    if (waitingEntries.length === 0) return null;
+    const total = waitingEntries.reduce((sum, entry) => sum + (entry.waitMinutes ?? 0), 0);
+    return Math.round(total / waitingEntries.length);
+});
+
+function formatAvgWait(minutes: number | null): string {
+    if (minutes === null) return '—';
+    if (minutes < 1) return '<1m';
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    const remainder = minutes % 60;
+    return remainder > 0 ? `${hours}h ${remainder}m` : `${hours}h`;
+}
+
 const activeTab = ref<'all' | 'waiting' | 'on_hold' | 'in_progress'>('all');
 
 const filteredEntries = computed<ReceptionQueueEntry[]>(() => {
@@ -427,25 +451,12 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         </div>
                         <p class="text-xs text-muted-foreground">Your patients waiting for review or already in consultation.</p>
                     </div>
-                    <Badge variant="secondary">{{ totalInQueue }} in queue</Badge>
                 </div>
 
-                <div v-if="canRead" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Waiting</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.waiting ?? '—' }}</p>
-                    </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">On hold</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.onHold ?? '—' }}</p>
-                    </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">In progress</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.inProgress ?? '—' }}</p>
-                    </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Completed today</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.completed ?? '—' }}</p>
+                <div v-if="canRead" class="mt-3">
+                    <div class="w-fit rounded-md border bg-muted/50 px-2.5 py-1.5">
+                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Avg wait time</p>
+                        <p class="text-sm font-bold tabular-nums">{{ formatAvgWait(avgWaitMinutes) }}</p>
                     </div>
                 </div>
 

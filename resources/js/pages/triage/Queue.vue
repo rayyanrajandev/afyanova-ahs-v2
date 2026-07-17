@@ -311,25 +311,6 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     <Badge v-if="queue.data.value" variant="secondary">{{ queue.data.value.data.length }} waiting</Badge>
                 </div>
 
-                <div v-if="canRead" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Waiting</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.waiting ?? '—' }}</p>
-                    </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">In progress</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.inProgress ?? '—' }}</p>
-                    </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Completed today</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.completed ?? '—' }}</p>
-                    </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Cancelled today</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.cancelled ?? '—' }}</p>
-                    </div>
-                </div>
-
                 <Tabs v-if="canRead" v-model="activeTab" class="mt-3">
                     <TabsList class="grid w-full grid-cols-4">
                         <TabsTrigger value="all" class="inline-flex items-center gap-1.5">

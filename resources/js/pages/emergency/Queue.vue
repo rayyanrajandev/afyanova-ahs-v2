@@ -289,25 +289,6 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     </div>
                 </div>
 
-                <div v-if="canRead" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Waiting</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.waiting ?? '—' }}</p>
-                    </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Triaged</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.triaged ?? '—' }}</p>
-                    </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">In treatment</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.in_treatment ?? '—' }}</p>
-                    </div>
-                    <div class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Total</p>
-                        <p class="text-sm font-bold tabular-nums">{{ statusCounts.data.value?.total ?? '—' }}</p>
-                    </div>
-                </div>
-
                 <Tabs v-if="canRead" :model-value="filters.status || 'all'" class="mt-3" @update:model-value="setStatus">
                     <TabsList class="grid w-full grid-cols-4">
                         <TabsTrigger value="all" class="inline-flex items-center gap-1.5">

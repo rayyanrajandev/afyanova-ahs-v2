@@ -263,12 +263,6 @@ async function handleCheckIn(appointmentId: string): Promise<void> {
     }
 }
 
-const kpis = computed(() => [
-    { value: 'waiting_triage' as const, label: 'Waiting for triage', count: statusCounts.data.value?.waiting_triage ?? null },
-    { value: 'waiting_provider' as const, label: 'Waiting for provider', count: statusCounts.data.value?.waiting_provider ?? null },
-    { value: 'scheduled_today' as const, label: 'Scheduled today', count: scheduledQuery.data.value?.length ?? null },
-]);
-
 // --- Start a visit ----------------------------------------------------
 // Patient search itself lives in PatientQuickSearchField.vue /
 // usePatientQuickSearch.ts (extracted out of this file — it used to
@@ -398,13 +392,6 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     <p class="text-xs text-muted-foreground">
                         Emergency arrivals first, then scheduled, then walk-in — oldest wait first within each group.
                     </p>
-                </div>
-
-                <div v-if="canReadAppointments" class="mt-3 grid grid-cols-3 gap-2">
-                    <div v-for="kpi in kpis" :key="kpi.value" class="rounded-md border bg-muted/50 px-2.5 py-1.5">
-                        <p class="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">{{ kpi.label }}</p>
-                        <p class="text-sm font-bold tabular-nums">{{ kpi.count ?? '—' }}</p>
-                    </div>
                 </div>
 
                 <TabsList v-if="canReadAppointments" class="mt-3 grid w-full grid-cols-3">
