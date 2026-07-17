@@ -245,6 +245,14 @@ function primaryActionHandler(order: LaboratoryOrder): (() => void) | null {
     }
 }
 
+function primaryActionLabel(order: LaboratoryOrder): string {
+    const label = order.currentCare?.nextAction?.label ?? '';
+    if (order.currentCare?.nextAction?.key === 'review_result' && !order.verifiedAt) {
+        return 'Verify result';
+    }
+    return label;
+}
+
 function primaryActionButtonVariant(order: LaboratoryOrder): 'default' | 'destructive' | 'outline' {
     switch (order.currentCare?.nextAction?.emphasis) {
         case 'warning':
@@ -611,7 +619,7 @@ function openAuditSheet(order: LaboratoryOrder): void {
                                                 :disabled="actionLoadingId === order.id"
                                                 @click="primaryActionHandler(order)?.()"
                                             >
-                                                {{ order.currentCare?.nextAction?.label }}
+                                                {{ primaryActionLabel(order) }}
                                             </Button>
                                             <Button
                                                 v-if="canApplyLifecycleAction && order.status !== 'cancelled' && order.status !== 'completed' && !order.enteredInErrorAt"
