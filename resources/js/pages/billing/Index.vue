@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { watchDebounced } from '@vueuse/core';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import InventoryEmptyState from '@/components/inventory/InventoryEmptyState.vue';
 import RegistryListRow from '@/components/list/RegistryListRow.vue';
@@ -155,6 +155,12 @@ const undoTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const mobileView = ref<'queue' | 'detail'>('queue');
 const isMobile = ref(false);
 
+// Deep-link support from patientChartModuleHref('/billing-invoices', ..., {
+// focusInvoiceId }) — see loadPatientByIdDirect() below.
+const deepLinkParams = new URLSearchParams(window.location.search);
+const deepLinkPatientId = deepLinkParams.get('patientId');
+const focusInvoiceId = ref(deepLinkParams.get('focusInvoiceId'));
+
 const csrfToken = (): string | null => {
     const meta = document.querySelector('meta[name="csrf-token"]');
     return meta?.getAttribute('content') ?? null;
@@ -286,6 +292,82 @@ async function selectPatient(entry: CashierQueueEntry) {
             error instanceof Error
                 ? error.message
                 : 'Unable to load patient details.',
+        );
+    } finally {
+        patientInvoicesLoading.value = false;
+        chargeCandidatesLoading.value = false;
+    }
+}
+
+/**
+ * Deep-link entry point from patientChartModuleHref('/billing-invoices',
+ * ..., { focusInvoiceId }) — the Patient Chart's Billing tab links straight
+ * to one invoice. The cashier queue only lists patients with pending
+ * payment/unbilled/in-consultation activity (see ListCashierQueueUseCase),
+ * so a fully-paid patient's invoice history may never appear there; this
+ * loads that patient's invoices directly instead of requiring queue
+ * selection, computing the same unpaid/paid summary the queue endpoint
+ * would (see ListCashierQueueUseCase::buildQueueEntries).
+ */
+async function loadPatientByIdDirect(targetPatientId: string): Promise<void> {
+    patientInvoices.value = [];
+    chargeCaptureCandidates.value = [];
+    selectedInvoiceIds.value.clear();
+
+    if (isMobile.value) mobileView.value = 'detail';
+
+    patientInvoicesLoading.value = true;
+    chargeCandidatesLoading.value = true;
+
+    try {
+        const [patientResponse, invoicesResponse, candidatesResponse] = await Promise.all([
+            apiRequest<{ data: { patientNumber: string | null; firstName: string | null; lastName: string | null; phone: string | null } }>(
+                'GET',
+                `/patients/${targetPatientId}`,
+            ).catch(() => null),
+            apiRequest<{ data: Invoice[] }>('GET', '/billing-invoices', {
+                query: {
+                    patientId: targetPatientId,
+                    perPage: 50,
+                    sortBy: 'invoiceDate',
+                    sortDir: 'desc',
+                },
+            }),
+            apiRequest<{ data: any[] }>('GET', '/billing-invoices/charge-capture-candidates', {
+                query: {
+                    patientId: targetPatientId,
+                    includeInvoiced: 'false',
+                    limit: 100,
+                },
+            }),
+        ]);
+
+        patientInvoices.value = invoicesResponse.data;
+        chargeCaptureCandidates.value = candidatesResponse.data;
+
+        const unpaidInvoices = invoicesResponse.data.filter((inv) => inv.status !== 'cancelled' && inv.status !== 'voided' && inv.balanceAmount > 0);
+        const paidInvoices = invoicesResponse.data.filter((inv) => inv.status !== 'cancelled' && inv.status !== 'voided' && inv.balanceAmount <= 0);
+        const patient = patientResponse?.data ?? null;
+        const patientName = patient ? [patient.firstName, patient.lastName].filter(Boolean).join(' ').trim() : '';
+
+        selectedPatient.value = {
+            patientId: targetPatientId,
+            patientNumber: patient?.patientNumber ?? '',
+            patientName: patientName || 'Patient',
+            phone: patient?.phone ?? null,
+            unpaidInvoiceCount: unpaidInvoices.length,
+            totalUnpaidAmount: unpaidInvoices.reduce((sum, inv) => sum + inv.balanceAmount, 0),
+            paidInvoiceCount: paidInvoices.length,
+            totalPaidAmount: paidInvoices.reduce((sum, inv) => sum + inv.paidAmount, 0),
+            unbilledServiceCount: candidatesResponse.data.length,
+            inConsultation: false,
+            summaryLabel: '',
+        };
+    } catch (error) {
+        notifyError(
+            error instanceof Error
+                ? error.message
+                : 'Unable to load patient billing details.',
         );
     } finally {
         patientInvoicesLoading.value = false;
@@ -767,6 +849,16 @@ onMounted(() => {
     checkMobile();
     window.addEventListener('keydown', handleKeydown);
     window.addEventListener('resize', checkMobile);
+    if (deepLinkPatientId) {
+        loadPatientByIdDirect(deepLinkPatientId);
+    }
+});
+
+watch(patientInvoices, async (list) => {
+    if (!focusInvoiceId.value) return;
+    if (!list.some((inv) => inv.id === focusInvoiceId.value)) return;
+    await nextTick();
+    document.getElementById(`billing-invoice-${focusInvoiceId.value}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 });
 
 onBeforeUnmount(() => {
@@ -1204,8 +1296,9 @@ watch(showPaymentDialog, (open) => {
 
                                         <div
                                             v-for="invoice in patientInvoices"
+                                            :id="`billing-invoice-${invoice.id}`"
                                             :key="invoice.id"
-                                            class="rounded-lg border p-3"
+                                            :class="['rounded-lg border p-3 transition-colors', invoice.id === focusInvoiceId ? 'border-primary ring-2 ring-primary/40' : '']"
                                         >
                                             <div class="flex items-start justify-between gap-2">
                                                 <div class="flex items-start gap-2">

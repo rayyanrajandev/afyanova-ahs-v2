@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query';
 import { Head, Link } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -470,6 +470,22 @@ function scrollToMedicationWorkspaceSection(section: keyof typeof medicationWork
     document.getElementById(medicationWorkspaceSectionIds[section])?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+/**
+ * Overview quick-stat tiles glance at data that lives on another tab —
+ * clicking one should take the user there, same as "Next step" already
+ * does for the timeline. Waits a tick so the target TabsContent (kept in
+ * the DOM but hidden while inactive) is visible before scrollIntoView runs.
+ */
+function openOverviewSummaryTab(
+    tab: 'medications' | 'orders' | 'records',
+    section?: keyof typeof medicationWorkspaceSectionIds,
+): void {
+    activeTab.value = tab;
+    if (section) {
+        nextTick(() => scrollToMedicationWorkspaceSection(section));
+    }
+}
+
 const patientDemographics = computed(() => {
     if (!patient.value) return null;
     return [patient.value.gender || 'Gender not recorded', ageLabel(patient.value.dateOfBirth), patient.value.patientNumber]
@@ -613,7 +629,9 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                             <button
                                 type="button"
-                                class="rounded-lg border bg-background px-4 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                                class="rounded-lg border bg-background px-4 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-border disabled:hover:bg-background"
+                                :disabled="!hasMedicationWorkspaceAccess"
+                                @click="openOverviewSummaryTab('medications', 'allergies')"
                             >
                                 <p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Allergy safety</p>
                                 <p class="mt-2 text-sm font-medium text-foreground">
@@ -624,7 +642,9 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                             </button>
                             <button
                                 type="button"
-                                class="rounded-lg border bg-background px-4 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                                class="rounded-lg border bg-background px-4 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-border disabled:hover:bg-background"
+                                :disabled="!hasOrdersAndResultsAccess"
+                                @click="openOverviewSummaryTab('orders')"
                             >
                                 <p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Active care</p>
                                 <p class="mt-2 text-sm font-medium text-foreground">
@@ -634,7 +654,9 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                             </button>
                             <button
                                 type="button"
-                                class="rounded-lg border bg-background px-4 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                                class="rounded-lg border bg-background px-4 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-border disabled:hover:bg-background"
+                                :disabled="!canReadMedicalRecords"
+                                @click="openOverviewSummaryTab('records')"
                             >
                                 <p class="text-xs font-medium tracking-wide text-muted-foreground uppercase">Problem focus</p>
                                 <p class="mt-2 text-sm text-foreground">
@@ -769,7 +791,12 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                         </div>
                                         <p class="mt-1 text-[10px] text-muted-foreground">{{ formatDateTime(structuredVitals.recordedAt) }}</p>
                                         <div v-if="vitalsHistory.length" class="mt-2">
-                                            <button class="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground" @click="showVitalsHistory = !showVitalsHistory">
+                                            <button
+                                                type="button"
+                                                class="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                                                :aria-expanded="showVitalsHistory"
+                                                @click="showVitalsHistory = !showVitalsHistory"
+                                            >
                                                 <AppIcon :name="showVitalsHistory ? 'chevron-down' : 'chevron-right'" class="size-3" />
                                                 {{ vitalsHistory.length }} previous set{{ vitalsHistory.length === 1 ? '' : 's' }}
                                             </button>
@@ -1662,7 +1689,12 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                     </template>
                                     <template v-else>
                                         <div class="grid gap-2">
-                                            <div v-for="invoice in billingInvoices" :key="`chart-billing-invoice-${invoice.id}`" class="rounded-lg border bg-background px-3 py-2.5">
+                                            <Link
+                                                v-for="invoice in billingInvoices"
+                                                :key="`chart-billing-invoice-${invoice.id}`"
+                                                :href="patientChartModuleHref('/billing-invoices', props.patientId, primaryVisit?.id ?? null, { includeAppointment: false, focusInvoiceId: invoice.id })"
+                                                class="block rounded-lg border bg-background px-3 py-2.5 transition hover:border-primary/40 hover:bg-primary/5"
+                                            >
                                                 <div class="flex items-start justify-between gap-2">
                                                     <div class="min-w-0">
                                                         <p class="truncate text-sm font-medium text-foreground">{{ invoice.invoiceNumber || 'Invoice pending number' }}</p>
@@ -1678,7 +1710,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                                     <span>Balance {{ formatMoney(invoice.balanceAmount, invoice.currencyCode) }}</span>
                                                 </div>
                                                 <p v-if="invoice.notes" class="mt-2 text-xs text-muted-foreground">{{ truncatePlainText(invoice.notes, 220) }}</p>
-                                            </div>
+                                            </Link>
                                         </div>
                                     </template>
                                 </div>
