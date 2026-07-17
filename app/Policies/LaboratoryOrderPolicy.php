@@ -46,18 +46,24 @@ class LaboratoryOrderPolicy
             || $order->status === LaboratoryOrderStatus::COLLECTED->value;
     }
 
-    public function verifyResult(User $user, LaboratoryOrderModel $order): bool
+    /**
+     * @param  array<string, mixed>  $order
+     */
+    public function verifyResult(User $user, array $order): bool
     {
         if (! $user->hasPermissionTo('lab.result.verify')) {
             return false;
         }
 
-        if ($order->ordered_by_user_id === $user->id) {
+        if (($order['ordered_by_user_id'] ?? null) === $user->id) {
             return false;
         }
 
-        return $order->status === LaboratoryOrderStatus::IN_PROGRESS->value
-            || $order->status === LaboratoryOrderStatus::COLLECTED->value;
+        $status = $order['status'] ?? null;
+
+        return $status === LaboratoryOrderStatus::COMPLETED->value
+            || $status === LaboratoryOrderStatus::IN_PROGRESS->value
+            || $status === LaboratoryOrderStatus::COLLECTED->value;
     }
 
     public function releaseResult(User $user, LaboratoryOrderModel $order): bool
