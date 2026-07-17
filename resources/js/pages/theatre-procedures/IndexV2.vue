@@ -7,6 +7,12 @@ import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -476,9 +482,20 @@ function openAuditSheet(order: TheatreProcedure): void {
                                 class="rounded-lg border bg-card px-3.5 py-2.5 shadow-sm transition-colors"
                             >
                                 <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                                    <button type="button" class="min-w-0 flex-1 space-y-1 text-left" @click="openDetail(order)">
+                                    <!-- Plain clickable div, not a <button>: the patient-name popover
+                                         trigger below needs to be its own independently-focusable
+                                         control in this same block, and nesting one interactive
+                                         element inside another is invalid/unreliable for AT and
+                                         keyboard users (see reports/v2-navigation-actions-ux-audit.md
+                                         §8.1/§11.1). The procedure name is its own real sibling
+                                         <button> so keyboard users have a direct way to open detail;
+                                         the div's own @click is a mouse-only convenience layered on
+                                         top. -->
+                                    <div class="min-w-0 flex-1 cursor-pointer space-y-1" @click="openDetail(order)">
                                         <div class="flex flex-wrap items-center gap-2">
-                                            <p class="truncate text-sm font-medium text-foreground">{{ orderLabel(order) }}</p>
+                                            <button type="button" class="truncate text-left text-sm font-medium text-foreground hover:underline" @click.stop="openDetail(order)">
+                                                {{ orderLabel(order) }}
+                                            </button>
                                             <Badge :variant="statusBadgeVariant(order.status)" class="text-[10px] leading-none">
                                                 {{ formatEnumLabel(order.status) }}
                                             </Badge>
@@ -489,28 +506,21 @@ function openAuditSheet(order: TheatreProcedure): void {
                                         <p class="text-xs text-muted-foreground">
                                             <PatientSummaryPopover v-if="order.patientId" :patient-id="order.patientId">
                                                 <template #trigger>
-                                                    <span
-                                                        role="button"
-                                                        tabindex="0"
-                                                        class="hover:underline"
-                                                        @click.stop
-                                                        @keydown.enter.stop
-                                                        @keydown.space.stop.prevent
-                                                    >
+                                                    <button type="button" class="hover:underline" @click.stop>
                                                         {{ order.patientLabel || order.patientNumber || 'Unknown patient' }}
-                                                    </span>
+                                                    </button>
                                                 </template>
                                                 <template #actions>
-                                                    <a :href="`/patients/${order.patientId}/chart`" class="text-xs font-medium text-primary hover:underline">
+                                                    <Link :href="`/patients/${order.patientId}/chart`" class="text-xs font-medium text-primary hover:underline">
                                                         View chart
-                                                    </a>
+                                                    </Link>
                                                 </template>
                                             </PatientSummaryPopover>
                                             <span v-else>{{ order.patientLabel || order.patientNumber || 'Unknown patient' }}</span>
                                             <span v-if="clinicianLabel(order.operatingClinicianUserId)"> · {{ clinicianLabel(order.operatingClinicianUserId) }}</span>
                                             <span> · {{ formatScheduledAt(order.scheduledAt) }}</span>
                                         </p>
-                                    </button>
+                                    </div>
                                     <div class="flex shrink-0 flex-wrap items-center gap-1.5">
                                         <Button
                                             v-if="order.currentCare?.nextAction && primaryActionAllowed(order)"
@@ -522,26 +532,35 @@ function openAuditSheet(order: TheatreProcedure): void {
                                         >
                                             {{ order.currentCare?.nextAction?.label }}
                                         </Button>
-                                        <Button
-                                            v-if="canApplyLifecycleAction && order.status !== 'cancelled' && order.status !== 'completed' && !order.enteredInErrorAt"
-                                            size="sm"
-                                            variant="outline"
-                                            class="h-7 px-2 text-xs"
-                                            :disabled="actionLoadingId === order.id"
-                                            @click="openLifecycleDialog(order, 'cancel')"
+                                        <!-- Cancel + audit log are lower-frequency than the primary
+                                             lifecycle action — folded into one overflow menu instead of
+                                             three simultaneous row buttons. -->
+                                        <DropdownMenu
+                                            v-if="
+                                                (canApplyLifecycleAction && order.status !== 'cancelled' && order.status !== 'completed' && !order.enteredInErrorAt) ||
+                                                canViewAuditLogs
+                                            "
                                         >
-                                            Cancel
-                                        </Button>
-                                        <Button
-                                            v-if="canViewAuditLogs"
-                                            size="sm"
-                                            variant="ghost"
-                                            class="h-7 px-1.5"
-                                            aria-label="View audit log"
-                                            @click="openAuditSheet(order)"
-                                        >
-                                            <AppIcon name="clock" class="size-3.5" />
-                                        </Button>
+                                            <DropdownMenuTrigger as-child>
+                                                <Button size="sm" variant="outline" class="h-7 px-2 text-xs" :disabled="actionLoadingId === order.id">More</Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" class="w-40">
+                                                <DropdownMenuItem
+                                                    v-if="canApplyLifecycleAction && order.status !== 'cancelled' && order.status !== 'completed' && !order.enteredInErrorAt"
+                                                    class="cursor-pointer text-sm text-destructive"
+                                                    @select="openLifecycleDialog(order, 'cancel')"
+                                                >
+                                                    Cancel
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    v-if="canViewAuditLogs"
+                                                    class="cursor-pointer text-sm"
+                                                    @select="openAuditSheet(order)"
+                                                >
+                                                    View audit log
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
                                     </div>
                                 </div>
                             </div>

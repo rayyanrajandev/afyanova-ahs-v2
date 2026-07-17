@@ -15,6 +15,13 @@ const props = withDefaults(
         align?: 'center' | 'start';
         surfaceClass?: string | Record<string, boolean> | Array<string | Record<string, boolean>>;
         statusDotOffset?: boolean;
+        /** Set when a caller uses `@select` to drive its own inline-expand
+         * disclosure (e.g. ward-beds/IndexV2.vue, which can't use
+         * CollapsibleTrigger here — see that page's own comment) so the
+         * expand/collapse state Reka's trigger would otherwise wire
+         * automatically isn't silently lost. No-op for every other caller. */
+        ariaExpanded?: boolean;
+        ariaControls?: string;
     }>(),
     {
         statusDotClass: null,
@@ -29,6 +36,8 @@ const props = withDefaults(
         align: 'center',
         surfaceClass: undefined,
         statusDotOffset: false,
+        ariaExpanded: undefined,
+        ariaControls: undefined,
     },
 );
 
@@ -129,6 +138,8 @@ function onSelect(): void {
             v-if="canUseBuiltInSelect"
             type="button"
             class="min-w-0 flex-1 space-y-0.5 text-left"
+            :aria-expanded="ariaExpanded"
+            :aria-controls="ariaControls"
             @click="onSelect"
         >
             <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -147,6 +158,8 @@ function onSelect(): void {
             v-else-if="canUseCustomSelect"
             type="button"
             class="min-w-0 flex-1 space-y-0.5 text-left"
+            :aria-expanded="ariaExpanded"
+            :aria-controls="ariaControls"
             @click="onSelect"
         >
             <slot name="title" />

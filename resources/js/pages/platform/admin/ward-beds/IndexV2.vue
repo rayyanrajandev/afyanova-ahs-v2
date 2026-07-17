@@ -9,6 +9,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input, SearchInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -510,6 +516,8 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                 :status-dot-class="item.status === 'active' ? 'bg-emerald-500' : 'bg-rose-500'"
                                 :status-title="(item.status ?? 'unknown').toString()"
                                 class="px-3"
+                                :aria-expanded="isExpanded(item.id)"
+                                :aria-controls="`ward-bed-content-${item.id}`"
                                 @select="toggleExpanded(item.id)"
                             >
                                 <template #leading>
@@ -558,33 +566,36 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                         variant="ghost"
                                         class="size-8"
                                         title="Activity"
+                                        aria-label="View activity log"
                                         @click="openAuditSheet(item)"
                                     >
                                         <AppIcon name="clock" class="size-3.5" />
                                     </Button>
-                                    <Button
-                                        v-if="canManage"
-                                        size="sm"
-                                        variant="secondary"
-                                        class="hidden h-8 rounded-lg text-xs sm:inline-flex"
-                                        @click="openEdit(item)"
-                                    >
-                                        Edit
-                                    </Button>
-                                    <Button
-                                        v-if="canManage"
-                                        size="sm"
-                                        :variant="(item.status ?? '').toLowerCase() === 'active' ? 'outline' : 'secondary'"
-                                        class="hidden h-8 rounded-lg text-xs sm:inline-flex"
-                                        :disabled="blockedFromDeactivation(item)"
-                                        :title="blockedFromDeactivation(item) ? occupancyTooltip(item) : undefined"
-                                        @click="openStatus(item, (item.status ?? '').toLowerCase() === 'active' ? 'inactive' : 'active')"
-                                    >
-                                        {{ (item.status ?? '').toLowerCase() === 'active' ? 'Deactivate' : 'Activate' }}
-                                    </Button>
+                                    <!-- Kept visible at every breakpoint (not hidden below sm) so
+                                         acting on a bed never costs an extra expand-then-scroll tap
+                                         on a tablet/phone; the mobile-only duplicate that used to live
+                                         inside CollapsibleContent is gone, not needed anymore. -->
+                                    <DropdownMenu v-if="canManage">
+                                        <DropdownMenuTrigger as-child>
+                                            <Button size="sm" variant="secondary" class="h-8 rounded-lg text-xs">More</Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" class="w-40">
+                                            <DropdownMenuItem class="cursor-pointer text-sm" @select="openEdit(item)">
+                                                Edit
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                class="cursor-pointer text-sm"
+                                                :disabled="blockedFromDeactivation(item)"
+                                                :title="blockedFromDeactivation(item) ? occupancyTooltip(item) : undefined"
+                                                @select="openStatus(item, (item.status ?? '').toLowerCase() === 'active' ? 'inactive' : 'active')"
+                                            >
+                                                {{ (item.status ?? '').toLowerCase() === 'active' ? 'Deactivate' : 'Activate' }}
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                 </template>
                             </RegistryListRow>
-                            <CollapsibleContent>
+                            <CollapsibleContent :id="`ward-bed-content-${item.id}`">
                                 <div class="space-y-3 border-t bg-muted/10 px-4 py-3">
                                     <div class="grid gap-3 sm:grid-cols-2">
                                         <Card class="!gap-0 overflow-hidden rounded-md border-border/50 !py-0 shadow-none">
@@ -663,21 +674,6 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                         </CardHeader>
                                         <CardContent class="px-3 py-3 text-sm whitespace-pre-wrap">{{ item.notes }}</CardContent>
                                     </Card>
-                                    <div class="flex flex-wrap gap-2 sm:hidden">
-                                        <Button v-if="canManage" size="sm" variant="secondary" class="h-8 rounded-lg text-xs" @click="openEdit(item)">
-                                            Edit
-                                        </Button>
-                                        <Button
-                                            v-if="canManage"
-                                            size="sm"
-                                            :variant="(item.status ?? '').toLowerCase() === 'active' ? 'outline' : 'secondary'"
-                                            class="h-8 rounded-lg text-xs"
-                                            :disabled="blockedFromDeactivation(item)"
-                                            @click="openStatus(item, (item.status ?? '').toLowerCase() === 'active' ? 'inactive' : 'active')"
-                                        >
-                                            {{ (item.status ?? '').toLowerCase() === 'active' ? 'Deactivate' : 'Activate' }}
-                                        </Button>
-                                    </div>
                                 </div>
                             </CollapsibleContent>
                         </Collapsible>
@@ -686,7 +682,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                     <div v-if="pagination && pagination.lastPage > 1" class="flex items-center justify-between text-sm text-muted-foreground">
                         <p>Page {{ pagination.currentPage }} of {{ pagination.lastPage }} ({{ pagination.total }} total)</p>
                         <div class="flex items-center gap-1">
-                            <Button variant="outline" size="icon" class="size-8" :disabled="!canPrev || list.isFetching.value" @click="prevPage">
+                            <Button variant="outline" size="icon" class="size-8" aria-label="Previous page" :disabled="!canPrev || list.isFetching.value" @click="prevPage">
                                 <AppIcon name="chevron-left" class="size-4" />
                             </Button>
                             <template v-for="page in paginationPageNumbers" :key="String(page)">
@@ -702,7 +698,7 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                     {{ page }}
                                 </Button>
                             </template>
-                            <Button variant="outline" size="icon" class="size-8" :disabled="!canNext || list.isFetching.value" @click="nextPage">
+                            <Button variant="outline" size="icon" class="size-8" aria-label="Next page" :disabled="!canNext || list.isFetching.value" @click="nextPage">
                                 <AppIcon name="chevron-right" class="size-4" />
                             </Button>
                         </div>
