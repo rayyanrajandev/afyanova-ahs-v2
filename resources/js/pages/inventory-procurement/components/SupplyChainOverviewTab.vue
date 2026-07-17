@@ -8,9 +8,6 @@ import { nextActionClass, type RequestPipelineStage, type SupplyChainNextAction 
 defineProps<{
     nextActions: SupplyChainNextAction[];
     requestPipelineStages: RequestPipelineStage[];
-    requisitionsReadyCount: number;
-    requisitionsWaitingCount: number;
-    departmentRequisitionTotal: number;
 }>();
 
 const emit = defineEmits<{
@@ -59,18 +56,8 @@ const emit = defineEmits<{
                     <p class="mt-1 text-sm text-muted-foreground">Start with work that changes patient-facing stock availability.</p>
                 </div>
 
-                <div class="grid gap-3 sm:grid-cols-3">
-                    <button type="button" class="rounded-lg border bg-muted/10 p-3 text-left transition hover:border-primary/40" @click="emit('change-tab', 'shortage-queue')">
-                        <AppIcon name="alert-triangle" class="mb-2 size-4 text-muted-foreground" />
-                        <p class="text-sm font-medium">Shortage queue</p>
-                        <p class="mt-1 text-xs text-muted-foreground">{{ requisitionsReadyCount }} ready, {{ requisitionsWaitingCount }} waiting.</p>
-                    </button>
-                    <button type="button" class="rounded-lg border bg-muted/10 p-3 text-left transition hover:border-primary/40" @click="emit('change-tab', 'requisitions')">
-                        <AppIcon name="clipboard-list" class="mb-2 size-4 text-muted-foreground" />
-                        <p class="text-sm font-medium">Department requisitions</p>
-                        <p class="mt-1 text-xs text-muted-foreground">{{ departmentRequisitionTotal }} request{{ departmentRequisitionTotal === 1 ? '' : 's' }} in view.</p>
-                    </button>
-                    <button type="button" class="rounded-lg border bg-muted/10 p-3 text-left transition hover:border-primary/40" @click="emit('change-tab', 'transfers')">
+                <div class="grid gap-3">
+                    <button type="button" class="rounded-lg border bg-muted/10 p-3 text-left transition hover:border-primary/40 sm:max-w-xs" @click="emit('change-tab', 'transfers')">
                         <AppIcon name="activity" class="mb-2 size-4 text-muted-foreground" />
                         <p class="text-sm font-medium">Transfers</p>
                         <p class="mt-1 text-xs text-muted-foreground">Pack, dispatch, receive, and review variance.</p>

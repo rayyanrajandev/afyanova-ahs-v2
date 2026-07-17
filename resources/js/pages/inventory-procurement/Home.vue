@@ -229,8 +229,6 @@ const storeTasks = computed<TaskCard[]>(() => [
         description: 'Review and approve department requisitions in the approval queue.',
         icon: 'shield-check',
         href: '/inventory-procurement/pending-approvals',
-        badge: pendingApprovalCount.value > 0 ? pendingApprovalCount.value : null,
-        badgeVariant: pendingApprovalCount.value > 0 ? 'destructive' : 'outline',
         permission: canUpdateRequestStatus.value,
     },
     {
@@ -239,8 +237,6 @@ const storeTasks = computed<TaskCard[]>(() => [
         description: 'Prioritise VEN-sensitive lines waiting for replenishment or procurement.',
         icon: 'alert-triangle',
         href: supplyChainSectionLink('shortage-queue'),
-        badge: shortageMeta.value?.readyLineCount ?? null,
-        badgeVariant: 'destructive',
         permission: canRead.value,
     },
     {

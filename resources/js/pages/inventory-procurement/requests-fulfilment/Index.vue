@@ -233,10 +233,6 @@ const tabContentDescription = computed(() => {
 
 const { requestPipelineCounts, loadRequestPipelineCounts } = useRequestPipelineCounts(apiRequest);
 
-const requisitionsReadyCount = computed(() => shortageQueueMeta.value?.readyLineCount ?? 0);
-const requisitionsWaitingCount = computed(() => shortageQueueMeta.value?.waitingLineCount ?? 0);
-const departmentRequisitionTotal = computed(() => deptReqPagination.value?.total ?? deptRequisitions.value.length);
-
 const requestPipelineStages = computed<RequestPipelineStage[]>(() => [
     {
         key: 'submitted',
@@ -260,7 +256,7 @@ const requestPipelineStages = computed<RequestPipelineStage[]>(() => [
     },
     {
         key: 'shortage',
-        label: 'Shortage',
+        label: 'Shortage (requisitions)',
         value: requestPipelineCounts.value.partiallyIssued + requestPipelineCounts.value.shortageWaiting,
         helper: 'Approved demand not fully issued.',
         icon: 'alert-triangle',
@@ -2218,9 +2214,6 @@ onMounted(async () => {
                                 <SupplyChainOverviewTab
                                     :next-actions="nextActions"
                                     :request-pipeline-stages="requestPipelineStages"
-                                    :requisitions-ready-count="requisitionsReadyCount"
-                                    :requisitions-waiting-count="requisitionsWaitingCount"
-                                    :department-requisition-total="departmentRequisitionTotal"
                                     @change-tab="(v: string) => { activeTab = v as RFTab; }"
                                     @refresh-pipeline="loadRequestPipelineCounts"
                                     @open-pipeline-stage="openRequestPipelineStage"
