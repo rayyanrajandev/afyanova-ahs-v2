@@ -60,7 +60,7 @@ function submit(): void {
                 <DialogDescription>Confirm the laboratory result was reviewed and release it.</DialogDescription>
             </DialogHeader>
 
-            <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
                 <div class="rounded-lg border bg-muted/20 p-3">
                     <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Order</p>
                     <p class="mt-2 text-sm font-medium text-foreground">
@@ -71,16 +71,18 @@ function submit(): void {
                     </p>
                 </div>
 
-                <div class="grid gap-2">
-                    <Label for="lab-verify-note">
-                        Verification note<span v-if="isCritical"> (required for critical results)</span><span v-else> (optional)</span>
-                    </Label>
-                    <Textarea id="lab-verify-note" v-model="verificationNote" rows="3" />
-                </div>
+                <div class="flex flex-col gap-4">
+                    <div class="grid gap-2">
+                        <Label for="lab-verify-note">
+                            Verification note<span v-if="isCritical"> (required for critical results)</span><span v-else> (optional)</span>
+                        </Label>
+                        <Textarea id="lab-verify-note" v-model="verificationNote" rows="3" />
+                    </div>
 
-                <Alert v-if="error" variant="destructive">
-                    <AlertDescription>{{ error }}</AlertDescription>
-                </Alert>
+                    <Alert v-if="error" variant="destructive">
+                        <AlertDescription>{{ error }}</AlertDescription>
+                    </Alert>
+                </div>
             </div>
 
             <DialogFooter>
