@@ -91,7 +91,7 @@ function submit(): void {
                         <div
                             v-for="param in parameters"
                             :key="param.code"
-                            class="rounded border bg-background p-2"
+                            :class="['rounded border bg-background p-2', param.code === 'impression' ? 'col-span-3' : '']"
                         >
                             <p class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                                 {{ param.name }}
