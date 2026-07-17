@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { useQueryClient } from '@tanstack/vue-query';
 import { computed, ref } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -7,6 +7,12 @@ import AppIcon from '@/components/AppIcon.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -334,9 +340,9 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                                     </button>
                                                 </template>
                                                 <template #actions>
-                                                    <a :href="`/patients/${appointment.patientId}/chart`" class="text-xs font-medium text-primary hover:underline">
+                                                    <Link :href="`/patients/${appointment.patientId}/chart`" class="text-xs font-medium text-primary hover:underline">
                                                         View chart
-                                                    </a>
+                                                    </Link>
                                                 </template>
                                             </PatientSummaryPopover>
                                             <p v-else class="font-medium text-foreground">{{ patientDirectory.displayName(appointment.patientId) }}</p>
@@ -364,24 +370,22 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                             >
                                                 <AppIcon name="pencil" class="size-3.5" />Edit
                                             </Button>
-                                            <Button
-                                                v-if="canUpdateStatus && appointment.status === 'scheduled'"
-                                                size="sm"
-                                                variant="ghost"
-                                                class="h-7 gap-1 px-2 text-xs"
-                                                @click="openClosureDialog(appointment, 'no_show')"
-                                            >
-                                                No-show
-                                            </Button>
-                                            <Button
-                                                v-if="canUpdateStatus && appointment.status === 'scheduled'"
-                                                size="sm"
-                                                variant="ghost"
-                                                class="h-7 gap-1 px-2 text-xs text-destructive hover:text-destructive"
-                                                @click="openClosureDialog(appointment, 'cancelled')"
-                                            >
-                                                Cancel
-                                            </Button>
+                                            <!-- No-show/Cancel are lower-frequency closure actions relative to
+                                                 Edit — kept in a "More" overflow instead of two more inline
+                                                 buttons, matching PatientChartOrderCard's row-actions pattern. -->
+                                            <DropdownMenu v-if="canUpdateStatus && appointment.status === 'scheduled'">
+                                                <DropdownMenuTrigger as-child>
+                                                    <Button size="sm" variant="ghost" class="h-7 gap-1 px-2 text-xs">More</Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" class="w-40">
+                                                    <DropdownMenuItem class="cursor-pointer text-sm" @select="openClosureDialog(appointment, 'no_show')">
+                                                        No-show
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem class="cursor-pointer text-sm text-destructive" @select="openClosureDialog(appointment, 'cancelled')">
+                                                        Cancel
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                             <span v-if="appointment.status !== 'scheduled'" class="text-xs text-muted-foreground">—</span>
                                         </div>
                                     </td>
