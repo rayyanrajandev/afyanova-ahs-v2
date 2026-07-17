@@ -1267,7 +1267,7 @@ watch(showPaymentDialog, (open) => {
                                     </div>
 
                                     <div v-else class="space-y-3">
-                                        <div class="grid grid-cols-3 gap-3 mb-4">
+                                        <div class="grid grid-cols-2 gap-3 mb-4">
                                             <Card>
                                                 <CardHeader class="pb-1">
                                                     <CardTitle class="text-xs text-muted-foreground">Total Billed</CardTitle>
@@ -1282,14 +1282,6 @@ watch(showPaymentDialog, (open) => {
                                                 </CardHeader>
                                                 <CardContent>
                                                     <p class="text-lg font-bold text-destructive tabular-nums">{{ formatMoney(totalUnpaid) }}</p>
-                                                </CardContent>
-                                            </Card>
-                                            <Card>
-                                                <CardHeader class="pb-1">
-                                                    <CardTitle class="text-xs text-muted-foreground">Invoices</CardTitle>
-                                                </CardHeader>
-                                                <CardContent>
-                                                    <p class="text-lg font-bold tabular-nums">{{ patientInvoices.length }}</p>
                                                 </CardContent>
                                             </Card>
                                         </div>
