@@ -7,16 +7,25 @@ import { onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue';
  * extraction; the template contract is unchanged — pair with
  * `<div ref="scrollContainer" :style="{ height: scrollContainerHeight }">`.
  *
- * `top` is clamped to >= 0 before subtracting: this recalculates on every
- * mount (not just first load — SidebarProvider's wrapper is `min-h-svh`,
- * so it has no ceiling, and Vite HMR recreates the component — and thus
- * re-triggers `onMounted` — on script/composable edits). If that happens
- * while the page is scrolled, `getBoundingClientRect().top` comes back
- * negative, and an unclamped `calc(baseHeight - top)` flips into
- * `calc(baseHeight + |top|)`, permanently inflating the container past the
- * viewport — which makes the page even more scrollable, compounding on the
- * next recalculation. Clamping keeps the formula meaningful even when this
- * fires mid-scroll.
+ * The offset is measured as `getBoundingClientRect().top + window.scrollY`
+ * (the element's position relative to the *document*, not the viewport) —
+ * not plain `getBoundingClientRect().top` — because this recalculates on
+ * every mount, not just first load: SidebarProvider's wrapper is
+ * `min-h-svh` (no ceiling), and Vite HMR recreates the component — and
+ * thus re-triggers `onMounted` — on script/composable edits. If that
+ * fires while the page happens to be scrolled, plain `rect.top` comes
+ * back smaller (or negative), and `calc(baseHeight - top)` bakes in a
+ * height that's short by however much the page had scrolled — which
+ * lets the container overflow past the viewport, which makes the outer
+ * page scrollable too (SidebarProvider has no maximum height), and any
+ * later recalculation while THAT scroll is in effect compounds the
+ * error further. `getBoundingClientRect().top` shrinks by exactly
+ * however much the page has scrolled; adding `window.scrollY` back
+ * cancels that out and recovers the element's true resting offset
+ * regardless of scroll position at measurement time — so the formula is
+ * correct whether this fires at scroll position 0 or 600. Still clamped
+ * to >= 0 as a defensive floor (this offset should never legitimately be
+ * negative).
  *
  * @param baseHeight Defaults to '98dvh' (leaves a small margin below the
  *   fold, the convention every page but one uses). encounters/WorkspaceV2.vue
@@ -30,7 +39,7 @@ export function useStickyScrollContainer(baseHeight = '98dvh') {
     function updateScrollContainerHeight(): void {
         const el = scrollContainerRef.value;
         if (!el) return;
-        const top = Math.max(0, el.getBoundingClientRect().top);
+        const top = Math.max(0, el.getBoundingClientRect().top + window.scrollY);
         scrollContainerHeight.value = `calc(${baseHeight} - ${top}px)`;
     }
 
