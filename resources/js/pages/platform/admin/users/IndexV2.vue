@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/vue-query';
 import { computed, ref } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import ListPagination from '@/components/ListPagination.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -548,7 +549,8 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         <p class="mt-1 text-xs text-muted-foreground">Try adjusting the search query or filters.</p>
                     </div>
 
-                    <div v-else class="overflow-x-auto rounded-lg border bg-card">
+                    <div v-else class="overflow-hidden rounded-lg border bg-card">
+                        <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead class="border-b bg-muted/30 text-xs text-muted-foreground uppercase">
                                 <tr>
@@ -620,17 +622,16 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                                 </tr>
                             </tbody>
                         </table>
-                    </div>
+                        </div>
 
-                    <div v-if="meta && meta.lastPage > 1" class="flex items-center justify-between text-sm text-muted-foreground">
-                        <p>Page {{ meta.currentPage }} of {{ meta.lastPage }} ({{ meta.total }} total)</p>
-                        <div class="flex gap-2">
-                            <Button size="sm" variant="outline" :disabled="meta.currentPage <= 1" @click="goToPage(meta.currentPage - 1)">
-                                <AppIcon name="chevron-left" class="size-3.5" />Previous
-                            </Button>
-                            <Button size="sm" variant="outline" :disabled="meta.currentPage >= meta.lastPage" @click="goToPage(meta.currentPage + 1)">
-                                Next<AppIcon name="chevron-right" class="size-3.5" />
-                            </Button>
+                        <div v-if="meta && meta.lastPage > 1" class="border-t px-3 py-3">
+                            <ListPagination
+                                :current-page="meta.currentPage"
+                                :last-page="meta.lastPage"
+                                :total="meta.total"
+                                item-label="users"
+                                @update:page="goToPage"
+                            />
                         </div>
                     </div>
                 </template>
