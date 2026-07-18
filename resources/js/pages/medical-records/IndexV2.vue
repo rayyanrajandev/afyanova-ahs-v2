@@ -329,16 +329,8 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Medical Records', href: '/medic
                         </Badge>
                     </TabsTrigger>
                 </TabsList>
-            </div>
 
-            <div class="space-y-4 px-6 pb-6">
-            <Alert v-if="!canReadMedicalRecords" variant="destructive">
-                <AlertTitle>Access required</AlertTitle>
-                <AlertDescription>Viewing the clinical note registry requires <code>medical.records.read</code>.</AlertDescription>
-            </Alert>
-
-            <template v-else>
-                <div class="rounded-lg border bg-background p-4">
+                <div v-if="canReadMedicalRecords" class="mt-3 rounded-lg border bg-background p-4">
                     <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                         <div class="grid gap-1.5 xl:col-span-2">
                             <Label for="mri-search">Search</Label>
@@ -382,7 +374,15 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Medical Records', href: '/medic
                         </div>
                     </div>
                 </div>
+            </div>
 
+            <div class="space-y-4 px-6 pb-6">
+            <Alert v-if="!canReadMedicalRecords" variant="destructive">
+                <AlertTitle>Access required</AlertTitle>
+                <AlertDescription>Viewing the clinical note registry requires <code>medical.records.read</code>.</AlertDescription>
+            </Alert>
+
+            <template v-else>
                 <div v-if="listQuery.isPending.value" class="space-y-2">
                     <Skeleton class="h-10 w-full" />
                     <Skeleton class="h-10 w-full" />

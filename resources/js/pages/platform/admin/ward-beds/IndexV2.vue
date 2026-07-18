@@ -443,6 +443,29 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         </TabsTrigger>
                     </TabsList>
                 </Tabs>
+
+                <div v-if="canRead" class="mt-3 flex flex-wrap items-start gap-2">
+                    <SearchInput
+                        v-model="filters.q"
+                        placeholder="Search code, name, ward, or location"
+                        class="min-w-72 flex-1"
+                    />
+                    <SearchableSelectField
+                        input-id="wb-department-filter"
+                        label=""
+                        v-model="filters.departmentId"
+                        :options="departmentOptions"
+                        :disabled="!canDepartmentRead"
+                        placeholder="All departments"
+                        search-placeholder="Search departments"
+                        empty-text="No department matched."
+                        trigger-class="w-56"
+                    />
+                    <Button v-if="hasActiveFilters" variant="ghost" size="sm" class="h-9 gap-1.5 text-xs" @click="reset">
+                        <AppIcon name="x" class="size-3.5" />
+                        Clear
+                    </Button>
+                </div>
             </div>
 
             <div class="space-y-4 px-6 pb-6">
@@ -452,29 +475,6 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                 </Alert>
 
                 <template v-else>
-                    <div class="flex flex-wrap items-start gap-2">
-                        <SearchInput
-                            v-model="filters.q"
-                            placeholder="Search code, name, ward, or location"
-                            class="min-w-72 flex-1"
-                        />
-                        <SearchableSelectField
-                            input-id="wb-department-filter"
-                            label=""
-                            v-model="filters.departmentId"
-                            :options="departmentOptions"
-                            :disabled="!canDepartmentRead"
-                            placeholder="All departments"
-                            search-placeholder="Search departments"
-                            empty-text="No department matched."
-                            trigger-class="w-56"
-                        />
-                        <Button v-if="hasActiveFilters" variant="ghost" size="sm" class="h-9 gap-1.5 text-xs" @click="reset">
-                            <AppIcon name="x" class="size-3.5" />
-                            Clear
-                        </Button>
-                    </div>
-
                     <div v-if="list.isPending.value" class="space-y-2">
                         <Skeleton class="h-16 w-full" />
                         <Skeleton class="h-16 w-full" />

@@ -204,6 +204,42 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         {{ earlierStageCount }} waiting for triage/clinician — open reception queue
                     </Link>
                 </div>
+
+                <div v-if="canReadAppointments" class="mt-3 flex flex-wrap items-start gap-2">
+                    <div class="relative min-w-72 flex-1">
+                        <AppIcon name="search" class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                        <Input v-model="filters.q" placeholder="Search patient name or number…" class="h-9 pl-9" />
+                    </div>
+                    <div class="w-56">
+                        <SearchableSelectField
+                            v-model="departmentValue"
+                            input-id="patient-flow-board-filter-department"
+                            label=""
+                            :options="departmentOptions"
+                            placeholder="All departments"
+                            empty-text="No departments seen yet."
+                        />
+                    </div>
+                    <div class="w-56">
+                        <SearchableSelectField
+                            v-model="clinicianUserIdText"
+                            input-id="patient-flow-board-filter-clinician"
+                            label=""
+                            :options="clinicianOptions"
+                            placeholder="All clinicians"
+                            empty-text="No matching clinician found."
+                        />
+                    </div>
+                    <Button
+                        type="button"
+                        size="sm"
+                        :variant="urgentOnly ? 'default' : 'outline'"
+                        class="h-9"
+                        @click="urgentOnly = !urgentOnly"
+                    >
+                        Urgent only
+                    </Button>
+                </div>
             </div>
 
             <div class="space-y-4 px-6 pb-6">
@@ -213,42 +249,6 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                 </Alert>
 
                 <template v-else>
-                    <div class="flex flex-wrap items-start gap-2">
-                        <div class="relative min-w-72 flex-1">
-                            <AppIcon name="search" class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                            <Input v-model="filters.q" placeholder="Search patient name or number…" class="h-9 pl-9" />
-                        </div>
-                        <div class="w-56">
-                            <SearchableSelectField
-                                v-model="departmentValue"
-                                input-id="patient-flow-board-filter-department"
-                                label=""
-                                :options="departmentOptions"
-                                placeholder="All departments"
-                                empty-text="No departments seen yet."
-                            />
-                        </div>
-                        <div class="w-56">
-                            <SearchableSelectField
-                                v-model="clinicianUserIdText"
-                                input-id="patient-flow-board-filter-clinician"
-                                label=""
-                                :options="clinicianOptions"
-                                placeholder="All clinicians"
-                                empty-text="No matching clinician found."
-                            />
-                        </div>
-                        <Button
-                            type="button"
-                            size="sm"
-                            :variant="urgentOnly ? 'default' : 'outline'"
-                            class="h-9"
-                            @click="urgentOnly = !urgentOnly"
-                        >
-                            Urgent only
-                        </Button>
-                    </div>
-
                     <div
                         v-if="overdueEntries.length > 0"
                         class="rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-3"

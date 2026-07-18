@@ -231,6 +231,20 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         </TabsTrigger>
                     </TabsList>
                 </Tabs>
+
+                <div v-if="canRead && !departmentScopeMissing && canViewAllDepartments" class="mt-3 flex flex-wrap items-start gap-2">
+                    <Select v-model="departmentFilterValue">
+                        <SelectTrigger class="h-9 w-56">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All departments</SelectItem>
+                            <SelectItem v-for="option in departmentOptions.data.value ?? []" :key="option.value" :value="option.value">
+                                {{ option.label }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
 
             <div class="space-y-4 px-6 pb-6">
@@ -247,21 +261,6 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                 </Alert>
 
                 <template v-else>
-
-                    <div v-if="canViewAllDepartments" class="flex flex-wrap items-start gap-2">
-                        <Select v-model="departmentFilterValue">
-                            <SelectTrigger class="h-9 w-56">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All departments</SelectItem>
-                                <SelectItem v-for="option in departmentOptions.data.value ?? []" :key="option.value" :value="option.value">
-                                    {{ option.label }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-
                     <div v-if="list.isPending.value" class="space-y-2">
                         <Skeleton class="h-16 w-full" />
                         <Skeleton class="h-16 w-full" />

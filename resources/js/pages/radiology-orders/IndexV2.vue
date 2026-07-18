@@ -424,6 +424,45 @@ function openAuditSheet(order: RadiologyOrder): void {
                             </Badge>
                         </TabsTrigger>
                     </TabsList>
+
+                    <div v-if="canRead" class="mt-3 flex flex-wrap items-end gap-2">
+                        <div class="relative min-w-64 flex-1">
+                            <Input
+                                v-model="filters.q"
+                                placeholder="Search by order number, study, patient…"
+                                class="h-9"
+                                @update:model-value="filters.page = 1"
+                            />
+                        </div>
+                        <div class="min-w-64">
+                            <PatientQuickSearchField
+                                v-model:query="patientSearchQuery"
+                                input-id="radiology-worklist-patient"
+                                placeholder="Search patient by name, MRN, or phone…"
+                                @selected="onPatientSelected"
+                            />
+                        </div>
+                        <div class="w-40">
+                            <Select :model-value="filters.modality || 'all'" @update:model-value="(value) => { filters.modality = value === 'all' ? '' : (value as RadiologyOrderModality); filters.page = 1; }">
+                                <SelectTrigger class="h-9">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem v-for="option in modalityOptions" :key="option.value || 'all'" :value="option.value || 'all'">
+                                        {{ option.label }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <DateRangeFilterPopover
+                            input-base-id="radiology-worklist-date-range"
+                            title="Order date range"
+                            :from="filters.from"
+                            :to="filters.to"
+                            @update:from="(value) => { filters.from = value; filters.page = 1; }"
+                            @update:to="(value) => { filters.to = value; filters.page = 1; }"
+                        />
+                    </div>
                 </div>
 
                 <div class="space-y-4 px-6 pb-6">
@@ -433,45 +472,6 @@ function openAuditSheet(order: RadiologyOrder): void {
                     </Alert>
 
                     <template v-else>
-                        <div class="flex flex-wrap items-end gap-2">
-                            <div class="relative min-w-64 flex-1">
-                                <Input
-                                    v-model="filters.q"
-                                    placeholder="Search by order number, study, patient…"
-                                    class="h-9"
-                                    @update:model-value="filters.page = 1"
-                                />
-                            </div>
-                            <div class="min-w-64">
-                                <PatientQuickSearchField
-                                    v-model:query="patientSearchQuery"
-                                    input-id="radiology-worklist-patient"
-                                    placeholder="Search patient by name, MRN, or phone…"
-                                    @selected="onPatientSelected"
-                                />
-                            </div>
-                            <div class="w-40">
-                                <Select :model-value="filters.modality || 'all'" @update:model-value="(value) => { filters.modality = value === 'all' ? '' : (value as RadiologyOrderModality); filters.page = 1; }">
-                                    <SelectTrigger class="h-9">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem v-for="option in modalityOptions" :key="option.value || 'all'" :value="option.value || 'all'">
-                                            {{ option.label }}
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <DateRangeFilterPopover
-                                input-base-id="radiology-worklist-date-range"
-                                title="Order date range"
-                                :from="filters.from"
-                                :to="filters.to"
-                                @update:from="(value) => { filters.from = value; filters.page = 1; }"
-                                @update:to="(value) => { filters.to = value; filters.page = 1; }"
-                            />
-                        </div>
-
                         <div v-if="list.isPending.value" class="space-y-2">
                             <Skeleton class="h-16 w-full" />
                             <Skeleton class="h-16 w-full" />

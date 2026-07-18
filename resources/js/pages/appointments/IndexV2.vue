@@ -263,6 +263,31 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         </TabsTrigger>
                     </TabsList>
                 </Tabs>
+
+                <div v-if="canRead" class="mt-3 flex flex-wrap items-start gap-2">
+                    <div class="relative min-w-72 flex-1">
+                        <AppIcon name="search" class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            v-model="filters.q"
+                            placeholder="Search patient, appointment #, or reason…"
+                            class="h-9 pl-9"
+                            @keyup.enter="submitSearch"
+                        />
+                    </div>
+                    <div class="w-56">
+                        <SearchableSelectField
+                            v-model="departmentFilterValue"
+                            input-id="appointment-filter-department"
+                            label=""
+                            :options="departmentOptions.data.value ?? []"
+                            placeholder="All departments"
+                            allow-custom-value
+                            trigger-class="h-9"
+                        />
+                    </div>
+                    <Input v-model="filters.from" type="date" class="h-9 w-40" />
+                    <Input v-model="filters.to" type="date" class="h-9 w-40" />
+                </div>
             </div>
 
             <div class="space-y-4 px-6 pb-6">
@@ -272,31 +297,6 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                 </Alert>
 
                 <template v-else>
-                    <div class="flex flex-wrap items-start gap-2">
-                        <div class="relative min-w-72 flex-1">
-                            <AppIcon name="search" class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                                v-model="filters.q"
-                                placeholder="Search patient, appointment #, or reason…"
-                                class="h-9 pl-9"
-                                @keyup.enter="submitSearch"
-                            />
-                        </div>
-                        <div class="w-56">
-                            <SearchableSelectField
-                                v-model="departmentFilterValue"
-                                input-id="appointment-filter-department"
-                                label=""
-                                :options="departmentOptions.data.value ?? []"
-                                placeholder="All departments"
-                                allow-custom-value
-                                trigger-class="h-9"
-                            />
-                        </div>
-                        <Input v-model="filters.from" type="date" class="h-9 w-40" />
-                        <Input v-model="filters.to" type="date" class="h-9 w-40" />
-                    </div>
-
                     <div v-if="list.isPending.value" class="space-y-2">
                         <Skeleton class="h-14 w-full" />
                         <Skeleton class="h-14 w-full" />

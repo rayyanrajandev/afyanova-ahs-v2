@@ -461,6 +461,49 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         </TabsTrigger>
                     </TabsList>
                 </Tabs>
+
+                <div v-if="canRead" class="mt-3 flex flex-wrap items-center gap-2">
+                    <div class="relative min-w-0 flex-1">
+                        <AppIcon name="search" class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                        <Input v-model="filters.q" placeholder="Search name or email…" class="h-9 pl-9" @keyup.enter="submitSearch" />
+                    </div>
+                    <Select v-model="verificationSelectValue">
+                        <SelectTrigger class="h-9 w-40 bg-background"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem :value="allSelectValue">Any verification</SelectItem>
+                            <SelectItem value="verified">Verified</SelectItem>
+                            <SelectItem value="unverified">Unverified</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select v-model="roleSelectValue">
+                        <SelectTrigger class="h-9 w-44 bg-background"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem :value="allSelectValue">Any role</SelectItem>
+                            <SelectItem v-for="role in roles" :key="String(role.id)" :value="String(role.id)">
+                                {{ role.name ?? role.code ?? role.id }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select v-if="!isFacilityScopedView" v-model="facilitySelectValue">
+                        <SelectTrigger class="h-9 w-48 bg-background"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem :value="allSelectValue">Any facility</SelectItem>
+                            <SelectItem v-for="facility in availableFacilities" :key="String(facility.id)" :value="String(facility.id)">
+                                {{ facility.code ?? 'FAC' }} - {{ facility.name ?? 'Facility' }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select v-model="sortSelectValue">
+                        <SelectTrigger class="h-9 w-44 bg-background"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="name:asc">Name (A–Z)</SelectItem>
+                            <SelectItem value="name:desc">Name (Z–A)</SelectItem>
+                            <SelectItem value="createdAt:desc">Newest first</SelectItem>
+                            <SelectItem value="createdAt:asc">Oldest first</SelectItem>
+                            <SelectItem value="status:asc">Status</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
 
             <div class="space-y-4 px-6 pb-6">
@@ -474,49 +517,6 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         <AlertTitle>Scope unresolved</AlertTitle>
                         <AlertDescription>Your tenant/facility scope could not be determined. Some results may be incomplete.</AlertDescription>
                     </Alert>
-
-                    <div class="flex flex-wrap items-center gap-2">
-                        <div class="relative min-w-0 flex-1">
-                            <AppIcon name="search" class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                            <Input v-model="filters.q" placeholder="Search name or email…" class="h-9 pl-9" @keyup.enter="submitSearch" />
-                        </div>
-                        <Select v-model="verificationSelectValue">
-                            <SelectTrigger class="h-9 w-40 bg-background"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem :value="allSelectValue">Any verification</SelectItem>
-                                <SelectItem value="verified">Verified</SelectItem>
-                                <SelectItem value="unverified">Unverified</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Select v-model="roleSelectValue">
-                            <SelectTrigger class="h-9 w-44 bg-background"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem :value="allSelectValue">Any role</SelectItem>
-                                <SelectItem v-for="role in roles" :key="String(role.id)" :value="String(role.id)">
-                                    {{ role.name ?? role.code ?? role.id }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Select v-if="!isFacilityScopedView" v-model="facilitySelectValue">
-                            <SelectTrigger class="h-9 w-48 bg-background"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem :value="allSelectValue">Any facility</SelectItem>
-                                <SelectItem v-for="facility in availableFacilities" :key="String(facility.id)" :value="String(facility.id)">
-                                    {{ facility.code ?? 'FAC' }} - {{ facility.name ?? 'Facility' }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Select v-model="sortSelectValue">
-                            <SelectTrigger class="h-9 w-44 bg-background"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="name:asc">Name (A–Z)</SelectItem>
-                                <SelectItem value="name:desc">Name (Z–A)</SelectItem>
-                                <SelectItem value="createdAt:desc">Newest first</SelectItem>
-                                <SelectItem value="createdAt:asc">Oldest first</SelectItem>
-                                <SelectItem value="status:asc">Status</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
 
                     <div
                         v-if="canUseBulkSelection && selectedUserIds.length > 0"

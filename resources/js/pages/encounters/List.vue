@@ -180,23 +180,23 @@ function goToPage(page: number): void {
                         </Badge>
                     </TabsTrigger>
                 </TabsList>
+
+                <div class="mt-3 flex flex-wrap items-start gap-2">
+                    <div class="relative min-w-72 flex-1">
+                        <Input
+                            v-model="filters.q"
+                            placeholder="Search by patient or encounter number…"
+                            class="h-9"
+                            @update:model-value="filters.page = 1"
+                        />
+                    </div>
+                    <Input v-model="filters.from" type="date" class="h-9 w-40" />
+                    <span class="text-xs text-muted-foreground self-center">to</span>
+                    <Input v-model="filters.to" type="date" class="h-9 w-40" />
+                </div>
             </div>
 
             <div class="space-y-4 px-6 pb-6">
-            <div class="flex flex-wrap items-start gap-2">
-                <div class="relative min-w-72 flex-1">
-                    <Input
-                        v-model="filters.q"
-                        placeholder="Search by patient or encounter number…"
-                        class="h-9"
-                        @update:model-value="filters.page = 1"
-                    />
-                </div>
-                <Input v-model="filters.from" type="date" class="h-9 w-40" />
-                <span class="text-xs text-muted-foreground self-center">to</span>
-                <Input v-model="filters.to" type="date" class="h-9 w-40" />
-            </div>
-
             <div v-if="encounters.isPending.value" class="space-y-2">
                 <Skeleton class="h-16 w-full" />
                 <Skeleton class="h-16 w-full" />

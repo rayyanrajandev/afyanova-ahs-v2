@@ -421,6 +421,33 @@ function openAuditSheet(order: TheatreProcedure): void {
                             </Badge>
                         </TabsTrigger>
                     </TabsList>
+
+                    <div v-if="canRead" class="mt-3 flex flex-wrap items-end gap-2">
+                        <div class="relative min-w-64 flex-1">
+                            <Input
+                                v-model="filters.q"
+                                placeholder="Search by procedure number, name, patient…"
+                                class="h-9"
+                                @update:model-value="filters.page = 1"
+                            />
+                        </div>
+                        <div class="min-w-64">
+                            <PatientQuickSearchField
+                                v-model:query="patientSearchQuery"
+                                input-id="theatre-worklist-patient"
+                                placeholder="Search patient by name, MRN, or phone…"
+                                @selected="onPatientSelected"
+                            />
+                        </div>
+                        <DateRangeFilterPopover
+                            input-base-id="theatre-worklist-date-range"
+                            title="Scheduled date range"
+                            :from="filters.from"
+                            :to="filters.to"
+                            @update:from="(value) => { filters.from = value; filters.page = 1; }"
+                            @update:to="(value) => { filters.to = value; filters.page = 1; }"
+                        />
+                    </div>
                 </div>
 
                 <div class="space-y-4 px-6 pb-6">
@@ -430,33 +457,6 @@ function openAuditSheet(order: TheatreProcedure): void {
                     </Alert>
 
                     <template v-else>
-                        <div class="flex flex-wrap items-end gap-2">
-                            <div class="relative min-w-64 flex-1">
-                                <Input
-                                    v-model="filters.q"
-                                    placeholder="Search by procedure number, name, patient…"
-                                    class="h-9"
-                                    @update:model-value="filters.page = 1"
-                                />
-                            </div>
-                            <div class="min-w-64">
-                                <PatientQuickSearchField
-                                    v-model:query="patientSearchQuery"
-                                    input-id="theatre-worklist-patient"
-                                    placeholder="Search patient by name, MRN, or phone…"
-                                    @selected="onPatientSelected"
-                                />
-                            </div>
-                            <DateRangeFilterPopover
-                                input-base-id="theatre-worklist-date-range"
-                                title="Scheduled date range"
-                                :from="filters.from"
-                                :to="filters.to"
-                                @update:from="(value) => { filters.from = value; filters.page = 1; }"
-                                @update:to="(value) => { filters.to = value; filters.page = 1; }"
-                            />
-                        </div>
-
                         <div v-if="list.isPending.value" class="space-y-2">
                             <Skeleton class="h-16 w-full" />
                             <Skeleton class="h-16 w-full" />
