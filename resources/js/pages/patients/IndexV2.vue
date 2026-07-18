@@ -445,6 +445,78 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                         </TabsTrigger>
                     </TabsList>
                 </Tabs>
+
+                <div v-if="canReadPatients" class="mt-3 flex flex-wrap items-center gap-2">
+                    <div class="relative min-w-0 flex-1">
+                        <AppIcon name="search" class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            v-model="searchInputRaw"
+                            placeholder="Search name, MRN, phone, email, or ID…"
+                            class="h-9 pl-9"
+                            @keyup.enter="submitSearchNow"
+                        />
+                    </div>
+                    <Select v-model="genderSelectValue">
+                        <SelectTrigger class="h-9 w-36 bg-background">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All genders</SelectItem>
+                            <SelectItem value="female">Female</SelectItem>
+                            <SelectItem value="male">Male</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                            <SelectItem value="unknown">Unknown</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select v-model="registrationWindowValue">
+                        <SelectTrigger class="h-9 w-36 bg-background">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Any registration date</SelectItem>
+                            <SelectItem value="today">Registered today</SelectItem>
+                            <SelectItem value="this_week">This week</SelectItem>
+                            <SelectItem value="this_month">This month</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select v-model="ageGroupValue">
+                        <SelectTrigger class="h-9 w-32 bg-background">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Any age</SelectItem>
+                            <SelectItem value="child">Child (&lt;18)</SelectItem>
+                            <SelectItem value="adult">Adult (18–59)</SelectItem>
+                            <SelectItem value="elderly">Elderly (60+)</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select v-model="insuranceTypeValue">
+                        <SelectTrigger class="h-9 w-32 bg-background">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Cash & insurance</SelectItem>
+                            <SelectItem value="insurance">Insurance</SelectItem>
+                            <SelectItem value="cash">Cash</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select v-model="filters.sortBy">
+                        <SelectTrigger class="h-9 w-40 bg-background">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="createdAt">Newest first</SelectItem>
+                            <SelectItem value="updatedAt">Recently updated</SelectItem>
+                            <SelectItem value="firstName">First name</SelectItem>
+                            <SelectItem value="lastName">Last name</SelectItem>
+                            <SelectItem value="patientNumber">MRN</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Button v-if="hasActiveFilters" size="sm" variant="ghost" class="h-9 gap-1.5 text-xs" @click="clearFilters">
+                        <AppIcon name="x" class="size-3.5" />
+                        Clear filters
+                    </Button>
+                </div>
             </div>
 
             <div class="space-y-4 px-6 pb-6">
@@ -454,78 +526,6 @@ const { scrollContainerHeight } = useStickyScrollContainer();
                 </Alert>
 
                 <template v-else>
-                    <div class="flex flex-wrap items-center gap-2">
-                        <div class="relative min-w-0 flex-1">
-                            <AppIcon name="search" class="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                                v-model="searchInputRaw"
-                                placeholder="Search name, MRN, phone, email, or ID…"
-                                class="h-9 pl-9"
-                                @keyup.enter="submitSearchNow"
-                            />
-                        </div>
-                        <Select v-model="genderSelectValue">
-                            <SelectTrigger class="h-9 w-36 bg-background">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All genders</SelectItem>
-                                <SelectItem value="female">Female</SelectItem>
-                                <SelectItem value="male">Male</SelectItem>
-                                <SelectItem value="other">Other</SelectItem>
-                                <SelectItem value="unknown">Unknown</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Select v-model="registrationWindowValue">
-                            <SelectTrigger class="h-9 w-36 bg-background">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Any registration date</SelectItem>
-                                <SelectItem value="today">Registered today</SelectItem>
-                                <SelectItem value="this_week">This week</SelectItem>
-                                <SelectItem value="this_month">This month</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Select v-model="ageGroupValue">
-                            <SelectTrigger class="h-9 w-32 bg-background">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Any age</SelectItem>
-                                <SelectItem value="child">Child (&lt;18)</SelectItem>
-                                <SelectItem value="adult">Adult (18–59)</SelectItem>
-                                <SelectItem value="elderly">Elderly (60+)</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Select v-model="insuranceTypeValue">
-                            <SelectTrigger class="h-9 w-32 bg-background">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Cash & insurance</SelectItem>
-                                <SelectItem value="insurance">Insurance</SelectItem>
-                                <SelectItem value="cash">Cash</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Select v-model="filters.sortBy">
-                            <SelectTrigger class="h-9 w-40 bg-background">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="createdAt">Newest first</SelectItem>
-                                <SelectItem value="updatedAt">Recently updated</SelectItem>
-                                <SelectItem value="firstName">First name</SelectItem>
-                                <SelectItem value="lastName">Last name</SelectItem>
-                                <SelectItem value="patientNumber">MRN</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Button v-if="hasActiveFilters" size="sm" variant="ghost" class="h-9 gap-1.5 text-xs" @click="clearFilters">
-                            <AppIcon name="x" class="size-3.5" />
-                            Clear filters
-                        </Button>
-                    </div>
-
                     <div v-if="list.isPending.value" class="space-y-2">
                         <Skeleton class="h-14 w-full" />
                         <Skeleton class="h-14 w-full" />
